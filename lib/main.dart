@@ -1,0 +1,33 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:zyiarah/screens/login_screen.dart';
+import 'package:zyiarah/screens/onboarding_screen.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:zyiarah/services/notification_service.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  await ZyiarahNotificationService().initialize();
+  runApp(const ZyiarahApp());
+}
+
+class ZyiarahApp extends StatelessWidget {
+  const ZyiarahApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'زيارة - Zyiarah',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primaryColor: const Color(0xFF1E3A8A),
+        textTheme: GoogleFonts.tajawalTextTheme(),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1E3A8A)),
+        useMaterial3: true,
+      ),
+      // تعيين شاشة الترحيب كشاشة البداية
+      home: const OnboardingScreen(),
+    );
+  }
+}

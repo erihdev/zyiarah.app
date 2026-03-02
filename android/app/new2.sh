@@ -1,0 +1,2 @@
+sh
+    flutter run

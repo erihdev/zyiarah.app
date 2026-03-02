@@ -1,0 +1,39 @@
+workflows:
+  ios-workflow:
+    name: Zyiarah iOS TestFlight Build
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      vars:
+        APP_ID: 6742511048 # Replace with your Apple App ID
+    scripts:
+      - name: Set up code signing
+        script: |
+          keychain initialize
+          # The following command fetches signing certificates and provisioning profiles from App Store Connect.
+          # It requires APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_ISSUER_ID, and APP_STORE_CONNECT_PRIVATE_KEY 
+          # to be defined as environment variables in Codemagic UI.
+          app-store-connect fetch-signing-files "com.erihdev.zyiarah" --type IOS_APP_STORE --install-certificate
+      - name: Install dependencies
+        script: |
+          flutter pub get
+      - name: Install CocoaPods
+        script: |
+          cd ios && pod install
+      - name: Build iOS for TestFlight
+        script: |
+          # Use 'ipa' target to generate the .ipa file needed for TestFlight
+          flutter build ipa --release --export-options-plist=$HOME/export_options.plist
+      - name: Publish to TestFlight
+        script: |
+          # This requires APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_ISSUER_ID, and APP_STORE_CONNECT_PRIVATE_KEY
+          app-store-connect publish --ipa build/ios/ipa/*.ipa
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      email:
+        recipients:
+          - erihdev@gmail.com # Updated with a likely correct email based on path
