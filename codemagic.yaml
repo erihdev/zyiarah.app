@@ -16,7 +16,7 @@ workflows:
           # The following command fetches signing certificates and provisioning profiles from App Store Connect.
           # It requires APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_ISSUER_ID, and APP_STORE_CONNECT_PRIVATE_KEY 
           # to be defined as environment variables in Codemagic UI.
-          app-store-connect fetch-signing-files "com.erihdev.zyiarah" --type IOS_APP_STORE --install-certificate
+          app-store-connect fetch-signing-files "com.erihdev.zyiarah" --type IOS_APP_STORE
       - name: Install dependencies
         script: |
           flutter pub get
