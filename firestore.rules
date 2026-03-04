@@ -1,0 +1,124 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ====== دوال مساعدة ======
+    function isLoggedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isLoggedIn() && request.auth.uid == uid;
+    }
+
+    function isDriver() {
+      return isLoggedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'driver';
+    }
+
+    function isAdmin() {
+      return isLoggedIn() &&
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role != null;
+    }
+
+    // ====== المستخدمون (users) ======
+    // العميل يقرأ ويكتب على ملفه الشخصي فقط. الأدمن يقرأ الكل.
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ====== السائقون (drivers) ======
+    // كل مستخدم مسجل يمكنه رؤية قائمة السائقين (للتتبع)
+    // فقط السائق يعدل على ملفه، والأدمن يعدل الكل
+    match /drivers/{uid} {
+      allow read: if isLoggedIn();
+      allow create, update: if isOwner(uid) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ====== الطلبات (orders) ======
+    // العميل يقرأ طلباته فقط، السائق يقرأ ويعدل الطلبات المرتبطة به، الأدمن يرى كل شيء
+    match /orders/{orderId} {
+      allow read: if isLoggedIn() &&
+        (resource.data.client_id == request.auth.uid ||
+         resource.data.driver_id == request.auth.uid ||
+         isAdmin());
+      allow create: if isLoggedIn();
+      allow update: if isLoggedIn() &&
+        (resource.data.client_id == request.auth.uid ||
+         resource.data.driver_id == request.auth.uid ||
+         isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // ====== تذاكر الدعم (tickets) ======
+    // المستخدم يقرأ ويكتب تذاكره فقط، الأدمن يرى الكل ويرد
+    match /tickets/{ticketId} {
+      allow read: if isLoggedIn() &&
+        (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isLoggedIn();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+
+      // رسائل المحادثة داخل التذكرة
+      match /messages/{messageId} {
+        allow read: if isLoggedIn() &&
+          (get(/databases/$(database)/documents/tickets/$(ticketId)).data.uid == request.auth.uid || isAdmin());
+        allow create: if isLoggedIn() &&
+          (get(/databases/$(database)/documents/tickets/$(ticketId)).data.uid == request.auth.uid || isAdmin());
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // ====== حذف الحساب (account_deletions) ======
+    match /account_deletions/{uid} {
+      allow read, write: if isOwner(uid) || isAdmin();
+    }
+
+    // ====== الإشعارات (fcm_tokens) ======
+    // كل مستخدم يحفظ ويحدث رمز جهازه فقط
+    match /fcm_tokens/{uid} {
+      allow read, write: if isOwner(uid) || isAdmin();
+    }
+
+    // ====== الإشعارات المُرسلة (notifications_log) ======
+    // الأدمن يكتب، المستخدم يقرأ إشعاراته
+    match /notifications_log/{notifId} {
+      allow read: if isLoggedIn() &&
+        (resource.data.target_uid == request.auth.uid || resource.data.target == 'all' || isAdmin());
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ====== إعدادات التطبيق (app_settings) ======
+    // قراءة مفتوحة لجميع المستخدمين (لجلب سياسة الخصوصية والإصدار)
+    match /app_settings/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ====== كوبونات الخصم (coupons) ======
+    match /coupons/{couponId} {
+      allow read: if isLoggedIn();
+      allow write: if isAdmin();
+    }
+
+    // ====== الأدمن (admins) ======
+    // مقيد بالكامل لا يراه إلا الأدمن
+    match /admins/{uid} {
+      allow read, write: if isAdmin();
+    }
+
+    // ====== الفواتير (invoices) ======
+    match /invoices/{invoiceId} {
+      allow read: if isLoggedIn() &&
+        (resource.data.client_id == request.auth.uid || isAdmin());
+      allow create: if isLoggedIn();
+      allow update, delete: if isAdmin();
+    }
+
+  }
+}

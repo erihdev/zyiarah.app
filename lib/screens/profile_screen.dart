@@ -1,92 +1,173 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class ZyiarahProfileScreen extends StatelessWidget {
+class ZyiarahProfileScreen extends StatefulWidget {
   const ZyiarahProfileScreen({super.key});
 
   @override
+  State<ZyiarahProfileScreen> createState() => _ZyiarahProfileScreenState();
+}
+
+class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
+  final _auth = FirebaseAuth.instance;
+  final _firestore = FirebaseFirestore.instance;
+  final _firebaseService = ZyiarahFirebaseService();
+
+  Map<String, dynamic>? _userData;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    try {
+      final doc = await _firestore.collection('users').doc(uid).get();
+      if (mounted) {
+        setState(() {
+          _userData = doc.data();
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      // تسجيل طلب الحذف في Firestore (متطلب Apple)
+      await _firestore.collection('account_deletions').doc(uid).set({
+        'uid': uid,
+        'phone': _auth.currentUser?.phoneNumber,
+        'requested_at': FieldValue.serverTimestamp(),
+        'status': 'pending',
+      });
+
+      // حذف بيانات المستخدم
+      await _firestore.collection('users').doc(uid).delete();
+
+      // تسجيل الخروج وحذف الحساب
+      await _auth.currentUser?.delete();
+      await _firebaseService.signOut();
+
+      if (mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('خطأ في حذف الحساب: $e', style: GoogleFonts.tajawal()),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    final firebaseService = ZyiarahFirebaseService();
+    final user = _auth.currentUser;
 
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text("الملف الشخصي", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+        title: Text('الملف الشخصي', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF1E3A8A),
         foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: Directionality(
         textDirection: TextDirection.rtl,
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              // رأس الصفحة (Header)
-              _buildHeader(user?.phoneNumber ?? "مستخدم زيارة"),
-              
-              const SizedBox(height: 20),
-              
-              // خيارات الحساب
-              _buildMenuTile(Icons.history, "سجل الطلبات", () {}),
-              _buildMenuTile(Icons.wallet, "المحفظة والفواتير", () {}),
-              _buildMenuTile(Icons.shield_outlined, "سياسة الخصوصية", () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('سيتم فتح رابط سياسة الخصوصية لاحقاً')),
-                );
-              }),
-              _buildMenuTile(Icons.support_agent, "الدعم الفني", () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('سيتم تحويلك إلى خدمة العملاء')),
-                );
-              }),
-              
-              const Divider(height: 40),
-              
-              _buildMenuTile(Icons.logout, "تسجيل الخروج", () async {
-                await firebaseService.signOut();
-                if (!context.mounted) return;
-                Navigator.of(context).popUntil((route) => route.isFirst);
-              }, color: Colors.orange),
-              
-              _buildMenuTile(Icons.delete_forever, "حذف الحساب نهائياً", () {
-                _showDeleteConfirmation(context);
-              }, color: Colors.red),
-              
-              const SizedBox(height: 40),
-              GestureDetector(
-                onTap: () => _launchErithWebsite('https://erihdev.com'),
-                onLongPress: () => _showThankYouMessage(context),
-                child: Text.rich(
-                  TextSpan(
-                    text: 'إصدار التطبيق 1.0.0 (Build 1)\nمؤسسة معاذ يحي محمد المالكي\nتم التطوير بواسطة\n',
-                    style: GoogleFonts.tajawal(fontSize: 10, color: Colors.grey),
-                    children: [
-                      TextSpan(
-                        text: 'إرث',
-                        style: GoogleFonts.tajawal(
-                          fontSize: 22,
-                          color: const Color(0xFF1E3A8A),
-                          fontWeight: FontWeight.w900, // Black weight proxy
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator(color: Color(0xFF1E3A8A)))
+            : SingleChildScrollView(
+                child: Column(
+                  children: [
+                    _buildHeader(
+                      _userData?['name'] ?? 'مستخدم زيارة',
+                      user?.phoneNumber ?? '',
+                    ),
+                    const SizedBox(height: 20),
+                    _buildInfoTile(
+                      Icons.phone,
+                      'رقم الجوال',
+                      user?.phoneNumber ?? 'غير متوفر',
+                    ),
+                    _buildInfoTile(
+                      Icons.badge_outlined,
+                      'نوع الحساب',
+                      _userData?['role'] == 'driver' ? '🚗 سائق' : '👤 عميل',
+                    ),
+                    const Divider(height: 10, indent: 20, endIndent: 20),
+                    _buildMenuTile(Icons.history, 'سجل الطلبات', () {}),
+                    _buildMenuTile(Icons.wallet, 'المحفظة والفواتير', () {}),
+                    _buildMenuTile(Icons.shield_outlined, 'سياسة الخصوصية', () {
+                      launchUrl(Uri.parse('https://zyiarah.com/privacy'),
+                          mode: LaunchMode.externalApplication);
+                    }),
+                    _buildMenuTile(Icons.support_agent, 'الدعم الفني', () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('سيتم تحويلك إلى خدمة العملاء', style: GoogleFonts.tajawal())),
+                      );
+                    }),
+                    const Divider(height: 40),
+                    _buildMenuTile(Icons.logout, 'تسجيل الخروج', () async {
+                      await _firebaseService.signOut();
+                      if (!context.mounted) return;
+                      Navigator.of(context).popUntil((route) => route.isFirst);
+                    }, color: Colors.orange),
+                    _buildMenuTile(Icons.delete_forever, 'حذف الحساب نهائياً', () {
+                      _showDeleteConfirmation(context);
+                    }, color: Colors.red),
+                    const SizedBox(height: 40),
+                    GestureDetector(
+                      onTap: () => launchUrl(Uri.parse('https://erihdev.com'),
+                          mode: LaunchMode.externalApplication),
+                      onLongPress: () => _showThankYouMessage(context),
+                      child: Text.rich(
+                        TextSpan(
+                          text: 'إصدار التطبيق 1.0.0 (Build 1)\nمؤسسة معاذ يحي محمد المالكي\nتم التطوير بواسطة\n',
+                          style: GoogleFonts.tajawal(fontSize: 10, color: Colors.grey),
+                          children: [
+                            TextSpan(
+                              text: 'إرث',
+                              style: GoogleFonts.tajawal(
+                                fontSize: 22,
+                                color: const Color(0xFF1E3A8A),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
                         ),
+                        textAlign: TextAlign.center,
                       ),
-                    ],
-                  ),
-                  textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                  ],
                 ),
               ),
-              const SizedBox(height: 20),
-            ],
-          ),
-        ),
       ),
     );
   }
 
-  Widget _buildHeader(String phone) {
+  Widget _buildHeader(String name, String phone) {
     return Container(
       padding: const EdgeInsets.all(30),
       decoration: const BoxDecoration(
@@ -95,21 +176,34 @@ class ZyiarahProfileScreen extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const CircleAvatar(
+          CircleAvatar(
             radius: 40,
-            backgroundColor: Colors.white24,
-            child: Icon(Icons.person, size: 40, color: Colors.white),
+            backgroundColor: Colors.white.withValues(alpha: 0.2),
+            child: Text(
+              name.isNotEmpty ? name[0].toUpperCase() : 'Z',
+              style: GoogleFonts.tajawal(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
           ),
           const SizedBox(width: 20),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("أهلاً بك،", style: GoogleFonts.tajawal(color: Colors.white70, fontSize: 14)),
-              Text(phone, style: GoogleFonts.tajawal(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('أهلاً بك،', style: GoogleFonts.tajawal(color: Colors.white70, fontSize: 14)),
+              Text(name, style: GoogleFonts.tajawal(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              if (phone.isNotEmpty)
+                Text(phone, style: GoogleFonts.tajawal(color: Colors.white60, fontSize: 13)),
             ],
           )
         ],
       ),
+    );
+  }
+
+  Widget _buildInfoTile(IconData icon, String label, String value) {
+    return ListTile(
+      leading: Icon(icon, color: const Color(0xFF1E3A8A)),
+      title: Text(label, style: GoogleFonts.tajawal(fontSize: 13, color: Colors.grey)),
+      subtitle: Text(value, style: GoogleFonts.tajawal(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87)),
     );
   }
 
@@ -125,36 +219,31 @@ class ZyiarahProfileScreen extends StatelessWidget {
   void _showDeleteConfirmation(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => Directionality(
+      builder: (ctx) => Directionality(
         textDirection: TextDirection.rtl,
         child: AlertDialog(
-          title: Text("حذف الحساب", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          content: Text("هل أنت متأكد من رغبتك في حذف الحساب؟ سيتم مسح كافة بياناتك وفواتيرك نهائياً ولا يمكن استعادتها.", style: GoogleFonts.tajawal()),
+          title: Text('حذف الحساب', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+          content: Text(
+            'هل أنت متأكد من رغبتك في حذف الحساب؟ سيتم مسح كافة بياناتك وفواتيرك نهائياً ولا يمكن استعادتها.',
+            style: GoogleFonts.tajawal(),
+          ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("تراجع")),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('تراجع', style: GoogleFonts.tajawal()),
+            ),
             ElevatedButton(
               onPressed: () {
-                // منطق الحذف النهائي من Firebase
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('تم حذف الحساب وتسجيل الخروج بنجاح')),
-                );
-                Navigator.of(context).popUntil((route) => route.isFirst);
+                Navigator.pop(ctx);
+                _deleteAccount();
               },
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text("حذف الآن", style: TextStyle(color: Colors.white)),
+              child: Text('حذف الآن', style: GoogleFonts.tajawal(color: Colors.white)),
             ),
           ],
         ),
       ),
     );
-  }
-
-  Future<void> _launchErithWebsite(String url) async {
-    final Uri uri = Uri.parse(url);
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      debugPrint('Could not launch $url');
-    }
   }
 
   void _showThankYouMessage(BuildContext context) {

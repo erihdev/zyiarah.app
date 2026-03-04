@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/screens/checkout_screen.dart';
 import 'package:zyiarah/services/tamara_service.dart';
 import 'package:zyiarah/screens/profile_screen.dart';
@@ -15,6 +17,17 @@ class _ClientDashboardState extends State<ClientDashboard> {
   bool _isLoading = false;
 
   void _initiatePayment(String serviceName, double amount) async {
+    final GeoPoint? selectedLocation = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => LocationPickerScreen(serviceName: serviceName),
+      ),
+    );
+
+    if (selectedLocation == null) {
+      return; // المستخدم ألغى الاختيار
+    }
+
     setState(() {
       _isLoading = true;
     });
@@ -35,7 +48,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
         });
         
         // الانتقال لشاشة الدفع
-        final String currentOrderId = "ORD-${DateTime.now().millisecondsSinceEpoch}";
         bool? paymentSuccess = await Navigator.push(
           context,
           MaterialPageRoute(
@@ -44,6 +56,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
               amount: amount,
               orderId: currentOrderId,
               serviceType: serviceName,
+              location: selectedLocation,
             ),
           ),
         );

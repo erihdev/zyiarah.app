@@ -5,12 +5,14 @@ import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/invoice_pdf_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class TamaraCheckoutScreen extends StatefulWidget {
   final String checkoutUrl;
   final double amount;
   final String orderId;
   final String serviceType;
+  final GeoPoint location;
 
   const TamaraCheckoutScreen({
     super.key,
@@ -18,6 +20,7 @@ class TamaraCheckoutScreen extends StatefulWidget {
     required this.amount,
     required this.orderId,
     required this.serviceType,
+    required this.location,
   });
 
   @override
@@ -39,10 +42,10 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
             if (url.contains('payment-success')) {
               // إنشاء الطلب في Firestore
               final String newOrderId = await _orderService.createOrder(
-                clientId: "client_123", // يجب جلبه من Firebase Auth لاحقاً
+                clientId: FirebaseAuth.instance.currentUser?.uid ?? "guest_client", 
                 serviceType: widget.serviceType,
                 amount: widget.amount,
-                location: const GeoPoint(17.3500, 43.1333), // إحداثيات الداير كمثال
+                location: widget.location, // إحداثيات من المستخدم
               );
 
               // توليد بيانات ZATCA وتوليد الفاتورة في الخلفية

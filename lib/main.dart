@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/screens/onboarding_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:zyiarah/firebase_options.dart';
 import 'package:zyiarah/services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await ZyiarahNotificationService().initialize();
   runApp(const ZyiarahApp());
 }

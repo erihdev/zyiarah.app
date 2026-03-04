@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// خدمة إنشاء فواتير ZATCA كملفات PDF ورفعها لسحابة التخزين
 class InvoicePdfService {
@@ -87,10 +88,9 @@ class InvoicePdfService {
       await storageRef.putData(pdfBytes, SettableMetadata(contentType: 'application/pdf'));
       final downloadUrl = await storageRef.getDownloadURL();
       
-      // هنا يمكن تحديث مستند الطلب في Firestore برابط الفاتورة
-      // await FirebaseFirestore.instance.collection('orders').doc(orderId).update({
-      //   'invoice_pdf_url': downloadUrl,
-      // });
+      await FirebaseFirestore.instance.collection('orders').doc(orderId).update({
+        'invoice_pdf_url': downloadUrl,
+      });
       
       return downloadUrl;
     } catch (e) {
