@@ -49,6 +49,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
       setState(() {
         _isLoading = false;
       });
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('خطأ: ${e.toString()}')),
       );
@@ -98,6 +99,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
       setState(() {
         _isLoading = false;
       });
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('رمز التحقق غير صحيح: ${e.toString()}')),
       );

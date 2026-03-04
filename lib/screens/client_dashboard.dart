@@ -115,7 +115,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
             ),
             if (_isLoading)
               Container(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 child: const Center(
                   child: CircularProgressIndicator(color: Color(0xFF1E3A8A)),
                 ),
@@ -133,7 +133,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

@@ -46,9 +46,9 @@ class ZyiarahProfileScreen extends StatelessWidget {
               
               const Divider(height: 40),
               
-              // خيارات الخروج والحذف (متطلبات أبل)
               _buildMenuTile(Icons.logout, "تسجيل الخروج", () async {
                 await firebaseService.signOut();
+                if (!context.mounted) return;
                 Navigator.of(context).popUntil((route) => route.isFirst);
               }, color: Colors.orange),
               
@@ -90,8 +90,8 @@ class ZyiarahProfileScreen extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(30),
       decoration: const BoxDecoration(
-        color: const Color(0xFF1E3A8A),
-        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
+        color: Color(0xFF1E3A8A),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
       ),
       child: Row(
         children: [

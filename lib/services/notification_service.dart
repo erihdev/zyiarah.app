@@ -1,5 +1,6 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/foundation.dart';
 
 /// خدمة إدارة الإشعارات - تطبيق زيارة
 class ZyiarahNotificationService {
@@ -18,15 +19,14 @@ class ZyiarahNotificationService {
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
       // 2. الحصول على رمز الجهاز (Token) لإرسال إشعارات مخصصة لهذا المستخدم
       String? token = await _fcm.getToken();
-      print("Device Token: $token"); // يفضل حفظه في Firestore تحت بيانات المستخدم
+      debugPrint("Device Token: $token"); // يفضل حفظه في Firestore تحت بيانات المستخدم
     }
 
     // 3. إعداد الإشعارات المحلية لإظهارها أثناء فتح التطبيق (Foreground)
-    const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const DarwinInitializationSettings iosSettings = DarwinInitializationSettings();
     
     await _localNotifications.initialize(
-      const InitializationSettings(android: androidSettings, iOS: iosSettings),
+      const InitializationSettings(iOS: iosSettings),
     );
 
     // 4. الاستماع للإشعارات أثناء فتح التطبيق
@@ -37,18 +37,13 @@ class ZyiarahNotificationService {
 
   /// عرض إشعار منبثق للمستخدم
   Future<void> _showLocalNotification(RemoteMessage message) async {
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'zyiarah_channel',
-      'إشعارات زيارة',
-      importance: Importance.max,
-      priority: Priority.high,
-    );
+    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails();
 
     await _localNotifications.show(
       message.hashCode,
       message.notification?.title,
       message.notification?.body,
-      const NotificationDetails(android: androidDetails),
+      const NotificationDetails(iOS: iosDetails),
     );
   }
 }
