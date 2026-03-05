@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, orderBy, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 interface StatCardProps {
@@ -71,24 +71,56 @@ const StatCard = ({ title, value, icon: Icon, trend, trendUp, colorScheme }: Sta
 export default function Dashboard() {
     const mapContainer = useRef<HTMLDivElement>(null);
     const map = useRef<mapboxgl.Map | null>(null);
+    const markersRef = useRef<{ [key: string]: mapboxgl.Marker }>({});
     const [totalUsers, setTotalUsers] = useState('...');
     const [activeOrders, setActiveOrders] = useState('...');
     const [availableDrivers, setAvailableDrivers] = useState('...');
+    const [totalRevenue, setTotalRevenue] = useState(0);
+    const [recentOrders, setRecentOrders] = useState<any[]>([]);
 
     // Live stats from Firestore
     useEffect(() => {
-        const unsubUsers = onSnapshot(collection(db, 'users'), snap => {
+        const unsubUsers = onSnapshot(collection(db, 'users'), (snap: any) => {
             setTotalUsers(snap.size.toString());
         });
         const unsubOrders = onSnapshot(
             query(collection(db, 'orders'), where('status', 'in', ['pending', 'in_progress'])),
-            snap => setActiveOrders(snap.size.toString())
+            (snap: any) => setActiveOrders(snap.size.toString())
         );
         const unsubDrivers = onSnapshot(
             query(collection(db, 'drivers'), where('is_available', '==', true)),
-            snap => setAvailableDrivers(snap.size.toString())
+            (snap: any) => setAvailableDrivers(snap.size.toString())
         );
-        return () => { unsubUsers(); unsubOrders(); unsubDrivers(); };
+        const unsubCompletedOrders = onSnapshot(
+            query(collection(db, 'orders'), where('status', '==', 'completed')),
+            (snap: any) => {
+                let revenue = 0;
+                snap.forEach((doc: any) => {
+                    revenue += doc.data().amount || 0;
+                });
+                setTotalRevenue(revenue);
+            }
+        );
+        const unsubRecentOrders = onSnapshot(
+            query(collection(db, 'orders'), orderBy('created_at', 'desc'), limit(5)),
+            (snap: any) => {
+                const fetchedOrders = snap.docs.map((doc: any) => {
+                    const data = doc.data();
+                    const date = data.created_at?.toDate();
+                    return {
+                        id: `#ORD-${doc.id.substring(0, 4).toUpperCase()}`,
+                        client: data.client_id ? `عميل ${data.client_id.substring(0, 4)}` : 'زائر',
+                        service: data.service_type || 'خدمة غير محددة',
+                        amount: data.amount?.toString() || '0',
+                        status: data.status || 'pending',
+                        time: date ? new Intl.DateTimeFormat('ar-SA', { month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' }).format(date) : 'الآن',
+                        avatar: data.client_id ? data.client_id.substring(0, 1).toUpperCase() : 'U'
+                    };
+                });
+                setRecentOrders(fetchedOrders);
+            }
+        );
+        return () => { unsubUsers(); unsubOrders(); unsubDrivers(); unsubCompletedOrders(); unsubRecentOrders(); };
     }, []);
 
     useEffect(() => {
@@ -104,19 +136,51 @@ export default function Dashboard() {
 
         map.current.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
 
-        // Mock Drivers Data Markers
-        new mapboxgl.Marker({ color: "#3b82f6" }).setLngLat([46.6753, 24.7136]).addTo(map.current);
-        new mapboxgl.Marker({ color: "#10b981" }).setLngLat([46.6900, 24.7200]).addTo(map.current);
-        new mapboxgl.Marker({ color: "#3b82f6" }).setLngLat([46.6600, 24.7000]).addTo(map.current);
+        // Live Drivers Data Markers from Firestore
+        const unsubDriversMap = onSnapshot(
+            query(collection(db, 'drivers'), where('is_available', '==', true)),
+            (snapshot: any) => {
+                const currentDriverIds = new Set<string>();
+
+                snapshot.forEach((doc: any) => {
+                    const data = doc.data();
+                    const id = doc.id;
+                    currentDriverIds.add(id);
+
+                    if (data.location && typeof data.location.latitude === 'number' && typeof data.location.longitude === 'number') {
+                        const lng = data.location.longitude;
+                        const lat = data.location.latitude;
+
+                        if (markersRef.current[id]) {
+                            markersRef.current[id].setLngLat([lng, lat]);
+                        } else {
+                            const marker = new mapboxgl.Marker({ color: "#10b981" })
+                                .setLngLat([lng, lat])
+                                .addTo(map.current!);
+                            markersRef.current[id] = marker;
+                        }
+                    }
+                });
+
+                // Remove drivers that are no longer available or online
+                Object.keys(markersRef.current).forEach(id => {
+                    if (!currentDriverIds.has(id)) {
+                        markersRef.current[id].remove();
+                        delete markersRef.current[id];
+                    }
+                });
+            }
+        );
+
+        return () => {
+            unsubDriversMap();
+            // Cleanup markers
+            Object.values(markersRef.current).forEach((m: mapboxgl.Marker) => m.remove());
+            markersRef.current = {};
+        };
     }, []);
 
-    const recentOrders = [
-        { id: '#ORD-8943', client: 'محمد عبدالله', service: 'نظافة منزلية', amount: '150', status: 'pending', time: 'منذ 10 دقائق', avatar: 'M' },
-        { id: '#ORD-8942', client: 'سارة أحمد', service: 'رعاية أطفال', amount: '200', status: 'active', time: 'منذ ساعتين', avatar: 'S' },
-        { id: '#ORD-8941', client: 'خالد الفهد', service: 'صيانة خفيفة', amount: '100', status: 'completed', time: 'اليوم 10:30 ص', avatar: 'K' },
-        { id: '#ORD-8940', client: 'نورة السعيد', service: 'كي وغسيل', amount: '50', status: 'completed', time: 'أمس 04:15 م', avatar: 'N' },
-        { id: '#ORD-8939', client: 'فهد الدوسري', service: 'توصيل طلبات', amount: '75', status: 'completed', time: 'أمس 02:00 م', avatar: 'F' },
-    ];
+
 
     const getStatusBadge = (status: string) => {
         switch (status) {
@@ -143,7 +207,7 @@ export default function Dashboard() {
 
             {/* Stats Grid - Live */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-                <StatCard title="إجمالي الإيرادات" value="—" icon={TrendingUp} trend="0" trendUp={true} colorScheme="blue" />
+                <StatCard title="إجمالي الإيرادات" value={`${totalRevenue} ر.س`} icon={TrendingUp} trend="0" trendUp={true} colorScheme="blue" />
                 <StatCard title="الطلبات النشطة" value={activeOrders} icon={Clock} trend="4.2" trendUp={true} colorScheme="orange" />
                 <StatCard title="السائقين المتاحين" value={availableDrivers} icon={CarFront} trend="0" trendUp={true} colorScheme="indigo" />
                 <StatCard title="إجمالي المستخدمين" value={totalUsers} icon={Users} trend="0" trendUp={true} colorScheme="emerald" />
@@ -175,7 +239,7 @@ export default function Dashboard() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100/80">
-                                {recentOrders.map((order) => (
+                                {recentOrders.map((order: any) => (
                                     <tr key={order.id} className="hover:bg-slate-50/70 transition-colors group">
                                         <td className="px-8 py-5">
                                             <span className="font-extrabold text-slate-700">{order.id}</span>

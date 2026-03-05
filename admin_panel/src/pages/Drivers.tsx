@@ -1,30 +1,93 @@
-import { useState } from 'react';
-import { Search, Filter, ShieldCheck, MapPin, Phone, Star, ShieldAlert } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, Filter, ShieldCheck, MapPin, Phone, Star, ShieldAlert, X, Loader2 } from 'lucide-react';
+import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { db } from '../services/firebase';
 
-const mockDrivers = [
-    { id: '#DRV-01', name: 'محمد الخالدي', phone: '+966 50 123 4567', vehicle: 'تويوتا كامري 2023', status: 'online', rating: 4.9, rides: 1450, wallet: '850 ر.س' },
-    { id: '#DRV-02', name: 'علي اليامي', phone: '+966 55 987 6543', vehicle: 'هونداي أكسنت 2022', status: 'offline', rating: 4.7, rides: 890, wallet: '120 ر.س' },
-    { id: '#DRV-03', name: 'سلطان القحطاني', phone: '+966 53 456 7890', vehicle: 'ايسوزو ديماكس (نقل)', status: 'busy', rating: 4.8, rides: 2100, wallet: '3400 ر.س' },
-    { id: '#DRV-04', name: 'فهد الدوسري', phone: '+966 59 111 2222', vehicle: 'فورد تورس 2024', status: 'suspended', rating: 3.5, rides: 42, wallet: '-50 ر.س' },
-];
+interface DriverData {
+    id: string;
+    name: string;
+    phone: string;
+    vehicle: string;
+    is_available: boolean;
+    rating: number;
+    rides: number;
+    wallet: number;
+}
 
-const StatusBadge = ({ status }: { status: string }) => {
-    switch (status) {
-        case 'online':
-            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-100 text-xs"><div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>متاح</span>;
-        case 'offline':
-            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-600 font-bold border border-slate-200 text-xs"><div className="w-2 h-2 rounded-full bg-slate-400"></div>غير متصل</span>;
-        case 'busy':
-            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-100 text-xs"><div className="w-2 h-2 rounded-full bg-blue-500"></div>في مشوار</span>;
-        case 'suspended':
-            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-700 font-bold border border-rose-100 text-xs"><ShieldAlert size={14} />موقوف</span>;
-        default:
-            return null;
+const StatusBadge = ({ is_available, is_suspended = false }: { is_available: boolean, is_suspended?: boolean }) => {
+    if (is_suspended) {
+        return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-700 font-bold border border-rose-100 text-xs"><ShieldAlert size={14} />موقوف</span>;
     }
+    if (is_available) {
+        return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-100 text-xs"><div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>متاح</span>;
+    }
+    return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-600 font-bold border border-slate-200 text-xs"><div className="w-2 h-2 rounded-full bg-slate-400"></div>غير متصل</span>;
 };
 
 export default function Drivers() {
     const [searchTerm, setSearchTerm] = useState('');
+    const [drivers, setDrivers] = useState<DriverData[]>([]);
+    const [isAvailableCount, setIsAvailableCount] = useState(0);
+
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [isAdding, setIsAdding] = useState(false);
+    const [newDriver, setNewDriver] = useState({ name: '', phone: '', vehicle: '' });
+
+    useEffect(() => {
+        const q = query(collection(db, 'drivers'), orderBy('created_at', 'desc'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            let available = 0;
+            const fetchedDrivers = snapshot.docs.map(doc => {
+                const data = doc.data();
+                if (data.is_available) available++;
+                return {
+                    id: doc.id,
+                    name: data.name || 'غير محدد',
+                    phone: data.phone || 'غير محدد',
+                    vehicle: data.vehicle || 'غير محدد',
+                    is_available: data.is_available || false,
+                    rating: data.rating || 5.0,
+                    rides: data.rides || 0,
+                    wallet: data.wallet || 0,
+                    ...data
+                } as DriverData;
+            });
+            setDrivers(fetchedDrivers);
+            setIsAvailableCount(available);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    const handleAddDriver = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newDriver.name || !newDriver.phone) return;
+        setIsAdding(true);
+        try {
+            await addDoc(collection(db, 'drivers'), {
+                name: newDriver.name,
+                phone: newDriver.phone,
+                vehicle: newDriver.vehicle,
+                is_available: false,
+                rating: 5.0,
+                rides: 0,
+                wallet: 0,
+                created_at: serverTimestamp()
+            });
+            setIsAddModalOpen(false);
+            setNewDriver({ name: '', phone: '', vehicle: '' });
+        } catch (error) {
+            console.error("Error adding driver: ", error);
+            alert("حدث خطأ أثناء إضافة السائق.");
+        } finally {
+            setIsAdding(false);
+        }
+    };
+
+    const filteredDrivers = drivers.filter(d =>
+        d.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        d.phone.includes(searchTerm) ||
+        d.id.includes(searchTerm)
+    );
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
@@ -38,7 +101,10 @@ export default function Drivers() {
                         <Filter size={18} />
                         تصفية
                     </button>
-                    <button className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl font-bold hover:from-emerald-600 hover:to-teal-700 transition-all shadow-lg shadow-emerald-500/20 hover:shadow-xl hover:-translate-y-0.5">
+                    <button
+                        onClick={() => setIsAddModalOpen(true)}
+                        className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl font-bold hover:from-emerald-600 hover:to-teal-700 transition-all shadow-lg shadow-emerald-500/20 hover:shadow-xl hover:-translate-y-0.5"
+                    >
                         إضافة سائق +
                     </button>
                 </div>
@@ -48,7 +114,7 @@ export default function Drivers() {
                 <div className="bg-white p-6 rounded-[20px] shadow-sm border border-slate-100/60 flex items-center justify-between group hover:border-blue-200 transition-colors">
                     <div>
                         <p className="text-sm font-bold text-slate-500 mb-1">إجمالي السائقين</p>
-                        <h3 className="text-3xl font-extrabold text-slate-800">1,248</h3>
+                        <h3 className="text-3xl font-extrabold text-slate-800">{drivers.length}</h3>
                     </div>
                     <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
                         <ShieldCheck size={24} />
@@ -57,7 +123,7 @@ export default function Drivers() {
                 <div className="bg-white p-6 rounded-[20px] shadow-sm border border-slate-100/60 flex items-center justify-between group hover:border-emerald-200 transition-colors">
                     <div>
                         <p className="text-sm font-bold text-slate-500 mb-1">المتاحين حالياً</p>
-                        <h3 className="text-3xl font-extrabold text-slate-800">423</h3>
+                        <h3 className="text-3xl font-extrabold text-slate-800">{isAvailableCount}</h3>
                     </div>
                     <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
                         <MapPin size={24} />
@@ -80,7 +146,11 @@ export default function Drivers() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 p-6 bg-slate-50/30">
-                    {mockDrivers.map((driver) => (
+                    {filteredDrivers.length === 0 ? (
+                        <div className="col-span-full py-12 text-center text-slate-500 font-bold">
+                            لا يوجد سائقين مطابقين للبحث.
+                        </div>
+                    ) : filteredDrivers.map((driver) => (
                         <div key={driver.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow p-5 relative overflow-hidden group">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-bl-full -z-10 group-hover:bg-blue-50/50 transition-colors duration-500"></div>
 
@@ -91,10 +161,10 @@ export default function Drivers() {
                                     </div>
                                     <div>
                                         <h4 className="font-extrabold text-slate-800 text-lg">{driver.name}</h4>
-                                        <span className="text-slate-400 text-xs font-bold font-mono">{driver.id}</span>
+                                        <span className="text-slate-400 text-xs font-bold font-mono">#{driver.id.substring(0, 6).toUpperCase()}</span>
                                     </div>
                                 </div>
-                                <StatusBadge status={driver.status} />
+                                <StatusBadge is_available={driver.is_available} />
                             </div>
 
                             <div className="space-y-3 mb-6">
@@ -121,13 +191,71 @@ export default function Drivers() {
                                 </div>
                                 <div className="text-center border-r border-slate-100">
                                     <span className="block text-xs font-bold text-slate-400 mb-1">المحفظة</span>
-                                    <span className={`font-bold ${driver.wallet.includes('-') ? 'text-rose-600' : 'text-emerald-600'}`}>{driver.wallet}</span>
+                                    <span className={`font-bold ${driver.wallet < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{driver.wallet} ر.س</span>
                                 </div>
                             </div>
                         </div>
                     ))}
                 </div>
             </div>
+
+            {/* Add Driver Modal */}
+            {isAddModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-slate-50/50">
+                            <h3 className="text-xl font-extrabold text-slate-800">إضافة سائق جديد</h3>
+                            <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-xl transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleAddDriver} className="p-6 space-y-5">
+                            <div className="space-y-2">
+                                <label className="block text-sm font-extrabold text-slate-700">اسم السائق الكامل</label>
+                                <input
+                                    type="text"
+                                    required
+                                    placeholder="مثال: أحمد محمد"
+                                    value={newDriver.name}
+                                    onChange={e => setNewDriver({ ...newDriver, name: e.target.value })}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="block text-sm font-extrabold text-slate-700">رقم الجوال</label>
+                                <div className="relative">
+                                    <Phone className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                    <input
+                                        type="tel"
+                                        required
+                                        placeholder="+966 5X XXX XXXX"
+                                        value={newDriver.phone}
+                                        onChange={e => setNewDriver({ ...newDriver, phone: e.target.value })}
+                                        className="w-full pl-4 pr-11 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium"
+                                        dir="ltr"
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="block text-sm font-extrabold text-slate-700">بيانات المركبة (اختياري)</label>
+                                <input
+                                    type="text"
+                                    placeholder="مثال: تويوتا كامري 2023 - أ ب ج ١٢٣٤"
+                                    value={newDriver.vehicle}
+                                    onChange={e => setNewDriver({ ...newDriver, vehicle: e.target.value })}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium"
+                                />
+                            </div>
+                            <div className="pt-4 flex gap-3">
+                                <button type="button" onClick={() => setIsAddModalOpen(false)} className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors">إلغاء</button>
+                                <button disabled={isAdding} type="submit" className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors flex justify-center items-center disabled:opacity-70 disabled:cursor-not-allowed">
+                                    {isAdding ? <Loader2 className="animate-spin" size={20} /> : "اعتماد وإضافة"}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

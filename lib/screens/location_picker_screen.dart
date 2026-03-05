@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class LocationPickerScreen extends StatefulWidget {
   final String serviceName;
@@ -11,8 +12,6 @@ class LocationPickerScreen extends StatefulWidget {
   @override
   State<LocationPickerScreen> createState() => _LocationPickerScreenState();
 }
-
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class _LocationPickerScreenState extends State<LocationPickerScreen> {
   final TextEditingController _searchController = TextEditingController();
