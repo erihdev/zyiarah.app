@@ -78,6 +78,10 @@ export default function Dashboard() {
     const [totalRevenue, setTotalRevenue] = useState(0);
     const [recentOrders, setRecentOrders] = useState<any[]>([]);
 
+    // Tracking map variables
+    const [isAvailableCount, setIsAvailableCount] = useState(0);
+    const [trackingDrivers, setTrackingDrivers] = useState<any[]>([]);
+
     // Live stats from Firestore
     useEffect(() => {
         const unsubUsers = onSnapshot(collection(db, 'users'), (snap: any) => {
@@ -141,9 +145,12 @@ export default function Dashboard() {
             query(collection(db, 'drivers'), where('is_available', '==', true)),
             (snapshot: any) => {
                 const currentDriverIds = new Set<string>();
+                const currentDriversData: any[] = [];
+                setIsAvailableCount(snapshot.size);
 
                 snapshot.forEach((doc: any) => {
                     const data = doc.data();
+                    currentDriversData.push(data);
                     const id = doc.id;
                     currentDriverIds.add(id);
 
@@ -161,6 +168,8 @@ export default function Dashboard() {
                         }
                     }
                 });
+
+                setTrackingDrivers(currentDriversData);
 
                 // Remove drivers that are no longer available or online
                 Object.keys(markersRef.current).forEach(id => {
@@ -180,7 +189,33 @@ export default function Dashboard() {
         };
     }, []);
 
+    const fitMapToDrivers = () => {
+        if (!map.current || trackingDrivers.length === 0) return;
 
+        const activeDriversWithLocation = trackingDrivers.filter(d =>
+            d.is_available &&
+            !d.is_suspended &&
+            d.location?.longitude &&
+            d.location?.latitude
+        );
+
+        if (activeDriversWithLocation.length === 0) return;
+
+        const bounds = new mapboxgl.LngLatBounds(
+            [activeDriversWithLocation[0].location.longitude, activeDriversWithLocation[0].location.latitude],
+            [activeDriversWithLocation[0].location.longitude, activeDriversWithLocation[0].location.latitude]
+        );
+
+        activeDriversWithLocation.forEach(driver => {
+            bounds.extend([driver.location.longitude, driver.location.latitude]);
+        });
+
+        map.current.fitBounds(bounds, {
+            padding: 50,
+            maxZoom: 14,
+            duration: 2000
+        });
+    };
 
     const getStatusBadge = (status: string) => {
         switch (status) {
@@ -279,11 +314,12 @@ export default function Dashboard() {
                     <div className="relative z-10 flex flex-col h-full w-full">
                         <div className="flex items-start justify-between mb-2">
                             <div>
-                                <h3 className="text-xl font-extrabold tracking-tight flex items-center gap-2"><MapIcon size={20} className="text-blue-400" /> تتبع السائقين</h3>
-                                <p className="text-slate-400 text-sm font-medium mt-1">خرائط Mapbox الحية</p>
+                                <h3 className="text-xl font-extrabold tracking-tight flex items-center gap-2"><MapIcon size={20} className="text-blue-400" /> تتبع السائقين الحصري</h3>
+                                <p className="text-slate-400 text-sm font-medium mt-1">اضغط على السائق للتتبع المباشر</p>
                             </div>
-                            <div className="bg-emerald-500/20 p-2 rounded-xl">
+                            <div className="bg-emerald-500/20 p-2 rounded-xl flex items-center gap-2">
                                 <span className="block w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(16,185,129,0.9)]"></span>
+                                <span className="text-xs font-bold text-emerald-400">{isAvailableCount} متصل</span>
                             </div>
                         </div>
 
@@ -291,10 +327,13 @@ export default function Dashboard() {
                             <div ref={mapContainer} className="w-full h-full" />
                         </div>
 
-                        <button className="w-full relative overflow-hidden bg-white text-slate-900 font-bold py-4 rounded-xl transition-all hover:shadow-[0_0_20px_rgba(255,255,255,0.3)] group/btn">
+                        <button
+                            onClick={fitMapToDrivers}
+                            className="w-full relative overflow-hidden bg-white text-slate-900 font-bold py-4 rounded-xl transition-all hover:shadow-[0_0_20px_rgba(255,255,255,0.3)] group/btn"
+                        >
                             <span className="relative z-10 flex items-center justify-center">
-                                فتح شاشة التتبع
-                                <ArrowLeftIcon className="mr-2 group-hover/btn:-translate-x-1 transition-transform" />
+                                إظهار جميع السائقين على الخريطة
+                                <MapIcon className="mr-2 w-5 h-5 group-hover/btn:scale-110 transition-transform" />
                             </span>
                         </button>
                     </div>
