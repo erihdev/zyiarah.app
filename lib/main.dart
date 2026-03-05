@@ -5,8 +5,11 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:zyiarah/firebase_options.dart';
 import 'package:zyiarah/services/notification_service.dart';
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await ZyiarahNotificationService().initialize();
   runApp(const ZyiarahApp());

@@ -94,7 +94,7 @@ export default function Dashboard() {
     useEffect(() => {
         if (map.current || !mapContainer.current) return;
 
-        mapboxgl.accessToken = 'YOUR_MAPBOX_PUBLIC_TOKEN'; // Replace with a PUBLIC token (starts with pk.)
+        mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
         map.current = new mapboxgl.Map({
             container: mapContainer.current,
             style: 'mapbox://styles/mapbox/dark-v11',

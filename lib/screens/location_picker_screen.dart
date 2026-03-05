@@ -12,13 +12,15 @@ class LocationPickerScreen extends StatefulWidget {
   State<LocationPickerScreen> createState() => _LocationPickerScreenState();
 }
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 class _LocationPickerScreenState extends State<LocationPickerScreen> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounce;
   List<dynamic> _searchResults = [];
   bool _isSearching = false;
 
-  final String _mapboxToken = 'YOUR_MAPBOX_PUBLIC_TOKEN'; // Replace with your PUBLIC token (starts with pk.)
+  final String _mapboxToken = dotenv.env['MAPBOX_TOKEN'] ?? '';
 
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
