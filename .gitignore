@@ -48,3 +48,4 @@ app.*.map.json
 .firebase/
 lib/firebase_options.dart
 admin_panel/src/services/firebase.ts
+zyiarah_backend/serviceAccountKey.json
