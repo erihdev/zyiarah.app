@@ -45,3 +45,6 @@ app.*.map.json
 /android/app/release
 
 .env
+.firebase/
+lib/firebase_options.dart
+admin_panel/src/services/firebase.ts
