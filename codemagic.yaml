@@ -1,31 +1,27 @@
 workflows:
-  android-workflow:
-    name: Zyiarah Android Build
-    max_build_duration: 60
+  ios-workflow:
+    name: Zyiarah iOS Build
+    max_build_duration: 120
+    instance_type: mac_mini_m2
     environment:
       flutter: default
       xcode: latest
       cocoapods: default
-      java: 17
       groups:
-        - google_play_credentials # Add your Google Play JSON credentials here in Codemagic UI
+        - appstore_credentials # Add your App Store Connect API Key here in Codemagic UI
     scripts:
-      - name: Set up local.properties
-        script: |
-          echo "flutter.sdk=$HOME/programs/flutter" > "$CM_BUILD_DIR/android/local.properties"
       - name: Get Flutter Packages
         script: |
           flutter packages pub get
-      - name: Build Android APK
+      - name: Install Pods
         script: |
-          flutter build apk --release --split-per-abi
-      - name: Build Android App Bundle
+          find . -name "Podfile" -execdir pod install \;
+      - name: iOS Build
         script: |
-          flutter build appbundle --release
+          flutter build ipa --release
     artifacts:
-      - build/app/outputs/flutter-apk/app-*release.apk
-      - build/app/outputs/bundle/release/app-release.aab
-      - build/app/outputs/mapping/release/mapping.txt
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
     publishing:
       email:
         recipients:
@@ -33,7 +29,7 @@ workflows:
         notify:
           success: true
           failure: false
-      google_play:
-        credentials: $GCP_CREDENTIALS # Secret variable from Codemagic UI
-        track: internal # or 'production', 'alpha', 'beta'
-        submit_as_draft: true
+#     app_store_connect:
+#       auth:
+#         integration: $APP_STORE_CONNECT_KEY
+#       submit_to_testflight: true
