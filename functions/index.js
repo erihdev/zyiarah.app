@@ -1,4 +1,5 @@
 const functions = require("firebase-functions");
+const {onDocumentCreated} = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
 admin.initializeApp();
 
@@ -7,13 +8,11 @@ exports.sendNotificationOnTicketReply = functions.firestore
     .document("support_tickets/{ticketId}/messages/{messageId}")
     .onCreate(async (snap, context) => {
       const newMessage = snap.data();
-
-      // We only want to notify the user if the admin replied
       if (newMessage.senderId !== "admin") return null;
 
       const ticketId = context.params.ticketId;
-      const ticketRef = admin.firestore()
-          .collection("support_tickets").doc(ticketId);
+      const ticketRef = admin.firestore().collection("support_tickets")
+          .doc(ticketId);
       const ticketDoc = await ticketRef.get();
 
       if (!ticketDoc.exists) return null;
@@ -21,9 +20,8 @@ exports.sendNotificationOnTicketReply = functions.firestore
       const ticketData = ticketDoc.data();
       const userId = ticketData.userId;
 
-      // Get user's FCM token
-      const tokenDoc = await admin.firestore()
-          .collection("fcm_tokens").doc(userId).get();
+      const tokenDoc = await admin.firestore().collection("fcm_tokens")
+          .doc(userId).get();
       if (!tokenDoc.exists) return null;
 
       const fcmToken = tokenDoc.data().fcmToken;
@@ -44,13 +42,11 @@ exports.sendNotificationOnTicketReply = functions.firestore
 
       try {
         await admin.messaging().send(payload);
-        console.log(
-            `Notification sent to user ${userId} for ticket ${ticketId}`,
-        );
+        console.log(`Notification sent to user ${userId} ` +
+            `for ticket ${ticketId}`);
       } catch (error) {
         console.error("Error sending notification:", error);
       }
-
       return null;
     });
 
@@ -84,8 +80,8 @@ exports.sendNotificationOnOrderStatusChange = functions.firestore
 
       if (!targetUserId) return null;
 
-      const tokenDoc = await admin.firestore()
-          .collection("fcm_tokens").doc(targetUserId).get();
+      const tokenDoc = await admin.firestore().collection("fcm_tokens")
+          .doc(targetUserId).get();
       if (!tokenDoc.exists) return null;
 
       const fcmToken = tokenDoc.data().fcmToken;
@@ -106,87 +102,102 @@ exports.sendNotificationOnOrderStatusChange = functions.firestore
 
       try {
         await admin.messaging().send(payload);
-        console.log(
-            `Notification sent to ${targetUserId} for order ${orderId}`,
-        );
+        console.log(`Notification sent to ${targetUserId} ` +
+            `for order ${orderId}`);
       } catch (error) {
         console.error("Error sending order notification:", error);
       }
-
       return null;
     });
 
-// 3. Global Notification from Admin Panel
-exports.sendGlobalNotification = functions.firestore
-    .document("notifications/{notificationId}")
-    .onCreate(async (snap, context) => {
-      const data = snap.data();
-      const title = data.title;
-      const body = data.body;
-      const target = data.target || "all"; // "all", "customers", "drivers"
+// 3. Unified Global Notification Trigger
+exports.onNotificationCreated = onDocumentCreated("notifications_log/{id}",
+    async (event) => {
+      const snap = event.data;
+      if (!snap) return;
 
-      const tokens = [];
+      const newValue = snap.data();
+      if (!newValue || !newValue.title || !newValue.body) {
+        console.log("Missing data in notification log doc:", event.params.id);
+        return;
+      }
 
-      if (target === "all") {
-        const tokensSnap = await admin.firestore()
-            .collection("fcm_tokens").get();
-        tokensSnap.forEach((doc) => {
-          if (doc.data().fcmToken) tokens.push(doc.data().fcmToken);
+      const {title, body, target = "all"} = newValue;
+
+      const payload = {
+        notification: {title, body},
+        data: {
+          click_action: "FLUTTER_NOTIFICATION_CLICK",
+          type: "global_broadcast",
+        },
+      };
+
+      try {
+        if (target === "all") {
+          await admin.messaging().send({...payload, topic: "all_users"});
+          await admin.messaging().send({...payload, topic: "clients"});
+          await admin.messaging().send({...payload, topic: "drivers"});
+        } else if (target === "clients" || target === "drivers") {
+          await admin.messaging().send({...payload, topic: target});
+        }
+
+        await snap.ref.update({
+          processed: true,
+          processed_at: admin.firestore.FieldValue.serverTimestamp(),
         });
-      } else {
-        // Find users matching the target role
-        const usersSnap = await admin.firestore()
-            .collection("users").where("role", "==", target).get();
-        const userIds = usersSnap.docs.map((doc) => doc.id);
-
-        // Get tokens for those specific users
-        if (userIds.length > 0) {
-          for (const uid of userIds) {
-            const tDoc = await admin.firestore()
-                .collection("fcm_tokens").doc(uid).get();
-            if (tDoc.exists && tDoc.data().fcmToken) {
-              tokens.push(tDoc.data().fcmToken);
-            }
-          }
-        }
+        console.log(`Notification processed for target: ${target}`);
+      } catch (error) {
+        console.error("Error sending push notification:", error);
+        await snap.ref.update({
+          processed: true,
+          error: error.message || "Unknown error",
+          processed_at: admin.firestore.FieldValue.serverTimestamp(),
+        });
       }
-
-      if (tokens.length === 0) {
-        console.log("No users found to send the notification to.");
-        return null;
-      }
-
-      // Firebase limits multicast to 500 tokens at a time.
-      // For large apps, chunking array into 500 is needed.
-      const chunks = [];
-      const chunkSize = 500;
-      for (let i = 0; i < tokens.length; i += chunkSize) {
-        chunks.push(tokens.slice(i, i + chunkSize));
-      }
-
-      for (const chunk of chunks) {
-        const payload = {
-          notification: {
-            title: title,
-            body: body,
-          },
-          data: {
-            click_action: "FLUTTER_NOTIFICATION_CLICK",
-            type: "global",
-          },
-          tokens: chunk,
-        };
-
-        try {
-          const response = await admin.messaging()
-              .sendEachForMulticast(payload);
-          console.log(
-              `Success: ${response.successCount}, Failed: ${response.failureCount}`,
-          );
-        } catch (error) {
-          console.error("Error sending bulk notifications:", error);
-        }
-      }
-
-      return null;
     });
+
+// 4. Callable function for direct sending
+exports.manualSendNotification = functions.https.onCall(
+    async (data, _context) => {
+      const {title, body, target = "all"} = data;
+
+      const payload = {
+        notification: {title, body},
+        data: {click_action: "FLUTTER_NOTIFICATION_CLICK"},
+      };
+
+      try {
+        if (target === "all") {
+          await admin.messaging().send({...payload, topic: "all_users"});
+        } else {
+          await admin.messaging().send({...payload, topic: target});
+        }
+        return {success: true};
+      } catch (error) {
+        throw new functions.https.HttpsError("internal", error.message);
+      }
+    });
+
+// 5. Tamara Webhook Handler (Security/Reliability Fix)
+exports.tamaraWebhook = functions.https.onRequest(async (req, res) => {
+  // ⚠️ IMPORTANT: In production, verify the Tamara signature header!
+  const notification = req.body;
+  console.log("Received Tamara Webhook:", JSON.stringify(notification));
+
+  const {order_id: orderId, status} = notification;
+
+  if (status === "authorised" || status === "captured") {
+    try {
+      await admin.firestore().collection("orders").doc(orderId).update({
+        payment_status: "paid",
+        status: "accepted",
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      console.log(`Order ${orderId} marked as PAID via Tamara Webhook`);
+    } catch (error) {
+      console.error("Error updating order from Tamara webhook:", error);
+    }
+  }
+
+  res.status(200).send("OK");
+});

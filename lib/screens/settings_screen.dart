@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:zyiarah/screens/support_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ZyiarahSettingsScreen extends StatelessWidget {
   const ZyiarahSettingsScreen({super.key});
@@ -16,6 +19,19 @@ class ZyiarahSettingsScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            ListTile(
+              leading: const Icon(Icons.support_agent, color: Color(0xFF1E3A8A)),
+              title: const Text("تذاكر الدعم الفني"),
+              subtitle: const Text("متابعة طلباتك الحالية أو فتح تذكرة جديدة"),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ZyiarahSupportScreen()),
+                );
+              },
+            ),
+            const Divider(),
             ListTile(
               leading: const Icon(Icons.privacy_tip, color: Color(0xFF1E3A8A)),
               title: const Text("سياسة الخصوصية"),
@@ -69,13 +85,32 @@ class ZyiarahSettingsScreen extends StatelessWidget {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('تم حذف الحساب وتسجيل الخروج بنجاح')),
-                );
-                // هنا يفترض المناداة لـ FirebaseAuth.instance.currentUser?.delete()
-                Navigator.of(context).popUntil((route) => route.isFirst);
+              onPressed: () async {
+                final user = FirebaseAuth.instance.currentUser;
+                if (user != null) {
+                  try {
+                    // 1. Delete user record in Firestore (optional but recommended for ZATCA/Privacy)
+                    await FirebaseFirestore.instance.collection('users').doc(user.uid).delete();
+                    
+                    // 2. Delete the actual Auth account
+                    await user.delete();
+
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تم حذف الحساب بالكامل من أنظمتنا')),
+                      );
+                      Navigator.of(context).popUntil((route) => route.isFirst);
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("خطأ: يرجى تسجيل الخروج ثم الدخول مرة أخرى قبل الحذف (متطلب أمني)")),
+                      );
+                      Navigator.pop(context);
+                    }
+                  }
+                }
               },
               child: const Text("نعم، احذف حسابي"),
             ),

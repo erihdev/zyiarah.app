@@ -23,26 +23,14 @@ export default function Notifications() {
         if (!title.trim() || !body.trim()) return;
         setSending(true);
         try {
-            // 1. Send the push notification via our new local backend server
-            const response = await fetch('http://localhost:3000/api/send-notification', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: title.trim(), body: body.trim(), target })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                console.error('Failed to send push notification:', errorData);
-                alert('فشل إرسال الإشعار الفوري. حاول مرة أخرى.');
-            }
-
-            // 2. Save the log to Firestore so it appears in the history table
+            // 1. Save the log to Firestore - This will trigger the consolidated Cloud Function 'onNotificationCreated'
+            // which handles the FCM broadcast to topics (all_users, clients, drivers).
             await addDoc(collection(db, 'notifications_log'), {
                 title: title.trim(),
                 body: body.trim(),
                 target,
                 sent_at: serverTimestamp(),
-                status: 'sent',
+                status: 'pending', // Will be updated by the Cloud Function once processed
             });
             setTitle('');
             setBody('');

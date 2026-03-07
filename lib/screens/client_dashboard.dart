@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/screens/checkout_screen.dart';
 import 'package:zyiarah/services/tamara_service.dart';
 import 'package:zyiarah/screens/profile_screen.dart';
+import 'package:zyiarah/models/order_model.dart';
+import 'package:zyiarah/models/user_model.dart';
 
 class ClientDashboard extends StatefulWidget {
   const ClientDashboard({super.key});
@@ -15,6 +18,25 @@ class ClientDashboard extends StatefulWidget {
 class _ClientDashboardState extends State<ClientDashboard> {
   final TamaraService _tamaraService = TamaraService();
   bool _isLoading = false;
+  ZyiarahUser? _currentUser;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (doc.exists && mounted) {
+        setState(() {
+          _currentUser = ZyiarahUser.fromMap(user.uid, doc.data()!);
+        });
+      }
+    }
+  }
 
   void _initiatePayment(String serviceName, double amount) async {
     final GeoPoint? selectedLocation = await Navigator.push(
@@ -34,12 +56,25 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
     try {
       final String currentOrderId = "ORD-${DateTime.now().millisecondsSinceEpoch}";
+      
+      // Creating the order object using our new Model
+      final newOrder = ZyiarahOrder(
+        id: currentOrderId,
+        clientId: FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
+        serviceType: serviceName,
+        amount: amount,
+        status: 'pending',
+        paymentStatus: 'unpaid',
+        location: selectedLocation,
+        createdAt: DateTime.now(),
+      );
+
       // إنشاء جلسة دفع تجريبية
       String? checkoutUrl = await _tamaraService.createCheckoutSession(
-        orderId: currentOrderId,
-        amount: amount,
-        customerPhone: "500000000", // تجريبي
-        customerName: "عميل تجريبي",
+        orderId: newOrder.id,
+        amount: newOrder.amount,
+        customerPhone: _currentUser?.phone ?? "500000000",
+        customerName: _currentUser?.name ?? "عميل زيارة",
       );
 
       if (checkoutUrl != null && mounted) {
@@ -53,18 +88,17 @@ class _ClientDashboardState extends State<ClientDashboard> {
           MaterialPageRoute(
             builder: (context) => TamaraCheckoutScreen(
               checkoutUrl: checkoutUrl,
-              amount: amount,
-              orderId: currentOrderId,
-              serviceType: serviceName,
-              location: selectedLocation,
+              amount: newOrder.amount,
+              orderId: newOrder.id,
+              serviceType: newOrder.serviceType,
+              location: newOrder.location,
             ),
           ),
         );
 
         if (paymentSuccess == true && mounted) {
-          // يمكن هنا نقل العميل لخريطة التتبع بعد الدفع
           ScaffoldMessenger.of(context).showSnackBar(
-             SnackBar(content: Text('تم تأكيد طلب $serviceName بنجاح!')),
+             SnackBar(content: Text('تم تأكيد طلب ${newOrder.serviceType} بنجاح!')),
           );
         }
       } else {
@@ -107,7 +141,10 @@ class _ClientDashboardState extends State<ClientDashboard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("مرحباً بك،", style: TextStyle(fontSize: 18, color: Colors.grey)),
+                  Text(
+                    "مرحباً بك${_currentUser != null ? '، ${_currentUser!.name}' : ''}", 
+                    style: const TextStyle(fontSize: 18, color: Colors.grey)
+                  ),
                   const Text("ما الخدمة التي تحتاجينها اليوم؟", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 30),
                   Expanded(

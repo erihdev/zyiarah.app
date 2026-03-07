@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:zyiarah/models/user_model.dart';
+import 'package:zyiarah/screens/support_screen.dart';
 
 class ZyiarahProfileScreen extends StatefulWidget {
   const ZyiarahProfileScreen({super.key});
@@ -17,7 +19,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
   final _firestore = FirebaseFirestore.instance;
   final _firebaseService = ZyiarahFirebaseService();
 
-  Map<String, dynamic>? _userData;
+  ZyiarahUser? _currentUser;
   bool _isLoading = true;
 
   @override
@@ -35,11 +37,13 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
 
     try {
       final doc = await _firestore.collection('users').doc(uid).get();
-      if (mounted) {
+      if (mounted && doc.exists) {
         setState(() {
-          _userData = doc.data();
+          _currentUser = ZyiarahUser.fromMap(uid, doc.data()!);
           _isLoading = false;
         });
+      } else {
+        setState(() => _isLoading = false);
       }
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
@@ -101,19 +105,19 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                 child: Column(
                   children: [
                     _buildHeader(
-                      _userData?['name'] ?? 'مستخدم زيارة',
+                      _currentUser?.name ?? 'مستخدم زيارة',
                       user?.phoneNumber ?? '',
                     ),
                     const SizedBox(height: 20),
                     _buildInfoTile(
                       Icons.phone,
                       'رقم الجوال',
-                      user?.phoneNumber ?? 'غير متوفر',
+                      _currentUser?.phone.isNotEmpty == true ? _currentUser!.phone : (user?.phoneNumber ?? 'غير متوفر'),
                     ),
                     _buildInfoTile(
                       Icons.badge_outlined,
                       'نوع الحساب',
-                      _userData?['role'] == 'driver' ? '🚗 سائق' : '👤 عميل',
+                      _currentUser?.role == 'driver' ? '🚗 سائق' : '👤 عميل',
                     ),
                     const Divider(height: 10, indent: 20, endIndent: 20),
                     _buildMenuTile(Icons.history, 'سجل الطلبات', () {}),
@@ -123,8 +127,9 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                           mode: LaunchMode.externalApplication);
                     }),
                     _buildMenuTile(Icons.support_agent, 'الدعم الفني', () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('سيتم تحويلك إلى خدمة العملاء', style: GoogleFonts.tajawal())),
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const ZyiarahSupportScreen()),
                       );
                     }),
                     const Divider(height: 40),
