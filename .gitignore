@@ -39,13 +39,23 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
+# Dependency directories
+node_modules/
+jspm_packages/
 
-.env
+# Android
+**/android/.kotlin/
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+
+# Firebase
 .firebase/
+functions/node_modules/
+admin_panel/node_modules/
+
+# Environment variables and secrets
+.env
 lib/firebase_options.dart
 admin_panel/src/services/firebase.ts
 zyiarah_backend/serviceAccountKey.json
