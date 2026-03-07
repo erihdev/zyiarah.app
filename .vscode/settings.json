@@ -2,5 +2,6 @@
     "css.lint.unknownAtRules": "ignore",
     "java.jdt.ls.java.home": "C:\\Program Files\\Android\\Android Studio\\jbr",
     "java.import.gradle.java.home": "C:\\Program Files\\Android\\Android Studio\\jbr",
-    "java.configuration.updateBuildConfiguration": "interactive"
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "deno.enable": true
 }
