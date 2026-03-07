@@ -2,12 +2,5 @@
     "css.lint.unknownAtRules": "ignore",
     "java.jdt.ls.java.home": "C:\\Program Files\\Android\\Android Studio\\jbr",
     "java.import.gradle.java.home": "C:\\Program Files\\Android\\Android Studio\\jbr",
-    "java.configuration.runtimes": [
-        {
-            "name": "JavaSE-19",
-            "path": "C:\\Program Files\\Android\\Android Studio\\jbr",
-            "default": true
-        }
-    ],
     "java.configuration.updateBuildConfiguration": "interactive"
 }
