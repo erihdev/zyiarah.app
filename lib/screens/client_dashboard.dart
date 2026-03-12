@@ -7,6 +7,7 @@ import 'package:zyiarah/services/tamara_service.dart';
 import 'package:zyiarah/screens/profile_screen.dart';
 import 'package:zyiarah/models/order_model.dart';
 import 'package:zyiarah/models/user_model.dart';
+import 'package:zyiarah/screens/hourly_details_screen.dart';
 
 class ClientDashboard extends StatefulWidget {
   const ClientDashboard({super.key});
@@ -118,83 +119,447 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("زيارة - اطلب الآن", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1E3A8A),
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person),
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahProfileScreen()));
-            },
-          )
-        ],
-      ),
-      body: Directionality(
-        textDirection: TextDirection.rtl,
-        child: Stack(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "مرحباً بك${_currentUser != null ? '، ${_currentUser!.name}' : ''}", 
-                    style: const TextStyle(fontSize: 18, color: Colors.grey)
-                  ),
-                  const Text("ما الخدمة التي تحتاجينها اليوم؟", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 30),
-                  Expanded(
-                    child: GridView.count(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 15,
-                      mainAxisSpacing: 15,
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF9FAFB),
+        appBar: _buildTopBar(),
+        drawer: _buildDrawer(),
+        body: SafeArea(
+          child: Stack(
+            children: [
+              SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildMetricsList(),
+                    const SizedBox(height: 25),
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.start,
                       children: [
-                        _buildServiceItem(Icons.cleaning_services, "نظافة منزلية", 150.0),
-                        _buildServiceItem(Icons.local_laundry_service, "كي وغسيل", 50.0),
-                        _buildServiceItem(Icons.child_care, "رعاية أطفال", 200.0),
-                        _buildServiceItem(Icons.settings_suggest, "صيانة خفيفة", 100.0),
+                        Icon(Icons.auto_awesome, color: Colors.amber, size: 20),
+                        SizedBox(width: 8),
+                        Text('خدماتنا', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
                       ],
+                    ),
+                    const SizedBox(height: 15),
+                    _buildServicesGrid(),
+                    const SizedBox(height: 25),
+                    _buildLatestBookings(),
+                    const SizedBox(height: 30),
+                  ],
+                ),
+              ),
+              if (_isLoading)
+                Container(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  child: const Center(
+                    child: CircularProgressIndicator(color: Color(0xFF2563EB)),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  PreferredSizeWidget _buildTopBar() {
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: const Color(0xFFDBEAFE),
+                child: const Text('d', style: TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold, fontSize: 18)),
+              ),
+              const SizedBox(width: 10),
+              Text(_currentUser?.name ?? 'difmashni', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A))),
+              const SizedBox(width: 5),
+              const Text('👋', style: TextStyle(fontSize: 16)),
+            ],
+          ),
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.shopping_cart_outlined, size: 24),
+                onPressed: () {},
+              ),
+              Stack(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_outlined, size: 24),
+                    onPressed: () {},
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: const Color(0xFFF9FAFB), width: 2),
+                      ),
                     ),
                   ),
                 ],
               ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricsList() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      clipBehavior: Clip.none,
+      child: Row(
+        children: [
+          _buildColorfulMetricCard(
+            title: 'إجمالي الحجوزات',
+            value: '0',
+            iconPath: Icons.calendar_today_rounded,
+            cardColor: const Color(0xFF3B82F6), // Blue
+          ),
+          const SizedBox(width: 15),
+          _buildColorfulMetricCard(
+             title: 'رصيد المحفظة',
+             value: '0 ر.س',
+             iconPath: Icons.account_balance_wallet_rounded,
+             cardColor: const Color(0xFF10B981), // Green
+          ),
+          const SizedBox(width: 15),
+          _buildColorfulMetricCard(
+             title: 'تقييمك',
+             value: '4.9 ★',
+             iconPath: Icons.star_border_rounded,
+             cardColor: const Color(0xFFF59E0B), // Yellow/Orange
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildColorfulMetricCard({
+    required String title,
+    required String value,
+    required IconData iconPath,
+    required Color cardColor,
+  }) {
+    return Container(
+      width: 200,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: cardColor.withValues(alpha: 0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
+              Text(value, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(14),
             ),
-            if (_isLoading)
-              Container(
-                color: Colors.black.withValues(alpha: 0.3),
-                child: const Center(
-                  child: CircularProgressIndicator(color: Color(0xFF1E3A8A)),
+            child: Icon(iconPath, color: Colors.white, size: 28),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildServicesGrid() {
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 15,
+      crossAxisSpacing: 15,
+      childAspectRatio: 0.80, // Taller cards
+      children: [
+        _buildWebStyleServiceCard(
+          title: "خدمة بالساعة",
+          subtitle: "احجز عاملة منزلية بالساعة حسب احتياجك",
+          price: "من 50 ر.س/ساعة",
+          numericPrice: 50.0,
+          themeColor: const Color(0xFF10B981), // Green
+          icon: Icons.access_time_filled,
+          iconBgColor: const Color(0xFFE1F0E4), // Light Green
+        ),
+        _buildWebStyleServiceCard(
+          title: "تنظيف الكنب والسجاد",
+          subtitle: "تنظيف عميق بالبخار لجميع المفروشات",
+          price: "من 100 ر.س",
+          numericPrice: 100.0,
+          themeColor: const Color(0xFF8B5CF6), // Purple
+          icon: Icons.chair,
+          iconBgColor: const Color(0xFFF1E9FE), // Light Purple
+        ),
+        _buildWebStyleServiceCard(
+          title: "سلة العائلة",
+          subtitle: "باقات شهرية موفرة للعائلات",
+          price: "من 299 ر.س/شهر",
+          numericPrice: 299.0,
+          themeColor: const Color(0xFFF59E0B), // Orange
+          icon: Icons.shopping_basket,
+          iconBgColor: const Color(0xFFFEF3C7), // Light Orange
+        ),
+        _buildWebStyleServiceCard(
+          title: "خدمات الشركات",
+          subtitle: "حلول تنظيف مخصصة للأعمال والمؤسسات",
+          price: "عرض سعر",
+          numericPrice: 0.0,
+          themeColor: const Color(0xFF3B82F6), // Blue
+          icon: Icons.business_center,
+          iconBgColor: const Color(0xFFDBEAFE), // Light Blue
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWebStyleServiceCard({
+    required String title,
+    required String subtitle,
+    required String price,
+    required double numericPrice,
+    required Color themeColor,
+    required IconData icon,
+    required Color iconBgColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+           BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                    const SizedBox(height: 4),
+                    Text(subtitle, style: TextStyle(fontSize: 10, color: Colors.grey.shade500), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  ],
                 ),
               ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: iconBgColor,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: themeColor, size: 24),
+              ),
+            ],
+          ),
+          const Spacer(),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFBBF24), // Yellow Badge
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  price,
+                  style: const TextStyle(color: Color(0xFF0F172A), fontSize: 10, fontWeight: FontWeight.w600),
+                ),
+              ),
+              InkWell(
+                onTap: () {
+                  if (title == "خدمة بالساعة") {
+                     Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const HourlyCleaningDetailsScreen(serviceName: "نظافة بالساعة"),
+                      ),
+                    );
+                  } else if (title != "خدمات الشركات") {
+                    _initiatePayment(title, numericPrice);
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: themeColor,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.arrow_back, color: Colors.white, size: 16),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLatestBookings() {
+    return Column(
+      children: [
+        Row(
+           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+           children: [
+             Row(
+               children: [
+                 Icon(Icons.calendar_month, color: Colors.blue.shade800, size: 20),
+                 const SizedBox(width: 8),
+                 const Text('آخر الحجوزات', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+               ],
+             ),
+             const Row(
+               children: [
+                 Text('عرض الكل', style: TextStyle(color: Color(0xFF2563EB), fontSize: 12, fontWeight: FontWeight.bold)),
+                 Icon(Icons.chevron_right, color: Color(0xFF2563EB), size: 16),
+               ],
+             ),
+           ],
+        ),
+        const SizedBox(height: 15),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(30),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Icon(Icons.inventory_2_outlined, size: 40, color: Colors.grey.shade400),
+              const SizedBox(height: 10),
+              Text('لا توجد حجوزات', style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
+              const SizedBox(height: 15),
+              OutlinedButton(
+                onPressed: () {},
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: Colors.grey.shade300),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                ),
+                child: const Text('احجز الآن', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDrawer() {
+    return Drawer(
+      backgroundColor: const Color(0xFF2563EB), // Solid vibrand blue as in screenshot
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Row(
+                children: [
+                  const Icon(Icons.maps_home_work, color: Colors.white, size: 32),
+                  const SizedBox(width: 12),
+                  const Text('زيارة', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const Spacer(),
+                  IconButton(
+                     onPressed: ()=> Navigator.pop(context),
+                     icon: const Icon(Icons.chevron_left, color: Colors.white, size: 30),
+                  )
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            _buildDrawerItem(Icons.home_outlined, 'الرئيسية', true),
+            _buildDrawerItem(Icons.calendar_today_outlined, 'حجوزاتي', false),
+            _buildDrawerItem(Icons.inventory_2_outlined, 'الطلبات', false),
+            _buildDrawerItem(Icons.shopping_cart_outlined, 'سلة التسوق', false),
+            const SizedBox(height: 20),
+            _buildDrawerItem(Icons.language, 'English', false),
+            _buildDrawerItem(Icons.wb_sunny_outlined, 'الوضع الداكن', false),
+            const Spacer(),
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              leading: const Icon(Icons.logout, color: Colors.white),
+              title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+              onTap: () async {
+                await FirebaseAuth.instance.signOut();
+                if (mounted) {
+                  Navigator.of(context).pushReplacementNamed('/');
+                }
+              },
+            ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildServiceItem(IconData icon, String label, double price) {
-    return InkWell(
-      onTap: () => _initiatePayment(label, price),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+  Widget _buildDrawerItem(IconData icon, String title, bool isActive) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: ListTile(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        tileColor: isActive ? Colors.white : Colors.transparent,
+        leading: Icon(icon, color: isActive ? const Color(0xFF2563EB) : Colors.white),
+        title: Text(
+          title, 
+          style: TextStyle(
+            color: isActive ? const Color(0xFF2563EB) : Colors.white,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+          ),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 40, color: const Color(0xFF1E3A8A)),
-            const SizedBox(height: 10),
-            Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 5),
-            Text("$price ر.س", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-          ],
-        ),
+        onTap: () {},
       ),
     );
   }

@@ -24,9 +24,12 @@ class ZyiarahApp extends StatelessWidget {
       title: 'زيارة - Zyiarah',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primaryColor: const Color(0xFF1E3A8A),
-        textTheme: GoogleFonts.tajawalTextTheme(),
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1E3A8A)),
+        primaryColor: const Color(0xFF2563EB),
+        scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+        textTheme: GoogleFonts.tajawalTextTheme(
+          Theme.of(context).textTheme.apply(bodyColor: const Color(0xFF0F172A), displayColor: const Color(0xFF0F172A)),
+        ),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB), surface: const Color(0xFFF8FAFC)),
         useMaterial3: true,
       ),
       // تعيين شاشة الترحيب كشاشة البداية
