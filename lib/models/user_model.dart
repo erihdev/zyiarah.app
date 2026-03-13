@@ -3,7 +3,13 @@ class ZyiarahUser {
   final String name;
   final String email;
   final String phone;
-  final String role; // 'client' or 'driver'
+  final String role;
+  final double walletBalance;
+  final double rating;
+  final bool hasActiveSubscription;
+  final int visitsRemaining;
+  final DateTime? subscriptionExpiry;
+  final String? subscriptionType;
 
   ZyiarahUser({
     required this.uid,
@@ -11,6 +17,12 @@ class ZyiarahUser {
     required this.email,
     required this.phone,
     required this.role,
+    this.walletBalance = 0.0,
+    this.rating = 4.9,
+    this.hasActiveSubscription = false,
+    this.visitsRemaining = 0,
+    this.subscriptionExpiry,
+    this.subscriptionType,
   });
 
   factory ZyiarahUser.fromMap(String id, Map<String, dynamic> data) {
@@ -20,6 +32,14 @@ class ZyiarahUser {
       email: data['email'] ?? '',
       phone: data['phone'] ?? '',
       role: data['role'] ?? 'client',
+      walletBalance: (data['wallet_balance'] ?? 0.0).toDouble(),
+      rating: (data['rating'] ?? 4.9).toDouble(),
+      hasActiveSubscription: data['has_active_subscription'] ?? false,
+      visitsRemaining: data['visits_remaining'] ?? 0,
+      subscriptionExpiry: data['subscription_expiry'] != null 
+          ? (data['subscription_expiry'] as Timestamp).toDate() 
+          : null,
+      subscriptionType: data['subscription_type'],
     );
   }
 
@@ -29,6 +49,12 @@ class ZyiarahUser {
       'email': email,
       'phone': phone,
       'role': role,
+      'wallet_balance': walletBalance,
+      'rating': rating,
+      'has_active_subscription': hasActiveSubscription,
+      'visits_remaining': visitsRemaining,
+      'subscription_expiry': subscriptionExpiry != null ? Timestamp.fromDate(subscriptionExpiry!) : null,
+      'subscription_type': subscriptionType,
     };
   }
 }

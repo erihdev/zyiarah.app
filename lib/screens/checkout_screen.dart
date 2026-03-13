@@ -13,6 +13,8 @@ class TamaraCheckoutScreen extends StatefulWidget {
   final String orderId;
   final String serviceType;
   final GeoPoint location;
+  final int? hours;
+  final DateTime? serviceDate;
 
   const TamaraCheckoutScreen({
     super.key,
@@ -21,6 +23,8 @@ class TamaraCheckoutScreen extends StatefulWidget {
     required this.orderId,
     required this.serviceType,
     required this.location,
+    this.hours,
+    this.serviceDate,
   });
 
   @override
@@ -39,13 +43,16 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) async {
-            if (url.contains('payment-success')) {
+            if (url.contains('payment-success') || url.contains('payment-success-mock')) {
               // إنشاء الطلب في Firestore
               final String newOrderId = await _orderService.createOrder(
                 clientId: FirebaseAuth.instance.currentUser?.uid ?? "guest_client", 
                 serviceType: widget.serviceType,
                 amount: widget.amount,
-                location: widget.location, // إحداثيات من المستخدم
+                location: widget.location,
+                paymentMethod: 'tamara',
+                hours: widget.hours,
+                serviceDate: widget.serviceDate,
               );
 
               // توليد بيانات ZATCA وتوليد الفاتورة في الخلفية
@@ -81,6 +88,8 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                   builder: (context) => ZyiarahInvoiceScreen(
                     amount: widget.amount,
                     orderId: newOrderId,
+                    hours: widget.hours,
+                    serviceDate: widget.serviceDate,
                   ),
                 ),
               );
@@ -96,7 +105,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("إتمام الدفع - تمارا"),
-        backgroundColor: const Color(0xFF1E3A8A),
+        backgroundColor: const Color(0xFF5D1B5E),
       ),
       body: WebViewWidget(controller: _controller),
     );

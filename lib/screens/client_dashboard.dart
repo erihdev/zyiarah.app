@@ -8,6 +8,10 @@ import 'package:zyiarah/screens/profile_screen.dart';
 import 'package:zyiarah/models/order_model.dart';
 import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/screens/hourly_details_screen.dart';
+import 'package:zyiarah/screens/orders_list_screen.dart';
+import 'package:zyiarah/screens/notifications_screen.dart';
+import 'package:zyiarah/screens/support_screen.dart';
+import 'package:zyiarah/screens/payment_summary_screen.dart';
 
 class ClientDashboard extends StatefulWidget {
   const ClientDashboard({super.key});
@@ -25,6 +29,23 @@ class _ClientDashboardState extends State<ClientDashboard> {
   void initState() {
     super.initState();
     _loadUserData();
+  }
+
+  Stream<DocumentSnapshot> _getUserStream() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const Stream.empty();
+    return FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots();
+  }
+
+  Stream<QuerySnapshot> _getOrdersStream() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const Stream.empty();
+    return FirebaseFirestore.instance
+        .collection('orders')
+        .where('client_id', isEqualTo: user.uid)
+        .orderBy('created_at', descending: true)
+        .limit(5)
+        .snapshots();
   }
 
   Future<void> _loadUserData() async {
@@ -51,69 +72,21 @@ class _ClientDashboardState extends State<ClientDashboard> {
       return; // المستخدم ألغى الاختيار
     }
 
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      final String currentOrderId = "ORD-${DateTime.now().millisecondsSinceEpoch}";
-      
-      // Creating the order object using our new Model
-      final newOrder = ZyiarahOrder(
-        id: currentOrderId,
-        clientId: FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
-        serviceType: serviceName,
-        amount: amount,
-        status: 'pending',
-        paymentStatus: 'unpaid',
-        location: selectedLocation,
-        createdAt: DateTime.now(),
-      );
-
-      // إنشاء جلسة دفع تجريبية
-      String? checkoutUrl = await _tamaraService.createCheckoutSession(
-        orderId: newOrder.id,
-        amount: newOrder.amount,
-        customerPhone: _currentUser?.phone ?? "500000000",
-        customerName: _currentUser?.name ?? "عميل زيارة",
-      );
-
-      if (checkoutUrl != null && mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        
-        // الانتقال لشاشة الدفع
-        bool? paymentSuccess = await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => TamaraCheckoutScreen(
-              checkoutUrl: checkoutUrl,
-              amount: newOrder.amount,
-              orderId: newOrder.id,
-              serviceType: newOrder.serviceType,
-              location: newOrder.location,
-            ),
+    if (selectedLocation != null && mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PaymentSummaryScreen(
+            serviceName: serviceName,
+            amount: amount,
+            location: selectedLocation,
           ),
-        );
-
-        if (paymentSuccess == true && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-             SnackBar(content: Text('تم تأكيد طلب ${newOrder.serviceType} بنجاح!')),
-          );
+        ),
+      ).then((success) {
+        if (success == true && mounted) {
+          _loadUserData(); // Refresh data if payment was successful
         }
-      } else {
-        throw Exception("لم نتمكن من جلب رابط الدفع");
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ في الدفع: $e')),
-        );
-      }
+      });
     }
   }
 
@@ -133,6 +106,8 @@ class _ClientDashboardState extends State<ClientDashboard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (_currentUser?.hasActiveSubscription == true) _buildSubscriptionCard(),
+                    const SizedBox(height: 10),
                     _buildMetricsList(),
                     const SizedBox(height: 25),
                     const Row(
@@ -146,7 +121,12 @@ class _ClientDashboardState extends State<ClientDashboard> {
                     const SizedBox(height: 15),
                     _buildServicesGrid(),
                     const SizedBox(height: 25),
-                    _buildLatestBookings(),
+                    StreamBuilder<QuerySnapshot>(
+                      stream: _getOrdersStream(),
+                      builder: (context, snapshot) {
+                        return _buildLatestBookings(snapshot.data?.docs ?? []);
+                      },
+                    ),
                     const SizedBox(height: 30),
                   ],
                 ),
@@ -173,30 +153,42 @@ class _ClientDashboardState extends State<ClientDashboard> {
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: const Color(0xFFDBEAFE),
-                child: const Text('d', style: TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold, fontSize: 18)),
-              ),
-              const SizedBox(width: 10),
-              Text(_currentUser?.name ?? 'difmashni', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A))),
-              const SizedBox(width: 5),
-              const Text('👋', style: TextStyle(fontSize: 16)),
-            ],
+          GestureDetector(
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahProfileScreen()));
+            },
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: const Color(0xFFDBEAFE),
+                  child: Text(
+                    _currentUser?.name.isNotEmpty == true ? _currentUser!.name[0].toUpperCase() : 'Z',
+                    style: const TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(_currentUser?.name ?? 'مستخدم زيارة', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A))),
+                const SizedBox(width: 5),
+                const Text('👋', style: TextStyle(fontSize: 16)),
+              ],
+            ),
           ),
           Row(
             children: [
               IconButton(
                 icon: const Icon(Icons.shopping_cart_outlined, size: 24),
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen()));
+                },
               ),
               Stack(
                 children: [
                   IconButton(
                     icon: const Icon(Icons.notifications_outlined, size: 24),
-                    onPressed: () {},
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen()));
+                    },
                   ),
                   Positioned(
                     top: 8,
@@ -220,34 +212,155 @@ class _ClientDashboardState extends State<ClientDashboard> {
     );
   }
 
-  Widget _buildMetricsList() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      clipBehavior: Clip.none,
-      child: Row(
-        children: [
-          _buildColorfulMetricCard(
-            title: 'إجمالي الحجوزات',
-            value: '0',
-            iconPath: Icons.calendar_today_rounded,
-            cardColor: const Color(0xFF3B82F6), // Blue
-          ),
-          const SizedBox(width: 15),
-          _buildColorfulMetricCard(
-             title: 'رصيد المحفظة',
-             value: '0 ر.س',
-             iconPath: Icons.account_balance_wallet_rounded,
-             cardColor: const Color(0xFF10B981), // Green
-          ),
-          const SizedBox(width: 15),
-          _buildColorfulMetricCard(
-             title: 'تقييمك',
-             value: '4.9 ★',
-             iconPath: Icons.star_border_rounded,
-             cardColor: const Color(0xFFF59E0B), // Yellow/Orange
+  Widget _buildSubscriptionCard() {
+    final int remaining = _currentUser?.visitsRemaining ?? 0;
+    const int total = 4; // Assuming 4 visits per month for Gold
+    final double progress = remaining / total;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1E3A8A), Color(0xFF2563EB)],
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF2563EB).withValues(alpha: 0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.workspace_premium, color: Colors.amber, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('زيارة جولد (الذهبية)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text('اشتراك فعّال', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                    ],
+                  ),
+                ],
+              ),
+              Text('$remaining / $total', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: progress,
+              backgroundColor: Colors.white.withValues(alpha: 0.1),
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.amber),
+              minHeight: 8,
+            ),
+          ),
+          const SizedBox(height: 15),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+               Text(
+                'الزيارات المتبقية لهذا الشهر', 
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12)
+              ),
+              if (_currentUser?.subscriptionExpiry != null)
+                Text(
+                  'التجديد في: ${_currentUser!.subscriptionExpiry!.day}/${_currentUser!.subscriptionExpiry!.month}',
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 10),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _upgradeToSubscription() async {
+    setState(() => _isLoading = true);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+        'has_active_subscription': true,
+        'visits_remaining': 4,
+        'subscription_type': 'gold_monthly',
+        'subscription_expiry': Timestamp.fromDate(DateTime.now().add(const Duration(days: 30))),
+      });
+      await _loadUserData();
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم تفعيل اشتراك زيارة جولد بنجاح! 🎉'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildMetricsList() {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: _getUserStream(),
+      builder: (context, userSnapshot) {
+        final userData = userSnapshot.data?.data() as Map<String, dynamic>?;
+        final wallet = (userData?['wallet_balance'] ?? 0.0).toString();
+        final rating = (userData?['rating'] ?? 4.9).toString();
+
+        return StreamBuilder<QuerySnapshot>(
+          stream: _getOrdersStream(),
+          builder: (context, orderSnapshot) {
+            final totalBookings = (orderSnapshot.data?.docs.length ?? 0).toString();
+
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.none,
+              child: Row(
+                children: [
+                  _buildColorfulMetricCard(
+                    title: 'إجمالي الحجوزات',
+                    value: totalBookings,
+                    iconPath: Icons.calendar_today_rounded,
+                    cardColor: const Color(0xFF3B82F6), // Blue
+                  ),
+                  const SizedBox(width: 15),
+                  _buildColorfulMetricCard(
+                     title: 'رصيد المحفظة',
+                     value: '$wallet ر.س',
+                     iconPath: Icons.account_balance_wallet_rounded,
+                     cardColor: const Color(0xFF10B981), // Green
+                  ),
+                  const SizedBox(width: 15),
+                  _buildColorfulMetricCard(
+                     title: 'تقييمك',
+                     value: '$rating ★',
+                     iconPath: Icons.star_border_rounded,
+                     cardColor: const Color(0xFFF59E0B), // Yellow/Orange
+                  ),
+                ],
+              ),
+            );
+          }
+        );
+      }
     );
   }
 
@@ -419,7 +532,9 @@ class _ClientDashboardState extends State<ClientDashboard> {
                         builder: (context) => const HourlyCleaningDetailsScreen(serviceName: "نظافة بالساعة"),
                       ),
                     );
-                  } else if (title != "خدمات الشركات") {
+                  } else if (title == "سلة العائلة") {
+                    _upgradeToSubscription();
+                  } else {
                     _initiatePayment(title, numericPrice);
                   }
                 },
@@ -439,7 +554,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
     );
   }
 
-  Widget _buildLatestBookings() {
+  Widget _buildLatestBookings(List<DocumentSnapshot> orders) {
     return Column(
       children: [
         Row(
@@ -452,47 +567,81 @@ class _ClientDashboardState extends State<ClientDashboard> {
                  const Text('آخر الحجوزات', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                ],
              ),
-             const Row(
-               children: [
-                 Text('عرض الكل', style: TextStyle(color: Color(0xFF2563EB), fontSize: 12, fontWeight: FontWeight.bold)),
-                 Icon(Icons.chevron_right, color: Color(0xFF2563EB), size: 16),
-               ],
+             GestureDetector(
+               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen())),
+               child: const Row(
+                 children: [
+                   Text('عرض الكل', style: TextStyle(color: Color(0xFF2563EB), fontSize: 12, fontWeight: FontWeight.bold)),
+                   Icon(Icons.chevron_right, color: Color(0xFF2563EB), size: 16),
+                 ],
+               ),
              ),
            ],
         ),
         const SizedBox(height: 15),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(30),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Icon(Icons.inventory_2_outlined, size: 40, color: Colors.grey.shade400),
-              const SizedBox(height: 10),
-              Text('لا توجد حجوزات', style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
-              const SizedBox(height: 15),
-              OutlinedButton(
-                onPressed: () {},
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: Colors.grey.shade300),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        if (orders.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(30),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4)),
+              ],
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.inventory_2_outlined, size: 40, color: Colors.grey.shade400),
+                const SizedBox(height: 10),
+                Text('لا توجد حجوزات', style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
+                const SizedBox(height: 15),
+                OutlinedButton(
+                  onPressed: () {},
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: Colors.grey.shade300),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  ),
+                  child: const Text('احجز الآن', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600)),
                 ),
-                child: const Text('احجز الآن', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          )
+        else
+          ...orders.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final status = data['status'] ?? 'pending';
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade100),
               ),
-            ],
-          ),
-        ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(12)),
+                    child: const Icon(Icons.cleaning_services, color: Color(0xFF2563EB)),
+                  ),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(data['service_type'] ?? 'خدمة زيارة', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        Text(status == 'completed' ? 'تم التنفيذ' : 'تحت المعالجة', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_left, color: Colors.grey),
+                ],
+              ),
+            );
+          }),
       ],
     );
   }
@@ -519,13 +668,22 @@ class _ClientDashboardState extends State<ClientDashboard> {
               ),
             ),
             const SizedBox(height: 10),
-            _buildDrawerItem(Icons.home_outlined, 'الرئيسية', true),
-            _buildDrawerItem(Icons.calendar_today_outlined, 'حجوزاتي', false),
-            _buildDrawerItem(Icons.inventory_2_outlined, 'الطلبات', false),
-            _buildDrawerItem(Icons.shopping_cart_outlined, 'سلة التسوق', false),
+            _buildDrawerItem(Icons.home_outlined, 'الرئيسية', true, onTap: () => Navigator.pop(context)),
+            _buildDrawerItem(Icons.calendar_today_outlined, 'حجوزاتي', false, onTap: () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen()));
+            }),
+            _buildDrawerItem(Icons.inventory_2_outlined, 'الطلبات', false, onTap: () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen()));
+            }),
+            _buildDrawerItem(Icons.support_agent, 'الدعم الفني', false, onTap: () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahSupportScreen()));
+            }),
             const SizedBox(height: 20),
-            _buildDrawerItem(Icons.language, 'English', false),
-            _buildDrawerItem(Icons.wb_sunny_outlined, 'الوضع الداكن', false),
+            _buildDrawerItem(Icons.language, 'English', false, onTap: () {}),
+            _buildDrawerItem(Icons.wb_sunny_outlined, 'الوضع الداكن', false, onTap: () {}),
             const Spacer(),
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 24),
@@ -545,7 +703,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
     );
   }
 
-  Widget _buildDrawerItem(IconData icon, String title, bool isActive) {
+  Widget _buildDrawerItem(IconData icon, String title, bool isActive, {required VoidCallback onTap}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: ListTile(
@@ -559,7 +717,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
             fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
           ),
         ),
-        onTap: () {},
+        onTap: onTap,
       ),
     );
   }

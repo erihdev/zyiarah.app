@@ -142,33 +142,64 @@ export default function Dashboard() {
 
         // Live Drivers Data Markers from Firestore
         const unsubDriversMap = onSnapshot(
-            query(collection(db, 'drivers'), where('is_available', '==', true)),
+            collection(db, 'drivers'),
             (snapshot: any) => {
                 const currentDriverIds = new Set<string>();
                 const currentDriversData: any[] = [];
-                setIsAvailableCount(snapshot.size);
+                let onlineCount = 0;
 
                 snapshot.forEach((doc: any) => {
                     const data = doc.data();
-                    currentDriversData.push(data);
                     const id = doc.id;
+                    
+                    // Only show drivers who are online/available
+                    if (!data.is_available && data.status === 'off') return;
+                    
+                    onlineCount++;
+                    currentDriversData.push({ ...data, id });
                     currentDriverIds.add(id);
 
                     if (data.location && typeof data.location.latitude === 'number' && typeof data.location.longitude === 'number') {
                         const lng = data.location.longitude;
                         const lat = data.location.latitude;
+                        
+                        // Status-based colors
+                        let markerColor = "#10b981"; // Green (Idle)
+                        if (data.status === 'en_route') markerColor = "#f59e0b"; // Orange (En-route)
+                        if (data.status === 'in_service') markerColor = "#ef4444"; // Red (Active)
+
+                        const popupHtml = `
+                            <div class="p-3 text-right" dir="rtl">
+                                <h4 class="font-bold text-slate-800">${data.name || 'سائق'}</h4>
+                                <p class="text-xs text-slate-500 mt-1">الحالة: ${
+                                    data.status === 'in_service' ? 'يخدم عميل' : 
+                                    data.status === 'en_route' ? 'في الطريق للعميل' : 'متاح'
+                                }</p>
+                                ${data.current_order_id ? `<p class="text-[10px] bg-slate-100 p-1 rounded mt-2">طلب: #${data.current_order_id.substring(0, 4)}</p>` : ''}
+                            </div>
+                        `;
 
                         if (markersRef.current[id]) {
                             markersRef.current[id].setLngLat([lng, lat]);
+                            const el = markersRef.current[id].getElement();
+                            const path = el.querySelector('path');
+                            if (path) path.setAttribute('fill', markerColor);
+                            
+                            // Update popup content if needed
+                            markersRef.current[id].getPopup()?.setHTML(popupHtml);
                         } else {
-                            const marker = new mapboxgl.Marker({ color: "#10b981" })
+                            const popup = new mapboxgl.Popup({ offset: 25, closeButton: false }).setHTML(popupHtml);
+                            
+                            const marker = new mapboxgl.Marker({ color: markerColor })
                                 .setLngLat([lng, lat])
+                                .setPopup(popup)
                                 .addTo(map.current!);
                             markersRef.current[id] = marker;
                         }
                     }
                 });
 
+                setIsAvailableCount(onlineCount);
                 setTrackingDrivers(currentDriversData);
 
                 // Remove drivers that are no longer available or online

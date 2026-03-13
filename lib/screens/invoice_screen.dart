@@ -5,11 +5,20 @@ import 'package:zyiarah/services/zatca_service.dart';
 class ZyiarahInvoiceScreen extends StatelessWidget {
   final double amount;
   final String orderId;
+  final int? hours;
+  final DateTime? serviceDate;
+
+  final bool isSubscription;
+  final double? cashbackEarned;
 
   const ZyiarahInvoiceScreen({
     super.key,
     required this.amount,
     required this.orderId,
+    this.hours,
+    this.serviceDate,
+    this.isSubscription = false,
+    this.cashbackEarned,
   });
 
   @override
@@ -31,7 +40,7 @@ class ZyiarahInvoiceScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text("الفاتورة الضريبية",
             style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1E3A8A),
+        backgroundColor: const Color(0xFF5D1B5E),
         foregroundColor: Colors.white,
       ),
       body: Directionality(
@@ -59,7 +68,7 @@ class ZyiarahInvoiceScreen extends StatelessWidget {
                         style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E3A8A)),
+                            color: Color(0xFF5D1B5E)),
                       ),
                       Text("فاتورة ضريبية مبسطة", style: TextStyle(fontSize: 16)),
                       Text("الرقم الضريبي: 310885360200003",
@@ -90,41 +99,102 @@ class ZyiarahInvoiceScreen extends StatelessWidget {
                         "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour}:${now.minute.toString().padLeft(2, '0')}"),
                   ],
                 ),
+                if (hours != null) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text("عدد الساعات:",
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      Text("$hours ساعة"),
+                    ],
+                  ),
+                ],
+                if (serviceDate != null) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text("موعد الخدمة:",
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      Text("${serviceDate!.year}-${serviceDate!.month.toString().padLeft(2, '0')}-${serviceDate!.day.toString().padLeft(2, '0')}"),
+                    ],
+                  ),
+                ],
 
                 const Divider(height: 40),
 
                 // Amounts
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text("المبلغ الخاضع للضريبة:"),
-                    Text("${subtotal.toStringAsFixed(2)} ر.س"),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text("ضريبة القيمة المضافة (15%):"),
-                    Text("${vatAmount.toStringAsFixed(2)} ر.س"),
-                  ],
-                ),
+                if (isSubscription) ...[
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text("طريقة الدفع:"),
+                      Text("باقة زيارة جولد", style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text("الزيارات المخصومة:"),
+                      Text("1 زيارة"),
+                    ],
+                  ),
+                ] else ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text("المبلغ الخاضع للضريبة:"),
+                      Text("${subtotal.toStringAsFixed(2)} ر.س"),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text("ضريبة القيمة المضافة (15%):"),
+                      Text("${vatAmount.toStringAsFixed(2)} ر.س"),
+                    ],
+                  ),
+                ],
                 const Divider(height: 30),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text("الإجمالي مع الضريبة:",
-                        style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E3A8A))),
-                    Text("${amount.toStringAsFixed(2)} ر.س",
+                    Text(isSubscription ? "رصيد الزيارة المستخدم:" : "الإجمالي مع الضريبة:",
                         style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: Colors.green)),
+                            color: Color(0xFF5D1B5E))),
+                    Text(isSubscription ? "مغطى بالباقة" : "${amount.toStringAsFixed(2)} ر.س",
+                        style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: isSubscription ? Colors.blue : Colors.green)),
                   ],
                 ),
+                
+                if (cashbackEarned != null || (!isSubscription && amount > 0)) ...[
+                  const SizedBox(height: 15),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text("كاش باك مكتسب (محفظة زيارة):", 
+                          style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13)),
+                        Text("${(cashbackEarned ?? amount * 0.05).toStringAsFixed(2)} ر.س",
+                          style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                ],
 
                 const SizedBox(height: 40),
 
@@ -163,7 +233,7 @@ class ZyiarahInvoiceScreen extends StatelessWidget {
                   label: const Text("طباعة / تحميل PDF",
                       style: TextStyle(fontSize: 16)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E3A8A),
+                    backgroundColor: const Color(0xFF5D1B5E),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 15),
                     shape: RoundedRectangleBorder(
@@ -177,7 +247,7 @@ class ZyiarahInvoiceScreen extends StatelessWidget {
                   },
                   child: const Text("العودة للرئيسية",
                       style: TextStyle(
-                          color: Color(0xFF1E3A8A),
+                          color: Color(0xFF5D1B5E),
                           fontWeight: FontWeight.bold)),
                 )
               ],
