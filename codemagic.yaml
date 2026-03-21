@@ -19,6 +19,7 @@ workflows:
       - name: Set up iOS code signing
         script: |
           keychain initialize
+          app-store-connect fetch-signing-files "com.zyiarah.zyiarah" --type IOS_APP_DEVELOPMENT --create
           app-store-connect fetch-signing-files "com.zyiarah.zyiarah" --type IOS_APP_STORE --create
           keychain add-certificates
           xcode-project use-profiles
@@ -40,4 +41,3 @@ workflows:
         key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
         issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         submit_to_testflight: true
-
