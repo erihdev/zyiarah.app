@@ -8,7 +8,7 @@ workflows:
       xcode: latest
       cocoapods: default
       groups:
-        - appstore_credentials # Add your App Store Connect API Key here in Codemagic UI
+        - appstore_credentials
     scripts:
       - name: Get Flutter Packages
         script: |
@@ -16,6 +16,12 @@ workflows:
       - name: Install Pods
         script: |
           find . -name "Podfile" -execdir pod install \;
+      - name: Set up iOS code signing
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "com.zyiarah.zyiarah" --type IOS_APP_STORE --create
+          keychain add-certificates
+          xcode-project use-profiles
       - name: iOS Build
         script: |
           flutter build ipa --release
@@ -25,11 +31,13 @@ workflows:
     publishing:
       email:
         recipients:
-          - support@zyiarah.com # Update to the user's email
+          - support@zyiarah.com
         notify:
           success: true
           failure: false
-#     app_store_connect:
-#       auth:
-#         integration: $APP_STORE_CONNECT_KEY
-#       submit_to_testflight: true
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+
