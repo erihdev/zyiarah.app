@@ -7,8 +7,9 @@ workflows:
       flutter: default
       xcode: latest
       cocoapods: default
-      groups:
-        - manual_profiles
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.zyiarah.zyiarah
     scripts:
       - name: Get Flutter Packages
         script: |
@@ -16,14 +17,9 @@ workflows:
       - name: Install Pods
         script: |
           find . -name "Podfile" -execdir pod install \;
-      - name: Setup Code Signing
-        script: |
-          keychain initialize
-          keychain add-certificates
-          xcode-project use-profiles
       - name: iOS Build
         script: |
-          flutter build ipa --release --export-options-plist=$HOME/export_options.plist
+          flutter build ipa --release --export-options-plist=$CM_EXPORT_OPTIONS
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
