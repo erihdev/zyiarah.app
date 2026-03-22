@@ -28,7 +28,7 @@ workflows:
           security set-key-partition-list -S apple-tool:,apple: -s -k "MySecretPassword123" build.keychain-db
           
           # Inject Apple WWDR Parent Certificates manually so Xcode instantly considers our Private Key "Trusted"!
-          curl -sL https://developer.apple.com/certificationauthority/AppleWWDRCAG3.cer -o AppleWWDRCAG3.cer
+          curl -sL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o AppleWWDRCAG3.cer
           security import AppleWWDRCAG3.cer -k build.keychain-db -T /usr/bin/codesign
           curl -sL https://www.apple.com/certificateauthority/AppleWWDRCAG4.cer -o AppleWWDRCAG4.cer
           security import AppleWWDRCAG4.cer -k build.keychain-db -T /usr/bin/codesign
