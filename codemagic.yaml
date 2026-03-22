@@ -22,6 +22,10 @@ workflows:
           keychain initialize
           keychain add-certificates
           xcode-project use-profiles
+      - name: Force Xcode Distribution
+        script: |
+          echo "CODE_SIGN_IDENTITY=Apple Distribution" >> ios/Flutter/Release.xcconfig
+          echo "PROVISIONING_PROFILE_SPECIFIER=" >> ios/Flutter/Release.xcconfig
       - name: iOS Build
         script: |
           flutter build ipa --release --export-options-plist=$HOME/export_options.plist
