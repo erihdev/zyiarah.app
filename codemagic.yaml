@@ -14,11 +14,11 @@ workflows:
       - name: Install Pods
         script: |
           find . -name "Podfile" -execdir pod install \;
-      - name: Setup Code Signing
+      - name: Setup Code Signing Natively
         script: |
           keychain initialize
-          security import ios/zyiarah_dist_cert.p12 -k /Users/builder/Library/Keychains/build.keychain-db -P "dxqiAR0S" -A -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "" /Users/builder/Library/Keychains/build.keychain-db
+          security import ios/zyiarah_dist_cert.p12 -k "$CM_KEYCHAIN_PATH" -P "dxqiAR0S" -A -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$CM_KEYCHAIN_PATH"
           jq -n --arg key_id "RJMPC4734X" \
                 --arg issuer_id "6dd67287-cfcd-40fc-a3db-8bf378a1ac8f" \
                 --arg key "$(cat ios/AuthKey_RJMPC4734X.p8 | tr -d '\r')" \
