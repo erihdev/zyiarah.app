@@ -1,27 +1,36 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { KeyRound, Mail, ArrowRight, ShieldCheck } from 'lucide-react';
+import { KeyRound, Mail, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../services/firebase';
 
-interface LoginProps {
-    onLogin: () => void;
-}
-
-export default function Login({ onLogin }: LoginProps) {
+export default function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const navigate = useNavigate();
 
-    const handleLogin = (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
+        setError(null);
 
-        // Simulate login
-        setTimeout(() => {
-            setIsLoading(false);
-            onLogin();
+        try {
+            await signInWithEmailAndPassword(auth, email, password);
             navigate('/');
-        }, 1500);
+        } catch (err: any) {
+            console.error("Login error:", err);
+            let errorMessage = "حدث خطأ أثناء تسجيل الدخول. يرجى التأكد من البيانات.";
+            if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+                errorMessage = "البريد الإلكتروني أو كلمة المرور غير صحيحة.";
+            } else if (err.code === 'auth/invalid-email') {
+                errorMessage = "البريد الإلكتروني المدخل غير صالح.";
+            }
+            setError(errorMessage);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -43,6 +52,13 @@ export default function Login({ onLogin }: LoginProps) {
                         <h1 className="text-3xl font-extrabold text-slate-800 mb-2 tracking-tight">زيارة أدمن</h1>
                         <p className="text-slate-500 font-medium text-sm">أدخل بيانات الاعتماد للوصول للوحة التحكم</p>
                     </div>
+
+                    {error && (
+                        <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 text-red-700 text-sm animate-in fade-in slide-in-from-top-2">
+                            <AlertCircle size={18} className="shrink-0 mt-0.5" />
+                            <p className="font-bold">{error}</p>
+                        </div>
+                    )}
 
                     <form onSubmit={handleLogin} className="space-y-6">
                         <div className="space-y-5">

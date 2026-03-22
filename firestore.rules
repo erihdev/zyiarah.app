@@ -1,124 +1,65 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // ====== دوال مساعدة ======
+    // Utility functions
     function isLoggedIn() {
       return request.auth != null;
     }
-
-    function isOwner(uid) {
-      return isLoggedIn() && request.auth.uid == uid;
+    function isOwner(userId) {
+      return isLoggedIn() && request.auth.uid == userId;
     }
-
-    function isDriver() {
-      return isLoggedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'driver';
-    }
-
     function isAdmin() {
-      return isLoggedIn() &&
-        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role != null;
+      return isLoggedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    // ====== المستخدمون (users) ======
-    // العميل يقرأ ويكتب على ملفه الشخصي فقط. الأدمن يقرأ الكل.
-    match /users/{uid} {
-      allow read: if isOwner(uid) || isAdmin();
-      allow create: if isOwner(uid);
-      allow update: if isOwner(uid) || isAdmin();
-      allow delete: if isAdmin();
-    }
-
-    // ====== السائقون (drivers) ======
-    // كل مستخدم مسجل يمكنه رؤية قائمة السائقين (للتتبع)
-    // فقط السائق يعدل على ملفه، والأدمن يعدل الكل
-    match /drivers/{uid} {
-      allow read: if isLoggedIn();
-      allow create, update: if isOwner(uid) || isAdmin();
-      allow delete: if isAdmin();
-    }
-
-    // ====== الطلبات (orders) ======
-    // العميل يقرأ طلباته فقط، السائق يقرأ ويعدل الطلبات المرتبطة به، الأدمن يرى كل شيء
-    match /orders/{orderId} {
-      allow read: if isLoggedIn() &&
-        (resource.data.client_id == request.auth.uid ||
-         resource.data.driver_id == request.auth.uid ||
-         isAdmin());
+    // User profiles
+    match /users/{userId} {
+      allow read: if isLoggedIn() && (isOwner(userId) || isAdmin());
       allow create: if isLoggedIn();
-      allow update: if isLoggedIn() &&
-        (resource.data.client_id == request.auth.uid ||
-         resource.data.driver_id == request.auth.uid ||
-         isAdmin());
+      allow update: if isLoggedIn() && isOwner(userId);
       allow delete: if isAdmin();
     }
 
-    // ====== تذاكر الدعم (tickets) ======
-    // المستخدم يقرأ ويكتب تذاكره فقط، الأدمن يرى الكل ويرد
-    match /tickets/{ticketId} {
-      allow read: if isLoggedIn() &&
-        (resource.data.uid == request.auth.uid || isAdmin());
+    // Account deletion requests
+    match /account_deletions/{deletionId} {
       allow create: if isLoggedIn();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow read, update, delete: if isAdmin();
+    }
 
-      // رسائل المحادثة داخل التذكرة
+    // Support Tickets (New Collection)
+    match /support_tickets/{ticketId} {
+      allow create: if isLoggedIn();
+      allow read, update: if isLoggedIn() && (request.auth.uid == resource.data.userId || isAdmin());
+      
       match /messages/{messageId} {
-        allow read: if isLoggedIn() &&
-          (get(/databases/$(database)/documents/tickets/$(ticketId)).data.uid == request.auth.uid || isAdmin());
-        allow create: if isLoggedIn() &&
-          (get(/databases/$(database)/documents/tickets/$(ticketId)).data.uid == request.auth.uid || isAdmin());
-        allow update, delete: if isAdmin();
+        allow read, create: if isLoggedIn();
       }
     }
 
-    // ====== حذف الحساب (account_deletions) ======
-    match /account_deletions/{uid} {
-      allow read, write: if isOwner(uid) || isAdmin();
+    // Legacy Tickets Collection (Optional)
+    match /tickets/{ticketId} {
+      allow read, write: if isLoggedIn();
     }
 
-    // ====== الإشعارات (fcm_tokens) ======
-    // كل مستخدم يحفظ ويحدث رمز جهازه فقط
-    match /fcm_tokens/{uid} {
-      allow read, write: if isOwner(uid) || isAdmin();
+    // Orders & Transactions
+    match /orders/{orderId} {
+      allow read, write: if isLoggedIn();
     }
 
-    // ====== الإشعارات المُرسلة (notifications_log) ======
-    // الأدمن يكتب، المستخدم يقرأ إشعاراته
-    match /notifications_log/{notifId} {
-      allow read: if isLoggedIn() &&
-        (resource.data.target_uid == request.auth.uid || resource.data.target == 'all' || isAdmin());
-      allow create, update, delete: if isAdmin();
+    // Driver Data
+    match /drivers/{driverId} {
+      allow read, write: if isLoggedIn();
     }
 
-    // ====== إعدادات التطبيق (app_settings) ======
-    // قراءة مفتوحة لجميع المستخدمين (لجلب سياسة الخصوصية والإصدار)
-    match /app_settings/{doc} {
-      allow read: if true;
-      allow write: if isAdmin();
+    // FCM Tokens
+    match /fcm_tokens/{tokenId} {
+      allow read, write: if isLoggedIn() && (request.auth.uid == tokenId || isAdmin());
     }
 
-    // ====== كوبونات الخصم (coupons) ======
-    match /coupons/{couponId} {
+    // System Admins
+    match /admins/{adminId} {
       allow read: if isLoggedIn();
-      allow write: if isAdmin();
     }
-
-    // ====== الأدمن (admins) ======
-    // مقيد بالكامل لا يراه إلا الأدمن
-    match /admins/{uid} {
-      allow read, write: if isAdmin();
-    }
-
-    // ====== الفواتير (invoices) ======
-    match /invoices/{invoiceId} {
-      allow read: if isLoggedIn() &&
-        (resource.data.client_id == request.auth.uid || isAdmin());
-      allow create: if isLoggedIn();
-      allow update, delete: if isAdmin();
-    }
-
   }
 }
+

@@ -10,6 +10,8 @@ class ZyiarahOrder {
   final String paymentStatus;
   final GeoPoint location;
   final DateTime createdAt;
+  final int? hours;
+  final DateTime? serviceDate;
 
   ZyiarahOrder({
     required this.id,
@@ -21,6 +23,8 @@ class ZyiarahOrder {
     required this.paymentStatus,
     required this.location,
     required this.createdAt,
+    this.hours,
+    this.serviceDate,
   });
 
   factory ZyiarahOrder.fromMap(String id, Map<String, dynamic> data) {
@@ -34,6 +38,10 @@ class ZyiarahOrder {
       paymentStatus: data['paymentStatus'] ?? 'unpaid',
       location: data['location'] as GeoPoint,
       createdAt: (data['createdAt'] as Timestamp).toDate(),
+      hours: data['hours'],
+      serviceDate: data['serviceDate'] != null 
+          ? (data['serviceDate'] as Timestamp).toDate() 
+          : null,
     );
   }
 
@@ -47,6 +55,8 @@ class ZyiarahOrder {
       'paymentStatus': paymentStatus,
       'location': location,
       'createdAt': Timestamp.fromDate(createdAt),
+      'hours': hours,
+      'serviceDate': serviceDate != null ? Timestamp.fromDate(serviceDate!) : null,
     };
   }
 }

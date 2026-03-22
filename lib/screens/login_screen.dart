@@ -35,23 +35,36 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
     });
 
     try {
-      await _firebaseService.verifyPhoneNumber(phone, (String verificationId) {
-        setState(() {
-          _verificationId = verificationId;
-          _codeSent = true;
-          _isLoading = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم إرسال رمز التحقق')),
-        );
-      });
+      await _firebaseService.verifyPhoneNumber(
+        phone, 
+        (String verificationId) {
+          if (!mounted) return;
+          setState(() {
+            _verificationId = verificationId;
+            _codeSent = true;
+            _isLoading = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تم إرسال رمز التحقق')),
+          );
+        },
+        (String error) {
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('خطأ التحقق: $error')),
+          );
+        }
+      );
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ: ${e.toString()}')),
+        SnackBar(content: Text('خطأ غير متوقع: ${e.toString()}')),
       );
     }
   }
@@ -77,7 +90,10 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
 
       if (userCredential.user != null) {
         // التحقق من دور المستخدم
-        String role = await _firebaseService.getUserRole(userCredential.user!.uid);
+        String role = await _firebaseService.getUserRole(
+          userCredential.user!.uid,
+          _phoneController.text.trim(),
+        );
 
         if (!mounted) return;
         
@@ -128,14 +144,18 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 60),
-                  const Icon(Icons.flash_on, size: 100, color: Color(0xFF1E3A8A)),
+                  Image.asset(
+                    'assets/logo.png',
+                    height: 120,
+                    fit: BoxFit.contain,
+                  ),
                   const SizedBox(height: 40),
                   Text(
                     "مرحباً بك في زيارة",
                     style: GoogleFonts.tajawal(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: const Color(0xFF1E3A8A),
+                      color: const Color(0xFF5D1B5E),
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -150,59 +170,65 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                   const SizedBox(height: 50),
                   
                   if (!_codeSent)
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey[50],
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: Colors.grey[200]!),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Row(
-                        children: [
-                          const Text("+966", style: TextStyle(fontWeight: FontWeight.bold)),
-                          const SizedBox(width: 15),
-                          Expanded(
-                            child: TextField(
-                              controller: _phoneController,
-                              keyboardType: TextInputType.phone,
-                              decoration: const InputDecoration(
-                                hintText: "5xxxxxxxx",
-                                border: InputBorder.none,
+                    Directionality(
+                      textDirection: TextDirection.ltr,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(color: Colors.grey[200]!),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(
+                          children: [
+                            const Text("+966", style: TextStyle(fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 15),
+                            Expanded(
+                              child: TextField(
+                                controller: _phoneController,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  hintText: "5xxxxxxxx",
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.zero,
+                                ),
                               ),
-                              textDirection: TextDirection.ltr,
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     )
                   else
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey[50],
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: Colors.grey[200]!),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: TextField(
-                        controller: _otpController,
-                        keyboardType: TextInputType.number,
-                        textAlign: TextAlign.center,
-                        decoration: const InputDecoration(
-                          hintText: "X X X X X X",
-                          border: InputBorder.none,
+                    Directionality(
+                      textDirection: TextDirection.ltr,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(color: Colors.grey[200]!),
                         ),
-                        style: const TextStyle(letterSpacing: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: TextField(
+                          controller: _otpController,
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.center,
+                          decoration: const InputDecoration(
+                            hintText: "X X X X X X",
+                            border: InputBorder.none,
+                          ),
+                          style: const TextStyle(letterSpacing: 8),
+                        ),
                       ),
                     ),
 
                   const SizedBox(height: 30),
                   
                   _isLoading 
-                    ? const Center(child: CircularProgressIndicator(color: Color(0xFF1E3A8A)))
+                    ? const Center(child: CircularProgressIndicator(color: Color(0xFF5D1B5E)))
                     : ElevatedButton(
                     onPressed: _codeSent ? _verifyOTP : _sendOTP,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1E3A8A),
+                      backgroundColor: const Color(0xFF5D1B5E),
                       padding: const EdgeInsets.symmetric(vertical: 18),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                     ),
@@ -227,7 +253,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                       child: Text(
                         "تعديل رقم الجوال",
                         style: GoogleFonts.tajawal(
-                          color: const Color(0xFF1E3A8A),
+                          color: const Color(0xFF5D1B5E),
                           fontWeight: FontWeight.bold,
                         ),
                       ),

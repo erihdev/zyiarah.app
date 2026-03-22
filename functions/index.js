@@ -44,6 +44,16 @@ exports.sendNotificationOnTicketReply = functions.firestore
         await admin.messaging().send(payload);
         console.log(`Notification sent to user ${userId} ` +
             `for ticket ${ticketId}`);
+
+        // Save to notifications collection for in-app history
+        await admin.firestore().collection("notifications").add({
+          userId: userId,
+          title: payload.notification.title,
+          body: payload.notification.body,
+          type: "support_ticket",
+          relatedId: ticketId,
+          sentAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
       } catch (error) {
         console.error("Error sending notification:", error);
       }
@@ -104,6 +114,16 @@ exports.sendNotificationOnOrderStatusChange = functions.firestore
         await admin.messaging().send(payload);
         console.log(`Notification sent to ${targetUserId} ` +
             `for order ${orderId}`);
+
+        // Save to notifications collection for in-app history
+        await admin.firestore().collection("notifications").add({
+          userId: targetUserId,
+          title: title,
+          body: body,
+          type: "order_update",
+          relatedId: orderId,
+          sentAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
       } catch (error) {
         console.error("Error sending order notification:", error);
       }

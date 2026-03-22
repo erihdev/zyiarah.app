@@ -1,5 +1,17 @@
 {
   "projects": {
     "default": "zyiarah-app"
+  },
+  "targets": {
+    "zyiarah-app": {
+      "hosting": {
+        "admin": [
+          "zyiarah-app"
+        ],
+        "web": [
+          "zyiarah-web"
+        ]
+      }
+    }
   }
 }

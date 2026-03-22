@@ -22,7 +22,7 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
       appBar: AppBar(
         title: const Text("تتبع السائق - زيارة",
             style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1E3A8A),
+        backgroundColor: const Color(0xFF5D1B5E),
         foregroundColor: Colors.white,
       ),
       body: StreamBuilder<DocumentSnapshot>(
@@ -66,7 +66,7 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
                   polylines: [
                     Polyline(
                       points: [driverLatLng, clientLatLng],
-                      color: const Color(0xFF1E3A8A),
+                      color: const Color(0xFF5D1B5E),
                       strokeWidth: 4.0,
                     ),
                   ],
@@ -89,7 +89,7 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
                       width: 40,
                       height: 40,
                       child: const Icon(Icons.directions_car,
-                          color: Color(0xFF1E3A8A), size: 40),
+                          color: Color(0xFF5D1B5E), size: 40),
                     ),
                 ],
               ),

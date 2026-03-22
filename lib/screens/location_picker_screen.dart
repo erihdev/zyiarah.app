@@ -4,10 +4,24 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+
+import 'package:zyiarah/services/location_service.dart';
 
 class LocationPickerScreen extends StatefulWidget {
   final String serviceName;
-  const LocationPickerScreen({super.key, required this.serviceName});
+  final int? hours;
+  final DateTime? serviceDate;
+  final double? amount;
+
+  const LocationPickerScreen({
+    super.key, 
+    required this.serviceName,
+    this.hours,
+    this.serviceDate,
+    this.amount,
+  });
 
   @override
   State<LocationPickerScreen> createState() => _LocationPickerScreenState();
@@ -15,32 +29,48 @@ class LocationPickerScreen extends StatefulWidget {
 
 class _LocationPickerScreenState extends State<LocationPickerScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final MapController _mapController = MapController();
   Timer? _debounce;
   List<dynamic> _searchResults = [];
-  bool _isSearching = false;
+  LatLng _selectedLatLng = const LatLng(24.7136, 46.6753); // Default: Riyadh
+  bool _isMapReady = false;
 
   final String _mapboxToken = dotenv.env['MAPBOX_TOKEN'] ?? '';
 
+  @override
+  void initState() {
+    super.initState();
+    _setInitialLocation();
+  }
+
+  Future<void> _setInitialLocation() async {
+    final position = await ZyiarahLocationService().getCurrentLocation();
+    if (position != null) {
+      setState(() {
+        _selectedLatLng = LatLng(position.latitude, position.longitude);
+        _isMapReady = true;
+      });
+      _mapController.move(_selectedLatLng, 15.0);
+    } else {
+      setState(() => _isMapReady = true);
+    }
+  }
+
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    
-    if (query.isEmpty) {
-      setState(() {
-        _searchResults = [];
-        _isSearching = false;
-      });
-      return;
-    }
-
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      _performSearch(query);
+      if (query.isNotEmpty) {
+        _performSearch(query);
+      } else {
+        setState(() {
+          _searchResults = [];
+        });
+      }
     });
   }
 
   Future<void> _performSearch(String query) async {
-    setState(() {
-      _isSearching = true;
-    });
+    if (query.isEmpty) return;
 
     try {
       final url = Uri.parse(
@@ -52,30 +82,46 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         final data = json.decode(response.body);
         setState(() {
           _searchResults = data['features'] ?? [];
-          _isSearching = false;
         });
       } else {
         setState(() {
           _searchResults = [];
-          _isSearching = false;
         });
       }
     } catch (e) {
       setState(() {
         _searchResults = [];
-        _isSearching = false;
       });
     }
   }
 
-  void _selectLocation(dynamic feature) {
+  void _selectSearchResult(dynamic feature) {
     final coordinates = feature['geometry']['coordinates'];
-    // Mapbox returns [longitude, latitude]
-    final double lng = coordinates[0];
-    final double lat = coordinates[1];
+    final double lng = coordinates[0].toDouble();
+    final double lat = coordinates[1].toDouble();
     
-    final geoPoint = GeoPoint(lat, lng);
-    Navigator.pop(context, geoPoint);
+    final newLatLng = LatLng(lat, lng);
+    setState(() {
+      _selectedLatLng = newLatLng;
+      _searchResults = [];
+      _searchController.clear();
+    });
+    _mapController.move(newLatLng, 15.0);
+    FocusScope.of(context).unfocus();
+  }
+
+  void _confirmLocation() {
+    final geoPoint = GeoPoint(_selectedLatLng.latitude, _selectedLatLng.longitude);
+    if (widget.hours != null) {
+      Navigator.pop(context, {
+        'location': geoPoint,
+        'hours': widget.hours,
+        'serviceDate': widget.serviceDate,
+        'amount': widget.amount,
+      });
+    } else {
+      Navigator.pop(context, geoPoint);
+    }
   }
 
   @override
@@ -92,57 +138,118 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text("تحديد موقع - ${widget.serviceName}"),
-          backgroundColor: const Color(0xFF1E3A8A),
+          backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
         ),
-        body: Column(
+        body: Stack(
           children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: TextField(
-                controller: _searchController,
-                onChanged: _onSearchChanged,
-                decoration: InputDecoration(
-                  hintText: "ابحث عن شارع، حي، أو معلم...",
-                  prefixIcon: const Icon(Icons.search, color: Color(0xFF1E3A8A)),
-                  filled: true,
-                  fillColor: Colors.grey[100],
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(15),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 15),
+            if (_isMapReady)
+              FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(
+                  initialCenter: _selectedLatLng,
+                  initialZoom: 15.0,
+                  onPositionChanged: (position, hasGesture) {
+                    if (hasGesture) {
+                      setState(() {
+                        _selectedLatLng = position.center;
+                      });
+                    }
+                  },
                 ),
+                children: [
+                   TileLayer(
+                    urlTemplate: 'https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/{z}/{x}/{y}?access_token=$_mapboxToken',
+                    additionalOptions: {'accessToken': _mapboxToken},
+                  ),
+                ],
+              ),
+            
+            // Fixed marker in center
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: 40),
+                child: Icon(Icons.location_on, color: Color(0xFF50B498), size: 45),
               ),
             ),
-            if (_isSearching)
-              const Padding(
-                padding: EdgeInsets.all(20.0),
-                child: CircularProgressIndicator(color: Color(0xFF1E3A8A)),
-              ),
-            Expanded(
-              child: ListView.separated(
-                itemCount: _searchResults.length,
-                separatorBuilder: (context, index) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final feature = _searchResults[index];
-                  final properties = feature['properties'];
-                  
-                  final title = properties['name'] ?? properties['full_address'] ?? 'موقع غير معروف';
-                  final subtitle = properties['place_formatted'] ?? '';
 
-                  return ListTile(
-                    leading: const Icon(Icons.location_on, color: Colors.blueAccent),
-                    title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: subtitle.isNotEmpty ? Text(subtitle) : null,
-                    onTap: () => _selectLocation(feature),
-                  );
-                },
+            // Search Bar
+            Positioned(
+              top: 16,
+              left: 16,
+              right: 16,
+              child: Column(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(15),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+                      ],
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: _onSearchChanged,
+                      decoration: const InputDecoration(
+                        hintText: "ابحث عن شارع، حي، أو معلم...",
+                        prefixIcon: Icon(Icons.search, color: Color(0xFF5D1B5E)),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 15, horizontal: 15),
+                      ),
+                    ),
+                  ),
+                  if (_searchResults.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(top: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      child: ListView.builder(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        itemCount: _searchResults.length,
+                        itemBuilder: (context, index) {
+                          final feature = _searchResults[index];
+                          final props = feature['properties'];
+                          return ListTile(
+                            title: Text(props['name'] ?? props['full_address'] ?? ''),
+                            subtitle: Text(props['place_formatted'] ?? ''),
+                            onTap: () => _selectSearchResult(feature),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // Confirm Button
+            Positioned(
+              bottom: 30,
+              left: 20,
+              right: 20,
+              child: ElevatedButton(
+                onPressed: _confirmLocation,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF5D1B5E),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  shape: roundedRectangleCircular(20),
+                ),
+                child: const Text("تأكيد هذا الموقع", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  // Helper for consistent rounding
+  OutlinedBorder roundedRectangleCircular(double radius) {
+    return RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius));
   }
 }

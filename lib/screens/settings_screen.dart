@@ -11,7 +11,7 @@ class ZyiarahSettingsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text("الإعدادات والدعم", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1E3A8A),
+        backgroundColor: const Color(0xFF5D1B5E),
         foregroundColor: Colors.white,
       ),
       body: Directionality(
@@ -20,7 +20,7 @@ class ZyiarahSettingsScreen extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           children: [
             ListTile(
-              leading: const Icon(Icons.support_agent, color: Color(0xFF1E3A8A)),
+              leading: const Icon(Icons.support_agent, color: Color(0xFF5D1B5E)),
               title: const Text("تذاكر الدعم الفني"),
               subtitle: const Text("متابعة طلباتك الحالية أو فتح تذكرة جديدة"),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
@@ -33,7 +33,7 @@ class ZyiarahSettingsScreen extends StatelessWidget {
             ),
             const Divider(),
             ListTile(
-              leading: const Icon(Icons.privacy_tip, color: Color(0xFF1E3A8A)),
+              leading: const Icon(Icons.privacy_tip, color: Color(0xFF5D1B5E)),
               title: const Text("سياسة الخصوصية"),
               subtitle: const Text("كيفية استخدامنا للموقع الجغرافي والبيانات"),
               onTap: () {
@@ -105,7 +105,7 @@ class ZyiarahSettingsScreen extends StatelessWidget {
                   } catch (e) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("خطأ: يرجى تسجيل الخروج ثم الدخول مرة أخرى قبل الحذف (متطلب أمني)")),
+                        const SnackBar(content: Text("خطأ: يرجى تسجيل الخروج ثم الدخول مرة أخرى قبل الحذف (متطلب أمني)")),
                       );
                       Navigator.pop(context);
                     }

@@ -1,28 +1,47 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import Layout from './components/Layout';
-import Dashboard from './pages/Dashboard';
-import Login from './pages/Login';
-import Settings from './pages/Settings';
-import Orders from './pages/Orders';
-import Drivers from './pages/Drivers';
-import Users from './pages/Users';
-import Accountants from './pages/Accountants';
-import Marketing from './pages/Marketing';
-import Notifications from './pages/Notifications';
-import Support from './pages/Support';
-import Admins from './pages/Admins';
-import AccountDeletion from './pages/AccountDeletion';
+import { onAuthStateChanged } from 'firebase/auth';
+import type { User } from 'firebase/auth';
+import { auth } from './services/firebase';
+import Layout from './components/Layout.tsx';
+import Dashboard from './pages/Dashboard.tsx';
+import Login from './pages/Login.tsx';
+import Settings from './pages/Settings.tsx';
+import Orders from './pages/Orders.tsx';
+import Drivers from './pages/Drivers.tsx';
+import Users from './pages/Users.tsx';
+import Accountants from './pages/Accountants.tsx';
+import Marketing from './pages/Marketing.tsx';
+import Notifications from './pages/Notifications.tsx';
+import Support from './pages/Support.tsx';
+import Admins from './pages/Admins.tsx';
+import AccountDeletion from './pages/AccountDeletion.tsx';
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleLogin = () => {
-    setIsAuthenticated(true);
-  };
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50" dir="rtl">
+        <div className="flex flex-col items-center">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="text-slate-600 font-bold">جاري التحقق من الهوية...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleLogout = () => {
-    setIsAuthenticated(false);
+    auth.signOut();
   };
 
   return (
@@ -30,13 +49,13 @@ function App() {
       <Routes>
         <Route
           path="/login"
-          element={isAuthenticated ? <Navigate to="/" /> : <Login onLogin={handleLogin} />}
+          element={user ? <Navigate to="/" /> : <Login />}
         />
 
         {/* Protected Routes */}
         <Route
           path="/"
-          element={isAuthenticated ? <Layout onLogout={handleLogout} /> : <Navigate to="/login" />}
+          element={user ? <Layout onLogout={handleLogout} /> : <Navigate to="/login" />}
         >
           <Route index element={<Dashboard />} />
           <Route path="orders" element={<Orders />} />

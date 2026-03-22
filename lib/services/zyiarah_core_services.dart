@@ -32,6 +32,16 @@ class ZyiarahCoreService {
     return getDistanceInMeters(dLat, dLon, cLat, cLon) <= 100.0;
   }
 
+  /// حساب المسافة وعرضها بتنسيق مقروء (مثلاً: 2.5 كم)
+  String getFormattedDistance(double distanceInMeters) {
+    if (distanceInMeters < 1000) {
+      return "${distanceInMeters.toStringAsFixed(0)} متر";
+    } else {
+      double distanceInKm = distanceInMeters / 1000;
+      return "${distanceInKm.toStringAsFixed(1)} كم";
+    }
+  }
+
   // --- 3. التوقيع الرقمي (Digital Signature) ---
 
   Map<String, dynamic> generateSecureSignature(String orderId, String userId) {

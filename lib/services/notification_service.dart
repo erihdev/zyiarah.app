@@ -24,78 +24,87 @@ class ZyiarahNotificationService {
   );
 
   Future<void> initialize() async {
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    try {
+      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    NotificationSettings settings = await _fcm.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-      provisional: false,
-    );
+      NotificationSettings settings = await _fcm.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
 
-    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      String? token = await _fcm.getToken();
-      if (token != null) await _saveTokenToFirestore(token);
-      _fcm.onTokenRefresh.listen(_saveTokenToFirestore);
-      
-      // Subscribe to general topic
-      await _fcm.subscribeToTopic('all_users');
-      
-      // Check auth state for specific topics
-      FirebaseAuth.instance.authStateChanges().listen((User? user) async {
-        if (user != null) {
-          // Determine if user is client or driver (you might need logic here based on your app's user roles, 
-          // but for simplicity, let's assume if they have the driver app they are a driver, 
-          // or we can subscribe them based on a database check.)
-          
-          // For now, let's subscribe everyone to clients topic unless we have a specific driver verification.
-          // In a real app, you'd fetch the user role from Firestore first.
-          final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-          if (userDoc.exists && userDoc.data()?['role'] == 'driver') {
-              await _fcm.subscribeToTopic('drivers');
-              await _fcm.unsubscribeFromTopic('clients');
-          } else {
-              await _fcm.subscribeToTopic('clients');
-              await _fcm.unsubscribeFromTopic('drivers');
+      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+        String? token = await _fcm.getToken();
+        if (token != null) await _saveTokenToFirestore(token);
+        _fcm.onTokenRefresh.listen(_saveTokenToFirestore);
+        
+        // Subscribe to general topic
+        await _fcm.subscribeToTopic('all_users');
+        
+        // Check auth state for specific topics
+        FirebaseAuth.instance.authStateChanges().listen((User? user) async {
+          if (user != null) {
+            // Determine if user is client or driver (you might need logic here based on your app's user roles, 
+            // but for simplicity, let's assume if they have the driver app they are a driver, 
+            // or we can subscribe them based on a database check.)
+            
+            // For now, let's subscribe everyone to clients topic unless we have a specific driver verification.
+            // In a real app, you'd fetch the user role from Firestore first.
+            final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+            if (userDoc.exists && userDoc.data()?['role'] == 'driver') {
+                await _fcm.subscribeToTopic('drivers');
+                await _fcm.unsubscribeFromTopic('clients');
+            } else {
+                await _fcm.subscribeToTopic('clients');
+                await _fcm.unsubscribeFromTopic('drivers');
+            }
           }
-        }
+        });
+      }
+
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(_channel);
+
+      const AndroidInitializationSettings androidSettings =
+          AndroidInitializationSettings('@mipmap/ic_launcher');
+      const DarwinInitializationSettings iosSettings =
+          DarwinInitializationSettings();
+
+      await _localNotifications.initialize(
+        const InitializationSettings(android: androidSettings, iOS: iosSettings),
+      );
+
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        _showLocalNotification(message);
       });
+    } catch (e) {
+      debugPrint("Error initializing notifications: $e");
     }
-
-    await _localNotifications
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(_channel);
-
-    const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-    const DarwinInitializationSettings iosSettings =
-        DarwinInitializationSettings();
-
-    await _localNotifications.initialize(
-      const InitializationSettings(android: androidSettings, iOS: iosSettings),
-    );
-
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      _showLocalNotification(message);
-    });
   }
 
   Future<void> _saveTokenToFirestore(String token) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) {
+        debugPrint("ℹ️ Skip saving FCM token: No user logged in");
+        return;
+      }
 
-    await FirebaseFirestore.instance.collection('fcm_tokens').doc(uid).set({
-      'token': token,
-      'updated_at': FieldValue.serverTimestamp(),
-      'platform': defaultTargetPlatform.name,
-    }, SetOptions(merge: true));
+      await FirebaseFirestore.instance.collection('fcm_tokens').doc(uid).set({
+        'token': token,
+        'updated_at': FieldValue.serverTimestamp(),
+        'platform': defaultTargetPlatform.name,
+      }, SetOptions(merge: true));
 
-    assert(() {
       debugPrint("✅ FCM Token saved for user: $uid");
-      return true;
-    }());
+    } catch (e) {
+      debugPrint("❌ Error saving FCM token to Firestore: $e");
+    }
   }
+
 
   Future<void> _showLocalNotification(RemoteMessage message) async {
     final notification = message.notification;

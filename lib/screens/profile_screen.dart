@@ -93,14 +93,14 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text('الملف الشخصي', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1E3A8A),
+        backgroundColor: const Color(0xFF5D1B5E),
         foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: Directionality(
         textDirection: TextDirection.rtl,
         child: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: Color(0xFF1E3A8A)))
+            ? const Center(child: CircularProgressIndicator(color: Color(0xFF5D1B5E)))
             : SingleChildScrollView(
                 child: Column(
                   children: [
@@ -155,7 +155,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                               text: 'إرث',
                               style: GoogleFonts.tajawal(
                                 fontSize: 22,
-                                color: const Color(0xFF1E3A8A),
+                                color: const Color(0xFF5D1B5E),
                                 fontWeight: FontWeight.w900,
                               ),
                             ),
@@ -176,7 +176,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(30),
       decoration: const BoxDecoration(
-        color: Color(0xFF1E3A8A),
+        color: Color(0xFF5D1B5E),
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
       ),
       child: Row(
@@ -206,13 +206,13 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
 
   Widget _buildInfoTile(IconData icon, String label, String value) {
     return ListTile(
-      leading: Icon(icon, color: const Color(0xFF1E3A8A)),
+      leading: Icon(icon, color: const Color(0xFF5D1B5E)),
       title: Text(label, style: GoogleFonts.tajawal(fontSize: 13, color: Colors.grey)),
       subtitle: Text(value, style: GoogleFonts.tajawal(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87)),
     );
   }
 
-  Widget _buildMenuTile(IconData icon, String title, VoidCallback onTap, {Color color = const Color(0xFF1E3A8A)}) {
+  Widget _buildMenuTile(IconData icon, String title, VoidCallback onTap, {Color color = const Color(0xFF5D1B5E)}) {
     return ListTile(
       leading: Icon(icon, color: color),
       title: Text(title, style: GoogleFonts.tajawal(fontSize: 15)),
@@ -259,7 +259,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
           style: GoogleFonts.tajawal(fontSize: 14, fontWeight: FontWeight.bold),
           textAlign: TextAlign.center,
         ),
-        backgroundColor: const Color(0xFF1E3A8A),
+        backgroundColor: const Color(0xFF5D1B5E),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         duration: const Duration(seconds: 4),

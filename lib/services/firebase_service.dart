@@ -10,14 +10,19 @@ class ZyiarahFirebaseService {
   // --- التحقق برقم الجوال (Phone Auth) ---
 
   Future<void> verifyPhoneNumber(
-      String phone, Function(String) onCodeSent) async {
+      String phone, Function(String) onCodeSent, Function(String) onError) async {
+    try {
+      if (kDebugMode) {
+        await _auth.setSettings(appVerificationDisabledForTesting: true);
+      }
+    } catch (_) {}
     await _auth.verifyPhoneNumber(
       phoneNumber: '+966$phone',
       verificationCompleted: (PhoneAuthCredential credential) async {
         await _auth.signInWithCredential(credential);
       },
       verificationFailed: (FirebaseAuthException e) {
-        throw Exception(e.message);
+        onError(e.message ?? 'حدث خطأ غير معروف في التحقق');
       },
       codeSent: (String verificationId, int? resendToken) {
         onCodeSent(verificationId);
@@ -58,12 +63,55 @@ class ZyiarahFirebaseService {
   }
 
   // جلب دور المستخدم ('client' أو 'driver')
-  Future<String> getUserRole(String uid) async {
+  Future<String> getUserRole(String uid, [String? phone]) async {
     try {
+      // 1. التحقق أولاً من مجموعة المستخدمين العامة
       DocumentSnapshot doc = await _db.collection('users').doc(uid).get();
       if (doc.exists && doc.data() != null) {
         final data = doc.data() as Map<String, dynamic>;
-        return data['role'] ?? 'client'; // الافتراضي هو عميل
+        return data['role'] ?? 'client';
+      }
+
+      // 2. إذا لم يوجد، وكان هناك رقم جوال، نتحقق من مجموعة السائقين
+      if (phone != null) {
+        // تنظيف رقم الجوال (التأكد من الصيغة: 5XXXXXXXX)
+        String cleanPhone = phone.replaceAll(RegExp(r'\D'), ''); // إزالة أي رموز غير أرقام
+        
+        // التعامل مع مفتاح الدولة والصفريين
+        if (cleanPhone.startsWith('966')) {
+          cleanPhone = cleanPhone.substring(3);
+        }
+        if (cleanPhone.startsWith('00966')) {
+           cleanPhone = cleanPhone.substring(5);
+        }
+        if (cleanPhone.startsWith('0')) {
+          cleanPhone = cleanPhone.substring(1);
+        }
+        
+        // استخراج آخر 9 أرقام إذا كان الرقم طويلاً
+        if (cleanPhone.length > 9) {
+          cleanPhone = cleanPhone.substring(cleanPhone.length - 9);
+        }
+
+        if (kDebugMode) {
+          print("Attempting to find driver with cleaned phone: $cleanPhone");
+        }
+
+        QuerySnapshot driverDoc = await _db
+            .collection('drivers')
+            .where('phone', isEqualTo: cleanPhone)
+            .limit(1)
+            .get();
+
+        if (driverDoc.docs.isNotEmpty) {
+          // حفظ الدور في مجموعة المستخدمين للمستقبل برقم الجوال الموحد
+          await saveUserToRegistry(
+            uid: uid,
+            name: driverDoc.docs.first.get('name') ?? 'سائق جديد',
+            role: 'driver',
+          );
+          return 'driver';
+        }
       }
     } catch (e) {
       if (kDebugMode) {

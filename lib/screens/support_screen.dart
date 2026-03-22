@@ -22,7 +22,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("تذاكر الدعم الفني", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1E3A8A),
+        backgroundColor: const Color(0xFF5D1B5E),
         foregroundColor: Colors.white,
       ),
       body: Directionality(
@@ -64,7 +64,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
         onPressed: () => _showNewTicketDialog(context),
         label: const Text("تذكرة جديدة"),
         icon: const Icon(Icons.add),
-        backgroundColor: const Color(0xFF1E3A8A),
+        backgroundColor: const Color(0xFF5D1B5E),
         foregroundColor: Colors.white,
       ),
     );
@@ -229,7 +229,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E3A8A),
+                    backgroundColor: const Color(0xFF5D1B5E),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 15),
                   ),
@@ -275,14 +275,14 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
         'sentAt': FieldValue.serverTimestamp(),
       });
 
-      if (mounted) {
+      if (context.mounted) {
         Navigator.pop(context);
         _subjectController.clear();
         _messageController.clear();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم إرسال التذكرة بنجاح")));
       }
     } catch (e) {
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ في الإرسال: $e")));
       }
     } finally {
