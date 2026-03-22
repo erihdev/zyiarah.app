@@ -21,7 +21,7 @@ workflows:
           security set-key-partition-list -S apple-tool:,apple: -s -k "" /Users/builder/Library/Keychains/build.keychain-db
           export APP_STORE_CONNECT_API_KEY_KEY_ID="RJMPC4734X"
           export APP_STORE_CONNECT_API_KEY_ISSUER_ID="6dd67287-cfcd-40fc-a3db-8bf378a1ac8f"
-          export APP_STORE_CONNECT_API_KEY_KEY="$(cat ios/AuthKey_RJMPC4734X.p8)"
+          export APP_STORE_CONNECT_API_KEY_KEY="$(cat ios/AuthKey_RJMPC4734X.p8 | tr -d '\r')"
           fastlane sigh --app_identifier "com.zyiarah.zyiarah" --force
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
           cp AppStore_com.zyiarah.zyiarah.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/"
