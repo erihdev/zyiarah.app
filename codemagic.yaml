@@ -44,14 +44,10 @@ workflows:
           # Move Payload to runtime
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
           cp AppStore_com.zyiarah.zyiarah.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/"
-      - name: Force Xcode Distribution (Ruby)
+      - name: Configure Xcode Project Profiles Natively
         script: |
-          ruby -e "require 'xcodeproj'; project = Xcodeproj::Project.open('ios/Runner.xcodeproj'); project.targets.each do |target| target.build_configurations.each do |config| config.build_settings['CODE_SIGN_STYLE'] = 'Manual'; config.build_settings['CODE_SIGN_IDENTITY'] = 'Apple Distribution'; config.build_settings['PROVISIONING_PROFILE_SPECIFIER'] = ''; end; end; project.save"
-      - name: Force Xcode Distribution (xcconfig)
-        script: |
-          echo "CODE_SIGN_STYLE=Manual" >> ios/Flutter/Release.xcconfig
-          echo "CODE_SIGN_IDENTITY=Apple Distribution" >> ios/Flutter/Release.xcconfig
-          echo "PROVISIONING_PROFILE_SPECIFIER=" >> ios/Flutter/Release.xcconfig
+          export CM_PROVISIONING_PROFILE="$HOME/Library/MobileDevice/Provisioning Profiles/AppStore_com.zyiarah.zyiarah.mobileprovision"
+          xcode-project use-profiles
       - name: Generate Export Options
         script: |
           cat <<EOF > export_options.plist
