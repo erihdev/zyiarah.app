@@ -16,16 +16,31 @@ workflows:
           find . -name "Podfile" -execdir pod install \;
       - name: Setup Code Signing
         script: |
-          export CM_CERTIFICATE="$(base64 -i ios/zyiarah_dist_cert.p12 | tr -d '\n')"
-          export CM_CERTIFICATE_PASSWORD="uZiESgq5"
-          export CM_PROVISIONING_PROFILE="$(base64 -i ios/Zyiarah_App_Store_Profile.mobileprovision | tr -d '\n')"
           keychain initialize
-          keychain add-certificates
-          xcode-project use-profiles
+          security import ios/zyiarah_dist_cert.p12 -k /Users/builder/Library/Keychains/build.keychain-db -P "uZiESgq5" -A -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" /Users/builder/Library/Keychains/build.keychain-db
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp ios/Zyiarah_App_Store_Profile.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/"
       - name: Force Xcode Distribution
         script: |
           echo "CODE_SIGN_IDENTITY=Apple Distribution" >> ios/Flutter/Release.xcconfig
           echo "PROVISIONING_PROFILE_SPECIFIER=" >> ios/Flutter/Release.xcconfig
+      - name: Generate Export Options
+        script: |
+          cat <<EOF > export_options.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store</string>
+            <key>teamID</key>
+            <string>RPTPMXA436</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+          </dict>
+          </plist>
+          EOF
       - name: iOS Build
         script: |
           flutter build ipa --release --export-options-plist=$HOME/export_options.plist
