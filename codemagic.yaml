@@ -9,6 +9,9 @@ workflows:
       cocoapods: default
       groups:
         - appstore_credentials
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.zyiarah.zyiarah
     scripts:
       - name: Get Flutter Packages
         script: |
@@ -16,23 +19,6 @@ workflows:
       - name: Install Pods
         script: |
           find . -name "Podfile" -execdir pod install \;
-      - name: Fetch Code Signing Files
-        script: |
-          set -e
-          echo "-----BEGIN PRIVATE KEY-----" > auth.p8
-          echo "MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQgheRjNtH2Xv5KnABp" >> auth.p8
-          echo "ngmhm9B8QDCDzEd+5EoUSj0pdragCgYIKoZIzj0DAQehRANCAARKlHPzREdAp3lk" >> auth.p8
-          echo "R/9b290A1l5zk1HVZg+9pw2r6nNCYdSh2dv5F4CloTI6P5Ha8fkPz7jBh6/Xk98+" >> auth.p8
-          echo "uiIOvfSZ" >> auth.p8
-          echo "-----END PRIVATE KEY-----" >> auth.p8
-          export APP_STORE_CONNECT_ISSUER_ID="6dd67287-cfcd-40fc-a3db-8bf378a1ac8f"
-          export APP_STORE_CONNECT_KEY_IDENTIFIER="RJMPC4734X"
-          export APP_STORE_CONNECT_PRIVATE_KEY=$(cat auth.p8)
-          keychain initialize
-          app-store-connect fetch-signing-files "com.zyiarah.zyiarah" --type IOS_APP_DEVELOPMENT --create
-          app-store-connect fetch-signing-files "com.zyiarah.zyiarah" --type IOS_APP_STORE --create
-          keychain add-certificates
-          xcode-project use-profiles
       - name: iOS Build
         script: |
           flutter build ipa --release --export-options-plist=/Users/builder/export_options.plist
