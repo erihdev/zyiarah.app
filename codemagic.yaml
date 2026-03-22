@@ -17,6 +17,10 @@ workflows:
       - name: Install Pods
         script: |
           find . -name "Podfile" -execdir pod install \;
+      - name: Fix Xcode Certificate Bug
+        script: |
+          sed -i '' 's/Apple Development/Apple Distribution/g' ios/Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/ProvisioningStyle = Automatic;/ProvisioningStyle = Manual;/g' ios/Runner.xcodeproj/project.pbxproj
       - name: Generate Export Options
         script: |
           cat <<EOF > export_options.plist
