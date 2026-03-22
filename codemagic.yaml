@@ -17,7 +17,7 @@ workflows:
       - name: Setup Code Signing
         script: |
           keychain initialize
-          security import ios/zyiarah_dist_cert.p12 -k /Users/builder/Library/Keychains/build.keychain-db -P "uZiESgq5" -A -T /usr/bin/codesign
+          security import ios/zyiarah_dist_cert.p12 -k /Users/builder/Library/Keychains/build.keychain-db -P "dxqiAR0S" -A -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "" /Users/builder/Library/Keychains/build.keychain-db
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
           cp ios/Zyiarah_App_Store_Profile.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/"
