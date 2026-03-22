@@ -56,6 +56,5 @@ admin_panel/node_modules/
 
 # Environment variables and secrets
 .env
-lib/firebase_options.dart
 admin_panel/src/services/firebase.ts
 zyiarah_backend/serviceAccountKey.json
