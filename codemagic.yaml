@@ -9,9 +9,6 @@ workflows:
       cocoapods: default
       groups:
         - appstore_credentials
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.zyiarah.zyiarah
     scripts:
       - name: Get Flutter Packages
         script: |
@@ -19,6 +16,12 @@ workflows:
       - name: Install Pods
         script: |
           find . -name "Podfile" -execdir pod install \;
+      - name: Fetch Code Signing Files
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "com.zyiarah.zyiarah" --type IOS_APP_STORE --create
+          keychain add-certificates
+          xcode-project use-profiles
       - name: iOS Build
         script: |
           flutter build ipa --release --export-options-plist=/Users/builder/export_options.plist
