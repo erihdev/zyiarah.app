@@ -21,6 +21,7 @@ workflows:
           security create-keychain -p "MySecretPassword123" build.keychain-db
           security default-keychain -s build.keychain-db
           security unlock-keychain -p "MySecretPassword123" build.keychain-db
+          security set-keychain-settings -t 3600 -u build.keychain-db
           security list-keychains -d user -s build.keychain-db login.keychain-db
           
           # Inject Private Key securely
@@ -66,6 +67,7 @@ workflows:
           EOF
       - name: iOS Build
         script: |
+          security unlock-keychain -p "MySecretPassword123" build.keychain-db || true
           flutter build ipa --release --export-options-plist=export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
