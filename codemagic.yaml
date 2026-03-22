@@ -7,9 +7,8 @@ workflows:
       flutter: default
       xcode: latest
       cocoapods: default
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.zyiarah.zyiarah
+      groups:
+        - manual_profiles
     scripts:
       - name: Get Flutter Packages
         script: |
@@ -17,29 +16,14 @@ workflows:
       - name: Install Pods
         script: |
           find . -name "Podfile" -execdir pod install \;
-      - name: Fix Xcode Certificate Bug
+      - name: Setup Code Signing
         script: |
-          sed -i '' 's/Apple Development/Apple Distribution/g' ios/Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/ProvisioningStyle = Automatic;/ProvisioningStyle = Manual;/g' ios/Runner.xcodeproj/project.pbxproj
-      - name: Generate Export Options
-        script: |
-          cat <<EOF > export_options.plist
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>app-store</string>
-            <key>teamID</key>
-            <string>RPTPMXA436</string>
-            <key>signingStyle</key>
-            <string>automatic</string>
-          </dict>
-          </plist>
-          EOF
+          keychain initialize
+          keychain add-certificates
+          xcode-project use-profiles
       - name: iOS Build
         script: |
-          flutter build ipa --release --export-options-plist=export_options.plist
+          flutter build ipa --release --export-options-plist=$HOME/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
