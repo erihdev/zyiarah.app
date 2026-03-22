@@ -19,8 +19,12 @@ workflows:
           keychain initialize
           security import ios/zyiarah_dist_cert.p12 -k /Users/builder/Library/Keychains/build.keychain-db -P "dxqiAR0S" -A -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "" /Users/builder/Library/Keychains/build.keychain-db
+          export APP_STORE_CONNECT_API_KEY_KEY_ID="RJMPC4734X"
+          export APP_STORE_CONNECT_API_KEY_ISSUER_ID="6dd67287-cfcd-40fc-a3db-8bf378a1ac8f"
+          export APP_STORE_CONNECT_API_KEY_KEY="$(cat ios/AuthKey_RJMPC4734X.p8)"
+          fastlane sigh --app_identifier "com.zyiarah.zyiarah" --force
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          cp ios/Zyiarah_App_Store_Profile.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/"
+          cp AppStore_com.zyiarah.zyiarah.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/"
       - name: Force Xcode Distribution (Ruby)
         script: |
           ruby -e "require 'xcodeproj'; project = Xcodeproj::Project.open('ios/Runner.xcodeproj'); project.targets.each do |target| target.build_configurations.each do |config| config.build_settings['CODE_SIGN_STYLE'] = 'Manual'; config.build_settings['CODE_SIGN_IDENTITY'] = 'Apple Distribution'; config.build_settings['PROVISIONING_PROFILE_SPECIFIER'] = ''; end; end; project.save"
