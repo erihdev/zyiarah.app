@@ -43,7 +43,7 @@ workflows:
           EOF
       - name: iOS Build
         script: |
-          flutter build ipa --release --export-options-plist=$HOME/export_options.plist
+          flutter build ipa --release --export-options-plist=export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
