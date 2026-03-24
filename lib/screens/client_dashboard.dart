@@ -374,13 +374,13 @@ class _ClientDashboardState extends State<ClientDashboard> {
       width: 200,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(20),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: cardColor.withValues(alpha: 0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -390,18 +390,18 @@ class _ClientDashboardState extends State<ClientDashboard> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+              Text(title, style: const TextStyle(color: Color(0xFF64748B), fontSize: 13, fontWeight: FontWeight.w500)),
               const SizedBox(height: 8),
-              Text(value, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+              Text(value, style: const TextStyle(color: Color(0xFF0F172A), fontSize: 24, fontWeight: FontWeight.bold)),
             ],
           ),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
+              color: cardColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(iconPath, color: Colors.white, size: 28),
+            child: Icon(iconPath, color: cardColor, size: 28),
           ),
         ],
       ),
@@ -415,20 +415,21 @@ class _ClientDashboardState extends State<ClientDashboard> {
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 15,
       crossAxisSpacing: 15,
-      childAspectRatio: 0.80, // Taller cards
+      childAspectRatio: 0.75, // Taller cards to fit image
       children: [
         _buildWebStyleServiceCard(
           title: "خدمة بالساعة",
-          subtitle: "احجز عاملة منزلية بالساعة حسب احتياجك",
-          price: "من 50 ر.س/ساعة",
+          subtitle: "عاملة منزلية بالساعة",
+          price: "من 50 ر.س",
           numericPrice: 50.0,
           themeColor: const Color(0xFF10B981), // Green
           icon: Icons.access_time_filled,
           iconBgColor: const Color(0xFFE1F0E4), // Light Green
+          imagePath: 'assets/images/hourly_cleaning.png',
         ),
         _buildWebStyleServiceCard(
-          title: "تنظيف الكنب والسجاد",
-          subtitle: "تنظيف عميق بالبخار لجميع المفروشات",
+          title: "تنظيف الكنب",
+          subtitle: "تنظيف عميق بالبخار",
           price: "من 100 ر.س",
           numericPrice: 100.0,
           themeColor: const Color(0xFF8B5CF6), // Purple
@@ -437,16 +438,17 @@ class _ClientDashboardState extends State<ClientDashboard> {
         ),
         _buildWebStyleServiceCard(
           title: "سلة العائلة",
-          subtitle: "باقات شهرية موفرة للعائلات",
-          price: "من 299 ر.س/شهر",
+          subtitle: "باقات شهرية موفرة",
+          price: "من 299 ر.س",
           numericPrice: 299.0,
           themeColor: const Color(0xFFF59E0B), // Orange
           icon: Icons.shopping_basket,
           iconBgColor: const Color(0xFFFEF3C7), // Light Orange
+          imagePath: 'assets/images/monthly_cleaning.png',
         ),
         _buildWebStyleServiceCard(
           title: "خدمات الشركات",
-          subtitle: "حلول تنظيف مخصصة للأعمال والمؤسسات",
+          subtitle: "حلول تنظيف مخصصة",
           price: "عرض سعر",
           numericPrice: 0.0,
           themeColor: const Color(0xFF3B82F6), // Blue
@@ -465,89 +467,108 @@ class _ClientDashboardState extends State<ClientDashboard> {
     required Color themeColor,
     required IconData icon,
     required Color iconBgColor,
+    String? imagePath,
   }) {
     return Container(
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
            BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
-                    const SizedBox(height: 4),
-                    Text(subtitle, style: TextStyle(fontSize: 10, color: Colors.grey.shade500), maxLines: 2, overflow: TextOverflow.ellipsis),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
+          if (imagePath != null)
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              child: Image.asset(
+                imagePath,
+                height: 90,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  height: 90,
+                  width: double.infinity,
                   color: iconBgColor,
-                  borderRadius: BorderRadius.circular(12),
+                  child: Icon(icon, color: themeColor, size: 40),
                 ),
-                child: Icon(icon, color: themeColor, size: 24),
+              )
+            )
+          else
+            Container(
+              height: 90,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: iconBgColor,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
               ),
-            ],
-          ),
-          const Spacer(),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFBBF24), // Yellow Badge
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  price,
-                  style: const TextStyle(color: Color(0xFF0F172A), fontSize: 10, fontWeight: FontWeight.w600),
-                ),
-              ),
-              InkWell(
-                onTap: () {
-                  if (title == "خدمة بالساعة") {
-                     Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const HourlyCleaningDetailsScreen(serviceName: "نظافة بالساعة"),
-                      ),
-                    );
-                  } else if (title == "سلة العائلة") {
-                    _upgradeToSubscription();
-                  } else {
-                    _initiatePayment(title, numericPrice);
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: themeColor,
-                    borderRadius: BorderRadius.circular(10),
+              child: Center(child: Icon(icon, color: themeColor, size: 40)),
+            ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                      const SizedBox(height: 2),
+                      Text(subtitle, style: TextStyle(fontSize: 10, color: Colors.grey.shade500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ],
                   ),
-                  child: const Icon(Icons.arrow_back, color: Colors.white, size: 16),
-                ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFBBF24).withValues(alpha: 0.2), // Yellow Badge
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          price,
+                          style: const TextStyle(color: Color(0xFFD97706), fontSize: 10, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () {
+                          if (title == "خدمة بالساعة") {
+                             Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const HourlyCleaningDetailsScreen(serviceName: "نظافة بالساعة"),
+                              ),
+                            );
+                          } else if (title == "سلة العائلة") {
+                            _upgradeToSubscription();
+                          } else {
+                            _initiatePayment(title, numericPrice);
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2563EB), // Dark or Primary Action
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.arrow_back, color: Colors.white, size: 16),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ],
       ),
@@ -648,7 +669,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
   Widget _buildDrawer() {
     return Drawer(
-      backgroundColor: const Color(0xFF2563EB), // Solid vibrand blue as in screenshot
+      backgroundColor: const Color(0xFF0F172A), // Dark slate as in website layout
       child: SafeArea(
         child: Column(
           children: [
