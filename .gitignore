@@ -58,3 +58,10 @@ admin_panel/node_modules/
 .env
 admin_panel/src/services/firebase.ts
 zyiarah_backend/serviceAccountKey.json
+
+# Temporary dumps and screenshots
+/*.png
+/*.xml
+/*.js
+/*.css
+/*.txt
