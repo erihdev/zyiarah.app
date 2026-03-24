@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
-import 'package:zyiarah/screens/checkout_screen.dart';
-import 'package:zyiarah/services/tamara_service.dart';
 import 'package:zyiarah/screens/profile_screen.dart';
-import 'package:zyiarah/models/order_model.dart';
 import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/screens/hourly_details_screen.dart';
 import 'package:zyiarah/screens/orders_list_screen.dart';
@@ -21,7 +18,6 @@ class ClientDashboard extends StatefulWidget {
 }
 
 class _ClientDashboardState extends State<ClientDashboard> {
-  final TamaraService _tamaraService = TamaraService();
   bool _isLoading = false;
   ZyiarahUser? _currentUser;
 
@@ -72,7 +68,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
       return; // المستخدم ألغى الاختيار
     }
 
-    if (selectedLocation != null && mounted) {
+    if (mounted) {
       Navigator.push(
         context,
         MaterialPageRoute(
