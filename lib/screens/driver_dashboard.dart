@@ -113,14 +113,51 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   Widget _buildStatsRow() {
-    return Row(
-      children: [
-        _buildCompactStat("مهام اليوم", "0", Icons.today, Colors.blue),
-        const SizedBox(width: 12),
-        _buildCompactStat("إجمالي المهام", "14", Icons.assignment_turned_in, Colors.orange),
-        const SizedBox(width: 12),
-        _buildCompactStat("التقييم", "4.8", Icons.star, Colors.amber),
-      ],
+    if (_currentDriverId == null) return const SizedBox.shrink();
+
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+
+    return StreamBuilder<QuerySnapshot>(
+      // جلب إجمالي الطلبات المكتملة للسائق
+      stream: FirebaseFirestore.instance
+          .collection('orders')
+          .where('driver_id', isEqualTo: _currentDriverId)
+          .where('status', isEqualTo: 'completed')
+          .snapshots(),
+      builder: (context, allSnapshot) {
+        final allOrders = allSnapshot.data?.docs ?? [];
+        final totalTasks = allOrders.length;
+
+        // حساب مهام اليوم من الكل
+        final todayTasks = allOrders.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final endTime = (data['end_time'] as Timestamp?)?.toDate();
+          return endTime != null && endTime.isAfter(todayStart);
+        }).length;
+
+        return StreamBuilder<DocumentSnapshot>(
+          // جلب تقييم السائق من مستنده
+          stream: FirebaseFirestore.instance
+              .collection('drivers')
+              .doc(_currentDriverId)
+              .snapshots(),
+          builder: (context, driverSnapshot) {
+            final driverData = driverSnapshot.data?.data() as Map<String, dynamic>?;
+            final rating = (driverData?['rating'] ?? 5.0).toStringAsFixed(1);
+
+            return Row(
+              children: [
+                _buildCompactStat("مهام اليوم", "$todayTasks", Icons.today, Colors.blue),
+                const SizedBox(width: 12),
+                _buildCompactStat("إجمالي المهام", "$totalTasks", Icons.assignment_turned_in, Colors.orange),
+                const SizedBox(width: 12),
+                _buildCompactStat("التقييم", "$rating ★", Icons.star, Colors.amber),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
