@@ -4,8 +4,28 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { collection, onSnapshot, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { collection, onSnapshot, query, where, orderBy, limit, Timestamp, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { db } from '../services/firebase.ts';
+
+interface RecentOrder {
+    id: string;
+    client: string;
+    service: string;
+    amount: string;
+    status: string;
+    time: string;
+    avatar: string;
+}
+
+interface DriverData {
+    id: string;
+    name?: string;
+    is_available?: boolean;
+    is_suspended?: boolean;
+    status?: string;
+    location?: { latitude: number; longitude: number };
+    current_order_id?: string;
+}
 
 interface StatCardProps {
     title: string;
@@ -78,7 +98,7 @@ export default function Dashboard() {
     const [activeOrders, setActiveOrders] = useState('...');
     const [availableDrivers, setAvailableDrivers] = useState('...');
     const [totalRevenue, setTotalRevenue] = useState(0);
-    const [recentOrders, setRecentOrders] = useState<any[]>([]);
+    const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
     
     // Trend state
     const [revenueTrend, setRevenueTrend] = useState('0');
@@ -87,7 +107,7 @@ export default function Dashboard() {
 
     // Tracking map variables
     const [isAvailableCount, setIsAvailableCount] = useState(0);
-    const [trackingDrivers, setTrackingDrivers] = useState<any[]>([]);
+    const [trackingDrivers, setTrackingDrivers] = useState<DriverData[]>([]);
 
     // Live stats from Firestore
     useEffect(() => {
@@ -98,13 +118,12 @@ export default function Dashboard() {
         const thisMonthTs = Timestamp.fromDate(thisMonthStart);
         const lastMonthTs = Timestamp.fromDate(lastMonthStart);
 
-        const unsubUsers = onSnapshot(collection(db, 'users'), (snap: any) => {
+        const unsubUsers = onSnapshot(collection(db, 'users'), (snap: QuerySnapshot<DocumentData>) => {
             const total = snap.size;
             setTotalUsers(total.toString());
-            // Count users joined this month vs last
             let thisMonth = 0, lastMonth = 0;
-            snap.forEach((doc: any) => {
-                const createdAt = doc.data().created_at;
+            snap.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
+                const createdAt = (doc.data() as { created_at?: Timestamp }).created_at;
                 if (createdAt && createdAt >= thisMonthTs) thisMonth++;
                 else if (createdAt && createdAt >= lastMonthTs) lastMonth++;
             });
@@ -115,19 +134,19 @@ export default function Dashboard() {
         });
         const unsubOrders = onSnapshot(
             query(collection(db, 'orders'), where('status', 'in', ['pending', 'in_progress', 'accepted', 'arrived'])),
-            (snap: any) => setActiveOrders(snap.size.toString())
+            (snap: QuerySnapshot<DocumentData>) => setActiveOrders(snap.size.toString())
         );
         const unsubDrivers = onSnapshot(
             query(collection(db, 'drivers'), where('is_available', '==', true)),
-            (snap: any) => setAvailableDrivers(snap.size.toString())
+            (snap: QuerySnapshot<DocumentData>) => setAvailableDrivers(snap.size.toString())
         );
         const unsubCompletedOrders = onSnapshot(
             query(collection(db, 'orders'), where('status', '==', 'completed')),
-            (snap: any) => {
+            (snap: QuerySnapshot<DocumentData>) => {
                 let revenue = 0, thisMonthRev = 0, lastMonthRev = 0;
                 let thisMonthOrders = 0, lastMonthOrders = 0;
-                snap.forEach((doc: any) => {
-                    const d = doc.data();
+                snap.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
+                    const d = doc.data() as { amount?: number; created_at?: Timestamp };
                     revenue += d.amount || 0;
                     if (d.created_at && d.created_at >= thisMonthTs) {
                         thisMonthRev += d.amount || 0;
@@ -138,19 +157,15 @@ export default function Dashboard() {
                     }
                 });
                 setTotalRevenue(revenue);
-                if (lastMonthRev > 0) {
-                    setRevenueTrend((((thisMonthRev - lastMonthRev) / lastMonthRev) * 100).toFixed(1));
-                }
-                if (lastMonthOrders > 0) {
-                    setOrdersTrend((((thisMonthOrders - lastMonthOrders) / lastMonthOrders) * 100).toFixed(1));
-                }
+                if (lastMonthRev > 0) setRevenueTrend((((thisMonthRev - lastMonthRev) / lastMonthRev) * 100).toFixed(1));
+                if (lastMonthOrders > 0) setOrdersTrend((((thisMonthOrders - lastMonthOrders) / lastMonthOrders) * 100).toFixed(1));
             }
         );
         const unsubRecentOrders = onSnapshot(
             query(collection(db, 'orders'), orderBy('created_at', 'desc'), limit(5)),
-            (snap: any) => {
-                const fetchedOrders = snap.docs.map((doc: any) => {
-                    const data = doc.data();
+            (snap: QuerySnapshot<DocumentData>) => {
+                const fetchedOrders: RecentOrder[] = snap.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => {
+                    const data = doc.data() as { client_name?: string; client_id?: string; service_type?: string; amount?: number; status?: string; created_at?: Timestamp };
                     const date = data.created_at?.toDate();
                     return {
                         id: `#ORD-${doc.id.substring(0, 4).toUpperCase()}`,
@@ -184,13 +199,13 @@ export default function Dashboard() {
         // Live Drivers Data Markers from Firestore
         const unsubDriversMap = onSnapshot(
             collection(db, 'drivers'),
-            (snapshot: any) => {
+            (snapshot: QuerySnapshot<DocumentData>) => {
                 const currentDriverIds = new Set<string>();
-                const currentDriversData: any[] = [];
+                const currentDriversData: DriverData[] = [];
                 let onlineCount = 0;
 
-                snapshot.forEach((doc: any) => {
-                    const data = doc.data();
+                snapshot.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
+                    const data = doc.data() as DriverData;
                     const id = doc.id;
                     
                     // Only show drivers who are online/available
@@ -306,7 +321,7 @@ export default function Dashboard() {
                     <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">نظرة عامة على الأداء</h2>
                     <p className="text-slate-500 font-medium text-sm mt-1">إحصائيات المنصة حتى اليوم</p>
                 </div>
-                <button className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-bold py-2.5 px-5 rounded-xl transition-all shadow-sm flex items-center space-x-2 space-x-reverse text-sm">
+                <button type="button" className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-bold py-2.5 px-5 rounded-xl transition-all shadow-sm flex items-center space-x-2 space-x-reverse text-sm">
                     <span>تصدير التقرير</span>
                     <ArrowUpRight size={18} />
                 </button>
@@ -316,7 +331,7 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                 <StatCard title="إجمالي الإيرادات" value={`${totalRevenue.toFixed(0)} ر.س`} icon={TrendingUp} trend={revenueTrend} trendUp={parseFloat(revenueTrend) >= 0} colorScheme="blue" />
                 <StatCard title="الطلبات النشطة" value={activeOrders} icon={Clock} trend={ordersTrend} trendUp={parseFloat(ordersTrend) >= 0} colorScheme="orange" />
-                <StatCard title="السائقين المتاحين" value={availableDrivers} icon={CarFront} trend="0" trendUp={true} colorScheme="indigo" />
+                <StatCard title="السائقين المتاحين" value={availableDrivers} icon={CarFront} trend="0" trendUp colorScheme="indigo" />
                 <StatCard title="إجمالي المستخدمين" value={totalUsers} icon={Users} trend={usersTrend} trendUp={parseFloat(usersTrend) >= 0} colorScheme="emerald" />
             </div>
 
@@ -329,7 +344,7 @@ export default function Dashboard() {
                             <h3 className="text-lg font-extrabold text-slate-800">أحدث الطلبات</h3>
                             <p className="text-sm font-medium text-slate-400 mt-1">آخر 5 طلبات مسجلة في النظام</p>
                         </div>
-                        <button onClick={() => navigate('/orders')} className="text-blue-600 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center">
+                        <button type="button" onClick={() => navigate('/orders')} className="text-blue-600 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center">
                             <span>عرض الكل</span>
                             <ChevronLeft size={16} className="mr-1" />
                         </button>
@@ -346,7 +361,7 @@ export default function Dashboard() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100/80">
-                                {recentOrders.map((order: any) => (
+                                {recentOrders.map((order: RecentOrder) => (
                                     <tr key={order.id} className="hover:bg-slate-50/70 transition-colors group">
                                         <td className="px-8 py-5">
                                             <span className="font-extrabold text-slate-700">{order.id}</span>
@@ -381,6 +396,7 @@ export default function Dashboard() {
                     <div className="absolute inset-0 opacity-40 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/40 via-slate-900 to-slate-900 mix-blend-overlay pointer-events-none"></div>
 
                     {/* Animated grid background */}
+                    {/* eslint-disable-next-line react/forbid-dom-props */}
                     <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px)', backgroundSize: '20px 20px', opacity: 0.2 }}></div>
 
                     <div className="relative z-10 flex flex-col h-full w-full">
@@ -400,6 +416,7 @@ export default function Dashboard() {
                         </div>
 
                         <button
+                            type="button"
                             onClick={fitMapToDrivers}
                             className="w-full relative overflow-hidden bg-white text-slate-900 font-bold py-4 rounded-xl transition-all hover:shadow-[0_0_20px_rgba(255,255,255,0.3)] group/btn"
                         >
