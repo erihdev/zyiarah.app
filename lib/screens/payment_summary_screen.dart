@@ -8,7 +8,6 @@ import 'package:zyiarah/services/edfapay_service.dart';
 import 'package:zyiarah/screens/checkout_screen.dart';
 import 'package:zyiarah/screens/invoice_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:zyiarah/models/order_model.dart';
 import 'package:zyiarah/models/user_model.dart';
 
 import 'package:zyiarah/services/order_service.dart';

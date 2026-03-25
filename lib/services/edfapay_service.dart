@@ -1,5 +1,5 @@
-import 'package:edfapg_sdk/edfapg_sdk.dart';
-import 'package:flutter/material.dart';
+// ignore: unused_import
+import 'package:edfapg_sdk/edfapg_sdk.dart'; // Reserved for future SDK integration
 
 class EdfaPayService {
   // Demo Credentials - Replace with real ones later

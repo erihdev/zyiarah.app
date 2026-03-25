@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:zyiarah/services/tamara_service.dart';
-import 'package:zyiarah/screens/checkout_screen.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
-import 'package:zyiarah/models/order_model.dart';
 import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 
@@ -17,7 +14,6 @@ class HourlyCleaningDetailsScreen extends StatefulWidget {
 }
 
 class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScreen> {
-  final TamaraService _tamaraService = TamaraService();
   int _selectedHours = 4;
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
   bool _isLoading = false;
@@ -65,7 +61,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
 
     final GeoPoint selectedLocation = result['location'];
 
-    if (selectedLocation != null) {
+    if (mounted) {
       Navigator.push(
         context,
         MaterialPageRoute(
