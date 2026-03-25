@@ -22,7 +22,7 @@ class ZyiarahOrderService {
         clientName = userDoc.data()?['name'] ?? 'عميل زيارة';
       }
     } catch (e) {
-      print('Error fetching user name: $e');
+      debugPrint('Error fetching user name: $e');
     }
 
     DocumentReference doc = await _db.collection('orders').add({

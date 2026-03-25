@@ -102,7 +102,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                     });
                   }
                 },
-                activeColor: Colors.greenAccent,
+                activeThumbColor: Colors.greenAccent,
                 inactiveThumbColor: Colors.grey[400],
               ),
             ],
@@ -131,7 +131,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 4))],
         ),
         child: Column(
           children: [
@@ -225,7 +225,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: stateColor.withOpacity(0.1), width: 2),
+        border: Border.all(color: stateColor.withValues(alpha: 0.1), width: 2),
       ),
       child: Column(
         children: [
@@ -233,7 +233,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
             children: [
               Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: stateColor.withOpacity(0.1), shape: BoxShape.circle),
+                decoration: BoxDecoration(color: stateColor.withValues(alpha: 0.1), shape: BoxShape.circle),
                 child: Icon(stateIcon, color: stateColor),
               ),
               const SizedBox(width: 15),
@@ -403,7 +403,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       ),
       child: Row(
         children: [
-          CircleAvatar(backgroundColor: const Color(0xFF5D1B5E).withOpacity(0.1), child: const Icon(Icons.local_offer, color: Color(0xFF5D1B5E), size: 20)),
+          CircleAvatar(backgroundColor: const Color(0xFF5D1B5E).withValues(alpha: 0.1), child: const Icon(Icons.local_offer, color: Color(0xFF5D1B5E), size: 20)),
           const SizedBox(width: 15),
           Expanded(
             child: Column(

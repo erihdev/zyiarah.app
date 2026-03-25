@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
-import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 
 class HourlyCleaningDetailsScreen extends StatefulWidget {
@@ -17,25 +15,6 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   int _selectedHours = 4;
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
   bool _isLoading = false;
-  ZyiarahUser? _currentUser;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUserData();
-  }
-
-  Future<void> _loadUserData() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-      if (doc.exists && mounted) {
-        setState(() {
-          _currentUser = ZyiarahUser.fromMap(user.uid, doc.data()!);
-        });
-      }
-    }
-  }
 
   // Pricing logic: Each hour is 40 SAR, minimum 2 hours (80 SAR), baseline or variable
   double get totalAmount {
