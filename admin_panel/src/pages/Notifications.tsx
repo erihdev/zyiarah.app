@@ -1,7 +1,16 @@
 import { useState, useEffect } from 'react';
 import { Send, BellRing, Smartphone, Users, UserRound, History, Clock, CheckCircle2 } from 'lucide-react';
-import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, limit } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, limit, type Timestamp, type DocumentData, type QuerySnapshot, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { db } from '../services/firebase.ts';
+
+interface NotificationLog {
+    id: string;
+    title: string;
+    body: string;
+    target: string;
+    sent_at: Timestamp | null;
+    status: string;
+}
 
 export default function Notifications() {
     const [target, setTarget] = useState('all');
@@ -9,12 +18,12 @@ export default function Notifications() {
     const [body, setBody] = useState('');
     const [sending, setSending] = useState(false);
     const [success, setSuccess] = useState(false);
-    const [history, setHistory] = useState<any[]>([]);
+    const [history, setHistory] = useState<NotificationLog[]>([]);
 
     useEffect(() => {
         const q = query(collection(db, 'notifications_log'), orderBy('sent_at', 'desc'), limit(10));
-        const unsub = onSnapshot(q, snap => {
-            setHistory(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const unsub = onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
+            setHistory(snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as NotificationLog)));
         });
         return () => unsub();
     }, []);
@@ -48,8 +57,8 @@ export default function Notifications() {
         return t;
     };
 
-    const relativeTime = (ts: any) => {
-        if (!ts?.toDate) return '';
+    const relativeTime = (ts: Timestamp | null) => {
+        if (!ts || !ts.toDate) return '';
         const diff = Math.floor((Date.now() - ts.toDate().getTime()) / 1000);
         if (diff < 60) return 'منذ لحظات';
         if (diff < 3600) return `منذ ${Math.floor(diff / 60)} دقيقة`;
@@ -128,6 +137,7 @@ export default function Notifications() {
                             </div>
 
                             <button
+                                type="button"
                                 onClick={handleSend}
                                 disabled={sending || !title.trim() || !body.trim()}
                                 className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-bold hover:from-indigo-700 hover:to-violet-700 transition-all shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 mt-4"
@@ -152,7 +162,7 @@ export default function Notifications() {
                             <p className="text-slate-400 font-bold text-sm">لا توجد إشعارات مُرسلة بعد</p>
                             <p className="text-slate-300 text-xs mt-1">أرسل أول إشعار وسيظهر هنا لحظياً</p>
                         </div>
-                    ) : history.map((notif) => (
+                    ) : history.map((notif: NotificationLog) => (
                         <div key={notif.id} className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-shadow">
                             <div className="flex justify-between items-start mb-2">
                                 <h4 className="font-bold text-slate-800 flex items-center gap-2">
