@@ -1,9 +1,10 @@
 import { TrendingUp, Users, CarFront, CheckCircle2, Clock, Map as MapIcon, ChevronLeft, ArrowUpRight } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { collection, onSnapshot, query, where, orderBy, limit } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 interface StatCardProps {
@@ -69,6 +70,7 @@ const StatCard = ({ title, value, icon: Icon, trend, trendUp, colorScheme }: Sta
 };
 
 export default function Dashboard() {
+    const navigate = useNavigate();
     const mapContainer = useRef<HTMLDivElement>(null);
     const map = useRef<mapboxgl.Map | null>(null);
     const markersRef = useRef<{ [key: string]: mapboxgl.Marker }>({});
@@ -77,6 +79,11 @@ export default function Dashboard() {
     const [availableDrivers, setAvailableDrivers] = useState('...');
     const [totalRevenue, setTotalRevenue] = useState(0);
     const [recentOrders, setRecentOrders] = useState<any[]>([]);
+    
+    // Trend state
+    const [revenueTrend, setRevenueTrend] = useState('0');
+    const [ordersTrend, setOrdersTrend] = useState('0');
+    const [usersTrend, setUsersTrend] = useState('0');
 
     // Tracking map variables
     const [isAvailableCount, setIsAvailableCount] = useState(0);
@@ -84,11 +91,30 @@ export default function Dashboard() {
 
     // Live stats from Firestore
     useEffect(() => {
+        // Date helpers for trends
+        const now = new Date();
+        const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const thisMonthTs = Timestamp.fromDate(thisMonthStart);
+        const lastMonthTs = Timestamp.fromDate(lastMonthStart);
+
         const unsubUsers = onSnapshot(collection(db, 'users'), (snap: any) => {
-            setTotalUsers(snap.size.toString());
+            const total = snap.size;
+            setTotalUsers(total.toString());
+            // Count users joined this month vs last
+            let thisMonth = 0, lastMonth = 0;
+            snap.forEach((doc: any) => {
+                const createdAt = doc.data().created_at;
+                if (createdAt && createdAt >= thisMonthTs) thisMonth++;
+                else if (createdAt && createdAt >= lastMonthTs) lastMonth++;
+            });
+            if (lastMonth > 0) {
+                const pct = (((thisMonth - lastMonth) / lastMonth) * 100).toFixed(1);
+                setUsersTrend(pct);
+            }
         });
         const unsubOrders = onSnapshot(
-            query(collection(db, 'orders'), where('status', 'in', ['pending', 'in_progress'])),
+            query(collection(db, 'orders'), where('status', 'in', ['pending', 'in_progress', 'accepted', 'arrived'])),
             (snap: any) => setActiveOrders(snap.size.toString())
         );
         const unsubDrivers = onSnapshot(
@@ -98,11 +124,26 @@ export default function Dashboard() {
         const unsubCompletedOrders = onSnapshot(
             query(collection(db, 'orders'), where('status', '==', 'completed')),
             (snap: any) => {
-                let revenue = 0;
+                let revenue = 0, thisMonthRev = 0, lastMonthRev = 0;
+                let thisMonthOrders = 0, lastMonthOrders = 0;
                 snap.forEach((doc: any) => {
-                    revenue += doc.data().amount || 0;
+                    const d = doc.data();
+                    revenue += d.amount || 0;
+                    if (d.created_at && d.created_at >= thisMonthTs) {
+                        thisMonthRev += d.amount || 0;
+                        thisMonthOrders++;
+                    } else if (d.created_at && d.created_at >= lastMonthTs) {
+                        lastMonthRev += d.amount || 0;
+                        lastMonthOrders++;
+                    }
                 });
                 setTotalRevenue(revenue);
+                if (lastMonthRev > 0) {
+                    setRevenueTrend((((thisMonthRev - lastMonthRev) / lastMonthRev) * 100).toFixed(1));
+                }
+                if (lastMonthOrders > 0) {
+                    setOrdersTrend((((thisMonthOrders - lastMonthOrders) / lastMonthOrders) * 100).toFixed(1));
+                }
             }
         );
         const unsubRecentOrders = onSnapshot(
@@ -113,12 +154,12 @@ export default function Dashboard() {
                     const date = data.created_at?.toDate();
                     return {
                         id: `#ORD-${doc.id.substring(0, 4).toUpperCase()}`,
-                        client: data.client_id ? `عميل ${data.client_id.substring(0, 4)}` : 'زائر',
+                        client: data.client_name || (data.client_id ? `عميل ${data.client_id.substring(0, 4)}` : 'زائر'),
                         service: data.service_type || 'خدمة غير محددة',
                         amount: data.amount?.toString() || '0',
                         status: data.status || 'pending',
                         time: date ? new Intl.DateTimeFormat('ar-SA', { month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' }).format(date) : 'الآن',
-                        avatar: data.client_id ? data.client_id.substring(0, 1).toUpperCase() : 'U'
+                        avatar: data.client_name ? data.client_name.substring(0, 1) : (data.client_id ? data.client_id.substring(0, 1).toUpperCase() : 'U')
                     };
                 });
                 setRecentOrders(fetchedOrders);
@@ -273,10 +314,10 @@ export default function Dashboard() {
 
             {/* Stats Grid - Live */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-                <StatCard title="إجمالي الإيرادات" value={`${totalRevenue} ر.س`} icon={TrendingUp} trend="0" trendUp={true} colorScheme="blue" />
-                <StatCard title="الطلبات النشطة" value={activeOrders} icon={Clock} trend="4.2" trendUp={true} colorScheme="orange" />
+                <StatCard title="إجمالي الإيرادات" value={`${totalRevenue.toFixed(0)} ر.س`} icon={TrendingUp} trend={revenueTrend} trendUp={parseFloat(revenueTrend) >= 0} colorScheme="blue" />
+                <StatCard title="الطلبات النشطة" value={activeOrders} icon={Clock} trend={ordersTrend} trendUp={parseFloat(ordersTrend) >= 0} colorScheme="orange" />
                 <StatCard title="السائقين المتاحين" value={availableDrivers} icon={CarFront} trend="0" trendUp={true} colorScheme="indigo" />
-                <StatCard title="إجمالي المستخدمين" value={totalUsers} icon={Users} trend="0" trendUp={true} colorScheme="emerald" />
+                <StatCard title="إجمالي المستخدمين" value={totalUsers} icon={Users} trend={usersTrend} trendUp={parseFloat(usersTrend) >= 0} colorScheme="emerald" />
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
@@ -288,7 +329,7 @@ export default function Dashboard() {
                             <h3 className="text-lg font-extrabold text-slate-800">أحدث الطلبات</h3>
                             <p className="text-sm font-medium text-slate-400 mt-1">آخر 5 طلبات مسجلة في النظام</p>
                         </div>
-                        <button className="text-blue-600 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center">
+                        <button onClick={() => navigate('/orders')} className="text-blue-600 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center">
                             <span>عرض الكل</span>
                             <ChevronLeft size={16} className="mr-1" />
                         </button>
