@@ -26,13 +26,18 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
-    // Support Tickets (New Collection)
+    // Support Tickets
     match /support_tickets/{ticketId} {
       allow create: if isLoggedIn();
       allow read, update: if isLoggedIn() && (request.auth.uid == resource.data.userId || isAdmin());
-      
+      allow delete: if isAdmin();
+
       match /messages/{messageId} {
-        allow read, create: if isLoggedIn();
+        // Only ticket owner or admin can read/write messages
+        allow read, create: if isLoggedIn() && (
+          request.auth.uid == get(/databases/$(database)/documents/support_tickets/$(ticketId)).data.userId
+          || isAdmin()
+        );
       }
     }
 
