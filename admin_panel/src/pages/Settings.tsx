@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Save, Bell, Shield, Wallet, MapPin, Search, Smartphone, Loader2 } from 'lucide-react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { db } from '../services/firebase.ts';
 
 interface SystemSettings {
     // General
@@ -85,7 +85,7 @@ export default function Settings() {
         }
     };
 
-    const handleChange = (key: keyof SystemSettings, value: any) => {
+    const handleChange = <K extends keyof SystemSettings>(key: K, value: SystemSettings[K]) => {
         setSettings(prev => ({ ...prev, [key]: value }));
     };
 
@@ -101,6 +101,7 @@ export default function Settings() {
                     <p className="text-slate-500 font-medium text-sm mt-1">إدارة الإعدادات العامة وتكوينات التطبيق</p>
                 </div>
                 <button
+                    type="button"
                     onClick={handleSave}
                     disabled={isSaving}
                     className="flex items-center space-x-2 space-x-reverse bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/20 hover:shadow-xl hover:shadow-blue-500/30 hover:-translate-y-0.5 disabled:opacity-75 disabled:cursor-not-allowed"
@@ -127,6 +128,7 @@ export default function Settings() {
 
                         <nav className="space-y-1">
                             <button
+                                type="button"
                                 onClick={() => setActiveTab('general')}
                                 className={`w-full flex items-center space-x-3 space-x-reverse px-4 py-3.5 rounded-2xl font-bold transition-colors group relative overflow-hidden ${activeTab === 'general' ? 'bg-blue-50/80 text-blue-600' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50 font-medium'}`}
                             >
@@ -135,6 +137,7 @@ export default function Settings() {
                                 <span>عام وأمان</span>
                             </button>
                             <button
+                                type="button"
                                 onClick={() => setActiveTab('payments')}
                                 className={`w-full flex items-center space-x-3 space-x-reverse px-4 py-3.5 rounded-2xl font-bold transition-colors group relative overflow-hidden ${activeTab === 'payments' ? 'bg-emerald-50/80 text-emerald-600' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50 font-medium'}`}
                             >
@@ -143,6 +146,7 @@ export default function Settings() {
                                 <span>المدفوعات والعمولات</span>
                             </button>
                             <button
+                                type="button"
                                 onClick={() => setActiveTab('notifications')}
                                 className={`w-full flex items-center space-x-3 space-x-reverse px-4 py-3.5 rounded-2xl font-bold transition-colors group relative overflow-hidden ${activeTab === 'notifications' ? 'bg-orange-50/80 text-orange-600' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50 font-medium'}`}
                             >
@@ -151,6 +155,7 @@ export default function Settings() {
                                 <span>الإشعارات الآلية</span>
                             </button>
                             <button
+                                type="button"
                                 onClick={() => setActiveTab('coverage')}
                                 className={`w-full flex items-center space-x-3 space-x-reverse px-4 py-3.5 rounded-2xl font-bold transition-colors group relative overflow-hidden ${activeTab === 'coverage' ? 'bg-indigo-50/80 text-indigo-600' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50 font-medium'}`}
                             >
@@ -174,18 +179,18 @@ export default function Settings() {
                             <div className="p-8 space-y-8">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <div className="space-y-2 group">
-                                        <label className="block text-sm font-extrabold text-slate-700">مفتاح ZATCA (هيئة الزكاة والدخل)</label>
+                                        <label htmlFor="zatca-key" className="block text-sm font-extrabold text-slate-700">مفتاح ZATCA (هيئة الزكاة والدخل)</label>
                                         <div className="relative">
-                                            <input type="password" value="xxxxxxxxxxxxxxxxxxxxxxxxxx" disabled className="w-full bg-[#f8fafc] border border-slate-200 text-slate-400 text-sm rounded-xl px-4 py-3.5 outline-none font-mono tracking-widest cursor-not-allowed group-hover:border-slate-300 transition-colors" />
-                                            <button className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors">مراجعة</button>
+                                            <input id="zatca-key" type="password" value="xxxxxxxxxxxxxxxxxxxxxxxxxx" disabled className="w-full bg-[#f8fafc] border border-slate-200 text-slate-400 text-sm rounded-xl px-4 py-3.5 outline-none font-mono tracking-widest cursor-not-allowed group-hover:border-slate-300 transition-colors" />
+                                            <button type="button" title="مراجعة مفتاح ZATCA" className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors">مراجعة</button>
                                         </div>
                                         <p className="text-xs text-slate-400 font-medium leading-relaxed">لأسباب أمنية لا يمكن عرض المفتاح كاملاً. لتغييره يرجى التواصل مع الدعم التقني.</p>
                                     </div>
                                     <div className="space-y-2 group">
-                                        <label className="block text-sm font-extrabold text-slate-700">مفتاح Firebase Admin</label>
+                                        <label htmlFor="firebase-key" className="block text-sm font-extrabold text-slate-700">مفتاح Firebase Admin</label>
                                         <div className="relative">
-                                            <input type="password" value="xxxxxxxxxxxxxxxxxxxxxxxxxx" disabled className="w-full bg-[#f8fafc] border border-slate-200 text-slate-400 text-sm rounded-xl px-4 py-3.5 outline-none font-mono tracking-widest cursor-not-allowed group-hover:border-slate-300 transition-colors" />
-                                            <button className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors">مراجعة</button>
+                                            <input id="firebase-key" type="password" value="xxxxxxxxxxxxxxxxxxxxxxxxxx" disabled className="w-full bg-[#f8fafc] border border-slate-200 text-slate-400 text-sm rounded-xl px-4 py-3.5 outline-none font-mono tracking-widest cursor-not-allowed group-hover:border-slate-300 transition-colors" />
+                                            <button type="button" title="مراجعة مفتاح فيربيس" className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors">مراجعة</button>
                                         </div>
                                         <p className="text-xs text-slate-400 font-medium leading-relaxed">مفتاح الاتصال الخاص بالخدمات السحابية وقاعدة البيانات.</p>
                                     </div>
@@ -197,15 +202,17 @@ export default function Settings() {
                                     <h4 className="font-extrabold text-slate-800 text-lg mb-4 flex items-center gap-2"><Smartphone size={20} className="text-blue-600" /> توافق المتاجر وإصدارات التطبيق</h4>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div className="space-y-2 group md:col-span-2">
-                                            <label className="block text-sm font-extrabold text-slate-700">إجبار المستخدمين والسائقين على التحديث (Force Update)</label>
+                                            <label htmlFor="min-version" className="block text-sm font-extrabold text-slate-700">إجبار المستخدمين والسائقين على التحديث (Force Update)</label>
                                             <div className="flex gap-4">
                                                 <div className="flex-1">
                                                     <input
+                                                        id="min-version"
                                                         type="text"
                                                         value={settings.force_update_version}
                                                         onChange={(e) => handleChange('force_update_version', e.target.value)}
                                                         className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all text-left font-mono"
                                                         dir="ltr"
+                                                        placeholder="v1.0.0"
                                                     />
                                                 </div>
                                                 <div className="flex items-center">
@@ -219,32 +226,38 @@ export default function Settings() {
                                             <p className="text-xs text-slate-500 font-medium leading-relaxed">أدخل الحد الأدنى للإصدار المسموح به. أي مستخدم لديه إصدار أقدم سيُجبر على فتح المتجر وتحديث التطبيق.</p>
                                         </div>
                                         <div className="space-y-2 group">
-                                            <label className="block text-sm font-extrabold text-slate-700">رابط الشروط والأحكام (Terms)</label>
+                                            <label htmlFor="terms-url" className="block text-sm font-extrabold text-slate-700">رابط الشروط والأحكام (Terms)</label>
                                             <input
+                                                id="terms-url"
                                                 type="url"
                                                 value={settings.terms_url}
                                                 onChange={(e) => handleChange('terms_url', e.target.value)}
                                                 className="w-full bg-white border border-slate-200 text-slate-700 text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all text-left"
                                                 dir="ltr"
+                                                placeholder="https://example.com/terms"
                                             />
                                         </div>
                                         <div className="space-y-2 group">
-                                            <label className="block text-sm font-extrabold text-slate-700">رابط الدعم الفني والمساعدة</label>
+                                            <label htmlFor="support-url" className="block text-sm font-extrabold text-slate-700">رابط الدعم الفني والمساعدة</label>
                                             <input
+                                                id="support-url"
                                                 type="url"
                                                 value={settings.support_url}
                                                 onChange={(e) => handleChange('support_url', e.target.value)}
                                                 className="w-full bg-white border border-slate-200 text-slate-700 text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all text-left"
                                                 dir="ltr"
+                                                placeholder="https://example.com/support"
                                             />
                                         </div>
                                         <div className="space-y-2 group md:col-span-2">
-                                            <label className="block text-sm font-extrabold text-slate-700">نص سياسة الخصوصية (Privacy Policy)</label>
+                                            <label htmlFor="privacy-policy" className="block text-sm font-extrabold text-slate-700">نص سياسة الخصوصية (Privacy Policy)</label>
                                             <textarea
+                                                id="privacy-policy"
                                                 rows={5}
                                                 value={settings.privacy_policy}
                                                 onChange={(e) => handleChange('privacy_policy', e.target.value)}
                                                 className="w-full bg-white border border-slate-200 text-slate-700 text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all resize-y leading-relaxed"
+                                                placeholder="اكتب سياسة الخصوصية هنا..."
                                             />
                                         </div>
                                     </div>
@@ -265,6 +278,7 @@ export default function Settings() {
                                     </div>
                                     <div className="relative z-10 sm:min-w-fit">
                                         <button
+                                            type="button"
                                             onClick={() => handleChange('maintenance_mode', !settings.maintenance_mode)}
                                             className={`w-full sm:w-auto font-extrabold px-6 py-3 rounded-xl transition-all shadow-sm border-2 ${settings.maintenance_mode ? 'bg-white border-orange-200 text-orange-700 hover:bg-orange-50' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
                                         >
@@ -285,35 +299,41 @@ export default function Settings() {
                             <div className="p-8 space-y-8">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <div className="space-y-2 group">
-                                        <label className="block text-sm font-extrabold text-slate-700">نسبة عمولة التطبيق (%)</label>
+                                        <label htmlFor="commission-rate" className="block text-sm font-extrabold text-slate-700">نسبة عمولة التطبيق (%)</label>
                                         <input
+                                            id="commission-rate"
                                             type="number"
                                             value={settings.commission_rate}
                                             onChange={(e) => handleChange('commission_rate', Number(e.target.value))}
                                             className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all text-left"
                                             dir="ltr"
+                                            placeholder="15"
                                         />
                                         <p className="text-xs text-slate-400 font-medium">النسبة المئوية التي يستقطعها التطبيق من كل طلب مكتمل.</p>
                                     </div>
                                     <div className="space-y-2 group">
-                                        <label className="block text-sm font-extrabold text-slate-700">نسبة ضريبة القيمة المضافة (VAT %)</label>
+                                        <label htmlFor="vat-rate" className="block text-sm font-extrabold text-slate-700">نسبة ضريبة القيمة المضافة (VAT %)</label>
                                         <input
+                                            id="vat-rate"
                                             type="number"
                                             value={settings.vat_rate}
                                             onChange={(e) => handleChange('vat_rate', Number(e.target.value))}
                                             className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all text-left"
                                             dir="ltr"
+                                            placeholder="15"
                                         />
                                         <p className="text-xs text-slate-400 font-medium">نسبة الضريبة المعمول بها في المملكة حالياً.</p>
                                     </div>
                                     <div className="space-y-2 group md:col-span-2">
-                                        <label className="block text-sm font-extrabold text-slate-700">الحد الأدنى لمحفظة السائق بالسالب (ر.س)</label>
+                                        <label htmlFor="min-wallet" className="block text-sm font-extrabold text-slate-700">الحد الأدنى لمحفظة السائق بالسالب (ر.س)</label>
                                         <input
+                                            id="min-wallet"
                                             type="number"
                                             value={settings.min_wallet_balance}
                                             onChange={(e) => handleChange('min_wallet_balance', Number(e.target.value))}
                                             className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all text-left"
                                             dir="ltr"
+                                            placeholder="-50"
                                         />
                                         <p className="text-xs text-slate-400 font-medium">إذا وصل رصيد السائق إلى هذا الحد (مديونية)، سيتم إيقاف حسابه تلقائياً حتى يقوم بالسداد.</p>
                                     </div>
@@ -335,7 +355,7 @@ export default function Settings() {
                                         <p className="text-xs text-slate-500 mt-1">إرسال تفاصيل الفاتورة عبر رسالة نصية بعد تأكيد الدفع.</p>
                                     </div>
                                     <label className="relative inline-flex items-center cursor-pointer">
-                                        <input type="checkbox" className="sr-only peer" checked={settings.sms_on_order} onChange={(e) => handleChange('sms_on_order', e.target.checked)} />
+                                        <input type="checkbox" title="تفعيل رسائل SMS" className="sr-only peer" checked={settings.sms_on_order} onChange={(e) => handleChange('sms_on_order', e.target.checked)} />
                                         <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
                                     </label>
                                 </div>
@@ -345,7 +365,7 @@ export default function Settings() {
                                         <p className="text-xs text-slate-500 mt-1">إرسال إشعار فوري للسائقين في النطاق عند توفر طلب جديد.</p>
                                     </div>
                                     <label className="relative inline-flex items-center cursor-pointer">
-                                        <input type="checkbox" className="sr-only peer" checked={settings.push_on_assign} onChange={(e) => handleChange('push_on_assign', e.target.checked)} />
+                                        <input type="checkbox" title="تفعيل تنبيه السائقين" className="sr-only peer" checked={settings.push_on_assign} onChange={(e) => handleChange('push_on_assign', e.target.checked)} />
                                         <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
                                     </label>
                                 </div>
@@ -355,7 +375,7 @@ export default function Settings() {
                                         <p className="text-xs text-slate-500 mt-1">إرسال إشعار فوري لتقييم الخدمة بعد إنهاء السائق للطلب.</p>
                                     </div>
                                     <label className="relative inline-flex items-center cursor-pointer">
-                                        <input type="checkbox" className="sr-only peer" checked={settings.push_on_completed} onChange={(e) => handleChange('push_on_completed', e.target.checked)} />
+                                        <input type="checkbox" title="تفعيل تنبيه العميل" className="sr-only peer" checked={settings.push_on_completed} onChange={(e) => handleChange('push_on_completed', e.target.checked)} />
                                         <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
                                     </label>
                                 </div>
@@ -379,7 +399,7 @@ export default function Settings() {
                                         </div>
                                     </div>
                                     <label className="relative inline-flex items-center cursor-pointer">
-                                        <input type="checkbox" className="sr-only peer" checked={settings.riyadh_enabled} onChange={(e) => handleChange('riyadh_enabled', e.target.checked)} />
+                                        <input type="checkbox" title="تفعيل منطقة الرياض" className="sr-only peer" checked={settings.riyadh_enabled} onChange={(e) => handleChange('riyadh_enabled', e.target.checked)} />
                                         <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                                     </label>
                                 </div>
@@ -392,7 +412,7 @@ export default function Settings() {
                                         </div>
                                     </div>
                                     <label className="relative inline-flex items-center cursor-pointer">
-                                        <input type="checkbox" className="sr-only peer" checked={settings.jeddah_enabled} onChange={(e) => handleChange('jeddah_enabled', e.target.checked)} />
+                                        <input type="checkbox" title="تفعيل منطقة جدة" className="sr-only peer" checked={settings.jeddah_enabled} onChange={(e) => handleChange('jeddah_enabled', e.target.checked)} />
                                         <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                                     </label>
                                 </div>
@@ -405,7 +425,7 @@ export default function Settings() {
                                         </div>
                                     </div>
                                     <label className="relative inline-flex items-center cursor-pointer">
-                                        <input type="checkbox" className="sr-only peer" checked={settings.dammam_enabled} onChange={(e) => handleChange('dammam_enabled', e.target.checked)} />
+                                        <input type="checkbox" title="تفعيل منطقة الشرقية" className="sr-only peer" checked={settings.dammam_enabled} onChange={(e) => handleChange('dammam_enabled', e.target.checked)} />
                                         <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                                     </label>
                                 </div>

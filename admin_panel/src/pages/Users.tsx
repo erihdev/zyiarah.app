@@ -1,7 +1,18 @@
 import { useState, useEffect } from 'react';
 import { Search, Filter, UserCheck, UserX, Mail, Phone, Users as UsersIcon } from 'lucide-react';
-import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { db } from '../services/firebase.ts';
+
+interface UserRecord {
+    uid: string;
+    name?: string;
+    phone?: string;
+    email?: string;
+    role?: string;
+    status?: string;
+    created_at?: Timestamp;
+    dateStr?: string;
+}
 
 const StatusBadge = ({ status }: { status: string }) => {
     switch (status) {
@@ -20,19 +31,19 @@ const StatusBadge = ({ status }: { status: string }) => {
 
 export default function Users() {
     const [searchTerm, setSearchTerm] = useState('');
-    const [users, setUsers] = useState<any[]>([]);
+    const [users, setUsers] = useState<UserRecord[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const q = query(collection(db, 'users'), orderBy('created_at', 'desc'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetched = snapshot.docs.map(d => {
-                const data = d.data();
+        const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
+            const fetched = snapshot.docs.map((d: QueryDocumentSnapshot<DocumentData>) => {
+                const data = d.data() as Partial<UserRecord>;
                 let dateStr = 'غير متاح';
                 if (data.created_at instanceof Timestamp) {
                     dateStr = data.created_at.toDate().toLocaleDateString('ar-EG');
                 }
-                return { uid: d.id, dateStr, ...data };
+                return { uid: d.id, dateStr, ...data } as UserRecord;
             });
             setUsers(fetched);
             setLoading(false);
@@ -63,7 +74,7 @@ export default function Users() {
                     <span className="px-4 py-2 bg-blue-50 text-blue-700 font-bold rounded-xl border border-blue-100 text-sm">
                         إجمالي: {users.length} مستخدم
                     </span>
-                    <button className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors shadow-sm">
+                    <button type="button" className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors shadow-sm">
                         <Filter size={18} /> تصفية
                     </button>
                 </div>
@@ -142,6 +153,7 @@ export default function Users() {
                                         <td className="px-6 py-4"><StatusBadge status={user.status || 'active'} /></td>
                                         <td className="px-6 py-4 text-center">
                                             <button
+                                                type="button"
                                                 onClick={() => toggleBan(user.uid, user.status || 'active')}
                                                 className={`p-2 rounded-lg transition-colors text-xs font-bold ${user.status === 'banned' ? 'text-emerald-600 hover:bg-emerald-50' : 'text-rose-500 hover:bg-rose-50'}`}
                                                 title={user.status === 'banned' ? 'رفع الحظر' : 'حظر المستخدم'}

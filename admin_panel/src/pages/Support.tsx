@@ -1,7 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { LifeBuoy, Search, MessageSquare, AlertCircle, CheckCircle2, Send, Clock } from 'lucide-react';
-import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc, addDoc, serverTimestamp, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { db } from '../services/firebase.ts';
+
+interface SupportMessage {
+    text: string;
+    sender: string;
+    senderName?: string;
+    created_at?: Timestamp;
+}
 
 interface Ticket {
     id: string;
@@ -10,7 +17,7 @@ interface Ticket {
     issue: string;
     status: string;
     priority: string;
-    messages?: any[];
+    messages?: SupportMessage[];
     created_at?: Timestamp;
     uid?: string;
 }
@@ -26,8 +33,8 @@ export default function Support() {
 
     useEffect(() => {
         const q = query(collection(db, 'tickets'), orderBy('created_at', 'desc'));
-        const unsub = onSnapshot(q, (snap) => {
-            const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as Ticket));
+        const unsub = onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
+            const data = snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Ticket));
             setTickets(data);
             if (!selected && data.length > 0) setSelected(data[0]);
             else if (selected) {
@@ -189,14 +196,14 @@ export default function Support() {
                                     <p className="text-sm text-slate-500 mt-1">من: <strong>{selected.sender}</strong> ({selected.userType})</p>
                                 </div>
                                 {selected.status !== 'closed' && (
-                                    <button onClick={handleClose} className="px-4 py-2 bg-slate-50 text-slate-600 hover:bg-slate-100 font-bold rounded-lg border border-slate-200 text-sm transition-colors">
+                                    <button type="button" onClick={handleClose} className="px-4 py-2 bg-slate-50 text-slate-600 hover:bg-slate-100 font-bold rounded-lg border border-slate-200 text-sm transition-colors">
                                         إغلاق التذكرة ✓
                                     </button>
                                 )}
                             </div>
 
                             <div className="flex-1 overflow-y-auto p-6 space-y-5 z-10">
-                                {(selected.messages || []).map((msg: any, idx: number) => (
+                                {(selected.messages || []).map((msg: SupportMessage, idx: number) => (
                                     <div key={idx} className={`flex gap-4 max-w-2xl ${msg.sender === 'admin' ? 'mr-auto flex-row-reverse' : ''}`}>
                                         <div className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-sm font-bold mt-1 ${msg.sender === 'admin' ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white' : 'bg-slate-100 border border-slate-200 text-slate-600'}`}>
                                             {msg.sender === 'admin' ? 'Z' : (selected.sender || 'U')[0]}
@@ -232,7 +239,9 @@ export default function Support() {
                                             className="w-full bg-[#f8fafc] border border-slate-200 text-slate-700 text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all resize-none block pr-14"
                                             placeholder="اكتب ردك هنا... (Ctrl+Enter للإرسال)"
                                         />
-                                        <button
+                                          <button
+                                            type="button"
+                                            title="إرسال رسالة"
                                             onClick={handleSend}
                                             disabled={sending || !reply.trim()}
                                             className="absolute left-3 bottom-3 w-10 h-10 bg-blue-600 disabled:bg-slate-300 text-white flex items-center justify-center rounded-lg hover:bg-blue-700 transition-colors shadow-sm">

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { KeyRound, Mail, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../services/firebase';
+import { auth, db } from '../services/firebase.ts';
 
 export default function Login() {
     const [email, setEmail] = useState('');
@@ -30,12 +30,13 @@ export default function Login() {
             }
 
             navigate('/');
-        } catch (err: any) {
-            console.error("Login error:", err);
+        } catch (err: unknown) {
+            const firebaseError = err as { code?: string };
+            console.error("Login error:", firebaseError);
             let errorMessage = "حدث خطأ أثناء تسجيل الدخول. يرجى التأكد من البيانات.";
-            if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+            if (firebaseError.code === 'auth/user-not-found' || firebaseError.code === 'auth/wrong-password' || firebaseError.code === 'auth/invalid-credential') {
                 errorMessage = "البريد الإلكتروني أو كلمة المرور غير صحيحة.";
-            } else if (err.code === 'auth/invalid-email') {
+            } else if (firebaseError.code === 'auth/invalid-email') {
                 errorMessage = "البريد الإلكتروني المدخل غير صالح.";
             }
             setError(errorMessage);
@@ -78,6 +79,7 @@ export default function Login() {
                                     <Mail size={20} strokeWidth={2.5} />
                                 </div>
                                 <input
+                                    id="login-email"
                                     type="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
@@ -92,6 +94,7 @@ export default function Login() {
                                     <KeyRound size={20} strokeWidth={2.5} />
                                 </div>
                                 <input
+                                    id="login-password"
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
@@ -103,9 +106,9 @@ export default function Login() {
                         </div>
 
                         <div className="flex items-center justify-between text-sm mt-6 mb-8">
-                            <label className="flex items-center text-slate-600 cursor-pointer group">
+                            <label htmlFor="remember-me" className="flex items-center text-slate-600 cursor-pointer group">
                                 <div className="relative flex items-center justify-center w-5 h-5 ml-2">
-                                    <input type="checkbox" className="peer w-5 h-5 opacity-0 absolute cursor-pointer" />
+                                    <input id="remember-me" type="checkbox" className="peer w-5 h-5 opacity-0 absolute cursor-pointer" />
                                     <div className="w-5 h-5 rounded-md border-2 border-slate-300 peer-checked:bg-blue-600 peer-checked:border-blue-600 transition-colors flex items-center justify-center">
                                         <ShieldCheck size={14} className="text-white opacity-0 peer-checked:opacity-100 transition-opacity" />
                                     </div>

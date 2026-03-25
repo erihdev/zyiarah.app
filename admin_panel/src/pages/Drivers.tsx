@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, Filter, ShieldCheck, MapPin, Phone, Star, ShieldAlert, X, Loader2 } from 'lucide-react';
-import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { db } from '../services/firebase.ts';
 
 interface DriverData {
     id: string;
@@ -35,9 +35,9 @@ export default function Drivers() {
 
     useEffect(() => {
         const q = query(collection(db, 'drivers'), orderBy('created_at', 'desc'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+        const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
             let available = 0;
-            const fetchedDrivers = snapshot.docs.map(doc => {
+            const fetchedDrivers = snapshot.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => {
                 const data = doc.data();
                 if (data.is_available) available++;
                 return {
@@ -97,11 +97,12 @@ export default function Drivers() {
                     <p className="text-slate-500 font-medium text-sm mt-1">تتبع أداء السائقين، الحالات، وإدارة الحسابات المالية</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors shadow-sm">
+                    <button type="button" className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors shadow-sm">
                         <Filter size={18} />
                         تصفية
                     </button>
                     <button
+                        type="button"
                         onClick={() => setIsAddModalOpen(true)}
                         className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl font-bold hover:from-emerald-600 hover:to-teal-700 transition-all shadow-lg shadow-emerald-500/20 hover:shadow-xl hover:-translate-y-0.5"
                     >
@@ -205,7 +206,7 @@ export default function Drivers() {
                     <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
                         <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-slate-50/50">
                             <h3 className="text-xl font-extrabold text-slate-800">إضافة سائق جديد</h3>
-                            <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-xl transition-colors">
+                            <button type="button" title="إغلاق" onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-xl transition-colors">
                                 <X size={20} />
                             </button>
                         </div>

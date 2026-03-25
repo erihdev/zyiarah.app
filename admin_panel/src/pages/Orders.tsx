@@ -1,7 +1,22 @@
 import { useState, useEffect } from 'react';
 import { Search, Filter, MoreVertical, CheckCircle2, Clock, XCircle, Package } from 'lucide-react';
-import { collection, onSnapshot, query, orderBy, Timestamp } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { collection, onSnapshot, query, orderBy, Timestamp, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { db } from '../services/firebase.ts';
+
+interface OrderRecord {
+    id: string;
+    customer: string;
+    driver: string;
+    status: string;
+    amount: string;
+    date: string;
+    type: string;
+    client_name?: string;
+    client_id?: string;
+    driver_name?: string;
+    service_type?: string;
+    created_at?: Timestamp;
+}
 
 const StatusBadge = ({ status }: { status: string }) => {
     switch (status) {
@@ -20,14 +35,14 @@ const StatusBadge = ({ status }: { status: string }) => {
 
 export default function Orders() {
     const [searchTerm, setSearchTerm] = useState('');
-    const [orders, setOrders] = useState<any[]>([]);
+    const [orders, setOrders] = useState<OrderRecord[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const q = query(collection(db, 'orders'), orderBy('created_at', 'desc'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedOrders = snapshot.docs.map(doc => {
-                const data = doc.data();
+        const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
+            const fetchedOrders = snapshot.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => {
+                const data = doc.data() as Partial<OrderRecord>;
                 let dateStr = "غير متاح";
                 if (data.created_at && data.created_at instanceof Timestamp) {
                     dateStr = data.created_at.toDate().toLocaleDateString('ar-EG');
@@ -41,7 +56,7 @@ export default function Orders() {
                     date: dateStr,
                     type: data.service_type || 'خدمة عامة',
                     ...data
-                };
+                } as OrderRecord;
             });
             setOrders(fetchedOrders);
             setLoading(false);
@@ -67,11 +82,11 @@ export default function Orders() {
                     <p className="text-slate-500 font-medium text-sm mt-1">متابعة حالة الطلبات وتفاصيلها لحظة بلحظة</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors shadow-sm">
+                    <button type="button" className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors shadow-sm">
                         <Filter size={18} />
                         تصفية
                     </button>
-                    <button className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg shadow-blue-500/20 hover:shadow-xl hover:-translate-y-0.5">
+                    <button type="button" className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg shadow-blue-500/20 hover:shadow-xl hover:-translate-y-0.5">
                         طلب جديد +
                     </button>
                 </div>
@@ -91,8 +106,8 @@ export default function Orders() {
                     </div>
 
                     <div className="flex gap-2 text-sm">
-                        <button className="px-4 py-2 bg-blue-50 text-blue-700 font-bold rounded-lg border border-blue-100">الكل ({orders.length})</button>
-                        <button className="px-4 py-2 bg-white text-slate-600 font-medium hover:bg-slate-50 rounded-lg shadow-sm border border-slate-200">النشطة ({orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled').length})</button>
+                        <button type="button" className="px-4 py-2 bg-blue-50 text-blue-700 font-bold rounded-lg border border-blue-100">الكل ({orders.length})</button>
+                        <button type="button" className="px-4 py-2 bg-white text-slate-600 font-medium hover:bg-slate-50 rounded-lg shadow-sm border border-slate-200">النشطة ({orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled').length})</button>
                     </div>
                 </div>
 
@@ -143,7 +158,7 @@ export default function Orders() {
                                             <td className="px-6 py-4 font-medium text-slate-500 text-sm">{order.date}</td>
                                             <td className="px-6 py-4"><StatusBadge status={order.status} /></td>
                                             <td className="px-6 py-4 text-center">
-                                                <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                                                <button type="button" title="المزيد من الخيارات" className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
                                                     <MoreVertical size={18} />
                                                 </button>
                                             </td>

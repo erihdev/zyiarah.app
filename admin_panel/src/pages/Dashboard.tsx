@@ -289,12 +289,12 @@ export default function Dashboard() {
         if (activeDriversWithLocation.length === 0) return;
 
         const bounds = new mapboxgl.LngLatBounds(
-            [activeDriversWithLocation[0].location.longitude, activeDriversWithLocation[0].location.latitude],
-            [activeDriversWithLocation[0].location.longitude, activeDriversWithLocation[0].location.latitude]
+            [activeDriversWithLocation[0].location!.longitude, activeDriversWithLocation[0].location!.latitude],
+            [activeDriversWithLocation[0].location!.longitude, activeDriversWithLocation[0].location!.latitude]
         );
 
         activeDriversWithLocation.forEach(driver => {
-            bounds.extend([driver.location.longitude, driver.location.latitude]);
+            bounds.extend([driver.location!.longitude, driver.location!.latitude]);
         });
 
         map.current.fitBounds(bounds, {
@@ -396,8 +396,7 @@ export default function Dashboard() {
                     <div className="absolute inset-0 opacity-40 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/40 via-slate-900 to-slate-900 mix-blend-overlay pointer-events-none"></div>
 
                     {/* Animated grid background */}
-                    {/* eslint-disable-next-line react/forbid-dom-props */}
-                    <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px)', backgroundSize: '20px 20px', opacity: 0.2 }}></div>
+                    <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[length:20px_20px] opacity-20"></div>
 
                     <div className="relative z-10 flex flex-col h-full w-full">
                         <div className="flex items-start justify-between mb-2">
