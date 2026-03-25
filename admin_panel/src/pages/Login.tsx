@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { KeyRound, Mail, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../services/firebase';
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../services/firebase';
 
 export default function Login() {
     const [email, setEmail] = useState('');
@@ -17,12 +18,22 @@ export default function Login() {
         setError(null);
 
         try {
-            await signInWithEmailAndPassword(auth, email, password);
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            const uid = userCredential.user.uid;
+
+            // التحقق من صلاحية الأدمن في Firestore
+            const adminDoc = await getDoc(doc(db, 'admins', uid));
+            if (!adminDoc.exists()) {
+                await signOut(auth);
+                setError('ليس لديك صلاحية الوصول للوحة التحكم.');
+                return;
+            }
+
             navigate('/');
         } catch (err: any) {
             console.error("Login error:", err);
             let errorMessage = "حدث خطأ أثناء تسجيل الدخول. يرجى التأكد من البيانات.";
-            if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+            if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
                 errorMessage = "البريد الإلكتروني أو كلمة المرور غير صحيحة.";
             } else if (err.code === 'auth/invalid-email') {
                 errorMessage = "البريد الإلكتروني المدخل غير صالح.";
