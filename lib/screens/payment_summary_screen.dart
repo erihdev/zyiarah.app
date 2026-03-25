@@ -152,17 +152,19 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           );
 
           setState(() => _isLoading = false);
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ZyiarahInvoiceScreen(
-                amount: totalWithVat,
-                orderId: orderId,
-                hours: widget.hours,
-                serviceDate: widget.serviceDate,
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ZyiarahInvoiceScreen(
+                  amount: totalWithVat,
+                  orderId: orderId,
+                  hours: widget.hours,
+                  serviceDate: widget.serviceDate,
+                ),
               ),
-            ),
-          );
+            );
+          }
         } else {
           throw Exception(result['error'] ?? "فشلت عملية الدفع بالبطاقة");
         }
