@@ -139,7 +139,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with TickerPr
                         angle: 0, // Could calculate bearing here
                         child: Container(
                           padding: const EdgeInsets.all(5),
-                          decoration: BoxDecoration(
+                          decoration: const BoxDecoration(
                             color: Colors.white,
                             shape: BoxShape.circle,
                             boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 5)],
@@ -169,7 +169,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with TickerPr
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(24),
-          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 20)],
+          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 20)],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

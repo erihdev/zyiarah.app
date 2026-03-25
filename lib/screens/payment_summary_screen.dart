@@ -227,7 +227,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       height: 180,
       decoration: BoxDecoration(
         color: Colors.grey[200],
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
       ),
       child: FlutterMap(
         options: MapOptions(
@@ -417,9 +417,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       right: 0,
       child: Container(
         padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: Colors.white,
-          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: const Offset(0, -2))],
+          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
         ),
         child: ElevatedButton(
           onPressed: _handlePayment,

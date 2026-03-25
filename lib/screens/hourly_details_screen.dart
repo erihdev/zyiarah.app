@@ -14,7 +14,7 @@ class HourlyCleaningDetailsScreen extends StatefulWidget {
 class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScreen> {
   int _selectedHours = 4;
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
-  bool _isLoading = false;
+  final bool _isLoading = false;
 
   // Pricing logic: Each hour is 40 SAR, minimum 2 hours (80 SAR), baseline or variable
   double get totalAmount {
