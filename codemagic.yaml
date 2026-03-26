@@ -60,11 +60,11 @@ workflows:
           # Copy with UUID as filename (required by Xcode)
           cp ios/Zyiarah_App_Store_Profile.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
 
-          echo "=== Installed Certificates ==="
-          security find-identity -v -p codesigning build.keychain-db
-
           echo "=== Provisioning Profiles ==="
           ls -l "$HOME/Library/MobileDevice/Provisioning Profiles/"
+
+          echo "=== Profile Content (Certs) ==="
+          security cms -D -i ios/Zyiarah_App_Store_Profile.mobileprovision | grep -A 10 "DeveloperCertificates" || true
 
       - name: Generate Export Options
         script: |
@@ -110,18 +110,12 @@ workflows:
           # 1. Build iOS without signing
           flutter build ios --release --no-codesign
           
-          # 2. Archive using xcodebuild with manual signing parameters
+          # 2. Archive without command-line signing overrides (rely on project settings)
           xcodebuild -workspace ios/Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
             -archivePath build/ios/archive/Runner.xcarchive \
             archive \
-            CODE_SIGNING_REQUIRED=YES \
-            CODE_SIGNING_ALLOWED=YES \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
-            DEVELOPMENT_TEAM="$TEAM_ID" \
             -allowProvisioningUpdates
           
           # 3. Export IPA using export_options.plist
