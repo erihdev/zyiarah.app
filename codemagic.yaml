@@ -41,6 +41,7 @@ workflows:
           security list-keychains -d user -s build.keychain-db login.keychain-db
 
           # Import distribution certificate
+          echo "CM_CERTIFICATE_PASSWORD contains ${#CM_CERTIFICATE_PASSWORD} characters"
           security import ios/zyiarah_dist_cert.p12 -k build.keychain-db -P "$CM_CERTIFICATE_PASSWORD" -A -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "BuildKeychain123!" build.keychain-db
 
