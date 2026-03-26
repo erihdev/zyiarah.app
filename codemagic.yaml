@@ -106,7 +106,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - support@zyiarah.com
+          - erihdev@gmail.com
         notify:
           success: true
           failure: true
