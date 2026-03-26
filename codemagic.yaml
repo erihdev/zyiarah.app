@@ -4,11 +4,11 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m2
     environment:
+      groups:
+        - appstore_credentials
       flutter: default
       xcode: latest
       cocoapods: default
-      groups:
-        - app_store_credentials
       vars:
         BUNDLE_ID: "com.zyiarah.zyiarah"
         TEAM_ID: "RPTPMXA436"
@@ -112,9 +112,9 @@ workflows:
           failure: true
       app_store_connect:
         auth: integration
-        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        key_id: RJMPC4734X
-        issuer_id: 6dd67287-cfcd-40fc-a3db-8bf378a1ac8f
         submit_to_testflight: true
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         beta_groups:
           - Internal Testers
