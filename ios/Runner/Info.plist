@@ -79,6 +79,8 @@
 	<string>نحتاج للوصول إلى موقعك لربطك بأقرب سائق متاح وتحديد موقع الخدمة بدقة في المناطق الجبلية حتى عندما يكون التطبيق في الخلفية.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>نحتاج للوصول إلى موقعك لربطك بأقرب سائق متاح وتحديد موقع الخدمة بدقة في المناطق الجبلية حتى عندما يكون التطبيق في الخلفية.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>قد نحتاج للكاميرا للسماح لك بمسح الـ QR Code الخاص بالفواتير أو تحديث صورة الملف الشخصي.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
