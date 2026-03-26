@@ -1,56 +1,70 @@
 workflows:
   ios-workflow:
-    name: Zyiarah iOS Build
+    name: Zyiarah iOS Build & TestFlight
     max_build_duration: 120
     instance_type: mac_mini_m2
     environment:
       flutter: default
       xcode: latest
       cocoapods: default
+      groups:
+        - app_store_credentials
+      vars:
+        BUNDLE_ID: "com.zyiarah.zyiarah"
+        TEAM_ID: "RPTPMXA436"
+        APP_STORE_CONNECT_KEY_IDENTIFIER: "RJMPC4734X"
+        APP_STORE_CONNECT_ISSUER_ID: "6dd67287-cfcd-40fc-a3db-8bf378a1ac8f"
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
     scripts:
       - name: Get Flutter Packages
         script: |
           flutter packages pub get
+
       - name: Install Pods
         script: |
           find . -name "Podfile" -execdir pod install \;
-      - name: Setup Code Signing Natively
+
+      - name: Setup Code Signing
         script: |
           set -e
-          # Stop relying on Codemagic or Mac defaults, build a fully controllable isolated keychain!
-          security create-keychain -p "MySecretPassword123" build.keychain-db
+
+          # Create isolated keychain
+          security create-keychain -p "BuildKeychain123!" build.keychain-db
           security default-keychain -s build.keychain-db
-          security unlock-keychain -p "MySecretPassword123" build.keychain-db
+          security unlock-keychain -p "BuildKeychain123!" build.keychain-db
           security set-keychain-settings -t 3600 -u build.keychain-db
           security list-keychains -d user -s build.keychain-db login.keychain-db
-          
-          # Inject Private Key securely
-          security import ios/zyiarah_dist_cert.p12 -k build.keychain-db -P "dxqiAR0S" -A -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "MySecretPassword123" build.keychain-db
-          
-          # Inject Apple WWDR Parent Certificates manually so Xcode instantly considers our Private Key "Trusted"!
+
+          # Import distribution certificate
+          security import ios/zyiarah_dist_cert.p12 -k build.keychain-db -P "$CM_CERTIFICATE_PASSWORD" -A -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "BuildKeychain123!" build.keychain-db
+
+          # Import Apple WWDR certificates for trust chain
           curl -sL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o AppleWWDRCAG3.cer
           security import AppleWWDRCAG3.cer -k build.keychain-db -T /usr/bin/codesign
           curl -sL https://www.apple.com/certificateauthority/AppleWWDRCAG4.cer -o AppleWWDRCAG4.cer
           security import AppleWWDRCAG4.cer -k build.keychain-db -T /usr/bin/codesign
-          
-          # Launch Fastlane payload
-          jq -n --arg key_id "RJMPC4734X" \
-                --arg issuer_id "6dd67287-cfcd-40fc-a3db-8bf378a1ac8f" \
-                --arg key "$(cat ios/AuthKey_RJMPC4734X.p8 | tr -d '\r')" \
-                --argjson in_house false \
-                '{key_id: $key_id, issuer_id: $issuer_id, key: $key, in_house: $in_house}' > api_key.json
-          fastlane sigh --app_identifier "com.zyiarah.zyiarah" --api_key_path "api_key.json" --force
-          
-          # Move Payload to runtime
+
+          # Install provisioning profile
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          cp AppStore_com.zyiarah.zyiarah.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/"
-      - name: Configure Xcode Project Profiles Natively
-        script: |
-          export CM_PROVISIONING_PROFILE="$HOME/Library/MobileDevice/Provisioning Profiles/AppStore_com.zyiarah.zyiarah.mobileprovision"
-          xcode-project use-profiles
+
+          # Get UUID from the provisioning profile
+          PROFILE_UUID=$(security cms -D -i ios/Zyiarah_App_Store_Profile.mobileprovision 2>/dev/null | plutil -extract UUID raw -)
+          echo "Profile UUID: $PROFILE_UUID"
+
+          # Copy with UUID as filename (required by Xcode)
+          cp ios/Zyiarah_App_Store_Profile.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+
       - name: Generate Export Options
         script: |
+          # Extract provisioning profile UUID
+          PROFILE_UUID=$(security cms -D -i ios/Zyiarah_App_Store_Profile.mobileprovision 2>/dev/null | plutil -extract UUID raw -)
+
           cat <<EOF > export_options.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -59,30 +73,48 @@ workflows:
             <key>method</key>
             <string>app-store</string>
             <key>teamID</key>
-            <string>RPTPMXA436</string>
+            <string>$TEAM_ID</string>
             <key>signingStyle</key>
-            <string>automatic</string>
+            <string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>$BUNDLE_ID</key>
+              <string>$PROFILE_UUID</string>
+            </dict>
+            <key>uploadBitcode</key>
+            <false/>
+            <key>uploadSymbols</key>
+            <true/>
           </dict>
           </plist>
           EOF
-      - name: iOS Build
+
+          echo "=== Export Options ==="
+          cat export_options.plist
+
+      - name: Build IPA
         script: |
           echo "MAPBOX_TOKEN=${MAPBOX_TOKEN:-pk.eyJ1IjoiZXJpaGRldiIsImEiOiJjbW1jbGZpcnIwNzh4MnJzaXcyM3I3dG1jIn0.Hqs-3sGgQCsGK0yHamvdug}" > .env
-          security unlock-keychain -p "MySecretPassword123" build.keychain-db || true
+          security unlock-keychain -p "BuildKeychain123!" build.keychain-db || true
           flutter build ipa --release --export-options-plist=export_options.plist
+
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
+      - build/ios/archive/Runner.xcarchive/Products/Applications/*.app
+
     publishing:
       email:
         recipients:
           - support@zyiarah.com
         notify:
           success: true
-          failure: false
+          failure: true
       app_store_connect:
+        auth: integration
         api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        key_id: RJMPC4734X
+        issuer_id: 6dd67287-cfcd-40fc-a3db-8bf378a1ac8f
         submit_to_testflight: true
-
+        beta_groups:
+          - Internal Testers
