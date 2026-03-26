@@ -115,8 +115,7 @@ workflows:
             -scheme Runner \
             -configuration Release \
             -archivePath build/ios/archive/Runner.xcarchive \
-            archive \
-            -allowProvisioningUpdates
+            archive
           
           # 3. Export IPA using export_options.plist
           xcodebuild -exportArchive \
