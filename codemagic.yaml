@@ -103,9 +103,8 @@ workflows:
           echo "MAPBOX_TOKEN=${MAPBOX_TOKEN:-pk.eyJ1IjoiZXJpaGRldiIsImEiOiJjbW1jbGZpcnIwNzh4MnJzaXcyM3I3dG1jIn0.Hqs-3sGgQCsGK0yHamvdug}" > .env
           security unlock-keychain -p "BuildKeychain123!" build.keychain-db || true
           
-          # Use explicit code signing identity for the archive phase
+          # Build the IPA using the export options
           flutter build ipa --release \
-            --code-sign-identity="Apple Distribution" \
             --export-options-plist=export_options.plist
 
     artifacts:
