@@ -103,9 +103,32 @@ workflows:
           echo "MAPBOX_TOKEN=${MAPBOX_TOKEN:-pk.eyJ1IjoiZXJpaGRldiIsImEiOiJjbW1jbGZpcnIwNzh4MnJzaXcyM3I3dG1jIn0.Hqs-3sGgQCsGK0yHamvdug}" > .env
           security unlock-keychain -p "BuildKeychain123!" build.keychain-db || true
           
-          # Build the IPA using the export options
-          flutter build ipa --release \
-            --export-options-plist=export_options.plist
+          # Extract profile UUID locally so it's available in this script block
+          PROFILE_UUID=$(security cms -D -i ios/Zyiarah_App_Store_Profile.mobileprovision 2>/dev/null | plutil -extract UUID raw -)
+          echo "Using Profile UUID: $PROFILE_UUID"
+
+          # 1. Build iOS without signing
+          flutter build ios --release --no-codesign
+          
+          # 2. Archive using xcodebuild with manual signing parameters
+          xcodebuild -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            archive \
+            CODE_SIGNING_REQUIRED=YES \
+            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            -allowProvisioningUpdates
+          
+          # 3. Export IPA using export_options.plist
+          xcodebuild -exportArchive \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            -exportOptionsPlist export_options.plist \
+            -exportPath build/ios/ipa
 
     artifacts:
       - build/ios/ipa/*.ipa
