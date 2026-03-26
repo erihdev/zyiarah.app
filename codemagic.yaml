@@ -60,6 +60,12 @@ workflows:
           # Copy with UUID as filename (required by Xcode)
           cp ios/Zyiarah_App_Store_Profile.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
 
+          echo "=== Installed Certificates ==="
+          security find-identity -v -p codesigning build.keychain-db
+
+          echo "=== Provisioning Profiles ==="
+          ls -l "$HOME/Library/MobileDevice/Provisioning Profiles/"
+
       - name: Generate Export Options
         script: |
           # Extract provisioning profile UUID
@@ -96,7 +102,11 @@ workflows:
         script: |
           echo "MAPBOX_TOKEN=${MAPBOX_TOKEN:-pk.eyJ1IjoiZXJpaGRldiIsImEiOiJjbW1jbGZpcnIwNzh4MnJzaXcyM3I3dG1jIn0.Hqs-3sGgQCsGK0yHamvdug}" > .env
           security unlock-keychain -p "BuildKeychain123!" build.keychain-db || true
-          flutter build ipa --release --export-options-plist=export_options.plist
+          
+          # Use explicit code signing identity for the archive phase
+          flutter build ipa --release \
+            --code-sign-identity="Apple Distribution" \
+            --export-options-plist=export_options.plist
 
     artifacts:
       - build/ios/ipa/*.ipa
