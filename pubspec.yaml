@@ -30,6 +30,7 @@ dependencies:
   flutter_dotenv: ^6.0.0
   intl: ^0.18.1
   edfapg_sdk: ^2.0.10+1
+  signature: ^5.5.0
 
 dev_dependencies:
   flutter_test:

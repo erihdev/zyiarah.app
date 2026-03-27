@@ -111,7 +111,7 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
                         'يتعهد الطرف الثاني (العميل) بالالتزام ببنود الاتفاقية ومواعيد الزيارة المحددة في الباقة المختارة. '
                         'يحق للطرف الأول (زيارة) تعديل المواعيد بالتنسيق مع العميل. '
                         'يتم تفعيل العقد بعد سداد القيمة واعتماده من الإدارة.',
-                        style: GoogleFonts.tajawal(height: 2.0, color: Colors.slate[700]),
+                        style: GoogleFonts.tajawal(height: 2.0, color: Colors.blueGrey[700]),
                       ),
                     ),
                     const SizedBox(height: 40),

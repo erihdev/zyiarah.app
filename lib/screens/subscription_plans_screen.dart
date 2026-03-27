@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/screens/contract_signing_screen.dart';
 
@@ -69,10 +70,10 @@ class ZyiarahSubscriptionPlansScreen extends StatelessWidget {
           Icon(Icons.info_outline, color: brandPurple, size: 30),
           const SizedBox(width: 15),
           Expanded(
-            child: Text(
-              'اختر الباقة المناسبة لعائلتك. بعد اختيار الباقة سيتم توجيه طلبك للإدارة للموافقة عليه قبل توقيع العقد الإلكتروني.',
-              style: GoogleFonts.tajawal(fontSize: 13, height: 1.5, color: Colors.slate[700]),
-            ),
+              Text(
+                'اختر الباقة المناسبة لعائلتك. بعد اختيار الباقة سيتم توجيه طلبك للإدارة للموافقة عليه قبل توقيع العقد الإلكتروني.',
+                style: GoogleFonts.tajawal(fontSize: 13, height: 1.5, color: Colors.blueGrey[700]),
+              ),
           ),
         ],
       ),
@@ -116,7 +117,7 @@ class ZyiarahSubscriptionPlansScreen extends StatelessWidget {
               children: [
                 Icon(Icons.check_circle_rounded, color: color, size: 18),
                 const SizedBox(width: 10),
-                Text(f, style: GoogleFonts.tajawal(fontSize: 14, color: Colors.slate[700])),
+                Text(f, style: GoogleFonts.tajawal(fontSize: 14, color: Colors.blueGrey[700])),
               ],
             ),
           )),
