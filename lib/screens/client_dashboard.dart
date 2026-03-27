@@ -601,6 +601,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           ),
         ],
       ),
+    ),
     );
   }
 
