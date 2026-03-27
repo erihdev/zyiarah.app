@@ -256,7 +256,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   Widget _buildInvoiceHeader() {
-    final double basePrice = widget.hours * 35.0; // Example hourly rate
+    final double basePrice = (widget.hours ?? 4) * 35.0; // Default to 4 hours if null
     final double vat = basePrice * 0.15;
     final double total = basePrice + vat;
 

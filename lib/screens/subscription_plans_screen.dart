@@ -27,6 +27,7 @@ class ZyiarahSubscriptionPlansScreen extends StatelessWidget {
               _buildInfoSection(),
               const SizedBox(height: 30),
               _buildPlanCard(
+                context,
                 'الباقة اليومية',
                 'زيارة واحدة في اليوم المختار',
                 '99 ر.س',
@@ -35,6 +36,7 @@ class ZyiarahSubscriptionPlansScreen extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               _buildPlanCard(
+                context,
                 'الباقة الأسبوعية',
                 'زيارة واحدة اسبوعياً (4 زيارات)',
                 '349 ر.س',
@@ -43,6 +45,7 @@ class ZyiarahSubscriptionPlansScreen extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               _buildPlanCard(
+                context,
                 'الباقة الشهرية (جولد)',
                 'زيارتين اسبوعياً (8 زيارات)',
                 '649 ر.س',
@@ -80,7 +83,7 @@ class ZyiarahSubscriptionPlansScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildPlanCard(String title, String subtitle, String price, List<String> features, Color color, {bool isPremium = false}) {
+  Widget _buildPlanCard(BuildContext context, String title, String subtitle, String price, List<String> features, Color color, {bool isPremium = false}) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
