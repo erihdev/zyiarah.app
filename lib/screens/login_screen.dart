@@ -107,7 +107,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
           // الافتراضي (client)
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => const ClientDashboard()),
+            MaterialPageRoute(builder: (context) => ClientDashboard()),
           );
         }
       }

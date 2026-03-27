@@ -15,6 +15,9 @@ import 'package:zyiarah/screens/wallet_screen.dart';
 import 'package:zyiarah/screens/maintenance_request_screen.dart';
 import 'package:zyiarah/screens/subscription_plans_screen.dart';
 
+class ClientDashboard extends StatefulWidget {
+  const ClientDashboard({super.key});
+
   @override
   State<ClientDashboard> createState() => _ClientDashboardState();
 }
@@ -350,7 +353,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                      value: '$wallet ر.س',
                      iconPath: Icons.account_balance_wallet_rounded,
                      cardColor: const Color(0xFF10B981), // Green
-                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahWalletScreen())),
+                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahContractsListScreen())),
                   ),
                   const SizedBox(width: 15),
                   _buildColorfulMetricCard(
@@ -490,8 +493,12 @@ class _ClientDashboardState extends State<ClientDashboard> {
     required IconData icon,
     required Color iconBgColor,
     String? imagePath,
+    VoidCallback? onTap,
   }) {
-    return Container(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
