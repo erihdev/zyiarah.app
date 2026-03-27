@@ -6,6 +6,7 @@ import 'package:zyiarah/services/firebase_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/screens/support_screen.dart';
+import 'package:zyiarah/screens/orders_list_screen.dart';
 
 class ZyiarahProfileScreen extends StatefulWidget {
   const ZyiarahProfileScreen({super.key});
@@ -105,7 +106,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                 child: Column(
                   children: [
                     _buildHeader(
-                      _currentUser?.name ?? 'مستخدم زيارة',
+                      _currentUser?.name?.isNotEmpty == true ? _currentUser!.name : 'عميل زيارة',
                       user?.phoneNumber ?? '',
                     ),
                     const SizedBox(height: 20),
@@ -120,8 +121,12 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                       _currentUser?.role == 'driver' ? '🚗 سائق' : '👤 عميل',
                     ),
                     const Divider(height: 10, indent: 20, endIndent: 20),
-                    _buildMenuTile(Icons.history, 'سجل الطلبات', () {}),
-                    _buildMenuTile(Icons.wallet, 'المحفظة والفواتير', () {}),
+                    _buildMenuTile(Icons.history, 'سجل الطلبات', () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen()));
+                    }),
+                    _buildMenuTile(Icons.wallet, 'المحفظة والفواتير', () {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('المحفظة قيد التطوير وستتوفر قريباً!')));
+                    }),
                     _buildMenuTile(Icons.shield_outlined, 'سياسة الخصوصية', () {
                       launchUrl(Uri.parse('https://zyiarah.com/privacy'),
                           mode: LaunchMode.externalApplication);

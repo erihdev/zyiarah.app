@@ -164,9 +164,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                Text(_currentUser?.name ?? 'مستخدم زيارة', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A))),
-                const SizedBox(width: 5),
-                const Text('👋', style: TextStyle(fontSize: 16)),
+                const Text('مرحباً بك 👋', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A))),
               ],
             ),
           ),
@@ -292,21 +290,35 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
   void _upgradeToSubscription() async {
     setState(() => _isLoading = true);
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-        'has_active_subscription': true,
-        'visits_remaining': 4,
-        'subscription_type': 'gold_monthly',
-        'subscription_expiry': Timestamp.fromDate(DateTime.now().add(const Duration(days: 30))),
-      });
-      await _loadUserData();
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+          'has_active_subscription': true,
+          'visits_remaining': 4,
+          'subscription_type': 'gold_monthly',
+          'subscription_expiry': Timestamp.fromDate(DateTime.now().add(const Duration(days: 30))),
+        });
+        await _loadUserData();
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('تم تفعيل اشتراك زيارة جولد بنجاح! 🎉'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تم تفعيل اشتراك زيارة جولد بنجاح! 🎉'),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: Text('حدث خطأ أثناء تفعيل الاشتراك: $e'),
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -336,6 +348,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                     value: totalBookings,
                     iconPath: Icons.calendar_today_rounded,
                     cardColor: const Color(0xFF3B82F6), // Blue
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen())),
                   ),
                   const SizedBox(width: 15),
                   _buildColorfulMetricCard(
@@ -343,6 +356,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                      value: '$wallet ر.س',
                      iconPath: Icons.account_balance_wallet_rounded,
                      cardColor: const Color(0xFF10B981), // Green
+                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahProfileScreen())),
                   ),
                   const SizedBox(width: 15),
                   _buildColorfulMetricCard(
@@ -350,6 +364,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                      value: '$rating ★',
                      iconPath: Icons.star_border_rounded,
                      cardColor: const Color(0xFFF59E0B), // Yellow/Orange
+                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahProfileScreen())),
                   ),
                 ],
               ),
@@ -365,9 +380,12 @@ class _ClientDashboardState extends State<ClientDashboard> {
     required String value,
     required IconData iconPath,
     required Color cardColor,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      width: 200,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 200,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -401,6 +419,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -431,6 +450,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           themeColor: const Color(0xFF8B5CF6), // Purple
           icon: Icons.chair,
           iconBgColor: const Color(0xFFF1E9FE), // Light Purple
+          imagePath: 'assets/images/sofa_cleaning.png',
         ),
         _buildWebStyleServiceCard(
           title: "سلة العائلة",
@@ -450,6 +470,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           themeColor: const Color(0xFF3B82F6), // Blue
           icon: Icons.business_center,
           iconBgColor: const Color(0xFFDBEAFE), // Light Blue
+          imagePath: 'assets/images/company_cleaning.png',
         ),
       ],
     );
@@ -686,6 +707,10 @@ class _ClientDashboardState extends State<ClientDashboard> {
             ),
             const SizedBox(height: 10),
             _buildDrawerItem(Icons.home_outlined, 'الرئيسية', true, onTap: () => Navigator.pop(context)),
+            _buildDrawerItem(Icons.person_outline, 'الملف الشخصي', false, onTap: () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahProfileScreen()));
+            }),
             _buildDrawerItem(Icons.calendar_today_outlined, 'حجوزاتي', false, onTap: () {
               Navigator.pop(context);
               Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen()));
@@ -699,8 +724,14 @@ class _ClientDashboardState extends State<ClientDashboard> {
               Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahSupportScreen()));
             }),
             const SizedBox(height: 20),
-            _buildDrawerItem(Icons.language, 'English', false, onTap: () {}),
-            _buildDrawerItem(Icons.wb_sunny_outlined, 'الوضع الداكن', false, onTap: () {}),
+            _buildDrawerItem(Icons.language, 'English', false, onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('اللغة الإنجليزية ستتوفر في التحديث القادم!')));
+            }),
+            _buildDrawerItem(Icons.wb_sunny_outlined, 'الوضع الداكن', false, onTap: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الوضع الداكن قيد التطوير وستتوفر قريباً!')));
+            }),
             const Spacer(),
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 24),

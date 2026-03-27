@@ -31,7 +31,6 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
           stream: FirebaseFirestore.instance
               .collection('support_tickets')
               .where('userId', isEqualTo: user?.uid)
-              .orderBy('createdAt', descending: true)
               .snapshots(),
           builder: (context, snapshot) {
             if (snapshot.hasError) {
@@ -41,11 +40,20 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
               return const Center(child: CircularProgressIndicator());
             }
 
-            final tickets = snapshot.data?.docs ?? [];
+            var tickets = snapshot.data?.docs ?? [];
 
             if (tickets.isEmpty) {
               return _buildEmptyState();
             }
+
+            // Sort locally to avoid requiring a Firestore composite index
+            tickets = tickets.toList()..sort((a, b) {
+              final aMap = a.data() as Map<String, dynamic>;
+              final bMap = b.data() as Map<String, dynamic>;
+              final aDate = (aMap['createdAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+              final bDate = (bMap['createdAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+              return bDate.compareTo(aDate);
+            });
 
             return ListView.separated(
               padding: const EdgeInsets.all(20),

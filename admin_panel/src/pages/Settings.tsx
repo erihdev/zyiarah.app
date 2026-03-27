@@ -16,6 +16,7 @@ interface SystemSettings {
     commission_rate: number;
     vat_rate: number;
     min_wallet_balance: number;
+    cod_enabled: boolean;
 
     // Notifications
     sms_on_order: boolean;
@@ -38,6 +39,7 @@ const defaultSettings: SystemSettings = {
     commission_rate: 15,
     vat_rate: 15,
     min_wallet_balance: -50,
+    cod_enabled: true,
     sms_on_order: true,
     push_on_assign: true,
     push_on_completed: true,
@@ -336,6 +338,16 @@ export default function Settings() {
                                             placeholder="-50"
                                         />
                                         <p className="text-xs text-slate-400 font-medium">إذا وصل رصيد السائق إلى هذا الحد (مديونية)، سيتم إيقاف حسابه تلقائياً حتى يقوم بالسداد.</p>
+                                    </div>
+                                    <div className="space-y-2 group md:col-span-2 flex items-center justify-between p-4 bg-emerald-50/50 border border-emerald-100 rounded-xl">
+                                        <div>
+                                            <h4 className="font-extrabold text-slate-800 text-sm">تفعيل الدفع عند الاستلام (COD)</h4>
+                                            <p className="text-xs text-slate-500 mt-1">السماح للعملاء بالدفع نقداً بعد تقديم الخدمة.</p>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input type="checkbox" title="تفعيل الدفع عند الاستلام" className="sr-only peer" checked={settings.cod_enabled} onChange={(e) => handleChange('cod_enabled', e.target.checked)} />
+                                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                                        </label>
                                     </div>
                                 </div>
                             </div>

@@ -120,6 +120,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with TickerPr
                 TileLayer(
                   urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
                   subdomains: const ['a', 'b', 'c'],
+                  userAgentPackageName: 'com.zyiarah.app',
                 ),
                 MarkerLayer(
                   markers: [

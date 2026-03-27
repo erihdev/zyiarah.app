@@ -37,8 +37,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   final EdfaPayService _edfaPayService = EdfaPayService();
   final ZyiarahOrderService _orderService = ZyiarahOrderService();
   
-  String _selectedPaymentMethod = 'card'; // 'card', 'tamara', or 'subscription'
+  String _selectedPaymentMethod = 'card'; // 'card', 'tamara', 'subscription' or 'cod'
   bool _isLoading = false;
+  bool _codEnabled = false;
   ZyiarahUser? _currentUser;
 
   @override
@@ -51,9 +52,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final configDoc = await FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get();
+      
       if (doc.exists && mounted) {
         setState(() {
           _currentUser = ZyiarahUser.fromMap(user.uid, doc.data()!);
+          if (configDoc.exists) {
+            _codEnabled = configDoc.data()?['cod_enabled'] ?? false;
+          }
           // Auto-select subscription if available
           if ((_currentUser?.visitsRemaining ?? 0) > 0) {
             _selectedPaymentMethod = 'subscription';
@@ -95,6 +101,33 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 hours: widget.hours,
                 serviceDate: widget.serviceDate,
                 isSubscription: true,
+              ),
+            ),
+          );
+        }
+      } else if (_selectedPaymentMethod == 'cod') {
+        // دفع عند الاستلام
+        await _orderService.createOrder(
+          clientId: _currentUser!.uid,
+          serviceType: widget.serviceName,
+          amount: totalWithVat,
+          location: widget.location,
+          paymentMethod: 'cod',
+          hours: widget.hours,
+          serviceDate: widget.serviceDate,
+        );
+        
+        if (mounted) {
+          setState(() => _isLoading = false);
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ZyiarahInvoiceScreen(
+                amount: totalWithVat,
+                orderId: orderId,
+                hours: widget.hours,
+                serviceDate: widget.serviceDate,
+                isSubscription: false,
               ),
             ),
           );
@@ -195,7 +228,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildMapPreview(),
                   Padding(
                     padding: const EdgeInsets.all(20.0),
                     child: Column(
@@ -238,6 +270,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           TileLayer(
             urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
             subdomains: const ['a', 'b', 'c'],
+            userAgentPackageName: 'com.zyiarah.app',
           ),
           MarkerLayer(
             markers: [
@@ -344,6 +377,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           subtitle: 'قسم فاتورتك على 4 دفعات (كاش باك 5%)',
           iconPath: 'assets/logo.png', // Ideally a Tamara logo
         ),
+        if (_codEnabled) ...[
+          const SizedBox(height: 12),
+          _buildPaymentOption(
+            id: 'cod',
+            title: 'الدفع عند الاستلام',
+            subtitle: 'دفع نقدي لمقدم الخدمة بعد أو قبل البدء',
+            icon: Icons.money,
+            color: Colors.green,
+          ),
+        ],
       ],
     );
   }

@@ -18,7 +18,7 @@ class OrdersListScreen extends StatelessWidget {
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: Text('حجوزاتي والطلبات', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF2563EB),
+          backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
           elevation: 0,
         ),
@@ -30,7 +30,7 @@ class OrdersListScreen extends StatelessWidget {
               .snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator(color: Color(0xFF2563EB)));
+              return const Center(child: CircularProgressIndicator(color: Color(0xFF5D1B5E)));
             }
             if (snapshot.hasError) {
               return Center(child: Text('خطأ في التحميل: ${snapshot.error}'));
@@ -128,7 +128,7 @@ class OrdersListScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('${order['amount']} ر.س', 
-                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF2563EB))),
+                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF5D1B5E))),
               if (status == 'completed')
                 TextButton.icon(
                   onPressed: () {
@@ -140,7 +140,7 @@ class OrdersListScreen extends StatelessWidget {
                   },
                   icon: const Icon(Icons.replay, size: 16),
                   label: Text('أعد الطلب', style: GoogleFonts.tajawal(fontSize: 12)),
-                  style: TextButton.styleFrom(foregroundColor: const Color(0xFF2563EB)),
+                  style: TextButton.styleFrom(foregroundColor: const Color(0xFF5D1B5E)),
                 )
               else if (status != 'pending')
                 ElevatedButton.icon(
@@ -156,7 +156,7 @@ class OrdersListScreen extends StatelessWidget {
                   icon: const Icon(Icons.map_outlined, size: 16),
                   label: Text('تتبع السائق', style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2563EB),
+      backgroundColor: const Color(0xFF5D1B5E),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),

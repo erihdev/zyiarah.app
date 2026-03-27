@@ -1,0 +1,19 @@
+{"users": [
+{
+  "localId": "RezztngO8CaqOE5Y2fvZDdZbRXc2",
+  "lastSignedInAt": "1774547416247",
+  "createdAt": "1772878310037",
+  "phoneNumber": "+966599363888",
+  "providerUserInfo": []
+},
+{
+  "localId": "wGkJlhcBK9Wg6Kn815yi0hbwRPi2",
+  "email": "difmashni@gmail.com",
+  "emailVerified": false,
+  "passwordHash": "+xioYKSgXi1ZY+RuIjwpaRYcDOGG9SA0uY7RfgzGeAiKtxQFpAzt4/DHCieuCDSi13kFDmDh4Xyl/xMG/CSxUg==",
+  "salt": "nxx0qrEtU+XDzQ==",
+  "lastSignedInAt": "1773388721999",
+  "createdAt": "1773387914295",
+  "disabled": false,
+  "providerUserInfo": []
+}]}
