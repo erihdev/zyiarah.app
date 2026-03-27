@@ -155,16 +155,9 @@ class _ClientDashboardState extends State<ClientDashboard> {
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          GestureDetector(
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahProfileScreen()));
-            },
-            child: const Row(
-              children: [
-                SizedBox(width: 10),
-                Text('بوابتك لخدمات منزلية متكاملة', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13, color: Color(0xFF64748B))),
-              ],
-            ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 10),
+            child: Text('بوابتك لخدمات منزلية متكاملة', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13, color: Color(0xFF64748B))),
           ),
           Row(
             children: [
@@ -351,7 +344,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                   const SizedBox(width: 15),
                   _buildColorfulMetricCard(
                      title: 'رصيد المحفظة',
-                     value: '$wallet ر.س',
+                     value: '${_currentUser?.walletBalance ?? 0} ر.س',
                      iconPath: Icons.account_balance_wallet_rounded,
                      cardColor: const Color(0xFF10B981), // Green
                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahWalletScreen())),
@@ -459,7 +452,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           icon: Icons.shopping_basket,
           iconBgColor: const Color(0xFFD1FAE5), // Light Green
           imagePath: 'assets/images/monthly_cleaning.png',
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ZyiarahSubscriptionPlansScreen())),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahSubscriptionPlansScreen())),
         ),
         _buildWebStyleServiceCard(
           title: "خدمات الصيانة",
