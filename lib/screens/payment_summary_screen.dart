@@ -308,7 +308,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   Widget _buildMapPreview() {
     return const SizedBox.shrink(); // Historically removed as requested
   }
-  }
 
   Widget _buildOrderDetailsCard() {
     return Container(

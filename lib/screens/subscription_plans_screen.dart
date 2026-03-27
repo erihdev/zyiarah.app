@@ -70,10 +70,10 @@ class ZyiarahSubscriptionPlansScreen extends StatelessWidget {
           Icon(Icons.info_outline, color: brandPurple, size: 30),
           const SizedBox(width: 15),
           Expanded(
-              Text(
-                'اختر الباقة المناسبة لعائلتك. بعد اختيار الباقة سيتم توجيه طلبك للإدارة للموافقة عليه قبل توقيع العقد الإلكتروني.',
-                style: GoogleFonts.tajawal(fontSize: 13, height: 1.5, color: Colors.blueGrey[700]),
-              ),
+            child: Text(
+              'اختر الباقة المناسبة لعائلتك. بعد اختيار الباقة سيتم توجيه طلبك للإدارة للموافقة عليه قبل توقيع العقد الإلكتروني.',
+              style: GoogleFonts.tajawal(fontSize: 13, height: 1.5, color: Colors.blueGrey[700]),
+            ),
           ),
         ],
       ),
