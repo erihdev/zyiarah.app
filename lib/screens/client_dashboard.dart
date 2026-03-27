@@ -159,39 +159,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
             padding: EdgeInsets.symmetric(horizontal: 10),
             child: Text('بوابتك لخدمات منزلية متكاملة', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13, color: Color(0xFF64748B))),
           ),
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.shopping_cart_outlined, size: 24),
-                onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen()));
-                },
-              ),
-              Stack(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.notifications_outlined, size: 24),
-                    onPressed: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen()));
-                    },
-                  ),
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEF4444),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: const Color(0xFFF9FAFB), width: 2),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+          const SizedBox(width: 48), // Spacer to balance the leading/trailing area if needed
         ],
       ),
     );
@@ -459,10 +427,11 @@ class _ClientDashboardState extends State<ClientDashboard> {
           subtitle: "صيانة مكيفات وأجهزة منزلية",
           price: "حسب التقييم",
           numericPrice: 0.0,
-          themeColor: const Color(0xFFFF4D4D), // Red
+          themeColor: const Color(0xFF475569), // Slate
           icon: Icons.settings_suggest_outlined,
-          iconBgColor: const Color(0xFFFFEBEE), // Light Red
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ZyiarahMaintenanceRequestScreen())),
+          iconBgColor: const Color(0xFFF1F5F9), // Very Light Slate
+          imagePath: 'assets/images/company_cleaning.png', // Reuse a professional image
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahMaintenanceRequestScreen())),
         ),
         _buildWebStyleServiceCard(
           title: "خدمات الشركات",

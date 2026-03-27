@@ -27,8 +27,7 @@ class ZyiarahContractsListScreen extends StatelessWidget {
           stream: FirebaseFirestore.instance
               .collection('contracts')
               .where('userId', isEqualTo: user?.uid)
-              .orderBy('createdAt', descending: true)
-              .snapshots(),
+            .snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return Center(child: CircularProgressIndicator(color: brandPurple));
