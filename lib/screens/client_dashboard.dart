@@ -353,7 +353,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                      value: '$wallet ر.س',
                      iconPath: Icons.account_balance_wallet_rounded,
                      cardColor: const Color(0xFF10B981), // Green
-                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahContractsListScreen())),
+                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahWalletScreen())),
                   ),
                   const SizedBox(width: 15),
                   _buildColorfulMetricCard(
@@ -458,7 +458,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           icon: Icons.shopping_basket,
           iconBgColor: const Color(0xFFD1FAE5), // Light Green
           imagePath: 'assets/images/monthly_cleaning.png',
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahSubscriptionPlansScreen())),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ZyiarahSubscriptionPlansScreen())),
         ),
         _buildWebStyleServiceCard(
           title: "خدمات الصيانة",
@@ -468,7 +468,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           themeColor: const Color(0xFFFF4D4D), // Red
           icon: Icons.settings_suggest_outlined,
           iconBgColor: const Color(0xFFFFEBEE), // Light Red
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahMaintenanceRequestScreen())),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ZyiarahMaintenanceRequestScreen())),
         ),
         _buildWebStyleServiceCard(
           title: "خدمات الشركات",
@@ -737,7 +737,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
             }),
             _buildDrawerItem(Icons.description_outlined, 'عقودي الإلكتـرونية', false, onTap: () {
               Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahContractsListScreen()));
+              Navigator.push(context, MaterialPageRoute(builder: (context) => ZyiarahContractsListScreen()));
             }),
             const SizedBox(height: 20),
             _buildDrawerItem(Icons.language, 'English', false, onTap: () {
