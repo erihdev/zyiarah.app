@@ -16,6 +16,8 @@ import Notifications from './pages/Notifications.tsx';
 import Support from './pages/Support.tsx';
 import Admins from './pages/Admins.tsx';
 import AccountDeletion from './pages/AccountDeletion.tsx';
+import Maintenance from './pages/Maintenance.tsx';
+import Contracts from './pages/Contracts.tsx';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -67,6 +69,8 @@ function App() {
           <Route path="support" element={<Support />} />
           <Route path="admins" element={<Admins />} />
           <Route path="account-deletion" element={<AccountDeletion />} />
+          <Route path="maintenance" element={<Maintenance />} />
+          <Route path="contracts" element={<Contracts />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

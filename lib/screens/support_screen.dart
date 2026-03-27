@@ -135,12 +135,8 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
           Padding(
             padding: const EdgeInsets.all(15.0),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text("الرسالة:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                const SizedBox(height: 5),
-                Text(data['lastMessage'] ?? "", style: const TextStyle(color: Colors.black87)),
-                const Divider(height: 30),
                 _buildMessagesList(id),
               ],
             ),
@@ -166,28 +162,36 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
           children: messages.map((doc) {
             final m = doc.data() as Map<String, dynamic>;
             final isAdmin = m['senderId'] == 'admin';
-            return Container(
-              margin: const EdgeInsets.symmetric(vertical: 5),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isAdmin ? Colors.blue[50] : Colors.grey[100],
-                borderRadius: BorderRadius.circular(10),
-                border: isAdmin ? Border.all(color: Colors.blue[100]!) : null,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    isAdmin ? "رد الدعم الفني:" : "أنت:",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11,
-                      color: isAdmin ? Colors.blue[800] : Colors.grey[700],
-                    ),
+            return Align(
+              alignment: isAdmin ? Alignment.centerLeft : Alignment.centerRight,
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 5),
+                padding: const EdgeInsets.all(12),
+                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
+                decoration: BoxDecoration(
+                  color: isAdmin ? const Color(0xFFF1F5F9) : const Color(0xFF5D1B5E),
+                  borderRadius: BorderRadius.circular(16).copyWith(
+                    topLeft: isAdmin ? const Radius.circular(0) : const Radius.circular(16),
+                    topRight: isAdmin ? const Radius.circular(16) : const Radius.circular(0),
                   ),
-                  const SizedBox(height: 3),
-                  Text(m['text'] ?? ""),
-                ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      m['text'] ?? "",
+                      style: TextStyle(color: isAdmin ? Colors.black87 : Colors.white),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      intl.DateFormat('HH:mm').format((m['sentAt'] as Timestamp?)?.toDate() ?? DateTime.now()),
+                      style: TextStyle(
+                        fontSize: 9, 
+                        color: isAdmin ? Colors.grey : Colors.white60,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           }).toList(),

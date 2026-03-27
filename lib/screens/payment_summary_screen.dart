@@ -218,7 +218,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: Text('ملخص الطلب والدفع', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF2563EB),
+          backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
           elevation: 0,
         ),
@@ -228,6 +228,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  _buildInvoiceHeader(),
                   Padding(
                     padding: const EdgeInsets.all(20.0),
                     child: Column(
@@ -254,50 +255,59 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     );
   }
 
-  Widget _buildMapPreview() {
+  Widget _buildInvoiceHeader() {
+    final double basePrice = widget.hours * 35.0; // Example hourly rate
+    final double vat = basePrice * 0.15;
+    final double total = basePrice + vat;
+
     return Container(
-      height: 180,
-      decoration: BoxDecoration(
-        color: Colors.grey[200],
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
-      ),
-      child: FlutterMap(
-        options: MapOptions(
-          initialCenter: LatLng(widget.location.latitude, widget.location.longitude),
-          initialZoom: 15.0,
+      padding: const EdgeInsets.all(30),
+      decoration: const BoxDecoration(
+        color: Color(0xFF5D1B5E),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(40),
+          bottomRight: Radius.circular(40),
         ),
+      ),
+      child: Column(
         children: [
-          TileLayer(
-            urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-            subdomains: const ['a', 'b', 'c'],
-            userAgentPackageName: 'com.zyiarah.app',
+          const Icon(Icons.receipt_long_rounded, color: Colors.white, size: 48),
+          const SizedBox(height: 16),
+          Text(
+            'فاتورة الطلب التقديرية',
+            style: GoogleFonts.tajawal(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
           ),
-          MarkerLayer(
-            markers: [
-              Marker(
-                point: LatLng(widget.location.latitude, widget.location.longitude),
-                child: const Icon(Icons.location_on, color: Colors.red, size: 40),
-              ),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _buildInvoiceStat('المجموع', '${basePrice.toStringAsFixed(2)} ر.س'),
+              _buildInvoiceStat('الضريبة (15%)', '${vat.toStringAsFixed(2)} ر.س'),
+              _buildInvoiceStat('الإجمالي', '${total.toStringAsFixed(2)} ر.س', isBold: true),
             ],
-          ),
-          Positioned(
-            bottom: 10,
-            right: 10,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-              child: Row(
-                children: [
-                  const Icon(Icons.verified, color: Colors.green, size: 14),
-                  const SizedBox(width: 5),
-                  Text('الموقع مؤكد', style: GoogleFonts.tajawal(fontSize: 10, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildInvoiceStat(String label, String value, {bool isBold = false}) {
+    return Column(
+      children: [
+        Text(label, style: GoogleFonts.tajawal(color: Colors.white70, fontSize: 12)),
+        const SizedBox(height: 4),
+        Text(value, style: GoogleFonts.tajawal(
+          color: Colors.white, 
+          fontSize: 16, 
+          fontWeight: isBold ? FontWeight.w900 : FontWeight.bold
+        )),
+      ],
+    );
+  }
+
+  Widget _buildMapPreview() {
+    return const SizedBox.shrink(); // Historically removed as requested
+  }
   }
 
   Widget _buildOrderDetailsCard() {

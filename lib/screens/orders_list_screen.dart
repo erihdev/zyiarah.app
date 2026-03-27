@@ -5,8 +5,28 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/order_tracking_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
-class OrdersListScreen extends StatelessWidget {
+
+class OrdersListScreen extends StatefulWidget {
   const OrdersListScreen({super.key});
+
+  @override
+  State<OrdersListScreen> createState() => _OrdersListScreenState();
+}
+
+class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,36 +41,132 @@ class OrdersListScreen extends StatelessWidget {
           backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
           elevation: 0,
+          bottom: TabBar(
+            controller: _tabController,
+            tabs: const [
+              Tab(text: "الخدمات المنزلية", icon: Icon(Icons.cleaning_services)),
+              Tab(text: "قسم الصيانة", icon: Icon(Icons.settings_suggest)),
+            ],
+            indicatorColor: Colors.white,
+            labelStyle: GoogleFonts.tajawal(fontWeight: FontWeight.bold),
+          ),
         ),
-        body: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('orders')
-              .where('client_id', isEqualTo: user?.uid)
-              .orderBy('created_at', descending: true)
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator(color: Color(0xFF5D1B5E)));
-            }
-            if (snapshot.hasError) {
-              return Center(child: Text('خطأ في التحميل: ${snapshot.error}'));
-            }
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-              return _buildEmptyState();
-            }
+        body: TabBarView(
+          controller: _tabController,
+          children: [
+            _buildOrdersTab(user),
+            _buildMaintenanceTab(user),
+          ],
+        ),
+      ),
+    );
+  }
 
-            final orders = snapshot.data!.docs;
-            return ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: orders.length,
-              itemBuilder: (context, index) {
-                final order = orders[index].data() as Map<String, dynamic>;
-                final orderDocId = orders[index].id;
-                return _buildOrderCard(context, order, orderDocId);
-              },
-            );
+  Widget _buildOrdersTab(User? user) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('orders')
+          .where('client_id', isEqualTo: user?.uid)
+          .orderBy('created_at', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: Color(0xFF5D1B5E)));
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text('خطأ: ${snapshot.error}'));
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return _buildEmptyState();
+        }
+
+        final orders = snapshot.data!.docs;
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: orders.length,
+          itemBuilder: (context, index) {
+            final order = orders[index].data() as Map<String, dynamic>;
+            final orderDocId = orders[index].id;
+            return _buildOrderCard(context, order, orderDocId);
           },
+        );
+      },
+    );
+  }
+
+  Widget _buildMaintenanceTab(User? user) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('maintenance_requests')
+          .where('userId', isEqualTo: user?.uid)
+          .orderBy('createdAt', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: Color(0xFF5D1B5E)));
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text('خطأ: ${snapshot.error}'));
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return _buildEmptyState();
+        }
+
+        final reqs = snapshot.data!.docs;
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: reqs.length,
+          itemBuilder: (context, index) {
+            final data = reqs[index].data() as Map<String, dynamic>;
+            return _buildMaintenanceCard(context, data);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildMaintenanceCard(BuildContext context, Map<String, dynamic> data) {
+    final status = data['status'] ?? 'under_review';
+    final requestId = data['requestId'] ?? '-';
+    
+    Color statusColor = Colors.orange;
+    String statusText = "تحت المراجعة";
+
+    if (status == 'approved') {
+       statusColor = Colors.blue;
+       statusText = "بانتظار الدفع";
+    } else if (status == 'paid' || status == 'completed') {
+       statusColor = Colors.green;
+       statusText = "تم التنفيذ";
+    } else if (status == 'rejected') {
+       statusColor = Colors.red;
+       statusText = "مرفوض";
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        leading: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+          child: Icon(Icons.build_circle_outlined, color: statusColor),
         ),
+        title: Text(data['serviceType'] ?? 'طلب صيانة', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('رقم الطلب: #$requestId', style: GoogleFonts.tajawal(fontSize: 12)),
+            const SizedBox(height: 5),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+              child: Text(statusText, style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+        trailing: const Icon(Icons.chevron_left),
       ),
     );
   }

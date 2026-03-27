@@ -161,9 +161,11 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    _codeSent 
-                        ? "أدخل رمز التحقق المرسل لجوالك"
-                        : "أدخل رقم جوالك للبدء في طلب الخدمات",
+                    _isLoading 
+                        ? "جاري التحقق من أمان الجلسة..."
+                        : (_codeSent 
+                            ? "أدخل رمز التحقق المرسل لجوالك"
+                            : "أدخل رقم جوالك للبدء في طلب الخدمات"),
                     style: GoogleFonts.tajawal(fontSize: 16, color: Colors.grey[600]),
                     textAlign: TextAlign.center,
                   ),
@@ -224,13 +226,21 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                   const SizedBox(height: 30),
                   
                   _isLoading 
-                    ? const Center(child: CircularProgressIndicator(color: Color(0xFF5D1B5E)))
+                    ? Column(
+                        children: [
+                          const CircularProgressIndicator(color: Color(0xFF5D1B5E)),
+                          const SizedBox(height: 15),
+                          Text("يرجى الانتظار، جاري التحقق من أمان الجهاز عبر خدمات Google/Apple", 
+                            style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey), textAlign: TextAlign.center),
+                        ],
+                      )
                     : ElevatedButton(
                     onPressed: _codeSent ? _verifyOTP : _sendOTP,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF5D1B5E),
                       padding: const EdgeInsets.symmetric(vertical: 18),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      elevation: 4,
                     ),
                     child: Text(
                       _codeSent ? "تأكيد والتحقق" : "إرسال الرمز",

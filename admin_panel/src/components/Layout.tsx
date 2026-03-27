@@ -13,7 +13,9 @@ import {
     BellRing,
     LifeBuoy,
     Shield,
-    ShieldAlert
+    ShieldAlert,
+    Wrench,
+    FileSignature
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -65,6 +67,8 @@ export default function Layout({ onLogout }: LayoutProps) {
                         <nav className="space-y-1">
                             <SidebarItem icon={LayoutDashboard} label="لوحة القيادة" path="/" active={location.pathname === '/'} />
                             <SidebarItem icon={ClipboardList} label="إدارة الطلبات" path="/orders" active={location.pathname === '/orders'} />
+                            <SidebarItem icon={Wrench} label="طلبات الصيانة" path="/maintenance" active={location.pathname === '/maintenance'} />
+                            <SidebarItem icon={FileSignature} label="العقود الإلكترونية" path="/contracts" active={location.pathname === '/contracts'} />
                             <SidebarItem icon={CarFront} label="إدارة السائقين" path="/drivers" active={location.pathname === '/drivers'} />
                             <SidebarItem icon={Users} label="إدارة العملاء" path="/users" active={location.pathname === '/users'} />
                         </nav>
@@ -92,6 +96,7 @@ export default function Layout({ onLogout }: LayoutProps) {
 
                 <div className="p-4 border-t border-slate-100/80">
                     <button
+                        type="button"
                         onClick={onLogout}
                         className="w-full flex items-center space-x-3 space-x-reverse px-4 py-4 text-slate-500 hover:bg-red-50 hover:text-red-600 rounded-2xl transition-all duration-300 group"
                     >
@@ -113,8 +118,10 @@ export default function Layout({ onLogout }: LayoutProps) {
                             {location.pathname === '/' ? 'لوحة القيادة' :
                                 location.pathname === '/orders' ? 'إدارة الطلبات' :
                                     location.pathname === '/drivers' ? 'إدارة السائقين' :
-                                        location.pathname === '/users' ? 'إدارة العملاء' :
-                                            location.pathname === '/settings' ? 'إعدادات النظام' : 'لوحة التحكم'}
+                                        location.pathname === '/maintenance' ? 'إدارة طلبات الصيانة' :
+                                            location.pathname === '/contracts' ? 'إدارة العقود الإلكترونية' :
+                                                location.pathname === '/users' ? 'إدارة العملاء' :
+                                                    location.pathname === '/settings' ? 'إعدادات النظام' : 'لوحة التحكم'}
                         </h2>
                     </div>
 
@@ -132,7 +139,11 @@ export default function Layout({ onLogout }: LayoutProps) {
 
                         <div className="h-8 w-px bg-slate-200 dark:bg-slate-700 hidden md:block"></div>
 
-                        <button className="relative p-2.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all">
+                        <button 
+                            type="button"
+                            title="الإشعارات"
+                            className="relative p-2.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                        >
                             <Bell size={22} strokeWidth={2.5} />
                             <span className="absolute top-2 right-2.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
                         </button>

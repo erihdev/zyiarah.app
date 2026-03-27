@@ -28,7 +28,7 @@ class TamaraService {
         "total_amount": {"amount": amount, "currency": "SAR"},
         "consumer": {
           "first_name": customerName,
-          "phone_number": customerPhone,
+          "phone_number": customerPhone.startsWith('+') ? customerPhone : "+966$customerPhone",
         },
         "merchant_url": {
           "success": "https://zyiarah.com/payment-success",
