@@ -14,6 +14,7 @@ import 'package:zyiarah/screens/orders_list_screen.dart';
 import 'package:zyiarah/screens/wallet_screen.dart';
 import 'package:zyiarah/screens/maintenance_request_screen.dart';
 import 'package:zyiarah/screens/subscription_plans_screen.dart';
+import 'package:zyiarah/screens/contracts_list_screen.dart';
 
 class ClientDashboard extends StatefulWidget {
   const ClientDashboard({super.key});
