@@ -27,7 +27,7 @@ workflows:
 
       - name: Install Pods
         script: |
-          find . -name "Podfile" -execdir pod install \;
+          cd ios && pod install
 
       - name: Setup Code Signing
         script: |

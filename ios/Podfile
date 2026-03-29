@@ -1,4 +1,19 @@
-# Uncomment this line to define a global platform for your project
+# The path to the flutter_ios_podfile.rb
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get has been run."
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/\AFLUTTER_ROOT=(.*)\z/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
 platform :ios, '13.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
@@ -10,13 +25,7 @@ project 'Runner', {
   'Profile' => :profile,
 }
 
-def flutter_install_all_ios_pods(relpath)
-  native_targets = {
-    'Runner' => :native,
-    'RunnerTests' => :none,
-  }
-  flutter_install_ios_plugin_pods(relpath, native_targets)
-end
+flutter_ios_podfile_setup
 
 target 'Runner' do
   use_frameworks!
@@ -29,7 +38,7 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     
-    # Optional: Force iOS 13 for all pod targets to avoid version mismatches
+    # Force iOS 13 for all pods to match deployment target
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
     end
