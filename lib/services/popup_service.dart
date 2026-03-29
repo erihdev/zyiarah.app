@@ -158,6 +158,8 @@ class ZyiarahPopupService {
         ),
       ),
     );
+  }
+
   static void _navigateBySection(BuildContext context, String section) {
     switch (section) {
       case 'home':
@@ -170,10 +172,10 @@ class ZyiarahPopupService {
         Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahSubscriptionPlansScreen()));
         break;
       case 'maintenance':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const MaintenanceRequestScreen()));
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahMaintenanceRequestScreen()));
         break;
       case 'contracts':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const ContractsListScreen()));
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahContractsListScreen()));
         break;
       default:
         break;

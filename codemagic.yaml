@@ -111,11 +111,13 @@ workflows:
           # 1. Build iOS without signing
           flutter build ios --release --no-codesign
           
-          # 2. Archive without command-line signing overrides (rely on project settings)
+          # 2. Archive with explicit signing overrides
           xcodebuild -workspace ios/Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
             -archivePath build/ios/archive/Runner.xcarchive \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
+            CODE_SIGN_STYLE=Manual \
             archive
           
           # 3. Export IPA using export_options.plist
