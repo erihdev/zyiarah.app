@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/firebase_service.dart';
-import 'package:zyiarah/screens/driver_dashboard.dart';
 import 'package:zyiarah/screens/client_dashboard.dart';
+import 'package:zyiarah/screens/driver_dashboard.dart';
+import 'package:zyiarah/screens/signup_screen.dart';
+import 'package:zyiarah/screens/account_activation_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class ZyiarahLoginScreen extends StatefulWidget {
@@ -14,118 +16,59 @@ class ZyiarahLoginScreen extends StatefulWidget {
 
 class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _otpController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   final ZyiarahFirebaseService _firebaseService = ZyiarahFirebaseService();
 
   bool _isLoading = false;
-  bool _codeSent = false;
-  String? _verificationId;
+  bool _isPasswordVisible = false;
+  bool _rememberMe = false;
 
-  void _sendOTP() async {
+  final Color brandColor = const Color(0xFF4A0E0E); // اللون العنابي الغامق
+
+  void _login() async {
     final phone = _phoneController.text.trim();
-    if (phone.isEmpty || phone.length < 9) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('الرجاء إدخال رقم جوال صحيح')),
-      );
+    final password = _passwordController.text.trim();
+
+    if (phone.isEmpty || password.isEmpty) {
+      _showError('الرجاء إدخال رقم الجوال وكلمة المرور');
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
-      await _firebaseService.verifyPhoneNumber(
-        phone, 
-        (String verificationId) {
-          if (!mounted) return;
-          setState(() {
-            _verificationId = verificationId;
-            _codeSent = true;
-            _isLoading = false;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('تم إرسال رمز التحقق')),
-          );
-        },
-        (String error) {
-          if (!mounted) return;
-          setState(() {
-            _isLoading = false;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('خطأ التحقق: $error')),
-          );
+      UserCredential userCredential = await _firebaseService.signInWithPhoneAndPassword(phone, password);
+      
+      if (userCredential.user != null) {
+        String role = await _firebaseService.getUserRole(userCredential.user!.uid, phone);
+        if (!mounted) return;
+        
+        if (role == 'driver') {
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const DriverDashboard()));
+        } else {
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => ClientDashboard()));
         }
-      );
+      }
+    } on FirebaseAuthException catch (e) {
+      String message = 'حدث خطأ في تسجيل الدخول';
+      if (e.code == 'user-not-found') message = 'المستخدم غير موجود';
+      else if (e.code == 'wrong-password') message = 'كلمة المرور غير صحيحة';
+      _showError(message);
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ غير متوقع: ${e.toString()}')),
-      );
+      _showError('خطأ غير متوقع: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _verifyOTP() async {
-    final otp = _otpController.text.trim();
-    if (otp.isEmpty || otp.length < 6 || _verificationId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('الرجاء إدخال رمز صحيح')),
-      );
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      UserCredential userCredential = await _firebaseService.verifyOTP(
-        _verificationId!,
-        otp,
-      );
-
-      if (userCredential.user != null) {
-        // التحقق من دور المستخدم
-        String role = await _firebaseService.getUserRole(
-          userCredential.user!.uid,
-          _phoneController.text.trim(),
-        );
-
-        if (!mounted) return;
-        
-        // التوجيه بناءً على الدور
-        if (role == 'driver') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const DriverDashboard()),
-          );
-        } else {
-          // الافتراضي (client)
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => ClientDashboard()),
-          );
-        }
-      }
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('رمز التحقق غير صحيح: ${e.toString()}')),
-      );
-    }
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message, style: GoogleFonts.tajawal())));
   }
 
   @override
   void dispose() {
     _phoneController.dispose();
-    _otpController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -136,143 +79,178 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
       body: Directionality(
         textDirection: TextDirection.rtl,
         child: SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 30.0),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 60),
-                  Image.asset(
-                    'assets/logo.png',
-                    height: 120,
-                    fit: BoxFit.contain,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 20),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    icon: const Icon(Icons.arrow_forward_ios, size: 20),
+                    onPressed: () => Navigator.pop(context),
                   ),
-                  const SizedBox(height: 40),
-                  Text(
-                    "مرحباً بك في زيارة",
-                    style: GoogleFonts.tajawal(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF5D1B5E),
-                    ),
-                    textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 40),
+                Text(
+                  "مرحباً بك",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.tajawal(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: brandColor,
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _isLoading 
-                        ? "جاري التحقق من أمان الجلسة..."
-                        : (_codeSent 
-                            ? "أدخل رمز التحقق المرسل لجوالك"
-                            : "أدخل رقم جوالك للبدء في طلب الخدمات"),
-                    style: GoogleFonts.tajawal(fontSize: 16, color: Colors.grey[600]),
-                    textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  "سجل دخولك باستخدام رقم الجوال\nوكلمه المرور",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.tajawal(
+                    fontSize: 18,
+                    color: Colors.black87,
+                    height: 1.4,
                   ),
-                  const SizedBox(height: 50),
-                  
-                  if (!_codeSent)
-                    Directionality(
-                      textDirection: TextDirection.ltr,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(15),
-                          border: Border.all(color: Colors.grey[200]!),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Row(
-                          children: [
-                            const Text("+966", style: TextStyle(fontWeight: FontWeight.bold)),
-                            const SizedBox(width: 15),
-                            Expanded(
-                              child: TextField(
-                                controller: _phoneController,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  hintText: "5xxxxxxxx",
-                                  border: InputBorder.none,
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    Directionality(
-                      textDirection: TextDirection.ltr,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(15),
-                          border: Border.all(color: Colors.grey[200]!),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: TextField(
-                          controller: _otpController,
-                          keyboardType: TextInputType.number,
-                          textAlign: TextAlign.center,
-                          decoration: const InputDecoration(
-                            hintText: "X X X X X X",
-                            border: InputBorder.none,
-                          ),
-                          style: const TextStyle(letterSpacing: 8),
-                        ),
-                      ),
+                ),
+                const SizedBox(height: 50),
+                _buildFieldLabel("رقم الجوال"),
+                _buildTextField(
+                  controller: _phoneController,
+                  hint: "5XXXXXXXX",
+                  keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 20),
+                _buildFieldLabel("كلمه المرور"),
+                _buildTextField(
+                  controller: _passwordController,
+                  hint: "********",
+                  isPassword: true,
+                  isPasswordVisible: _isPasswordVisible,
+                  toggleVisibility: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
+                ),
+                const SizedBox(height: 15),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: _rememberMe,
+                      onChanged: (val) => setState(() => _rememberMe = val!),
+                      activeColor: brandColor,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                     ),
-
-                  const SizedBox(height: 30),
-                  
-                  _isLoading 
-                    ? Column(
-                        children: [
-                          const CircularProgressIndicator(color: Color(0xFF5D1B5E)),
-                          const SizedBox(height: 15),
-                          Text("يرجى الانتظار، جاري التحقق من أمان الجهاز عبر خدمات Google/Apple", 
-                            style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey), textAlign: TextAlign.center),
-                        ],
-                      )
-                    : ElevatedButton(
-                    onPressed: _codeSent ? _verifyOTP : _sendOTP,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF5D1B5E),
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                      elevation: 4,
-                    ),
-                    child: Text(
-                      _codeSent ? "تأكيد والتحقق" : "إرسال الرمز",
-                      style: GoogleFonts.tajawal(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  
-                  if (_codeSent && !_isLoading) ...[
-                    const SizedBox(height: 20),
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _codeSent = false;
-                        });
+                    Text("تذكرني", style: GoogleFonts.tajawal(color: Colors.grey[700])),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text("مستخدم سابق؟ ", style: GoogleFonts.tajawal(color: Colors.white70)),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahAccountActivationScreen()));
                       },
                       child: Text(
-                        "تعديل رقم الجوال",
-                        style: GoogleFonts.tajawal(
-                          color: const Color(0xFF5D1B5E),
-                          fontWeight: FontWeight.bold,
-                        ),
+                        "قم بتفعيل حسابك هنا",
+                        style: GoogleFonts.tajawal(color: Colors.amber, fontWeight: FontWeight.bold),
                       ),
                     ),
-                  ]
-                ],
-              ),
+                  ],
+                ),
+                const SizedBox(height: 30),
+                _isLoading
+                    ? const Center(child: CircularProgressIndicator(color: Color(0xFF4A0E0E)))
+                    : ElevatedButton(
+                        onPressed: _login,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: brandColor,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                          elevation: 2,
+                        ),
+                        child: Text(
+                          "تسجيل الدخول",
+                          style: GoogleFonts.tajawal(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text("ليس لديك حساب ؟ ", style: GoogleFonts.tajawal(color: Colors.grey[700])),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahSignupScreen()));
+                      },
+                      child: Text(
+                        "انشاء حساب",
+                        style: GoogleFonts.tajawal(color: brandColor, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 60),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => ClientDashboard()));
+                  },
+                  child: Text(
+                    "تخطي",
+                    style: GoogleFonts.tajawal(
+                      color: Colors.black,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFieldLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0, right: 4.0),
+      child: Text(
+        label,
+        style: GoogleFonts.tajawal(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+      ),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String hint,
+    TextInputType keyboardType = TextInputType.text,
+    bool isPassword = false,
+    bool isPasswordVisible = false,
+    VoidCallback? toggleVisibility,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F0F0),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        obscureText: isPassword && !isPasswordVisible,
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: GoogleFonts.tajawal(color: Colors.grey[400]),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          suffixIcon: isPassword
+              ? IconButton(
+                  icon: Icon(
+                    isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                    color: Colors.grey,
+                  ),
+                  onPressed: toggleVisibility,
+                )
+              : null,
         ),
       ),
     );

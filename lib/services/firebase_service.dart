@@ -7,7 +7,78 @@ class ZyiarahFirebaseService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // --- التحقق برقم الجوال (Phone Auth) ---
+  // --- التحقق برقم الجوال وكلمة المرور (Phone & Password) ---
+
+  // تحويل رقم الجوال إلى بريد إلكتروني وهمي لـ Firebase Auth
+  String _phoneToEmail(String phone) {
+    String clean = phone.replaceAll(RegExp(r'\D'), '');
+    if (clean.startsWith('966')) clean = clean.substring(3);
+    if (clean.startsWith('0')) clean = clean.substring(1);
+    return '$clean@zyiarah.com';
+  }
+
+  Future<UserCredential> signUpWithPhoneAndPassword({
+    required String phone,
+    required String password,
+    required String name,
+    required String email,
+  }) async {
+    final firebaseEmail = _phoneToEmail(phone);
+    UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
+      email: firebaseEmail,
+      password: password,
+    );
+
+    if (userCredential.user != null) {
+      await saveUserToRegistry(
+        uid: userCredential.user!.uid,
+        name: name,
+        role: 'client',
+      );
+      // حفظ بيانات إضافية
+      await _db.collection('users').doc(userCredential.user!.uid).update({
+        'phone': phone,
+        'real_email': email,
+      });
+    }
+    return userCredential;
+  }
+
+  Future<UserCredential> signInWithPhoneAndPassword(String phone, String password) async {
+    final firebaseEmail = _phoneToEmail(phone);
+    return await _auth.signInWithEmailAndPassword(
+      email: firebaseEmail,
+      password: password,
+    );
+  }
+
+  // تحديث كلمة المرور للمستخدمين القدامى (Migration)
+  Future<void> updatePassword(String phone, String newPassword) async {
+    User? user = _auth.currentUser;
+    if (user != null) {
+      final firebaseEmail = _phoneToEmail(phone);
+      // Linking the current Phone-auth user with an Email-auth credential
+      AuthCredential credential = EmailAuthProvider.credential(
+        email: firebaseEmail,
+        password: newPassword,
+      );
+      
+      try {
+        await user.linkWithCredential(credential);
+      } catch (e) {
+        // If already linked or other error, try updating password directly
+        await user.updatePassword(newPassword);
+      }
+      
+      // Update the user profile in Firestore to ensure it's marked as set up
+      await _db.collection('users').doc(user.uid).update({
+        'has_password': true,
+        'phone': phone,
+      });
+    }
+  }
+
+  // --- التحقق برقم الجوال (Phone Auth - OTP) ---
 
   Future<void> verifyPhoneNumber(
       String phone, Function(String) onCodeSent, Function(String) onError) async {

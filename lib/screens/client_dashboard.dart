@@ -10,11 +10,10 @@ import 'package:zyiarah/screens/notifications_screen.dart';
 import 'package:zyiarah/screens/support_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 
-import 'package:zyiarah/screens/orders_list_screen.dart';
-import 'package:zyiarah/screens/wallet_screen.dart';
 import 'package:zyiarah/screens/maintenance_request_screen.dart';
 import 'package:zyiarah/screens/subscription_plans_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
+import 'package:zyiarah/services/popup_service.dart';
 
 class ClientDashboard extends StatefulWidget {
   const ClientDashboard({super.key});
@@ -31,6 +30,9 @@ class _ClientDashboardState extends State<ClientDashboard> {
   void initState() {
     super.initState();
     _loadUserData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ZyiarahPopupService.checkAndShowPopup(context);
+    });
   }
 
   Stream<DocumentSnapshot> _getUserStream() {
@@ -247,49 +249,12 @@ class _ClientDashboardState extends State<ClientDashboard> {
     );
   }
 
-  void _upgradeToSubscription() async {
-    setState(() => _isLoading = true);
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-          'has_active_subscription': true,
-          'visits_remaining': 4,
-          'subscription_type': 'gold_monthly',
-          'subscription_expiry': Timestamp.fromDate(DateTime.now().add(const Duration(days: 30))),
-        });
-        await _loadUserData();
-        if (mounted) {
-          setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('تم تفعيل اشتراك زيارة جولد بنجاح! 🎉'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } else {
-        if (mounted) setState(() => _isLoading = false);
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('حدث خطأ أثناء تفعيل الاشتراك: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
 
   Widget _buildMetricsList() {
     return StreamBuilder<DocumentSnapshot>(
       stream: _getUserStream(),
       builder: (context, userSnapshot) {
         final userData = userSnapshot.data?.data() as Map<String, dynamic>?;
-        final wallet = (userData?['wallet_balance'] ?? 0.0).toString();
         final rating = (userData?['rating'] ?? 4.9).toString();
 
         return StreamBuilder<QuerySnapshot>(
@@ -308,14 +273,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
                     iconPath: Icons.calendar_today_rounded,
                     cardColor: const Color(0xFF3B82F6), // Blue
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen())),
-                  ),
-                  const SizedBox(width: 15),
-                  _buildColorfulMetricCard(
-                     title: 'رصيد المحفظة',
-                     value: '${_currentUser?.walletBalance ?? 0} ر.س',
-                     iconPath: Icons.account_balance_wallet_rounded,
-                     cardColor: const Color(0xFF10B981), // Green
-                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahWalletScreen())),
                   ),
                   const SizedBox(width: 15),
                   _buildColorfulMetricCard(
@@ -534,15 +491,15 @@ class _ClientDashboardState extends State<ClientDashboard> {
                       ),
                       InkWell(
                         onTap: () {
-                          if (title == "خدمة بالساعة") {
-                             Navigator.push(
+                          if (onTap != null) {
+                            onTap();
+                          } else if (title == "خدمة بالساعة") {
+                            Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => const HourlyCleaningDetailsScreen(serviceName: "نظافة بالساعة"),
                               ),
                             );
-                          } else if (title == "سلة العائلة") {
-                            _upgradeToSubscription();
                           } else {
                             _initiatePayment(title, numericPrice);
                           }

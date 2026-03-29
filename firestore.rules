@@ -61,6 +61,21 @@ service cloud.firestore {
       allow read, write: if isLoggedIn() && (request.auth.uid == tokenId || isAdmin());
     }
 
+    // Electronic Contracts
+    match /contracts/{contractId} {
+      allow create: if isLoggedIn();
+      allow read, update: if isLoggedIn() && (request.auth.uid == resource.data.userId || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Maintenance Requests
+    match /maintenance_requests/{requestId} {
+      allow create: if isLoggedIn();
+      allow read: if isLoggedIn() && (request.auth.uid == resource.data.userId || isAdmin());
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
     // System Admins
     match /admins/{adminId} {
       allow read: if isLoggedIn();

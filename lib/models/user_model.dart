@@ -6,7 +6,6 @@ class ZyiarahUser {
   final String email;
   final String phone;
   final String role;
-  final double walletBalance;
   final double rating;
   final bool hasActiveSubscription;
   final int visitsRemaining;
@@ -19,7 +18,6 @@ class ZyiarahUser {
     required this.email,
     required this.phone,
     required this.role,
-    this.walletBalance = 0.0,
     this.rating = 4.9,
     this.hasActiveSubscription = false,
     this.visitsRemaining = 0,
@@ -34,7 +32,6 @@ class ZyiarahUser {
       email: data['email'] ?? '',
       phone: data['phone'] ?? '',
       role: data['role'] ?? 'client',
-      walletBalance: (data['wallet_balance'] ?? 0.0).toDouble(),
       rating: (data['rating'] ?? 4.9).toDouble(),
       hasActiveSubscription: data['has_active_subscription'] ?? false,
       visitsRemaining: data['visits_remaining'] ?? 0,
@@ -51,7 +48,6 @@ class ZyiarahUser {
       'email': email,
       'phone': phone,
       'role': role,
-      'wallet_balance': walletBalance,
       'rating': rating,
       'has_active_subscription': hasActiveSubscription,
       'visits_remaining': visitsRemaining,

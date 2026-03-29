@@ -7,7 +7,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/screens/support_screen.dart';
 import 'package:zyiarah/screens/orders_list_screen.dart';
-import 'package:zyiarah/screens/wallet_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
 import 'package:zyiarah/screens/support_screen.dart';
 
@@ -126,9 +125,6 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                     const Divider(height: 10, indent: 20, endIndent: 20),
                     _buildMenuTile(Icons.history, 'سجل الطلبات', () {
                       Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen()));
-                    }),
-                    _buildMenuTile(Icons.wallet, 'المحفظة والفواتير', () {
-                      Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahWalletScreen()));
                     }),
                     _buildMenuTile(Icons.description_outlined, 'عقودي الإلكتـرونية', () {
                       Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahContractsListScreen()));
