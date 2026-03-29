@@ -14,6 +14,7 @@ interface NotificationLog {
     body: string;
     target: string;
     type?: 'push' | 'popup';
+    targetSection?: string;
     popup_buttons?: PopupButton[];
     popup_image?: string;
     sent_at: Timestamp | null;
@@ -26,6 +27,7 @@ export default function Notifications() {
     const [title, setTitle] = useState('');
     const [body, setBody] = useState('');
     const [popupImage, setPopupImage] = useState('');
+    const [targetSection, setTargetSection] = useState('home');
     const [buttons, setButtons] = useState<PopupButton[]>([]);
     
     const [sending, setSending] = useState(false);
@@ -57,6 +59,7 @@ export default function Notifications() {
                 body: body.trim(),
                 target,
                 type: notifType,
+                targetSection: notifType === 'popup' ? targetSection : 'home',
                 popup_image: notifType === 'popup' ? popupImage.trim() : null,
                 popup_buttons: notifType === 'popup' ? buttons : null,
                 sent_at: serverTimestamp(),
@@ -179,15 +182,32 @@ export default function Notifications() {
 
                             {notifType === 'popup' && (
                                 <div className="space-y-6 pt-2 border-t border-slate-50 animate-in fade-in zoom-in duration-300">
-                                    <div>
-                                        <label className="block text-sm font-extrabold text-slate-700 mb-2">رابط الصورة (اختياري)</label>
-                                        <input
-                                            type="text"
-                                            placeholder="https://example.com/image.png"
-                                            className="w-full bg-[#f8fafc] border border-slate-200 text-slate-700 text-xs rounded-xl px-4 py-3 outline-none focus:border-indigo-500 font-medium"
-                                            value={popupImage}
-                                            onChange={(e) => setPopupImage(e.target.value)}
-                                        />
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-extrabold text-slate-700 mb-2">رابط الصورة (اختياري)</label>
+                                            <input
+                                                type="text"
+                                                placeholder="https://example.com/image.png"
+                                                className="w-full bg-[#f8fafc] border border-slate-200 text-slate-700 text-xs rounded-xl px-4 py-3 outline-none focus:border-indigo-500 font-medium"
+                                                value={popupImage}
+                                                onChange={(e) => setPopupImage(e.target.value)}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-extrabold text-slate-700 mb-2">القسم المستهدف عند الضغط</label>
+                                            <select
+                                                title="القسم المستهدف"
+                                                className="w-full bg-[#f8fafc] border border-slate-200 text-slate-700 text-xs rounded-xl px-4 py-3 outline-none focus:border-indigo-500 font-bold"
+                                                value={targetSection}
+                                                onChange={(e) => setTargetSection(e.target.value)}
+                                            >
+                                                <option value="home">الرئيسية</option>
+                                                <option value="hourly">التنظيف بالساعة</option>
+                                                <option value="family_basket">سلة العائلة (الباقات)</option>
+                                                <option value="maintenance">قسم الصيانة</option>
+                                                <option value="contracts">العقود الإلكترونية</option>
+                                            </select>
+                                        </div>
                                     </div>
 
                                     <div>

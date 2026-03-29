@@ -5,6 +5,7 @@ import 'package:zyiarah/screens/client_dashboard.dart';
 import 'package:zyiarah/screens/driver_dashboard.dart';
 import 'package:zyiarah/screens/signup_screen.dart';
 import 'package:zyiarah/screens/account_activation_screen.dart';
+import 'package:zyiarah/screens/forgot_password_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class ZyiarahLoginScreen extends StatefulWidget {
@@ -128,7 +129,19 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                   isPasswordVisible: _isPasswordVisible,
                   toggleVisibility: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
                 ),
-                const SizedBox(height: 15),
+                
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (c) => const ZyiarahForgotPasswordScreen())),
+                    child: Text(
+                      "نسيت كلمة المرور؟",
+                      style: GoogleFonts.tajawal(color: const Color(0xFF4A0E0E), fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 30),
                 Row(
                   children: [
                     Checkbox(

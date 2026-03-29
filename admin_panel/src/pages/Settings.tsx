@@ -17,6 +17,10 @@ interface SystemSettings {
     vat_rate: number;
     min_wallet_balance: number;
     cod_enabled: boolean;
+    cod_hourly: boolean;
+    cod_monthly: boolean;
+    cod_maintenance: boolean;
+    cod_contracts: boolean;
 
     // Notifications
     sms_on_order: boolean;
@@ -40,6 +44,10 @@ const defaultSettings: SystemSettings = {
     vat_rate: 15,
     min_wallet_balance: -50,
     cod_enabled: true,
+    cod_hourly: true,
+    cod_monthly: false,
+    cod_maintenance: true,
+    cod_contracts: false,
     sms_on_order: true,
     push_on_assign: true,
     push_on_completed: true,
@@ -349,6 +357,34 @@ export default function Settings() {
                                             <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
                                         </label>
                                     </div>
+
+                                    {settings.cod_enabled && (
+                                        <div className="col-span-full grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl animate-in fade-in slide-in-from-top-2 duration-300">
+                                            <div className="col-span-full mb-2">
+                                                <h5 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">تفعيل COD لأقسام محددة:</h5>
+                                            </div>
+                                            {[
+                                                { id: 'cod_hourly', label: 'التنظيف بالساعة' },
+                                                { id: 'cod_monthly', label: 'التنظيف الشهري' },
+                                                { id: 'cod_maintenance', label: 'قسم الصيانة' },
+                                                { id: 'cod_contracts', label: 'العقود الإلكترونية' },
+                                            ].map((item) => (
+                                                <div key={item.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                                    <span className="text-xs font-bold text-slate-700">{item.label}</span>
+                                                    <label className="relative inline-flex items-center cursor-pointer scale-75">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            title={item.label}
+                                                            className="sr-only peer" 
+                                                            checked={settings[item.id as keyof SystemSettings] as boolean} 
+                                                            onChange={(e) => handleChange(item.id as keyof SystemSettings, e.target.checked)} 
+                                                        />
+                                                        <div className="w-11 h-6 bg-slate-100 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-200 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                                                    </label>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </>

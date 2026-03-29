@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:zyiarah/screens/subscription_plans_screen.dart';
+import 'package:zyiarah/screens/maintenance_request_screen.dart';
+import 'package:zyiarah/screens/contracts_list_screen.dart';
+import 'package:zyiarah/screens/order_tracking_screen.dart';
 
 class ZyiarahPopupService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -108,10 +112,17 @@ class ZyiarahPopupService {
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: () {
+                            // 1. Handle External Links
                             if (btn['link'] != null && btn['link'].toString().isNotEmpty) {
                               launchUrl(Uri.parse(btn['link']), mode: LaunchMode.externalApplication);
+                            } 
+                            // 2. Handle Internal Sections
+                            else if (data['targetSection'] != null) {
+                              final section = data['targetSection'];
+                              _navigateBySection(context, section);
                             }
-                            Navigator.pop(context);
+                            
+                            Navigator.pop(context); // Close Popup
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
@@ -147,5 +158,25 @@ class ZyiarahPopupService {
         ),
       ),
     );
+  static void _navigateBySection(BuildContext context, String section) {
+    switch (section) {
+      case 'home':
+        // Stay on home/dashboard
+        break;
+      case 'hourly':
+        // Navigate to hourly cleaning or just dashboard home as entry point
+        break;
+      case 'family_basket':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahSubscriptionPlansScreen()));
+        break;
+      case 'maintenance':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const MaintenanceRequestScreen()));
+        break;
+      case 'contracts':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const ContractsListScreen()));
+        break;
+      default:
+        break;
+    }
   }
 }

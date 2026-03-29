@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/screens/client_dashboard.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zyiarah/screens/terms_privacy_screens.dart';
 
 class ZyiarahSignupScreen extends StatefulWidget {
   const ZyiarahSignupScreen({super.key});
@@ -22,6 +23,8 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
   bool _isLoading = false;
   bool _isPasswordVisible = false;
   bool _isConfirmVisible = false;
+  bool _acceptTerms = false;
+  bool _acceptPrivacy = false;
 
   final Color brandColor = const Color(0xFF4A0E0E);
 
@@ -39,6 +42,11 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
 
     if (password != confirm) {
       _showError('كلمتا المرور غير متطابقتين');
+      return;
+    }
+
+    if (!_acceptTerms || !_acceptPrivacy) {
+      _showError('يجب الموافقة على الشروط والخصوصية للمتابعة');
       return;
     }
 
@@ -150,6 +158,20 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
                   onToggle: () => setState(() => _isConfirmVisible = !_isConfirmVisible),
                 ),
                 
+                const SizedBox(height: 25),
+                _buildLegalCheckbox(
+                  "أوافق على الشروط والأحكام", 
+                  _acceptTerms, 
+                  (v) => setState(() => _acceptTerms = v!),
+                  () => Navigator.push(context, MaterialPageRoute(builder: (c) => const ZyiarahTermsScreen())),
+                ),
+                _buildLegalCheckbox(
+                  "أوافق على سياسة الخصوصية", 
+                  _acceptPrivacy, 
+                  (v) => setState(() => _acceptPrivacy = v!),
+                  () => Navigator.push(context, MaterialPageRoute(builder: (c) => const ZyiarahPrivacyScreen())),
+                ),
+                
                 const SizedBox(height: 40),
                 _isLoading
                     ? const Center(child: CircularProgressIndicator(color: Color(0xFF4A0E0E)))
@@ -214,6 +236,29 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
               : null,
         ),
       ),
+    );
+  }
+
+  Widget _buildLegalCheckbox(String label, bool value, Function(bool?) onChanged, VoidCallback onLinkTap) {
+    return Row(
+      children: [
+        Checkbox(
+          value: value, 
+          onChanged: onChanged,
+          activeColor: brandColor,
+        ),
+        GestureDetector(
+          onTap: onLinkTap,
+          child: Text(
+            label,
+            style: GoogleFonts.tajawal(
+              fontSize: 14, 
+              color: Colors.blue[800],
+              decoration: TextDecoration.underline,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

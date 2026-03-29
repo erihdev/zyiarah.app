@@ -41,6 +41,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   bool _isLoading = false;
   bool _codEnabled = false;
   ZyiarahUser? _currentUser;
+  Map<String, dynamic> _paymentConfigs = {};
 
   @override
   void initState() {
@@ -58,7 +59,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         setState(() {
           _currentUser = ZyiarahUser.fromMap(user.uid, doc.data()!);
           if (configDoc.exists) {
-            _codEnabled = configDoc.data()?['cod_enabled'] ?? false;
+            _paymentConfigs = configDoc.data()!;
+            _codEnabled = _paymentConfigs['cod_enabled'] ?? false;
           }
           // Auto-select subscription if available
           if ((_currentUser?.visitsRemaining ?? 0) > 0) {
@@ -67,6 +69,27 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         });
       }
     }
+  }
+
+  bool _isCodAvailableForService() {
+    if (!_codEnabled) return false;
+    
+    final name = widget.serviceName.toLowerCase();
+    
+    if (name.contains('ساعة') || name.contains('hourly')) {
+      return _paymentConfigs['cod_hourly'] ?? true;
+    }
+    if (name.contains('سلة') || name.contains('family') || name.contains('باقة')) {
+      return _paymentConfigs['cod_monthly'] ?? false;
+    }
+    if (name.contains('صيانة') || name.contains('maintenance') || name.contains('سباكة') || name.contains('كهرباء')) {
+      return _paymentConfigs['cod_maintenance'] ?? true;
+    }
+    if (name.contains('عقد') || name.contains('contract')) {
+      return _paymentConfigs['cod_contracts'] ?? false;
+    }
+    
+    return true; // Default to true if not categorized
   }
 
   double get vatAmount => widget.amount * 0.15;
@@ -386,7 +409,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           subtitle: 'قسم فاتورتك على 4 دفعات (كاش باك 5%)',
           iconPath: 'assets/logo.png', // Ideally a Tamara logo
         ),
-        if (_codEnabled) ...[
+        if (_isCodAvailableForService()) ...[
           const SizedBox(height: 12),
           _buildPaymentOption(
             id: 'cod',
@@ -429,9 +452,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               ),
               child: id == 'card' 
                 ? const Icon(Icons.apple, color: Colors.white, size: 24) // Apple Pay representation
-                : icon != null 
-                  ? Icon(icon, color: color ?? const Color(0xFF2563EB))
-                  : Image.asset('assets/logo.png', width: 24, height: 24), // Fallback
+                : id == 'tamara'
+                  ? const Icon(Icons.timer_outlined, color: Color(0xFFE5A170))
+                  : icon != null 
+                    ? Icon(icon, color: color ?? const Color(0xFF2563EB))
+                    : Image.asset('assets/logo.png', width: 24, height: 24), // Fallback
             ),
             const SizedBox(width: 15),
             Expanded(
