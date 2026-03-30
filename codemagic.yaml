@@ -24,11 +24,18 @@ workflows:
       - name: Get Flutter Packages & Pod Install
         script: |
           set -e
+          
+          # 1. Remove old Config if present
           rm -f ios/Flutter/Generated.xcconfig
-          flutter packages pub get
-          flutter build ios --config-only
-          cd ios && pod install --repo-update
-
+          
+          # 2. Fetch Packages (Generates Generated.xcconfig implicitly)
+          flutter pub get
+          
+          # 3. Clean and reinstall Pods
+          cd ios 
+          rm -rf Pods Podfile.lock
+          pod install --repo-update
+          
 
       - name: Setup Code Signing
         script: |
