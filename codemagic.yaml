@@ -113,7 +113,14 @@ workflows:
           echo "Using Profile UUID: $PROFILE_UUID"
 
           # 1. Build iOS without signing
-          flutter build ios --release --no-codesign -v
+          echo "Running flutter build ios..."
+          flutter build ios --release --no-codesign -v > flutter_build.log 2>&1 || {
+            echo "==== COCOAPODS ERROR DETECTED ===="
+            grep -A 30 -B 10 -i "\[!\]" flutter_build.log || true
+            echo "==== TAIL OF LOG ===="
+            tail -n 100 flutter_build.log
+            exit 1
+          }
           
           # 2. Archive with explicit signing overrides
           xcodebuild -workspace ios/Runner.xcworkspace \
