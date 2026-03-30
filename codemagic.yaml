@@ -25,9 +25,6 @@ workflows:
         script: |
           flutter packages pub get
 
-      - name: Install Pods
-        script: |
-          cd ios && pod install
 
       - name: Setup Code Signing
         script: |
