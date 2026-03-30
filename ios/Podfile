@@ -22,7 +22,7 @@ ENV['COCOAPODS_DISABLE_STATS'] = '1'
 project 'Runner', {
   'Debug' => :debug,
   'Release' => :release,
-  'Profile' => :profile,
+  'Profile' => :release,
 }
 
 flutter_ios_podfile_setup
