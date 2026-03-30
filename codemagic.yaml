@@ -28,10 +28,18 @@ workflows:
           # Fetch Packages
           flutter pub get
           
-          # Ensure a clean Pod state so that upcoming 'flutter build ios' does a fresh install
-          cd ios 
+          # Ensure Flutter environment is mocked so pod install doesn't crash on regex
+          mkdir -p ios/Flutter
+          cat <<EOF > ios/Flutter/Generated.xcconfig
+          // This is a generated file
+          FLUTTER_ROOT=$FLUTTER_ROOT
+          FLUTTER_APPLICATION_PATH=$CM_BUILD_DIR
+          EOF
+          
+          cd ios
           rm -rf Pods Podfile.lock
-
+          echo "Running explicit pod install to capture raw errors..."
+          pod install --repo-update || { echo "==== POD INSTALL FAILED ===="; exit 1; }
       - name: Setup Code Signing
         script: |
           set -e
