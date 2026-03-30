@@ -25,15 +25,20 @@ workflows:
         script: |
           set -e
           
-          # Fetch Packages (Generates Generated.xcconfig implicitly, sometimes missing in CI)
+          # Fetch Packages
           flutter pub get
           
-          # Create a dummy Generated.xcconfig if missing or create the correct structure
+          # Get Flutter SDK path dynamically since env vars might be empty
+          FLUTTER_BIN=$(which flutter)
+          MY_FLUTTER_ROOT=$(dirname $(dirname "$FLUTTER_BIN"))
+          MY_APP_PATH=$(pwd)
+          
+          # Create Generated.xcconfig manually to enable successful pod install
           mkdir -p ios/Flutter
           cat <<EOF > ios/Flutter/Generated.xcconfig
           // This is a generated file; do not edit or check into version control.
-          FLUTTER_ROOT=$FLUTTER_ROOT
-          FLUTTER_APPLICATION_PATH=$CM_BUILD_DIR
+          FLUTTER_ROOT=$MY_FLUTTER_ROOT
+          FLUTTER_APPLICATION_PATH=$MY_APP_PATH
           COCOAPODS_PARALLEL_CODE_SIGN=true
           FLUTTER_BUILD_DIR=build
           FLUTTER_BUILD_NAME=1.0.0
