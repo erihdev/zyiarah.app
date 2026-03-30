@@ -23,6 +23,8 @@ workflows:
     scripts:
       - name: Get Flutter Packages & Pod Install
         script: |
+          set -e
+          rm -f ios/Flutter/Generated.xcconfig
           flutter packages pub get
           flutter build ios --config-only
           cd ios && pod install --repo-update
