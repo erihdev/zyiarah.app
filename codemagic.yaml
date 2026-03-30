@@ -21,35 +21,16 @@ workflows:
         - pattern: main
           include: true
     scripts:
-      - name: Get Flutter Packages & Pod Install
+      - name: Get Flutter Packages
         script: |
           set -e
           
           # Fetch Packages
           flutter pub get
           
-          # Create Generated.xcconfig manually to enable successful pod install
-          mkdir -p ios/Flutter
-          cat <<EOF > ios/Flutter/Generated.xcconfig
-          // This is a generated file; do not edit or check into version control.
-          FLUTTER_ROOT=$FLUTTER_ROOT
-          FLUTTER_APPLICATION_PATH=$CM_BUILD_DIR
-          COCOAPODS_PARALLEL_CODE_SIGN=true
-          FLUTTER_BUILD_DIR=build
-          FLUTTER_BUILD_NAME=1.0.0
-          FLUTTER_BUILD_NUMBER=8
-          EXCLUDED_ARCHS[sdk=iphonesimulator*]=i386
-          EXCLUDED_ARCHS[sdk=iphoneos*]=armv7
-          DART_OBFUSCATION=false
-          TRACK_WIDGET_CREATION=true
-          TREE_SHAKE_ICONS=false
-          PACKAGE_CONFIG=.dart_tool/package_config.json
-          EOF
-          
-          # Clean and reinstall Pods
+          # Ensure a clean Pod state so that upcoming 'flutter build ios' does a fresh install
           cd ios 
           rm -rf Pods Podfile.lock
-          pod install --repo-update
 
       - name: Setup Code Signing
         script: |
