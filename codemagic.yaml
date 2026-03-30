@@ -24,6 +24,7 @@ workflows:
       - name: Get Flutter Packages & Pod Install
         script: |
           flutter packages pub get
+          flutter build ios --config-only
           cd ios && pod install --repo-update
 
 
