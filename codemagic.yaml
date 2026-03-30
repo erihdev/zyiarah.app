@@ -25,17 +25,31 @@ workflows:
         script: |
           set -e
           
-          # 1. Remove old Config if present
-          rm -f ios/Flutter/Generated.xcconfig
-          
-          # 2. Fetch Packages (Generates Generated.xcconfig implicitly)
+          # Fetch Packages (Generates Generated.xcconfig implicitly, sometimes missing in CI)
           flutter pub get
           
-          # 3. Clean and reinstall Pods
+          # Create a dummy Generated.xcconfig if missing or create the correct structure
+          mkdir -p ios/Flutter
+          cat <<EOF > ios/Flutter/Generated.xcconfig
+          // This is a generated file; do not edit or check into version control.
+          FLUTTER_ROOT=$FLUTTER_ROOT
+          FLUTTER_APPLICATION_PATH=$CM_BUILD_DIR
+          COCOAPODS_PARALLEL_CODE_SIGN=true
+          FLUTTER_BUILD_DIR=build
+          FLUTTER_BUILD_NAME=1.0.0
+          FLUTTER_BUILD_NUMBER=8
+          EXCLUDED_ARCHS[sdk=iphonesimulator*]=i386
+          EXCLUDED_ARCHS[sdk=iphoneos*]=armv7
+          DART_OBFUSCATION=false
+          TRACK_WIDGET_CREATION=true
+          TREE_SHAKE_ICONS=false
+          PACKAGE_CONFIG=.dart_tool/package_config.json
+          EOF
+          
+          # Clean and reinstall Pods
           cd ios 
           rm -rf Pods Podfile.lock
           pod install --repo-update
-          
 
       - name: Setup Code Signing
         script: |
