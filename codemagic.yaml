@@ -21,9 +21,10 @@ workflows:
         - pattern: main
           include: true
     scripts:
-      - name: Get Flutter Packages
+      - name: Get Flutter Packages & Pod Install
         script: |
           flutter packages pub get
+          cd ios && pod install --repo-update
 
 
       - name: Setup Code Signing
@@ -98,6 +99,7 @@ workflows:
 
       - name: Build IPA
         script: |
+          set -e
           echo "MAPBOX_TOKEN=${MAPBOX_TOKEN:-pk.eyJ1IjoiZXJpaGRldiIsImEiOiJjbW1jbGZpcnIwNzh4MnJzaXcyM3I3dG1jIn0.Hqs-3sGgQCsGK0yHamvdug}" > .env
           security unlock-keychain -p "BuildKeychain123!" build.keychain-db || true
           
