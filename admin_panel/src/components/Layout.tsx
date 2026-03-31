@@ -15,7 +15,9 @@ import {
     Shield,
     ShieldAlert,
     Wrench,
-    FileSignature
+    FileSignature,
+    ShoppingBasket,
+    ShoppingBag
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -69,6 +71,8 @@ export default function Layout({ onLogout }: LayoutProps) {
                             <SidebarItem icon={ClipboardList} label="إدارة الطلبات" path="/orders" active={location.pathname === '/orders'} />
                             <SidebarItem icon={Wrench} label="طلبات الصيانة" path="/maintenance" active={location.pathname === '/maintenance'} />
                             <SidebarItem icon={FileSignature} label="العقود الإلكترونية" path="/contracts" active={location.pathname === '/contracts'} />
+                            <SidebarItem icon={ShoppingBasket} label="إدارة المتجر" path="/store-products" active={location.pathname === '/store-products'} />
+                            <SidebarItem icon={ShoppingBag} label="طلبات المتجر" path="/store-orders" active={location.pathname === '/store-orders'} />
                             <SidebarItem icon={CarFront} label="إدارة السائقين" path="/drivers" active={location.pathname === '/drivers'} />
                             <SidebarItem icon={Users} label="إدارة العملاء" path="/users" active={location.pathname === '/users'} />
                         </nav>
@@ -120,8 +124,10 @@ export default function Layout({ onLogout }: LayoutProps) {
                                     location.pathname === '/drivers' ? 'إدارة السائقين' :
                                         location.pathname === '/maintenance' ? 'إدارة طلبات الصيانة' :
                                             location.pathname === '/contracts' ? 'إدارة العقود الإلكترونية' :
-                                                location.pathname === '/users' ? 'إدارة العملاء' :
-                                                    location.pathname === '/settings' ? 'إعدادات النظام' : 'لوحة التحكم'}
+                                                location.pathname === '/store-products' ? 'إدارة منتجات المتجر' :
+                                                    location.pathname === '/store-orders' ? 'طلبات المتجر' :
+                                                        location.pathname === '/users' ? 'إدارة العملاء' :
+                                                            location.pathname === '/settings' ? 'إعدادات النظام' : 'لوحة التحكم'}
                         </h2>
                     </div>
 

@@ -15,6 +15,7 @@ class TamaraCheckoutScreen extends StatefulWidget {
   final GeoPoint location;
   final int? hours;
   final DateTime? serviceDate;
+  final String? zoneName;
 
   const TamaraCheckoutScreen({
     super.key,
@@ -25,6 +26,7 @@ class TamaraCheckoutScreen extends StatefulWidget {
     required this.location,
     this.hours,
     this.serviceDate,
+    this.zoneName,
   });
 
   @override
@@ -53,6 +55,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                 paymentMethod: 'tamara',
                 hours: widget.hours,
                 serviceDate: widget.serviceDate,
+                zoneName: widget.zoneName,
               );
 
               // توليد بيانات ZATCA وتوليد الفاتورة في الخلفية

@@ -14,6 +14,7 @@ class ZyiarahOrderService {
     String paymentMethod = 'card',
     int? hours,
     DateTime? serviceDate,
+    String? zoneName,
   }) async {
     // جلب اسم العميل لتسهيل العرض في لوحة التحكم
     String clientName = 'عميل زيارة';
@@ -37,6 +38,7 @@ class ZyiarahOrderService {
       'created_at': FieldValue.serverTimestamp(),
       'hours_contracted': hours ?? 4,
       'service_date': serviceDate != null ? Timestamp.fromDate(serviceDate) : null,
+      'zone_name': zoneName,
     });
     return doc.id;
   }

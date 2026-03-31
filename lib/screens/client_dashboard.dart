@@ -14,6 +14,7 @@ import 'package:zyiarah/screens/maintenance_request_screen.dart';
 import 'package:zyiarah/screens/subscription_plans_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
 import 'package:zyiarah/services/popup_service.dart';
+import 'package:zyiarah/screens/store_screen.dart';
 
 class ClientDashboard extends StatefulWidget {
   const ClientDashboard({super.key});
@@ -399,6 +400,17 @@ class _ClientDashboardState extends State<ClientDashboard> {
           icon: Icons.business_center,
           iconBgColor: const Color(0xFFDBEAFE), // Light Blue
           imagePath: 'assets/images/company_cleaning.png',
+        ),
+        _buildWebStyleServiceCard(
+          title: "متجر الأدوات",
+          subtitle: "أدوات ومواد تنظيف احترافية",
+          price: "أفضل الأسعار",
+          numericPrice: 0.0,
+          themeColor: const Color(0xFF5D1B5E), // Purple/Deep Purple
+          icon: Icons.shopping_basket_rounded,
+          iconBgColor: const Color(0xFFF1E9FE), // Light Purple
+          imagePath: 'assets/images/sofa_cleaning.png', // Placeholder
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahStoreScreen())),
         ),
       ],
     );

@@ -18,6 +18,7 @@ class PaymentSummaryScreen extends StatefulWidget {
   final GeoPoint location;
   final int? hours;
   final DateTime? serviceDate;
+  final String? zoneName;
 
   const PaymentSummaryScreen({
     super.key,
@@ -26,6 +27,7 @@ class PaymentSummaryScreen extends StatefulWidget {
     required this.location,
     this.hours,
     this.serviceDate,
+    this.zoneName,
   });
 
   @override
@@ -111,6 +113,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           paymentMethod: 'subscription',
           hours: widget.hours,
           serviceDate: widget.serviceDate,
+          zoneName: widget.zoneName,
         );
         
         if (mounted) {
@@ -138,6 +141,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           paymentMethod: 'cod',
           hours: widget.hours,
           serviceDate: widget.serviceDate,
+          zoneName: widget.zoneName,
         );
         
         if (mounted) {
@@ -176,6 +180,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 location: widget.location,
                 hours: widget.hours,
                 serviceDate: widget.serviceDate,
+                zoneName: widget.zoneName,
               ),
             ),
           );
@@ -205,6 +210,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             paymentMethod: 'card',
             hours: widget.hours,
             serviceDate: widget.serviceDate,
+            zoneName: widget.zoneName,
           );
 
           setState(() => _isLoading = false);
@@ -279,7 +285,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   Widget _buildInvoiceHeader() {
-    final double basePrice = (widget.hours ?? 4) * 35.0; // Default to 4 hours if null
+    final double basePrice = widget.amount;
     final double vat = basePrice * 0.15;
     final double total = basePrice + vat;
 
@@ -349,6 +355,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           if (widget.hours != null) _buildRow('المدة', '${widget.hours} ساعات'),
           if (widget.serviceDate != null) 
             _buildRow('التاريخ', '${widget.serviceDate!.year}-${widget.serviceDate!.month}-${widget.serviceDate!.day}'),
+          if (widget.zoneName != null) _buildRow('المنطقة', widget.zoneName!),
           const Divider(height: 30),
           _buildRow('المبلغ', '${widget.amount.toStringAsFixed(2)} ر.س'),
           _buildRow('الضريبة (15%)', '${vatAmount.toStringAsFixed(2)} ر.س'),

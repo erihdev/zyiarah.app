@@ -25,6 +25,9 @@ workflows:
         script: |
           set -e
           
+          # Clean architecture to prevent stale/Windows files
+          rm -f ios/Flutter/Generated.xcconfig
+
           # Fetch Packages
           flutter pub get
           
@@ -80,6 +83,7 @@ workflows:
 
       - name: Generate Export Options
         script: |
+          set -e
           # Extract provisioning profile UUID
           PROFILE_UUID=$(security cms -D -i ios/Zyiarah_App_Store_Profile.mobileprovision 2>/dev/null | plutil -extract UUID raw -)
 

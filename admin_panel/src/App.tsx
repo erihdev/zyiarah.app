@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
-import { auth } from './services/firebase';
+import { auth } from './services/firebase.ts';
 import Layout from './components/Layout.tsx';
 import Dashboard from './pages/Dashboard.tsx';
 import Login from './pages/Login.tsx';
@@ -18,6 +18,8 @@ import Admins from './pages/Admins.tsx';
 import AccountDeletion from './pages/AccountDeletion.tsx';
 import Maintenance from './pages/Maintenance.tsx';
 import Contracts from './pages/Contracts.tsx';
+import StoreProducts from './pages/StoreProducts.tsx';
+import StoreOrders from './pages/StoreOrders.tsx';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -71,6 +73,8 @@ function App() {
           <Route path="account-deletion" element={<AccountDeletion />} />
           <Route path="maintenance" element={<Maintenance />} />
           <Route path="contracts" element={<Contracts />} />
+          <Route path="store-products" element={<StoreProducts />} />
+          <Route path="store-orders" element={<StoreOrders />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
