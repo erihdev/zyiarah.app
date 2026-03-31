@@ -36,6 +36,18 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
 
     try {
       final user = _auth.currentUser;
+      
+      // Fetch user name
+      String userName = 'عميل زيارة';
+      try {
+        final userDoc = await _firestore.collection('users').doc(user?.uid).get();
+        if (userDoc.exists) {
+          userName = userDoc.data()?['name'] ?? 'عميل زيارة';
+        }
+      } catch (e) {
+        // Fallback
+      }
+
       // Generate unique 5-digit ID
       final requestId = (10000 + (90000 * (DateTime.now().microsecondsSinceEpoch % 1000000) / 1000000)).toInt().toString();
 
@@ -47,6 +59,7 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
       await _firestore.collection('maintenance_requests').add({
         'requestId': requestId,
         'userId': user?.uid,
+        'userName': userName,
         'userPhone': user?.phoneNumber,
         'serviceType': _selectedService,
         'quantity': _quantity,

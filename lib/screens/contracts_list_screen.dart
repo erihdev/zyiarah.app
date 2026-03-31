@@ -29,11 +29,21 @@ class ZyiarahContractsListScreen extends StatelessWidget {
               .where('userId', isEqualTo: user?.uid)
             .snapshots(),
           builder: (context, snapshot) {
+            if (user == null) {
+              return const Center(child: Text('يرجى تسجيل الدخول لعرض عقودك'));
+            }
             if (snapshot.connectionState == ConnectionState.waiting) {
               return Center(child: CircularProgressIndicator(color: brandPurple));
             }
             if (snapshot.hasError) {
-              return Center(child: Text('خطأ: ${snapshot.error}'));
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Text('حدث خطأ أثناء جلب العقود: ${snapshot.error}', 
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.tajawal(color: Colors.red)),
+                ),
+              );
             }
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
               return _buildEmptyState();

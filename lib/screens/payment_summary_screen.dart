@@ -406,14 +406,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         _buildPaymentOption(
           id: 'card',
           title: 'بطاقة فيزا / مدى / Apple Pay',
-          subtitle: 'دفع آمن وسريع عبر EdfaPay (كاش باك 5%)',
+          subtitle: 'دفع آمن وسريع عبر EdfaPay',
           icon: Icons.credit_card,
         ),
         const SizedBox(height: 12),
         _buildPaymentOption(
           id: 'tamara',
           title: 'تمارا | Tamara',
-          subtitle: 'قسم فاتورتك على 4 دفعات (كاش باك 5%)',
+          subtitle: 'قسم فاتورتك على 4 دفعات',
           iconPath: 'assets/logo.png', // Ideally a Tamara logo
         ),
         if (_isCodAvailableForService()) ...[

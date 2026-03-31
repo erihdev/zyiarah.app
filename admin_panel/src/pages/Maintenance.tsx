@@ -11,6 +11,7 @@ interface MaintenanceRecord {
     qty: number;
     floor: string;
     status: string;
+    userName?: string;
     createdAt?: Timestamp;
 }
 
@@ -62,7 +63,8 @@ export default function Maintenance() {
     const filtered = requests.filter(r =>
         r.serviceType.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.requestId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.userId.toLowerCase().includes(searchTerm.toLowerCase())
+        r.userId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (r.userName && r.userName.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
     return (
@@ -119,7 +121,10 @@ export default function Maintenance() {
                                                 <span className="font-bold text-slate-800">#{req.requestId}</span>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span className="font-bold text-slate-700">{req.userId}</span>
+                                                <div className="flex flex-col">
+                                                    <span className="font-bold text-slate-700">{req.userName || 'عميل زيارة'}</span>
+                                                    <span className="text-[10px] text-slate-400 font-mono">UID: {req.userId.substring(0, 8)}...</span>
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4 font-bold text-indigo-700">{req.serviceType}</td>
                                             <td className="px-6 py-4 text-xs font-medium">العدد: {req.qty} | {req.floor}</td>

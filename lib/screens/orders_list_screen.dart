@@ -67,9 +67,9 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
       stream: FirebaseFirestore.instance
           .collection('orders')
           .where('client_id', isEqualTo: user?.uid)
-          .orderBy('created_at', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
+        if (user == null) return const Center(child: Text('يرجى تسجيل الدخول لعرض حجوزاتك'));
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: Color(0xFF5D1B5E)));
         }
@@ -80,7 +80,14 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           return _buildEmptyState();
         }
 
-        final orders = snapshot.data!.docs;
+        // Sort in-memory to avoid composite index requirement
+        final orders = snapshot.data!.docs.toList();
+        orders.sort((a, b) {
+          final aTime = (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+          final bTime = (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+          return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
+        });
+
         return ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: orders.length,
@@ -99,9 +106,9 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
       stream: FirebaseFirestore.instance
           .collection('maintenance_requests')
           .where('userId', isEqualTo: user?.uid)
-          .orderBy('createdAt', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
+        if (user == null) return const Center(child: Text('يرجى تسجيل الدخول'));
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: Color(0xFF5D1B5E)));
         }
@@ -112,7 +119,14 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           return _buildEmptyState();
         }
 
-        final reqs = snapshot.data!.docs;
+        // Sort in-memory to avoid composite index requirement
+        final reqs = snapshot.data!.docs.toList();
+        reqs.sort((a, b) {
+          final aTime = (a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+          final bTime = (b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+          return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
+        });
+
         return ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: reqs.length,

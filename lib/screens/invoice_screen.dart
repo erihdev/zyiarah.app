@@ -175,26 +175,6 @@ class ZyiarahInvoiceScreen extends StatelessWidget {
                   ],
                 ),
                 
-                if (cashbackEarned != null || (!isSubscription && amount > 0)) ...[
-                  const SizedBox(height: 15),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text("كاش باك مكتسب (محفظة زيارة):", 
-                          style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13)),
-                        Text("${(cashbackEarned ?? amount * 0.05).toStringAsFixed(2)} ر.س",
-                          style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13)),
-                      ],
-                    ),
-                  ),
-                ],
 
                 const SizedBox(height: 40),
 

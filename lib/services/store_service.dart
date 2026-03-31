@@ -68,8 +68,19 @@ class ZyiarahStoreService {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
+    String clientName = 'عميل زيارة';
+    try {
+      final userDoc = await _db.collection('users').doc(user.uid).get();
+      if (userDoc.exists) {
+        clientName = userDoc.data()?['name'] ?? 'عميل زيارة';
+      }
+    } catch (e) {
+      // Fallback to anonymous
+    }
+
     await _db.collection('store_orders').add({
       'client_id': user.uid,
+      'client_name': clientName,
       'items': items,
       'total_amount': totalAmount,
       'status': 'pending',
