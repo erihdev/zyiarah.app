@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lottie/lottie.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -97,6 +98,31 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   double get vatAmount => widget.amount * 0.15;
   double get totalWithVat => widget.amount + vatAmount;
 
+  Future<void> _showSuccessAnimation() async {
+    return showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Lottie.network(
+              'https://lottie.host/85cc1144-6729-4d64-88aa-3e753456c636/Hw4h8Pndr5.json',
+              width: 200,
+              height: 200,
+              repeat: false,
+            ),
+            const SizedBox(height: 10),
+            Text('تمت العملية بنجاح', 
+              style: GoogleFonts.tajawal(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _handlePayment() async {
     setState(() => _isLoading = true);
 
@@ -118,6 +144,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         
         if (mounted) {
           setState(() => _isLoading = false);
+          await _showSuccessAnimation();
+          await Future.delayed(const Duration(seconds: 2));
+          if (!mounted) return;
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
@@ -146,6 +175,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         
         if (mounted) {
           setState(() => _isLoading = false);
+          await _showSuccessAnimation();
+          await Future.delayed(const Duration(seconds: 2));
+          if (!mounted) return;
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
@@ -215,6 +247,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
           setState(() => _isLoading = false);
           if (mounted) {
+            await _showSuccessAnimation();
+            await Future.delayed(const Duration(seconds: 2));
+            if (!mounted) return;
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(

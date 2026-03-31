@@ -98,6 +98,8 @@ export default function Dashboard() {
     const [activeOrders, setActiveOrders] = useState('...');
     const [availableDrivers, setAvailableDrivers] = useState('...');
     const [totalRevenue, setTotalRevenue] = useState(0);
+    const [storeRevenue, setStoreRevenue] = useState(0);
+    const [pendingStoreOrders, setPendingStoreOrders] = useState('...');
     const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
     
     // Trend state
@@ -180,7 +182,20 @@ export default function Dashboard() {
                 setRecentOrders(fetchedOrders);
             }
         );
-        return () => { unsubUsers(); unsubOrders(); unsubDrivers(); unsubCompletedOrders(); unsubRecentOrders(); };
+
+        const unsubStoreOrders = onSnapshot(collection(db, 'store_orders'), (snap: QuerySnapshot<DocumentData>) => {
+            let sRev = 0;
+            let pendingCount = 0;
+            snap.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
+                const d = doc.data() as { total_amount?: number; status?: string };
+                if (d.status === 'approved') sRev += d.total_amount || 0;
+                if (d.status === 'pending') pendingCount++;
+            });
+            setStoreRevenue(sRev);
+            setPendingStoreOrders(pendingCount.toString());
+        });
+
+        return () => { unsubUsers(); unsubOrders(); unsubDrivers(); unsubCompletedOrders(); unsubRecentOrders(); unsubStoreOrders(); };
     }, []);
 
     useEffect(() => {
@@ -327,12 +342,24 @@ export default function Dashboard() {
                 </button>
             </div>
 
-            {/* Stats Grid - Live */}
+            {/* Services Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-                <StatCard title="إجمالي الإيرادات" value={`${totalRevenue.toFixed(0)} ر.س`} icon={TrendingUp} trend={revenueTrend} trendUp={parseFloat(revenueTrend) >= 0} colorScheme="blue" />
+                <StatCard title="إجمالي الإيرادات (الخدمات)" value={`${totalRevenue.toFixed(0)} ر.س`} icon={TrendingUp} trend={revenueTrend} trendUp={parseFloat(revenueTrend) >= 0} colorScheme="blue" />
                 <StatCard title="الطلبات النشطة" value={activeOrders} icon={Clock} trend={ordersTrend} trendUp={parseFloat(ordersTrend) >= 0} colorScheme="orange" />
                 <StatCard title="السائقين المتاحين" value={availableDrivers} icon={CarFront} trend="0" trendUp colorScheme="indigo" />
                 <StatCard title="إجمالي المستخدمين" value={totalUsers} icon={Users} trend={usersTrend} trendUp={parseFloat(usersTrend) >= 0} colorScheme="emerald" />
+            </div>
+
+            <div className="pt-4">
+                <h3 className="text-lg font-extrabold text-slate-800 mb-4 flex items-center gap-2">
+                    <ArrowUpRight className="text-blue-600" size={20} />
+                    إحصائيات متجر الأدوات
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <StatCard title="إيرادات المتجر" value={`${storeRevenue.toFixed(0)} ر.س`} icon={TrendingUp} trend="100" trendUp colorScheme="blue" />
+                    <StatCard title="طلبات بانتظار الموافقة" value={pendingStoreOrders} icon={Clock} trend="0" trendUp colorScheme="orange" />
+                    <StatCard title="إجمالي الدخل الكلي" value={`${(totalRevenue + storeRevenue).toFixed(0)} ر.س`} icon={TrendingUp} trend="+" trendUp colorScheme="emerald" />
+                </div>
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">

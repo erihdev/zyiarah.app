@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/order_tracking_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
+import 'package:zyiarah/widgets/shimmer_loading.dart';
 
 class OrdersListScreen extends StatefulWidget {
   const OrdersListScreen({super.key});
@@ -71,7 +72,11 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
       builder: (context, snapshot) {
         if (user == null) return const Center(child: Text('يرجى تسجيل الدخول لعرض حجوزاتك'));
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: Color(0xFF5D1B5E)));
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: 5,
+            itemBuilder: (context, index) => const ShimmerCard(),
+          );
         }
         if (snapshot.hasError) {
           return Center(child: Text('خطأ: ${snapshot.error}'));
@@ -110,7 +115,11 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
       builder: (context, snapshot) {
         if (user == null) return const Center(child: Text('يرجى تسجيل الدخول'));
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: Color(0xFF5D1B5E)));
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: 5,
+            itemBuilder: (context, index) => const ShimmerCard(),
+          );
         }
         if (snapshot.hasError) {
           return Center(child: Text('خطأ: ${snapshot.error}'));

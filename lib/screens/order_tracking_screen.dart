@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class OrderTrackingScreen extends StatefulWidget {
   final String orderId;
@@ -26,6 +27,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with TickerPr
   StreamSubscription? _driverSubscription;
   LatLng? _driverLocation;
   LatLng? _oldLocation;
+  String? _driverName;
+  String? _driverPhone;
   
   // Animation for smooth marker movement
   late AnimationController _moveController;
@@ -53,6 +56,11 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with TickerPr
         if (location != null) {
           final newLatLng = LatLng(location.latitude, location.longitude);
           
+          setState(() {
+            _driverName = data['name'] ?? 'سائق زيارة';
+            _driverPhone = data['phone'] ?? data['phoneNumber'] ?? '';
+          });
+
           if (_driverLocation == null) {
             setState(() {
               _driverLocation = newLatLng;
@@ -129,7 +137,14 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with TickerPr
                       point: dest,
                       width: 80,
                       height: 80,
-                      child: const Icon(Icons.location_on, color: Colors.red, size: 45),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [BoxShadow(color: Colors.red.withValues(alpha: 0.3), blurRadius: 10)],
+                        ),
+                        child: const Icon(Icons.home_work, color: Colors.red, size: 35),
+                      ),
                     ),
                     // Driver Car
                     Marker(
@@ -137,15 +152,16 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with TickerPr
                       width: 80,
                       height: 80,
                       child: Transform.rotate(
-                        angle: 0, // Could calculate bearing here
+                        angle: 0, 
                         child: Container(
-                          padding: const EdgeInsets.all(5),
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2563EB),
                             shape: BoxShape.circle,
-                            boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 5)],
+                            border: Border.all(color: Colors.white, width: 3),
+                            boxShadow: [BoxShadow(color: const Color(0xFF2563EB).withValues(alpha: 0.4), blurRadius: 15, offset: const Offset(0, 5))],
                           ),
-                          child: const Icon(Icons.directions_car, color: Color(0xFF2563EB), size: 30),
+                          child: const Icon(Icons.directions_car, color: Colors.white, size: 25),
                         ),
                       ),
                     ),
@@ -178,18 +194,19 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with TickerPr
             Row(
               children: [
                 const CircleAvatar(
+                  radius: 25,
                   backgroundColor: Color(0xFFDBEAFE),
-                  child: Icon(Icons.person, color: Color(0xFF2563EB)),
+                  child: Icon(Icons.person, color: Color(0xFF2563EB), size: 30),
                 ),
                 const SizedBox(width: 15),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('السائق في الطريق إليك', 
-                        style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text('يتم تحديث الموقع لحظياً', 
-                        style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 12)),
+                      Text(_driverName ?? 'السائق في الطريق إليك', 
+                        style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
+                      Text('يتم تحديث الموقع لحظياً برقم طلب #${widget.orderId.substring(0, 5)}', 
+                        style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 11)),
                     ],
                   ),
                 ),
@@ -208,8 +225,16 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with TickerPr
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildAction(Icons.call, 'اتصال', () {}),
-                _buildAction(Icons.message, 'دردشة', () {}),
+                _buildAction(Icons.call, 'اتصال', () {
+                  if (_driverPhone != null && _driverPhone!.isNotEmpty) {
+                    launchUrl(Uri.parse('tel:$_driverPhone'));
+                  }
+                }),
+                _buildAction(Icons.message, 'واتساب', () {
+                  if (_driverPhone != null && _driverPhone!.isNotEmpty) {
+                    launchUrl(Uri.parse('https://wa.me/$_driverPhone'));
+                  }
+                }),
                 _buildAction(Icons.info_outline, 'التفاصيل', () {}),
               ],
             ),

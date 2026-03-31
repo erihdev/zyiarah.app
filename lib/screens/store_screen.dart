@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:zyiarah/services/store_service.dart';
+import 'package:zyiarah/widgets/shimmer_loading.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class ZyiarahStoreScreen extends StatefulWidget {
@@ -71,7 +72,17 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
           stream: _storeService.streamProducts(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+              return GridView.builder(
+                padding: const EdgeInsets.all(16),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 15,
+                  crossAxisSpacing: 15,
+                  childAspectRatio: 0.75,
+                ),
+                itemCount: 6,
+                itemBuilder: (context, index) => const ShimmerGridItem(),
+              );
             }
             if (!snapshot.hasData || snapshot.data!.isEmpty) {
               return _buildEmptyState();

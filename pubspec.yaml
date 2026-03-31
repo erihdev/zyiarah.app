@@ -31,6 +31,8 @@ dependencies:
   intl: ^0.18.1
   edfapg_sdk: ^2.0.10+1
   signature: ^5.5.0
+  shimmer: ^3.0.0
+  lottie: ^3.1.2
 
 dev_dependencies:
   flutter_test:
