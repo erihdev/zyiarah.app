@@ -60,6 +60,34 @@ exports.sendNotificationOnTicketReply = functions.firestore
       return null;
     });
 
+// 1.5 Notify Admins on New Order
+exports.sendNotificationToAdminsOnNewOrder = functions.firestore
+    .document("orders/{orderId}")
+    .onCreate(async (snap, context) => {
+      const newOrder = snap.data();
+      const orderId = context.params.orderId;
+
+      const payload = {
+        notification: {
+          title: "طلب جديد! 🚨",
+          body: `وصلك طلب تنظيف جديد من العميل. رقم الطلب: ${orderId.substring(0, 6)}`,
+        },
+        data: {
+          click_action: "FLUTTER_NOTIFICATION_CLICK",
+          type: "new_order_admin",
+          orderId: orderId,
+        },
+      };
+
+      try {
+        await admin.messaging().send({...payload, topic: "admins"});
+        console.log(`Admin notification sent for new order: ${orderId}`);
+      } catch (error) {
+        console.error("Error sending admin notification for new order:", error);
+      }
+      return null;
+    });
+
 // 2. Notify driver/client when order status changes
 exports.sendNotificationOnOrderStatusChange = functions.firestore
     .document("orders/{orderId}")

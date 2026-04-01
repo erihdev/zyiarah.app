@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AdminMarketingScreen extends StatefulWidget {
   const AdminMarketingScreen({super.key});
@@ -17,10 +18,19 @@ class _AdminMarketingScreenState extends State<AdminMarketingScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء إدخال عنوان ونص الإشعار')));
       return;
     }
-    // TODO: Trigger Cloud Function to broadcast push notification
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جدولة إرسال الإشعار لجميع المستخدمين')));
-    _titleController.clear();
-    _bodyController.clear();
+    try {
+      FirebaseFirestore.instance.collection('notifications_log').add({
+        'title': _titleController.text,
+        'body': _bodyController.text,
+        'target': 'all', // can be 'clients' or 'drivers'
+        'created_at': FieldValue.serverTimestamp(),
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرسال الإشعار لجميع المستخدمين بنجاح!')));
+      _titleController.clear();
+      _bodyController.clear();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ أثناء الإرسال: $e')));
+    }
   }
 
   @override

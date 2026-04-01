@@ -52,12 +52,23 @@ class ZyiarahNotificationService {
             // For now, let's subscribe everyone to clients topic unless we have a specific driver verification.
             // In a real app, you'd fetch the user role from Firestore first.
             final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-            if (userDoc.exists && userDoc.data()?['role'] == 'driver') {
+            if (userDoc.exists) {
+              final role = userDoc.data()?['role'];
+              if (role == 'admin') {
+                await _fcm.subscribeToTopic('admins');
+                await _fcm.unsubscribeFromTopic('clients');
+                await _fcm.unsubscribeFromTopic('drivers');
+              } else if (role == 'driver') {
                 await _fcm.subscribeToTopic('drivers');
                 await _fcm.unsubscribeFromTopic('clients');
-            } else {
+                await _fcm.unsubscribeFromTopic('admins');
+              } else {
                 await _fcm.subscribeToTopic('clients');
                 await _fcm.unsubscribeFromTopic('drivers');
+                await _fcm.unsubscribeFromTopic('admins');
+              }
+            } else {
+                await _fcm.subscribeToTopic('clients');
             }
           }
         });
