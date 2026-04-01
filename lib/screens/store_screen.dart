@@ -196,6 +196,8 @@ class _CartSheet extends StatefulWidget {
 
 class _CartSheetState extends State<_CartSheet> {
   bool _isSubmitting = false;
+  String _selectedPaymentMethod = 'cash_on_delivery';
+
 
   void _checkout(List<StoreProduct> products) async {
     setState(() => _isSubmitting = true);
@@ -212,7 +214,11 @@ class _CartSheetState extends State<_CartSheet> {
 
     double total = items.fold(0, (sum, item) => sum + (item['price'] as double) * (item['quantity'] as int));
 
-    await widget.storeService.createStoreOrder(items: items, totalAmount: total);
+    await widget.storeService.createStoreOrder(
+      items: items, 
+      totalAmount: total,
+      paymentMethod: _selectedPaymentMethod,
+    );
     
     if (mounted) {
       Navigator.pop(context);
@@ -268,6 +274,45 @@ class _CartSheetState extends State<_CartSheet> {
                       const Text('المجموع الإجمالي', style: TextStyle(fontWeight: FontWeight.bold)),
                       Text('$total ر.س', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.w900, fontSize: 18)),
                     ],
+                  ),
+                ),
+                const Divider(),
+                const Text('طريقة الدفع', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 10),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: _selectedPaymentMethod == 'cash_on_delivery' ? const Color(0xFF2563EB) : Colors.grey.shade200),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: RadioListTile(
+                    value: 'cash_on_delivery',
+                    groupValue: _selectedPaymentMethod,
+                    onChanged: (val) => setState(() => _selectedPaymentMethod = val.toString()),
+                    title: const Text('الدفع عند الاستلام', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    subtitle: const Text('الدفع كاش أو عبر الشبكة عند استلام المنتجات', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    secondary: const Icon(Icons.money, color: Colors.green),
+                    activeColor: const Color(0xFF2563EB),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: Colors.grey.shade200),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: RadioListTile(
+                    value: 'online',
+                    groupValue: _selectedPaymentMethod,
+                    onChanged: (val) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الدفع الإلكتروني سيتوفر قريباً')));
+                    },
+                    title: const Text('الدفع الإلكتروني (مدى / فيزا / تمارا)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey)),
+                    secondary: const Icon(Icons.credit_card, color: Colors.grey),
+                    activeColor: const Color(0xFF2563EB),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   ),
                 ),
                 const SizedBox(height: 20),

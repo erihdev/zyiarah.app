@@ -162,6 +162,14 @@ class AdminStoreOrdersScreen extends StatelessWidget {
                             Text("الإجمالي: ${order['total_amount'] ?? 0} ر.س", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                           ],
                         ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(Icons.payment, size: 20, color: Colors.grey),
+                            const SizedBox(width: 8),
+                            Text("الدفع: ${order['payment_method'] == 'cash_on_delivery' ? 'عند الاستلام' : 'غير محدد'}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                          ],
+                        ),
                         const SizedBox(height: 15),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,

@@ -64,6 +64,7 @@ class ZyiarahStoreService {
   Future<void> createStoreOrder({
     required List<Map<String, dynamic>> items,
     required double totalAmount,
+    String paymentMethod = 'cash_on_delivery',
   }) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -83,6 +84,7 @@ class ZyiarahStoreService {
       'client_name': clientName,
       'items': items,
       'total_amount': totalAmount,
+      'payment_method': paymentMethod,
       'status': 'pending',
       'created_at': FieldValue.serverTimestamp(),
     });
