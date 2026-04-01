@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 class AdminSettingsScreen extends StatefulWidget {
   const AdminSettingsScreen({super.key});
@@ -140,6 +141,33 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 30),
+              const Divider(),
+              const SizedBox(height: 20),
+              const Text("أدوات النظام وحل المشاكل", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+              const SizedBox(height: 10),
+              ElevatedButton.icon(
+                onPressed: () {
+                  // إجبار التطبيق على الانهيار لاختبار Crashlytics
+                  FirebaseCrashlytics.instance.crash();
+                },
+                icon: const Icon(Icons.bug_report),
+                label: const Text("تجربة النظام: إحداث انهيار اختباري", style: TextStyle(fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red[50],
+                  foregroundColor: Colors.red,
+                  side: const BorderSide(color: Colors.red),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                "ملاحظة: الضغط على هذا الزر سيقوم بإغلاق التطبيق فوراً لاختبار قدرة Firebase Crashlytics على التقاط وتحليل الأعطال المفاجئة.",
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
             ],
           ),
     );

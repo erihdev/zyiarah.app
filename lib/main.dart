@@ -4,6 +4,8 @@ import 'package:zyiarah/screens/onboarding_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:zyiarah/firebase_options.dart';
 import 'package:zyiarah/services/notification_service.dart';
+import 'dart:ui';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -17,6 +19,14 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // System-wide crash reporting setup
+  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+  PlatformDispatcher.instance.onError = (error, stack) {
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    return true;
+  };
+
   ZyiarahNotificationService().initialize();
   runApp(const ZyiarahApp());
 }
