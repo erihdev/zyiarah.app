@@ -68,6 +68,7 @@ export default function Layout({ onLogout }: LayoutProps) {
                         <p className="px-4 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">الرئيسية</p>
                         <nav className="space-y-1">
                             <SidebarItem icon={LayoutDashboard} label="لوحة القيادة" path="/" active={location.pathname === '/'} />
+                            <SidebarItem icon={Settings} label="إدارة الخدمات والتسعير" path="/services" active={location.pathname === '/services'} />
                             <SidebarItem icon={ClipboardList} label="إدارة الطلبات" path="/orders" active={location.pathname === '/orders'} />
                             <SidebarItem icon={Wrench} label="طلبات الصيانة" path="/maintenance" active={location.pathname === '/maintenance'} />
                             <SidebarItem icon={FileSignature} label="العقود الإلكترونية" path="/contracts" active={location.pathname === '/contracts'} />

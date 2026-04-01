@@ -20,6 +20,7 @@ class PaymentSummaryScreen extends StatefulWidget {
   final int? hours;
   final DateTime? serviceDate;
   final String? zoneName;
+  final int workerCount;
 
   const PaymentSummaryScreen({
     super.key,
@@ -29,6 +30,7 @@ class PaymentSummaryScreen extends StatefulWidget {
     this.hours,
     this.serviceDate,
     this.zoneName,
+    this.workerCount = 1,
   });
 
   @override
@@ -45,6 +47,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   bool _codEnabled = false;
   ZyiarahUser? _currentUser;
   Map<String, dynamic> _paymentConfigs = {};
+
+  final TextEditingController _couponController = TextEditingController();
+  double _discountAmount = 0.0;
+  String? _appliedCoupon;
+  bool _isValidatingCoupon = false;
 
   @override
   void initState() {
@@ -95,8 +102,40 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     return true; // Default to true if not categorized
   }
 
-  double get vatAmount => widget.amount * 0.15;
-  double get totalWithVat => widget.amount + vatAmount;
+  double get vatAmount => (widget.amount - _discountAmount) * 0.15;
+  double get totalWithVat => (widget.amount - _discountAmount) + vatAmount;
+
+  Future<void> _validateCoupon() async {
+    if (_couponController.text.isEmpty) return;
+
+    setState(() => _isValidatingCoupon = true);
+    
+    final couponData = await _orderService.validateCoupon(_couponController.text);
+    
+    if (mounted) {
+      setState(() {
+        _isValidatingCoupon = false;
+        if (couponData != null) {
+          _appliedCoupon = _couponController.text.toUpperCase();
+          double value = (couponData['value'] as num).toDouble();
+          if (couponData['type'] == 'percentage') {
+            _discountAmount = widget.amount * (value / 100);
+          } else {
+            _discountAmount = value;
+          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("تم تطبيق الكود بنجاح"), backgroundColor: Colors.green),
+          );
+        } else {
+          _appliedCoupon = null;
+          _discountAmount = 0.0;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("كود الخصم غير صحيح أو منتهي"), backgroundColor: Colors.red),
+          );
+        }
+      });
+    }
+  }
 
   Future<void> _showSuccessAnimation() async {
     return showDialog(
@@ -140,6 +179,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           hours: widget.hours,
           serviceDate: widget.serviceDate,
           zoneName: widget.zoneName,
+          workerCount: widget.workerCount,
+          couponCode: _appliedCoupon,
+          discountAmount: _discountAmount,
         );
         
         if (mounted) {
@@ -156,6 +198,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 hours: widget.hours,
                 serviceDate: widget.serviceDate,
                 isSubscription: true,
+                workerCount: widget.workerCount,
+                couponCode: _appliedCoupon,
+                discountAmount: _discountAmount,
               ),
             ),
           );
@@ -171,6 +216,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           hours: widget.hours,
           serviceDate: widget.serviceDate,
           zoneName: widget.zoneName,
+          workerCount: widget.workerCount,
+          couponCode: _appliedCoupon,
+          discountAmount: _discountAmount,
         );
         
         if (mounted) {
@@ -187,6 +235,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 hours: widget.hours,
                 serviceDate: widget.serviceDate,
                 isSubscription: false,
+                workerCount: widget.workerCount,
+                couponCode: _appliedCoupon,
+                discountAmount: _discountAmount,
               ),
             ),
           );
@@ -213,6 +264,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 hours: widget.hours,
                 serviceDate: widget.serviceDate,
                 zoneName: widget.zoneName,
+                workerCount: widget.workerCount,
+                couponCode: _appliedCoupon,
+                discountAmount: _discountAmount,
               ),
             ),
           );
@@ -243,6 +297,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             hours: widget.hours,
             serviceDate: widget.serviceDate,
             zoneName: widget.zoneName,
+            workerCount: widget.workerCount,
+            couponCode: _appliedCoupon,
+            discountAmount: _discountAmount,
           );
 
           setState(() => _isLoading = false);
@@ -258,6 +315,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                   orderId: orderId,
                   hours: widget.hours,
                   serviceDate: widget.serviceDate,
+                  workerCount: widget.workerCount,
+                  couponCode: _appliedCoupon,
+                  discountAmount: _discountAmount,
                 ),
               ),
             );
@@ -299,6 +359,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                       children: [
                         _buildOrderDetailsCard(),
                         const SizedBox(height: 20),
+                        _buildCouponSection(),
+                        const SizedBox(height: 20),
                         _buildPaymentMethods(),
                         const SizedBox(height: 100), // Space for sticky button
                       ],
@@ -320,7 +382,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   Widget _buildInvoiceHeader() {
-    final double basePrice = widget.amount;
+    final double basePrice = widget.amount - _discountAmount;
     final double vat = basePrice * 0.15;
     final double total = basePrice + vat;
 
@@ -388,11 +450,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           const Divider(height: 30),
           _buildRow('الخدمة', widget.serviceName),
           if (widget.hours != null) _buildRow('المدة', '${widget.hours} ساعات'),
+          _buildRow('عدد العاملات', widget.workerCount == 1 ? "عاملة واحدة" : "عاملتين"),
           if (widget.serviceDate != null) 
             _buildRow('التاريخ', '${widget.serviceDate!.year}-${widget.serviceDate!.month}-${widget.serviceDate!.day}'),
           if (widget.zoneName != null) _buildRow('المنطقة', widget.zoneName!),
           const Divider(height: 30),
-          _buildRow('المبلغ', '${widget.amount.toStringAsFixed(2)} ر.س'),
+          _buildRow('المبلغ الأساسي', '${widget.amount.toStringAsFixed(2)} ر.س'),
+          if (_discountAmount > 0) 
+            _buildRow('الخصم ($_appliedCoupon)', '-${_discountAmount.toStringAsFixed(2)} ر.س', isDiscount: true),
           _buildRow('الضريبة (15%)', '${vatAmount.toStringAsFixed(2)} ر.س'),
           const SizedBox(height: 10),
           Row(
@@ -408,14 +473,77 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     );
   }
 
-  Widget _buildRow(String label, String value) {
+  Widget _buildRow(String label, String value, {bool isDiscount = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: GoogleFonts.tajawal(color: Colors.grey[600], fontSize: 14)),
-          Text(value, style: GoogleFonts.tajawal(fontWeight: FontWeight.w600, fontSize: 14)),
+          Text(value, style: GoogleFonts.tajawal(
+            fontWeight: FontWeight.w600, 
+            fontSize: 14, 
+            color: isDiscount ? Colors.red : Colors.black
+          )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCouponSection() {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('كود الخصم', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 15)),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _couponController,
+                  decoration: InputDecoration(
+                    hintText: 'أدخل كود الخصم هنا',
+                    hintStyle: GoogleFonts.tajawal(fontSize: 13),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                  ),
+                  onChanged: (val) {
+                    if (_appliedCoupon != null) {
+                      setState(() {
+                        _appliedCoupon = null;
+                        _discountAmount = 0.0;
+                      });
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              ElevatedButton(
+                onPressed: _isValidatingCoupon ? null : _validateCoupon,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF5D1B5E),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: _isValidatingCoupon 
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : Text('تطبيق', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          if (_appliedCoupon != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text('تم تطبيق الكود: $_appliedCoupon', 
+                style: GoogleFonts.tajawal(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold)),
+            ),
         ],
       ),
     );

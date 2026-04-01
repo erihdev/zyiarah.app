@@ -7,7 +7,46 @@ class ZyiarahFirebaseService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // --- التحقق برقم الجوال وكلمة المرور (Phone & Password) ---
+  // --- التحقق بالبريد الإلكتروني وكلمة المرور (Email & Password) ---
+
+  Future<UserCredential> signUpWithRealEmailAndPassword({
+    required String email,
+    required String password,
+    required String name,
+    required String phone,
+  }) async {
+    UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+
+    if (userCredential.user != null) {
+      await saveUserToRegistry(
+        uid: userCredential.user!.uid,
+        name: name,
+        role: 'client',
+      );
+      // حفظ بيانات الجوال والإيميل
+      await _db.collection('users').doc(userCredential.user!.uid).update({
+        'phone': phone,
+        'email': email,
+      });
+    }
+    return userCredential;
+  }
+
+  Future<UserCredential> signInWithRealEmailAndPassword(String email, String password) async {
+    return await _auth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+  }
+
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _auth.sendPasswordResetEmail(email: email);
+  }
+
+  // --- التحقق برقم الجوال وكلمة المرور (Phone & Password - Legacy) ---
 
   // تحويل رقم الجوال إلى بريد إلكتروني وهمي لـ Firebase Auth
   String _phoneToEmail(String phone) {

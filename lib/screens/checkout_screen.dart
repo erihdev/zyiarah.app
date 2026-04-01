@@ -16,6 +16,9 @@ class TamaraCheckoutScreen extends StatefulWidget {
   final int? hours;
   final DateTime? serviceDate;
   final String? zoneName;
+  final int workerCount;
+  final String? couponCode;
+  final double discountAmount;
 
   const TamaraCheckoutScreen({
     super.key,
@@ -27,6 +30,9 @@ class TamaraCheckoutScreen extends StatefulWidget {
     this.hours,
     this.serviceDate,
     this.zoneName,
+    this.workerCount = 1,
+    this.couponCode,
+    this.discountAmount = 0.0,
   });
 
   @override
@@ -56,6 +62,9 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                 hours: widget.hours,
                 serviceDate: widget.serviceDate,
                 zoneName: widget.zoneName,
+                workerCount: widget.workerCount,
+                couponCode: widget.couponCode,
+                discountAmount: widget.discountAmount,
               );
 
               // توليد بيانات ZATCA وتوليد الفاتورة في الخلفية
@@ -93,6 +102,9 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                     orderId: newOrderId,
                     hours: widget.hours,
                     serviceDate: widget.serviceDate,
+                    workerCount: widget.workerCount,
+                    couponCode: widget.couponCode,
+                    discountAmount: widget.discountAmount,
                   ),
                 ),
               );

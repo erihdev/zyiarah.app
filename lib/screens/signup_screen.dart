@@ -53,7 +53,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _firebaseService.signUpWithPhoneAndPassword(
+      await _firebaseService.signUpWithRealEmailAndPassword(
         phone: phone,
         password: password,
         name: name,

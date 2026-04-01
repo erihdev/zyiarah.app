@@ -15,6 +15,7 @@ class LocationPickerScreen extends StatefulWidget {
   final DateTime? serviceDate;
   final double? amount;
   final String? zoneName;
+  final int workerCount;
 
   const LocationPickerScreen({
     super.key, 
@@ -23,6 +24,7 @@ class LocationPickerScreen extends StatefulWidget {
     this.serviceDate,
     this.amount,
     this.zoneName,
+    this.workerCount = 1,
   });
 
   @override
@@ -121,6 +123,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         'serviceDate': widget.serviceDate,
         'amount': widget.amount,
         'zoneName': widget.zoneName,
+        'workerCount': widget.workerCount,
       });
     } else {
       Navigator.pop(context, geoPoint);

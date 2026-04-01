@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 class ZyiarahOrderService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // إنشاء طلب جديد بعد نجاح دفع تمارا
+  // إنشاء طلب جديد
   Future<String> createOrder({
     required String clientId,
     required String serviceType,
@@ -15,6 +15,9 @@ class ZyiarahOrderService {
     int? hours,
     DateTime? serviceDate,
     String? zoneName,
+    int workerCount = 1,
+    String? couponCode,
+    double discountAmount = 0.0,
   }) async {
     // جلب اسم العميل لتسهيل العرض في لوحة التحكم
     String clientName = 'عميل زيارة';
@@ -39,8 +42,70 @@ class ZyiarahOrderService {
       'hours_contracted': hours ?? 4,
       'service_date': serviceDate != null ? Timestamp.fromDate(serviceDate) : null,
       'zone_name': zoneName,
+      'worker_count': workerCount,
+      'coupon_code': couponCode,
+      'discount_amount': discountAmount,
     });
+
+    // إذا كان هناك كود خصم، نحدث عدد مرات استخدامه
+    if (couponCode != null) {
+      await _incrementCouponUsage(couponCode);
+    }
+
     return doc.id;
+  }
+
+  // التحقق من كود الخصم
+  Future<Map<String, dynamic>?> validateCoupon(String code) async {
+    try {
+      final snapshot = await _db
+          .collection('promo_codes')
+          .where('code', isEqualTo: code.toUpperCase())
+          .where('status', isEqualTo: 'active')
+          .limit(1)
+          .get();
+
+      if (snapshot.docs.isEmpty) return null;
+
+      final data = snapshot.docs.first.data();
+      final expiry = data['expiry'] as String;
+      final maxUses = data['maxUses'] as int;
+      final uses = data['uses'] as int;
+
+      // تحقق من التاريخ
+      if (DateTime.parse(expiry).isBefore(DateTime.now())) {
+        return null;
+      }
+
+      // تحقق من عدد مرات الاستخدام
+      if (uses >= maxUses) {
+        return null;
+      }
+
+      return data;
+    } catch (e) {
+      debugPrint('Error validating coupon: $e');
+      return null;
+    }
+  }
+
+  // زيادة عداد استخدام الكود
+  Future<void> _incrementCouponUsage(String code) async {
+    try {
+      final snapshot = await _db
+          .collection('promo_codes')
+          .where('code', isEqualTo: code.toUpperCase())
+          .limit(1)
+          .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        await snapshot.docs.first.reference.update({
+          'uses': FieldValue.increment(1),
+        });
+      }
+    } catch (e) {
+      debugPrint('Error incrementing coupon usage: $e');
+    }
   }
 
   // منح كاش باك 5%

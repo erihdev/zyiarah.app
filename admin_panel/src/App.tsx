@@ -20,6 +20,7 @@ import Maintenance from './pages/Maintenance.tsx';
 import Contracts from './pages/Contracts.tsx';
 import StoreProducts from './pages/StoreProducts.tsx';
 import StoreOrders from './pages/StoreOrders.tsx';
+import Services from './pages/Services.tsx';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -76,6 +77,7 @@ function App() {
           <Route path="store-products" element={<StoreProducts />} />
           <Route path="store-orders" element={<StoreOrders />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="services" element={<Services />} />
         </Route>
       </Routes>
     </BrowserRouter>

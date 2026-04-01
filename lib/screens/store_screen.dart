@@ -116,12 +116,7 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
         children: [
           Icon(Icons.storefront_outlined, size: 80, color: Colors.grey[300]),
           const SizedBox(height: 20),
-          Text('المتجر فارغ حالياً', style: GoogleFonts.tajawal(fontSize: 18, color: Colors.grey)),
-          const SizedBox(height: 10),
-          ElevatedButton(
-            onPressed: () => _storeService.seedInitialProducts(),
-            child: const Text('تعبئة منتجات سلة (للتجربة)'),
-          ),
+          Text('المتجر قيد التعبئة، سيتم توفير المنتجات قريباً', style: GoogleFonts.tajawal(fontSize: 18, color: Colors.grey)),
         ],
       ),
     );

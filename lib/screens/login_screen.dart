@@ -16,7 +16,7 @@ class ZyiarahLoginScreen extends StatefulWidget {
 }
 
 class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
-  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final ZyiarahFirebaseService _firebaseService = ZyiarahFirebaseService();
 
@@ -27,21 +27,21 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
   final Color brandColor = const Color(0xFF4A0E0E); // اللون العنابي الغامق
 
   void _login() async {
-    final phone = _phoneController.text.trim();
+    final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (phone.isEmpty || password.isEmpty) {
-      _showError('الرجاء إدخال رقم الجوال وكلمة المرور');
+    if (email.isEmpty || password.isEmpty) {
+      _showError('الرجاء إدخال البريد الإلكتروني وكلمة المرور');
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      UserCredential userCredential = await _firebaseService.signInWithPhoneAndPassword(phone, password);
+      UserCredential userCredential = await _firebaseService.signInWithRealEmailAndPassword(email, password);
       
       if (userCredential.user != null) {
-        String role = await _firebaseService.getUserRole(userCredential.user!.uid, phone);
+        String role = await _firebaseService.getUserRole(userCredential.user!.uid);
         if (!mounted) return;
         
         if (role == 'driver') {
@@ -68,7 +68,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
 
   @override
   void dispose() {
-    _phoneController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -105,7 +105,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  "سجل دخولك باستخدام رقم الجوال\nوكلمه المرور",
+                  "سجل دخولك باستخدام البريد الإلكتروني\nوكلمة المرور",
                   textAlign: TextAlign.center,
                   style: GoogleFonts.tajawal(
                     fontSize: 18,
@@ -114,11 +114,11 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 50),
-                _buildFieldLabel("رقم الجوال"),
+                _buildFieldLabel("البريد الإلكتروني"),
                 _buildTextField(
-                  controller: _phoneController,
-                  hint: "5XXXXXXXX",
-                  keyboardType: TextInputType.phone,
+                  controller: _emailController,
+                  hint: "example@email.com",
+                  keyboardType: TextInputType.emailAddress,
                 ),
                 const SizedBox(height: 20),
                 _buildFieldLabel("كلمه المرور"),

@@ -12,6 +12,9 @@ class ZyiarahOrder {
   final DateTime createdAt;
   final int? hours;
   final DateTime? serviceDate;
+  final int workerCount;
+  final String? couponCode;
+  final double discountAmount;
 
   ZyiarahOrder({
     required this.id,
@@ -25,6 +28,9 @@ class ZyiarahOrder {
     required this.createdAt,
     this.hours,
     this.serviceDate,
+    this.workerCount = 1,
+    this.couponCode,
+    this.discountAmount = 0.0,
   });
 
   factory ZyiarahOrder.fromMap(String id, Map<String, dynamic> data) {
@@ -42,6 +48,9 @@ class ZyiarahOrder {
       serviceDate: data['serviceDate'] != null 
           ? (data['serviceDate'] as Timestamp).toDate() 
           : null,
+      workerCount: data['worker_count'] ?? 1,
+      couponCode: data['coupon_code'],
+      discountAmount: (data['discount_amount'] ?? 0.0).toDouble(),
     );
   }
 
@@ -57,6 +66,9 @@ class ZyiarahOrder {
       'createdAt': Timestamp.fromDate(createdAt),
       'hours': hours,
       'serviceDate': serviceDate != null ? Timestamp.fromDate(serviceDate!) : null,
+      'worker_count': workerCount,
+      'coupon_code': couponCode,
+      'discount_amount': discountAmount,
     };
   }
 }

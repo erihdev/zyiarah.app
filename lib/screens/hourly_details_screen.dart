@@ -23,6 +23,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   int _selectedHours = 4;
   int? _selectedZoneIndex;
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
+  int _workerCount = 1;
   final bool _isLoading = false;
 
   final List<CleaningZone> _zones = [
@@ -53,7 +54,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
 
   double get totalAmount {
     if (_selectedZoneIndex == null || _selectedZoneIndex! >= _zones.length - 1) return 0.0;
-    return _zones[_selectedZoneIndex!].prices[_selectedHours] ?? 0.0;
+    double basePrice = _zones[_selectedZoneIndex!].prices[_selectedHours] ?? 0.0;
+    return basePrice * _workerCount;
   }
 
   bool get isOutOfService => _selectedZoneIndex == _zones.length - 1;
@@ -77,6 +79,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           serviceDate: _selectedDate,
           amount: totalAmount,
           zoneName: _zones[_selectedZoneIndex!].name,
+          workerCount: _workerCount,
         ),
       ),
     );
@@ -97,6 +100,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
             location: selectedLocation,
             hours: _selectedHours,
             serviceDate: _selectedDate,
+            workerCount: _workerCount,
           ),
         ),
       ).then((success) {
@@ -132,6 +136,10 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                     const Text("حدد عدد الساعات", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 15),
                     _buildHourSelector(),
+                    const SizedBox(height: 25),
+                    const Text("عدد العاملات", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 15),
+                    _buildWorkerSelector(),
                     const SizedBox(height: 25),
                     const Text("اختر التاريخ", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 15),
@@ -243,6 +251,42 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       }).toList(),
     );
   }
+  
+  Widget _buildWorkerSelector() {
+    return Row(
+      children: [1, 2].map((count) {
+        bool isSelected = _workerCount == count;
+        return Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(left: count == 1 ? 10 : 0, right: count == 2 ? 10 : 0),
+            child: InkWell(
+              onTap: () => setState(() => _workerCount = count),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: isSelected ? const Color(0xFF5D1B5E) : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isSelected ? const Color(0xFF5D1B5E) : Colors.grey[300]!,
+                    width: 2,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    count == 1 ? "عاملة واحدة" : "عاملتين", 
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.black,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
 
   Widget _buildDatePicker() {
     return Container(
@@ -278,12 +322,14 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           const Divider(),
           _buildSummaryRow("عدد الساعات", "$_selectedHours ساعة"),
           const Divider(),
+          _buildSummaryRow("عدد العاملات", _workerCount == 1 ? "عاملة واحدة" : "عاملتين"),
+          const Divider(),
           _buildSummaryRow("التاريخ", "${_selectedDate.year}-${_selectedDate.month}-${_selectedDate.day}"),
           const Divider(),
           _buildSummaryRow("الإجمالي", "$totalAmount ر.س", isTotal: true),
           const SizedBox(height: 15),
           const Divider(),
-          _buildNoticeRow("السعر للعاملة الواحدة يشمل التوصيل"),
+          _buildNoticeRow(_workerCount == 1 ? "السعر للعاملة الواحدة يشمل التوصيل" : "السعر للعاملتين يشمل التوصيل"),
           _buildNoticeRow("لا يشمل مواد وأدوات التنظيف"),
         ],
       ),

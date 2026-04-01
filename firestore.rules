@@ -80,6 +80,16 @@ service cloud.firestore {
     match /admins/{adminId} {
       allow read: if isLoggedIn();
     }
+
+    // Store Section
+    match /products/{productId} {
+      allow read: if isLoggedIn();
+      allow write: if isAdmin();
+    }
+    match /store_orders/{orderId} {
+      allow create: if isLoggedIn();
+      allow read, update, delete: if isAdmin();
+    }
   }
 }
 

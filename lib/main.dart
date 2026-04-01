@@ -7,6 +7,12 @@ import 'package:zyiarah/services/notification_service.dart';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zyiarah/screens/client_dashboard.dart';
+import 'package:zyiarah/screens/driver_dashboard.dart';
+import 'package:zyiarah/screens/admin/admin_dashboard_screen.dart';
+import 'package:zyiarah/services/firebase_service.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
@@ -32,8 +38,52 @@ class ZyiarahApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB), surface: const Color(0xFFF8FAFC)),
         useMaterial3: true,
       ),
-      // تعيين شاشة الترحيب كشاشة البداية
-      home: const OnboardingScreen(),
+      // AuthWrapper للتحقق من حالة تسجيل الدخول تلقائياً
+      home: const AuthWrapper(),
+    );
+  }
+}
+
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        // حالة التحميل
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        // إذا كان المستخدم مسجلاً دخوله
+        if (snapshot.hasData && snapshot.data != null) {
+          return FutureBuilder<String>(
+            future: ZyiarahFirebaseService().getUserRole(snapshot.data!.uid),
+            builder: (context, roleSnapshot) {
+              if (roleSnapshot.connectionState == ConnectionState.waiting) {
+                return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              if (roleSnapshot.data == 'driver') {
+                return const DriverDashboard();
+              } else if (roleSnapshot.data == 'admin') {
+                return const AdminDashboardScreen();
+              } else {
+                return const ClientDashboard();
+              }
+            },
+          );
+        }
+
+        // إذا لم يكن مسجلاً دخوله، نعرض شاشة الترحيب
+        return const OnboardingScreen();
+      },
     );
   }
 }

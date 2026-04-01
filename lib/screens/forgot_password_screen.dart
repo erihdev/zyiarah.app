@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ZyiarahForgotPasswordScreen extends StatefulWidget {
   const ZyiarahForgotPasswordScreen({super.key});
@@ -11,46 +10,29 @@ class ZyiarahForgotPasswordScreen extends StatefulWidget {
 }
 
 class _ZyiarahForgotPasswordScreenState extends State<ZyiarahForgotPasswordScreen> {
-  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
   bool _isLoading = false;
   final Color brandColor = const Color(0xFF4A0E0E);
 
   void _resetPassword() async {
-    final phone = _phoneController.text.trim();
-    if (phone.isEmpty) {
-      _showError('الرجاء إدخال رقم الجوال');
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      _showError('الرجاء إدخال البريد الإلكتروني');
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      // 1. البحث عن إيميل العميل الحقيقي في Firestore
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .where('phone', isEqualTo: phone)
-          .limit(1)
-          .get();
-
-      if (snapshot.docs.isNotEmpty) {
-        final userData = snapshot.docs.first.data();
-        final realEmail = userData['real_email'] as String?;
-
-        if (realEmail != null && realEmail.isNotEmpty) {
-          // 2. إرسال رابط إعادة تعيين كلمة المرور
-          await FirebaseAuth.instance.sendPasswordResetEmail(email: realEmail);
-          
-          if (!mounted) return;
-          _showSuccess('تم إرسال رابط إعادة تعيين كلمة المرور إلى إيميلك المسجل: $realEmail');
-          Future.delayed(const Duration(seconds: 3), () => Navigator.pop(context));
-        } else {
-          _showError('لم يتم العثور على بريد إلكتروني مسجل لهذا الرقم');
-        }
-      } else {
-        _showError('رقم الجوال غير مسجل لدينا');
-      }
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      
+      if (!mounted) return;
+      _showSuccess('تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني بنجاح.');
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) Navigator.pop(context);
+      });
     } catch (e) {
-      _showError('حدث خطأ: $e');
+      _showError('تأكد من صحة البريد الإلكتروني المدخل.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -85,14 +67,14 @@ class _ZyiarahForgotPasswordScreenState extends State<ZyiarahForgotPasswordScree
             children: [
               const SizedBox(height: 20),
               Text(
-                "أدخل رقم الجوال المسجل وسنقوم بإرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني",
+                "أدخل البريد الإلكتروني المسجل وسنقوم بإرسال رابط استعادة كلمة المرور",
                 textAlign: TextAlign.center,
                 style: GoogleFonts.tajawal(fontSize: 16, color: Colors.grey[600]),
               ),
               const SizedBox(height: 40),
               
               Text(
-                "رقم الجوال",
+                "البريد الإلكتروني",
                 style: GoogleFonts.tajawal(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 10),
@@ -102,10 +84,10 @@ class _ZyiarahForgotPasswordScreenState extends State<ZyiarahForgotPasswordScree
                   borderRadius: BorderRadius.circular(15),
                 ),
                 child: TextField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
-                    hintText: "5XXXXXXXX",
+                    hintText: "example@mail.com",
                     hintStyle: GoogleFonts.tajawal(color: Colors.grey[400]),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),

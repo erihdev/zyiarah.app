@@ -7,6 +7,9 @@ class ZyiarahInvoiceScreen extends StatelessWidget {
   final String orderId;
   final int? hours;
   final DateTime? serviceDate;
+  final int workerCount;
+  final String? couponCode;
+  final double discountAmount;
 
   final bool isSubscription;
   final double? cashbackEarned;
@@ -17,6 +20,9 @@ class ZyiarahInvoiceScreen extends StatelessWidget {
     required this.orderId,
     this.hours,
     this.serviceDate,
+    this.workerCount = 1,
+    this.couponCode,
+    this.discountAmount = 0.0,
     this.isSubscription = false,
     this.cashbackEarned,
   });
@@ -104,12 +110,21 @@ class ZyiarahInvoiceScreen extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text("عدد الساعات:",
+                      const Text("مدة الزيارة:",
                           style: TextStyle(fontWeight: FontWeight.bold)),
                       Text("$hours ساعة"),
                     ],
                   ),
                 ],
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text("عدد العاملات:",
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text(workerCount == 1 ? "عاملة واحدة" : "عاملتين"),
+                  ],
+                ),
                 if (serviceDate != null) ...[
                   const SizedBox(height: 10),
                   Row(
@@ -146,9 +161,19 @@ class ZyiarahInvoiceScreen extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text("المبلغ الخاضع للضريبة:"),
-                      Text("${subtotal.toStringAsFixed(2)} ر.س"),
+                      Text("${(amount - vatAmount).toStringAsFixed(2)} ر.س"),
                     ],
                   ),
+                  if (discountAmount > 0) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text("خصم كود ($couponCode):"),
+                        Text("-${discountAmount.toStringAsFixed(2)} ر.س", style: const TextStyle(color: Colors.red)),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,

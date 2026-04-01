@@ -15,6 +15,8 @@ import 'package:zyiarah/screens/subscription_plans_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
 import 'package:zyiarah/services/popup_service.dart';
 import 'package:zyiarah/screens/store_screen.dart';
+import 'package:zyiarah/models/service_model.dart';
+import 'package:zyiarah/screens/sofa_rug_details_screen.dart';
 
 class ClientDashboard extends StatefulWidget {
   const ClientDashboard({super.key});
@@ -336,82 +338,135 @@ class _ClientDashboardState extends State<ClientDashboard> {
           ),
         ],
       ),
-      ),
     );
   }
 
   Widget _buildServicesGrid() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('services')
+          .where('is_active', isEqualTo: true)
+          .orderBy('order_index')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final serviceDocs = snapshot.data?.docs ?? [];
+        
+        // إذا كانت القائمة فارغة في قاعدة البيانات، نعرض الخدمات الافتراضية لمرة واحدة أو للتجربة
+        if (serviceDocs.isEmpty) {
+          return _buildDefaultStaticGrid();
+        }
+
+        return GridView.builder(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 15,
+            crossAxisSpacing: 15,
+            childAspectRatio: 0.75,
+          ),
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: serviceDocs.length,
+          itemBuilder: (context, index) {
+            final service = ZyiarahService.fromMap(
+              serviceDocs[index].id,
+              serviceDocs[index].data() as Map<String, dynamic>,
+            );
+            return _buildDynamicServiceCard(service);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildDynamicServiceCard(ZyiarahService service) {
+    return _buildWebStyleServiceCard(
+      title: service.title,
+      subtitle: service.subtitle,
+      price: service.priceText,
+      numericPrice: service.basePrice,
+      themeColor: _getThemeColorForRoute(service.routeName),
+      icon: ZyiarahService.getIcon(service.iconName),
+      iconBgColor: _getThemeColorForRoute(service.routeName).withValues(alpha: 0.1),
+      imagePath: service.imagePath,
+      onTap: () => _handleServiceNavigation(service),
+    );
+  }
+
+  Color _getThemeColorForRoute(String route) {
+    switch (route) {
+      case 'hourly': return const Color(0xFF10B981);
+      case 'sofa_rug': return const Color(0xFF8B5CF6);
+      case 'subscription': return const Color(0xFF10B981);
+      case 'maintenance': return const Color(0xFF475569);
+      case 'business': return const Color(0xFF3B82F6);
+      case 'store': return const Color(0xFF5D1B5E);
+      default: return const Color(0xFF2563EB);
+    }
+  }
+
+  void _handleServiceNavigation(ZyiarahService service) {
+    switch (service.routeName) {
+      case 'hourly':
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const HourlyCleaningDetailsScreen(serviceName: "نظافة بالساعة")));
+        break;
+      case 'sofa_rug':
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const SofaRugCleaningDetailsScreen(serviceName: "تنظيف الكنب والزل")));
+        break;
+      case 'subscription':
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahSubscriptionPlansScreen()));
+        break;
+      case 'maintenance':
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahMaintenanceRequestScreen()));
+        break;
+      case 'store':
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahStoreScreen()));
+        break;
+      default:
+        if (service.basePrice > 0) {
+          _initiatePayment(service.title, service.basePrice);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("هذه الخدمة تتطلب تواصل مباشر")));
+        }
+    }
+  }
+
+  // نسخة احتياطية في حال كانت قاعدة البيانات فارغة (نفس التصميم القديم)
+  Widget _buildDefaultStaticGrid() {
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 15,
       crossAxisSpacing: 15,
-      childAspectRatio: 0.75, // Taller cards to fit image
+      childAspectRatio: 0.75,
       children: [
         _buildWebStyleServiceCard(
           title: "خدمة بالساعة",
           subtitle: "عاملة منزلية بالساعة",
           price: "من 50 ر.س",
           numericPrice: 50.0,
-          themeColor: const Color(0xFF10B981), // Green
+          themeColor: const Color(0xFF10B981),
           icon: Icons.access_time_filled,
-          iconBgColor: const Color(0xFFE1F0E4), // Light Green
+          iconBgColor: const Color(0xFFE1F0E4),
           imagePath: 'assets/images/hourly_cleaning.png',
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HourlyCleaningDetailsScreen(serviceName: "نظافة بالساعة"))),
         ),
         _buildWebStyleServiceCard(
-          title: "تنظيف الكنب",
+          title: "تنظيف الكنب والزل",
           subtitle: "تنظيف عميق بالبخار",
-          price: "من 100 ر.س",
-          numericPrice: 100.0,
-          themeColor: const Color(0xFF8B5CF6), // Purple
+          price: "حسب المتر",
+          numericPrice: 0.0,
+          themeColor: const Color(0xFF8B5CF6),
           icon: Icons.chair,
-          iconBgColor: const Color(0xFFF1E9FE), // Light Purple
+          iconBgColor: const Color(0xFFF1E9FE),
           imagePath: 'assets/images/sofa_cleaning.png',
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SofaRugCleaningDetailsScreen(serviceName: "تنظيف الكنب والزل"))),
         ),
-        _buildWebStyleServiceCard(
-          title: "سلة العائلة",
-          subtitle: "باقات شهرية موفرة",
-          price: "من 299 ر.س",
-          numericPrice: 299.0,
-          themeColor: const Color(0xFF10B981), // Green
-          icon: Icons.shopping_basket,
-          iconBgColor: const Color(0xFFD1FAE5), // Light Green
-          imagePath: 'assets/images/monthly_cleaning.png',
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahSubscriptionPlansScreen())),
-        ),
-        _buildWebStyleServiceCard(
-          title: "خدمات الصيانة",
-          subtitle: "صيانة مكيفات وأجهزة منزلية",
-          price: "حسب التقييم",
-          numericPrice: 0.0,
-          themeColor: const Color(0xFF475569), // Slate
-          icon: Icons.settings_suggest_outlined,
-          iconBgColor: const Color(0xFFF1F5F9), // Very Light Slate
-          imagePath: 'assets/images/company_cleaning.png', // Reuse a professional image
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahMaintenanceRequestScreen())),
-        ),
-        _buildWebStyleServiceCard(
-          title: "خدمات الشركات",
-          subtitle: "حلول تنظيف مخصصة",
-          price: "عرض سعر",
-          numericPrice: 0.0,
-          themeColor: const Color(0xFF3B82F6), // Blue
-          icon: Icons.business_center,
-          iconBgColor: const Color(0xFFDBEAFE), // Light Blue
-          imagePath: 'assets/images/company_cleaning.png',
-        ),
-        _buildWebStyleServiceCard(
-          title: "متجر الأدوات",
-          subtitle: "أدوات ومواد تنظيف احترافية",
-          price: "أفضل الأسعار",
-          numericPrice: 0.0,
-          themeColor: const Color(0xFF5D1B5E), // Purple/Deep Purple
-          icon: Icons.shopping_basket_rounded,
-          iconBgColor: const Color(0xFFF1E9FE), // Light Purple
-          imagePath: 'assets/images/sofa_cleaning.png', // Placeholder
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahStoreScreen())),
-        ),
+        // ... باقي الخدمات يمكن إضافتها هنا كـ fallback
       ],
     );
   }
