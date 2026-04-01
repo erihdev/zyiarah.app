@@ -6,6 +6,7 @@ import 'package:zyiarah/screens/driver_dashboard.dart';
 import 'package:zyiarah/screens/signup_screen.dart';
 import 'package:zyiarah/screens/account_activation_screen.dart';
 import 'package:zyiarah/screens/forgot_password_screen.dart';
+import 'package:zyiarah/screens/admin/admin_dashboard_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class ZyiarahLoginScreen extends StatefulWidget {
@@ -46,6 +47,8 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
         
         if (role == 'driver') {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const DriverDashboard()));
+        } else if (role == 'admin') {
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AdminDashboardScreen()));
         } else {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => ClientDashboard()));
         }
