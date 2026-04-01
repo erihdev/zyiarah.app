@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/screens/admin/admin_services_screen.dart';
 import 'package:zyiarah/screens/admin/admin_orders_screen.dart';
-import 'package:zyiarah/screens/admin/admin_settings_screen.dart';
+import 'package:zyiarah/screens/admin/admin_more_screen.dart';
 import 'package:zyiarah/screens/admin/admin_store_screen.dart';
 import 'package:zyiarah/screens/onboarding_screen.dart';
 
@@ -20,7 +20,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     const AdminServicesScreen(),
     const AdminOrdersScreen(),
     const AdminStoreScreen(),
-    const AdminSettingsScreen(),
+    const AdminMoreScreen(),
   ];
 
   void _logout() async {
@@ -80,7 +80,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           BottomNavigationBarItem(icon: Icon(Icons.design_services), label: "الخدمات"),
           BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: "الطلبات"),
           BottomNavigationBarItem(icon: Icon(Icons.storefront), label: "المتجر"),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: "الإعدادات"),
+          BottomNavigationBarItem(icon: Icon(Icons.grid_view_rounded), label: "المزيد"),
         ],
       ),
     );

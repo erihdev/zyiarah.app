@@ -81,6 +81,12 @@ service cloud.firestore {
       allow read: if isLoggedIn();
     }
 
+    // Dynamic Services
+    match /services/{serviceId} {
+      allow read: if isLoggedIn();
+      allow write: if isAdmin();
+    }
+
     // Store Section
     match /products/{productId} {
       allow read: if isLoggedIn();
