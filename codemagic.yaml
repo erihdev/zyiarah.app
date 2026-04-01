@@ -124,9 +124,9 @@ workflows:
           PROFILE_UUID=$(security cms -D -i ios/Zyiarah_App_Store_Profile.mobileprovision 2>/dev/null | plutil -extract UUID raw -)
           echo "Using Profile UUID: $PROFILE_UUID"
 
-          # 1. Build iOS without signing
-          echo "Running flutter build ios..."
-          flutter build ios --release --no-codesign -v > flutter_build.log 2>&1 || {
+          # 1. Build iOS without signing (Auto-incrementing build number using Codemagic's variable)
+          echo "Running flutter build ios with Build Number: $BUILD_NUMBER..."
+          flutter build ios --release --no-codesign --build-number=$BUILD_NUMBER -v > flutter_build.log 2>&1 || {
             echo "==== COCOAPODS ERROR DETECTED ===="
             grep -A 30 -B 10 -i "\[!\]" flutter_build.log || true
             echo "==== TAIL OF LOG ===="
