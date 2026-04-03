@@ -190,7 +190,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                         icon: Icons.chair_rounded,
                         color: const Color(0xFF3B82F6),
                         children: [
-                          _buildPremiumField("داخل الداير (منطقة الرياض التلقائية)", "ر.س", _sofaInsideCtrl, Icons.location_inner_rounded),
+                          _buildPremiumField("داخل الداير (منطقة الرياض التلقائية)", "ر.س", _sofaInsideCtrl, Icons.my_location_rounded),
                           const SizedBox(height: 16),
                           _buildPremiumField("خارج الداير (المناطق البعيدة)", "ر.س", _sofaOutsideCtrl, Icons.location_off_rounded),
                         ],
@@ -204,7 +204,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                         icon: Icons.grid_view_rounded,
                         color: const Color(0xFFF59E0B),
                         children: [
-                          _buildPremiumField("داخل الداير (منطقة الرياض التلقائية)", "ر.س", _rugInsideCtrl, Icons.location_inner_rounded),
+                          _buildPremiumField("داخل الداير (منطقة الرياض التلقائية)", "ر.س", _rugInsideCtrl, Icons.my_location_rounded),
                           const SizedBox(height: 16),
                           _buildPremiumField("خارج الداير (المناطق البعيدة)", "ر.س", _rugOutsideCtrl, Icons.location_off_rounded),
                         ],
