@@ -68,42 +68,73 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
             ),
           ],
         ),
-        body: StreamBuilder<List<StoreProduct>>(
-          stream: _storeService.streamProducts(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return GridView.builder(
-                padding: const EdgeInsets.all(16),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 15,
-                  crossAxisSpacing: 15,
-                  childAspectRatio: 0.75,
+        body: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              height: 180,
+              decoration: const BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage('assets/images/store.png'),
+                  fit: BoxFit.cover,
+                  alignment: Alignment.center,
                 ),
-                itemCount: 6,
-                itemBuilder: (context, index) => const ShimmerGridItem(),
-              );
-            }
-            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return _buildEmptyState();
-            }
+              ),
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.3),
+                child: Center(
+                  child: Text(
+                    'أدوات النظافة الاحترافية',
+                    style: GoogleFonts.tajawal(
+                      color: Colors.white,
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      shadows: const [Shadow(color: Colors.black54, blurRadius: 10)],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: StreamBuilder<List<StoreProduct>>(
+                stream: _storeService.streamProducts(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return GridView.builder(
+                      padding: const EdgeInsets.all(16),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        mainAxisSpacing: 15,
+                        crossAxisSpacing: 15,
+                        childAspectRatio: 0.75,
+                      ),
+                      itemCount: 6,
+                      itemBuilder: (context, index) => const ShimmerGridItem(),
+                    );
+                  }
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return _buildEmptyState();
+                  }
 
-            final products = snapshot.data!;
-            return GridView.builder(
-              padding: const EdgeInsets.all(16),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                childAspectRatio: 0.65,
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
+                  final products = snapshot.data!;
+                  return GridView.builder(
+                    padding: const EdgeInsets.all(16),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      childAspectRatio: 0.65,
+                      mainAxisSpacing: 16,
+                      crossAxisSpacing: 16,
+                    ),
+                    itemCount: products.length,
+                    itemBuilder: (context, index) => _ProductCard(
+                      product: products[index],
+                      onAdd: () => _addToCart(products[index]),
+                    ),
+                  );
+                },
               ),
-              itemCount: products.length,
-              itemBuilder: (context, index) => _ProductCard(
-                product: products[index],
-                onAdd: () => _addToCart(products[index]),
-              ),
-            );
-          },
+            ),
+          ],
         ),
       ),
     );

@@ -122,7 +122,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   Future<void> _showSuccessAnimation() async {
-    return showDialog(
+    showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => Dialog(
@@ -144,6 +144,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         ),
       ),
     );
+    await Future.delayed(const Duration(seconds: 2));
+    if (mounted) Navigator.pop(context);
   }
 
   void _handlePayment() async {
@@ -171,7 +173,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         if (mounted) {
           setState(() => _isLoading = false);
           await _showSuccessAnimation();
-          await Future.delayed(const Duration(seconds: 2));
           if (!mounted) return;
           Navigator.pushReplacement(
             context,
@@ -208,7 +209,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         if (mounted) {
           setState(() => _isLoading = false);
           await _showSuccessAnimation();
-          await Future.delayed(const Duration(seconds: 2));
           if (!mounted) return;
           Navigator.pushReplacement(
             context,
@@ -289,7 +289,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           setState(() => _isLoading = false);
           if (mounted) {
             await _showSuccessAnimation();
-            await Future.delayed(const Duration(seconds: 2));
             if (!mounted) return;
             Navigator.pushReplacement(
               context,
