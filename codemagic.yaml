@@ -119,30 +119,20 @@ workflows:
           PROFILE_UUID=$(security cms -D -i ios/Zyiarah_App_Store_Profile.mobileprovision 2>/dev/null | plutil -extract UUID raw -)
           echo "Using Profile UUID: $PROFILE_UUID"
 
-          # 1. Build iOS without signing (Auto-incrementing build number using Codemagic's variable)
-          echo "Running flutter build ios with Build Number: $BUILD_NUMBER..."
-          flutter build ios --release --no-codesign --build-number=$BUILD_NUMBER -v > flutter_build.log 2>&1 || {
-            echo "==== COCOAPODS ERROR DETECTED ===="
-            grep -A 30 -B 10 -i "\[!\]" flutter_build.log || true
-            echo "==== TAIL OF LOG ===="
-            tail -n 100 flutter_build.log
+          # We must append code signing overrides explicitly to Release.xcconfig 
+          # to ensure xcodebuild securely uses our manual provisioning profile internally.
+          echo "PROVISIONING_PROFILE_SPECIFIER=$PROFILE_UUID" >> ios/Flutter/Release.xcconfig
+          echo "CODE_SIGN_STYLE=Manual" >> ios/Flutter/Release.xcconfig
+          echo "DEVELOPMENT_TEAM=$TEAM_ID" >> ios/Flutter/Release.xcconfig
+          
+          # Native Flutter command to build and package IPA with our export options
+          echo "Running flutter build ipa..."
+          flutter build ipa --release \
+            --build-number=$BUILD_NUMBER \
+            --export-options-plist=export_options.plist || {
+            echo "==== FLUTTER BUILD IPA FAILED ===="
             exit 1
           }
-          
-          # 2. Archive with explicit signing overrides
-          xcodebuild -workspace ios/Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Release \
-            -archivePath build/ios/archive/Runner.xcarchive \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
-            CODE_SIGN_STYLE=Manual \
-            archive
-          
-          # 3. Export IPA using export_options.plist
-          xcodebuild -exportArchive \
-            -archivePath build/ios/archive/Runner.xcarchive \
-            -exportOptionsPlist export_options.plist \
-            -exportPath build/ios/ipa
 
     artifacts:
       - build/ios/ipa/*.ipa
