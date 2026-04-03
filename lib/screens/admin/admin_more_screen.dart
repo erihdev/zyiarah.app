@@ -12,7 +12,9 @@ import 'package:zyiarah/screens/admin/admin_managers_screen.dart';
 import 'package:zyiarah/screens/admin/admin_accountants_screen.dart';
 import 'package:zyiarah/screens/admin/admin_deletions_screen.dart';
 import 'package:zyiarah/screens/admin/admin_store_orders_screen.dart';
-
+import 'package:zyiarah/screens/admin/admin_hourly_zones_screen.dart';
+import 'package:zyiarah/screens/admin/admin_subscriptions_screen.dart';
+import 'package:zyiarah/screens/admin/admin_analytics_screen.dart';
 
 class AdminMoreScreen extends StatelessWidget {
   const AdminMoreScreen({super.key});
@@ -32,6 +34,7 @@ class AdminMoreScreen extends StatelessWidget {
             mainAxisSpacing: 16,
           ),
           children: [
+            _buildGridItem(context, 'لوحة الإحصائيات والأرباح', Icons.insert_chart_outlined, Colors.teal, const AdminAnalyticsScreen()),
             _buildGridItem(context, 'المستخدمين', Icons.people_outline, Colors.blue, const AdminUsersScreen()),
             _buildGridItem(context, 'السائقين والعمال', Icons.engineering_outlined, Colors.orange, const AdminDriversScreen()),
             _buildGridItem(context, 'الدعم الفني', Icons.support_agent, Colors.purple, const AdminSupportScreen()),
@@ -42,6 +45,8 @@ class AdminMoreScreen extends StatelessWidget {
              _buildGridItem(context, 'المدراء', Icons.admin_panel_settings_outlined, Colors.indigo, const AdminManagersScreen()),
             _buildGridItem(context, 'المحاسبون', Icons.account_balance_wallet_outlined, Colors.blueGrey, const AdminAccountantsScreen()),
             _buildGridItem(context, 'طلبات الحذف', Icons.delete_sweep_outlined, Colors.red, const AdminDeletionsScreen()),
+            _buildGridItem(context, 'باقات الاشتراك', Icons.card_giftcard_outlined, Colors.deepPurple, const AdminSubscriptionsScreen()),
+            _buildGridItem(context, 'المناطق والأسعار', Icons.map_outlined, Colors.blueAccent, const AdminHourlyZonesScreen()),
             _buildGridItem(context, 'إعدادات النظام', Icons.settings_suggest_outlined, Colors.grey[800]!, const AdminSettingsScreen()),
           ],
         )

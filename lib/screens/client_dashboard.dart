@@ -113,6 +113,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    _buildPromoBanners(),
                     if (_currentUser?.hasActiveSubscription == true) _buildSubscriptionCard(),
                     const SizedBox(height: 10),
                     _buildMetricsList(),
@@ -252,6 +253,57 @@ class _ClientDashboardState extends State<ClientDashboard> {
     );
   }
 
+
+  Widget _buildPromoBanners() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('promo_banners')
+          .where('isActive', isEqualTo: true)
+          .orderBy('rank')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final banners = snapshot.data!.docs;
+
+        return Container(
+          height: 160,
+          margin: const EdgeInsets.only(bottom: 20),
+          child: PageView.builder(
+            itemCount: banners.length,
+            controller: PageController(viewportFraction: 0.95),
+            itemBuilder: (context, index) {
+              final data = banners[index].data() as Map<String, dynamic>;
+              final imageUrl = data['imageUrl'] ?? '';
+              
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 5),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 5)),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      color: Colors.grey.shade200,
+                      child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
 
   Widget _buildMetricsList() {
     return StreamBuilder<DocumentSnapshot>(

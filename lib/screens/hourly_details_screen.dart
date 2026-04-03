@@ -24,33 +24,51 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   int? _selectedZoneIndex;
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
   int _workerCount = 1;
-  final bool _isLoading = false;
+  bool _isLoading = true;
+  List<CleaningZone> _zones = [];
 
-  final List<CleaningZone> _zones = [
-    CleaningZone(
-      name: "داخل الداير - العيدابي",
-      subAreas: [],
-      prices: {4: 200, 5: 240, 6: 260, 8: 280},
-    ),
-    CleaningZone(
-      name: "فيفا - جبال فيفا والعارضة",
-      subAreas: ["فيفا", "جبل خاشر", "جبال الحشر", "عثوان", "المشاف"],
-      prices: {4: 300, 5: 355, 6: 410, 8: 465},
-    ),
-    CleaningZone(
-      name: "مناطق أخرى (الجوه، عيبان، الخ)",
-      subAreas: [
-        "ريع", "الجوه", "عيبان", "العشبة", "القاع", "المشوف", 
-        "الطلعه", "اسكان حرس الحدود", "صدر جورا", "حي الاسكان"
-      ],
-      prices: {4: 260, 5: 305, 6: 350, 8: 460},
-    ),
-    CleaningZone(
-      name: "غير مدرج / خارج التغطية",
-      subAreas: [],
-      prices: {},
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _fetchZones();
+  }
+
+  Future<void> _fetchZones() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance.collection('hourly_zones').orderBy('rank').get();
+      if (mounted) {
+        setState(() {
+          _zones = snapshot.docs.map((doc) {
+            final data = doc.data();
+            Map<int, double> prices = {};
+            final pricesMap = data['prices'] as Map<String, dynamic>? ?? {};
+            pricesMap.forEach((key, value) {
+              int? h = int.tryParse(key);
+              if (h != null) {
+                prices[h] = (value as num).toDouble();
+              }
+            });
+            return CleaningZone(
+              name: data['name'] ?? '',
+              subAreas: (data['subAreas'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+              prices: prices,
+            );
+          }).toList();
+          
+          // إضافة خيار خارج التغطية دائماً في النهاية
+          _zones.add(CleaningZone(
+            name: "غير مدرج / خارج التغطية",
+            subAreas: [],
+            prices: {},
+          ));
+
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   double get totalAmount {
     if (_selectedZoneIndex == null || _selectedZoneIndex! >= _zones.length - 1) return 0.0;
@@ -121,7 +139,9 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       ),
       body: Directionality(
         textDirection: TextDirection.rtl,
-        child: Stack(
+        child: _isLoading 
+            ? const Center(child: CircularProgressIndicator()) 
+            : Stack(
           children: [
             SingleChildScrollView(
               padding: const EdgeInsets.all(20),

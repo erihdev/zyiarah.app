@@ -22,6 +22,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   final TextEditingController _rugInsideCtrl = TextEditingController();
   final TextEditingController _rugOutsideCtrl = TextEditingController();
   final TextEditingController _depositCtrl = TextEditingController();
+  bool _codEnabled = false;
 
   @override
   void initState() {
@@ -42,6 +43,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
             _rugInsideCtrl.text = (data['rug_price_inside'] ?? 15).toString();
             _rugOutsideCtrl.text = (data['rug_price_outside'] ?? 17).toString();
             _depositCtrl.text = (data['outside_deposit'] ?? 50).toString();
+            _codEnabled = data['cod_enabled'] ?? false;
             _isLoading = false;
           });
           _fadeController.forward();
@@ -69,6 +71,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         'rug_price_inside': double.tryParse(_rugInsideCtrl.text) ?? 15,
         'rug_price_outside': double.tryParse(_rugOutsideCtrl.text) ?? 17,
         'outside_deposit': double.tryParse(_depositCtrl.text) ?? 50,
+        'cod_enabled': _codEnabled,
       }, SetOptions(merge: true));
       
       if (mounted) {
@@ -219,6 +222,30 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                         color: const Color(0xFF10B981),
                         children: [
                           _buildPremiumField("العربون الافتراضي لخارج الداير", "ر.س", _depositCtrl, Icons.payments_rounded),
+                        ],
+                      ),
+
+
+                      const SizedBox(height: 24),
+                      
+                      // Payment Settings Card
+                      _buildSectionCard(
+                        title: "إعدادات الدفع",
+                        icon: Icons.payments_rounded,
+                        color: const Color(0xFF8B5CF6),
+                        children: [
+                          SwitchListTile(
+                            title: const Text("تفعيل الدفع عند الاستلام", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                            subtitle: const Text("السماح للعملاء باختيار الدفع نقداً", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                            value: _codEnabled,
+                            activeColor: const Color(0xFF8B5CF6),
+                            onChanged: (val) {
+                              setState(() {
+                                _codEnabled = val;
+                              });
+                            },
+                            contentPadding: EdgeInsets.zero,
+                          ),
                         ],
                       ),
 

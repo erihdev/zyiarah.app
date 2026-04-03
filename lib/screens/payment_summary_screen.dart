@@ -82,24 +82,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   bool _isCodAvailableForService() {
-    if (!_codEnabled) return false;
-    
-    final name = widget.serviceName.toLowerCase();
-    
-    if (name.contains('ساعة') || name.contains('hourly')) {
-      return _paymentConfigs['cod_hourly'] ?? true;
-    }
-    if (name.contains('سلة') || name.contains('family') || name.contains('باقة')) {
-      return _paymentConfigs['cod_monthly'] ?? false;
-    }
-    if (name.contains('صيانة') || name.contains('maintenance') || name.contains('سباكة') || name.contains('كهرباء')) {
-      return _paymentConfigs['cod_maintenance'] ?? true;
-    }
-    if (name.contains('عقد') || name.contains('contract')) {
-      return _paymentConfigs['cod_contracts'] ?? false;
-    }
-    
-    return true; // Default to true if not categorized
+    // تم تفعيل الدفع عند الاستلام ليكون متاحاً لجميع الخدمات
+    return true;
   }
 
   double get vatAmount => (widget.amount - _discountAmount) * 0.15;

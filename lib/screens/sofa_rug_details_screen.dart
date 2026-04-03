@@ -77,9 +77,16 @@ class _SofaRugCleaningDetailsScreenState extends State<SofaRugCleaningDetailsScr
       ),
     );
 
-    if (result == null || result is! Map<String, dynamic>) return;
+    if (result == null) return;
 
-    final GeoPoint selectedLocation = result['location'];
+    GeoPoint selectedLocation;
+    if (result is GeoPoint) {
+      selectedLocation = result;
+    } else if (result is Map<String, dynamic>) {
+      selectedLocation = result['location'];
+    } else {
+      return;
+    }
 
     if (mounted) {
       Navigator.push(

@@ -53,6 +53,74 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
     }
   }
 
+  Future<void> _showEditProfileDialog() async {
+    final nameController = TextEditingController(text: _currentUser?.name.isNotEmpty == true ? _currentUser!.name : '');
+    final phoneController = TextEditingController(text: _currentUser?.phone.isNotEmpty == true ? _currentUser!.phone : (_auth.currentUser?.phoneNumber ?? ''));
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: Text('تحديث البيانات', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: InputDecoration(
+                  labelText: 'الاسم الشخصي',
+                  labelStyle: GoogleFonts.tajawal(),
+                ),
+              ),
+              const SizedBox(height: 15),
+              TextField(
+                controller: phoneController,
+                keyboardType: TextInputType.phone,
+                decoration: InputDecoration(
+                  labelText: 'رقم الجوال',
+                  labelStyle: GoogleFonts.tajawal(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('إلغـاء', style: GoogleFonts.tajawal()),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E)),
+              child: Text('حفـظ', style: GoogleFonts.tajawal(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == true) {
+      final uid = _auth.currentUser?.uid;
+      if (uid != null) {
+        setState(() => _isLoading = true);
+        try {
+          await _firestore.collection('users').doc(uid).set({
+            'name': nameController.text.trim(),
+            'phone': phoneController.text.trim(),
+          }, SetOptions(merge: true));
+          await _loadUserData();
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('خطأ في حفظ البيانات', style: GoogleFonts.tajawal())),
+            );
+            setState(() => _isLoading = false);
+          }
+        }
+      }
+    }
+  }
+
   Future<void> _deleteAccount() async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
@@ -108,10 +176,20 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                 child: Column(
                   children: [
                     _buildHeader(
-                      _currentUser?.name?.isNotEmpty == true ? _currentUser!.name : 'عميل زيارة',
-                      user?.phoneNumber ?? '',
+                      _currentUser?.name.isNotEmpty == true ? _currentUser!.name : 'عميل زيارة',
+                      _currentUser?.phone.isNotEmpty == true ? _currentUser!.phone : (user?.phoneNumber ?? ''),
                     ),
                     const SizedBox(height: 20),
+                    _buildInfoTile(
+                      Icons.person_outline,
+                      'الاسم الشخصي',
+                      _currentUser?.name.isNotEmpty == true ? _currentUser!.name : 'غير متوفر',
+                    ),
+                    _buildInfoTile(
+                      Icons.email_outlined,
+                      'البريد الإلكتروني',
+                      _currentUser?.email.isNotEmpty == true ? _currentUser!.email : (user?.email ?? 'غير متوفر'),
+                    ),
                     _buildInfoTile(
                       Icons.phone,
                       'رقم الجوال',
@@ -200,15 +278,21 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
             ),
           ),
           const SizedBox(width: 20),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('أهلاً بك،', style: GoogleFonts.tajawal(color: Colors.white70, fontSize: 14)),
-              Text(name, style: GoogleFonts.tajawal(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-              if (phone.isNotEmpty)
-                Text(phone, style: GoogleFonts.tajawal(color: Colors.white60, fontSize: 13)),
-            ],
-          )
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('أهلاً بك،', style: GoogleFonts.tajawal(color: Colors.white70, fontSize: 14)),
+                Text(name, style: GoogleFonts.tajawal(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                if (phone.isNotEmpty)
+                  Text(phone, style: GoogleFonts.tajawal(color: Colors.white60, fontSize: 13)),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit, color: Colors.white),
+            onPressed: _showEditProfileDialog,
+          ),
         ],
       ),
     );

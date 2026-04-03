@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:zyiarah/screens/admin/admin_coupons_screen.dart';
+import 'package:zyiarah/screens/admin/admin_banners_screen.dart';
 
 class AdminMarketingScreen extends StatefulWidget {
   const AdminMarketingScreen({super.key});
@@ -47,6 +49,34 @@ class _AdminMarketingScreenState extends State<AdminMarketingScreen> {
           padding: const EdgeInsets.all(20),
           children: [
             const Icon(Icons.campaign, size: 80, color: Colors.blueAccent),
+            const SizedBox(height: 20),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminCouponsScreen()));
+              },
+              icon: const Icon(Icons.local_offer, color: Color(0xFFE11D48)),
+              label: Text("إدارة أكواد الخصم (Coupons)", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFFE11D48))),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                side: const BorderSide(color: Color(0xFFE11D48), width: 2),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 15),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminBannersScreen()));
+              },
+              icon: const Icon(Icons.view_carousel, color: Color(0xFF2563EB)),
+              label: Text("إدارة البنرات الإعلانية (Banners)", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF2563EB))),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                side: const BorderSide(color: Color(0xFF2563EB), width: 2),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 40),
+            const Divider(),
             const SizedBox(height: 20),
             Text(
               "إرسال إشعار للجميع (Push Notification)",

@@ -1,11 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/screens/contract_signing_screen.dart';
 
-class ZyiarahSubscriptionPlansScreen extends StatelessWidget {
+class ZyiarahSubscriptionPlansScreen extends StatefulWidget {
   const ZyiarahSubscriptionPlansScreen({super.key});
 
+  @override
+  State<ZyiarahSubscriptionPlansScreen> createState() => _ZyiarahSubscriptionPlansScreenState();
+}
+
+class _ZyiarahSubscriptionPlansScreenState extends State<ZyiarahSubscriptionPlansScreen> {
   final Color brandPurple = const Color(0xFF5D1B5E);
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  
+  bool _isLoading = true;
+  List<QueryDocumentSnapshot> _packages = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchPackages();
+  }
+
+  Future<void> _fetchPackages() async {
+    try {
+      final snapshot = await _db.collection('subscription_packages').orderBy('rank').get();
+      if (mounted) {
+        setState(() {
+          _packages = snapshot.docs;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,43 +51,50 @@ class ZyiarahSubscriptionPlansScreen extends StatelessWidget {
       ),
       body: Directionality(
         textDirection: TextDirection.rtl,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildInfoSection(),
-              const SizedBox(height: 30),
-              _buildPlanCard(
-                context,
-                'الباقة اليومية',
-                'زيارة واحدة في اليوم المختار',
-                '99 ر.س',
-                ['تنظيف شامل لمدة 4 ساعات', 'تشمل جميع الأدوات', 'مقدمة خدمة واحدة'],
-                Colors.blue.shade600,
+        child: _isLoading 
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildInfoSection(),
+                  const SizedBox(height: 30),
+                  if (_packages.isEmpty)
+                    Center(
+                      child: Text(
+                        'لا توجد باقات متاحة حالياً', 
+                        style: GoogleFonts.tajawal(fontSize: 16, color: Colors.grey),
+                      ),
+                    ),
+                  ..._packages.map((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final features = (data['features'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [];
+                    final isPremium = data['isPremium'] == true;
+                    // Provide aesthetic colors
+                    Color cardColor = brandPurple;
+                    if (isPremium) {
+                      cardColor = Colors.amber.shade700;
+                    } else if (_packages.indexOf(doc) % 2 == 0) {
+                      cardColor = Colors.blue.shade600;
+                    }
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 20),
+                      child: _buildPlanCard(
+                        context,
+                        data['title'] ?? 'باقة اشتراك',
+                        data['subtitle'] ?? '',
+                        '${data['price']} ر.س',
+                        features,
+                        cardColor,
+                        isPremium: isPremium,
+                      ),
+                    );
+                  }),
+                ],
               ),
-              const SizedBox(height: 20),
-              _buildPlanCard(
-                context,
-                'الباقة الأسبوعية',
-                'زيارة واحدة اسبوعياً (4 زيارات)',
-                '349 ر.س',
-                ['توفير 15%', 'تحديد موعد ثابت أسبوعياً', 'خصومات على الخدمات الإضافية'],
-                brandPurple,
-              ),
-              const SizedBox(height: 20),
-              _buildPlanCard(
-                context,
-                'الباقة الشهرية (جولد)',
-                'زيارتين اسبوعياً (8 زيارات)',
-                '649 ر.س',
-                ['توفير 25%', 'مقدمة خدمة ثابتة ومفضلة', 'أولوية في الحجز', 'عقد إلكتروني موثق'],
-                Colors.amber.shade700,
-                isPremium: true,
-              ),
-            ],
-          ),
-        ),
+            ),
       ),
     );
   }
@@ -100,13 +139,16 @@ class ZyiarahSubscriptionPlansScreen extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: GoogleFonts.tajawal(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-                  Text(subtitle, style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey[600])),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: GoogleFonts.tajawal(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+                    Text(subtitle, style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey[600])),
+                  ],
+                ),
               ),
+              const SizedBox(width: 10),
               Text(price, style: GoogleFonts.tajawal(fontSize: 22, fontWeight: FontWeight.w900, color: const Color(0xFF0F172A))),
             ],
           ),
@@ -120,7 +162,7 @@ class ZyiarahSubscriptionPlansScreen extends StatelessWidget {
               children: [
                 Icon(Icons.check_circle_rounded, color: color, size: 18),
                 const SizedBox(width: 10),
-                Text(f, style: GoogleFonts.tajawal(fontSize: 14, color: Colors.blueGrey[700])),
+                Expanded(child: Text(f, style: GoogleFonts.tajawal(fontSize: 14, color: Colors.blueGrey[700]))),
               ],
             ),
           )),
@@ -129,11 +171,11 @@ class ZyiarahSubscriptionPlansScreen extends StatelessWidget {
             width: double.infinity,
             child: ElevatedButton(
               onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => ZyiarahContractSigningScreen(planName: title)),
-            );
-          },
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ZyiarahContractSigningScreen(planName: title)),
+                );
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: color,
                 foregroundColor: Colors.white,
