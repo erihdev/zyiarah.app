@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' as intl;
 
 class AdminAnalyticsScreen extends StatefulWidget {
   const AdminAnalyticsScreen({super.key});
@@ -123,7 +123,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                           ),
                           const SizedBox(height: 20),
                           Text(
-                            '${NumberFormat.currency(symbol: 'ر.س', decimalDigits: 0).format(_totalRevenue)}',
+                            '${intl.NumberFormat.currency(symbol: 'ر.س', decimalDigits: 0).format(_totalRevenue)}',
                             style: GoogleFonts.tajawal(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.white),
                           ),
                         ],

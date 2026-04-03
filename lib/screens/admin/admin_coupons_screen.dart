@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' as intl;
 
 class AdminCouponsScreen extends StatefulWidget {
   const AdminCouponsScreen({super.key});
@@ -114,7 +114,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                                 setDialogState(() => expiryDate = picked);
                               }
                             },
-                            child: Text(DateFormat('yyyy-MM-dd').format(expiryDate)),
+                            child: Text(intl.DateFormat('yyyy-MM-dd').format(expiryDate)),
                           ),
                         ],
                       ),
@@ -251,7 +251,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                                 decoration: BoxDecoration(
                                   color: Colors.pink.shade50,
                                   borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: Colors.pink.shade200, style: BorderStyle.dash),
+                                  border: Border.all(color: Colors.pink.shade200, style: BorderStyle.solid),
                                 ),
                                 child: Text(
                                   data['code'] ?? '', 
@@ -301,7 +301,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text('الاستخدام: ${data['uses'] ?? 0} من ${data['maxUses'] ?? 0}', style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey[700])),
-                              Text('ينتهي في: ${DateFormat('yyyy-MM-dd').format(expiry)}', style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey[700])),
+                              Text('ينتهي في: ${intl.DateFormat('yyyy-MM-dd').format(expiry)}', style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey[700])),
                             ],
                           ),
                         ],
