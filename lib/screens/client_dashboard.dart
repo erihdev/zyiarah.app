@@ -416,7 +416,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           themeColor: const Color(0xFF10B981),
           icon: Icons.access_time_filled,
           iconBgColor: const Color(0xFFE1F0E4),
-          // imagePath: 'assets/images/hourly_cleaning.png',
+          imagePath: 'assets/images/hourly_cleaning.png',
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HourlyCleaningDetailsScreen(serviceName: "نظافة بالساعة"))),
         ),
         _buildWebStyleServiceCard(
@@ -427,7 +427,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           themeColor: const Color(0xFF8B5CF6),
           icon: Icons.chair,
           iconBgColor: const Color(0xFFF1E9FE),
-          // imagePath: 'assets/images/sofa_cleaning.png',
+          imagePath: 'assets/images/sofa_cleaning.png',
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SofaRugCleaningDetailsScreen(serviceName: "تنظيف الكنب والزل"))),
         ),
         _buildWebStyleServiceCard(
@@ -438,16 +438,18 @@ class _ClientDashboardState extends State<ClientDashboard> {
           themeColor: const Color(0xFF10B981),
           icon: Icons.workspace_premium,
           iconBgColor: const Color(0xFFE1F0E4),
+          imagePath: 'assets/images/monthly_cleaning.png',
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahSubscriptionPlansScreen())),
         ),
         _buildWebStyleServiceCard(
-          title: "الصيانة والمقاولات",
-          subtitle: "أعمال صيانة متكاملة",
+          title: "صيانة وغسيل المكيفات",
+          subtitle: "تنظيف وصيانة شاملة",
           price: "حسب الطلب",
           numericPrice: 0.0,
           themeColor: const Color(0xFF475569),
           icon: Icons.handyman,
           iconBgColor: const Color(0xFFF1F5F9),
+          imagePath: 'assets/images/company_cleaning.png',
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahMaintenanceRequestScreen())),
         ),
         _buildWebStyleServiceCard(
