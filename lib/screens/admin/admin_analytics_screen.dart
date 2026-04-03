@@ -123,7 +123,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                           ),
                           const SizedBox(height: 20),
                           Text(
-                            '${intl.NumberFormat.currency(symbol: 'ر.س', decimalDigits: 0).format(_totalRevenue)}',
+                            intl.NumberFormat.currency(symbol: 'ر.س', decimalDigits: 0).format(_totalRevenue),
                             style: GoogleFonts.tajawal(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.white),
                           ),
                         ],

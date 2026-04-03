@@ -238,7 +238,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                             title: const Text("تفعيل الدفع عند الاستلام", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                             subtitle: const Text("السماح للعملاء باختيار الدفع نقداً", style: TextStyle(fontSize: 12, color: Colors.grey)),
                             value: _codEnabled,
-                            activeColor: const Color(0xFF8B5CF6),
+                            activeThumbColor: const Color(0xFF8B5CF6),
                             onChanged: (val) {
                               setState(() {
                                 _codEnabled = val;

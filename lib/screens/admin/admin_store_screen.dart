@@ -43,11 +43,11 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: Text("تعديل السعر", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
         content: TextField(
           controller: priceCtrl,
-          keyboardType: TextInputType.numberWithOptions(decimal: true),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: InputDecoration(
             labelText: "السعر الجديد (ر.س)",
             labelStyle: GoogleFonts.tajawal(),
@@ -65,8 +65,10 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                 await _db.collection('products').doc(doc.id).update({
                   'price': double.tryParse(priceCtrl.text) ?? double.parse(currentPrice),
                 });
-                if (mounted) Navigator.pop(context);
-              } catch (e) {}
+                if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+              } catch (e) {
+                debugPrint('Error updating price: $e');
+              }
             },
             child: Text("حفظ", style: GoogleFonts.tajawal()),
           ),
@@ -173,7 +175,7 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                         Switch(
                           value: !isHidden,
                           onChanged: (val) => _toggleProductVisibility(doc),
-                          activeColor: Colors.green,
+                          activeThumbColor: Colors.green,
                           inactiveThumbColor: Colors.red,
                         ),
                       ],

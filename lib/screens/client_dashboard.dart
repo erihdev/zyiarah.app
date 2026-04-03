@@ -6,7 +6,6 @@ import 'package:zyiarah/screens/profile_screen.dart';
 import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/screens/hourly_details_screen.dart';
 import 'package:zyiarah/screens/orders_list_screen.dart';
-import 'package:zyiarah/screens/notifications_screen.dart';
 import 'package:zyiarah/screens/support_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 
@@ -14,9 +13,8 @@ import 'package:zyiarah/screens/maintenance_request_screen.dart';
 import 'package:zyiarah/screens/subscription_plans_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
 import 'package:zyiarah/services/popup_service.dart';
-import 'package:zyiarah/screens/store_screen.dart';
-import 'package:zyiarah/models/service_model.dart';
 import 'package:zyiarah/screens/sofa_rug_details_screen.dart';
+import 'package:zyiarah/screens/store_screen.dart';
 
 class ClientDashboard extends StatefulWidget {
   const ClientDashboard({super.key});
@@ -26,7 +24,7 @@ class ClientDashboard extends StatefulWidget {
 }
 
 class _ClientDashboardState extends State<ClientDashboard> {
-  bool _isLoading = false;
+  final bool _isLoading = false;
   ZyiarahUser? _currentUser;
 
   @override
@@ -158,14 +156,14 @@ class _ClientDashboardState extends State<ClientDashboard> {
       backgroundColor: Colors.transparent,
       elevation: 0,
       iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
-      title: Row(
+      title: const Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(horizontal: 10),
             child: Text('بوابتك لخدمات منزلية متكاملة', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13, color: Color(0xFF64748B))),
           ),
-          const SizedBox(width: 48), // Spacer to balance the leading/trailing area if needed
+          SizedBox(width: 48), // Spacer to balance the leading/trailing area if needed
         ],
       ),
     );
@@ -398,57 +396,9 @@ class _ClientDashboardState extends State<ClientDashboard> {
     return _buildDefaultStaticGrid();
   }
 
-  Widget _buildDynamicServiceCard(ZyiarahService service) {
-    return _buildWebStyleServiceCard(
-      title: service.title,
-      subtitle: service.subtitle,
-      price: service.priceText,
-      numericPrice: service.basePrice,
-      themeColor: _getThemeColorForRoute(service.routeName),
-      icon: ZyiarahService.getIcon(service.iconName),
-      iconBgColor: _getThemeColorForRoute(service.routeName).withValues(alpha: 0.1),
-      imagePath: service.imagePath,
-      onTap: () => _handleServiceNavigation(service),
-    );
-  }
 
-  Color _getThemeColorForRoute(String route) {
-    switch (route) {
-      case 'hourly': return const Color(0xFF10B981);
-      case 'sofa_rug': return const Color(0xFF8B5CF6);
-      case 'subscription': return const Color(0xFF10B981);
-      case 'maintenance': return const Color(0xFF475569);
-      case 'business': return const Color(0xFF3B82F6);
-      case 'store': return const Color(0xFF5D1B5E);
-      default: return const Color(0xFF2563EB);
-    }
-  }
 
-  void _handleServiceNavigation(ZyiarahService service) {
-    switch (service.routeName) {
-      case 'hourly':
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const HourlyCleaningDetailsScreen(serviceName: "نظافة بالساعة")));
-        break;
-      case 'sofa_rug':
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const SofaRugCleaningDetailsScreen(serviceName: "تنظيف الكنب والزل")));
-        break;
-      case 'subscription':
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahSubscriptionPlansScreen()));
-        break;
-      case 'maintenance':
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahMaintenanceRequestScreen()));
-        break;
-      case 'store':
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahStoreScreen()));
-        break;
-      default:
-        if (service.basePrice > 0) {
-          _initiatePayment(service.title, service.basePrice);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("هذه الخدمة تتطلب تواصل مباشر")));
-        }
-    }
-  }
+
 
   // نسخة احتياطية في حال كانت قاعدة البيانات فارغة
   Widget _buildDefaultStaticGrid() {
@@ -772,7 +722,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
             }),
             _buildDrawerItem(Icons.description_outlined, 'عقودي الإلكتـرونية', false, onTap: () {
               Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (context) => ZyiarahContractsListScreen()));
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahContractsListScreen()));
             }),
             const SizedBox(height: 20),
             _buildDrawerItem(Icons.language, 'English', false, onTap: () {

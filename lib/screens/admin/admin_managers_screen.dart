@@ -37,7 +37,7 @@ class AdminManagersScreen extends StatelessWidget {
                   child: ListTile(
                     leading: const CircleAvatar(backgroundColor: Colors.indigo, child: Icon(Icons.admin_panel_settings, color: Colors.white)),
                     title: Text(admin['email'] ?? 'مدير', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text("صلاحيات القراءة والكتابة"),
+                    subtitle: const Text("صلاحيات القراءة والكتابة"),
                     trailing: const Icon(Icons.shield, color: Colors.blue),
                   ),
                 );

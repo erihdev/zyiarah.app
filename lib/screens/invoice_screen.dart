@@ -30,7 +30,6 @@ class ZyiarahInvoiceScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final double vatAmount = amount * 0.15; // الضريبة 15%
-    final double subtotal = amount - vatAmount;
     final DateTime now = DateTime.now();
 
     // توليد QR Code متوافق مع هيئة الزكاة (TLV Base64)

@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:signature/signature.dart';
@@ -35,18 +34,18 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
       return;
     }
 
-    final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-    final FirebaseAuth _auth = FirebaseAuth.instance;
+    final FirebaseFirestore firestore = FirebaseFirestore.instance;
+    final FirebaseAuth auth = FirebaseAuth.instance;
 
     try {
-      final user = _auth.currentUser;
-      final Uint8List? signatureData = await _controller.toPngBytes();
+      final user = auth.currentUser;
+      await _controller.toPngBytes();
       
       // Note: In a production app, you'd upload signatureData to Firebase Storage here
       // and get a download URL. For this TestFlight version, we proceed with identifying
       // the contract in Firestore so the Admin can see it.
 
-      await _firestore.collection('contracts').add({
+      await firestore.collection('contracts').add({
         'userId': user?.uid,
         'userPhone': user?.phoneNumber,
         'planName': widget.planName,

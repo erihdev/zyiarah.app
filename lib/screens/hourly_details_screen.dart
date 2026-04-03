@@ -274,13 +274,13 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   
   Widget _buildWorkerSelector() {
     return Row(
-      children: [1, 2].map((count) {
-        bool isSelected = _workerCount == count;
+      children: [1, 2].map((workerNum) {
+        bool isSelected = _workerCount == workerNum;
         return Expanded(
           child: Padding(
-            padding: EdgeInsets.only(left: count == 1 ? 10 : 0, right: count == 2 ? 10 : 0),
+            padding: EdgeInsets.only(left: workerNum == 1 ? 10 : 0, right: workerNum == 2 ? 10 : 0),
             child: InkWell(
-              onTap: () => setState(() => _workerCount = count),
+              onTap: () => setState(() => _workerCount = workerNum),
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
@@ -293,7 +293,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                 ),
                 child: Center(
                   child: Text(
-                    count == 1 ? "عاملة واحدة" : "عاملتين", 
+                    workerNum == 1 ? "عاملة واحدة" : "عاملتين", 
                     style: TextStyle(
                       color: isSelected ? Colors.white : Colors.black,
                       fontWeight: FontWeight.bold,

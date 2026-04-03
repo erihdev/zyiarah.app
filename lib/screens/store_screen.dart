@@ -23,10 +23,7 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
     );
   }
 
-  double get _totalAmount {
-    // This is simplified; ideally we need access to product details to calculate
-    return 0.0; // Calculated in checkout
-  }
+
 
   void _showCart() {
     showModalBottomSheet(
@@ -318,7 +315,9 @@ class _CartSheetState extends State<_CartSheet> {
                   ),
                   child: RadioListTile(
                     value: 'cash_on_delivery',
+                    // ignore: deprecated_member_use
                     groupValue: _selectedPaymentMethod,
+                    // ignore: deprecated_member_use
                     onChanged: (val) => setState(() => _selectedPaymentMethod = val.toString()),
                     title: const Text('الدفع عند الاستلام', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                     subtitle: const Text('الدفع كاش أو عبر الشبكة عند استلام المنتجات', style: TextStyle(fontSize: 11, color: Colors.grey)),
@@ -336,7 +335,9 @@ class _CartSheetState extends State<_CartSheet> {
                   ),
                   child: RadioListTile(
                     value: 'online',
+                    // ignore: deprecated_member_use
                     groupValue: _selectedPaymentMethod,
+                    // ignore: deprecated_member_use
                     onChanged: (val) {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الدفع الإلكتروني سيتوفر قريباً')));
                     },

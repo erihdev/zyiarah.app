@@ -71,7 +71,9 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                             child: RadioListTile<String>(
                               title: const Text('نسبة مئوية %', style: TextStyle(fontSize: 12)),
                               value: 'percentage',
+                              // ignore: deprecated_member_use
                               groupValue: type,
+                              // ignore: deprecated_member_use
                               onChanged: (val) => setDialogState(() => type = val!),
                               contentPadding: EdgeInsets.zero,
                             ),
@@ -80,7 +82,9 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                             child: RadioListTile<String>(
                               title: const Text('مبلغ ثابت', style: TextStyle(fontSize: 12)),
                               value: 'fixed',
+                              // ignore: deprecated_member_use
                               groupValue: type,
+                              // ignore: deprecated_member_use
                               onChanged: (val) => setDialogState(() => type = val!),
                               contentPadding: EdgeInsets.zero,
                             ),

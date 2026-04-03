@@ -5,7 +5,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/screens/subscription_plans_screen.dart';
 import 'package:zyiarah/screens/maintenance_request_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
-import 'package:zyiarah/screens/order_tracking_screen.dart';
 
 class ZyiarahPopupService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -24,6 +23,7 @@ class ZyiarahPopupService {
         
         // Only show if sent in the last 24 hours (or adjust as needed)
         if (sentAt != null && DateTime.now().difference(sentAt).inHours < 24) {
+          if (!context.mounted) return;
           _showRahaStylePopup(context, data);
         }
       }

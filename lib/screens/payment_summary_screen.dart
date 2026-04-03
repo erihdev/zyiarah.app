@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:zyiarah/services/tamara_service.dart';
 import 'package:zyiarah/services/edfapay_service.dart';
 import 'package:zyiarah/screens/checkout_screen.dart';
@@ -44,9 +42,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   
   String _selectedPaymentMethod = 'card'; // 'card', 'tamara', 'subscription' or 'cod'
   bool _isLoading = false;
-  bool _codEnabled = false;
   ZyiarahUser? _currentUser;
-  Map<String, dynamic> _paymentConfigs = {};
 
   final TextEditingController _couponController = TextEditingController();
   double _discountAmount = 0.0;
@@ -63,15 +59,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-      final configDoc = await FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get();
-      
       if (doc.exists && mounted) {
         setState(() {
           _currentUser = ZyiarahUser.fromMap(user.uid, doc.data()!);
-          if (configDoc.exists) {
-            _paymentConfigs = configDoc.data()!;
-            _codEnabled = _paymentConfigs['cod_enabled'] ?? false;
-          }
+
           // Auto-select subscription if available
           if ((_currentUser?.visitsRemaining ?? 0) > 0) {
             _selectedPaymentMethod = 'subscription';
@@ -414,9 +405,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     );
   }
 
-  Widget _buildMapPreview() {
-    return const SizedBox.shrink(); // Historically removed as requested
-  }
+
 
   Widget _buildOrderDetailsCard() {
     return Container(

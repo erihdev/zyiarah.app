@@ -34,7 +34,7 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: Text("تعديل تسعير: ${service.title}"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -60,8 +60,9 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
                   'base_price': double.tryParse(priceCtrl.text) ?? service.basePrice,
                   'price_text': displayCtrl.text,
                 });
+                if (!dialogCtx.mounted) return;
+                Navigator.pop(dialogCtx);
                 if (!mounted) return;
-                Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم التحديث")));
               } catch (e) {
                 if (!mounted) return;

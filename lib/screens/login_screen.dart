@@ -50,13 +50,16 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
         } else if (role == 'admin') {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AdminDashboardScreen()));
         } else {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => ClientDashboard()));
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ClientDashboard()));
         }
       }
     } on FirebaseAuthException catch (e) {
       String message = 'حدث خطأ في تسجيل الدخول';
-      if (e.code == 'user-not-found') message = 'المستخدم غير موجود';
-      else if (e.code == 'wrong-password') message = 'كلمة المرور غير صحيحة';
+      if (e.code == 'user-not-found') {
+        message = 'المستخدم غير موجود';
+      } else if (e.code == 'wrong-password') {
+        message = 'كلمة المرور غير صحيحة';
+      }
       _showError(message);
     } catch (e) {
       _showError('خطأ غير متوقع: $e');
@@ -207,7 +210,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                 const SizedBox(height: 60),
                 TextButton(
                   onPressed: () {
-                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => ClientDashboard()));
+                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ClientDashboard()));
                   },
                   child: Text(
                     "تخطي",

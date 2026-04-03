@@ -110,9 +110,8 @@ class ZyiarahOrderService {
 
   // منح كاش باك 5%
   Future<void> _applyCashback(String userId, double orderAmount) async {
-    final cashback = orderAmount * 0.05;
+    // Cashback disabled for now
     await _db.collection('users').doc(userId).update({
-      // 'wallet_balance': FieldValue.increment(cashback), (Wallet Removed)
     });
   }
 
