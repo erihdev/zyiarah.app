@@ -155,7 +155,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       if (_selectedPaymentMethod == 'subscription') {
         // دفع عبر الاشتراك
         await _orderService.createOrder(
-          clientId: _currentUser!.uid,
+          clientId: FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
           serviceType: widget.serviceName,
           amount: 0.0, // لا توجد تكلفة مالية فورية
           location: widget.location,
@@ -192,7 +192,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       } else if (_selectedPaymentMethod == 'cod') {
         // دفع عند الاستلام
         await _orderService.createOrder(
-          clientId: _currentUser!.uid,
+          clientId: FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
           serviceType: widget.serviceName,
           amount: totalWithVat,
           location: widget.location,
@@ -273,7 +273,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         if (result['success'] == true && mounted) {
           // جلب OrderService لإنشاء الطلب في الداتا بيس لأن EdfaPay (المحاكي) لا يفعل ذلك تلقائياً هنا
           await _orderService.createOrder(
-            clientId: _currentUser!.uid,
+            clientId: FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
             serviceType: widget.serviceName,
             amount: totalWithVat,
             location: widget.location,
