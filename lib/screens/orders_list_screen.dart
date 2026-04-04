@@ -151,16 +151,17 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
   Widget _buildMaintenanceCard(BuildContext context, Map<String, dynamic> data) {
     final status = data['status'] ?? 'under_review';
     final requestId = data['requestId'] ?? '-';
+    final quotePrice = (data['quotePrice'] ?? 0.0).toDouble();
     
     Color statusColor = Colors.orange;
     String statusText = "تحت المراجعة";
 
-    if (status == 'approved') {
+    if (status == 'waiting_payment') {
        statusColor = Colors.blue;
        statusText = "بانتظار الدفع";
-    } else if (status == 'paid' || status == 'completed') {
+    } else if (status == 'approved' || status == 'paid' || status == 'completed') {
        statusColor = Colors.green;
-       statusText = "تم التنفيذ";
+       statusText = "مقبول / جاري العمل";
     } else if (status == 'rejected') {
        statusColor = Colors.red;
        statusText = "مرفوض";
@@ -169,27 +170,67 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        leading: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-          child: Icon(Icons.build_circle_outlined, color: statusColor),
-        ),
-        title: Text(data['serviceType'] ?? 'طلب صيانة', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
           children: [
-            Text('رقم الطلب: #$requestId', style: GoogleFonts.tajawal(fontSize: 12)),
-            const SizedBox(height: 5),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-              child: Text(statusText, style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold)),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+                  child: Icon(Icons.build_circle_outlined, color: statusColor),
+                ),
+                const SizedBox(width: 15),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(data['serviceType'] ?? 'طلب صيانة', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                      Text('رقم الطلب: #$requestId', style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey)),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                  child: Text(statusText, style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+              ],
             ),
+            if (quotePrice > 0) ...[
+              const Divider(height: 30),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text("التكلفة المقدرة", style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      Text("$quotePrice ر.س", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF5D1B5E))),
+                    ],
+                  ),
+                  if (status == 'waiting_payment')
+                    ElevatedButton(
+                      onPressed: () {
+                        // Navigate to payment
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => PaymentSummaryScreen(
+                          serviceName: data['serviceType'] ?? 'صيانة',
+                          amount: quotePrice,
+                          maintenanceId: requestId, // We might need to handle this in PaymentSummary
+                        )));
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF5D1B5E),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: Text("ادفع الآن", style: GoogleFonts.tajawal(color: Colors.white, fontWeight: FontWeight.bold)),
+                    )
+                ],
+              ),
+            ],
           ],
         ),
-        trailing: const Icon(Icons.chevron_left),
       ),
     );
   }

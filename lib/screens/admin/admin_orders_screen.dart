@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart' hide TextDirection;
+import 'package:shimmer/shimmer.dart';
+import 'package:zyiarah/screens/admin/admin_order_details_screen.dart';
+
 
 class AdminOrdersScreen extends StatefulWidget {
   const AdminOrdersScreen({super.key});
@@ -42,7 +43,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
         stream: _db.collection('orders').orderBy('created_at', descending: true).limit(50).snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return _buildShimmerLoading();
           }
 
           final docs = snapshot.data?.docs ?? [];
@@ -69,57 +70,81 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                 elevation: 2,
                 margin: const EdgeInsets.only(bottom: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text("رقم الطلب: #$code", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: _getStatusColor(status).withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(20),
+                child: InkWell(
+                  onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => AdminOrderDetailsScreen(orderId: docs[index].id)));
+                  },
+                  borderRadius: BorderRadius.circular(15),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text("رقم الطلب: #$code", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: _getStatusColor(status).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                _getStatusText(status),
+                                style: TextStyle(color: _getStatusColor(status), fontWeight: FontWeight.bold),
+                              ),
                             ),
-                            child: Text(
-                              _getStatusText(status),
-                              style: TextStyle(color: _getStatusColor(status), fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Divider(height: 24),
-                      Row(
-                        children: [
-                          const Icon(Icons.cleaning_services, color: Colors.grey, size: 20),
-                          const SizedBox(width: 8),
-                          Text(service, style: const TextStyle(fontSize: 15)),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Icon(Icons.attach_money, color: Colors.grey, size: 20),
-                          const SizedBox(width: 8),
-                          Text("$amount ر.س", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Icon(Icons.access_time, color: Colors.grey, size: 20),
-                          const SizedBox(width: 8),
-                          Text(DateFormat('yyyy-MM-dd HH:mm').format(date), style: const TextStyle(color: Colors.grey)),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                        const Divider(height: 24),
+                        Row(
+                          children: [
+                            const Icon(Icons.cleaning_services, color: Colors.grey, size: 20),
+                            const SizedBox(width: 8),
+                            Text(service, style: const TextStyle(fontSize: 15)),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(Icons.attach_money, color: Colors.grey, size: 20),
+                            const SizedBox(width: 8),
+                            Text("$amount ر.س", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(Icons.access_time, color: Colors.grey, size: 20),
+                            const SizedBox(width: 8),
+                            Text(DateFormat('yyyy-MM-dd HH:mm').format(date), style: const TextStyle(color: Colors.grey)),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );
-            },
+          },
+        );
+        },
+      ),
+    );
+  }
+
+  Widget _buildShimmerLoading() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey[300]!,
+      highlightColor: Colors.grey[100]!,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: 6,
+        itemBuilder: (context, index) {
+          return Container(
+            height: 150,
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
           );
         },
       ),

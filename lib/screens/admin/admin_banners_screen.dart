@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
 
 class AdminBannersScreen extends StatefulWidget {
   const AdminBannersScreen({super.key});
@@ -37,13 +40,29 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
   void _showBannerDialog({DocumentSnapshot? doc}) {
     final Map<String, dynamic>? data = doc?.data() as Map<String, dynamic>?;
 
-    final imageUrlCtrl = TextEditingController(text: data?['imageUrl'] ?? '');
     final actionUrlCtrl = TextEditingController(text: data?['actionUrl'] ?? '');
+    String uploadedImageUrl = data?['imageUrl'] ?? '';
     bool isActive = data?['isActive'] ?? true;
     int rank = data?['rank'] ?? (_banners.length + 1);
+    String selectedRoute = data?['routeType'] ?? 'whatsapp';
+    File? pickedImage;
+    bool isUploading = false;
+
+    final List<Map<String, String>> routingOptions = [
+      {'value': 'whatsapp', 'label': 'رابط واتساب (خارجي)'},
+      {'value': '/hourly_cleaning', 'label': 'خدمة النظافة بالساعة'},
+      {'value': '/sofa_cleaning', 'label': 'خدمة تنظيف الكنب'},
+      {'value': '/rug_cleaning', 'label': 'خدمة تنظيف الزل'},
+      {'value': '/maintenance', 'label': 'طلب صيانة'},
+      {'value': '/store', 'label': 'المتجر'},
+      {'value': '/subscriptions', 'label': 'باقات الاشتراك'},
+      {'value': '/support', 'label': 'الدعم الفني'},
+      {'value': 'none', 'label': 'بدون توجيه (صورة فقط)'},
+    ];
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
@@ -76,24 +95,64 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                         ),
                       ),
                       const SizedBox(height: 15),
-                      TextField(
-                        controller: imageUrlCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'رابط الصورة (URL)', 
-                          hintText: 'https://example.com/banner.jpg',
-                          border: OutlineInputBorder(),
+                      
+                      // Image Piker
+                      GestureDetector(
+                        onTap: () async {
+                          final picker = ImagePicker();
+                          final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+                          if (image != null) {
+                            setDialogState(() => pickedImage = File(image.path));
+                          }
+                        },
+                        child: Container(
+                          height: 150,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey),
+                            borderRadius: BorderRadius.circular(10),
+                            color: Colors.grey[200],
+                            image: pickedImage != null 
+                                ? DecorationImage(image: FileImage(pickedImage!), fit: BoxFit.cover)
+                                : (uploadedImageUrl.isNotEmpty 
+                                    ? DecorationImage(image: NetworkImage(uploadedImageUrl), fit: BoxFit.cover) 
+                                    : null),
+                          ),
+                          child: pickedImage == null && uploadedImageUrl.isEmpty
+                              ? const Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.add_photo_alternate, size: 50, color: Colors.grey),
+                                    Text("اضغط لاختيار صورة من الاستديو")
+                                  ],
+                                )
+                              : null,
                         ),
-                        maxLines: 2,
                       ),
+                      
                       const SizedBox(height: 15),
-                      TextField(
-                        controller: actionUrlCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'رابط التوجيه (اختياري)',
-                          hintText: 'أين يذهب العميل عند النقر؟ (واتساب/رابط)',
-                          border: OutlineInputBorder(),
-                        ),
+                      DropdownButtonFormField<String>(
+                        value: selectedRoute,
+                        decoration: const InputDecoration(labelText: 'توجيه العميل عند النقر', border: OutlineInputBorder()),
+                        items: routingOptions.map((e) => DropdownMenuItem(value: e['value'], child: Text(e['label']!))).toList(),
+                        onChanged: (val) {
+                          if (val != null) setDialogState(() => selectedRoute = val);
+                        },
                       ),
+                      
+                      if (selectedRoute == 'whatsapp') ...[
+                        const SizedBox(height: 15),
+                        TextField(
+                          controller: actionUrlCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'رابط الواتساب (https://wa.me/...)',
+                            hintText: 'https://wa.me/966500000000',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.link),
+                          ),
+                        ),
+                      ],
+                      
                       const SizedBox(height: 10),
                       SwitchListTile(
                         title: const Text('حالة البنر (تفعيل / إخفاء)'),
@@ -106,33 +165,56 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                 ),
                 actions: [
                   TextButton(
-                    onPressed: () => Navigator.pop(ctx),
+                    onPressed: isUploading ? null : () => Navigator.pop(ctx),
                     child: Text('إلغاء', style: GoogleFonts.tajawal(color: Colors.grey)),
                   ),
                   ElevatedButton(
-                    onPressed: () async {
-                      if (imageUrlCtrl.text.isEmpty) return;
-
-                      final newData = {
-                        'imageUrl': imageUrlCtrl.text.trim(),
-                        'actionUrl': actionUrlCtrl.text.trim(),
-                        'isActive': isActive,
-                        'rank': rank,
-                      };
-
-                      if (doc == null) {
-                        await _db.collection('promo_banners').add(newData);
-                      } else {
-                        await _db.collection('promo_banners').doc(doc.id).update(newData);
+                    onPressed: isUploading ? null : () async {
+                      if (pickedImage == null && uploadedImageUrl.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء اختيار صورة')));
+                        return;
                       }
 
-                      if (context.mounted) {
-                        Navigator.pop(ctx);
-                        _fetchBanners();
+                      setDialogState(() => isUploading = true);
+
+                      try {
+                        String finalUrl = uploadedImageUrl;
+                        if (pickedImage != null) {
+                          final ref = FirebaseStorage.instance.ref().child('banners/${DateTime.now().millisecondsSinceEpoch}.jpg');
+                          await ref.putFile(pickedImage!);
+                          finalUrl = await ref.getDownloadURL();
+                        }
+
+                        final newData = {
+                          'imageUrl': finalUrl,
+                          'routeType': selectedRoute,
+                          'actionUrl': actionUrlCtrl.text.trim(),
+                          'isActive': isActive,
+                          'rank': rank,
+                        };
+
+                        if (doc == null) {
+                          await _db.collection('promo_banners').add(newData);
+                        } else {
+                          await _db.collection('promo_banners').doc(doc.id).update(newData);
+                        }
+
+                        if (context.mounted) {
+                          Navigator.pop(ctx);
+                          _fetchBanners();
+                        }
+                      } catch (e) {
+                         if (context.mounted) {
+                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ في الرفع: $e')));
+                         }
+                      } finally {
+                        setDialogState(() => isUploading = false);
                       }
                     },
                     style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB)),
-                    child: Text('حفظ ونشر', style: GoogleFonts.tajawal(color: Colors.white)),
+                    child: isUploading 
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : Text('حفظ ونشر', style: GoogleFonts.tajawal(color: Colors.white)),
                   ),
                 ],
               ),

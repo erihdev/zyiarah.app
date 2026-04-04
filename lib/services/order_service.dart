@@ -208,7 +208,11 @@ class ZyiarahOrderService {
   }
 
   // الاستماع لتحديثات طلب معين
-  Stream<DocumentSnapshot> streamOrderTracking(String orderId) {
-    return _db.collection('orders').doc(orderId).snapshots();
+  // تحديث موقع السائق اللحظي للطلب (للمتابعة من قبل العميل)
+  Future<void> updateDriverLocation(String orderId, GeoPoint location) async {
+    await _db.collection('orders').doc(orderId).update({
+      'driver_location': location,
+      'last_location_update': FieldValue.serverTimestamp(),
+    });
   }
 }

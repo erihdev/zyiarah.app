@@ -17,11 +17,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   bool _isSaving = false;
   late AnimationController _fadeController;
 
-  final TextEditingController _sofaInsideCtrl = TextEditingController();
-  final TextEditingController _sofaOutsideCtrl = TextEditingController();
-  final TextEditingController _rugInsideCtrl = TextEditingController();
-  final TextEditingController _rugOutsideCtrl = TextEditingController();
-  final TextEditingController _depositCtrl = TextEditingController();
+  final TextEditingController _maxWorkerCtrl = TextEditingController();
+  List<int> _selectedHours = [4, 5, 6, 8];
   bool _codEnabled = false;
 
   @override
@@ -38,14 +35,28 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         final data = doc.data()!;
         if (mounted) {
           setState(() {
-            _sofaInsideCtrl.text = (data['sofa_price_inside'] ?? 35).toString();
-            _sofaOutsideCtrl.text = (data['sofa_price_outside'] ?? 39).toString();
-            _rugInsideCtrl.text = (data['rug_price_inside'] ?? 15).toString();
-            _rugOutsideCtrl.text = (data['rug_price_outside'] ?? 17).toString();
-            _depositCtrl.text = (data['outside_deposit'] ?? 50).toString();
             _codEnabled = data['cod_enabled'] ?? false;
             _isLoading = false;
           });
+          
+          final hourlyDoc = await _db.collection('system_configs').doc('hourly_settings').get();
+          if (hourlyDoc.exists) {
+            final List<dynamic>? hoursList = hourlyDoc.data()?['allowed_hours'];
+            if (hoursList != null && mounted) {
+              setState(() {
+                _selectedHours = hoursList.cast<int>();
+              });
+            }
+            if (mounted) {
+              setState(() {
+                _maxWorkerCtrl.text = (hourlyDoc.data()?['max_workers'] ?? 5).toString();
+              });
+            }
+          }
+          else {
+             _selectedHours = [4, 5, 6, 8];
+             _maxWorkerCtrl.text = '5';
+          }
           _fadeController.forward();
         }
       } else {
@@ -66,12 +77,15 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
     setState(() => _isSaving = true);
     try {
       await _db.collection('system_configs').doc('main_settings').set({
-        'sofa_price_inside': double.tryParse(_sofaInsideCtrl.text) ?? 35,
-        'sofa_price_outside': double.tryParse(_sofaOutsideCtrl.text) ?? 39,
-        'rug_price_inside': double.tryParse(_rugInsideCtrl.text) ?? 15,
-        'rug_price_outside': double.tryParse(_rugOutsideCtrl.text) ?? 17,
-        'outside_deposit': double.tryParse(_depositCtrl.text) ?? 50,
         'cod_enabled': _codEnabled,
+      }, SetOptions(merge: true));
+
+      List<int> validHours = List<int>.from(_selectedHours)..sort();
+      if (validHours.isEmpty) validHours = [4];
+
+      await _db.collection('system_configs').doc('hourly_settings').set({
+        'allowed_hours': validHours,
+        'max_workers': int.tryParse(_maxWorkerCtrl.text) ?? 5,
       }, SetOptions(merge: true));
       
       if (mounted) {
@@ -103,11 +117,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   @override
   void dispose() {
     _fadeController.dispose();
-    _sofaInsideCtrl.dispose();
-    _sofaOutsideCtrl.dispose();
-    _rugInsideCtrl.dispose();
-    _rugOutsideCtrl.dispose();
-    _depositCtrl.dispose();
+    _maxWorkerCtrl.dispose();
     super.dispose();
   }
 
@@ -186,47 +196,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                       ),
                       
                       const SizedBox(height: 32),
-                      
-                      // Sofa Pricing Card
-                      _buildSectionCard(
-                        title: "أسعار غسيل الكنب (بالمتر)",
-                        icon: Icons.chair_rounded,
-                        color: const Color(0xFF3B82F6),
-                        children: [
-                          _buildPremiumField("داخل الداير (منطقة الرياض التلقائية)", "ر.س", _sofaInsideCtrl, Icons.my_location_rounded),
-                          const SizedBox(height: 16),
-                          _buildPremiumField("خارج الداير (المناطق البعيدة)", "ر.س", _sofaOutsideCtrl, Icons.location_off_rounded),
-                        ],
-                      ),
-                      
-                      const SizedBox(height: 24),
-                      
-                      // Rug Pricing Card
-                      _buildSectionCard(
-                        title: "أسعار غسيل الزل والسجاد (بالمتر)",
-                        icon: Icons.grid_view_rounded,
-                        color: const Color(0xFFF59E0B),
-                        children: [
-                          _buildPremiumField("داخل الداير (منطقة الرياض التلقائية)", "ر.س", _rugInsideCtrl, Icons.my_location_rounded),
-                          const SizedBox(height: 16),
-                          _buildPremiumField("خارج الداير (المناطق البعيدة)", "ر.س", _rugOutsideCtrl, Icons.location_off_rounded),
-                        ],
-                      ),
-                      
-                      const SizedBox(height: 24),
-                      
-                      // Deposit Settings Card
-                      _buildSectionCard(
-                        title: "شروط وسياسات الحجز (العربون)",
-                        icon: Icons.security_rounded,
-                        color: const Color(0xFF10B981),
-                        children: [
-                          _buildPremiumField("العربون الافتراضي لخارج الداير", "ر.س", _depositCtrl, Icons.payments_rounded),
-                        ],
-                      ),
 
+                      
 
-                      const SizedBox(height: 24),
                       
                       // Payment Settings Card
                       _buildSectionCard(
@@ -246,6 +218,20 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                             },
                             contentPadding: EdgeInsets.zero,
                           ),
+                        ],
+                      ),
+
+                       const SizedBox(height: 24),
+                      
+                      // Packages Pricing Card
+                      _buildSectionCard(
+                        title: "إعدادات باقات النظام",
+                        icon: Icons.timelapse_rounded,
+                        color: const Color(0xFFEC4899),
+                        children: [
+                          _buildHoursToggles(),
+                          const SizedBox(height: 24),
+                          _buildPremiumField("الحد الأقصى لعدد العاملات في الطلب الواحد", "عاملات", _maxWorkerCtrl, Icons.group_add_rounded),
                         ],
                       ),
 
@@ -402,6 +388,50 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildHoursToggles() {
+    final allHours = [1, 2, 4, 5, 6, 8];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(right: 4, bottom: 12),
+          child: Text("الساعات المتاحة للعميل (إظهار/إخفاء)", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
+        ),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: allHours.map((h) {
+            final isSelected = _selectedHours.contains(h);
+            return FilterChip(
+              label: Text("$h ساعة"),
+              selected: isSelected,
+              onSelected: (val) {
+                setState(() {
+                  if (val) {
+                    _selectedHours.add(h);
+                  } else {
+                    _selectedHours.remove(h);
+                  }
+                });
+              },
+              selectedColor: const Color(0xFF6366F1).withValues(alpha: 0.2),
+              checkmarkColor: const Color(0xFF6366F1),
+              labelStyle: TextStyle(
+                color: isSelected ? const Color(0xFF6366F1) : const Color(0xFF64748B),
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: isSelected ? const Color(0xFF6366F1) : const Color(0xFFE2E8F0)),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 

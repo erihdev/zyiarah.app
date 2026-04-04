@@ -43,36 +43,39 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
 
     showDialog(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: Text("تعديل السعر", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-        content: TextField(
-          controller: priceCtrl,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(
-            labelText: "السعر الجديد (ر.س)",
-            labelStyle: GoogleFonts.tajawal(),
+      builder: (dialogCtx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: Text("تعديل السعر", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+          content: TextField(
+            controller: priceCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: "السعر الجديد (ر.س)",
+              labelStyle: GoogleFonts.tajawal(),
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("إلغاء", style: GoogleFonts.tajawal()),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B), foregroundColor: Colors.white),
+              onPressed: () async {
+                try {
+                  await _db.collection('products').doc(doc.id).update({
+                    'price': double.tryParse(priceCtrl.text) ?? double.parse(currentPrice),
+                  });
+                  if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+                } catch (e) {
+                  debugPrint('Error updating price: $e');
+                }
+              },
+              child: Text("حفظ", style: GoogleFonts.tajawal()),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("إلغاء", style: GoogleFonts.tajawal()),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E), foregroundColor: Colors.white),
-            onPressed: () async {
-              try {
-                await _db.collection('products').doc(doc.id).update({
-                  'price': double.tryParse(priceCtrl.text) ?? double.parse(currentPrice),
-                });
-                if (dialogCtx.mounted) Navigator.pop(dialogCtx);
-              } catch (e) {
-                debugPrint('Error updating price: $e');
-              }
-            },
-            child: Text("حفظ", style: GoogleFonts.tajawal()),
-          ),
-        ],
       ),
     );
   }
@@ -84,26 +87,31 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text("إدارة المتجر", style: GoogleFonts.tajawal(color: Colors.white, fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF5D1B5E),
+          backgroundColor: const Color(0xFF1E293B),
+          foregroundColor: Colors.white,
           actions: [
             IconButton(
               icon: _isSeeding ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.cloud_download, color: Colors.white),
               onPressed: _isSeeding ? null : () {
                 showDialog(
                   context: context,
-                  builder: (context) => AlertDialog(
-                    title: Text("استيراد منتجات سويفت كلين", style: GoogleFonts.tajawal()),
-                    content: Text("هل تريد تحميل قائمة المنتجات والأسعار الافتراضية إلى قاعدة البيانات؟", style: GoogleFonts.tajawal()),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(context), child: Text("إلغاء", style: GoogleFonts.tajawal())),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _seedProducts();
-                        },
-                        child: Text("بدء الاستيراد", style: GoogleFonts.tajawal()),
-                      ),
-                    ],
+                  builder: (context) => Directionality(
+                    textDirection: TextDirection.rtl,
+                    child: AlertDialog(
+                      title: Text("استيراد منتجات سويفت كلين", style: GoogleFonts.tajawal()),
+                      content: Text("هل تريد تحميل قائمة المنتجات والأسعار الافتراضية إلى قاعدة البيانات؟", style: GoogleFonts.tajawal()),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(context), child: Text("إلغاء", style: GoogleFonts.tajawal())),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B), foregroundColor: Colors.white),
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _seedProducts();
+                          },
+                          child: Text("بدء الاستيراد", style: GoogleFonts.tajawal()),
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },
@@ -132,7 +140,7 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                       onPressed: _isSeeding ? null : _seedProducts,
                       icon: const Icon(Icons.download),
                       label: Text("استيراد منتجات سويفت كلين", style: GoogleFonts.tajawal()),
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E), foregroundColor: Colors.white),
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B), foregroundColor: Colors.white),
                     )
                   ],
                 ),

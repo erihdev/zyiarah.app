@@ -64,11 +64,23 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
       }
     ];
 
-    for (var pkg in defaults) {
-      await _db.collection('subscription_packages').add(pkg);
+    try {
+      for (var pkg in defaults) {
+        await _db.collection('subscription_packages').add(pkg);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحميل الباقات الافتراضية بنجاح')));
+      }
+      _fetchPackages();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error loading defaults: $e')));
+      }
+    } finally {
+       // _fetchPackages will set it to false, but if it wasn't called:
+       // setState(() => _isLoading = false);
     }
-
-    _fetchPackages();
   }
 
   void _showPackageDialog({DocumentSnapshot? package}) {

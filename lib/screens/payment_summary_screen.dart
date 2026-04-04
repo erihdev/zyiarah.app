@@ -14,21 +14,23 @@ import 'package:zyiarah/services/order_service.dart';
 class PaymentSummaryScreen extends StatefulWidget {
   final String serviceName;
   final double amount;
-  final GeoPoint location;
+  final GeoPoint? location;
   final int? hours;
   final DateTime? serviceDate;
   final String? zoneName;
   final int workerCount;
+  final String? maintenanceId;
 
   const PaymentSummaryScreen({
     super.key,
     required this.serviceName,
     required this.amount,
-    required this.location,
+    this.location,
     this.hours,
     this.serviceDate,
     this.zoneName,
     this.workerCount = 1,
+    this.maintenanceId,
   });
 
   @override
@@ -147,19 +149,27 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       
       if (_selectedPaymentMethod == 'subscription') {
         // دفع عبر الاشتراك
-        await _orderService.createOrder(
-          clientId: FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
-          serviceType: widget.serviceName,
-          amount: 0.0, // لا توجد تكلفة مالية فورية
-          location: widget.location,
-          paymentMethod: 'subscription',
-          hours: widget.hours,
-          serviceDate: widget.serviceDate,
-          zoneName: widget.zoneName,
-          workerCount: widget.workerCount,
-          couponCode: _appliedCoupon,
-          discountAmount: _discountAmount,
-        );
+        if (widget.maintenanceId != null) {
+          await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
+            'status': 'paid',
+            'paymentMethod': 'subscription',
+            'paidAt': FieldValue.serverTimestamp(),
+          });
+        } else {
+          await _orderService.createOrder(
+            clientId: FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
+            serviceType: widget.serviceName,
+            amount: 0.0,
+            location: widget.location ?? const GeoPoint(24.7136, 46.6753),
+            paymentMethod: 'subscription',
+            hours: widget.hours,
+            serviceDate: widget.serviceDate,
+            zoneName: widget.zoneName,
+            workerCount: widget.workerCount,
+            couponCode: _appliedCoupon,
+            discountAmount: _discountAmount,
+          );
+        }
         
         if (mounted) {
           setState(() => _isLoading = false);
@@ -183,19 +193,27 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         }
       } else if (_selectedPaymentMethod == 'cod') {
         // دفع عند الاستلام
-        await _orderService.createOrder(
-          clientId: FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
-          serviceType: widget.serviceName,
-          amount: totalWithVat,
-          location: widget.location,
-          paymentMethod: 'cod',
-          hours: widget.hours,
-          serviceDate: widget.serviceDate,
-          zoneName: widget.zoneName,
-          workerCount: widget.workerCount,
-          couponCode: _appliedCoupon,
-          discountAmount: _discountAmount,
-        );
+        if (widget.maintenanceId != null) {
+          await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
+            'status': 'waiting_payment_cod', // Or approved
+            'paymentMethod': 'cod',
+            'paidAt': FieldValue.serverTimestamp(),
+          });
+        } else {
+          await _orderService.createOrder(
+            clientId: FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
+            serviceType: widget.serviceName,
+            amount: totalWithVat,
+            location: widget.location ?? const GeoPoint(24.7136, 46.6753),
+            paymentMethod: 'cod',
+            hours: widget.hours,
+            serviceDate: widget.serviceDate,
+            zoneName: widget.zoneName,
+            workerCount: widget.workerCount,
+            couponCode: _appliedCoupon,
+            discountAmount: _discountAmount,
+          );
+        }
         
         if (mounted) {
           setState(() => _isLoading = false);
@@ -235,13 +253,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 amount: totalWithVat,
                 orderId: orderId,
                 serviceType: widget.serviceName,
-                location: widget.location,
+                location: widget.location ?? const GeoPoint(24.7136, 46.6753),
                 hours: widget.hours,
                 serviceDate: widget.serviceDate,
                 zoneName: widget.zoneName,
                 workerCount: widget.workerCount,
                 couponCode: _appliedCoupon,
                 discountAmount: _discountAmount,
+                maintenanceId: widget.maintenanceId,
               ),
             ),
           );
@@ -262,20 +281,30 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         );
 
         if (result['success'] == true && mounted) {
-          // جلب OrderService لإنشاء الطلب في الداتا بيس لأن EdfaPay (المحاكي) لا يفعل ذلك تلقائياً هنا
-          await _orderService.createOrder(
-            clientId: FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
-            serviceType: widget.serviceName,
-            amount: totalWithVat,
-            location: widget.location,
-            paymentMethod: 'card',
-            hours: widget.hours,
-            serviceDate: widget.serviceDate,
-            zoneName: widget.zoneName,
-            workerCount: widget.workerCount,
-            couponCode: _appliedCoupon,
-            discountAmount: _discountAmount,
-          );
+      if (widget.maintenanceId != null) {
+        // تحديث حالة طلب الصيانة بعد الدفع
+        await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
+          'status': _selectedPaymentMethod == 'cod' ? 'approved' : 'paid',
+          'paymentMethod': _selectedPaymentMethod,
+          'paidAt': FieldValue.serverTimestamp(),
+          'totalAmount': totalWithVat,
+        });
+      } else {
+        // دفع للخدمات العادية (تنظيف، إلخ) - إنشاء طلب جديد
+        await _orderService.createOrder(
+          clientId: FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
+          serviceType: widget.serviceName,
+          amount: totalWithVat,
+          location: widget.location ?? const GeoPoint(24.7136, 46.6753),
+          paymentMethod: _selectedPaymentMethod,
+          hours: widget.hours,
+          serviceDate: widget.serviceDate,
+          zoneName: widget.zoneName,
+          workerCount: widget.workerCount,
+          couponCode: _appliedCoupon,
+          discountAmount: _discountAmount,
+        );
+      }
 
           setState(() => _isLoading = false);
           if (mounted) {

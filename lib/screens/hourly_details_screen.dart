@@ -1,15 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
+import 'package:table_calendar/table_calendar.dart';
 
-class CleaningZone {
-  final String name;
-  final List<String> subAreas;
-  final Map<int, double> prices;
-
-  CleaningZone({required this.name, required this.subAreas, required this.prices});
-}
 
 class HourlyCleaningDetailsScreen extends StatefulWidget {
   final String serviceName;
@@ -21,92 +16,180 @@ class HourlyCleaningDetailsScreen extends StatefulWidget {
 
 class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScreen> {
   int _selectedHours = 4;
-  int? _selectedZoneIndex;
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
   int _workerCount = 1;
   bool _isLoading = true;
-  List<CleaningZone> _zones = [];
+
+  double _hourlyBasePrice = 0.0;
+  String? _selectedZoneName;
+  GeoPoint? _selectedLocation;
+
+  List<int> _allowedHours = [4, 5, 6, 8];
+  int _maxAllowedWorkers = 5;
+  List<Map<String, dynamic>> _zones = [];
 
   @override
   void initState() {
     super.initState();
-    _fetchZones();
+    _fetchConfigAndZones();
   }
 
-  Future<void> _fetchZones() async {
+  Future<void> _fetchConfigAndZones() async {
     try {
+      final configDoc = await FirebaseFirestore.instance.collection('system_configs').doc('hourly_settings').get();
+      if (configDoc.exists) {
+        final List<dynamic>? hoursList = configDoc.data()?['allowed_hours'];
+        if (hoursList != null) {
+          _allowedHours = hoursList.map((e) => int.tryParse(e.toString()) ?? 4).toList()..sort();
+          if (_allowedHours.isNotEmpty && !_allowedHours.contains(_selectedHours)) {
+            _selectedHours = _allowedHours.first;
+          }
+        }
+        if (configDoc.data()!.containsKey('max_workers')) {
+          _maxAllowedWorkers = configDoc.data()?['max_workers'] ?? 5;
+        }
+      }
+
       final snapshot = await FirebaseFirestore.instance.collection('hourly_zones').orderBy('rank').get();
       if (mounted) {
         setState(() {
-          _zones = snapshot.docs.map((doc) {
-            final data = doc.data();
-            Map<int, double> prices = {};
-            final pricesMap = data['prices'] as Map<String, dynamic>? ?? {};
-            pricesMap.forEach((key, value) {
-              int? h = int.tryParse(key);
-              if (h != null) {
-                prices[h] = (value as num).toDouble();
-              }
-            });
-            return CleaningZone(
-              name: data['name'] ?? '',
-              subAreas: (data['subAreas'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
-              prices: prices,
-            );
-          }).toList();
-          
-          // إضافة خيار خارج التغطية دائماً في النهاية
-          _zones.add(CleaningZone(
-            name: "غير مدرج / خارج التغطية",
-            subAreas: [],
-            prices: {},
-          ));
-
+          _zones = snapshot.docs.map((doc) => doc.data()).toList();
           _isLoading = false;
         });
+        _attemptAutoLocation();
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  double get totalAmount {
-    if (_selectedZoneIndex == null || _selectedZoneIndex! >= _zones.length - 1) return 0.0;
-    double basePrice = _zones[_selectedZoneIndex!].prices[_selectedHours] ?? 0.0;
-    return basePrice * _workerCount;
+  Future<void> _attemptAutoLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) return;
+      }
+      
+      if (permission == LocationPermission.deniedForever) return;
+
+      Position pos = await Geolocator.getCurrentPosition();
+      GeoPoint loc = GeoPoint(pos.latitude, pos.longitude);
+      
+      Map<String, dynamic>? matchedZone;
+      double minDistance = double.infinity;
+
+      for (var z in _zones) {
+        final center = z['centerLoc'];
+        if (center is GeoPoint) {
+          double radius = (z['radiusKm'] ?? 15.0) * 1000;
+          double distance = Geolocator.distanceBetween(loc.latitude, loc.longitude, center.latitude, center.longitude);
+          if (distance <= radius && distance < minDistance) {
+            minDistance = distance;
+            matchedZone = z;
+          }
+        }
+      }
+
+      if (matchedZone != null && mounted) {
+        setState(() {
+          _selectedLocation = loc;
+          _selectedZoneName = matchedZone!['name'];
+          _updatePriceForZone(matchedZone);
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text("تم تحديد موقعك تلقائياً: $_selectedZoneName"),
+          backgroundColor: const Color(0xFF6366F1),
+          duration: const Duration(seconds: 2),
+        ));
+      }
+    } catch (e) {
+      // Silent error, let user pick manually
+    }
   }
 
-  bool get isOutOfService => _selectedZoneIndex == _zones.length - 1;
-
-  void _handleInitiateFlow() async {
-    if (_selectedZoneIndex == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("يرجى اختيار المنطقة أولاً")),
-      );
-      return;
-    }
-
-    if (isOutOfService) return;
-
+  Future<void> _pickLocation() async {
     final dynamic result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => LocationPickerScreen(
-          serviceName: widget.serviceName,
-          hours: _selectedHours,
-          serviceDate: _selectedDate,
-          amount: totalAmount,
-          zoneName: _zones[_selectedZoneIndex!].name,
-          workerCount: _workerCount,
+        builder: (context) => const LocationPickerScreen(
+          serviceName: "تحديد موقع النظافة بالساعة",
         ),
       ),
     );
 
-    if (result == null || result is! Map<String, dynamic>) {
-      return;
+    if (!mounted) return;
+    if (result == null || result is! GeoPoint) return;
+    
+    GeoPoint loc = result;
+    
+    Map<String, dynamic>? matchedZone;
+    double minDistance = double.infinity;
+
+    for (var z in _zones) {
+      final center = z['centerLoc'];
+      if (center is GeoPoint) {
+        double radius = (z['radiusKm'] ?? 15.0) * 1000;
+        double distance = Geolocator.distanceBetween(loc.latitude, loc.longitude, center.latitude, center.longitude);
+        if (distance <= radius && distance < minDistance) {
+          minDistance = distance;
+          matchedZone = z;
+        }
+      }
     }
 
-    final GeoPoint selectedLocation = result['location'];
+    if (matchedZone != null) {
+      if (mounted) {
+        setState(() {
+          _selectedLocation = loc;
+          _selectedZoneName = matchedZone!['name'];
+          _updatePriceForZone(matchedZone);
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _selectedLocation = loc;
+          _selectedZoneName = null;
+          _hourlyBasePrice = 0.0;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("نأسف، موقعك خارج نطاق الخدمة حالياً"), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  void _updatePriceForZone(Map<String, dynamic> zone) {
+    if (_allowedHours.isNotEmpty && !_allowedHours.contains(_selectedHours)) {
+       _selectedHours = _allowedHours.first;
+    }
+    final prices = zone['prices'] as Map<String, dynamic>? ?? {};
+    double p = 0.0;
+    if (prices.containsKey(_selectedHours.toString())) {
+       p = (prices[_selectedHours.toString()] as num).toDouble();
+    }
+    setState(() {
+       _hourlyBasePrice = p;
+    });
+  }
+
+  double get totalAmount {
+     return _hourlyBasePrice * _workerCount;
+  }
+
+  void _handleInitiateFlow() async {
+    if (_selectedLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى تحديد موقعك أولاً لمعرفة الأسعار المتاحة")));
+      return;
+    }
+    
+    if (totalAmount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("هذه الخدمة غير مسعرة في منطقتك حالياً لعدد الساعات المحدد")));
+      return;
+    }
 
     if (mounted) {
       Navigator.push(
@@ -115,315 +198,247 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           builder: (context) => PaymentSummaryScreen(
             serviceName: widget.serviceName,
             amount: totalAmount,
-            location: selectedLocation,
+            location: _selectedLocation!,
             hours: _selectedHours,
             serviceDate: _selectedDate,
             workerCount: _workerCount,
           ),
         ),
       ).then((success) {
-        if (success == true && mounted) {
-          Navigator.pop(context, true);
-        }
+        if (success == true && mounted) Navigator.pop(context, true);
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text("تفاصيل ${widget.serviceName}"),
-        backgroundColor: const Color(0xFF5D1B5E),
-        foregroundColor: Colors.white,
-      ),
-      body: Directionality(
-        textDirection: TextDirection.rtl,
-        child: _isLoading 
-            ? const Center(child: CircularProgressIndicator()) 
-            : Stack(
-          children: [
-            SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text("اختر منطقتك", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 10),
-                  _buildZoneSelector(),
-                  const SizedBox(height: 25),
-                  if (!isOutOfService) ...[
-                    const Text("حدد عدد الساعات", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 15),
-                    _buildHourSelector(),
-                    const SizedBox(height: 25),
-                    const Text("عدد العاملات", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 15),
-                    _buildWorkerSelector(),
-                    const SizedBox(height: 25),
-                    const Text("اختر التاريخ", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 15),
-                    _buildDatePicker(),
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.serviceName, style: const TextStyle(fontWeight: FontWeight.bold)),
+          backgroundColor: const Color(0xFF5D1B5E),
+          foregroundColor: Colors.white,
+        ),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildLocationPickerSection(),
                     const SizedBox(height: 30),
-                    _buildSummaryCard(),
-                    const SizedBox(height: 20),
-                    _buildNextButton(),
-                  ] else ...[
-                    const SizedBox(height: 50),
-                    _buildOutOfServiceMessage(),
-                  ],
-                ],
-              ),
-            ),
-            if (_isLoading)
-              Container(
-                color: Colors.black.withValues(alpha: 0.3),
-                child: const Center(
-                  child: CircularProgressIndicator(color: Color(0xFF5D1B5E)),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
+                    
+                    if (_selectedLocation != null) ...[
+                      const Text("اختر عدد الساعات:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                      const SizedBox(height: 15),
+                      _buildHoursSelector(),
+                      const SizedBox(height: 30),
 
-  Widget _buildZoneSelector() {
-    return Column(
-      children: List.generate(_zones.length, (index) {
-        bool isSelected = _selectedZoneIndex == index;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8.0),
-          child: InkWell(
-            onTap: () => setState(() => _selectedZoneIndex = index),
-            child: Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF5D1B5E).withValues(alpha: 0.1) : Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isSelected ? const Color(0xFF5D1B5E) : Colors.grey[300]!,
-                  width: isSelected ? 2 : 1,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-                    color: isSelected ? const Color(0xFF5D1B5E) : Colors.grey,
-                  ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _zones[index].name,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            color: isSelected ? const Color(0xFF5D1B5E) : Colors.black,
-                          ),
+                      const Text("تاريخ الخدمة:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                      const SizedBox(height: 15),
+                      _buildDateSelector(),
+                      const SizedBox(height: 30),
+
+                      const Text("عدد العاملات (اختياري):", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                      const SizedBox(height: 15),
+                      _buildWorkerCounter(),
+                      const SizedBox(height: 40),
+
+                      _buildSummaryCard(),
+                      const SizedBox(height: 30),
+                      
+                      SizedBox(
+                        width: double.infinity,
+                        height: 60,
+                        child: ElevatedButton(
+                          onPressed: _handleInitiateFlow,
+                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), elevation: 4),
+                          child: const Text("متابعة لملخص الحجز", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                         ),
-                        if (_zones[index].subAreas.isNotEmpty)
-                          Text(
-                            _zones[index].subAreas.join(" - "),
-                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
+                      ),
+                    ] else ...[
+                       const Center(child: Text("يرجى تحديد الموقع الجغرافي لعرض باقات النظافة بالساعة والأسعار المخصصة لمنطقتك.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, height: 1.5))),
+                    ]
+                  ],
+                ),
               ),
-            ),
-          ),
-        );
-      }),
+      ),
     );
   }
 
-  Widget _buildHourSelector() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [4, 5, 6, 8].map((h) {
-        bool isSelected = _selectedHours == h;
-        return InkWell(
-          onTap: () => setState(() => _selectedHours = h),
-          child: Container(
-            width: 55,
-            height: 55,
-            decoration: BoxDecoration(
-              color: isSelected ? const Color(0xFF5D1B5E) : Colors.grey[200],
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                "$h",
-                style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.black,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-  
-  Widget _buildWorkerSelector() {
-    return Row(
-      children: [1, 2].map((workerNum) {
-        bool isSelected = _workerCount == workerNum;
-        return Expanded(
-          child: Padding(
-            padding: EdgeInsets.only(left: workerNum == 1 ? 10 : 0, right: workerNum == 2 ? 10 : 0),
-            child: InkWell(
-              onTap: () => setState(() => _workerCount = workerNum),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: isSelected ? const Color(0xFF5D1B5E) : Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isSelected ? const Color(0xFF5D1B5E) : Colors.grey[300]!,
-                    width: 2,
-                  ),
-                ),
-                child: Center(
-                  child: Text(
-                    workerNum == 1 ? "عاملة واحدة" : "عاملتين", 
-                    style: TextStyle(
-                      color: isSelected ? Colors.white : Colors.black,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildDatePicker() {
+  Widget _buildLocationPickerSection() {
+    bool isOutOfRange = _selectedLocation != null && _selectedZoneName == null;
     return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(20),
+        color: isOutOfRange ? Colors.red.shade50 : Colors.blue.shade50, 
+        borderRadius: BorderRadius.circular(15), 
+        border: Border.all(color: isOutOfRange ? Colors.red.shade200 : Colors.blue.shade200)
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: CalendarDatePicker(
-          initialDate: _selectedDate,
-          firstDate: DateTime.now(),
-          lastDate: DateTime.now().add(const Duration(days: 30)),
-          onDateChanged: (date) {
-            setState(() => _selectedDate = date);
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("تحديد موقع السكن:", style: TextStyle(fontWeight: FontWeight.bold, color: isOutOfRange ? Colors.red : Colors.blue.shade900)),
+          const SizedBox(height: 10),
+          if (_selectedLocation != null)
+            Row(
+              children: [
+                Icon(isOutOfRange ? Icons.error_outline : Icons.check_circle, color: isOutOfRange ? Colors.red : Colors.green, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isOutOfRange ? "نعتذر، موقعك حالياً خارج نطاق الخدمة" : "المنطقة المدعومة: $_selectedZoneName", 
+                    style: TextStyle(color: isOutOfRange ? Colors.red : Colors.green, fontWeight: FontWeight.bold)
+                  ),
+                ),
+              ],
+            )
+          else
+            const Row(
+              children: [
+                Icon(Icons.location_searching, color: Colors.orange, size: 20),
+                SizedBox(width: 8),
+                Text("جاري تحديد موقعك تلقائياً...", style: TextStyle(color: Colors.orange)),
+              ],
+            ),
+          const SizedBox(height: 15),
+          ElevatedButton.icon(
+            onPressed: _pickLocation, 
+            icon: const Icon(Icons.map_outlined), 
+            label: Text(_selectedLocation == null ? "تحديد من الخريطة يدوياً" : "تغيير الموقع"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isOutOfRange ? Colors.red : Colors.blueAccent, 
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHoursSelector() {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: _allowedHours.map((h) {
+        final isSelected = _selectedHours == h;
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              _selectedHours = h;
+              // update price dynamically
+              final matchedZone = _zones.firstWhere((z) => z['name'] == _selectedZoneName, orElse: () => {});
+              if (matchedZone.isNotEmpty) {
+                _updatePriceForZone(matchedZone);
+              }
+            });
           },
+          child: Container(
+            width: 70,
+            height: 70,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: isSelected ? const Color(0xFF5D1B5E) : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: isSelected ? const Color(0xFF5D1B5E) : Colors.grey.shade300, width: 2),
+              boxShadow: isSelected ? [BoxShadow(color: const Color(0xFF5D1B5E).withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 5))] : [],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text("$h", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : const Color(0xFF1E293B))),
+                Text("ساعات", style: TextStyle(fontSize: 12, color: isSelected ? Colors.white70 : Colors.grey.shade600))
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildDateSelector() {
+    return Container(
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade200), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)]),
+      child: TableCalendar(
+        firstDay: DateTime.now(),
+        lastDay: DateTime.now().add(const Duration(days: 90)),
+        focusedDay: _selectedDate,
+        selectedDayPredicate: (day) => isSameDay(_selectedDate, day),
+        onDaySelected: (selected, focused) => setState(() => _selectedDate = selected),
+        calendarStyle: const CalendarStyle(
+          selectedDecoration: BoxDecoration(color: Color(0xFF5D1B5E), shape: BoxShape.circle),
+          todayDecoration: BoxDecoration(color: Color(0x665D1B5E), shape: BoxShape.circle),
         ),
+        headerStyle: const HeaderStyle(formatButtonVisible: false, titleCentered: true),
       ),
+    );
+  }
+
+  Widget _buildWorkerCounter() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10)]),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text("عدد العاملات المطلوب", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+          Row(
+            children: [
+              _buildAdjustButton(Icons.remove, () {
+                if (_workerCount > 1) setState(() => _workerCount--);
+              }),
+              Container(width: 50, alignment: Alignment.center, child: Text("$_workerCount", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold))),
+              _buildAdjustButton(Icons.add, () {
+                if (_workerCount < _maxAllowedWorkers) setState(() => _workerCount++);
+              }),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdjustButton(IconData icon, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: const Color(0xFF5D1B5E).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)), child: Icon(icon, color: const Color(0xFF5D1B5E))),
     );
   }
 
   Widget _buildSummaryCard() {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF5D1B5E).withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF5D1B5E).withValues(alpha: 0.1)),
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 15)]),
       child: Column(
         children: [
-          _buildSummaryRow("المنطقة", _selectedZoneIndex != null ? _zones[_selectedZoneIndex!].name : "لم يتم الاختيار"),
-          const Divider(),
-          _buildSummaryRow("عدد الساعات", "$_selectedHours ساعة"),
-          const Divider(),
-          _buildSummaryRow("عدد العاملات", _workerCount == 1 ? "عاملة واحدة" : "عاملتين"),
-          const Divider(),
-          _buildSummaryRow("التاريخ", "${_selectedDate.year}-${_selectedDate.month}-${_selectedDate.day}"),
-          const Divider(),
-          _buildSummaryRow("الإجمالي", "$totalAmount ر.س", isTotal: true),
-          const SizedBox(height: 15),
-          const Divider(),
-          _buildNoticeRow(_workerCount == 1 ? "السعر للعاملة الواحدة يشمل التوصيل" : "السعر للعاملتين يشمل التوصيل"),
-          _buildNoticeRow("لا يشمل مواد وأدوات التنظيف"),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSummaryRow(String label, String value, {bool isTotal = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(fontSize: isTotal ? 17 : 15, fontWeight: isTotal ? FontWeight.bold : FontWeight.normal)),
-          Text(value, style: TextStyle(fontSize: isTotal ? 19 : 15, fontWeight: FontWeight.bold, color: isTotal ? Colors.green[700] : Colors.black)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNoticeRow(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8.0),
-      child: Row(
-        children: [
-          const Icon(Icons.info_outline, size: 16, color: Colors.blueGrey),
-          const SizedBox(width: 8),
-          Expanded(child: Text(text, style: const TextStyle(fontSize: 12, color: Colors.blueGrey))),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOutOfServiceMessage() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(30),
-      decoration: BoxDecoration(
-        color: Colors.red[50],
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.red[100]!),
-      ),
-      child: Column(
-        children: [
-          Icon(Icons.location_off, size: 60, color: Colors.red[300]),
-          const SizedBox(height: 20),
-          const Text(
-            "نأسف، التطبيق لا يخدم مكانك حتى هذه اللحظة",
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("سعر الزيارة:", style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+              Text("${_hourlyBasePrice.toStringAsFixed(2)} ر.س", style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+            ],
           ),
           const SizedBox(height: 10),
-          const Text(
-            "نحن نعمل باستمرار على توسيع مناطق التغطية لدينا. شكراً لتفهمكم.",
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: Colors.black54),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("عدد العاملات:", style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+              Text("x$_workerCount", style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+            ],
           ),
+          const Divider(height: 20, thickness: 1),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("الإجمالي المطلوب:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+              Text("${totalAmount.toStringAsFixed(2)} ر.س", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF6366F1))),
+            ],
+          )
         ],
-      ),
-    );
-  }
-
-  Widget _buildNextButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 55,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF5D1B5E),
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          elevation: 2,
-        ),
-        onPressed: _handleInitiateFlow,
-        child: const Text("متابعة لاختيار الموقع", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
       ),
     );
   }

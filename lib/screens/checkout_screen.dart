@@ -33,7 +33,11 @@ class TamaraCheckoutScreen extends StatefulWidget {
     this.workerCount = 1,
     this.couponCode,
     this.discountAmount = 0.0,
+    this.maintenanceId,
   });
+
+  final String? maintenanceId;
+
 
   @override
   State<TamaraCheckoutScreen> createState() => _TamaraCheckoutScreenState();
@@ -52,20 +56,32 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
         NavigationDelegate(
           onPageStarted: (url) async {
             if (url.contains('payment-success') || url.contains('payment-success-mock')) {
-              // إنشاء الطلب في Firestore
-              final String newOrderId = await _orderService.createOrder(
-                clientId: FirebaseAuth.instance.currentUser?.uid ?? "guest_client", 
-                serviceType: widget.serviceType,
-                amount: widget.amount,
-                location: widget.location,
-                paymentMethod: 'tamara',
-                hours: widget.hours,
-                serviceDate: widget.serviceDate,
-                zoneName: widget.zoneName,
-                workerCount: widget.workerCount,
-                couponCode: widget.couponCode,
-                discountAmount: widget.discountAmount,
-              );
+              String newOrderId = widget.orderId;
+              
+              if (widget.maintenanceId != null) {
+                // تحديث طلب الصيانة
+                await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
+                  'status': 'paid',
+                  'paymentMethod': 'tamara',
+                  'paidAt': FieldValue.serverTimestamp(),
+                  'totalAmountPaid': widget.amount,
+                });
+              } else {
+                // إنشاء طلب خدمة جديد
+                newOrderId = await _orderService.createOrder(
+                  clientId: FirebaseAuth.instance.currentUser?.uid ?? "guest_client", 
+                  serviceType: widget.serviceType,
+                  amount: widget.amount,
+                  location: widget.location,
+                  paymentMethod: 'tamara',
+                  hours: widget.hours,
+                  serviceDate: widget.serviceDate,
+                  zoneName: widget.zoneName,
+                  workerCount: widget.workerCount,
+                  couponCode: widget.couponCode,
+                  discountAmount: widget.discountAmount,
+                );
+              }
 
               // توليد بيانات ZATCA وتوليد الفاتورة في الخلفية
               final double vatAmount = widget.amount * 0.15;

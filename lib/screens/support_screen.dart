@@ -147,6 +147,9 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
   }
 
   Widget _buildMessagesList(String ticketId) {
+    final TextEditingController replyController = TextEditingController();
+    bool isSendingReply = false;
+
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('support_tickets')
@@ -158,43 +161,103 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
         if (!snapshot.hasData) return const SizedBox();
         final messages = snapshot.data!.docs;
 
-        return Column(
-          children: messages.map((doc) {
-            final m = doc.data() as Map<String, dynamic>;
-            final isAdmin = m['senderId'] == 'admin';
-            return Align(
-              alignment: isAdmin ? Alignment.centerLeft : Alignment.centerRight,
-              child: Container(
-                margin: const EdgeInsets.symmetric(vertical: 5),
-                padding: const EdgeInsets.all(12),
-                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
-                decoration: BoxDecoration(
-                  color: isAdmin ? const Color(0xFFF1F5F9) : const Color(0xFF5D1B5E),
-                  borderRadius: BorderRadius.circular(16).copyWith(
-                    topLeft: isAdmin ? const Radius.circular(0) : const Radius.circular(16),
-                    topRight: isAdmin ? const Radius.circular(16) : const Radius.circular(0),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      m['text'] ?? "",
-                      style: TextStyle(color: isAdmin ? Colors.black87 : Colors.white),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      intl.DateFormat('HH:mm').format((m['sentAt'] as Timestamp?)?.toDate() ?? DateTime.now()),
-                      style: TextStyle(
-                        fontSize: 9, 
-                        color: isAdmin ? Colors.grey : Colors.white60,
+        return StatefulBuilder(
+          builder: (context, setInternalState) {
+            return Column(
+              children: [
+                ...messages.map((doc) {
+                  final m = doc.data() as Map<String, dynamic>;
+                  final role = m['senderRole'] ?? '';
+                  final senderId = m['senderId'] ?? '';
+                  final isAdmin = role == 'admin' || senderId == 'admin';
+
+                  return Align(
+                    alignment: isAdmin ? Alignment.centerLeft : Alignment.centerRight,
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(vertical: 5),
+                      padding: const EdgeInsets.all(12),
+                      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
+                      decoration: BoxDecoration(
+                        color: isAdmin ? const Color(0xFFF1F5F9) : const Color(0xFF5D1B5E),
+                        borderRadius: BorderRadius.circular(16).copyWith(
+                          topLeft: isAdmin ? const Radius.circular(0) : const Radius.circular(16),
+                          topRight: isAdmin ? const Radius.circular(16) : const Radius.circular(0),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            m['text'] ?? "",
+                            style: TextStyle(color: isAdmin ? Colors.black87 : Colors.white),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            intl.DateFormat('HH:mm').format((m['sentAt'] as Timestamp?)?.toDate() ?? (m['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now()),
+                            style: TextStyle(
+                              fontSize: 9, 
+                              color: isAdmin ? Colors.grey : Colors.white60,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                  );
+                }),
+                const Divider(height: 30),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: replyController,
+                        decoration: InputDecoration(
+                          hintText: "اكتب ردك هنا...",
+                          isDense: true,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    isSendingReply 
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      : IconButton(
+                          icon: const Icon(Icons.send, color: Color(0xFF5D1B5E)),
+                          onPressed: () async {
+                            final text = replyController.text.trim();
+                            if (text.isEmpty) return;
+                            
+                            setInternalState(() => isSendingReply = true);
+                            try {
+                              await FirebaseFirestore.instance
+                                  .collection('support_tickets')
+                                  .doc(ticketId)
+                                  .collection('messages')
+                                  .add({
+                                    'senderId': FirebaseAuth.instance.currentUser?.uid,
+                                    'senderRole': 'user',
+                                    'text': text,
+                                    'sentAt': FieldValue.serverTimestamp(),
+                                  });
+                              
+                              await FirebaseFirestore.instance
+                                  .collection('support_tickets')
+                                  .doc(ticketId)
+                                  .update({
+                                    'status': 'open',
+                                    'updatedAt': FieldValue.serverTimestamp(),
+                                  });
+                              
+                              replyController.clear();
+                            } finally {
+                              setInternalState(() => isSendingReply = false);
+                            }
+                          },
+                        ),
                   ],
                 ),
-              ),
+              ],
             );
-          }).toList(),
+          }
         );
       },
     );

@@ -8,13 +8,15 @@ import 'package:zyiarah/screens/hourly_details_screen.dart';
 import 'package:zyiarah/screens/orders_list_screen.dart';
 import 'package:zyiarah/screens/support_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
-
 import 'package:zyiarah/screens/maintenance_request_screen.dart';
 import 'package:zyiarah/screens/subscription_plans_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
 import 'package:zyiarah/services/popup_service.dart';
 import 'package:zyiarah/screens/sofa_rug_details_screen.dart';
 import 'package:zyiarah/screens/store_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:zyiarah/screens/order_tracking_screen.dart';
+import 'package:shimmer/shimmer.dart';
 
 class ClientDashboard extends StatefulWidget {
   const ClientDashboard({super.key});
@@ -24,7 +26,7 @@ class ClientDashboard extends StatefulWidget {
 }
 
 class _ClientDashboardState extends State<ClientDashboard> {
-  final bool _isLoading = false;
+  bool _isLoading = true;
   ZyiarahUser? _currentUser;
 
   @override
@@ -54,14 +56,20 @@ class _ClientDashboardState extends State<ClientDashboard> {
   }
 
   Future<void> _loadUserData() async {
+    setState(() => _isLoading = true);
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       if (doc.exists && mounted) {
         setState(() {
           _currentUser = ZyiarahUser.fromMap(user.uid, doc.data()!);
+          _isLoading = false;
         });
+      } else {
+        setState(() => _isLoading = false);
       }
+    } else {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -73,9 +81,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
       ),
     );
 
-    if (selectedLocation == null) {
-      return; // المستخدم ألغى الاختيار
-    }
+    if (selectedLocation == null) return;
 
     if (mounted) {
       Navigator.push(
@@ -89,7 +95,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
         ),
       ).then((success) {
         if (success == true && mounted) {
-          _loadUserData(); // Refresh data if payment was successful
+          _loadUserData();
         }
       });
     }
@@ -104,54 +110,228 @@ class _ClientDashboardState extends State<ClientDashboard> {
         appBar: _buildTopBar(),
         drawer: _buildDrawer(),
         body: SafeArea(
-          child: Stack(
-            children: [
-              SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildPromoBanners(),
-                    if (_currentUser?.hasActiveSubscription == true) _buildSubscriptionCard(),
-                    const SizedBox(height: 10),
-                    _buildMetricsList(),
-                    const SizedBox(height: 25),
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      children: [
-                        Icon(Icons.auto_awesome, color: Colors.amber, size: 20),
-                        SizedBox(width: 8),
-                        Text('خدماتنا', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-                      ],
-                    ),
-                    const SizedBox(height: 15),
-                    _buildServicesGrid(),
-                    const SizedBox(height: 25),
-                    StreamBuilder<QuerySnapshot>(
-                      stream: _getOrdersStream(),
-                      builder: (context, snapshot) {
-                        return _buildLatestBookings(snapshot.data?.docs ?? []);
-                      },
-                    ),
-                    const SizedBox(height: 30),
-                  ],
-                ),
-              ),
-              if (_isLoading)
-                Container(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  child: const Center(
-                    child: CircularProgressIndicator(color: Color(0xFF2563EB)),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildActiveTrackingCard(),
+                _buildPromoBanners(),
+                _buildMaintenanceAlertCard(),
+                if (_currentUser?.hasActiveSubscription == true) _buildSubscriptionCard(),
+                const SizedBox(height: 10),
+                _buildMetricsList(),
+                const SizedBox(height: 25),
+                _buildSectionTitle('خدماتنا', Icons.auto_awesome, Colors.amber),
+                const SizedBox(height: 15),
+                _isLoading ? _buildShimmerGrid() : _buildServicesGrid(),
+                const SizedBox(height: 25),
+                _buildSectionTitle('آخر الحجوزات', Icons.calendar_month, Colors.blue.shade800),
+                const SizedBox(height: 15),
+                _isLoading 
+                  ? _buildShimmerList()
+                  : StreamBuilder<QuerySnapshot>(
+                    stream: _getOrdersStream(),
+                    builder: (context, snapshot) {
+                      return _buildLatestBookings(snapshot.data?.docs ?? []);
+                    },
                   ),
-                ),
-            ],
+                const SizedBox(height: 30),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
+  Widget _buildSectionTitle(String title, IconData icon, Color color) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(width: 8),
+        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+      ],
+    );
+  }
+
+  Widget _buildShimmerGrid() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey[200]!,
+      highlightColor: Colors.grey[100]!,
+      child: GridView.count(
+        crossAxisCount: 2,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 15,
+        crossAxisSpacing: 15,
+        childAspectRatio: 0.75,
+        children: List.generate(4, (index) => Container(
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
+        )),
+      ),
+    );
+  }
+
+  Widget _buildShimmerList() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey[200]!,
+      highlightColor: Colors.grey[100]!,
+      child: Column(
+        children: List.generate(3, (index) => Container(
+          height: 80,
+          margin: const EdgeInsets.only(bottom: 10),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+        )),
+      ),
+    );
+  }
+
+  Widget _buildActiveTrackingCard() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const SizedBox.shrink();
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('orders')
+          .where('client_id', isEqualTo: user.uid)
+          .where('status', whereIn: ['accepted', 'arrived', 'in_progress'])
+          .limit(1)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final orderDoc = snapshot.data!.docs.first;
+        final data = orderDoc.data() as Map<String, dynamic>;
+        final String orderId = orderDoc.id;
+        final String status = data['status'] ?? '';
+        
+        String statusText = "السائق في الطريق";
+        if (status == 'arrived') statusText = "وصل السائق لموقعك";
+        if (status == 'in_progress') statusText = "جاري تنفيذ الخدمة";
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.blue.shade100, width: 2),
+            boxShadow: [BoxShadow(color: Colors.blue.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.blue.shade50, shape: BoxShape.circle),
+                child: const Icon(Icons.cleaning_services, color: Colors.blue),
+              ),
+              const SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(statusText, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const Text("اضغط للمتابعة المباشرة على الخريطة", style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  ],
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                   Navigator.push(context, MaterialPageRoute(builder: (_) => OrderTrackingScreen(orderId: orderId)));
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+                child: const Text("تتبع", style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMaintenanceAlertCard() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const SizedBox.shrink();
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('maintenance_requests')
+          .where('userId', isEqualTo: user.uid)
+          .where('status', isEqualTo: 'waiting_payment')
+          .limit(1)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final reqDoc = snapshot.data!.docs.first;
+        final data = reqDoc.data() as Map<String, dynamic>;
+        final String serviceType = data['serviceType'] ?? 'صيانة';
+        final double price = (data['quotePrice'] ?? 0.0).toDouble();
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF7ED),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.orange.shade200, width: 2),
+            boxShadow: [BoxShadow(color: Colors.orange.withValues(alpha: 0.05), blurRadius: 15, offset: const Offset(0, 8))],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: Colors.orange.shade100, shape: BoxShape.circle),
+                    child: const Icon(Icons.receipt_long, color: Colors.orange),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text("بانتظار الدفع", style: TextStyle(fontWeight: FontWeight.w900, color: Colors.orange, fontSize: 16)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                "تم تحديد تكلفة خدمة ($serviceType) بمبلغ $price ر.س. يرجى إتمام الدفع لبدء التنفيذ.",
+                style: const TextStyle(fontSize: 13, height: 1.5, color: Color(0xFF431407)),
+              ),
+              const SizedBox(height: 15),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen()));
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text("استعرض وادفع الآن", style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   PreferredSizeWidget _buildTopBar() {
+
     return AppBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -163,7 +343,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
             padding: EdgeInsets.symmetric(horizontal: 10),
             child: Text('بوابتك لخدمات منزلية متكاملة', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13, color: Color(0xFF64748B))),
           ),
-          SizedBox(width: 48), // Spacer to balance the leading/trailing area if needed
+          SizedBox(width: 48),
         ],
       ),
     );
@@ -171,7 +351,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
   Widget _buildSubscriptionCard() {
     final int remaining = _currentUser?.visitsRemaining ?? 0;
-    const int total = 4; // Assuming 4 visits per month for Gold
+    const int total = 4;
     final double progress = remaining / total;
 
     return Container(
@@ -235,10 +415,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-               Text(
-                'الزيارات المتبقية لهذا الشهر', 
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12)
-              ),
+              Text('الزيارات المتبقية لهذا الشهر', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12)),
               if (_currentUser?.subscriptionExpiry != null)
                 Text(
                   'التجديد في: ${_currentUser!.subscriptionExpiry!.day}/${_currentUser!.subscriptionExpiry!.month}',
@@ -250,7 +427,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
       ),
     );
   }
-
 
   Widget _buildPromoBanners() {
     return StreamBuilder<QuerySnapshot>(
@@ -275,23 +451,39 @@ class _ClientDashboardState extends State<ClientDashboard> {
             itemBuilder: (context, index) {
               final data = banners[index].data() as Map<String, dynamic>;
               final imageUrl = data['imageUrl'] ?? '';
+              final String routeType = data['routeType'] ?? 'none';
+              final String actionUrl = data['actionUrl'] ?? '';
               
-              return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 5),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 5)),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: Image.network(
-                    imageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      color: Colors.grey.shade200,
-                      child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+              return GestureDetector(
+                onTap: () async {
+                  if (routeType == 'whatsapp' && actionUrl.isNotEmpty) {
+                    final uri = Uri.parse(actionUrl);
+                    if (await canLaunchUrl(uri)) await launchUrl(uri);
+                  } else if (routeType == '/hourly_cleaning') {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const HourlyCleaningDetailsScreen(serviceName: "نظافة بالساعة")));
+                  } else if (routeType == '/store') {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahStoreScreen()));
+                  } else if (routeType == '/support') {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahSupportScreen()));
+                  }
+                },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 5),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 5)),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: Colors.grey.shade200,
+                        child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                      ),
                     ),
                   ),
                 ),
@@ -324,7 +516,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                     title: 'إجمالي الحجوزات',
                     value: totalBookings,
                     iconPath: Icons.calendar_today_rounded,
-                    cardColor: const Color(0xFF3B82F6), // Blue
+                    cardColor: const Color(0xFF3B82F6),
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen())),
                   ),
                   const SizedBox(width: 15),
@@ -332,7 +524,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                      title: 'تقييمك',
                      value: '$rating ★',
                      iconPath: Icons.star_border_rounded,
-                     cardColor: const Color(0xFFF59E0B), // Yellow/Orange
+                     cardColor: const Color(0xFFF59E0B),
                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahProfileScreen())),
                   ),
                 ],
@@ -396,11 +588,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
     return _buildDefaultStaticGrid();
   }
 
-
-
-
-
-  // نسخة احتياطية في حال كانت قاعدة البيانات فارغة
   Widget _buildDefaultStaticGrid() {
     return GridView.count(
       crossAxisCount: 2,
@@ -545,7 +732,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFBBF24).withValues(alpha: 0.2), // Yellow Badge
+                          color: const Color(0xFFFBBF24).withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -553,29 +740,13 @@ class _ClientDashboardState extends State<ClientDashboard> {
                           style: const TextStyle(color: Color(0xFFD97706), fontSize: 10, fontWeight: FontWeight.w700),
                         ),
                       ),
-                      InkWell(
-                        onTap: () {
-                          if (onTap != null) {
-                            onTap();
-                          } else if (title == "خدمة بالساعة") {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const HourlyCleaningDetailsScreen(serviceName: "نظافة بالساعة"),
-                              ),
-                            );
-                          } else {
-                            _initiatePayment(title, numericPrice);
-                          }
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF2563EB), // Dark or Primary Action
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(Icons.arrow_back, color: Colors.white, size: 16),
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2563EB),
+                          borderRadius: BorderRadius.circular(10),
                         ),
+                        child: const Icon(Icons.arrow_back, color: Colors.white, size: 16),
                       ),
                     ],
                   ),
@@ -592,28 +763,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
   Widget _buildLatestBookings(List<DocumentSnapshot> orders) {
     return Column(
       children: [
-        Row(
-           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-           children: [
-             Row(
-               children: [
-                 Icon(Icons.calendar_month, color: Colors.blue.shade800, size: 20),
-                 const SizedBox(width: 8),
-                 const Text('آخر الحجوزات', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-               ],
-             ),
-             GestureDetector(
-               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen())),
-               child: const Row(
-                 children: [
-                   Text('عرض الكل', style: TextStyle(color: Color(0xFF2563EB), fontSize: 12, fontWeight: FontWeight.bold)),
-                   Icon(Icons.chevron_right, color: Color(0xFF2563EB), size: 16),
-                 ],
-               ),
-             ),
-           ],
-        ),
-        const SizedBox(height: 15),
         if (orders.isEmpty)
           Container(
             width: double.infinity,
@@ -630,16 +779,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
                 Icon(Icons.inventory_2_outlined, size: 40, color: Colors.grey.shade400),
                 const SizedBox(height: 10),
                 Text('لا توجد حجوزات', style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
-                const SizedBox(height: 15),
-                OutlinedButton(
-                  onPressed: () {},
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: Colors.grey.shade300),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  ),
-                  child: const Text('احجز الآن', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600)),
-                ),
               ],
             ),
           )
@@ -683,7 +822,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
   Widget _buildDrawer() {
     return Drawer(
-      backgroundColor: const Color(0xFF0F172A), // Dark slate as in website layout
+      backgroundColor: const Color(0xFF0F172A),
       child: SafeArea(
         child: Column(
           children: [
@@ -724,15 +863,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
               Navigator.pop(context);
               Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahContractsListScreen()));
             }),
-            const SizedBox(height: 20),
-            _buildDrawerItem(Icons.language, 'English', false, onTap: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('اللغة الإنجليزية ستتوفر في التحديث القادم!')));
-            }),
-            _buildDrawerItem(Icons.wb_sunny_outlined, 'الوضع الداكن', false, onTap: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الوضع الداكن قيد التطوير وستتوفر قريباً!')));
-            }),
             const Spacer(),
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 24),
@@ -740,9 +870,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
               title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
               onTap: () async {
                 await FirebaseAuth.instance.signOut();
-                if (mounted) {
-                  Navigator.of(context).pushReplacementNamed('/');
-                }
+                if (mounted) Navigator.of(context).pushReplacementNamed('/');
               },
             ),
             const SizedBox(height: 20),
