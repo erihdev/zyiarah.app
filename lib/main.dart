@@ -14,6 +14,9 @@ import 'package:zyiarah/screens/client_dashboard.dart';
 import 'package:zyiarah/screens/driver_dashboard.dart';
 import 'package:zyiarah/screens/admin/admin_dashboard_screen.dart';
 import 'package:zyiarah/services/firebase_service.dart';
+import 'package:zyiarah/services/deep_link_service.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +31,7 @@ void main() async {
   };
 
   ZyiarahNotificationService().initialize();
+  ZyiarahDeepLinkService().initialize(navigatorKey);
   runApp(const ZyiarahApp());
 }
 
@@ -38,6 +42,7 @@ class ZyiarahApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'زيارة - Zyiarah',
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primaryColor: const Color(0xFF2563EB),

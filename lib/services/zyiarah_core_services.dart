@@ -1,5 +1,5 @@
-import 'dart:async';
 import 'dart:math' show cos, sqrt, asin;
+import 'package:firebase_analytics/firebase_analytics.dart';
 
 /// خدمة إدارة العمليات الجوهرية (قفل الوقت والجيوفنسينج)
 /// تم التطوير بواسطة: إرث (erihdev.com)
@@ -52,5 +52,44 @@ class ZyiarahCoreService {
       "order_ref": orderId,
       "user_ref": userId
     };
+  }
+
+  // --- 4. التحليلات (Business Analytics) ---
+  final FirebaseAnalytics _analytics = FirebaseAnalytics.instance;
+
+  Future<void> logEvent(String name, Map<String, dynamic>? parameters) async {
+    await _analytics.logEvent(name: name, parameters: parameters?.cast<String, Object>());
+  }
+
+  Future<void> logOrderSuccess(String orderId, double amount, String type) async {
+    await _analytics.logEvent(
+      name: 'order_success',
+      parameters: {
+        'order_id': orderId,
+        'value': amount,
+        'currency': 'SAR',
+        'service_type': type
+      },
+    );
+  }
+
+  Future<void> logPaymentComplete(String orderId, String method) async {
+    await _analytics.logEvent(
+      name: 'payment_complete',
+      parameters: {
+        'order_id': orderId,
+        'method': method,
+      },
+    );
+  }
+
+  Future<void> logSupportOpen(String ticketId, String category) async {
+    await _analytics.logEvent(
+      name: 'support_ticket_open',
+      parameters: {
+        'ticket_id': ticketId,
+        'category': category,
+      },
+    );
   }
 }

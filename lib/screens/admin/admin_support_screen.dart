@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/screens/admin/admin_ticket_details_screen.dart';
+import 'package:zyiarah/widgets/zyiarah_shimmer.dart';
 
 class AdminSupportScreen extends StatelessWidget {
   const AdminSupportScreen({super.key});
@@ -19,7 +20,9 @@ class AdminSupportScreen extends StatelessWidget {
         body: StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance.collection('support_tickets').orderBy('createdAt', descending: true).snapshots(),
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return ZyiarahShimmer.buildListSkeleton(count: 5);
+            }
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("لا توجد تذاكر حالياً"));
 
             return ListView.builder(

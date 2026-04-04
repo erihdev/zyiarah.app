@@ -215,4 +215,9 @@ class ZyiarahOrderService {
       'last_location_update': FieldValue.serverTimestamp(),
     });
   }
+
+  // الاستماع لتتبع طلب معين (للمتابعة من قبل العميل)
+  Stream<DocumentSnapshot> streamOrderTracking(String orderId) {
+    return _db.collection('orders').doc(orderId).snapshots();
+  }
 }

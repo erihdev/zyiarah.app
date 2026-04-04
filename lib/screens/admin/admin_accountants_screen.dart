@@ -137,7 +137,7 @@ class _AdminAccountantsScreenState extends State<AdminAccountantsScreen> {
                         children: [
                           Switch(
                             value: acc['is_active'] ?? true, 
-                            activeColor: const Color(0xFF1E293B),
+                            activeThumbColor: const Color(0xFF1E293B),
                             onChanged: (val) {
                               _db.collection('accountants').doc(doc.id).update({'is_active': val});
                             }

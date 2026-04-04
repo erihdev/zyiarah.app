@@ -59,7 +59,7 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                     ),
                     const SizedBox(height: 15),
                     DropdownButtonFormField<String>(
-                      value: role,
+                      initialValue: role,
                       items: roles.map((r) => DropdownMenuItem(value: r['value'], child: Text(r['label']!))).toList(),
                       onChanged: (val) {
                         if (val != null) setDialogState(() => role = val);

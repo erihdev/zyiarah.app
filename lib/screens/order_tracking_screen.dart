@@ -5,7 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:lottie/lottie.dart';
+import 'package:lottie/lottie.dart' hide Marker;
 
 
 class OrderTrackingScreen extends StatefulWidget {
@@ -169,8 +169,6 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   }
 
   Widget _buildStepper(String currentStatus) {
-    final statusOrder = ['pending', 'accepted', 'arrived', 'in_progress', 'completed'];
-    int currentIndex = statusOrder.indexOf(currentStatus);
     // Map Firestore status to our UI steps
     Map<String, int> stepMapping = {
       'accepted': 0,

@@ -44,7 +44,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                     ),
                     const SizedBox(height: 15),
                     DropdownButtonFormField<String>(
-                      value: type,
+                      initialValue: type,
                       items: const [
                         DropdownMenuItem(value: 'driver', child: Text("سائق")),
                         DropdownMenuItem(value: 'worker', child: Text("عامل / عاملة")),
@@ -145,7 +145,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                         children: [
                           Switch(
                             value: driver['is_active'] ?? true, 
-                            activeColor: const Color(0xFF1E293B),
+                            activeThumbColor: const Color(0xFF1E293B),
                             onChanged: (val) async {
                               await _db.collection('drivers').doc(doc.id).update({'is_active': val});
                               if (context.mounted) {

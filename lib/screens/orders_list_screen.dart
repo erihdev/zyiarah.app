@@ -328,8 +328,6 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                     if (order['driver_id'] != null && order['location'] != null) {
                       Navigator.push(context, MaterialPageRoute(builder: (context) => OrderTrackingScreen(
                         orderId: docId,
-                        driverId: order['driver_id'],
-                        destination: order['location'],
                       )));
                     }
                   },

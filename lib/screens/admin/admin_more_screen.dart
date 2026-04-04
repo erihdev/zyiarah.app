@@ -48,35 +48,35 @@ class AdminMoreScreen extends StatelessWidget {
         'title': 'الدعم الفني',
         'icon': Icons.support_agent,
         'color': Colors.purple,
-        'page': const AdminSupportScreen(),
+        'page': AdminSupportScreen(),
         'roles': ['super_admin', 'orders_manager']
       },
       {
         'title': 'الإشعارات والتسويق',
         'icon': Icons.campaign_outlined,
         'color': Colors.redAccent,
-        'page': const AdminMarketingScreen(),
+        'page': AdminMarketingScreen(),
         'roles': ['super_admin', 'orders_manager', 'accountant_admin']
       },
       {
         'title': 'طلبات الصيانة',
         'icon': Icons.build_circle_outlined,
         'color': Colors.brown,
-        'page': const AdminMaintenanceScreen(),
+        'page': AdminMaintenanceScreen(),
         'roles': ['super_admin', 'orders_manager']
       },
       {
         'title': 'العقود الإلكترونية',
         'icon': Icons.history_edu,
         'color': Colors.green,
-        'page': const AdminContractsScreen(),
+        'page': AdminContractsScreen(),
         'roles': ['super_admin', 'orders_manager']
       },
       {
         'title': 'طلبات المتجر',
         'icon': Icons.shopping_cart_checkout,
         'color': Colors.teal,
-        'page': const AdminStoreOrdersScreen(),
+        'page': AdminStoreOrdersScreen(),
         'roles': ['super_admin', 'accountant_admin']
       },
       {

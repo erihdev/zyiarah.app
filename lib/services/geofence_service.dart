@@ -72,4 +72,14 @@ class GeofenceService {
     }
     return nearestZoneName;
   }
+
+  /// حساب المسافة بين نقطتين
+  static double calculateDistance(double startLat, double startLng, double endLat, double endLng) {
+    return Geolocator.distanceBetween(startLat, startLng, endLat, endLng);
+  }
+
+  /// التحقق مما إذا كان السائق قريباً من الهدف (افتراضياً 2 كم)
+  static bool isNearTarget(double currentLat, double currentLng, double targetLat, double targetLng, {double threshold = 2000}) {
+    return calculateDistance(currentLat, currentLng, targetLat, targetLng) <= threshold;
+  }
 }

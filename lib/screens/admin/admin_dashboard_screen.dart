@@ -7,6 +7,7 @@ import 'package:zyiarah/screens/admin/admin_more_screen.dart';
 import 'package:zyiarah/screens/admin/admin_store_screen.dart';
 import 'package:zyiarah/screens/onboarding_screen.dart';
 import 'package:lottie/lottie.dart';
+import 'package:zyiarah/utils/zyiarah_strings.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -18,6 +19,7 @@ class AdminDashboardScreen extends StatefulWidget {
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   String _role = 'none'; 
   bool _isLoadingRole = true;
+  int _currentIndex = 0;
 
   @override
   void initState() {
@@ -52,10 +54,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   List<Map<String, dynamic>> _getFilteredTabs() {
     final allTabs = [
-      {'page': const AdminServicesScreen(), 'label': 'الخدمات', 'icon': Icons.design_services, 'roles': ['super_admin', 'orders_manager']},
-      {'page': const AdminOrdersScreen(), 'label': 'الطلبات', 'icon': Icons.list_alt, 'roles': ['super_admin', 'orders_manager']},
-      {'page': const AdminStoreScreen(), 'label': 'المتجر', 'icon': Icons.storefront, 'roles': ['super_admin', 'accountant_admin']},
-      {'page': AdminMoreScreen(role: _role), 'label': 'المزيد', 'icon': Icons.grid_view_rounded, 'roles': ['super_admin', 'orders_manager', 'accountant_admin']},
+      {'page': const AdminServicesScreen(), 'label': ZyiarahStrings.servicesHeader, 'icon': Icons.design_services, 'roles': ['super_admin', 'orders_manager']},
+      {'page': const AdminOrdersScreen(), 'label': ZyiarahStrings.ordersManagement, 'icon': Icons.list_alt, 'roles': ['super_admin', 'orders_manager']},
+      {'page': const AdminStoreScreen(), 'label': ZyiarahStrings.storeManagement, 'icon': Icons.storefront, 'roles': ['super_admin', 'accountant_admin']},
+      {'page': AdminMoreScreen(role: _role), 'label': ZyiarahStrings.systemSettings, 'icon': Icons.grid_view_rounded, 'roles': ['super_admin', 'orders_manager', 'accountant_admin']},
     ];
 
     return allTabs.where((tab) => (tab['roles'] as List).contains(_role)).toList();
@@ -67,10 +69,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       builder: (context) => Directionality(
         textDirection: TextDirection.rtl,
         child: AlertDialog(
-          title: const Text("تسجيل الخروج"),
-          content: const Text("هل تريد بالتأكيد تسجيل الخروج من لوحة الإدارة؟"),
+          title: Text(ZyiarahStrings.logout),
+          content: Text(ZyiarahStrings.isArabic ? "هل تريد بالتأكيد تسجيل الخروج من لوحة الإدارة؟" : "Are you sure you want to logout from admin panel?"),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("إلغاء")),
+            TextButton(onPressed: () => Navigator.pop(context, false), child: Text(ZyiarahStrings.cancel)),
             TextButton(
               onPressed: () => Navigator.pop(context, true), 
               child: const Text("نعم، متأكد", style: TextStyle(color: Colors.red)),
@@ -137,7 +139,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ElevatedButton.icon(
                   onPressed: _logout,
                   icon: const Icon(Icons.logout),
-                  label: const Text("تسجيل الخروج"),
+                  label: Text(ZyiarahStrings.logout),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1E293B),
                     foregroundColor: Colors.white,
@@ -157,7 +159,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("لوحة التحكم (الإدارة)", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(ZyiarahStrings.adminPanel, style: const TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF1E293B), // Slate 800
         foregroundColor: Colors.white,
         centerTitle: true,

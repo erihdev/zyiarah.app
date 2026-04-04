@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:zyiarah/services/notification_trigger_service.dart';
 
 class AdminOrderDetailsScreen extends StatefulWidget {
   final String orderId;
@@ -15,6 +16,7 @@ class AdminOrderDetailsScreen extends StatefulWidget {
 
 class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final ZyiarahNotificationTriggerService _notificationService = ZyiarahNotificationTriggerService();
   bool _isLoading = true;
   Map<String, dynamic>? _orderData;
 
@@ -89,9 +91,14 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
         'assigned_driver': _selectedDriverName,
         'updated_at': FieldValue.serverTimestamp(),
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ التعديلات وحفظ بيانات السائق بنجاح'), backgroundColor: Colors.green));
-      }
+        if (mounted) {
+          if (_selectedDriverId != null && _currentStatus == 'assigned') {
+            await _notificationService.notifyDriverOfAssignment(_selectedDriverId!, widget.orderId);
+          }
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ التعديلات وحفظ بيانات السائق بنجاح'), backgroundColor: Colors.green));
+          }
+        }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('فشل تحديث الطلب'), backgroundColor: Colors.red));
@@ -203,7 +210,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                     const SizedBox(height: 10),
                     const Text("حالة الطلب"),
                     DropdownButtonFormField<String>(
-                      value: _currentStatus,
+                      initialValue: _currentStatus,
                       items: _statuses.map((s) => DropdownMenuItem(value: s, child: Text(_getStatusText(s)))).toList(),
                       onChanged: (val) {
                         if (val != null) setState(() => _currentStatus = val);
@@ -215,7 +222,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                     _isLoadingDrivers 
                       ? const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(strokeWidth: 2)))
                       : DropdownButtonFormField<String>(
-                        value: _selectedDriverId,
+                        initialValue: _selectedDriverId,
                         hint: const Text("اختر من قائمة الكوادر النشطة..."),
                         items: _drivers.map((d) => DropdownMenuItem(value: d['id'] as String, child: Text(d['name'] as String))).toList(),
                         onChanged: (val) {

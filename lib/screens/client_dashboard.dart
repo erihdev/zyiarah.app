@@ -1,22 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/screens/profile_screen.dart';
 import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/screens/hourly_details_screen.dart';
 import 'package:zyiarah/screens/orders_list_screen.dart';
 import 'package:zyiarah/screens/support_screen.dart';
-import 'package:zyiarah/screens/payment_summary_screen.dart';
-import 'package:zyiarah/screens/maintenance_request_screen.dart';
-import 'package:zyiarah/screens/subscription_plans_screen.dart';
-import 'package:zyiarah/screens/contracts_list_screen.dart';
-import 'package:zyiarah/services/popup_service.dart';
-import 'package:zyiarah/screens/sofa_rug_details_screen.dart';
-import 'package:zyiarah/screens/store_screen.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/screens/order_tracking_screen.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:zyiarah/utils/zyiarah_strings.dart';
+import 'package:zyiarah/services/popup_service.dart';
+import 'package:zyiarah/screens/store_screen.dart';
+import 'package:zyiarah/screens/sofa_rug_details_screen.dart';
+import 'package:zyiarah/screens/subscription_plans_screen.dart';
+import 'package:zyiarah/screens/maintenance_request_screen.dart';
+import 'package:zyiarah/screens/contracts_list_screen.dart';
 
 class ClientDashboard extends StatefulWidget {
   const ClientDashboard({super.key});
@@ -73,33 +72,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
     }
   }
 
-  void _initiatePayment(String serviceName, double amount) async {
-    final GeoPoint? selectedLocation = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => LocationPickerScreen(serviceName: serviceName),
-      ),
-    );
-
-    if (selectedLocation == null) return;
-
-    if (mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => PaymentSummaryScreen(
-            serviceName: serviceName,
-            amount: amount,
-            location: selectedLocation,
-          ),
-        ),
-      ).then((success) {
-        if (success == true && mounted) {
-          _loadUserData();
-        }
-      });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -122,11 +94,11 @@ class _ClientDashboardState extends State<ClientDashboard> {
                 const SizedBox(height: 10),
                 _buildMetricsList(),
                 const SizedBox(height: 25),
-                _buildSectionTitle('خدماتنا', Icons.auto_awesome, Colors.amber),
+                _buildSectionTitle(ZyiarahStrings.servicesHeader, Icons.auto_awesome, Colors.amber),
                 const SizedBox(height: 15),
                 _isLoading ? _buildShimmerGrid() : _buildServicesGrid(),
                 const SizedBox(height: 25),
-                _buildSectionTitle('آخر الحجوزات', Icons.calendar_month, Colors.blue.shade800),
+                _buildSectionTitle(ZyiarahStrings.latestBookings, Icons.calendar_month, Colors.blue.shade800),
                 const SizedBox(height: 15),
                 _isLoading 
                   ? _buildShimmerList()
@@ -207,10 +179,9 @@ class _ClientDashboardState extends State<ClientDashboard> {
         final data = orderDoc.data() as Map<String, dynamic>;
         final String orderId = orderDoc.id;
         final String status = data['status'] ?? '';
-        
-        String statusText = "السائق في الطريق";
-        if (status == 'arrived') statusText = "وصل السائق لموقعك";
-        if (status == 'in_progress') statusText = "جاري تنفيذ الخدمة";
+        String statusText = ZyiarahStrings.driverOnWay;
+        if (status == 'arrived') statusText = ZyiarahStrings.driverArrived;
+        if (status == 'in_progress') statusText = ZyiarahStrings.serviceInProgress;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 20),
@@ -234,7 +205,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(statusText, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    const Text("اضغط للمتابعة المباشرة على الخريطة", style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    Text(ZyiarahStrings.tapToTrackMap, style: const TextStyle(fontSize: 11, color: Colors.grey)),
                   ],
                 ),
               ),
@@ -248,7 +219,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 0,
                 ),
-                child: const Text("تتبع", style: TextStyle(fontWeight: FontWeight.bold)),
+                child: Text(ZyiarahStrings.track, style: const TextStyle(fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -298,7 +269,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                     child: const Icon(Icons.receipt_long, color: Colors.orange),
                   ),
                   const SizedBox(width: 12),
-                  const Text("بانتظار الدفع", style: TextStyle(fontWeight: FontWeight.w900, color: Colors.orange, fontSize: 16)),
+                  Text(ZyiarahStrings.waitingPayment, style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.orange, fontSize: 16)),
                 ],
               ),
               const SizedBox(height: 12),
@@ -320,7 +291,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
-                  child: const Text("استعرض وادفع الآن", style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: Text(ZyiarahStrings.viewAndPayNow, style: const TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -336,14 +307,14 @@ class _ClientDashboardState extends State<ClientDashboard> {
       backgroundColor: Colors.transparent,
       elevation: 0,
       iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
-      title: const Row(
+      title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: 10),
-            child: Text('بوابتك لخدمات منزلية متكاملة', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13, color: Color(0xFF64748B))),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(ZyiarahStrings.portalSubtitle, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13, color: Color(0xFF64748B))),
           ),
-          SizedBox(width: 48),
+          const SizedBox(width: 48),
         ],
       ),
     );
@@ -778,7 +749,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
               children: [
                 Icon(Icons.inventory_2_outlined, size: 40, color: Colors.grey.shade400),
                 const SizedBox(height: 10),
-                Text('لا توجد حجوزات', style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
+                Text(ZyiarahStrings.noBookings, style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
               ],
             ),
           )

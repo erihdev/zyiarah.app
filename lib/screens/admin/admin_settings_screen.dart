@@ -326,12 +326,60 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                           ],
                         ),
                       ),
+                      const SizedBox(height: 32),
+
+                      // About Zyiarah Card
+                      _buildAboutCard(),
+
                       const SizedBox(height: 20),
                     ],
                   ),
                 ),
               ],
             ),
+      ),
+    );
+  }
+
+  Widget _buildAboutCard() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A), // Deep Slate
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.2),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          )
+        ],
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.verified_user_rounded, color: Color(0xFF38BDF8), size: 40),
+          const SizedBox(height: 16),
+          const Text(
+            "زيارة - Zyiarah",
+            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            "إصدار النظام: 1.0.1+12 (Staging)",
+            style: TextStyle(color: Colors.white60, fontSize: 13),
+          ),
+          const Divider(color: Colors.white10, height: 32),
+          const Text(
+            "مؤسسة معاذ يحي محمد المالكي\nسجل تجاري رقم: 7030376342",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.5),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            "تطوير وتشغيل: Erih Dev (إرث)",
+            style: TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.bold),
+          ),
+        ],
       ),
     );
   }

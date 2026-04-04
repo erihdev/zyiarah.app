@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:zyiarah/services/notification_trigger_service.dart';
+import 'package:zyiarah/widgets/zyiarah_shimmer.dart';
 
 class AdminMaintenanceScreen extends StatelessWidget {
-  const AdminMaintenanceScreen({super.key});
+  AdminMaintenanceScreen({super.key});
+
+  final ZyiarahNotificationTriggerService _notificationService = ZyiarahNotificationTriggerService();
 
   @override
   Widget build(BuildContext context) {
@@ -18,7 +22,9 @@ class AdminMaintenanceScreen extends StatelessWidget {
         body: StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance.collection('maintenance_requests').snapshots(),
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return ZyiarahShimmer.buildListSkeleton(count: 4);
+            }
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("لا توجد طلبات صيانة"));
 
             // Sort manually to handle missing timestamps
@@ -72,7 +78,7 @@ class AdminMaintenanceScreen extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
                             TextButton.icon(
-                              onPressed: () => _showStatusDialog(context, doc.id, req),
+                              onPressed: () => _showStatusDialog(context, doc.id, req, req['userId'] ?? ''),
                               icon: const Icon(Icons.edit_note, size: 18),
                               label: const Text("تحديث"),
                             ),
@@ -110,7 +116,7 @@ class AdminMaintenanceScreen extends StatelessWidget {
     );
   }
 
-  void _showStatusDialog(BuildContext context, String docId, Map<String, dynamic> currentData) {
+  void _showStatusDialog(BuildContext context, String docId, Map<String, dynamic> currentData, String userId) {
     final TextEditingController priceCtrl = TextEditingController(text: (currentData['quotePrice'] ?? '').toString());
     
     showDialog(
@@ -137,27 +143,27 @@ class AdminMaintenanceScreen extends StatelessWidget {
               ListTile(
                 title: const Text('قيد المراجعة'), 
                 leading: const Icon(Icons.hourglass_empty, color: Colors.orange),
-                onTap: () { _updateStatus(docId, 'under_review', priceCtrl.text); Navigator.pop(ctx); }
+                onTap: () { _updateStatus(docId, 'under_review', priceCtrl.text, userId); Navigator.pop(ctx); }
               ),
               ListTile(
                 title: const Text('مقبول (بانتظار الدفع)'), 
                 leading: const Icon(Icons.payment, color: Colors.blue),
-                onTap: () { _updateStatus(docId, 'waiting_payment', priceCtrl.text); Navigator.pop(ctx); }
+                onTap: () { _updateStatus(docId, 'waiting_payment', priceCtrl.text, userId); Navigator.pop(ctx); }
               ),
               ListTile(
                 title: const Text('جاري العمل (مدفوع)'), 
                 leading: const Icon(Icons.build, color: Colors.blueGrey),
-                onTap: () { _updateStatus(docId, 'approved', priceCtrl.text); Navigator.pop(ctx); }
+                onTap: () { _updateStatus(docId, 'approved', priceCtrl.text, userId); Navigator.pop(ctx); }
               ),
               ListTile(
                 title: const Text('مكتمل'), 
                 leading: const Icon(Icons.check_circle, color: Colors.green),
-                onTap: () { _updateStatus(docId, 'completed', priceCtrl.text); Navigator.pop(ctx); }
+                onTap: () { _updateStatus(docId, 'completed', priceCtrl.text, userId); Navigator.pop(ctx); }
               ),
               ListTile(
                 title: const Text('مرفوض'), 
                 leading: const Icon(Icons.cancel, color: Colors.red),
-                onTap: () { _updateStatus(docId, 'rejected', priceCtrl.text); Navigator.pop(ctx); }
+                onTap: () { _updateStatus(docId, 'rejected', priceCtrl.text, userId); Navigator.pop(ctx); }
               ),
             ],
           ),
@@ -166,11 +172,17 @@ class AdminMaintenanceScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _updateStatus(String docId, String status, String price) async {
+  Future<void> _updateStatus(String docId, String status, String price, String userId) async {
     final Map<String, dynamic> updates = {'status': status};
+    double quotedAmount = 0.0;
     if (price.isNotEmpty) {
-      updates['quotePrice'] = double.tryParse(price) ?? 0.0;
+      quotedAmount = double.tryParse(price) ?? 0.0;
+      updates['quotePrice'] = quotedAmount;
     }
     await FirebaseFirestore.instance.collection('maintenance_requests').doc(docId).update(updates);
+
+    if (status == 'waiting_payment' && userId.isNotEmpty) {
+      await _notificationService.notifyClientOfMaintenanceQuote(userId, docId, quotedAmount);
+    }
   }
 }

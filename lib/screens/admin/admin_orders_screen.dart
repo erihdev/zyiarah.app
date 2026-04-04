@@ -1,6 +1,8 @@
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart' hide TextDirection;
-import 'package:shimmer/shimmer.dart';
 import 'package:zyiarah/screens/admin/admin_order_details_screen.dart';
+import 'package:zyiarah/widgets/zyiarah_shimmer.dart';
 
 
 class AdminOrdersScreen extends StatefulWidget {
@@ -134,20 +136,6 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
   }
 
   Widget _buildShimmerLoading() {
-    return Shimmer.fromColors(
-      baseColor: Colors.grey[300]!,
-      highlightColor: Colors.grey[100]!,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: 6,
-        itemBuilder: (context, index) {
-          return Container(
-            height: 150,
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
-          );
-        },
-      ),
-    );
+    return ZyiarahShimmer.buildListSkeleton(count: 6);
   }
 }

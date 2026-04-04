@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart' as intl;
-import 'package:zyiarah/screens/admin/admin_orders_screen.dart';
 import 'package:zyiarah/screens/admin/admin_users_screen.dart';
+import 'package:zyiarah/services/report_service.dart';
+import 'package:intl/intl.dart' as intl;
+import 'package:fl_chart/fl_chart.dart';
+import 'package:zyiarah/screens/admin/admin_orders_screen.dart';
 
 class AdminAnalyticsScreen extends StatefulWidget {
   const AdminAnalyticsScreen({super.key});
@@ -14,6 +16,7 @@ class AdminAnalyticsScreen extends StatefulWidget {
 
 class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final ZyiarahReportService _reportService = ZyiarahReportService();
   
   bool _isLoading = true;
   int _totalUsers = 0;
@@ -23,6 +26,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
   
   Map<String, int> _serviceDistribution = {};
   List<Map<String, dynamic>> _recentOrders = [];
+  List<double> _weeklyRevenue = List.filled(7, 0.0);
   
   @override
   void initState() {
@@ -43,6 +47,8 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
       double revenue = 0.0;
       int completed = 0;
       Map<String, int> distribution = {};
+      List<double> weeklyRev = List.filled(7, 0.0);
+      final now = DateTime.now();
       List<Map<String, dynamic>> recent = [];
 
       for (int i = 0; i < ordersSnap.docs.length; i++) {
@@ -52,8 +58,9 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
         final status = data['status'] ?? 'pending';
         final amount = (data['amount'] ?? 0.0) as num;
         final serviceType = data['service_type'] ?? 'أخرى';
+        final createdAt = (data['created_at'] as Timestamp?)?.toDate() ?? now;
 
-        // Count services
+        // Group by service
         distribution[serviceType] = (distribution[serviceType] ?? 0) + 1;
 
         if (status == 'completed') {
@@ -61,6 +68,12 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
         }
         if (status != 'cancelled') {
           revenue += amount.toDouble();
+          
+          // Weekly revenue grouping
+          final difference = now.difference(createdAt).inDays;
+          if (difference >= 0 && difference < 7) {
+            weeklyRev[6 - difference] += amount.toDouble();
+          }
         }
 
         // Add to recent if first 5
@@ -79,6 +92,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
       _totalRevenue = revenue;
       _serviceDistribution = distribution;
       _recentOrders = recent;
+      _weeklyRevenue = weeklyRev;
 
       if (mounted) {
         setState(() {
@@ -99,6 +113,24 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
         backgroundColor: const Color(0xFF0F172A),
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
+            tooltip: 'تصدير تقرير PDF',
+            onPressed: _isLoading ? null : () async {
+               // Fetch all orders for report
+               final snap = await _db.collection('orders').get();
+               final orders = snap.docs.map((d) => d.data()).toList();
+               
+               await _reportService.generateOrdersReport(
+                 orders: orders, 
+                 periodName: "إجمالي الفترة الحالية", 
+                 totalRevenue: _totalRevenue
+                );
+            },
+          ),
+          const SizedBox(width: 10),
+        ],
       ),
       body: Directionality(
         textDirection: TextDirection.rtl,
@@ -133,6 +165,11 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                       ],
                     ),
                     
+                    const SizedBox(height: 30),
+                    _buildSectionHeader('تحليل الإيرادات (آخر 7 أيام)'),
+                    const SizedBox(height: 15),
+                    _buildRevenueChart(),
+
                     const SizedBox(height: 30),
                     _buildSectionHeader('توزيع الخدمات'),
                     const SizedBox(height: 15),
@@ -271,6 +308,58 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildRevenueChart() {
+    return Container(
+      height: 250,
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(10, 20, 20, 10),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)]),
+      child: BarChart(
+        BarChartData(
+          alignment: BarChartAlignment.spaceAround,
+          maxY: _weeklyRevenue.reduce((a, b) => a > b ? a : b) * 1.2 + 100,
+          barTouchData: const BarTouchData(enabled: true),
+          titlesData: FlTitlesData(
+            show: true,
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                getTitlesWidget: (value, meta) {
+                  const days = ['6d', '5d', '4d', '3d', '2d', '1d', 'اليوم'];
+                  if (value.toInt() >= 0 && value.toInt() < 7) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Text(days[value.toInt()], style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
+            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          ),
+          gridData: const FlGridData(show: false),
+          borderData: FlBorderData(show: false),
+          barGroups: List.generate(7, (i) {
+            return BarChartGroupData(
+              x: i,
+              barRods: [
+                BarChartRodData(
+                  toY: _weeklyRevenue[i],
+                  color: i == 6 ? const Color(0xFF2563EB) : const Color(0xFF94A3B8),
+                  width: 18,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                ),
+              ],
+            );
+          }),
+        ),
       ),
     );
   }

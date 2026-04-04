@@ -96,6 +96,12 @@ service cloud.firestore {
       allow create: if isLoggedIn();
       allow read, update, delete: if isAdmin();
     }
+
+    // Notification Triggers (SECURITY SENSITIVE)
+    match /notification_triggers/{triggerId} {
+      allow create: if isLoggedIn();
+      allow read, delete: if isAdmin();
+    }
   }
 }
 

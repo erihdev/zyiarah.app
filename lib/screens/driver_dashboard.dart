@@ -9,7 +9,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:async';
-import 'package:lottie/lottie.dart';
+import 'package:lottie/lottie.dart' hide Marker;
+import 'package:zyiarah/services/notification_trigger_service.dart';
 
 class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
@@ -21,6 +22,7 @@ class DriverDashboard extends StatefulWidget {
 class _DriverDashboardState extends State<DriverDashboard> {
   final ZyiarahCoreService _coreService = ZyiarahCoreService();
   final ZyiarahOrderService _orderService = ZyiarahOrderService();
+  final ZyiarahNotificationTriggerService _notificationService = ZyiarahNotificationTriggerService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   bool _isOnline = true;
@@ -350,18 +352,52 @@ class _DriverDashboardState extends State<DriverDashboard> {
       stream: Geolocator.getPositionStream(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox.shrink();
-        double dist = _coreService.getDistanceInMeters(snapshot.data!.latitude, snapshot.data!.longitude, clientLoc.latitude, clientLoc.longitude);
+        
+        final pos = snapshot.data!;
+        double dist = _coreService.getDistanceInMeters(pos.latitude, pos.longitude, clientLoc.latitude, clientLoc.longitude);
         String formatted = _coreService.getFormattedDistance(dist);
+
+        // Geofencing Check (2km)
+        if (dist <= 2000 && _activeOrderId != null) {
+          _checkAndNotifyProximity(_activeOrderId!, clientLoc);
+        }
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text("على بعد: $formatted", style: const TextStyle(fontSize: 11, color: Colors.blueAccent, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
-            _buildMiniMap(snapshot.data!, clientLoc),
+            _buildMiniMap(pos, clientLoc),
           ],
         );
       },
     );
+  }
+
+  Future<void> _checkAndNotifyProximity(String orderId, GeoPoint target) async {
+    try {
+      final docRef = FirebaseFirestore.instance.collection('orders').doc(orderId);
+      final doc = await docRef.get();
+      final data = doc.data();
+
+      if (data != null && data['proximity_notified'] != true) {
+        // Mark as notified FIRST to avoid race conditions
+        await docRef.update({'proximity_notified': true});
+        
+        final clientId = data['client_id'] ?? '';
+        if (clientId.isNotEmpty) {
+          await _notificationService.triggerNotification(
+            toUid: clientId,
+            title: "السائق يقترب! 🚙",
+            body: "السائق أصبح على بعد أقل من 2 كم من موقعك. استعد لاستلام الخدمة.",
+            type: 'driver_near',
+            data: {'orderId': orderId},
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint("Proximity notify error: $e");
+    }
   }
 
   Widget _buildMiniMap(Position driverPos, GeoPoint clientLoc) {

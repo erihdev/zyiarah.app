@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:zyiarah/services/notification_trigger_service.dart';
 
 class AdminTicketDetailsScreen extends StatefulWidget {
   final String ticketId;
@@ -13,6 +14,7 @@ class AdminTicketDetailsScreen extends StatefulWidget {
 
 class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final ZyiarahNotificationTriggerService _notificationService = ZyiarahNotificationTriggerService();
   final TextEditingController _replyCtrl = TextEditingController();
   bool _isSending = false;
 
@@ -29,10 +31,17 @@ class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
         'sentAt': FieldValue.serverTimestamp(),
       });
 
+      final ticketDoc = await _db.collection('support_tickets').doc(widget.ticketId).get();
+      final userId = ticketDoc.data()?['userId'] ?? '';
+
       await _db.collection('support_tickets').doc(widget.ticketId).update({
         'status': 'replied',
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      if (userId.isNotEmpty) {
+        await _notificationService.notifyUserOfSupportReply(userId, widget.ticketId);
+      }
 
       _replyCtrl.clear();
     } catch (e) {
