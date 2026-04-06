@@ -11,6 +11,7 @@ import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/utils/zyiarah_strings.dart';
 import 'package:zyiarah/services/popup_service.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:zyiarah/screens/store_screen.dart';
 import 'package:zyiarah/screens/sofa_rug_details_screen.dart';
 import 'package:zyiarah/screens/subscription_plans_screen.dart';
@@ -448,10 +449,14 @@ class _ClientDashboardState extends State<ClientDashboard> {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(20),
-                    child: Image.network(
-                      imageUrl,
+                    child: CachedNetworkImage(
+                      imageUrl: imageUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
+                      placeholder: (context, url) => Container(
+                        color: Colors.grey.shade200,
+                        child: const Center(child: CircularProgressIndicator()),
+                      ),
+                      errorWidget: (context, url, error) => Container(
                         color: Colors.grey.shade200,
                         child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
                       ),

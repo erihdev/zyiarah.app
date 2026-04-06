@@ -11,6 +11,7 @@ import 'package:latlong2/latlong.dart';
 import 'dart:async';
 import 'package:lottie/lottie.dart' hide Marker;
 import 'package:zyiarah/services/notification_trigger_service.dart';
+import 'package:zyiarah/screens/login_screen.dart';
 
 class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
@@ -69,29 +70,56 @@ class _DriverDashboardState extends State<DriverDashboard> {
       return const Scaffold(body: Center(child: Text("يرجى تسجيل الدخول")));
     }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
-      body: Directionality(
-        textDirection: TextDirection.rtl,
-        child: CustomScrollView(
-          slivers: [
-            _buildAppBar(),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildStatsRow(),
-                    const SizedBox(height: 25),
-                    _buildMainSection(),
-                  ],
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('drivers').doc(_currentDriverId).snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>;
+          final isActive = data['is_active'] ?? true;
+          
+          if (!isActive) {
+            // الحظر وطرد المستخدم
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+               await FirebaseAuth.instance.signOut();
+               if (!context.mounted) return;
+               ScaffoldMessenger.of(context).showSnackBar(
+                   const SnackBar(content: Text('تم تعطيل حسابك من قبل الإدارة.'), backgroundColor: Colors.red)
+                 );
+                 /* GOROUTER-READY: Once GoRouter is active, this becomes context.go('/login') */
+                 Navigator.of(context).pushAndRemoveUntil(
+                   MaterialPageRoute(builder: (_) => const ZyiarahLoginScreen()),
+                   (route) => false,
+                 );
+            });
+            return const Scaffold(body: Center(child: Text("تم حظر أو تعطيل حسابك.")));
+          }
+        }
+
+        return Scaffold(
+          backgroundColor: const Color(0xFFF1F5F9),
+          body: Directionality(
+            textDirection: TextDirection.rtl,
+            child: CustomScrollView(
+              slivers: [
+                _buildAppBar(),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildStatsRow(),
+                        const SizedBox(height: 25),
+                        _buildMainSection(),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      }
     );
   }
 

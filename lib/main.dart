@@ -15,6 +15,7 @@ import 'package:zyiarah/screens/driver_dashboard.dart';
 import 'package:zyiarah/screens/admin/admin_dashboard_screen.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/services/deep_link_service.dart';
+import 'package:zyiarah/router.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -40,9 +41,9 @@ class ZyiarahApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'زيارة - Zyiarah',
-      navigatorKey: navigatorKey,
+      routerConfig: appRouter,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primaryColor: const Color(0xFF2563EB),
@@ -53,8 +54,6 @@ class ZyiarahApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB), surface: const Color(0xFFF8FAFC)),
         useMaterial3: true,
       ),
-      // AuthWrapper للتحقق من حالة تسجيل الدخول تلقائياً
-      home: const AuthWrapper(),
     );
   }
 }

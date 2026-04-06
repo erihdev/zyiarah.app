@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:zyiarah/services/store_service.dart';
 import 'package:zyiarah/widgets/shimmer_loading.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ZyiarahStoreScreen extends StatefulWidget {
   const ZyiarahStoreScreen({super.key});
@@ -171,10 +172,17 @@ class _ProductCard extends StatelessWidget {
           Expanded(
             child: ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-              child: Image.network(
-                product.imageUrl,
+              child: CachedNetworkImage(
+                imageUrl: product.imageUrl,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(color: Colors.grey[100], child: const Icon(Icons.image_not_supported)),
+                placeholder: (context, url) => Container(
+                  color: Colors.grey.shade100,
+                  child: const Center(child: CircularProgressIndicator()),
+                ),
+                errorWidget: (context, url, error) => Container(
+                  color: Colors.grey[100], 
+                  child: const Center(child: Icon(Icons.image_not_supported)),
+                ),
               ),
             ),
           ),
