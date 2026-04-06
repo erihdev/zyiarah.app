@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
-
+import 'package:zyiarah/services/firebase_service.dart';
 
 class AdminDriversScreen extends StatefulWidget {
   const AdminDriversScreen({super.key});
@@ -13,14 +13,20 @@ class AdminDriversScreen extends StatefulWidget {
 
 class _AdminDriversScreenState extends State<AdminDriversScreen> {
   final _db = FirebaseFirestore.instance;
+  final ZyiarahFirebaseService _firebaseService = ZyiarahFirebaseService();
 
   void _showDriverDialog({String? docId, Map<String, dynamic>? currentData}) {
     final TextEditingController nameCtrl = TextEditingController(text: currentData?['name'] ?? '');
     final TextEditingController phoneCtrl = TextEditingController(text: currentData?['phone'] ?? '');
+    final TextEditingController emailCtrl = TextEditingController(text: currentData?['email'] ?? '');
+    final TextEditingController carInfoCtrl = TextEditingController(text: currentData?['car_info'] ?? '');
+    final TextEditingController licenseCtrl = TextEditingController(text: currentData?['license_info'] ?? '');
     String type = currentData?['type'] ?? 'driver'; 
+    bool isSaving = false;
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setState) {
           return Directionality(
@@ -43,6 +49,23 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                       decoration: const InputDecoration(labelText: "رقم الجوال", border: OutlineInputBorder()),
                     ),
                     const SizedBox(height: 15),
+                    TextField(
+                      controller: emailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      enabled: docId == null, // لا يمكن تعديل الايميل بعد الانشاء لتجنب مشاكل Auth
+                      decoration: const InputDecoration(labelText: "البريد الإلكتروني", border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 15),
+                    TextField(
+                      controller: carInfoCtrl,
+                      decoration: const InputDecoration(labelText: "بيانات السيارة (اختياري)", border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 15),
+                    TextField(
+                      controller: licenseCtrl,
+                      decoration: const InputDecoration(labelText: "رقم رخصة القيادة (اختياري)", border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 15),
                     DropdownButtonFormField<String>(
                       initialValue: type,
                       items: const [
@@ -58,11 +81,12 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                 ),
               ),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text("إلغاء", style: TextStyle(color: Colors.grey)),
-                ),
-                if (docId != null) 
+                if (!isSaving)
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text("إلغاء", style: TextStyle(color: Colors.grey)),
+                  ),
+                if (docId != null && !isSaving) 
                   TextButton(
                     onPressed: () async {
                       await _db.collection('drivers').doc(docId).delete();
@@ -70,25 +94,69 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                     },
                     child: const Text("حذف", style: TextStyle(color: Colors.red)),
                   ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B)),
-                  onPressed: () async {
-                    if (nameCtrl.text.isEmpty) return;
-                    final data = {
-                      'name': nameCtrl.text.trim(),
-                      'phone': phoneCtrl.text.trim(),
-                      'type': type,
-                      'is_active': currentData?['is_active'] ?? true,
-                    };
-                    if (docId == null) {
-                      await _db.collection('drivers').add(data);
-                    } else {
-                      await _db.collection('drivers').doc(docId).update(data);
-                    }
-                    if (context.mounted) Navigator.pop(ctx);
-                  },
-                  child: const Text("حفظ", style: TextStyle(color: Colors.white)),
-                ),
+                isSaving 
+                  ? const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: CircularProgressIndicator(),
+                    )
+                  : ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B)),
+                      onPressed: () async {
+                        final email = emailCtrl.text.trim();
+                        final name = nameCtrl.text.trim();
+                        
+                        if (name.isEmpty || email.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الاسم والبريد الإلكتروني إجبارية')));
+                          return;
+                        }
+
+                        setState(() => isSaving = true);
+
+                        try {
+                          if (docId == null) {
+                            // إنشاء موظف جديد وحسابه
+                            await _firebaseService.createDriverAccountViaAdmin(
+                              name: name,
+                              phone: phoneCtrl.text.trim(),
+                              email: email,
+                              carInfo: carInfoCtrl.text.trim(),
+                              licenseInfo: licenseCtrl.text.trim(),
+                              role: type,
+                              isActive: currentData?['is_active'] ?? true,
+                            );
+                            
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                content: Text('تم إنشاء الحساب وإرسال رابط التفعيل للسائق بنجاح'),
+                                backgroundColor: Colors.green,
+                              ));
+                              Navigator.pop(ctx);
+                            }
+                          } else {
+                            // تعديل بيانات الموظف
+                            final data = {
+                              'name': name,
+                              'phone': phoneCtrl.text.trim(),
+                              'car_info': carInfoCtrl.text.trim(),
+                              'license_info': licenseCtrl.text.trim(),
+                              'type': type,
+                              'is_active': currentData?['is_active'] ?? true,
+                            };
+                            await _db.collection('drivers').doc(docId).update(data);
+                            if (context.mounted) Navigator.pop(ctx);
+                          }
+                        } catch (e) {
+                          setState(() => isSaving = false);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: Text('حدث خطأ: $e'),
+                              backgroundColor: Colors.red,
+                            ));
+                          }
+                        }
+                      },
+                      child: const Text("حفظ", style: TextStyle(color: Colors.white)),
+                    ),
               ],
             ),
           );

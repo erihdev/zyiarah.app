@@ -1,7 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
-
+import 'package:firebase_core/firebase_core.dart';
+import 'package:zyiarah/firebase_options.dart';
+import 'dart:math';
 /// خدمة إدارة Firebase لتطبيق زيارة
 class ZyiarahFirebaseService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -229,5 +231,74 @@ class ZyiarahFirebaseService {
       }
     }
     return 'client'; // في حالة الخطأ أو عدم وجود بيانات، نعتبره عميل
+  }
+
+  // --- تسجيل السائقين من قِبل الإدارة ---
+  Future<void> createDriverAccountViaAdmin({
+    required String name,
+    required String phone,
+    required String email,
+    required String carInfo,
+    required String licenseInfo,
+    required String role, 
+    required bool isActive,
+  }) async {
+    FirebaseApp? secondaryApp;
+    try {
+      secondaryApp = await Firebase.initializeApp(
+        name: 'SecondaryApp_${DateTime.now().millisecondsSinceEpoch}',
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+      
+      final randomPassword = _generateRandomPassword();
+      
+      UserCredential userCredential = await secondaryAuth.createUserWithEmailAndPassword(
+        email: email, 
+        password: randomPassword,
+      );
+
+      if (userCredential.user != null) {
+        final uid = userCredential.user!.uid;
+
+        await saveUserToRegistry(
+          uid: uid,
+          name: name,
+          role: role,
+        );
+
+        await _db.collection('users').doc(uid).update({
+          'phone': phone,
+          'email': email,
+        });
+
+        await _db.collection('drivers').doc(uid).set({
+          'name': name,
+          'phone': phone,
+          'email': email,
+          'car_info': carInfo,
+          'license_info': licenseInfo,
+          'type': role,
+          'is_active': isActive,
+          'created_at': FieldValue.serverTimestamp(),
+        });
+
+        await secondaryAuth.sendPasswordResetEmail(email: email);
+      }
+    } catch (e) {
+      rethrow;
+    } finally {
+      if (secondaryApp != null) {
+        await secondaryApp.delete();
+      }
+    }
+  }
+
+  String _generateRandomPassword() {
+    const chars = 'AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz1234567890!@#\$%^&*';
+    Random rnd = Random();
+    return String.fromCharCodes(Iterable.generate(
+        16, (_) => chars.codeUnitAt(rnd.nextInt(chars.length))));
   }
 }
