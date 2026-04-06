@@ -30,19 +30,52 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Future<void> _fetchAdminRole() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user != null && user.email != null) {
-        final doc = await FirebaseFirestore.instance.collection('admins').doc(user.email).get();
-        if (doc.exists && mounted) {
-          setState(() {
-            _role = doc.data()?['role'] ?? 'none';
-            _isLoadingRole = false;
-          });
+      if (user != null) {
+        // Fallback: Check if user collection says they are an admin
+        String zyRole = 'client';
+        try {
+          final dbRole = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+          if (dbRole.exists) {
+            zyRole = dbRole.data()?['role'] ?? 'client';
+          }
+        } catch (_) {}
+
+        // Auto-assign super_admin if email matches OR if users collection says they are admin
+        if ((user.email != null && user.email!.trim().toLowerCase().contains('admin@zyiarah')) || zyRole == 'admin' || zyRole == 'super_admin') {
+          try {
+            if (user.email != null) {
+              await FirebaseFirestore.instance.collection('admins').doc(user.email).set({
+                'role': 'super_admin',
+                'email': user.email,
+                'created_at': FieldValue.serverTimestamp(),
+              }, SetOptions(merge: true));
+            }
+          } catch (_) {}
+          
+          if (mounted) {
+            setState(() {
+              _role = 'super_admin';
+              _isLoadingRole = false;
+            });
+          }
+          return;
+        }
+
+        if (user.email != null) {
+          final doc = await FirebaseFirestore.instance.collection('admins').doc(user.email).get();
+          if (doc.exists && mounted) {
+            setState(() {
+              _role = doc.data()?['role'] ?? 'none';
+              _isLoadingRole = false;
+            });
+          } else if (mounted) {
+            setState(() {
+              _role = 'none';
+              _isLoadingRole = false;
+            });
+          }
         } else if (mounted) {
-          // Explicitly set to 'none' if admin record is missing
-          setState(() {
-            _role = 'none';
-            _isLoadingRole = false;
-          });
+           setState(() => _isLoadingRole = false);
         }
       } else if (mounted) {
         setState(() => _isLoadingRole = false);
@@ -130,10 +163,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.red),
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  "يرجى التواصل مع الإدارة العليا لتفعيل حسابك كمدير في النظام.",
+                Text(
+                  "يرجى التواصل مع الإدارة العليا لتفعيل حسابك كمدير في النظام.\n\nالبريد الحالي المسجل:\n${FirebaseAuth.instance.currentUser?.email ?? 'لا يوجد بريد مسجل'}",
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
+                  style: const TextStyle(color: Colors.grey),
                 ),
                 const SizedBox(height: 30),
                 ElevatedButton.icon(
