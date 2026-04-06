@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -45,7 +46,7 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
     bool isActive = data?['isActive'] ?? true;
     int rank = data?['rank'] ?? (_banners.length + 1);
     String selectedRoute = data?['routeType'] ?? 'whatsapp';
-    File? pickedImage;
+    Uint8List? pickedImageBytes;
     bool isUploading = false;
 
     final List<Map<String, String>> routingOptions = [
@@ -102,7 +103,8 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                           final picker = ImagePicker();
                           final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
                           if (image != null) {
-                            setDialogState(() => pickedImage = File(image.path));
+                            final bytes = await image.readAsBytes();
+                            setDialogState(() => pickedImageBytes = bytes);
                           }
                         },
                         child: Container(
@@ -112,13 +114,13 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                             border: Border.all(color: Colors.grey),
                             borderRadius: BorderRadius.circular(10),
                             color: Colors.grey[200],
-                            image: pickedImage != null 
-                                ? DecorationImage(image: FileImage(pickedImage!), fit: BoxFit.cover)
+                            image: pickedImageBytes != null 
+                                ? DecorationImage(image: MemoryImage(pickedImageBytes!), fit: BoxFit.cover)
                                 : (uploadedImageUrl.isNotEmpty 
                                     ? DecorationImage(image: NetworkImage(uploadedImageUrl), fit: BoxFit.cover) 
                                     : null),
                           ),
-                          child: pickedImage == null && uploadedImageUrl.isEmpty
+                          child: pickedImageBytes == null && uploadedImageUrl.isEmpty
                               ? const Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
@@ -168,22 +170,25 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                     onPressed: isUploading ? null : () => Navigator.pop(ctx),
                     child: Text('إلغاء', style: GoogleFonts.tajawal(color: Colors.grey)),
                   ),
-                  ElevatedButton(
-                    onPressed: isUploading ? null : () async {
-                      if (pickedImage == null && uploadedImageUrl.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء اختيار صورة')));
-                        return;
-                      }
-
-                      setDialogState(() => isUploading = true);
-
-                      try {
-                        String finalUrl = uploadedImageUrl;
-                        if (pickedImage != null) {
-                          final ref = FirebaseStorage.instance.ref().child('banners/${DateTime.now().millisecondsSinceEpoch}.jpg');
-                          await ref.putFile(pickedImage!);
-                          finalUrl = await ref.getDownloadURL();
+                    ElevatedButton(
+                      onPressed: isUploading ? null : () async {
+                        if (pickedImageBytes == null && uploadedImageUrl.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء اختيار صورة')));
+                          return;
                         }
+
+                        setDialogState(() => isUploading = true);
+
+                        try {
+                          String finalUrl = uploadedImageUrl;
+                          if (pickedImageBytes != null) {
+                            final ref = FirebaseStorage.instance.ref().child('banners/${DateTime.now().millisecondsSinceEpoch}.jpg');
+                            
+                            // Upload as Data (Bytes) instead of File to support Web Platform
+                            final uploadTask = ref.putData(pickedImageBytes!, SettableMetadata(contentType: 'image/jpeg'));
+                            await uploadTask;
+                            finalUrl = await ref.getDownloadURL();
+                          }
 
                         final newData = {
                           'imageUrl': finalUrl,
