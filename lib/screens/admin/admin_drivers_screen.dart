@@ -148,10 +148,19 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                         } catch (e) {
                           setState(() => isSaving = false);
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                              content: Text('حدث خطأ: $e'),
-                              backgroundColor: Colors.red,
-                            ));
+                            showDialog(
+                              context: context,
+                              builder: (ctxErr) => AlertDialog(
+                                title: const Text("رسالة خطأ (يرجى تصويرها)"),
+                                content: Text(e.toString(), style: const TextStyle(color: Colors.red, fontSize: 13)),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctxErr),
+                                    child: const Text("حسناً"),
+                                  ),
+                                ],
+                              ),
+                            );
                           }
                         }
                       },

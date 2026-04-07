@@ -262,16 +262,16 @@ class ZyiarahFirebaseService {
       if (userCredential.user != null) {
         final uid = userCredential.user!.uid;
 
-        await saveUserToRegistry(
-          uid: uid,
-          name: name,
-          role: role,
-        );
-
-        await _db.collection('users').doc(uid).update({
+        // دمج البيانات هنا بدلاً من استخدام update لمنع خطأ الصلاحيات لأن المدير ليس مالك المستند
+        await _db.collection('users').doc(uid).set({
+          'name': name,
+          'role': role,
           'phone': phone,
           'email': email,
-        });
+          'created_at': FieldValue.serverTimestamp(),
+          'is_verified': true,
+          'entity': 'مؤسسة معاذ يحي محمد المالكي',
+        }, SetOptions(merge: true));
 
         await _db.collection('drivers').doc(uid).set({
           'name': name,
