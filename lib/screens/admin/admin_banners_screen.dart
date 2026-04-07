@@ -181,39 +181,54 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                         try {
                           String finalUrl = uploadedImageUrl;
                           if (pickedImageBytes != null) {
-                            final ref = FirebaseStorage.instance.ref().child('banners/${DateTime.now().millisecondsSinceEpoch}.jpg');
+                            final ref = FirebaseStorage.instance.ref().child('banners/Banner_${DateTime.now().millisecondsSinceEpoch}.jpg');
                             
                             // Upload as Data (Bytes) instead of File to support Web Platform
-                            final uploadTask = ref.putData(pickedImageBytes!, SettableMetadata(contentType: 'image/jpeg'));
-                            await uploadTask;
-                            finalUrl = await ref.getDownloadURL();
+                            TaskSnapshot snapshot = await ref.putData(pickedImageBytes!, SettableMetadata(contentType: 'image/jpeg'));
+                            
+                            if (snapshot.state == TaskState.success) {
+                              finalUrl = await snapshot.ref.getDownloadURL();
+                            } else {
+                              throw Exception('فشل رفع الصورة، الحالة: ${snapshot.state}');
+                            }
                           }
 
-                        final newData = {
-                          'imageUrl': finalUrl,
-                          'routeType': selectedRoute,
-                          'actionUrl': actionUrlCtrl.text.trim(),
-                          'isActive': isActive,
-                          'rank': rank,
-                        };
+                          final newData = {
+                            'imageUrl': finalUrl,
+                            'routeType': selectedRoute,
+                            'actionUrl': actionUrlCtrl.text.trim(),
+                            'isActive': isActive,
+                            'rank': rank,
+                          };
 
-                        if (doc == null) {
-                          await _db.collection('promo_banners').add(newData);
-                        } else {
-                          await _db.collection('promo_banners').doc(doc.id).update(newData);
-                        }
+                          if (doc == null) {
+                            await _db.collection('promo_banners').add(newData);
+                          } else {
+                            await _db.collection('promo_banners').doc(doc.id).update(newData);
+                          }
 
-                        if (context.mounted) {
-                          Navigator.pop(ctx);
-                          _fetchBanners();
+                          if (context.mounted) {
+                            Navigator.pop(ctx);
+                            _fetchBanners();
+                          }
+                        } catch (e) {
+                           if (context.mounted) {
+                            showDialog(
+                              context: context,
+                              builder: (ctxErr) => AlertDialog(
+                                title: const Text("رسالة خطأ مفصلة (للمبرمج)"),
+                                content: Text(e.toString(), style: const TextStyle(color: Colors.red, fontSize: 13)),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(ctxErr), child: const Text("حسناً")),
+                                ],
+                              ),
+                            );
+                           }
+                        } finally {
+                          if (mounted) {
+                            setDialogState(() => isUploading = false);
+                          }
                         }
-                      } catch (e) {
-                         if (context.mounted) {
-                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ في الرفع: $e')));
-                         }
-                      } finally {
-                        setDialogState(() => isUploading = false);
-                      }
                     },
                     style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB)),
                     child: isUploading 
