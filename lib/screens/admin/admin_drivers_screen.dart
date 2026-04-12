@@ -351,21 +351,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
     );
   }
 
-  Widget _buildLuxuryField({required TextEditingController controller, required String label, required IconData icon, TextInputType? keyboardType, bool enabled = true}) {
-    return TextField(
-      controller: controller,
-      enabled: enabled,
-      keyboardType: keyboardType,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, size: 20, color: const Color(0xFF1E293B)),
-        filled: true,
-        fillColor: Colors.grey[50],
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Color(0xFF1E293B), width: 1)),
-      ),
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {

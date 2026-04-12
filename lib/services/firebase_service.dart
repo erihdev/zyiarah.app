@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:zyiarah/firebase_options.dart';
 import 'dart:math';
 /// خدمة إدارة Firebase لتطبيق زيارة
@@ -246,7 +247,7 @@ class ZyiarahFirebaseService {
   }
 
   // --- تسجيل السائقين من قِبل الإدارة ---
-  Future<void> createDriverAccountViaAdmin({
+  Future<String> createDriverAccountViaAdmin({
     required String name,
     required String phone,
     required String email,
@@ -308,7 +309,9 @@ class ZyiarahFirebaseService {
         });
 
         await secondaryAuth.sendPasswordResetEmail(email: email);
+        return uid;
       }
+      throw Exception("فشل إنشاء الحساب");
     } catch (e) {
       rethrow;
     } finally {

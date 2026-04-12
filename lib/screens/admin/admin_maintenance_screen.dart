@@ -170,6 +170,7 @@ class AdminMaintenanceScreen extends StatelessWidget {
           Text(label, style: GoogleFonts.tajawal(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
         ],
       ),
+    );
   }
 
   void _showStatusDialog(BuildContext context, String docId, Map<String, dynamic> currentData, String userId) {

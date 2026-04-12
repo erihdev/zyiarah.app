@@ -348,6 +348,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                 )
               else
                  const Icon(Icons.chevron_left, color: Colors.grey, size: 18),
+            ],
           ),
         ],
       ),

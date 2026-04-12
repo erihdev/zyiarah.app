@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart' as intl;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/screens/admin/admin_compliance_screen.dart';
@@ -354,8 +355,8 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     return BarChart(
       BarChartData(
         barGroups: [
-          BarChartGroupData(x: 0, barRods: [BarRodData(toY: activeCount.toDouble(), color: Colors.orange, width: 16, borderRadius: BorderRadius.circular(4))]),
-          BarChartGroupData(x: 1, barRods: [BarRodData(toY: completedCount.toDouble(), color: Colors.green, width: 16, borderRadius: BorderRadius.circular(4))]),
+          BarChartGroupData(x: 0, barRods: [BarChartRodData(toY: activeCount.toDouble(), color: Colors.orange, width: 16, borderRadius: BorderRadius.circular(4))]),
+          BarChartGroupData(x: 1, barRods: [BarChartRodData(toY: completedCount.toDouble(), color: Colors.green, width: 16, borderRadius: BorderRadius.circular(4))]),
         ],
         titlesData: FlTitlesData(
           bottomTitles: AxisTitles(

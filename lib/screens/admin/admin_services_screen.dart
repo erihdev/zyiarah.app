@@ -21,7 +21,7 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
       });
       await _audit.logAction(
         action: ZyiarahAuditService.actionToggleService,
-        details: {'service': service.name, 'status': !service.isActive ? 'نشط' : 'معطل'},
+        details: {'service': service.title, 'status': !service.isActive ? 'نشط' : 'معطل'},
         targetId: service.id,
       );
       if (!mounted) return;
