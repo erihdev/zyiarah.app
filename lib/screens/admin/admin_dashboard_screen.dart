@@ -129,14 +129,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoadingRole) {
-      return Scaffold(
+      return const Scaffold(
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const CircularProgressIndicator(color: Color(0xFF1E293B)),
-              const SizedBox(height: 20),
-              const Text("جاري التحقق من الصلاحيات...", style: TextStyle(fontWeight: FontWeight.bold)),
+              CircularProgressIndicator(color: Color(0xFF1E293B)),
+              SizedBox(height: 20),
+              Text("جاري التحقق من الصلاحيات...", style: TextStyle(fontWeight: FontWeight.bold)),
             ],
           ),
         ),

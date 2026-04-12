@@ -125,9 +125,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Lottie.network(
-              'https://lottie.host/85cc1144-6729-4d64-88aa-3e753456c636/Hw4h8Pndr5.json',
-              width: 200,
-              height: 200,
+              'https://lottie.host/62ba874f-c760-466d-9781-ca41aeb135f6/K7tps5ZIDf.json',
+              width: 250,
+              height: 250,
               repeat: false,
             ),
             const SizedBox(height: 10),

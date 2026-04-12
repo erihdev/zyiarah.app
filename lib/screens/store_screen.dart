@@ -3,6 +3,7 @@ import 'package:zyiarah/services/store_service.dart';
 import 'package:zyiarah/widgets/shimmer_loading.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:lottie/lottie.dart';
 
 class ZyiarahStoreScreen extends StatefulWidget {
   const ZyiarahStoreScreen({super.key});
@@ -143,9 +144,12 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.storefront_outlined, size: 80, color: Colors.grey[300]),
-          const SizedBox(height: 20),
-          Text('المتجر قيد التعبئة، سيتم توفير المنتجات قريباً', style: GoogleFonts.tajawal(fontSize: 18, color: Colors.grey)),
+          Lottie.network(
+            'https://lottie.host/9972352b-4780-4545-8f65-021199346747/XJzQitkR2f.json', // Search/Empty anim
+            height: 200,
+          ),
+          const SizedBox(height: 10),
+          Text('المتجر قيد التعبئة، سيتم توفير المنتجات قريباً', style: GoogleFonts.tajawal(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -163,8 +167,14 @@ class _ProductCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF2563EB).withValues(alpha: 0.08), 
+            blurRadius: 20, 
+            offset: const Offset(0, 8)
+          )
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -177,7 +187,7 @@ class _ProductCard extends StatelessWidget {
                 fit: BoxFit.cover,
                 placeholder: (context, url) => Container(
                   color: Colors.grey.shade100,
-                  child: const Center(child: CircularProgressIndicator()),
+                  child: Center(child: Icon(Icons.shopping_bag_outlined, color: Colors.grey.shade300)),
                 ),
                 errorWidget: (context, url, error) => Container(
                   color: Colors.grey[100], 
@@ -338,19 +348,16 @@ class _CartSheetState extends State<_CartSheet> {
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    border: Border.all(color: Colors.grey.shade200),
+                    border: Border.all(color: _selectedPaymentMethod == 'online' ? const Color(0xFF2563EB) : Colors.grey.shade200),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: RadioListTile(
                     value: 'online',
-                    // ignore: deprecated_member_use
                     groupValue: _selectedPaymentMethod,
-                    // ignore: deprecated_member_use
-                    onChanged: (val) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الدفع الإلكتروني سيتوفر قريباً')));
-                    },
-                    title: const Text('الدفع الإلكتروني (مدى / فيزا / تمارا)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey)),
-                    secondary: const Icon(Icons.credit_card, color: Colors.grey),
+                    onChanged: (val) => setState(() => _selectedPaymentMethod = val.toString()),
+                    title: const Text('دفع إلكتروني (تمارا / بطاقة)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    subtitle: const Text('دفع آمن عبر بوابة EdfaPay أو Tamara', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    secondary: const Icon(Icons.payment, color: Colors.blue),
                     activeColor: const Color(0xFF2563EB),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   ),

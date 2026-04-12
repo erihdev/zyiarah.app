@@ -343,7 +343,16 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   ],
                 ),
               ),
-              IconButton(onPressed: () => _openMaps(data['location']), icon: const Icon(Icons.directions, color: Colors.blue)),
+              TextButton.icon(
+                onPressed: () => _openMaps(data['location']), 
+                icon: const Icon(Icons.directions, color: Colors.blue, size: 28),
+                label: Text("فتح في الخرائط", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.blue)),
+                style: TextButton.styleFrom(
+                  backgroundColor: Colors.blue.withValues(alpha: 0.1),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
             ],
           ),
           const Divider(height: 30),

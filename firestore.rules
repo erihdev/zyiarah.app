@@ -48,12 +48,17 @@ service cloud.firestore {
 
     // Orders & Transactions
     match /orders/{orderId} {
-      allow read, write: if isLoggedIn();
+      allow read: if isLoggedIn() && (request.auth.uid == resource.data.client_id || request.auth.uid == resource.data.driver_id || isAdmin());
+      allow update: if isLoggedIn() && (request.auth.uid == resource.data.driver_id || isAdmin());
+      allow create: if isLoggedIn();
+      allow delete: if isAdmin();
     }
 
     // Driver Data
     match /drivers/{driverId} {
-      allow read, write: if isLoggedIn();
+      allow read: if isLoggedIn() && (request.auth.uid == driverId || isAdmin());
+      allow write: if isAdmin();
+      allow update: if isLoggedIn() && (request.auth.uid == driverId || isAdmin());
     }
 
     // FCM Tokens

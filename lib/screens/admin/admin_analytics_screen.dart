@@ -27,6 +27,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
   Map<String, int> _serviceDistribution = {};
   List<Map<String, dynamic>> _recentOrders = [];
   List<double> _weeklyRevenue = List.filled(7, 0.0);
+  final Map<String, double> _monthlyRevenue = {};
   
   @override
   void initState() {
@@ -74,6 +75,10 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
           if (difference >= 0 && difference < 7) {
             weeklyRev[6 - difference] += amount.toDouble();
           }
+
+          // Monthly revenue grouping
+          final monthKey = intl.DateFormat('yyyy-MM').format(createdAt);
+          _monthlyRevenue[monthKey] = (_monthlyRevenue[monthKey] ?? 0.0) + amount.toDouble();
         }
 
         // Add to recent if first 5
@@ -174,6 +179,11 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                     _buildSectionHeader('توزيع الخدمات'),
                     const SizedBox(height: 15),
                     _buildServiceDistributionBars(),
+
+                    const SizedBox(height: 30),
+                    _buildSectionHeader('نمو الإيرادات الشهرية'),
+                    const SizedBox(height: 15),
+                    _buildMonthlyRevenueList(),
                     
                     const SizedBox(height: 30),
                     _buildSectionHeader('آخر الطلبات'),
@@ -360,6 +370,38 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
             );
           }),
         ),
+      ),
+    );
+  }
+
+  Widget _buildMonthlyRevenueList() {
+    // Sort months descending
+    final sortedMonths = _monthlyRevenue.keys.toList()..sort((a, b) => b.compareTo(a));
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+      child: Column(
+        children: sortedMonths.map((month) {
+          final amount = _monthlyRevenue[month]!;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(height: 8, width: 8, decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle)),
+                    const SizedBox(width: 10),
+                    Text(month, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                Text("${intl.NumberFormat.currency(symbol: '', decimalDigits: 0).format(amount)} ر.س", 
+                  style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF0F172A))),
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }

@@ -65,3 +65,7 @@ zyiarah_backend/serviceAccountKey.json
 /*.js
 /*.css
 /*.txt
+
+# Signing files
+*.jks
+/android/key.properties

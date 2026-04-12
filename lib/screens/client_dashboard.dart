@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -10,6 +11,8 @@ import 'package:zyiarah/screens/order_tracking_screen.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/utils/zyiarah_strings.dart';
+import 'package:lottie/lottie.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/popup_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:zyiarah/screens/store_screen.dart';
@@ -303,10 +306,15 @@ class _ClientDashboardState extends State<ClientDashboard> {
   }
 
   PreferredSizeWidget _buildTopBar() {
-
     return AppBar(
-      backgroundColor: Colors.transparent,
+      backgroundColor: Colors.white.withValues(alpha: 0.7),
       elevation: 0,
+      flexibleSpace: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(color: Colors.transparent),
+        ),
+      ),
       iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -745,16 +753,19 @@ class _ClientDashboardState extends State<ClientDashboard> {
             padding: const EdgeInsets.all(30),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(24),
               boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4)),
+                BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 20, offset: const Offset(0, 8)),
               ],
             ),
             child: Column(
               children: [
-                Icon(Icons.inventory_2_outlined, size: 40, color: Colors.grey.shade400),
+                Lottie.network(
+                  'https://lottie.host/9972352b-4780-4545-8f65-021199346747/XJzQitkR2f.json', // Search/Empty anim
+                  height: 150,
+                ),
                 const SizedBox(height: 10),
-                Text(ZyiarahStrings.noBookings, style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
+                Text(ZyiarahStrings.noBookings, style: GoogleFonts.tajawal(color: Colors.grey.shade600, fontSize: 14, fontWeight: FontWeight.bold)),
               ],
             ),
           )

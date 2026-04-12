@@ -2,7 +2,7 @@ name: zyiarah
 description: "A new Flutter project."
 publish_to: "none"
 
-version: 1.0.1+12
+version: 1.2.0+14
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -63,4 +63,4 @@ flutter:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "C:/Users/denin/OneDrive/Desktop/logo_white_bg_1772928501196.png"
+  image_path: "assets/logo.png"

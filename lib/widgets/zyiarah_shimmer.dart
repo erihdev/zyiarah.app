@@ -42,11 +42,11 @@ class ZyiarahShimmer extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       itemCount: count,
       itemBuilder: (context, index) => const Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+        padding: EdgeInsets.symmetric(vertical: 10, horizontal: 20),
         child: Row(
           children: [
-            const ZyiarahShimmer.circular(width: 50, height: 50),
-            const SizedBox(width: 15),
+            ZyiarahShimmer.circular(width: 50, height: 50),
+            SizedBox(width: 15),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
