@@ -210,10 +210,12 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
     if (confirm == true) {
       try {
         await _db.collection('subscription_packages').doc(id).delete();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الباقة بنجاح")));
-        _fetchPackages();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الباقة بنجاح")));
+          _fetchPackages();
+        }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل الحذف الجذري: $e")));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل الحذف الجذري: $e")));
       }
     }
   }

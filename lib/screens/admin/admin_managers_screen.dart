@@ -284,7 +284,7 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                               scale: 0.8,
                               child: Switch(
                                 value: isActive, 
-                                activeColor: const Color(0xFF1E293B),
+                                activeThumbColor: const Color(0xFF1E293B),
                                 onChanged: (val) {
                                   _db.collection('admins').doc(doc.id).update({'is_active': val});
                                 }

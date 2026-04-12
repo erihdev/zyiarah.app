@@ -33,7 +33,7 @@ class ZyiarahAuditService {
     } catch (e) {
       // We don't want to crash the main app if logging fails, 
       // but in a production environment, you might want to log this error to a crash reporter.
-      print('Audit Log Error: $e');
+      // print('Audit Log Error: $e');
     }
   }
 

@@ -246,10 +246,12 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     if (confirm == true) {
       try {
         await _db.collection('hourly_zones').doc(id).delete();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف المنطقة بنجاح")));
-        _fetchZones();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف المنطقة بنجاح")));
+          _fetchZones();
+        }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل الحذف الجذري: $e")));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل الحذف الجذري: $e")));
       }
     }
   }

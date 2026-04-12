@@ -109,8 +109,10 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                             details: {'id': docId},
                                             targetId: docId,
                                           );
-                                          if (context.mounted) Navigator.pop(ctx);
-                                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الكادر بنجاح")));
+                                          if (context.mounted) {
+                                            Navigator.pop(ctx);
+                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الكادر بنجاح")));
+                                          }
                                         } catch (e) {
                                           setDialogState(() => isSaving = false);
                                           if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل الحذف: $e")));
@@ -142,12 +144,18 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                         ListTile(
                                           leading: const Icon(Icons.camera_alt_rounded, color: Color(0xFF1E293B)),
                                           title: const Text("التقاط صورة فورية"),
-                                          onTap: () async => Navigator.pop(context, await picker.pickImage(source: ImageSource.camera, imageQuality: 50)),
+                                          onTap: () async {
+                                            final img = await picker.pickImage(source: ImageSource.camera, imageQuality: 50);
+                                            if (context.mounted) Navigator.pop(context, img);
+                                          },
                                         ),
                                         ListTile(
                                           leading: const Icon(Icons.photo_library_rounded, color: Color(0xFF1E293B)),
                                           title: const Text("اختيار من الاستوديو"),
-                                          onTap: () async => Navigator.pop(context, await picker.pickImage(source: ImageSource.gallery, imageQuality: 50)),
+                                          onTap: () async {
+                                            final img = await picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
+                                            if (context.mounted) Navigator.pop(context, img);
+                                          },
                                         ),
                                       ],
                                     ),
@@ -167,7 +175,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
                                       gradient: const LinearGradient(colors: [Color(0xFF1E293B), Colors.blueAccent]),
-                                      boxShadow: [BoxShadow(color: Colors.blueAccent.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))],
+                                      boxShadow: [BoxShadow(color: Colors.blueAccent.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 5))],
                                     ),
                                     child: CircleAvatar(
                                       radius: 60,
@@ -219,6 +227,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade200)),
                             child: DropdownButtonFormField<String>(
+                              // ignore: deprecated_member_use
                               value: type,
                               items: const [
                                 DropdownMenuItem(value: 'driver', child: Text("سائق توصيل (Delivery)")),
@@ -263,7 +272,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                   foregroundColor: Colors.white,
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                                   elevation: 5,
-                                  shadowColor: const Color(0xFF1E293B).withOpacity(0.4),
+                                  shadowColor: const Color(0xFF1E293B).withValues(alpha: 0.4),
                                 ),
                                 onPressed: () async {
                                   final email = emailCtrl.text.trim().toLowerCase();
@@ -438,7 +447,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
       margin: const EdgeInsets.only(left: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white10),
       ),
@@ -464,7 +473,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
       child: ClipRRect(
@@ -482,7 +491,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                       padding: const EdgeInsets.all(3),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: (isWorker ? Colors.pinkAccent : Colors.orangeAccent).withOpacity(0.2), width: 2),
+                        border: Border.all(color: (isWorker ? Colors.pinkAccent : Colors.orangeAccent).withValues(alpha: 0.2), width: 2),
                       ),
                       child: CircleAvatar(
                         radius: 28,
@@ -521,7 +530,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
-                          color: (isWorker ? Colors.pinkAccent : Colors.orangeAccent).withOpacity(0.1),
+                          color: (isWorker ? Colors.pinkAccent : Colors.orangeAccent).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -536,7 +545,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                   children: [
                     Switch(
                       value: isActive, 
-                      activeColor: const Color(0xFF1E293B),
+                      activeThumbColor: const Color(0xFF1E293B),
                       onChanged: (val) async {
                         try {
                           await FirebaseFirestore.instance.collection('drivers').doc(docId).update({'is_active': val});
@@ -598,7 +607,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
       child: TextField(
@@ -609,7 +618,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
         decoration: InputDecoration(
           labelText: label,
           labelStyle: GoogleFonts.tajawal(color: Colors.grey[600], fontSize: 13),
-          prefixIcon: Icon(icon, color: const Color(0xFF1E293B).withOpacity(0.7), size: 20),
+          prefixIcon: Icon(icon, color: const Color(0xFF1E293B).withValues(alpha: 0.7), size: 20),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.grey.shade100)),
           enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.grey.shade100)),
           focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: Color(0xFF1E293B), width: 1.5)),

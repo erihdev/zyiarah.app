@@ -171,7 +171,7 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
       color = Colors.purple;
     } else if (type == 'driver') {
       title = data['name'] ?? 'سائق';
-      subtitle = (data['type'] == 'worker' ? 'كادر تنظيف' : 'سائق توصيل') + " - ${data['phone']}";
+      subtitle = "${data['type'] == 'worker' ? 'كادر تنظيف' : 'سائق توصيل'} - ${data['phone']}";
       icon = Icons.local_shipping_rounded;
       color = Colors.orange;
     }

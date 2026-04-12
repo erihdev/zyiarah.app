@@ -229,10 +229,12 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
           details: {'id': id},
           targetId: id,
         );
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الكود بنجاح")));
-        _fetchCoupons();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الكود بنجاح")));
+          _fetchCoupons();
+        }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل الحذف الجذري: $e")));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل الحذف الجذري: $e")));
       }
     }
   }

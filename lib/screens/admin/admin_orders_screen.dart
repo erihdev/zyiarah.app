@@ -129,7 +129,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                 children: [
                   Container(
                     width: 48, height: 48,
-                    decoration: BoxDecoration(color: _getStatusColor(status).withOpacity(0.1), borderRadius: BorderRadius.circular(15)),
+                    decoration: BoxDecoration(color: _getStatusColor(status).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(15)),
                     child: Icon(Icons.receipt_long_rounded, color: _getStatusColor(status), size: 24),
                   ),
                   const SizedBox(width: 16),
@@ -150,7 +150,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                       const SizedBox(height: 4),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(color: _getStatusColor(status).withOpacity(0.05), borderRadius: BorderRadius.circular(10)),
+                        decoration: BoxDecoration(color: _getStatusColor(status).withValues(alpha: 0.05), borderRadius: BorderRadius.circular(10)),
                         child: Text(_getStatusText(status), style: TextStyle(fontSize: 10, color: _getStatusColor(status), fontWeight: FontWeight.w900)),
                       ),
                     ],

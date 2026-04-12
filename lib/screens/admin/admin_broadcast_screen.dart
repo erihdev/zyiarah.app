@@ -199,8 +199,10 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
         ));
       }
     } catch (e) {
-      if (mounted) setState(() => _isSending = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل البث: $e")));
+      if (mounted) {
+        setState(() => _isSending = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل البث: $e")));
+      }
     }
   }
 

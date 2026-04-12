@@ -460,7 +460,9 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
         if (expiryDate.difference(now).inDays < 30) {
           expiringSoon++;
         }
-      } catch (e) {}
+      } catch (e) {
+        // Ignore invalid date formats for individual documents
+      }
     }
 
     return Column(

@@ -123,7 +123,7 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
       child: ExpansionTile(
         leading: Container(
           padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
           child: Icon(icon, color: color, size: 24),
         ),
         title: Text(

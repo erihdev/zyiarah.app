@@ -72,7 +72,6 @@ class ZyiarahPdfReportUtil {
     return pw.Container(
       padding: const pw.EdgeInsets.all(16),
       decoration: pw.BoxDecoration(
-        color: PdfColors.grey100,
         borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
       ),
       child: pw.Row(
@@ -127,7 +126,7 @@ class ZyiarahPdfReportUtil {
                   pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(data['status'] ?? 'pending')),
                 ],
               );
-            }).toList(),
+            }),
           ],
         ),
       ],

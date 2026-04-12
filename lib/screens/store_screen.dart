@@ -353,7 +353,9 @@ class _CartSheetState extends State<_CartSheet> {
                   ),
                   child: RadioListTile(
                     value: 'online',
+                    // ignore: deprecated_member_use
                     groupValue: _selectedPaymentMethod,
+                    // ignore: deprecated_member_use
                     onChanged: (val) => setState(() => _selectedPaymentMethod = val.toString()),
                     title: const Text('دفع إلكتروني (تمارا / بطاقة)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                     subtitle: const Text('دفع آمن عبر بوابة EdfaPay أو Tamara', style: TextStyle(fontSize: 11, color: Colors.grey)),
