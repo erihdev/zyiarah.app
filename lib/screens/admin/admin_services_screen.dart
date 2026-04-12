@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/models/service_model.dart';
+import 'package:zyiarah/services/audit_service.dart';
 
 class AdminServicesScreen extends StatefulWidget {
   const AdminServicesScreen({super.key});
@@ -11,12 +12,18 @@ class AdminServicesScreen extends StatefulWidget {
 
 class _AdminServicesScreenState extends State<AdminServicesScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final ZyiarahAuditService _audit = ZyiarahAuditService();
 
   Future<void> _toggleServiceStatus(ZyiarahService service) async {
     try {
       await _db.collection('services').doc(service.id).update({
         'is_active': !service.isActive,
       });
+      await _audit.logAction(
+        action: ZyiarahAuditService.actionToggleService,
+        details: {'service': service.name, 'status': !service.isActive ? 'نشط' : 'معطل'},
+        targetId: service.id,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(service.isActive ? "تم إخفاء الخدمة" : "تم عرض الخدمة"),
@@ -31,47 +38,75 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
   void _showEditPriceDialog(ZyiarahService service) {
     TextEditingController priceCtrl = TextEditingController(text: service.basePrice.toString());
     TextEditingController displayCtrl = TextEditingController(text: service.priceText);
+    bool isSaving = false;
 
     showDialog(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: Text("تعديل تسعير: ${service.title}"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: displayCtrl,
-              decoration: const InputDecoration(labelText: "السعر المعروض (للعميل)", hintText: "مثال: من 50 ر.س"),
+      barrierDismissible: false,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return Directionality(
+            textDirection: TextDirection.rtl,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text("تعديل تسعير: ${service.title}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isSaving)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 15),
+                      child: LinearProgressIndicator(color: Color(0xFF1E293B)),
+                    ),
+                  TextField(
+                    controller: displayCtrl,
+                    enabled: !isSaving,
+                    decoration: const InputDecoration(labelText: "السعر المعروض (للعميل)", hintText: "مثال: من 50 ر.س", border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 15),
+                  TextField(
+                    controller: priceCtrl,
+                    enabled: !isSaving,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: "السعر الأساسي الرقمي", border: OutlineInputBorder()),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: isSaving ? null : () => Navigator.pop(context), child: const Text("إلغاء", style: TextStyle(color: Colors.grey))),
+                ElevatedButton(
+                  onPressed: isSaving ? null : () async {
+                    setDialogState(() => isSaving = true);
+                    try {
+                      final double newPrice = double.tryParse(priceCtrl.text) ?? service.basePrice;
+                      await _db.collection('services').doc(service.id).update({
+                        'base_price': newPrice,
+                        'price_text': displayCtrl.text,
+                        'updated_at': FieldValue.serverTimestamp(),
+                      });
+                      
+                      await _audit.logAction(
+                        action: ZyiarahAuditService.actionUpdateServicePrice,
+                        details: {'service': service.title, 'price': newPrice, 'display': displayCtrl.text},
+                        targetId: service.id,
+                      );
+
+                      if (dialogCtx.mounted) {
+                        Navigator.pop(dialogCtx);
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم التحديث الجذري بنجاح ✅")));
+                      }
+                    } catch (e) {
+                      setDialogState(() => isSaving = false);
+                      if (dialogCtx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ في التحديث: $e")));
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B)),
+                  child: Text(isSaving ? "جاري الحفظ..." : "حفظ التعديل", style: const TextStyle(color: Colors.white)),
+                ),
+              ],
             ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: priceCtrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "السعر الأساسي الرقمي"),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                await _db.collection('services').doc(service.id).update({
-                  'base_price': double.tryParse(priceCtrl.text) ?? service.basePrice,
-                  'price_text': displayCtrl.text,
-                });
-                if (!dialogCtx.mounted) return;
-                Navigator.pop(dialogCtx);
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم التحديث")));
-              } catch (e) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ: $e")));
-              }
-            },
-            child: const Text("حفظ التعديل"),
-          ),
-        ],
+          );
+        }
       ),
     );
   }

@@ -15,23 +15,31 @@ class _AdminMarketingScreenState extends State<AdminMarketingScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _bodyController = TextEditingController();
 
-  void _sendNotification() {
+  bool _isSending = false;
+
+  void _sendNotification() async {
     if (_titleController.text.isEmpty || _bodyController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء إدخال عنوان ونص الإشعار')));
       return;
     }
+    
+    setState(() => _isSending = true);
     try {
-      FirebaseFirestore.instance.collection('notifications_log').add({
+      await FirebaseFirestore.instance.collection('notifications_log').add({
         'title': _titleController.text,
         'body': _bodyController.text,
-        'target': 'all', // can be 'clients' or 'drivers'
+        'target': 'all',
         'created_at': FieldValue.serverTimestamp(),
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرسال الإشعار لجميع المستخدمين بنجاح!')));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرسال الإشعار لجميع المستخدمين بنجاح! ✅')));
       _titleController.clear();
       _bodyController.clear();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ أثناء الإرسال: $e')));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ جذري أثناء الإرسال: $e')));
+    } finally {
+      if (mounted) setState(() => _isSending = false);
     }
   }
 
@@ -44,11 +52,12 @@ class _AdminMarketingScreenState extends State<AdminMarketingScreen> {
           title: Text("التسويق والإشعارات", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
           backgroundColor: const Color(0xFF1E293B),
           foregroundColor: Colors.white,
+          elevation: 0,
         ),
         body: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            const Icon(Icons.campaign, size: 80, color: Colors.blueAccent),
+            const Icon(Icons.campaign, size: 80, color: Color(0xFF1E293B)),
             const SizedBox(height: 20),
             OutlinedButton.icon(
               onPressed: () {
@@ -86,23 +95,31 @@ class _AdminMarketingScreenState extends State<AdminMarketingScreen> {
             const SizedBox(height: 30),
             TextField(
               controller: _titleController,
+              enabled: !_isSending,
               decoration: const InputDecoration(labelText: "عنوان الإشعار", border: OutlineInputBorder()),
             ),
             const SizedBox(height: 20),
             TextField(
               controller: _bodyController,
+              enabled: !_isSending,
               maxLines: 4,
               decoration: const InputDecoration(labelText: "نص العرض أو رسالة الإشعار", border: OutlineInputBorder()),
             ),
             const SizedBox(height: 30),
+            if (_isSending)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 20),
+                child: LinearProgressIndicator(color: Color(0xFF1E293B)),
+              ),
             ElevatedButton.icon(
-              onPressed: _sendNotification,
+              onPressed: _isSending ? null : _sendNotification,
               icon: const Icon(Icons.send),
-              label: Text("إرسال الآن", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
+              label: Text(_isSending ? "جاري الإرسال..." : "إرسال الآن", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: Colors.blueAccent,
+                backgroundColor: const Color(0xFF1E293B),
                 foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ],

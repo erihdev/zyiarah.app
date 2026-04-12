@@ -233,6 +233,18 @@ class ZyiarahFirebaseService {
     return 'client'; // في حالة الخطأ أو عدم وجود بيانات، نعتبره عميل
   }
 
+  // --- رفع ملفات للعمالة ---
+  Future<String?> uploadWorkerPhoto(Uint8List fileData, String fileName) async {
+    try {
+      final ref = FirebaseStorage.instance.ref().child('worker_photos/$fileName');
+      final uploadTask = await ref.putData(fileData);
+      return await uploadTask.ref.getDownloadURL();
+    } catch (e) {
+      if (kDebugMode) print("Error uploading photo: $e");
+      return null;
+    }
+  }
+
   // --- تسجيل السائقين من قِبل الإدارة ---
   Future<void> createDriverAccountViaAdmin({
     required String name,
@@ -242,6 +254,10 @@ class ZyiarahFirebaseService {
     required String licenseInfo,
     required String role, 
     required bool isActive,
+    String? nationality,
+    String? idNumber,
+    String? idExpiry,
+    String? photoUrl,
   }) async {
     FirebaseApp? secondaryApp;
     try {
@@ -268,6 +284,9 @@ class ZyiarahFirebaseService {
           'role': role,
           'phone': phone,
           'email': email,
+          'photo_url': photoUrl,
+          'nationality': nationality,
+          'id_number': idNumber,
           'created_at': FieldValue.serverTimestamp(),
           'is_verified': true,
           'entity': 'مؤسسة معاذ يحي محمد المالكي',
@@ -281,6 +300,10 @@ class ZyiarahFirebaseService {
           'license_info': licenseInfo,
           'type': role,
           'is_active': isActive,
+          'photo_url': photoUrl,
+          'nationality': nationality,
+          'id_number': idNumber,
+          'id_expiry': idExpiry,
           'created_at': FieldValue.serverTimestamp(),
         });
 

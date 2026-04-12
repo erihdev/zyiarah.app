@@ -9,12 +9,13 @@ import 'package:zyiarah/screens/admin/admin_marketing_screen.dart';
 import 'package:zyiarah/screens/admin/admin_contracts_screen.dart';
 import 'package:zyiarah/screens/admin/admin_maintenance_screen.dart';
 import 'package:zyiarah/screens/admin/admin_managers_screen.dart';
-import 'package:zyiarah/screens/admin/admin_accountants_screen.dart';
 import 'package:zyiarah/screens/admin/admin_deletions_screen.dart';
 import 'package:zyiarah/screens/admin/admin_store_orders_screen.dart';
 import 'package:zyiarah/screens/admin/admin_hourly_zones_screen.dart';
 import 'package:zyiarah/screens/admin/admin_subscriptions_screen.dart';
+import 'package:zyiarah/screens/admin/admin_audit_logs_screen.dart';
 import 'package:zyiarah/screens/admin/admin_analytics_screen.dart';
+import 'package:zyiarah/utils/zyiarah_strings.dart';
 
 class AdminMoreScreen extends StatelessWidget {
   final String role;
@@ -52,11 +53,18 @@ class AdminMoreScreen extends StatelessWidget {
         'roles': ['super_admin', 'orders_manager']
       },
       {
+        'title': 'سجل العمليات الإدارية',
+        'icon': Icons.history_edu_rounded,
+        'color': const Color(0xFF1E293B),
+        'page': const AdminAuditLogsScreen(),
+        'roles': ['super_admin']
+      },
+      {
         'title': 'الإشعارات والتسويق',
         'icon': Icons.campaign_outlined,
         'color': Colors.redAccent,
         'page': AdminMarketingScreen(),
-        'roles': ['super_admin', 'orders_manager', 'accountant_admin']
+        'roles': ['super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin']
       },
       {
         'title': 'طلبات الصيانة',
@@ -80,17 +88,10 @@ class AdminMoreScreen extends StatelessWidget {
         'roles': ['super_admin', 'accountant_admin']
       },
       {
-        'title': 'المدراء',
-        'icon': Icons.admin_panel_settings_outlined,
+        'title': ZyiarahStrings.unifiedStaffManagement,
+        'icon': Icons.admin_panel_settings_rounded,
         'color': Colors.indigo,
         'page': const AdminManagersScreen(),
-        'roles': ['super_admin']
-      },
-      {
-        'title': 'المحاسبون',
-        'icon': Icons.account_balance_wallet_outlined,
-        'color': Colors.blueGrey,
-        'page': const AdminAccountantsScreen(),
         'roles': ['super_admin']
       },
       {

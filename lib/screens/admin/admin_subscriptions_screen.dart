@@ -90,6 +90,7 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
     final featuresCtrl = TextEditingController(text: (package?['features'] as List<dynamic>?)?.join('\n') ?? '');
     bool isPremium = package?['isPremium'] ?? false;
     int rank = package?['rank'] ?? (_packages.length + 1);
+    bool isSaving = false;
 
     showDialog(
       context: context,
@@ -104,20 +105,29 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'اسم الباقة')),
-                      TextField(controller: subtitleCtrl, decoration: const InputDecoration(labelText: 'العنوان الفرعي/الوصف')),
-                      TextField(controller: priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'السعر (ر.س)')),
+                      if (isSaving)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 20),
+                          child: LinearProgressIndicator(color: Color(0xFF1E293B)),
+                        ),
+                      TextField(controller: titleCtrl, enabled: !isSaving, decoration: const InputDecoration(labelText: 'اسم الباقة', border: OutlineInputBorder())),
+                      const SizedBox(height: 15),
+                      TextField(controller: subtitleCtrl, enabled: !isSaving, decoration: const InputDecoration(labelText: 'العنوان الفرعي/الوصف', border: OutlineInputBorder())),
+                      const SizedBox(height: 15),
+                      TextField(controller: priceCtrl, enabled: !isSaving, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'السعر (ر.س)', border: OutlineInputBorder())),
+                      const SizedBox(height: 15),
                       TextField(
                         controller: featuresCtrl, 
+                        enabled: !isSaving,
                         maxLines: 4, 
-                        decoration: const InputDecoration(labelText: 'الميزات (ميزة في كل سطر)', hintText: 'مثال:\nتنظيف شامل\nتوفير 15%'),
+                        decoration: const InputDecoration(labelText: 'الميزات (ميزة في كل سطر)', hintText: 'مثال:\nتنظيف شامل\nتوفير 15%', border: OutlineInputBorder()),
                       ),
                       const SizedBox(height: 10),
                       Row(
                         children: [
                           Checkbox(
                             value: isPremium,
-                            onChanged: (val) => setDialogState(() => isPremium = val ?? false),
+                            onChanged: isSaving ? null : (val) => setDialogState(() => isPremium = val ?? false),
                           ),
                           const Text('باقة مميزة (ذهبية)؟'),
                         ],
@@ -131,31 +141,42 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                     child: Text('إلغاء', style: GoogleFonts.tajawal(color: Colors.grey)),
                   ),
                   ElevatedButton(
-                    onPressed: () async {
-                      if (titleCtrl.text.isEmpty || priceCtrl.text.isEmpty) return;
-                      
-                      final data = {
-                        'title': titleCtrl.text.trim(),
-                        'subtitle': subtitleCtrl.text.trim(),
-                        'price': priceCtrl.text.trim(),
-                        'features': featuresCtrl.text.trim().split('\n').where((s) => s.isNotEmpty).toList(),
-                        'isPremium': isPremium,
-                        'rank': rank,
-                      };
-
-                      if (package == null) {
-                        await _db.collection('subscription_packages').add(data);
-                      } else {
-                        await _db.collection('subscription_packages').doc(package.id).update(data);
+                    onPressed: isSaving ? null : () async {
+                      if (titleCtrl.text.isEmpty || priceCtrl.text.isEmpty) {
+                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى إدخال مسمى الباقة وسعرها")));
+                         return;
                       }
+                      
+                      setDialogState(() => isSaving = true);
+                      try {
+                        final data = {
+                          'title': titleCtrl.text.trim(),
+                          'subtitle': subtitleCtrl.text.trim(),
+                          'price': priceCtrl.text.trim(),
+                          'features': featuresCtrl.text.trim().split('\n').where((s) => s.isNotEmpty).toList(),
+                          'isPremium': isPremium,
+                          'rank': rank,
+                          'updated_at': FieldValue.serverTimestamp(),
+                        };
 
-                      if (context.mounted) {
-                        Navigator.pop(ctx);
-                        _fetchPackages();
+                        if (package == null) {
+                          await _db.collection('subscription_packages').add(data);
+                        } else {
+                          await _db.collection('subscription_packages').doc(package.id).update(data);
+                        }
+
+                        if (ctx.mounted) {
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حفظ الباقة بنجاح ✅")));
+                          _fetchPackages();
+                        }
+                      } catch (e) {
+                         setDialogState(() => isSaving = false);
+                         if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ في الحفظ: $e")));
                       }
                     },
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E)),
-                    child: Text('حفظ', style: GoogleFonts.tajawal(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B)),
+                    child: Text(isSaving ? "جاري الحفظ..." : "حفظ الباقة", style: GoogleFonts.tajawal(color: Colors.white)),
                   ),
                 ],
               ),
@@ -187,8 +208,13 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
     );
 
     if (confirm == true) {
-      await _db.collection('subscription_packages').doc(id).delete();
-      _fetchPackages();
+      try {
+        await _db.collection('subscription_packages').doc(id).delete();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الباقة بنجاح")));
+        _fetchPackages();
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل الحذف الجذري: $e")));
+      }
     }
   }
 

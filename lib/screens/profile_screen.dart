@@ -8,6 +8,7 @@ import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/screens/support_screen.dart';
 import 'package:zyiarah/screens/orders_list_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
+import 'package:zyiarah/services/maintenance_listener_service.dart';
 
 
 class ZyiarahProfileScreen extends StatefulWidget {
@@ -222,6 +223,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                     }),
                     const Divider(height: 40),
                     _buildMenuTile(Icons.logout, 'تسجيل الخروج', () async {
+                      MaintenanceListenerService().stopListening();
                       await _firebaseService.signOut();
                       if (!context.mounted) return;
                       Navigator.of(context).popUntil((route) => route.isFirst);

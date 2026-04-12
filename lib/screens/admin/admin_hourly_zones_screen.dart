@@ -54,6 +54,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
 
     int rank = data?['rank'] ?? (_zones.length + 1);
     GeoPoint? selectedGeo = data?['centerLoc'] as GeoPoint?;
+    bool isSaving = false;
 
     showDialog(
       context: context,
@@ -70,7 +71,12 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'اسم المنطقة الرئيسي (مثل: داخل الداير)')),
+                      if (isSaving)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 20),
+                          child: LinearProgressIndicator(color: Color(0xFF1E293B)),
+                        ),
+                      TextField(controller: nameCtrl, enabled: !isSaving, decoration: const InputDecoration(labelText: 'اسم المنطقة الرئيسي (مثل: داخل الداير)', border: OutlineInputBorder())),
                       const SizedBox(height: 15),
                       
                       // Map Center Selection
@@ -92,14 +98,14 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                                     selectedGeo == null 
                                       ? "يجب تحديد موقع نقطة مركز المنطقة من الخريطة" 
                                       : "تم التحديد: (${selectedGeo!.latitude.toStringAsFixed(4)}, ${selectedGeo!.longitude.toStringAsFixed(4)})",
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: selectedGeo == null ? Colors.red : Colors.green),
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: selectedGeo == null ? Colors.red : Colors.green),
                                   ),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 10),
                             ElevatedButton.icon(
-                              onPressed: () async {
+                              onPressed: isSaving ? null : () async {
                                 final geo = await Navigator.push(
                                   context, 
                                   MaterialPageRoute(builder: (_) => const LocationPickerScreen(serviceName: "تحديد مركز المنطقة"))
@@ -119,39 +125,40 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                       const SizedBox(height: 15),
                       TextField(
                         controller: radiusCtrl, 
+                        enabled: !isSaving,
                         keyboardType: TextInputType.number, 
-                        decoration: const InputDecoration(labelText: 'نصف القطر المدعوم حول المركز (بالكيلومتر)', helperText: 'المسافة التي يغطيها المركز (مثال: 15)'),
+                        decoration: const InputDecoration(labelText: 'نصف القطر المدعوم (كم)', helperText: 'المسافة التي يغطيها المركز (مثال: 15)', border: OutlineInputBorder()),
                       ),
                       
                       const Divider(height: 30),
-                      const Text('أسعار باقات التنظيف بالساعة (ر.س):', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                      Text('أسعار باقات التنظيف بالساعة (ر.س):', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          Expanded(child: TextField(controller: p1Ctrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '1 ساعة'))),
+                          Expanded(child: TextField(controller: p1Ctrl, enabled: !isSaving, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '1 ساعة', border: OutlineInputBorder()))),
                           const SizedBox(width: 10),
-                          Expanded(child: TextField(controller: p4Ctrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '4 ساعات'))),
+                          Expanded(child: TextField(controller: p4Ctrl, enabled: !isSaving, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '4 ساعات', border: OutlineInputBorder()))),
                         ],
                       ),
                       const SizedBox(height: 10),
                       Row(
                         children: [
-                          Expanded(child: TextField(controller: p5Ctrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '5 ساعات'))),
+                          Expanded(child: TextField(controller: p5Ctrl, enabled: !isSaving, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '5 ساعات', border: OutlineInputBorder()))),
                           const SizedBox(width: 10),
-                          Expanded(child: TextField(controller: p6Ctrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '6 ساعات'))),
+                          Expanded(child: TextField(controller: p6Ctrl, enabled: !isSaving, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '6 ساعات', border: OutlineInputBorder()))),
                         ],
                       ),
                       const SizedBox(height: 10),
-                      TextField(controller: p8Ctrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '8 ساعات')),
+                      TextField(controller: p8Ctrl, enabled: !isSaving, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '8 ساعات', border: OutlineInputBorder())),
                       
                       const Divider(height: 30),
-                      const Text('أسعار خدمة التنظيف العميق بهذه بالمنطقة (ر.س):', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.purple)),
+                      Text('أسعار خدمة التنظيف العميق (ر.س):', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          Expanded(child: TextField(controller: pSofaCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'سعر متر الكنب'))),
+                          Expanded(child: TextField(controller: pSofaCtrl, enabled: !isSaving, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'متر الكنب', border: OutlineInputBorder()))),
                           const SizedBox(width: 10),
-                          Expanded(child: TextField(controller: pRugCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'سعر متر الزل'))),
+                          Expanded(child: TextField(controller: pRugCtrl, enabled: !isSaving, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'متر الزل', border: OutlineInputBorder()))),
                         ],
                       ),
                     ],
@@ -163,41 +170,49 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     child: Text('إلغاء', style: GoogleFonts.tajawal(color: Colors.grey)),
                   ),
                   ElevatedButton(
-                    onPressed: () async {
+                    onPressed: isSaving ? null : () async {
                       if (nameCtrl.text.isEmpty || selectedGeo == null) {
                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء كتابة الاسم وتحديد نقطة المركز')));
                          return;
                       }
                       
-                      final newData = {
-                        'name': nameCtrl.text.trim(),
-                        'centerLoc': selectedGeo,
-                        'radiusKm': double.tryParse(radiusCtrl.text) ?? 15.0,
-                        'prices': {
-                          '1': double.tryParse(p1Ctrl.text) ?? 0,
-                          '4': double.tryParse(p4Ctrl.text) ?? 0,
-                          '5': double.tryParse(p5Ctrl.text) ?? 0,
-                          '6': double.tryParse(p6Ctrl.text) ?? 0,
-                          '8': double.tryParse(p8Ctrl.text) ?? 0,
-                        },
-                        'sofaPrice': double.tryParse(pSofaCtrl.text) ?? 35,
-                        'rugPrice': double.tryParse(pRugCtrl.text) ?? 15,
-                        'rank': rank,
-                      };
+                      setDialogState(() => isSaving = true);
+                      try {
+                        final newData = {
+                          'name': nameCtrl.text.trim(),
+                          'centerLoc': selectedGeo,
+                          'radiusKm': double.tryParse(radiusCtrl.text) ?? 15.0,
+                          'prices': {
+                            '1': double.tryParse(p1Ctrl.text) ?? 0,
+                            '4': double.tryParse(p4Ctrl.text) ?? 0,
+                            '5': double.tryParse(p5Ctrl.text) ?? 0,
+                            '6': double.tryParse(p6Ctrl.text) ?? 0,
+                            '8': double.tryParse(p8Ctrl.text) ?? 0,
+                          },
+                          'sofaPrice': double.tryParse(pSofaCtrl.text) ?? 35,
+                          'rugPrice': double.tryParse(pRugCtrl.text) ?? 15,
+                          'rank': rank,
+                          'updated_at': FieldValue.serverTimestamp(),
+                        };
 
-                      if (doc == null) {
-                        await _db.collection('hourly_zones').add(newData);
-                      } else {
-                        await _db.collection('hourly_zones').doc(doc.id).update(newData);
-                      }
+                        if (doc == null) {
+                          await _db.collection('hourly_zones').add(newData);
+                        } else {
+                          await _db.collection('hourly_zones').doc(doc.id).update(newData);
+                        }
 
-                      if (context.mounted) {
-                        Navigator.pop(ctx);
-                        _fetchZones();
+                        if (ctx.mounted) {
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حفظ المنطقة والأسعار بنجاح ✅")));
+                          _fetchZones();
+                        }
+                      } catch (e) {
+                         setDialogState(() => isSaving = false);
+                         if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ في الحفظ: $e")));
                       }
                     },
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
-                    child: Text('حفظ', style: GoogleFonts.tajawal(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B)),
+                    child: Text(isSaving ? "جاري الحفظ..." : "حفظ المنطقة", style: GoogleFonts.tajawal(color: Colors.white)),
                   ),
                 ],
               ),
@@ -229,8 +244,13 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     );
 
     if (confirm == true) {
-      await _db.collection('hourly_zones').doc(id).delete();
-      _fetchZones();
+      try {
+        await _db.collection('hourly_zones').doc(id).delete();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف المنطقة بنجاح")));
+        _fetchZones();
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل الحذف الجذري: $e")));
+      }
     }
   }
 

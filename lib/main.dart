@@ -18,6 +18,7 @@ import 'package:zyiarah/services/deep_link_service.dart';
 import 'package:zyiarah/router.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<ScaffoldMessengerState> messengerKey = GlobalKey<ScaffoldMessengerState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,6 +46,7 @@ class ZyiarahApp extends StatelessWidget {
       title: 'زيارة - Zyiarah',
       routerConfig: appRouter,
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: messengerKey,
       theme: ThemeData(
         primaryColor: const Color(0xFF2563EB),
         scaffoldBackgroundColor: const Color(0xFFF8FAFC),

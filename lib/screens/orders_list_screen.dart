@@ -142,14 +142,15 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           itemCount: reqs.length,
           itemBuilder: (context, index) {
             final data = reqs[index].data() as Map<String, dynamic>;
-            return _buildMaintenanceCard(context, data);
+            final String docId = reqs[index].id;
+            return _buildMaintenanceCard(context, data, docId);
           },
         );
       },
     );
   }
 
-  Widget _buildMaintenanceCard(BuildContext context, Map<String, dynamic> data) {
+  Widget _buildMaintenanceCard(BuildContext context, Map<String, dynamic> data, String docId) {
     final status = data['status'] ?? 'under_review';
     final requestId = data['requestId'] ?? '-';
     final quotePrice = (data['quotePrice'] ?? 0.0).toDouble();
@@ -199,6 +200,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                 ),
               ],
             ),
+            _buildProgressStepper(status),
             if (quotePrice > 0) ...[
               const Divider(height: 30),
               Row(
@@ -218,7 +220,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                         Navigator.push(context, MaterialPageRoute(builder: (context) => PaymentSummaryScreen(
                           serviceName: data['serviceType'] ?? 'صيانة',
                           amount: quotePrice,
-                          maintenanceId: requestId, // We might need to handle this in PaymentSummary
+                          maintenanceId: docId,
                         )));
                       },
                       style: ElevatedButton.styleFrom(
@@ -346,9 +348,89 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                 )
               else
                  const Icon(Icons.chevron_left, color: Colors.grey, size: 18),
-            ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildProgressStepper(String status) {
+    int currentStep = 0;
+    bool isRejected = status == 'rejected';
+    
+    // Status Mapping
+    if (status == 'waiting_payment') {
+      currentStep = 1;
+    } else if (status == 'approved' || status == 'paid' || status == 'in_progress') {
+      currentStep = 2;
+    } else if (status == 'completed') {
+      currentStep = 3;
+    }
+
+    final steps = [
+      {'label': 'مراجعة', 'icon': Icons.search},
+      {'label': 'تسعير', 'icon': Icons.payments},
+      {'label': 'تنفيذ', 'icon': Icons.build},
+      {'label': 'اكتمال', 'icon': Icons.check_circle},
+    ];
+
+    return Container(
+      margin: const EdgeInsets.only(top: 20, bottom: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: List.generate(steps.length, (index) {
+          final bool isCompleted = !isRejected && index <= currentStep;
+          final bool isLast = index == steps.length - 1;
+          
+          Color activeColor = const Color(0xFF5D1B5E);
+          if (isRejected && index == 0) activeColor = Colors.red;
+          
+          final color = isCompleted ? activeColor : (isRejected && index <= currentStep ? Colors.red.withValues(alpha: 0.3) : Colors.grey.shade300);
+
+          return Expanded(
+            child: Row(
+              children: [
+                Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.1), 
+                        shape: BoxShape.circle, 
+                        border: Border.all(color: color, width: 2)
+                      ),
+                      child: Icon(
+                        isRejected && index == 0 ? Icons.error_outline : steps[index]['icon'] as IconData, 
+                        size: 14, 
+                        color: color
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      isRejected && index == 0 ? 'مرفوض' : steps[index]['label'] as String, 
+                      style: GoogleFonts.tajawal(
+                        fontSize: 8, 
+                        fontWeight: isCompleted || (isRejected && index == 0) ? FontWeight.bold : FontWeight.normal, 
+                        color: isCompleted ? const Color(0xFF0F172A) : (isRejected && index == 0 ? Colors.red : Colors.grey)
+                      )
+                    ),
+                  ],
+                ),
+                if (!isLast)
+                  Expanded(
+                    child: Container(
+                      height: 2,
+                      margin: const EdgeInsets.only(bottom: 15, left: 4, right: 4),
+                      decoration: BoxDecoration(
+                        color: !isRejected && index < currentStep ? activeColor : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }),
       ),
     );
   }

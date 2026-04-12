@@ -48,6 +48,7 @@ class ZyiarahStrings {
   static String get supportTickets => isArabic ? "تذاكر الدعم" : "Support Tickets";
   static String get storeManagement => isArabic ? "إدارة المتجر" : "Store Management";
   static String get driversStaff => isArabic ? "الكوادر والسائقين" : "Staff & Drivers";
+  static String get unifiedStaffManagement => isArabic ? "إدارة منسوبي النظام" : "Unified Staff Management";
   static String get analyticsReports => isArabic ? "التحليلات والتقارير" : "Analytics & Reports";
   static String get systemSettings => isArabic ? "إعدادات النظام" : "System Settings";
   static String get accessDenied => isArabic ? "عذراً.. غير مصرح لك" : "Sorry.. Access Denied";

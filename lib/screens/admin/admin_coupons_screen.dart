@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:zyiarah/services/audit_service.dart';
 
 class AdminCouponsScreen extends StatefulWidget {
   const AdminCouponsScreen({super.key});
@@ -12,6 +13,7 @@ class AdminCouponsScreen extends StatefulWidget {
 
 class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final ZyiarahAuditService _audit = ZyiarahAuditService();
   bool _isLoading = true;
   List<QueryDocumentSnapshot> _coupons = [];
 
@@ -45,6 +47,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
     String type = data?['type'] ?? 'percentage';
     String status = data?['status'] ?? 'active';
     DateTime expiryDate = data?['expiry'] != null ? DateTime.tryParse(data!['expiry']) ?? DateTime.now().add(const Duration(days: 30)) : DateTime.now().add(const Duration(days: 30));
+    bool isSaving = false;
 
     showDialog(
       context: context,
@@ -141,32 +144,53 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                     child: Text('إلغاء', style: GoogleFonts.tajawal(color: Colors.grey)),
                   ),
                   ElevatedButton(
-                    onPressed: () async {
-                      if (codeCtrl.text.isEmpty || valueCtrl.text.isEmpty) return;
-
-                      final newData = {
-                        'code': codeCtrl.text.trim().toUpperCase(),
-                        'type': type,
-                        'value': num.tryParse(valueCtrl.text) ?? 0,
-                        'maxUses': int.tryParse(maxUsesCtrl.text) ?? 0,
-                        'uses': data?['uses'] ?? 0,
-                        'expiry': expiryDate.toIso8601String(),
-                        'status': status,
-                      };
-
-                      if (doc == null) {
-                        await _db.collection('promo_codes').add(newData);
-                      } else {
-                        await _db.collection('promo_codes').doc(doc.id).update(newData);
+                    onPressed: isSaving ? null : () async {
+                      if (codeCtrl.text.isEmpty || valueCtrl.text.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى إكمال البيانات")));
+                        return;
                       }
 
-                      if (context.mounted) {
-                        Navigator.pop(ctx);
-                        _fetchCoupons();
+                      setDialogState(() => isSaving = true);
+
+                      try {
+                        final newData = {
+                          'code': codeCtrl.text.trim().toUpperCase(),
+                          'type': type,
+                          'value': num.tryParse(valueCtrl.text) ?? 0,
+                          'maxUses': int.tryParse(maxUsesCtrl.text) ?? 0,
+                          'uses': data?['uses'] ?? 0,
+                          'expiry': expiryDate.toIso8601String(),
+                          'status': status,
+                          'updatedAt': FieldValue.serverTimestamp(),
+                        };
+
+                        if (doc == null) {
+                          await _db.collection('promo_codes').add(newData);
+                          await _audit.logAction(
+                            action: ZyiarahAuditService.actionCreateCoupon,
+                            details: {'code': codeCtrl.text, 'value': valueCtrl.text, 'type': type},
+                          );
+                        } else {
+                          await _db.collection('promo_codes').doc(doc.id).update(newData);
+                          await _audit.logAction(
+                            action: ZyiarahAuditService.actionUpdateCoupon,
+                            details: {'code': codeCtrl.text, 'value': valueCtrl.text, 'type': type},
+                            targetId: doc.id,
+                          );
+                        }
+
+                        if (context.mounted) {
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حفظ كود الخصم بنجاح ✅")));
+                          _fetchCoupons();
+                        }
+                      } catch (e) {
+                         setDialogState(() => isSaving = false);
+                         if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل الحفظ: $e")));
                       }
                     },
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE11D48)),
-                    child: Text('حفظ', style: GoogleFonts.tajawal(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B)),
+                    child: Text(isSaving ? "جاري الحفظ..." : 'حفظ الكود', style: GoogleFonts.tajawal(color: Colors.white)),
                   ),
                 ],
               ),
@@ -198,8 +222,18 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
     );
 
     if (confirm == true) {
-      await _db.collection('promo_codes').doc(id).delete();
-      _fetchCoupons();
+      try {
+        await _db.collection('promo_codes').doc(id).delete();
+        await _audit.logAction(
+          action: ZyiarahAuditService.actionDeleteCoupon,
+          details: {'id': id},
+          targetId: id,
+        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الكود بنجاح")));
+        _fetchCoupons();
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل الحذف الجذري: $e")));
+      }
     }
   }
 
