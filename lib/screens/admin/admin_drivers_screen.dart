@@ -15,7 +15,6 @@ class AdminDriversScreen extends StatefulWidget {
 }
 
 class _AdminDriversScreenState extends State<AdminDriversScreen> {
-  final _db = FirebaseFirestore.instance;
   final ZyiarahFirebaseService _firebaseService = ZyiarahFirebaseService();
   final ZyiarahAuditService _audit = ZyiarahAuditService();
 

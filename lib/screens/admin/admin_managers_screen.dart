@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/audit_service.dart';
-import 'package:zyiarah/utils/strings.dart';
+import 'package:zyiarah/utils/zyiarah_strings.dart';
 
 class AdminManagersScreen extends StatefulWidget {
   const AdminManagersScreen({super.key});
@@ -94,6 +94,7 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                     ),
                     const SizedBox(height: 15),
                     DropdownButtonFormField<String>(
+                      // ignore: deprecated_member_use
                       value: role,
                       items: roles.map((r) => DropdownMenuItem(value: r['value'], child: Text(r['label']!, style: const TextStyle(fontSize: 13)))).toList(),
                       onChanged: isSaving ? null : (val) {

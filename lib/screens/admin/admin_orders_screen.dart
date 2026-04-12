@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart' hide TextDirection;
 import 'package:flutter/services.dart';
 import 'package:zyiarah/screens/admin/admin_order_details_screen.dart';
 import 'package:zyiarah/widgets/zyiarah_shimmer.dart';
@@ -110,9 +109,9 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
         final amount = data['final_amount'] ?? data['amount'] ?? 0;
         final code = data['code'] ?? docs[index].id.substring(0, 8).toUpperCase();
         
-        DateTime date = DateTime.now();
         if (data['created_at'] != null) {
-          date = (data['created_at'] as Timestamp).toDate();
+          // ignore: unused_local_variable
+          final date = (data['created_at'] as Timestamp).toDate();
         }
 
         return Card(
