@@ -153,7 +153,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                     Checkbox(
                       value: _rememberMe,
                       onChanged: (val) => setState(() => _rememberMe = val!),
-                      activeColor: brandColor,
+                      fillColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? brandColor : null),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                     ),
                     Text("تذكرني", style: GoogleFonts.tajawal(color: Colors.grey[700])),

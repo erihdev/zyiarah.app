@@ -5,9 +5,9 @@ import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/widgets/zyiarah_shimmer.dart';
 
 class AdminMaintenanceScreen extends StatelessWidget {
-  AdminMaintenanceScreen({super.key});
+  const AdminMaintenanceScreen({super.key});
 
-  final ZyiarahNotificationTriggerService _notificationService = ZyiarahNotificationTriggerService();
+  static final ZyiarahNotificationTriggerService _notificationService = ZyiarahNotificationTriggerService();
 
   @override
   Widget build(BuildContext context) {

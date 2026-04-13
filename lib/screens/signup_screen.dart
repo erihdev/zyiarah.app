@@ -244,7 +244,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
         Checkbox(
           value: value, 
           onChanged: onChanged,
-          activeColor: brandColor,
+          fillColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? brandColor : null),
         ),
         GestureDetector(
           onTap: onLinkTap,

@@ -244,12 +244,11 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
       } catch (_) {}
     }
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text("تم إرسال $count تنبيه استباقي آلي بنجاح 🤖✅"),
-        backgroundColor: Colors.blueAccent,
-      ));
-    }
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text("تم إرسال $count تنبيه استباقي آلي بنجاح 🤖✅"),
+      backgroundColor: Colors.blueAccent,
+    ));
   }
 
   Future<void> _launchURL(String url) async {

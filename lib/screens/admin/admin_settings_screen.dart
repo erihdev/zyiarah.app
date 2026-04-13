@@ -355,27 +355,27 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
           )
         ],
       ),
-      child: Column(
+      child: const Column(
         children: [
-          const Icon(Icons.verified_user_rounded, color: Color(0xFF38BDF8), size: 40),
-          const SizedBox(height: 16),
-          const Text(
+          Icon(Icons.verified_user_rounded, color: Color(0xFF38BDF8), size: 40),
+          SizedBox(height: 16),
+          Text(
             "زيارة - Zyiarah",
             style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 8),
-          const Text(
+          SizedBox(height: 8),
+          Text(
             "إصدار النظام: 1.0.1+12 (Staging)",
             style: TextStyle(color: Colors.white60, fontSize: 13),
           ),
-          const Divider(color: Colors.white10, height: 32),
-          const Text(
+          Divider(color: Colors.white10, height: 32),
+          Text(
             "مؤسسة معاذ يحي محمد المالكي\nسجل تجاري رقم: 7030376342",
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.5),
           ),
-          const SizedBox(height: 16),
-          const Text(
+          SizedBox(height: 16),
+          Text(
             "تطوير وتشغيل: Erih Dev (إرث)",
             style: TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.bold),
           ),
