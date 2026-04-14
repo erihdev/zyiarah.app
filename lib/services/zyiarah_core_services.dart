@@ -1,3 +1,4 @@
+import 'dart:math' show cos, sqrt, asin;
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/services.dart';
 

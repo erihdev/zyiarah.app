@@ -117,7 +117,7 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                         );
 
                         if (source != null) {
-                          final file = await _picker.pickImage(imageSource: source, imageQuality: 70);
+                          final file = await _picker.pickImage(source: source, imageQuality: 70);
                           if (file != null) {
                             setDialogState(() => isUploading = true);
                             try {

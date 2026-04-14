@@ -109,7 +109,7 @@ class ZyiarahInvoiceScreen extends StatelessWidget {
             style: GoogleFonts.ibmPlexMono(
               color: Colors.white,
               fontSize: 32,
-              fontWeight: FontWeight.black,
+              fontWeight: FontWeight.w900,
               letterSpacing: 3,
             ),
           ),
@@ -275,8 +275,7 @@ class ZyiarahInvoiceScreen extends StatelessWidget {
               backgroundColor: const Color(0xFF1E293B),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 18),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Colors.grey.shade300)),
             ),
           ),
         ),

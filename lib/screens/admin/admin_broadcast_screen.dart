@@ -193,7 +193,7 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
           });
         },
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Colors.grey.shade300)),
       ),
     );
   }

@@ -125,9 +125,12 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
               selectedColor: const Color(0xFF1E293B).withValues(alpha: 0.1),
               checkmarkColor: const Color(0xFF1E293B),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: BorderSide(
-                      color: isSelected ? const Color(0xFF1E293B) : Colors.grey.shade300)),
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(
+                  color: Colors.grey.shade200,
+                  width: 1,
+                ),
+              ),
             ),
           );
         },

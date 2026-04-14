@@ -408,14 +408,16 @@ class _CartSheetState extends State<_CartSheet> {
                 const SizedBox(height: 15),
                 _buildTermsAndConditions(),
                 const SizedBox(height: 20),
+                SizedBox(
                   height: 55,
+                  width: double.infinity,
                   child: ElevatedButton(
                     onPressed: (_isSubmitting || !_agreeToTerms) ? null : () => _checkout(snapshot.data!),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _agreeToTerms ? const Color(0xFF5D1B5E) : Colors.grey.shade300,
                       foregroundColor: Colors.white,
                     ),
-                    child: _isSubmitting ? const CircularProgressIndicator(color: Colors.white) : const Text('إرسال طلب لبموافقة الإدارة'),
+                    child: _isSubmitting ? const CircularProgressIndicator(color: Colors.white) : const Text('إرسال طلب للموافقة الإدارة'),
                   ),
                 ),
               ],

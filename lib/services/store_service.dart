@@ -70,7 +70,7 @@ class ZyiarahStoreService {
     String paymentMethod = 'cash_on_delivery',
   }) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) return '';
 
     String clientName = 'عميل زيارة';
     String clientPhone = '000000000';

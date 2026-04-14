@@ -21,6 +21,7 @@ class OrderTrackingScreen extends StatefulWidget {
 
 class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   final ZyiarahOrderService _orderService = ZyiarahOrderService();
+  final ZyiarahCoreService _coreService = ZyiarahCoreService();
   final MapController _mapController = MapController();
   bool _ratingPromptShown = false;
 

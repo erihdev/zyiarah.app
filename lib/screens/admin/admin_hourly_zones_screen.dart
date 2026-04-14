@@ -90,7 +90,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     // Map Selection
                     InkWell(
                       onTap: () async {
-                        final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => const LocationPickerScreen()));
+                        final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => const LocationPickerScreen(serviceName: 'تحديد موقع المنطقة')));
                         if (result != null && result is GeoPoint) {
                           setDialogState(() => selectedGeo = result);
                         }
