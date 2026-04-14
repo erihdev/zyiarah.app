@@ -538,12 +538,40 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                           style: GoogleFonts.tajawal(color: isWorker ? Colors.pink : Colors.orange[800], fontSize: 10, fontWeight: FontWeight.bold),
                         ),
                       ),
+                      const SizedBox(height: 6),
+                      // Performance Badge
+                      if ((driver['rating_avg'] ?? 5.0) >= 4.7 && (driver['rating_count'] ?? 0) > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(color: Colors.amber.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.amber.withValues(alpha: 0.3))),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.star_rounded, color: Colors.amber, size: 10),
+                              const SizedBox(width: 4),
+                              Text("نخبة المتميزين", style: GoogleFonts.tajawal(color: Colors.amber[900], fontSize: 8, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ),
                 Column(
                   children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.star, color: Colors.amber, size: 14),
+                        const SizedBox(width: 4),
+                        Text(
+                          (driver['rating_avg'] ?? 5.0).toStringAsFixed(1),
+                          style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF1E293B)),
+                        ),
+                      ],
+                    ),
+                    Text("(${driver['rating_count'] ?? 0} تقييم)", style: TextStyle(fontSize: 8, color: Colors.grey[400])),
+                    const SizedBox(height: 10),
                     Switch(
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       value: isActive, 
                       activeThumbColor: const Color(0xFF1E293B),
                       onChanged: (val) async {

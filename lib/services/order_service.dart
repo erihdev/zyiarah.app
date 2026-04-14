@@ -283,4 +283,42 @@ class ZyiarahOrderService {
   Stream<DocumentSnapshot> streamOrderTracking(String orderId) {
     return _db.collection('orders').doc(orderId).snapshots();
   }
+
+  // تقديم تقييم للطلب وتحديث معدل تقييم الكادر
+  Future<void> submitOrderRating(String orderId, double rating, String comment) async {
+    final orderDoc = await _db.collection('orders').doc(orderId).get();
+    if (!orderDoc.exists) return;
+
+    final data = orderDoc.data() as Map<String, dynamic>;
+    final String? driverId = data['driver_id'];
+
+    // 1. تحديث الطلب بالتقييم
+    await _db.collection('orders').doc(orderId).update({
+      'rating': rating,
+      'rating_comment': comment,
+      'rated_at': FieldValue.serverTimestamp(),
+    });
+
+    // 2. تحديث معدل تقييم الكادر (Atomic Calculation)
+    if (driverId != null) {
+      final driverRef = _db.collection('drivers').doc(driverId);
+      
+      await _db.runTransaction((transaction) async {
+        final driverSnap = await transaction.get(driverRef);
+        if (!driverSnap.exists) return;
+
+        final driverData = driverSnap.data() as Map<String, dynamic>;
+        double currentAvg = (driverData['rating_avg'] ?? 5.0).toDouble();
+        int currentCount = (driverData['rating_count'] ?? 0).toInt();
+
+        // حساب المعدل الجديد: (المعدل القديم * العدد القديم + التقييم الجديد) / (العدد الجديد)
+        double newAvg = ((currentAvg * currentCount) + rating) / (currentCount + 1);
+        
+        transaction.update(driverRef, {
+          'rating_avg': newAvg,
+          'rating_count': currentCount + 1,
+        });
+      });
+    }
+  }
 }

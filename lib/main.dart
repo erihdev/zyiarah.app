@@ -24,6 +24,12 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  
+  // Enable Firestore Persistence for Enterprise Resilience
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+  );
 
   // System-wide crash reporting setup
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;

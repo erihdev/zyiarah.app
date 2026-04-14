@@ -201,7 +201,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
               .snapshots(),
           builder: (context, driverSnapshot) {
             final driverData = driverSnapshot.data?.data() as Map<String, dynamic>?;
-            final rating = (driverData?['rating'] ?? 5.0).toStringAsFixed(1);
+            final rating = (driverData?['rating_avg'] ?? 5.0).toStringAsFixed(1);
 
             return Row(
               children: [

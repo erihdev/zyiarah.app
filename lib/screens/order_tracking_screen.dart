@@ -6,6 +6,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:lottie/lottie.dart' hide Marker;
+import 'package:zyiarah/services/order_service.dart';
+import 'package:zyiarah/widgets/rating_dialog.dart';
 
 
 class OrderTrackingScreen extends StatefulWidget {
@@ -18,8 +20,9 @@ class OrderTrackingScreen extends StatefulWidget {
 }
 
 class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
-  final ZyiarahCoreService _coreService = ZyiarahCoreService();
+  final ZyiarahOrderService _orderService = ZyiarahOrderService();
   final MapController _mapController = MapController();
+  bool _ratingPromptShown = false;
 
   final List<Map<String, dynamic>> _steps = [
     {'status': 'accepted', 'label': 'السائق في الطريق', 'icon': Icons.directions_car},
@@ -54,6 +57,23 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
             final status = data['status'] ?? 'pending';
             final clientLoc = data['location'] as GeoPoint?;
             final driverLoc = data['driver_location'] as GeoPoint?;
+
+            // Trigger Rating Prompt if completed and not yet rated
+            if (status == 'completed' && data['rating'] == null && !_ratingPromptShown && mounted) {
+              _ratingPromptShown = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (ctx) => ZyiarahRatingDialog(
+                    onSubmitted: (rating, comment) {
+                      _orderService.submitOrderRating(widget.orderId, rating, comment);
+                    },
+                  ),
+                );
+              });
+            }
 
             return Column(
               children: [
@@ -242,7 +262,10 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           Column(
             children: [
               const Icon(Icons.star, color: Colors.amber, size: 18),
-              Text("4.9", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 12)),
+              Text(
+                (data['driver_rating_avg'] ?? 5.0).toStringAsFixed(1),
+                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 12),
+              ),
             ],
           ),
         ],
