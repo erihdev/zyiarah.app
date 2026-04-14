@@ -214,7 +214,7 @@ class ZyiarahFirebaseService {
         }
 
         if (kDebugMode) {
-          print("Attempting to find driver with cleaned phone: $cleanPhone");
+          debugPrint("Attempting to find driver with cleaned phone: $cleanPhone");
         }
 
         QuerySnapshot driverDoc = await _db
@@ -235,7 +235,7 @@ class ZyiarahFirebaseService {
       }
     } catch (e) {
       if (kDebugMode) {
-        print("Error fetching role: $e");
+        debugPrint("Error fetching role: $e");
       }
     }
     return 'client'; // في حالة الخطأ أو عدم وجود بيانات، نعتبره عميل
