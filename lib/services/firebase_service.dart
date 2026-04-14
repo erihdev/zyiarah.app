@@ -313,7 +313,6 @@ class ZyiarahFirebaseService {
     }
   }
 
-  // Backward compatibility
   Future<String> createDriverAccountViaAdmin({
     required String name,
     required String phone,
@@ -322,6 +321,9 @@ class ZyiarahFirebaseService {
     required String licenseInfo,
     required String role, 
     required bool isActive,
+    String? nationality,
+    String? idNumber,
+    String? idExpiry,
     String? photoUrl,
   }) => createAccountViaAdmin(
     name: name,
@@ -333,6 +335,9 @@ class ZyiarahFirebaseService {
       'car_info': carInfo,
       'license_info': licenseInfo,
       'photo_url': photoUrl,
+      if (nationality != null) 'nationality': nationality,
+      if (idNumber != null) 'id_number': idNumber,
+      if (idExpiry != null) 'id_expiry': idExpiry,
     }
   );
 

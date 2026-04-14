@@ -177,20 +177,6 @@ class ZyiarahOrderService {
         }
       }
     }
-
-    // تحديث حالة السائق أيضاً للمتابعة اللحظية في لوحة التحكم
-    if (driverId != null) {
-      String driverStatus = 'idle';
-      if (status == 'accepted' || status == 'arrived') driverStatus = 'en_route';
-      if (status == 'in_progress') driverStatus = 'in_service';
-      if (status == 'completed') driverStatus = 'idle';
-
-      await _db.collection('drivers').doc(driverId).update({
-        'status': driverStatus,
-        'current_order_id': status == 'completed' ? null : orderId,
-        'is_available': status == 'completed',
-      });
-    }
   }
 
   // قبول الطلب باستخدام Transaction لمنع التعارض المزدوج (Race Condition)
