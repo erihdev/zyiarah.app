@@ -22,6 +22,7 @@ import 'package:zyiarah/screens/maintenance_request_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
 import 'package:zyiarah/services/maintenance_listener_service.dart';
 import 'package:zyiarah/widgets/permission_sheet.dart';
+import 'package:zyiarah/widgets/support_fab.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:zyiarah/services/location_service.dart';
@@ -135,6 +136,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
         backgroundColor: const Color(0xFFF9FAFB),
         appBar: _buildTopBar(),
         drawer: _buildDrawer(),
+        floatingActionButton: const ZyiarahSupportFab(),
         body: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),

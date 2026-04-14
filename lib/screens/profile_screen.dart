@@ -323,23 +323,51 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
       builder: (ctx) => Directionality(
         textDirection: TextDirection.rtl,
         child: AlertDialog(
-          title: Text('حذف الحساب', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          content: Text(
-            'هل أنت متأكد من رغبتك في حذف الحساب؟ سيتم مسح كافة بياناتك وفواتيرك نهائياً ولا يمكن استعادتها.',
-            style: GoogleFonts.tajawal(),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.red),
+              const SizedBox(width: 10),
+              Text('حذف الحساب نهائياً', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'سيتم مسح كافة بياناتك، فواتيرك، وخدماتك السابقة نهائياً من نظام "زيارة". لا يمكن التراجع عن هذا الإجراء.',
+                style: GoogleFonts.tajawal(height: 1.5),
+              ),
+              const SizedBox(height: 15),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(12)),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: Colors.red, size: 16),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text("حق النسيان: سيتم حذف كافة سجلات التتبع الخاصة بك.", style: GoogleFonts.tajawal(fontSize: 10, color: Colors.red))),
+                  ],
+                ),
+              ),
+            ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text('تراجع', style: GoogleFonts.tajawal()),
+              child: Text('تراجع', style: GoogleFonts.tajawal(color: Colors.grey)),
             ),
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(ctx);
                 _deleteAccount();
               },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: Text('حذف الآن', style: GoogleFonts.tajawal(color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text('تأكيد الحذف النهائي', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
             ),
           ],
         ),

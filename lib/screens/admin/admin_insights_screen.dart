@@ -172,14 +172,16 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
   }
 
   Map<String, dynamic> _calculateStats(List<DocumentSnapshot> orders, List<DocumentSnapshot> maintenance, List<DocumentSnapshot> users, List<DocumentSnapshot> storeOrders) {
-    double totalRevenue = 0;
+    double cleaningRevenue = 0;
+    double maintenanceRevenue = 0;
+    double storeRevenue = 0;
     int activeOrders = 0;
 
     for (var doc in orders) {
       final data = doc.data() as Map<String, dynamic>;
       final status = data['status'] ?? 'pending';
       if (status != 'cancelled') {
-        totalRevenue += (data['final_amount'] ?? data['amount'] ?? 0.0);
+        cleaningRevenue += (data['final_amount'] ?? data['amount'] ?? 0.0);
       }
       if (status == 'pending' || status == 'assigned' || status == 'in_progress') {
         activeOrders++;
@@ -190,24 +192,26 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       final data = doc.data() as Map<String, dynamic>;
       final status = data['status'] ?? 'pending';
       if (status == 'paid' || status == 'completed' || status == 'approved') {
-        totalRevenue += (data['quotePrice'] ?? 0.0);
+        maintenanceRevenue += (data['quotePrice'] ?? 0.0);
       }
       if (status == 'under_review' || status == 'waiting_payment' || status == 'approved') {
         activeOrders++;
       }
     }
 
-    // Include Store Orders Revenue
     for (var doc in storeOrders) {
       final data = doc.data() as Map<String, dynamic>;
-      totalRevenue += (data['total_price'] ?? 0.0);
+      storeRevenue += (data['total_price'] ?? data['total_amount'] ?? 0.0);
       if (data['status'] == 'pending' || data['status'] == 'processing') {
         activeOrders++;
       }
     }
 
     return {
-      'revenue': totalRevenue,
+      'revenue': cleaningRevenue + maintenanceRevenue + storeRevenue,
+      'cleaning': cleaningRevenue,
+      'maintenance': maintenanceRevenue,
+      'store': storeRevenue,
       'active': activeOrders,
       'users': users.length,
     };
@@ -218,16 +222,42 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
   }
 
   Widget _buildQuickStats(Map<String, dynamic> stats) {
-    return SizedBox(
-      height: 110,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          _buildStatCard("إجمالي الإيرادات", "${stats['revenue'].toStringAsFixed(0)} ر.س", const Color(0xFF059669), Icons.account_balance_wallet_rounded),
-          _buildStatCard("طلبات نشطة", stats['active'].toString(), const Color(0xFF2563EB), Icons.speed_rounded),
-          _buildStatCard("إجمالي العملاء", stats['users'].toString(), const Color(0xFF7C3AED), Icons.people_alt_rounded),
-        ],
-      ),
+    return Column(
+      children: [
+        SizedBox(
+          height: 110,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              _buildStatCard("إجمالي الإيرادات", "${stats['revenue'].toStringAsFixed(0)} ر.س", const Color(0xFF059669), Icons.account_balance_wallet_rounded),
+              _buildStatCard("طلبات نشطة", stats['active'].toString(), const Color(0xFF2563EB), Icons.speed_rounded),
+              _buildStatCard("إجمالي العملاء", stats['users'].toString(), const Color(0xFF7C3AED), Icons.people_alt_rounded),
+            ],
+          ),
+        ),
+        const SizedBox(height: 15),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildMiniRevenue("تنظيف", stats['cleaning'], Colors.blue),
+              _buildMiniRevenue("متجر", stats['store'], Colors.teal),
+              _buildMiniRevenue("صيانة", stats['maintenance'], Colors.orange),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMiniRevenue(String label, double amount, Color color) {
+    return Column(
+      children: [
+        Text(label, style: GoogleFonts.tajawal(fontSize: 10, color: Colors.grey)),
+        Text("${amount.toStringAsFixed(0)} ر.س", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: color)),
+      ],
     );
   }
 
