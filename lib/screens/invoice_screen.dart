@@ -174,7 +174,7 @@ class ZyiarahInvoiceScreen extends StatelessWidget {
                 Text("الإجمالي المستحق", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16, color: const Color(0xFF1E293B))),
                 Text(
                   "${amount.toStringAsFixed(2)} ر.س",
-                  style: GoogleFonts.tajawal(fontWeight: FontWeight.black, fontSize: 20, color: const Color(0xFF059669)),
+                  style: GoogleFonts.tajawal(fontWeight: FontWeight.w900, fontSize: 20, color: const Color(0xFF059669)),
                 ),
               ],
             ),
