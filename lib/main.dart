@@ -86,9 +86,11 @@ class AuthWrapper extends StatelessWidget {
                 );
               }
 
-              if (roleSnapshot.data == 'driver') {
+              final String role = roleSnapshot.data ?? 'client';
+              
+              if (role == 'driver') {
                 return const DriverDashboard();
-              } else if (roleSnapshot.data == 'admin') {
+              } else if (['admin', 'super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin'].contains(role)) {
                 return const AdminDashboardScreen();
               } else {
                 return const ClientDashboard();

@@ -145,7 +145,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final orderId = "ORD-${DateTime.now().millisecondsSinceEpoch}";
+      // Pre-allocate a Firestore ID if this is a new order, or use the maintenance ID
+      final String finalOrderId = widget.maintenanceId ?? FirebaseFirestore.instance.collection('orders').doc().id;
       
       if (_selectedPaymentMethod == 'subscription') {
         // دفع عبر الاشتراك
@@ -156,19 +157,31 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             'paidAt': FieldValue.serverTimestamp(),
           });
         } else {
-          await _orderService.createOrder(
-            clientId: FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
-            serviceType: widget.serviceName,
-            amount: 0.0,
-            location: widget.location ?? const GeoPoint(24.7136, 46.6753),
-            paymentMethod: 'subscription',
-            hours: widget.hours,
-            serviceDate: widget.serviceDate,
-            zoneName: widget.zoneName,
-            workerCount: widget.workerCount,
-            couponCode: _appliedCoupon,
-            discountAmount: _discountAmount,
-          );
+          // دفع للخدمات العادية (تنظيف، إلخ) - إنشاء طلب جديد بهوية محددة مسبقاً
+          await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
+            'client_id': FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
+            'client_name': _currentUser?.name ?? 'عميل زيارة',
+            'service_type': widget.serviceName,
+            'amount': 0.0,
+            'status': 'pending',
+            'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
+            'payment_method': 'subscription',
+            'created_at': FieldValue.serverTimestamp(),
+            'hours_contracted': widget.hours ?? 4,
+            'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
+            'zone_name': widget.zoneName,
+            'worker_count': widget.workerCount,
+            'coupon_code': _appliedCoupon,
+            'discount_amount': _discountAmount,
+          });
+          
+          if (_appliedCoupon != null) {
+             // Increment coupon usage manually since we're bypassing createOrder for ID consistency
+             final couponSnap = await FirebaseFirestore.instance.collection('promo_codes').where('code', isEqualTo: _appliedCoupon).get();
+             if (couponSnap.docs.isNotEmpty) {
+               await couponSnap.docs.first.reference.update({'uses': FieldValue.increment(1)});
+             }
+          }
         }
         
         if (mounted) {
@@ -180,7 +193,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             MaterialPageRoute(
               builder: (context) => ZyiarahInvoiceScreen(
                 amount: 0.0,
-                orderId: orderId,
+                orderId: finalOrderId.toUpperCase(),
                 hours: widget.hours,
                 serviceDate: widget.serviceDate,
                 isSubscription: true,
@@ -200,19 +213,30 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             'paidAt': FieldValue.serverTimestamp(),
           });
         } else {
-          await _orderService.createOrder(
-            clientId: FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
-            serviceType: widget.serviceName,
-            amount: totalWithVat,
-            location: widget.location ?? const GeoPoint(24.7136, 46.6753),
-            paymentMethod: 'cod',
-            hours: widget.hours,
-            serviceDate: widget.serviceDate,
-            zoneName: widget.zoneName,
-            workerCount: widget.workerCount,
-            couponCode: _appliedCoupon,
-            discountAmount: _discountAmount,
-          );
+          // دفع للخدمات العادية (تنظيف، إلخ) - إنشاء طلب جديد بهوية محددة مسبقاً
+          await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
+            'client_id': FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
+            'client_name': _currentUser?.name ?? 'عميل زيارة',
+            'service_type': widget.serviceName,
+            'amount': totalWithVat,
+            'status': 'pending',
+            'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
+            'payment_method': 'cod',
+            'created_at': FieldValue.serverTimestamp(),
+            'hours_contracted': widget.hours ?? 4,
+            'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
+            'zone_name': widget.zoneName,
+            'worker_count': widget.workerCount,
+            'coupon_code': _appliedCoupon,
+            'discount_amount': _discountAmount,
+          });
+          
+          if (_appliedCoupon != null) {
+             final couponSnap = await FirebaseFirestore.instance.collection('promo_codes').where('code', isEqualTo: _appliedCoupon).get();
+             if (couponSnap.docs.isNotEmpty) {
+               await couponSnap.docs.first.reference.update({'uses': FieldValue.increment(1)});
+             }
+          }
         }
         
         if (mounted) {
@@ -224,7 +248,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             MaterialPageRoute(
               builder: (context) => ZyiarahInvoiceScreen(
                 amount: totalWithVat,
-                orderId: orderId,
+                orderId: finalOrderId.toUpperCase(),
                 hours: widget.hours,
                 serviceDate: widget.serviceDate,
                 isSubscription: false,
@@ -237,7 +261,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         }
       } else if (_selectedPaymentMethod == 'tamara') {
         String? checkoutUrl = await _tamaraService.createCheckoutSession(
-          orderId: orderId,
+          orderId: finalOrderId,
           amount: totalWithVat,
           customerPhone: _currentUser?.phone ?? "500000000",
           customerName: _currentUser?.name ?? "عميل زيارة",
@@ -251,7 +275,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               builder: (context) => TamaraCheckoutScreen(
                 checkoutUrl: checkoutUrl,
                 amount: totalWithVat,
-                orderId: orderId,
+                orderId: finalOrderId,
                 serviceType: widget.serviceName,
                 location: widget.location ?? const GeoPoint(24.7136, 46.6753),
                 hours: widget.hours,
@@ -274,7 +298,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         // EdfaPay / Card Payment
         final result = await _edfaPayService.processPayment(
           amount: totalWithVat,
-          orderId: orderId,
+          orderId: finalOrderId,
           customerEmail: _currentUser?.email ?? "customer@zyiarah.com",
           customerPhone: _currentUser?.phone ?? "500000000",
           customerName: _currentUser?.name ?? "عميل زيارة",
@@ -284,26 +308,36 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       if (widget.maintenanceId != null) {
         // تحديث حالة طلب الصيانة بعد الدفع
         await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
-          'status': _selectedPaymentMethod == 'cod' ? 'approved' : 'paid',
+          'status': 'paid',
           'paymentMethod': _selectedPaymentMethod,
           'paidAt': FieldValue.serverTimestamp(),
           'totalAmount': totalWithVat,
         });
       } else {
-        // دفع للخدمات العادية (تنظيف، إلخ) - إنشاء طلب جديد
-        await _orderService.createOrder(
-          clientId: FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
-          serviceType: widget.serviceName,
-          amount: totalWithVat,
-          location: widget.location ?? const GeoPoint(24.7136, 46.6753),
-          paymentMethod: _selectedPaymentMethod,
-          hours: widget.hours,
-          serviceDate: widget.serviceDate,
-          zoneName: widget.zoneName,
-          workerCount: widget.workerCount,
-          couponCode: _appliedCoupon,
-          discountAmount: _discountAmount,
-        );
+        // دفع للخدمات العادية (تنظيف، إلخ) - إنشاء طلب جديد بهوية محددة مسبقاً
+        await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
+          'client_id': FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
+          'client_name': _currentUser?.name ?? 'عميل زيارة',
+          'service_type': widget.serviceName,
+          'amount': totalWithVat,
+          'status': 'pending',
+          'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
+          'payment_method': _selectedPaymentMethod,
+          'created_at': FieldValue.serverTimestamp(),
+          'hours_contracted': widget.hours ?? 4,
+          'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
+          'zone_name': widget.zoneName,
+          'worker_count': widget.workerCount,
+          'coupon_code': _appliedCoupon,
+          'discount_amount': _discountAmount,
+        });
+        
+        if (_appliedCoupon != null) {
+           final couponSnap = await FirebaseFirestore.instance.collection('promo_codes').where('code', isEqualTo: _appliedCoupon).get();
+           if (couponSnap.docs.isNotEmpty) {
+             await couponSnap.docs.first.reference.update({'uses': FieldValue.increment(1)});
+           }
+        }
       }
 
           setState(() => _isLoading = false);
@@ -315,7 +349,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               MaterialPageRoute(
                 builder: (context) => ZyiarahInvoiceScreen(
                   amount: totalWithVat,
-                  orderId: orderId,
+                  orderId: finalOrderId.toUpperCase(),
                   hours: widget.hours,
                   serviceDate: widget.serviceDate,
                   workerCount: widget.workerCount,

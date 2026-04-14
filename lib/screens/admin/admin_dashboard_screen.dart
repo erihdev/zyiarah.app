@@ -32,51 +32,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        // Fallback: Check if user collection says they are an admin
-        String zyRole = 'client';
-        try {
-          final dbRole = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-          if (dbRole.exists) {
-            zyRole = dbRole.data()?['role'] ?? 'client';
-          }
-        } catch (_) {}
-
-        // Auto-assign super_admin if email matches OR if users collection says they are admin
-        if ((user.email != null && user.email!.trim().toLowerCase().contains('admin@zyiarah')) || zyRole == 'admin' || zyRole == 'super_admin') {
-          try {
-            if (user.email != null) {
-              await FirebaseFirestore.instance.collection('admins').doc(user.email).set({
-                'role': 'super_admin',
-                'email': user.email,
-                'created_at': FieldValue.serverTimestamp(),
-              }, SetOptions(merge: true));
-            }
-          } catch (_) {}
-          
-          if (mounted) {
-            setState(() {
-              _role = 'super_admin';
-              _isLoadingRole = false;
-            });
-          }
-          return;
-        }
-
-        if (user.email != null) {
-          final doc = await FirebaseFirestore.instance.collection('admins').doc(user.email).get();
-          if (doc.exists && mounted) {
-            setState(() {
-              _role = doc.data()?['role'] ?? 'none';
-              _isLoadingRole = false;
-            });
-          } else if (mounted) {
-            setState(() {
+        // Use the centralized service to fetch the role (UID-based)
+        final ZyiarahFirebaseService firebaseService = ZyiarahFirebaseService();
+        String role = await firebaseService.getUserRole(user.uid);
+        
+        if (mounted) {
+          setState(() {
+            // Check if the returned role is one of the admin roles
+            if (['super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin', 'admin'].contains(role)) {
+              _role = role == 'admin' ? 'super_admin' : role; // Normalize generic admin to super
+            } else {
               _role = 'none';
-              _isLoadingRole = false;
-            });
-          }
-        } else if (mounted) {
-           setState(() => _isLoadingRole = false);
+            }
+            _isLoadingRole = false;
+          });
         }
       } else if (mounted) {
         setState(() => _isLoadingRole = false);

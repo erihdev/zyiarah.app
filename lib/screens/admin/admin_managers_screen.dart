@@ -13,6 +13,7 @@ class AdminManagersScreen extends StatefulWidget {
 
 class _AdminManagersScreenState extends State<AdminManagersScreen> {
   final _db = FirebaseFirestore.instance;
+  final ZyiarahFirebaseService _firebase = ZyiarahFirebaseService();
   final ZyiarahAuditService _audit = ZyiarahAuditService();
 
   void _showManagerDialog({String? docId, Map<String, dynamic>? currentData}) {
@@ -155,7 +156,7 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
                   ),
                   onPressed: isSaving ? null : () async {
-                    if (nameCtrl.text.isEmpty || emailCtrl.text.isEmpty || (docId == null && passwordCtrl.text.isEmpty)) {
+                    if (nameCtrl.text.isEmpty || emailCtrl.text.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى إكمال البيانات الأساسية")));
                       return;
                     }
@@ -164,19 +165,34 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                     
                     try {
                       final email = emailCtrl.text.trim().toLowerCase();
-                      final data = {
-                        'name': nameCtrl.text.trim(),
-                        'email': email,
-                        'role': role,
-                        'is_active': currentData?['is_active'] ?? true,
-                        'updated_at': FieldValue.serverTimestamp(),
-                      };
-                      if (passwordCtrl.text.isNotEmpty) {
-                        data['password'] = passwordCtrl.text.trim();
-                      }
                       
-                      // Using Email as ID ensuring compatibility with Dashboard checks
-                      await _db.collection('admins').doc(email).set(data, SetOptions(merge: true));
+                      if (docId == null) {
+                        // حالة الإضافة الجديدة: إنشاء حساب حقيقي في Firebase Auth + Firestore
+                        await _firebase.createAccountViaAdmin(
+                          name: nameCtrl.text.trim(),
+                          phone: "000000000", // Default for staff, can be updated later
+                          email: email,
+                          role: 'admin', // General role in users collection
+                          isActive: true,
+                          extraData: {
+                            'staff_role': role, // Specific admin permission level
+                          }
+                        );
+                      } else {
+                        // حالة التعديل: تحديث البيانات في Firestore فقط (UID-based)
+                        final updates = {
+                          'name': nameCtrl.text.trim(),
+                          'role': 'admin',
+                          'staff_role': role,
+                          'updated_at': FieldValue.serverTimestamp(),
+                        };
+                        
+                        await _db.collection('users').doc(docId).set(updates, SetOptions(merge: true));
+                        await _db.collection('admins').doc(docId).set({
+                          ...updates,
+                          'email': email,
+                        }, SetOptions(merge: true));
+                      }
                       
                       await _audit.logAction(
                         action: docId == null ? ZyiarahAuditService.actionCreateStaff : ZyiarahAuditService.actionUpdateStaff,
@@ -261,8 +277,8 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                       child: ListTile(
                         leading: CircleAvatar(
                           radius: 25,
-                          backgroundColor: _getRoleColor(admin['role']).withValues(alpha: 0.1),
-                          child: Icon(_getRoleIcon(admin['role']), color: _getRoleColor(admin['role'])),
+                          backgroundColor: _getRoleColor(admin['staff_role'] ?? admin['role']).withValues(alpha: 0.1),
+                          child: Icon(_getRoleIcon(admin['staff_role'] ?? admin['role']), color: _getRoleColor(admin['staff_role'] ?? admin['role'])),
                         ),
                         title: Text(admin['name'] ?? 'منسوب جديد', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
                         subtitle: Column(
@@ -272,8 +288,8 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                             const SizedBox(height: 4),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(color: _getRoleColor(admin['role']).withValues(alpha: 0.05), borderRadius: BorderRadius.circular(6)),
-                              child: Text(_getRoleLabel(admin['role']), style: TextStyle(fontSize: 10, color: _getRoleColor(admin['role']), fontWeight: FontWeight.bold)),
+                              decoration: BoxDecoration(color: _getRoleColor(admin['staff_role'] ?? admin['role']).withValues(alpha: 0.05), borderRadius: BorderRadius.circular(6)),
+                              child: Text(_getRoleLabel(admin['staff_role'] ?? admin['role']), style: TextStyle(fontSize: 10, color: _getRoleColor(admin['staff_role'] ?? admin['role']), fontWeight: FontWeight.bold)),
                             ),
                           ],
                         ),

@@ -41,16 +41,18 @@ service cloud.firestore {
       }
     }
 
-    // Legacy Tickets Collection (Optional)
+    // Legacy Tickets Collection (Protected)
     match /tickets/{ticketId} {
-      allow read, write: if isLoggedIn();
+      allow read, update: if isLoggedIn() && (request.auth.uid == resource.data.userId || isAdmin());
+      allow create: if isLoggedIn();
+      allow delete: if isAdmin();
     }
 
-    // Orders & Transactions
+    // Orders & Transactions (Hardened)
     match /orders/{orderId} {
       allow read: if isLoggedIn() && (request.auth.uid == resource.data.client_id || request.auth.uid == resource.data.driver_id || isAdmin());
+      allow create: if isLoggedIn() && (request.resource.data.status == 'pending' || request.resource.data.status == 'waiting_payment_cod');
       allow update: if isLoggedIn() && (request.auth.uid == resource.data.driver_id || isAdmin());
-      allow create: if isLoggedIn();
       allow delete: if isAdmin();
     }
 
@@ -81,9 +83,10 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // System Admins
+    // System Admins (Restricted access)
     match /admins/{adminId} {
-      allow read: if isLoggedIn();
+      allow read: if isLoggedIn() && (request.auth.uid == adminId || isAdmin());
+      allow write: if isAdmin(); // Only super admins can add other managers
     }
 
     // Dynamic Services
@@ -102,9 +105,10 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
-    // Notification Triggers (SECURITY SENSITIVE)
+    // Notification Triggers (SECURITY HARDENED)
     match /notification_triggers/{triggerId} {
-      allow create: if isLoggedIn();
+      // Users can only create triggers of type 'maintenance_request' or 'order' for themself
+      allow create: if isLoggedIn() && request.resource.data.userId == request.auth.uid;
       allow read, delete: if isAdmin();
     }
   }

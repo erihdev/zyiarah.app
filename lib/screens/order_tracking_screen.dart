@@ -89,6 +89,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
         TileLayer(
           urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
           subdomains: const ['a', 'b', 'c'],
+          userAgentPackageName: 'com.zyiarah.zyiarah',
         ),
         MarkerLayer(
           markers: [
@@ -139,23 +140,28 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("حالة الطلب الحالية", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF1E293B))),
-                  const SizedBox(height: 4),
-                  Text(distanceInfo, style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 12)),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("حالة الطلب الحالية", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF1E293B))),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Text(distanceInfo, style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 12)),
+                          _buildStaleStatus(data['last_location_update']),
+                        ],
+                      ),
+                    ],
+                  ),
+                  if (status == 'in_progress')
+                    Lottie.network(
+                      'https://lottie.host/6429f55e-a61d-4519-94b2-0545cf026131/V088G0M8hS.json',
+                      width: 50,
+                      height: 50,
+                    ),
+                  IconButton(onPressed: () => _callDriver(data['driver_phone'] ?? '05xxxx'), icon: const CircleAvatar(backgroundColor: Colors.green, child: Icon(Icons.phone, color: Colors.white, size: 20))),
                 ],
-              ),
-              if (status == 'in_progress')
-                Lottie.network(
-                  'https://lottie.host/6429f55e-a61d-4519-94b2-0545cf026131/V088G0M8hS.json',
-                  width: 50,
-                  height: 50,
-                ),
-              IconButton(onPressed: () => _callDriver(data['driver_phone'] ?? '05xxxx'), icon: const CircleAvatar(backgroundColor: Colors.green, child: Icon(Icons.phone, color: Colors.white, size: 20))),
-            ],
           ),
           const SizedBox(height: 25),
           _buildStepper(status),
@@ -267,6 +273,35 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
         ),
       ],
     );
+  }
+
+  Widget _buildStaleStatus(dynamic timestamp) {
+    if (timestamp == null) return const SizedBox();
+    
+    DateTime lastUpdate;
+    if (timestamp is Timestamp) {
+      lastUpdate = timestamp.toDate();
+    } else {
+      return const SizedBox();
+    }
+
+    final diff = DateTime.now().difference(lastUpdate).inMinutes;
+    if (diff >= 5) {
+      return Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.orange.shade200)),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.wifi_off, size: 10, color: Colors.orange),
+            SizedBox(width: 4),
+            Text("اتصال ضعيف", style: TextStyle(fontSize: 10, color: Colors.orange, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      );
+    }
+    return const SizedBox();
   }
 
   void _callDriver(String phone) async {

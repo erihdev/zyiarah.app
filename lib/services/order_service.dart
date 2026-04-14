@@ -123,7 +123,15 @@ class ZyiarahOrderService {
   }
 
   // تحديث حالة الطلب مع إضافة بيانات السائق والمنطق الزمني
-  Future<void> updateOrderStatus(String orderId, String status, {String? driverId}) async {
+    // التحقق من الحالة الحالية لمنع التكرار (مثل خصم الزيارات مرتين)
+    final docSnap = await _db.collection('orders').doc(orderId).get();
+    final currentStatus = docSnap.data()?['status'] as String?;
+    
+    if (currentStatus == status) return;
+
+    final batch = _db.batch();
+    final orderRef = _db.collection('orders').doc(orderId);
+
     final Map<String, dynamic> updates = {
       'status': status,
       if (driverId != null) 'driver_id': driverId,
@@ -133,12 +141,27 @@ class ZyiarahOrderService {
       if (status == 'completed') 'end_time': FieldValue.serverTimestamp(),
     };
 
-    await _db.collection('orders').doc(orderId).update(updates);
+    batch.update(orderRef, updates);
+
+    // تحديث حالة السائق بالتزامن مع الطلب (Atomic Update) في Batch واحد
+    if (driverId != null) {
+      final driverRef = _db.collection('drivers').doc(driverId);
+      String driverStatus = 'available';
+      if (status == 'accepted' || status == 'arrived') driverStatus = 'en_route';
+      if (status == 'in_progress') driverStatus = 'in_service';
+      
+      batch.update(driverRef, {
+        'status': driverStatus,
+        'current_order_id': status == 'completed' ? null : orderId,
+        'is_available': status == 'completed',
+      });
+    }
+
+    await batch.commit();
 
     // معالجة المكافآت والاشتراكات عند اكتمال الطلب
-    if (status == 'completed') {
-      final orderDoc = await _db.collection('orders').doc(orderId).get();
-      final orderData = orderDoc.data() as Map<String, dynamic>;
+    if (status == 'completed' && currentStatus != 'completed') {
+      final orderData = docSnap.data() as Map<String, dynamic>;
       final clientId = orderData['client_id'];
       final amount = (orderData['amount'] ?? 0.0).toDouble();
       final isSubscriptionOrder = orderData['payment_method'] == 'subscription';
@@ -169,15 +192,44 @@ class ZyiarahOrderService {
     }
   }
 
-  // قبول الطلب بشكل مباشر مع منع التعارض (منع قبول أكثر من طلب نشط)
+  // قبول الطلب باستخدام Transaction لمنع التعارض المزدوج (Race Condition)
   Future<bool> acceptOrder(String orderId, String driverId) async {
-    // 1. التحقق من عدم وجود طلبات نشطة للسائق
-    bool hasActive = await hasActiveOrder(driverId);
-    if (hasActive) return false;
+    return await _db.runTransaction((transaction) async {
+      final orderRef = _db.collection('orders').doc(orderId);
+      final driverRef = _db.collection('drivers').doc(driverId);
+      
+      final orderSnap = await transaction.get(orderRef);
+      
+      // 1. التحقق من أن الطلب ما زال متاحاً (قيد الانتظار)
+      if (!orderSnap.exists || orderSnap.data()?['status'] != 'pending') {
+        return false;
+      }
 
-    // 2. تحديث الطلب وتخصيصه للسائق
-    await updateOrderStatus(orderId, 'accepted', driverId: driverId);
-    return true;
+      // 2. التحقق من عدم وجود طلبات نشطة للسائق
+      bool hasActive = await hasActiveOrder(driverId);
+      if (hasActive) return false;
+
+      // 3. جلب بيانات السائق لمزامنتها داخل الطلب (لضمان عمل زر الاتصال)
+      final driverSnap = await transaction.get(driverRef);
+      final driverData = driverSnap.data() as Map<String, dynamic>;
+
+      // 4. تنفيذ التحديث بشكل ذري (Atomic)
+      transaction.update(orderRef, {
+        'status': 'accepted',
+        'driver_id': driverId,
+        'driver_phone': driverData['phone'] ?? '000000000', // مزامنة الرقم
+        'assigned_driver': driverData['name'] ?? 'سائق', // مزامنة الاسم
+        'accepted_at': FieldValue.serverTimestamp(),
+      });
+
+      transaction.update(driverRef, {
+        'status': 'en_route',
+        'current_order_id': orderId,
+        'is_available': false,
+      });
+
+      return true;
+    });
   }
 
   // التحقق مما إذا كان السائق لديه طلب نشط حالياً

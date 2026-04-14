@@ -175,10 +175,15 @@ class ZyiarahFirebaseService {
     });
   }
 
-  // جلب دور المستخدم ('client' أو 'driver')
-  Future<String> getUserRole(String uid, [String? phone]) async {
-    try {
-      // 1. التحقق أولاً من مجموعة المستخدمين العامة
+      // 1. التحقق أولاً من مجموعة المديرين (UID-based)
+      DocumentSnapshot adminDoc = await _db.collection('admins').doc(uid).get();
+      if (adminDoc.exists && adminDoc.data() != null) {
+        final adminData = adminDoc.data() as Map<String, dynamic>;
+        // العودة بالدور الإداري التفصيلي (مثل accountant_admin, marketing_admin)
+        return adminData['staff_role'] ?? adminData['role'] ?? 'admin';
+      }
+
+      // 2. التحقق من مجموعة المستخدمين العامة
       DocumentSnapshot doc = await _db.collection('users').doc(uid).get();
       if (doc.exists && doc.data() != null) {
         final data = doc.data() as Map<String, dynamic>;
@@ -246,19 +251,14 @@ class ZyiarahFirebaseService {
     }
   }
 
-  // --- تسجيل السائقين من قِبل الإدارة ---
-  Future<String> createDriverAccountViaAdmin({
+  /// إنشاء حساب جديد من قِبل الإدارة (سائق أو مدير) بشكل آمن
+  Future<String> createAccountViaAdmin({
     required String name,
     required String phone,
     required String email,
-    required String carInfo,
-    required String licenseInfo,
-    required String role, 
+    required String role,
     required bool isActive,
-    String? nationality,
-    String? idNumber,
-    String? idExpiry,
-    String? photoUrl,
+    Map<String, dynamic>? extraData,
   }) async {
     FirebaseApp? secondaryApp;
     try {
@@ -268,7 +268,6 @@ class ZyiarahFirebaseService {
       );
 
       final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
-      
       final randomPassword = _generateRandomPassword();
       
       UserCredential userCredential = await secondaryAuth.createUserWithEmailAndPassword(
@@ -279,47 +278,61 @@ class ZyiarahFirebaseService {
       if (userCredential.user != null) {
         final uid = userCredential.user!.uid;
 
-        // دمج البيانات هنا بدلاً من استخدام update لمنع خطأ الصلاحيات لأن المدير ليس مالك المستند
+        // 1. إضافة للمجموعة العامة
         await _db.collection('users').doc(uid).set({
           'name': name,
           'role': role,
           'phone': phone,
           'email': email,
-          'photo_url': photoUrl,
-          'nationality': nationality,
-          'id_number': idNumber,
           'created_at': FieldValue.serverTimestamp(),
           'is_verified': true,
           'entity': 'مؤسسة معاذ يحي محمد المالكي',
+          ...extraData ?? {},
         }, SetOptions(merge: true));
 
-        await _db.collection('drivers').doc(uid).set({
+        // 2. إضافة لمجموعة التخصص (سائقين أو مديرين)
+        final String collection = role == 'admin' ? 'admins' : 'drivers';
+        await _db.collection(collection).doc(uid).set({
           'name': name,
           'phone': phone,
           'email': email,
-          'car_info': carInfo,
-          'license_info': licenseInfo,
-          'type': role,
+          'role': role,
           'is_active': isActive,
-          'photo_url': photoUrl,
-          'nationality': nationality,
-          'id_number': idNumber,
-          'id_expiry': idExpiry,
           'created_at': FieldValue.serverTimestamp(),
+          ...extraData ?? {},
         });
 
         await secondaryAuth.sendPasswordResetEmail(email: email);
         return uid;
       }
       throw Exception("فشل إنشاء الحساب");
-    } catch (e) {
-      rethrow;
     } finally {
-      if (secondaryApp != null) {
-        await secondaryApp.delete();
-      }
+      if (secondaryApp != null) await secondaryApp.delete();
     }
   }
+
+  // Backward compatibility
+  Future<String> createDriverAccountViaAdmin({
+    required String name,
+    required String phone,
+    required String email,
+    required String carInfo,
+    required String licenseInfo,
+    required String role, 
+    required bool isActive,
+    String? photoUrl,
+  }) => createAccountViaAdmin(
+    name: name,
+    phone: phone,
+    email: email,
+    role: role,
+    isActive: isActive,
+    extraData: {
+      'car_info': carInfo,
+      'license_info': licenseInfo,
+      'photo_url': photoUrl,
+    }
+  );
 
   String _generateRandomPassword() {
     const chars = 'AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz1234567890!@#\$%^&*';

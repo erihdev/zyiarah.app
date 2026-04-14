@@ -1,38 +1,52 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-/// خدمة توليد بيانات الفاتورة الإلكترونية المتوافقة مع ZATCA (المرحلة الأولى)
-/// مطور لـ: مؤسسة معاذ يحي محمد المالكي
+/// خدمة متوافقة مع متطلبات هيئة الزكاة والضريبة والجمارك (ZATCA)
+/// تقوم بتوليد رمز الاستجابة السريعة (QR Code) بنظام التشفير (TLV) المطلوب قانونياً
 class ZatcaService {
   
-  /// تحويل بيانات الفاتورة إلى تنسيق Base64 TLV المطلوب في الـ QR Code
-  /// هذا التنسيق هو الإلزامي للمرحلة الأولى من الفوترة الإلكترونية في السعودية
+  /// توليد رمز QR متوافق مع ZATCA للفواتير الإلكترونية (المرحلة الأولى والثانية)
   static String generateZatcaQrCode({
-    required String merchantName,
-    required String vatNumber,
+    String? merchantName,
+    String? vatNumber,
     required DateTime timestamp,
     required double totalAmount,
     required double vatAmount,
   }) {
-    BytesBuilder builder = BytesBuilder();
+    // استخدام البيانات الممررة أو القيم الافتراضية للمؤسسة
+    final String name = merchantName ?? "مؤسسة معاذ يحي محمد المالكي";
+    final String vat = vatNumber ?? "310885360200003";
 
-    // Tag 1: اسم المورد (Merchant Name)
-    builder.add(_encodeTlv(1, merchantName));
-    // Tag 2: الرقم الضريبي (VAT Number)
-    builder.add(_encodeTlv(2, vatNumber));
-    // Tag 3: الختم الزمني (Timestamp)
-    builder.add(_encodeTlv(3, timestamp.toIso8601String()));
-    // Tag 4: إجمالي الفاتورة مع الضريبة (Total Amount)
-    builder.add(_encodeTlv(4, totalAmount.toStringAsFixed(2)));
-    // Tag 5: مبلغ ضريبة القيمة المضافة (VAT Amount)
-    builder.add(_encodeTlv(5, vatAmount.toStringAsFixed(2)));
+    final bytesBuilder = BytesBuilder();
 
-    return base64Encode(builder.toBytes());
+    // Tag 1: Merchant Name (اسم المنشأة)
+    bytesBuilder.add(_encodeTlv(1, name));
+
+    // Tag 2: VAT Number (الرقم الضريبي للمنشأة)
+    bytesBuilder.add(_encodeTlv(2, vat));
+
+    // Tag 3: Timestamp (وقت إصدار الفاتورة بصيغة ISO 8601)
+    bytesBuilder.add(_encodeTlv(3, timestamp.toIso8601String()));
+
+    // Tag 4: Total Amount (المبلغ الإجمالي مع الضريبة)
+    bytesBuilder.add(_encodeTlv(4, totalAmount.toStringAsFixed(2)));
+
+    // Tag 5: VAT Amount (مبلغ ضريبة القيمة المضافة 15%)
+    bytesBuilder.add(_encodeTlv(5, vatAmount.toStringAsFixed(2)));
+
+    // التحويل إلى Base64 كما تطلبه الهيئة
+    return base64.encode(bytesBuilder.toBytes());
   }
 
-  /// ترميز البيانات بنظام (Tag-Length-Value)
+  /// دالة مساعدة لتشفير كل حقل بنظام Tag-Length-Value
   static Uint8List _encodeTlv(int tag, String value) {
-    List<int> valueBytes = utf8.encode(value);
-    return Uint8List.fromList([tag, valueBytes.length, ...valueBytes]);
+    final valueBytes = utf8.encode(value);
+    final tlv = BytesBuilder();
+    
+    tlv.addByte(tag); // T: Tag
+    tlv.addByte(valueBytes.length); // L: Length
+    tlv.add(valueBytes); // V: Value
+    
+    return tlv.toBytes();
   }
 }

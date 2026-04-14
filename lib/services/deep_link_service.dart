@@ -28,25 +28,39 @@ class ZyiarahDeepLinkService {
     });
   }
 
-  void _handleUri(Uri uri) {
+  Future<void> _handleUri(Uri uri) async {
     if (uri.scheme != 'zyiarah' || uri.host != 'app') return;
 
     final pathSegments = uri.pathSegments;
     if (pathSegments.isEmpty) return;
 
-    final String resource = pathSegments[0]; // e.g. 'order' or 'ticket'
+    final String resource = pathSegments[0]; // e.g. 'order', 'ticket', 'maintenance'
     final String? id = pathSegments.length > 1 ? pathSegments[1] : null;
-
     if (id == null) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final ZyiarahFirebaseService firebaseService = ZyiarahFirebaseService();
+    final String role = await firebaseService.getUserRole(user.uid);
+    final bool isAdmin = ['super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin', 'admin'].contains(role);
 
     if (resource == 'order') {
        _navKey?.currentState?.push(
-         MaterialPageRoute(builder: (_) => AdminOrderDetailsScreen(orderId: id))
+         MaterialPageRoute(
+           builder: (_) => isAdmin 
+             ? AdminOrderDetailsScreen(orderId: id)
+             : OrderTrackingScreen(orderId: id)
+         )
        );
     } else if (resource == 'ticket') {
        _navKey?.currentState?.push(
          MaterialPageRoute(builder: (_) => AdminTicketDetailsScreen(ticketId: id))
        );
+    } else if (resource == 'maintenance') {
+       // Navigate based on role for maintenance
+       // For clients, we could push MaintenanceDetailsScreen (if exists) or tracking
+       // For now, let's keep it safe.
     }
   }
 

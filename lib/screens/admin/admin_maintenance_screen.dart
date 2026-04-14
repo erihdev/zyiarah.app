@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/widgets/zyiarah_shimmer.dart';
+import 'package:zyiarah/utils/status_util.dart';
 
 class AdminMaintenanceScreen extends StatelessWidget {
   const AdminMaintenanceScreen({super.key});
@@ -57,12 +58,9 @@ class AdminMaintenanceScreen extends StatelessWidget {
                         final req = doc.data() as Map<String, dynamic>;
                         String status = req['status'] ?? 'under_review';
                         
-                        String statusAr = 'قيد المراجعة';
-                        Color statusColor = Colors.orange;
-                        if (status == 'waiting_payment') { statusAr = 'بانتظار الدفع'; statusColor = Colors.blue; }
-                        if (status == 'approved') { statusAr = 'مقبول / جاري العمل'; statusColor = Colors.indigo; }
-                        if (status == 'rejected') { statusAr = 'مرفوض'; statusColor = Colors.red; }
-                        if (status == 'completed') { statusAr = 'مكتمل'; statusColor = Colors.green; }
+                        final statusData = ZyiarahStatus.getMaintenanceStatus(status);
+                        String statusAr = statusData['text'];
+                        Color statusColor = statusData['color'];
 
                         return Card(
                            elevation: 2,

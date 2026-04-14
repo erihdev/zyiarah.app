@@ -7,6 +7,7 @@ import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/order_tracking_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/widgets/shimmer_loading.dart';
+import 'package:zyiarah/utils/status_util.dart';
 
 class OrdersListScreen extends StatefulWidget {
   const OrdersListScreen({super.key});
@@ -155,19 +156,9 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     final requestId = data['requestId'] ?? '-';
     final quotePrice = (data['quotePrice'] ?? 0.0).toDouble();
     
-    Color statusColor = Colors.orange;
-    String statusText = "تحت المراجعة";
-
-    if (status == 'waiting_payment') {
-       statusColor = Colors.blue;
-       statusText = "بانتظار الدفع";
-    } else if (status == 'approved' || status == 'paid' || status == 'completed') {
-       statusColor = Colors.green;
-       statusText = "مقبول / جاري العمل";
-    } else if (status == 'rejected') {
-       statusColor = Colors.red;
-       statusText = "مرفوض";
-    }
+    final statusData = ZyiarahStatus.getMaintenanceStatus(status);
+    final statusColor = statusData['color'];
+    final statusText = statusData['text'];
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -262,15 +253,9 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     final createdAt = (order['created_at'] as Timestamp?)?.toDate() ?? DateTime.now();
     final dateStr = intl.DateFormat('yyyy/MM/dd HH:mm').format(createdAt);
     
-    Color statusColor = Colors.orange;
-    String statusText = "قيد الانتظار";
-    if (status == 'completed') {
-      statusColor = Colors.green;
-      statusText = "مكتمل";
-    } else if (status == 'in_progress' || status == 'accepted' || status == 'arrived') {
-      statusColor = Colors.blue;
-      statusText = "جاري التنفيذ";
-    }
+    final statusData = ZyiarahStatus.getOrderStatus(status);
+    final statusColor = statusData['color'];
+    final statusText = statusData['text'];
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -356,17 +341,9 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
   }
 
   Widget _buildProgressStepper(String status) {
-    int currentStep = 0;
+    final statusData = ZyiarahStatus.getMaintenanceStatus(status);
+    int currentStep = statusData['step'];
     bool isRejected = status == 'rejected';
-    
-    // Status Mapping
-    if (status == 'waiting_payment') {
-      currentStep = 1;
-    } else if (status == 'approved' || status == 'paid' || status == 'in_progress') {
-      currentStep = 2;
-    } else if (status == 'completed') {
-      currentStep = 3;
-    }
 
     final steps = [
       {'label': 'مراجعة', 'icon': Icons.search},

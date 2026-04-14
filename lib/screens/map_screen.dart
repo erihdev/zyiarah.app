@@ -58,7 +58,7 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
             children: [
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.zyiarah.app',
+                userAgentPackageName: 'com.zyiarah.zyiarah',
               ),
               // عرض الخط الواصل بين السائق والعميل (Route)
               if (driverLatLng != null)

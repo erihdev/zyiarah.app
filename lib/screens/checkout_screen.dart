@@ -67,23 +67,33 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                   'totalAmountPaid': widget.amount,
                 });
               } else {
-                // إنشاء طلب خدمة جديد
-                newOrderId = await _orderService.createOrder(
-                  clientId: FirebaseAuth.instance.currentUser?.uid ?? "guest_client", 
-                  serviceType: widget.serviceType,
-                  amount: widget.amount,
-                  location: widget.location,
-                  paymentMethod: 'tamara',
-                  hours: widget.hours,
-                  serviceDate: widget.serviceDate,
-                  zoneName: widget.zoneName,
-                  workerCount: widget.workerCount,
-                  couponCode: widget.couponCode,
-                  discountAmount: widget.discountAmount,
-                );
+                // إنشاء طلب خدمة جديد بهوية محددة مسبقاً
+                await FirebaseFirestore.instance.collection('orders').doc(widget.orderId).set({
+                  'client_id': FirebaseAuth.instance.currentUser?.uid ?? "guest_client", 
+                  'client_name': 'عميل زيارة',
+                  'service_type': widget.serviceType,
+                  'amount': widget.amount,
+                  'status': 'pending',
+                  'location': widget.location,
+                  'payment_method': 'tamara',
+                  'created_at': FieldValue.serverTimestamp(),
+                  'hours_contracted': widget.hours ?? 4,
+                  'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
+                  'zone_name': widget.zoneName,
+                  'worker_count': widget.workerCount,
+                  'coupon_code': widget.couponCode,
+                  'discount_amount': widget.discountAmount,
+                });
+
+                if (widget.couponCode != null) {
+                   final couponSnap = await FirebaseFirestore.instance.collection('promo_codes').where('code', isEqualTo: widget.couponCode).get();
+                   if (couponSnap.docs.isNotEmpty) {
+                     await couponSnap.docs.first.reference.update({'uses': FieldValue.increment(1)});
+                   }
+                }
               }
 
-              // توليد بيانات ZATCA وتوليد الفاتورة في الخلفية
+              // توليد بيانات ZATCA وتوليد الفاتورة في الخلفية (نظام تشفير قانوني)
               final double vatAmount = widget.amount * 0.15;
               final String qrData = ZatcaService.generateZatcaQrCode(
                 merchantName: "مؤسسة معاذ يحي محمد المالكي",

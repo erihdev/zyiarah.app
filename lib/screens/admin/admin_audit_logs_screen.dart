@@ -176,6 +176,8 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
       case 'CREATE_ZONE': return "إضافة منطقة تغطية";
       case 'UPDATE_ZONE': return "تعديل منطقة تغطية";
       case 'DELETE_ZONE': return "حذف منطقة تغطية";
+      case 'ADMIN_LOGIN_SUCCESS': return "دخول ناجح للوحة الإدارة";
+      case 'ADMIN_LOGIN_FAILED': return "محاولة دخول فاشلة للمسؤول";
       default: return action;
     }
   }
@@ -191,6 +193,8 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
       case 'type': return "النوع";
       case 'phone': return "الجوال";
       case 'status': return "الحالة";
+      case 'staff_role': return "تخصص الإدارة";
+      case 'admin_email': return "بريد المسؤول";
       default: return key;
     }
   }

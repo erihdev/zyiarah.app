@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:zyiarah/screens/admin/admin_order_details_screen.dart';
 import 'package:zyiarah/widgets/zyiarah_shimmer.dart';
 import 'package:zyiarah/utils/csv_export_util.dart';
+import 'package:zyiarah/utils/status_util.dart';
 
 
 class AdminOrdersScreen extends StatefulWidget {
@@ -18,25 +19,11 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   Color _getStatusColor(String status) {
-    switch (status) {
-      case 'pending': return Colors.orange;
-      case 'assigned': return Colors.blue;
-      case 'in_progress': return Colors.purple;
-      case 'completed': return Colors.green;
-      case 'cancelled': return Colors.red;
-      default: return Colors.grey;
-    }
+    return ZyiarahStatus.getOrderStatus(status)['color'];
   }
 
   String _getStatusText(String status) {
-    switch (status) {
-      case 'pending': return 'قيد الانتظار';
-      case 'assigned': return 'تم التعيين';
-      case 'in_progress': return 'جاري التنفيذ';
-      case 'completed': return 'مكتمل';
-      case 'cancelled': return 'ملغي';
-      default: return status;
-    }
+    return ZyiarahStatus.getOrderStatus(status)['text'];
   }
 
   @override

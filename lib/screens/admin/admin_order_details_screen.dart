@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/services/notification_trigger_service.dart';
+import 'package:zyiarah/utils/status_util.dart';
 
 class AdminOrderDetailsScreen extends StatefulWidget {
   final String orderId;
@@ -29,14 +30,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   final List<String> _statuses = ['pending', 'assigned', 'in_progress', 'completed', 'cancelled'];
   
   String _getStatusText(String status) {
-    switch (status) {
-      case 'pending': return 'قيد الانتظار';
-      case 'assigned': return 'تم التعيين لسائق / عامل';
-      case 'in_progress': return 'جاري التنفيذ';
-      case 'completed': return 'مكتمل';
-      case 'cancelled': return 'ملغي';
-      default: return status;
-    }
+    return ZyiarahStatus.getOrderStatus(status)['text'];
   }
 
   @override

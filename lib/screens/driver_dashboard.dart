@@ -448,7 +448,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
         child: FlutterMap(
           options: MapOptions(initialCenter: driverLatLng, initialZoom: 13.0, interactionOptions: const InteractionOptions(flags: InteractiveFlag.none)),
           children: [
-            TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.zyiarah.app'),
+            TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.zyiarah.zyiarah'),
             MarkerLayer(markers: [
               Marker(point: driverLatLng, width: 30, height: 30, child: const Icon(Icons.directions_car, color: Colors.blue, size: 30)),
               Marker(point: clientLatLng, width: 30, height: 30, child: const Icon(Icons.location_on, color: Colors.red, size: 30)),

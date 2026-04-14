@@ -25,10 +25,21 @@ class _AdminMarketingScreenState extends State<AdminMarketingScreen> {
     
     setState(() => _isSending = true);
     try {
+      // 1. تسجيل العملية في سجل الإشعارات
       await FirebaseFirestore.instance.collection('notifications_log').add({
         'title': _titleController.text,
         'body': _bodyController.text,
         'target': 'all',
+        'created_at': FieldValue.serverTimestamp(),
+      });
+
+      // 2. إرسال أمر بربط الإشعار بنظام التنبيهات (Broadcast Trigger)
+      // ملاحظة: نستخدم معرف خاص 'all_users' ليفهمه الـ Cloud Function كبث عام
+      await FirebaseFirestore.instance.collection('notification_triggers').add({
+        'userId': 'broadcast_all',
+        'title': _titleController.text,
+        'body': _bodyController.text,
+        'type': 'marketing_broadcast',
         'created_at': FieldValue.serverTimestamp(),
       });
       if (!mounted) return;

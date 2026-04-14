@@ -18,6 +18,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   late AnimationController _fadeController;
 
   final TextEditingController _maxWorkerCtrl = TextEditingController();
+  final TextEditingController _merchantNameCtrl = TextEditingController();
+  final TextEditingController _vatNumberCtrl = TextEditingController();
   List<int> _selectedHours = [4, 5, 6, 8];
   bool _codEnabled = false;
 
@@ -36,6 +38,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         if (mounted) {
           setState(() {
             _codEnabled = data['cod_enabled'] ?? false;
+            _merchantNameCtrl.text = data['merchant_name'] ?? "مؤسسة معاذ يحي محمد المالكي";
+            _vatNumberCtrl.text = data['vat_number'] ?? "310885360200003";
             _isLoading = false;
           });
           
@@ -78,6 +82,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
     try {
       await _db.collection('system_configs').doc('main_settings').set({
         'cod_enabled': _codEnabled,
+        'merchant_name': _merchantNameCtrl.text.trim(),
+        'vat_number': _vatNumberCtrl.text.trim(),
       }, SetOptions(merge: true));
 
       List<int> validHours = List<int>.from(_selectedHours)..sort();
@@ -218,6 +224,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                             },
                             contentPadding: EdgeInsets.zero,
                           ),
+                          const Divider(),
+                          _buildPremiumField("اسم المنشأة الضريبي (ZATCA)", "الاسم", _merchantNameCtrl, Icons.business_rounded),
+                          const SizedBox(height: 16),
+                          _buildPremiumField("الرقم الضريبي (VAT)", "رقم", _vatNumberCtrl, Icons.account_balance_wallet_rounded),
                         ],
                       ),
 
@@ -365,7 +375,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
           ),
           SizedBox(height: 8),
           Text(
-            "إصدار النظام: 1.0.1+12 (Staging)",
+            "إصدار النظام: 1.2.0+21 (Production-Ready)",
             style: TextStyle(color: Colors.white60, fontSize: 13),
           ),
           Divider(color: Colors.white10, height: 32),

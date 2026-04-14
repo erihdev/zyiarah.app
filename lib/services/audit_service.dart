@@ -57,4 +57,7 @@ class ZyiarahAuditService {
   static const String actionCreateZone = 'CREATE_ZONE';
   static const String actionUpdateZone = 'UPDATE_ZONE';
   static const String actionDeleteZone = 'DELETE_ZONE';
+
+  static const String actionAdminLogin = 'ADMIN_LOGIN_SUCCESS';
+  static const String actionAdminLoginFailed = 'ADMIN_LOGIN_FAILED';
 }

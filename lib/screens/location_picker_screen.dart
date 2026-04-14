@@ -167,6 +167,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                    TileLayer(
                     urlTemplate: 'https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/{z}/{x}/{y}?access_token=$_mapboxToken',
                     additionalOptions: {'accessToken': _mapboxToken},
+                    userAgentPackageName: 'com.zyiarah.zyiarah',
                   ),
                 ],
               ),
