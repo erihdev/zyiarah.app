@@ -174,7 +174,9 @@ class ZyiarahFirebaseService {
       'entity': 'مؤسسة معاذ يحي محمد المالكي',
     });
   }
-
+  // --- استرجاع دور المستخدم وتوجيهه ---
+  Future<String> getUserRole(String uid, {String? phone}) async {
+    try {
       // 1. التحقق أولاً من مجموعة المديرين (UID-based)
       DocumentSnapshot adminDoc = await _db.collection('admins').doc(uid).get();
       if (adminDoc.exists && adminDoc.data() != null) {
@@ -193,7 +195,7 @@ class ZyiarahFirebaseService {
       // 2. إذا لم يوجد، وكان هناك رقم جوال، نتحقق من مجموعة السائقين
       if (phone != null) {
         // تنظيف رقم الجوال (التأكد من الصيغة: 5XXXXXXXX)
-        String cleanPhone = phone.replaceAll(RegExp(r'\D'), ''); // إزالة أي رموز غير أرقام
+        String cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
         
         // التعامل مع مفتاح الدولة والصفريين
         if (cleanPhone.startsWith('966')) {

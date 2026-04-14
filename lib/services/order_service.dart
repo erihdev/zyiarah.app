@@ -123,6 +123,7 @@ class ZyiarahOrderService {
   }
 
   // تحديث حالة الطلب مع إضافة بيانات السائق والمنطق الزمني
+  Future<void> updateOrderStatus(String orderId, String status, {String? driverId}) async {
     // التحقق من الحالة الحالية لمنع التكرار (مثل خصم الزيارات مرتين)
     final docSnap = await _db.collection('orders').doc(orderId).get();
     final currentStatus = docSnap.data()?['status'] as String?;
