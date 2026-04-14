@@ -10,6 +10,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/models/user_model.dart';
 
 import 'package:zyiarah/services/order_service.dart';
+import 'package:zyiarah/services/notification_trigger_service.dart';
+import 'package:zyiarah/services/counter_service.dart';
+import 'package:zyiarah/utils/order_util.dart';
+import 'package:zyiarah/screens/order_success_screen.dart';
 
 class PaymentSummaryScreen extends StatefulWidget {
   final String serviceName;
@@ -45,6 +49,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   String _selectedPaymentMethod = 'card'; // 'card', 'tamara', 'subscription' or 'cod'
   bool _isLoading = false;
   ZyiarahUser? _currentUser;
+  bool _agreeToTerms = false;
 
   final TextEditingController _couponController = TextEditingController();
   double _discountAmount = 0.0;
@@ -114,31 +119,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     }
   }
 
-  Future<void> _showSuccessAnimation() async {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Lottie.network(
-              'https://lottie.host/62ba874f-c760-466d-9781-ca41aeb135f6/K7tps5ZIDf.json',
-              width: 250,
-              height: 250,
-              repeat: false,
-            ),
-            const SizedBox(height: 10),
-            Text('تمت العملية بنجاح', 
-              style: GoogleFonts.tajawal(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-          ],
+  Future<void> _navigateToSuccess(String code) async {
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ZyiarahOrderSuccessScreen(
+          orderCode: code,
         ),
       ),
     );
-    await Future.delayed(const Duration(seconds: 2));
-    if (mounted) Navigator.pop(context);
   }
 
   void _handlePayment() async {
@@ -148,19 +138,23 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       // Pre-allocate a Firestore ID if this is a new order, or use the maintenance ID
       final String finalOrderId = widget.maintenanceId ?? FirebaseFirestore.instance.collection('orders').doc().id;
       
+      // Generate Smart Sequential Code
+      final seq = await ZyiarahCounterService().getNextOrderNumber();
+      final orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
+
       if (_selectedPaymentMethod == 'subscription') {
         // دفع عبر الاشتراك
         if (widget.maintenanceId != null) {
+          // Fetch existing maintenance code if possible, or use new one
           await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
             'status': 'paid',
             'paymentMethod': 'subscription',
             'paidAt': FieldValue.serverTimestamp(),
           });
         } else {
-          // دفع للخدمات العادية (تنظيف، إلخ) - إنشاء طلب جديد بهوية محددة مسبقاً
+          // دفع للخدمات العادية (تنظيف، إلخ)
           await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
-            'client_id': FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
-            'client_name': _currentUser?.name ?? 'عميل زيارة',
+            'code': orderCode,
             'service_type': widget.serviceName,
             'amount': 0.0,
             'status': 'pending',
@@ -186,23 +180,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         
         if (mounted) {
           setState(() => _isLoading = false);
-          await _showSuccessAnimation();
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ZyiarahInvoiceScreen(
-                amount: 0.0,
-                orderId: finalOrderId.toUpperCase(),
-                hours: widget.hours,
-                serviceDate: widget.serviceDate,
-                isSubscription: true,
-                workerCount: widget.workerCount,
-                couponCode: _appliedCoupon,
-                discountAmount: _discountAmount,
-              ),
-            ),
+          
+          // Trigger Notifications
+          await ZyiarahNotificationTriggerService().notifyOrderCreated(
+            clientId: FirebaseAuth.instance.currentUser?.uid ?? '',
+            orderCode: orderCode,
+            serviceName: widget.serviceName,
+            type: widget.maintenanceId != null ? 'maintenance' : 'cleaning',
           );
+
+          await _navigateToSuccess(orderCode);
         }
       } else if (_selectedPaymentMethod == 'cod') {
         // دفع عند الاستلام
@@ -213,8 +200,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             'paidAt': FieldValue.serverTimestamp(),
           });
         } else {
-          // دفع للخدمات العادية (تنظيف، إلخ) - إنشاء طلب جديد بهوية محددة مسبقاً
+          // دفع للخدمات العادية
           await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
+            'code': orderCode,
             'client_id': FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
             'client_name': _currentUser?.name ?? 'عميل زيارة',
             'service_type': widget.serviceName,
@@ -241,23 +229,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         
         if (mounted) {
           setState(() => _isLoading = false);
-          await _showSuccessAnimation();
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ZyiarahInvoiceScreen(
-                amount: totalWithVat,
-                orderId: finalOrderId.toUpperCase(),
-                hours: widget.hours,
-                serviceDate: widget.serviceDate,
-                isSubscription: false,
-                workerCount: widget.workerCount,
-                couponCode: _appliedCoupon,
-                discountAmount: _discountAmount,
-              ),
-            ),
+          
+          // Trigger Notifications
+          await ZyiarahNotificationTriggerService().notifyOrderCreated(
+            clientId: FirebaseAuth.instance.currentUser?.uid ?? '',
+            orderCode: orderCode,
+            serviceName: widget.serviceName,
+            type: widget.maintenanceId != null ? 'maintenance' : 'cleaning',
           );
+
+          await _navigateToSuccess(orderCode);
         }
       } else if (_selectedPaymentMethod == 'tamara') {
         String? checkoutUrl = await _tamaraService.createCheckoutSession(
@@ -342,22 +323,15 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
           setState(() => _isLoading = false);
           if (mounted) {
-            await _showSuccessAnimation();
-            if (!mounted) return;
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ZyiarahInvoiceScreen(
-                  amount: totalWithVat,
-                  orderId: finalOrderId.toUpperCase(),
-                  hours: widget.hours,
-                  serviceDate: widget.serviceDate,
-                  workerCount: widget.workerCount,
-                  couponCode: _appliedCoupon,
-                  discountAmount: _discountAmount,
-                ),
-              ),
+            // Trigger Notifications
+            await ZyiarahNotificationTriggerService().notifyOrderCreated(
+              clientId: FirebaseAuth.instance.currentUser?.uid ?? '',
+              orderCode: orderCode,
+              serviceName: widget.serviceName,
+              type: widget.maintenanceId != null ? 'maintenance' : 'cleaning',
             );
+
+            await _navigateToSuccess(orderCode);
           }
         } else {
           throw Exception(result['error'] ?? "فشلت عملية الدفع بالبطاقة");
@@ -399,6 +373,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                         _buildCouponSection(),
                         const SizedBox(height: 20),
                         _buildPaymentMethods(),
+                        const SizedBox(height: 25),
+                        _buildTermsAndConditions(),
                         const SizedBox(height: 100), // Space for sticky button
                       ],
                     ),
@@ -692,6 +668,34 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     );
   }
 
+  Widget _buildTermsAndConditions() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _agreeToTerms ? const Color(0xFF2563EB) : Colors.grey.shade200),
+      ),
+      child: CheckboxListTile(
+        value: _agreeToTerms,
+        onChanged: (val) => setState(() => _agreeToTerms = val ?? false),
+        activeColor: const Color(0xFF2563EB),
+        title: Text(
+          "أوافق على شروط الخدمة وسياسة الخصوصية الخاصة بزيارة",
+          style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold),
+        ),
+        subtitle: InkWell(
+          onTap: () {
+             // Navigation to terms screen could be here
+          },
+          child: Text("اضغط هنا لقراءة التفاصيل", style: GoogleFonts.tajawal(fontSize: 10, color: const Color(0xFF2563EB), decoration: TextDecoration.underline)),
+        ),
+        controlAffinity: ListTileControlAffinity.leading,
+        contentPadding: EdgeInsets.zero,
+      ),
+    );
+  }
+
   Widget _buildBottomButton() {
     return Positioned(
       bottom: 0,
@@ -704,9 +708,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
         ),
         child: ElevatedButton(
-          onPressed: _handlePayment,
+          onPressed: _agreeToTerms ? _handlePayment : null,
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF2563EB),
+            backgroundColor: _agreeToTerms ? const Color(0xFF2563EB) : Colors.grey.shade300,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

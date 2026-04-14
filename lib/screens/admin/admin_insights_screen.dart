@@ -576,6 +576,9 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       case 'UPDATE_SERVICE_PRICE': return 'تحديث الأسعار';
       case 'REGISTER_DRIVER': return 'تسجيل كادر جديد';
       case 'TOGGLE_DRIVER_STATUS': return 'تغيير حالة كادر';
+      case 'CREATE_CLEANING_ORDER': return 'طلب نظافة جديد 🧹';
+      case 'CREATE_STORE_ORDER': return 'طلب متجر جديد 📦';
+      case 'CREATE_MAINTENANCE_REQUEST': return 'طلب صيانة جديد 🛠️';
       default: return raw.replaceAll('_', ' ');
     }
   }

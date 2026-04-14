@@ -3,6 +3,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:zyiarah/utils/order_util.dart';
+import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/services/counter_service.dart';
+import 'package:zyiarah/services/notification_trigger_service.dart';
+import 'package:zyiarah/screens/order_success_screen.dart';
 
 class ZyiarahMaintenanceRequestScreen extends StatefulWidget {
   const ZyiarahMaintenanceRequestScreen({super.key});
@@ -39,17 +44,20 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
       
       // Fetch user name
       String userName = 'عميل زيارة';
+      String userPhone = user?.phoneNumber ?? '000000000';
       try {
         final userDoc = await _firestore.collection('users').doc(user?.uid).get();
         if (userDoc.exists) {
           userName = userDoc.data()?['name'] ?? 'عميل زيارة';
+          userPhone = userDoc.data()?['phone'] ?? userPhone;
         }
       } catch (e) {
         // Fallback
       }
 
-      // Generate unique 5-digit ID
-      final requestId = (10000 + (90000 * (DateTime.now().microsecondsSinceEpoch % 1000000) / 1000000)).toInt().toString();
+      // Generate Smart Sequential Code
+      final seq = await ZyiarahCounterService().getNextOrderNumber();
+      final orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
 
       final scheduledDateTime = DateTime(
         _selectedDate.year, _selectedDate.month, _selectedDate.day,
@@ -57,10 +65,11 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
       );
 
       await _firestore.collection('maintenance_requests').add({
-        'requestId': requestId,
+        'requestId': orderCode,
+        'code': orderCode,
         'userId': user?.uid,
         'userName': userName,
-        'userPhone': user?.phoneNumber,
+        'userPhone': userPhone,
         'serviceType': _selectedService,
         'quantity': _quantity,
         'floor': _selectedFloor,
@@ -69,18 +78,34 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
         'createdAt': FieldValue.serverTimestamp(),
       });
 
+      // Audit Log
+      ZyiarahAuditService().logAction(
+        action: 'CREATE_MAINTENANCE_REQUEST',
+        details: {
+          'code': orderCode,
+          'user': userName,
+          'service': _selectedService,
+        },
+        targetId: user?.uid,
+      );
+
       if (mounted) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('تم إرسال الطلب'),
-            content: Text('طلبك رقم #$requestId قيد المراجعة الآن. سنقوم بإبلاغك فور قبوله لإتمام عملية الدفع.'),
-            actions: [
-              TextButton(onPressed: () {
-                Navigator.pop(ctx);
-                Navigator.pop(context);
-              }, child: const Text('حسناً'))
-            ],
+        // Trigger Notifications
+        await ZyiarahNotificationTriggerService().notifyOrderCreated(
+          clientId: user?.uid ?? '',
+          orderCode: orderCode,
+          serviceName: _selectedService ?? 'صيانة',
+          type: 'maintenance',
+        );
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ZyiarahOrderSuccessScreen(
+              orderCode: orderCode,
+              title: "تم استلام طلب الصيانة!",
+              subtitle: "طلبك قيد المراجعة حالياً. سنقوم بتسعير الخدمة وإرسال عرض سعر لك فوراً للبدء.",
+            ),
           ),
         );
       }

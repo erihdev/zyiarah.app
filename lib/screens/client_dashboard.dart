@@ -21,6 +21,11 @@ import 'package:zyiarah/screens/subscription_plans_screen.dart';
 import 'package:zyiarah/screens/maintenance_request_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
 import 'package:zyiarah/services/maintenance_listener_service.dart';
+import 'package:zyiarah/widgets/permission_sheet.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:zyiarah/services/location_service.dart';
+import 'package:zyiarah/services/notification_service.dart';
 
 class ClientDashboard extends StatefulWidget {
   const ClientDashboard({super.key});
@@ -40,7 +45,50 @@ class _ClientDashboardState extends State<ClientDashboard> {
     MaintenanceListenerService().startListening();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ZyiarahPopupService.checkAndShowPopup(context);
+      _checkAndRequestPermissions();
     });
+  }
+
+  Future<void> _checkAndRequestPermissions() async {
+    // 1. تفعيل الموقع (Location)
+    LocationPermission locationPermission = await Geolocator.checkPermission();
+    if (locationPermission == LocationPermission.denied && mounted) {
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => ZyiarahPermissionSheet(
+          title: "تفعيل الموقع لتحسين الخدمة 📍",
+          description: "نحتاج للوصول إلى موقعك لتسهيل وصول العاملات وتحديد وجهة التوصيل بدقة.",
+          icon: Icons.location_on_rounded,
+          color: const Color(0xFF10B981),
+          buttonText: "تفعيل الموقع الآن",
+          onAction: () async {
+            await ZyiarahLocationService().requestPermission();
+          },
+        ),
+      );
+    }
+
+    // 2. تفعيل الإشعارات (Notifications)
+    NotificationSettings settings = await FirebaseMessaging.instance.getNotificationSettings();
+    if (settings.authorizationStatus != AuthorizationStatus.authorized && mounted) {
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => ZyiarahPermissionSheet(
+          title: "فعل التنبيهات لمتابعة طلبك 🔔",
+          description: "سنقوم بإخطارك فور وصول العاملة، وعند تحديث حالة طلباتك من المتجر أو الصيانة.",
+          icon: Icons.notifications_active_rounded,
+          color: const Color(0xFF2563EB),
+          buttonText: "تفعيل التنبيهات الآن",
+          onAction: () async {
+            await ZyiarahNotificationService().initialize();
+          },
+        ),
+      );
+    }
   }
 
   Stream<DocumentSnapshot> _getUserStream() {
@@ -629,12 +677,13 @@ class _ClientDashboardState extends State<ClientDashboard> {
         ),
         _buildWebStyleServiceCard(
           title: "متجر المنظفات",
-          subtitle: "سويفت كلين",
+          subtitle: "أدوات احترافية",
           price: "عروض حصرية",
           numericPrice: 0.0,
           themeColor: const Color(0xFF5D1B5E),
           icon: Icons.storefront,
           iconBgColor: const Color(0xFFFCEEFA),
+          imagePath: 'assets/images/store.png',
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahStoreScreen())),
         ),
       ],

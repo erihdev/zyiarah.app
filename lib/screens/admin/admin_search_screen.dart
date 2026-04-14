@@ -16,6 +16,7 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
   
   List<DocumentSnapshot> _orderResults = [];
   List<DocumentSnapshot> _storeResults = [];
+  List<DocumentSnapshot> _maintenanceResults = [];
   List<DocumentSnapshot> _userResults = [];
   List<DocumentSnapshot> _productResults = [];
   List<DocumentSnapshot> _driverResults = [];
@@ -24,7 +25,7 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
   }
 
   @override
@@ -50,25 +51,28 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
     try {
       // Parallel searches
       final results = await Future.wait([
-        // 1. Regular Orders
-        db.collection('orders').where('code', isGreaterThanOrEqualTo: qUpper).where('code', isLessThanOrEqualTo: '$qUpper\uf8ff').limit(10).get(),
-        // 2. Store Orders
-        db.collection('store_orders').orderBy('created_at', descending: true).limit(20).get(), // Basic retrieval for now as it lacks code-based search usually
-        // 3. Users
-        db.collection('users').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(10).get(),
-        // 4. Products
-        db.collection('products').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(10).get(),
-        // 5. Drivers
-        db.collection('drivers').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(10).get(),
+        // 1. Regular Orders (Cleaning/Services) - Search by Code
+        db.collection('orders').where('code', isGreaterThanOrEqualTo: qUpper).where('code', isLessThanOrEqualTo: '$qUpper\uf8ff').limit(15).get(),
+        // 2. Store Orders - Search by Code
+        db.collection('store_orders').where('code', isGreaterThanOrEqualTo: qUpper).where('code', isLessThanOrEqualTo: '$qUpper\uf8ff').limit(15).get(),
+        // 3. Maintenance Requests - Search by Code
+        db.collection('maintenance_requests').where('code', isGreaterThanOrEqualTo: qUpper).where('code', isLessThanOrEqualTo: '$qUpper\uf8ff').limit(15).get(),
+        // 4. Users - Search by Name
+        db.collection('users').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(15).get(),
+        // 5. Products - Search by Name
+        db.collection('products').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(15).get(),
+        // 6. Drivers - Search by Name
+        db.collection('drivers').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(15).get(),
       ]);
 
       if (mounted) {
         setState(() {
           _orderResults = results[0].docs;
-          _storeResults = results[1].docs; // Note: Filtering store orders locally if needed
-          _userResults = results[2].docs;
-          _productResults = results[3].docs;
-          _driverResults = results[4].docs;
+          _storeResults = results[1].docs;
+          _maintenanceResults = results[2].docs;
+          _userResults = results[3].docs;
+          _productResults = results[4].docs;
+          _driverResults = results[5].docs;
           _isSearching = false;
         });
       }
@@ -110,8 +114,9 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
             labelStyle: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 11),
             isScrollable: true,
             tabs: const [
-              Tab(text: "الطلبات"),
+              Tab(text: "الخدمات"),
               Tab(text: "المتجر"),
+              Tab(text: "الصيانة"),
               Tab(text: "العملاء"),
               Tab(text: "المنتجات"),
               Tab(text: "الكوادر"),
@@ -125,6 +130,7 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
               children: [
                 _buildResultsList(_orderResults, 'order'),
                 _buildResultsList(_storeResults, 'store_order'),
+                _buildResultsList(_maintenanceResults, 'maintenance'),
                 _buildResultsList(_userResults, 'user'),
                 _buildResultsList(_productResults, 'product'),
                 _buildResultsList(_driverResults, 'driver'),
@@ -170,10 +176,16 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
         color = Colors.blue;
         break;
       case 'store_order':
-        title = "طلب متجر #${doc.id.substring(0, 6)}";
-        subtitle = "الإجمالي: ${data['total_price']} ر.س - الحالة: ${data['status']}";
+        title = "طلب متجر #${data['code'] ?? doc.id.substring(0, 6)}";
+        subtitle = "الإجمالي: ${data['total_amount']} ر.س - الحالة: ${data['status']}";
         icon = Icons.shopping_basket_rounded;
         color = Colors.teal;
+        break;
+      case 'maintenance':
+        title = data['serviceType'] ?? 'طلب صيانة';
+        subtitle = "رقم: #${data['code'] ?? doc.id.substring(0, 5)} - العميل: ${data['userName']}";
+        icon = Icons.plumbing_rounded;
+        color = Colors.orange;
         break;
       case 'user':
         title = data['name'] ?? 'عميل';
@@ -205,6 +217,10 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
       child: ListTile(
         onTap: () {
           if (type == 'order') Navigator.push(context, MaterialPageRoute(builder: (_) => AdminOrderDetailsScreen(orderId: doc.id)));
+          else if (type == 'maintenance') {
+             // Future: AdminMaintenanceDetailsScreen
+             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("طلب صيانة: $title")));
+          }
           else ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("ملف: $title")));
         },
         leading: CircleAvatar(backgroundColor: color.withValues(alpha: 0.1), child: Icon(icon, color: color, size: 18)),

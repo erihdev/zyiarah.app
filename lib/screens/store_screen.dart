@@ -4,6 +4,9 @@ import 'package:zyiarah/widgets/shimmer_loading.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:lottie/lottie.dart';
+import 'package:zyiarah/screens/order_success_screen.dart';
+import 'package:zyiarah/services/notification_trigger_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ZyiarahStoreScreen extends StatefulWidget {
   const ZyiarahStoreScreen({super.key});
@@ -243,6 +246,7 @@ class _CartSheet extends StatefulWidget {
 class _CartSheetState extends State<_CartSheet> {
   bool _isSubmitting = false;
   String _selectedPaymentMethod = 'cash_on_delivery';
+  bool _agreeToTerms = false;
 
 
   void _checkout(List<StoreProduct> products) async {
@@ -260,15 +264,36 @@ class _CartSheetState extends State<_CartSheet> {
 
     double total = items.fold(0, (sum, item) => sum + (item['price'] as double) * (item['quantity'] as int));
 
-    await widget.storeService.createStoreOrder(
+    final orderCode = await widget.storeService.createStoreOrder(
       items: items, 
       totalAmount: total,
       paymentMethod: _selectedPaymentMethod,
     );
     
     if (mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرسال طلبك للإدارة بنجاح!')));
+      setState(() => _isSubmitting = false);
+      
+      // Trigger Notifications
+      await ZyiarahNotificationTriggerService().notifyOrderCreated(
+        clientId: FirebaseAuth.instance.currentUser?.uid ?? '',
+        orderCode: orderCode,
+        serviceName: 'طلب منتجات من المتجر',
+        type: 'store',
+      );
+
+      Navigator.pop(context); // Close cart sheet
+      
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ZyiarahOrderSuccessScreen(
+            orderCode: orderCode,
+            title: "تم استلام طلب المتجر!",
+            subtitle: "لقد وصل طلبك للإدارة، سنقوم بتجهيز منتجاتك والتواصل معك فوراً.",
+          ),
+        ),
+      );
+      
       widget.cart.clear();
     }
   }
@@ -364,19 +389,44 @@ class _CartSheetState extends State<_CartSheet> {
                     contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   ),
                 ),
+                const SizedBox(height: 15),
+                _buildTermsAndConditions(),
                 const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
                   height: 55,
                   child: ElevatedButton(
-                    onPressed: _isSubmitting ? null : () => _checkout(snapshot.data!),
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E), foregroundColor: Colors.white),
+                    onPressed: (_isSubmitting || !_agreeToTerms) ? null : () => _checkout(snapshot.data!),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _agreeToTerms ? const Color(0xFF5D1B5E) : Colors.grey.shade300,
+                      foregroundColor: Colors.white,
+                    ),
                     child: _isSubmitting ? const CircularProgressIndicator(color: Colors.white) : const Text('إرسال طلب لبموافقة الإدارة'),
                   ),
                 ),
               ],
             );
           },
+      ),
+    );
+  }
+
+  Widget _buildTermsAndConditions() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _agreeToTerms ? const Color(0xFF2563EB) : Colors.grey.shade200),
+      ),
+      child: CheckboxListTile(
+        value: _agreeToTerms,
+        onChanged: (val) => setState(() => _agreeToTerms = val ?? false),
+        activeColor: const Color(0xFF2563EB),
+        title: Text(
+          "أوافق على شروط المتجر وسياسة الخصوصية",
+          style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold),
+        ),
+        controlAffinity: ListTileControlAffinity.leading,
+        contentPadding: EdgeInsets.zero,
       ),
     );
   }

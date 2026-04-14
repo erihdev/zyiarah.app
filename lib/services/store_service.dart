@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zyiarah/utils/order_util.dart';
+import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/services/counter_service.dart';
 
 class StoreProduct {
   final String id;
@@ -61,7 +64,7 @@ class ZyiarahStoreService {
             .toList());
   }
 
-  Future<void> createStoreOrder({
+  Future<String> createStoreOrder({
     required List<Map<String, dynamic>> items,
     required double totalAmount,
     String paymentMethod = 'cash_on_delivery',
@@ -70,24 +73,46 @@ class ZyiarahStoreService {
     if (user == null) return;
 
     String clientName = 'عميل زيارة';
+    String clientPhone = '000000000';
     try {
       final userDoc = await _db.collection('users').doc(user.uid).get();
       if (userDoc.exists) {
         clientName = userDoc.data()?['name'] ?? 'عميل زيارة';
+        clientPhone = userDoc.data()?['phone'] ?? '000000000';
       }
     } catch (e) {
-      // Fallback to anonymous
+      // Fallback
     }
 
-    await _db.collection('store_orders').add({
+    // Generate Smart Sequential Code
+    final seq = await ZyiarahCounterService().getNextOrderNumber();
+    final orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
+
+    final docRef = await _db.collection('store_orders').add({
+      'code': orderCode,
       'client_id': user.uid,
       'client_name': clientName,
+      'client_phone': clientPhone,
       'items': items,
       'total_amount': totalAmount,
       'payment_method': paymentMethod,
       'status': 'pending',
       'created_at': FieldValue.serverTimestamp(),
     });
+
+    // Audit Log
+    ZyiarahAuditService().logAction(
+      action: 'CREATE_STORE_ORDER',
+      details: {
+        'code': orderCode,
+        'amount': totalAmount,
+        'client': clientName,
+        'item_count': items.length,
+      },
+      targetId: docRef.id,
+    );
+
+    return orderCode;
   }
 
   // Seeding method to be called once or by admin
@@ -106,7 +131,7 @@ class ZyiarahStoreService {
     for (var p in initialProducts) {
       await _db.collection('products').add({
         ...p,
-        'description': 'منتج عالي الجودة من شركة Swift Clean',
+        'description': 'منتج عالي الجودة من زيارة للتنظيف الذكي',
         'is_hidden': false,
         'created_at': FieldValue.serverTimestamp(),
       });

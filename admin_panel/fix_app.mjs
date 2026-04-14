@@ -16,7 +16,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 const fixRoles = async () => {
-    const emails = ['admin@zyiarah.com', 'difmashni@gmail.com'];
+    const emails = ['admin@zyiarah.com'];
     for (const email of emails) {
         try {
             console.log(`Checking auth for ${email}...`);

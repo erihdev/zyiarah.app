@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:zyiarah/utils/order_util.dart';
+import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/services/counter_service.dart';
 
 /// خدمة إدارة دورة حياة الطلب - تطبيق زيارة
 class ZyiarahOrderService {
@@ -21,19 +24,28 @@ class ZyiarahOrderService {
   }) async {
     // جلب اسم العميل لتسهيل العرض في لوحة التحكم
     String clientName = 'عميل زيارة';
+    String clientPhone = '000000000';
     try {
       final userDoc = await _db.collection('users').doc(clientId).get();
       if (userDoc.exists) {
         clientName = userDoc.data()?['name'] ?? 'عميل زيارة';
+        clientPhone = userDoc.data()?['phone'] ?? '000000000';
       }
     } catch (e) {
-      debugPrint('Error fetching user name: $e');
+      debugPrint('Error fetching user data: $e');
     }
 
+    // Generate Smart Sequential Code
+    final seq = await ZyiarahCounterService().getNextOrderNumber();
+    final orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
+
     DocumentReference doc = await _db.collection('orders').add({
+      'code': orderCode,
       'client_id': clientId,
       'client_name': clientName,
+      'client_phone': clientPhone,
       'service_type': serviceType,
+      'service_name': serviceType, // Ensuring service_name is present for UI consistency
       'amount': amount,
       'status': 'pending',
       'location': location,
@@ -47,12 +59,24 @@ class ZyiarahOrderService {
       'discount_amount': discountAmount,
     });
 
+    // Log the order creation in audit trail
+    ZyiarahAuditService().logAction(
+      action: 'CREATE_CLEANING_ORDER',
+      details: {
+        'code': orderCode,
+        'amount': amount,
+        'client': clientName,
+        'service': serviceType,
+      },
+      targetId: doc.id,
+    );
+
     // إذا كان هناك كود خصم، نحدث عدد مرات استخدامه
     if (couponCode != null) {
       await _incrementCouponUsage(couponCode);
     }
 
-    return doc.id;
+    return orderCode;
   }
 
   // التحقق من كود الخصم

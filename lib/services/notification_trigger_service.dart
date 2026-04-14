@@ -67,4 +67,30 @@ class ZyiarahNotificationTriggerService {
       },
     );
   }
+
+  /// يرسل تنبيه مزدوج (للعميل وللإدارة) عند إنشاء طلب جديد
+  Future<void> notifyOrderCreated({
+    required String clientId,
+    required String orderCode,
+    required String type, // 'cleaning', 'store', 'maintenance'
+    required String serviceName,
+  }) async {
+    // 1. تنبيه العميل
+    await triggerNotification(
+      toUid: clientId,
+      title: "تم استلام طلبك بنجاح! 🎉",
+      body: "طلبك رقم #$orderCode ($serviceName) قيد التنفيذ الآن. شكراً لاختيارك زيارة.",
+      type: 'order_update',
+      data: {'code': orderCode, 'type': type},
+    );
+
+    // 2. تنبيه الإدارة (سيتم معالجتها في الـ Cloud Function لإرسالها لجميع المشرفين)
+    await triggerNotification(
+      toUid: 'ADMIN_BROADCAST', // معرف خاص تلتقطه الـ Cloud Function
+      title: "طلب جديد وارد 🔔",
+      body: "وصل طلب $serviceName جديد برقم #$orderCode. اضغط للمراجعة.",
+      type: 'admin_order_alert',
+      data: {'code': orderCode, 'type': type},
+    );
+  }
 }
