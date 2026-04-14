@@ -9,6 +9,7 @@ import 'package:zyiarah/screens/admin/admin_insights_screen.dart';
 import 'package:zyiarah/screens/onboarding_screen.dart';
 import 'package:lottie/lottie.dart';
 import 'package:zyiarah/utils/zyiarah_strings.dart';
+import 'package:zyiarah/services/firebase_service.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
