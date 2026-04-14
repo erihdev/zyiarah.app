@@ -16,6 +16,7 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
   final _db = FirebaseFirestore.instance;
   final ZyiarahFirebaseService _firebase = ZyiarahFirebaseService();
   final ZyiarahAuditService _audit = ZyiarahAuditService();
+  String _searchQuery = "";
 
   void _showManagerDialog({String? docId, Map<String, dynamic>? currentData}) {
     final TextEditingController nameCtrl = TextEditingController(text: currentData?['name'] ?? '');
@@ -42,10 +43,14 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
               title: Row(
                 children: [
-                   Icon(docId == null ? Icons.person_add_rounded : Icons.edit_note_rounded, color: const Color(0xFF1E293B)),
-                   const SizedBox(width: 10),
+                   Container(
+                     padding: const EdgeInsets.all(8),
+                     decoration: BoxDecoration(color: const Color(0xFF1E293B).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+                     child: Icon(docId == null ? Icons.person_add_rounded : Icons.edit_note_rounded, color: const Color(0xFF1E293B), size: 24),
+                   ),
+                   const SizedBox(width: 12),
                    Text(
-                     docId == null ? "إضافة كادر جديد" : "تعديل بيانات المنسوب", 
+                     docId == null ? "إضافة كادر جديد" : "تعديل بيانات مصلحي", 
                      style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)
                    ),
                 ],
@@ -59,13 +64,15 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                         padding: EdgeInsets.only(bottom: 20),
                         child: LinearProgressIndicator(color: Color(0xFF1E293B), backgroundColor: Color(0xFFF1F5F9)),
                       ),
+                    
                     TextField(
                       controller: nameCtrl,
                       enabled: !isSaving,
                       decoration: InputDecoration(
                         labelText: "الاسم الكامل", 
+                        hintText: "أدخل الاسم الرباعي",
                         prefixIcon: const Icon(Icons.person_outline),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))
                       ),
                     ),
                     const SizedBox(height: 15),
@@ -74,10 +81,10 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                       keyboardType: TextInputType.emailAddress,
                       enabled: !isSaving,
                       decoration: InputDecoration(
-                        labelText: "البريد الإلكتروني للعمل", 
+                        labelText: "البريد الإلكتروني", 
                         prefixIcon: const Icon(Icons.alternate_email_rounded),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        helperText: "سيتم استخدامه كاسم مستخدم لتسجيل الدخول",
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                        helperText: "سيستخدم لتسجيل دخول الموظف",
                         helperStyle: const TextStyle(fontSize: 10)
                       ),
                     ),
@@ -89,14 +96,13 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                       decoration: InputDecoration(
                         labelText: "كلمة المرور", 
                         prefixIcon: const Icon(Icons.lock_outline),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        helperText: docId != null ? "اتركها فارغة لعدم التغيير" : "كلمة المرور المطلوبة للدخول",
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                        helperText: docId != null ? "اتركها فارغة لعدم التغيير" : "كلمة المرور الافتتاحية",
                         helperStyle: const TextStyle(fontSize: 10)
                       ),
                     ),
                     const SizedBox(height: 15),
                     DropdownButtonFormField<String>(
-                      // ignore: deprecated_member_use
                       value: role,
                       items: roles.map((r) => DropdownMenuItem(value: r['value'], child: Text(r['label']!, style: const TextStyle(fontSize: 13)))).toList(),
                       onChanged: isSaving ? null : (val) {
@@ -105,17 +111,17 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                       decoration: InputDecoration(
                         labelText: "مستوى الصلاحيات", 
                         prefixIcon: const Icon(Icons.admin_panel_settings_outlined),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))
                       ),
                     ),
                   ],
                 ),
               ),
-              actionsPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+              actionsPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
               actions: [
                 TextButton(
                   onPressed: isSaving ? null : () => Navigator.pop(ctx),
-                  child: const Text("إلغاء", style: TextStyle(color: Colors.grey)),
+                  child: const Text("إلغاء", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
                 ),
                 const Spacer(),
                 if (docId != null) 
@@ -123,13 +129,21 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                     onPressed: isSaving ? null : () async {
                       bool? confirm = await showDialog<bool>(
                         context: context,
-                        builder: (c) => AlertDialog(
-                          title: const Text("تأكيد الحذف"),
-                          content: const Text("هل أنت متأكد من سحب كافة صلاحيات هذا المنسوب وحذف حسابه؟"),
-                          actions: [
-                            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text("تراجع")),
-                            TextButton(onPressed: () => Navigator.pop(c, true), child: const Text("حذف نهائياً", style: TextStyle(color: Colors.red))),
-                          ],
+                        builder: (c) => Directionality(
+                          textDirection: TextDirection.rtl,
+                          child: AlertDialog(
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            title: const Text("تأكيد الحذف", style: TextStyle(fontWeight: FontWeight.bold)),
+                            content: const Text("هل أنت متأكد من سحب كافة صلاحيات هذا المنسوب وحذف حسابه نهائياً؟"),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(c, false), child: const Text("تراجع")),
+                              TextButton(
+                                onPressed: () => Navigator.pop(c, true), 
+                                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                child: const Text("حذف نهائياً", style: TextStyle(fontWeight: FontWeight.bold))
+                              ),
+                            ],
+                          ),
                         )
                       );
                       if (confirm != true) return;
@@ -145,7 +159,7 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                         if (ctx.mounted) Navigator.pop(ctx);
                       } catch (e) {
                          setDialogState(() => isSaving = false);
-                         if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ في الحذف الجذري: $e")));
+                         if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text("خطأ في الحذف: $e")));
                       }
                     },
                     icon: Icon(Icons.delete_forever_rounded, color: isSaving ? Colors.grey : Colors.red),
@@ -153,12 +167,12 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1E293B),
-                    padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                    padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))
                   ),
                   onPressed: isSaving ? null : () async {
                     if (nameCtrl.text.isEmpty || emailCtrl.text.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى إكمال البيانات الأساسية")));
+                      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text("يرجى إكمال البيانات الأساسية")));
                       return;
                     }
                     
@@ -168,19 +182,17 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                       final email = emailCtrl.text.trim().toLowerCase();
                       
                       if (docId == null) {
-                        // حالة الإضافة الجديدة: إنشاء حساب حقيقي في Firebase Auth + Firestore
                         await _firebase.createAccountViaAdmin(
                           name: nameCtrl.text.trim(),
-                          phone: "000000000", // Default for staff, can be updated later
+                          phone: "000000000",
                           email: email,
-                          role: 'admin', // General role in users collection
+                          role: 'admin',
                           isActive: true,
                           extraData: {
-                            'staff_role': role, // Specific admin permission level
+                            'staff_role': role,
                           }
                         );
                       } else {
-                        // حالة التعديل: تحديث البيانات في Firestore فقط (UID-based)
                         final updates = {
                           'name': nameCtrl.text.trim(),
                           'role': 'admin',
@@ -203,16 +215,14 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                       
                       if (ctx.mounted) {
                         Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم تحديث بيانات المنسوب بنجاح ✅")));
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم تنفيذ العملية بنجاح ✅")));
                       }
                     } catch (e) {
                       setDialogState(() => isSaving = false);
-                      if (ctx.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("حدث خطأ جذري: $e")));
-                      }
+                      if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text("حدث خطأ: $e")));
                     }
                   },
-                  child: Text(isSaving ? "جاري الحفظ..." : "حفظ البيانات", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: Text(isSaving ? "جاري الحفظ..." : "حفظ الموظف", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -227,19 +237,31 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF1F5F9),
+        backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: Text(ZyiarahStrings.unifiedStaffManagement, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
           backgroundColor: const Color(0xFF1E293B),
           foregroundColor: Colors.white,
           elevation: 0,
+          actions: [
+             IconButton(
+               icon: const Icon(Icons.search_rounded),
+               onPressed: () {
+                 showSearch(
+                   context: context,
+                   delegate: StaffSearchDelegate(onSelect: (doc) => _showManagerDialog(docId: doc.id, currentData: doc.data() as Map<String, dynamic>)),
+                 );
+               },
+             ),
+             const SizedBox(width: 10),
+          ],
         ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => _showManagerDialog(),
           backgroundColor: const Color(0xFF1E293B),
           foregroundColor: Colors.white,
           icon: const Icon(Icons.person_add_alt_1_rounded),
-          label: Text("إضافة منسوب", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+          label: Text("إضافة منسوب", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13)),
         ),
         body: StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance.collection('admins').snapshots(),
@@ -250,71 +272,83 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.people_outline_rounded, size: 64, color: Colors.grey.shade400),
+                    Icon(Icons.people_outline_rounded, size: 80, color: Colors.grey.shade300),
                     const SizedBox(height: 16),
-                    Text("لا يوجد منسوبين مسجلين حالياً", style: GoogleFonts.tajawal(color: Colors.grey)),
+                    Text("لا يوجد منسوبين مسجلين", style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 16)),
                   ],
                 ),
               );
             }
 
-            return ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: snapshot.data!.docs.length,
-              itemBuilder: (context, index) {
-                final doc = snapshot.data!.docs[index];
-                final admin = doc.data() as Map<String, dynamic>;
-                final bool isActive = admin['is_active'] ?? true;
+            return ListWheelScrollView.useDelegate(
+              itemExtent: 110,
+              physics: const FixedExtentScrollPhysics(),
+              childDelegate: ListWheelChildBuilderDelegate(
+                childCount: snapshot.data!.docs.length,
+                builder: (context, index) {
+                  final doc = snapshot.data!.docs[index];
+                  final admin = doc.data() as Map<String, dynamic>;
+                  final bool isActive = admin['is_active'] ?? true;
+                  final String role = admin['staff_role'] ?? admin['role'] ?? 'staff';
 
-                return Card(
-                  elevation: 0,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.shade200)),
-                  child: InkWell(
-                    onTap: () => _showManagerDialog(docId: doc.id, currentData: admin),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          radius: 25,
-                          backgroundColor: _getRoleColor(admin['staff_role'] ?? admin['role']).withValues(alpha: 0.1),
-                          child: Icon(_getRoleIcon(admin['staff_role'] ?? admin['role']), color: _getRoleColor(admin['staff_role'] ?? admin['role'])),
-                        ),
-                        title: Text(admin['name'] ?? 'منسوب جديد', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(admin['email'] ?? '', style: const TextStyle(fontSize: 12)),
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(color: _getRoleColor(admin['staff_role'] ?? admin['role']).withValues(alpha: 0.05), borderRadius: BorderRadius.circular(6)),
-                              child: Text(_getRoleLabel(admin['staff_role'] ?? admin['role']), style: TextStyle(fontSize: 10, color: _getRoleColor(admin['staff_role'] ?? admin['role']), fontWeight: FontWeight.bold)),
-                            ),
-                          ],
-                        ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Transform.scale(
-                              scale: 0.8,
-                              child: Switch(
-                                value: isActive, 
-                                activeThumbColor: const Color(0xFF1E293B),
-                                onChanged: (val) {
-                                  _db.collection('admins').doc(doc.id).update({'is_active': val});
-                                }
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Card(
+                      elevation: 4,
+                      shadowColor: Colors.black.withValues(alpha: 0.1),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      child: InkWell(
+                        onTap: () => _showManagerDialog(docId: doc.id, currentData: admin),
+                        borderRadius: BorderRadius.circular(20),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 28,
+                                backgroundColor: _getRoleColor(role).withValues(alpha: 0.1),
+                                child: Icon(_getRoleIcon(role), color: _getRoleColor(role), size: 28),
                               ),
-                            ),
-                            Text(isActive ? "نشط" : "معطل", style: TextStyle(fontSize: 9, color: isActive ? Colors.green : Colors.red, fontWeight: FontWeight.bold)),
-                          ],
+                              const SizedBox(width: 15),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(admin['name'] ?? 'بدون اسم', style: GoogleFonts.tajawal(fontWeight: FontWeight.w900, fontSize: 15)),
+                                    const SizedBox(height: 4),
+                                    Text(admin['email'] ?? '', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                    const SizedBox(height: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                      decoration: BoxDecoration(color: _getRoleColor(role).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
+                                      child: Text(_getRoleLabel(role), style: TextStyle(fontSize: 9, color: _getRoleColor(role), fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Switch.adaptive(
+                                    value: isActive, 
+                                    activeColor: Colors.green,
+                                    onChanged: (val) {
+                                      _db.collection('admins').doc(doc.id).update({'is_active': val});
+                                      _audit.logAction(action: 'TOGGLE_ADMIN_STATUS', details: {'email': admin['email'], 'new_status': val});
+                                    }
+                                  ),
+                                  Text(isActive ? "نشط" : "معطل", style: TextStyle(fontSize: 9, color: isActive ? Colors.green : Colors.red, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             );
           },
         ),
@@ -344,11 +378,61 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
 
   String _getRoleLabel(String? role) {
     switch (role) {
-      case 'super_admin': return 'إدارة عليا';
-      case 'orders_manager': return 'إدارة عمليات وكوادر';
-      case 'accountant_admin': return 'إدارة مالية';
-      case 'marketing_admin': return 'إدارة تسويق';
-      default: return 'منسوب عام';
+      case 'super_admin': return 'الإدارة العليا';
+      case 'orders_manager': return 'إدارة العمليات';
+      case 'accountant_admin': return 'الإدارة المالية';
+      case 'marketing_admin': return 'إدارة التسويق';
+      default: return 'منسوب منصة';
     }
+  }
+}
+
+class StaffSearchDelegate extends SearchDelegate {
+  final Function(DocumentSnapshot) onSelect;
+  StaffSearchDelegate({required this.onSelect});
+
+  @override
+  List<Widget>? buildActions(BuildContext context) => [IconButton(icon: const Icon(Icons.clear), onPressed: () => query = "")];
+
+  @override
+  Widget? buildLeading(BuildContext context) => IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => close(context, null));
+
+  @override
+  Widget buildResults(BuildContext context) => _buildSearchResults();
+
+  @override
+  Widget buildSuggestions(BuildContext context) => _buildSearchResults();
+
+  Widget _buildSearchResults() {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('admins').snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          final results = snapshot.data!.docs.where((doc) {
+            final name = doc['name'].toString().toLowerCase();
+            final email = doc['email'].toString().toLowerCase();
+            return name.contains(query.toLowerCase()) || email.contains(query.toLowerCase());
+          }).toList();
+
+          return ListView.builder(
+            itemCount: results.length,
+            itemBuilder: (context, index) {
+              final doc = results[index];
+              return ListTile(
+                leading: const CircleAvatar(child: Icon(Icons.person)),
+                title: Text(doc['name']),
+                subtitle: Text(doc['email']),
+                onTap: () {
+                  onSelect(doc);
+                  close(context, null);
+                },
+              );
+            },
+          );
+        },
+      ),
+    );
   }
 }
