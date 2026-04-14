@@ -39,6 +39,9 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
             children: [
               _buildInfoCard(),
               const SizedBox(height: 30),
+
+              _buildTemplateBar(),
+              const SizedBox(height: 30),
               
               Text("الفئة المستهدفة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
               const SizedBox(height: 12),
@@ -155,6 +158,46 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
         });
       }
     }
+  }
+
+    }
+  }
+
+  Widget _buildTemplateBar() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text("قوالب سريعة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _templateChip("📢 تنبيه عام", "تنبيه هام من زيارة", "نود إفادتكم بوجود تحديثات جديدة في النظام لخدمتكم بشكل أفضل."),
+              _templateChip("🛍️ عرض خصم", "خصم خاص في انتظاركم! 🎁", "استمتع بخصم حصري ومحدود بمناسبة التوسعات الجديدة. استخدم الكود: ZYIARAH10"),
+              _templateChip("🔧 صيانة", "أعمال صيانة مجدولة", "سنقوم ببعض أعمال الصيانة لتحسين جودة الخدمة، خدماتنا ستعود للعمل بكفاءة خلال وقت قصير."),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _templateChip(String label, String title, String body) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: ActionChip(
+        label: Text(label, style: GoogleFonts.tajawal(fontSize: 12)),
+        onPressed: () {
+          setState(() {
+            _titleCtrl.text = title;
+            _bodyCtrl.text = body;
+          });
+        },
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
+      ),
+    );
   }
 
   Widget _buildInfoCard() {
