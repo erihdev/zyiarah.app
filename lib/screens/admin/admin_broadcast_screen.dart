@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/services/notification_trigger_service.dart';
+import 'package:zyiarah/services/zyiarah_core_services.dart';
 
 class AdminBroadcastScreen extends StatefulWidget {
   const AdminBroadcastScreen({super.key});
@@ -157,9 +158,6 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
           _scheduledTime = DateTime(date.year, date.month, date.day, time.hour, time.minute);
         });
       }
-    }
-  }
-
     }
   }
 
@@ -339,6 +337,7 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
       }
 
       if (mounted) {
+        ZyiarahCoreService.triggerHapticSuccess();
         setState(() {
           _isSending = false;
           if (!_isScheduled) {
@@ -490,6 +489,7 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
     try {
       await FirebaseFirestore.instance.collection('scheduled_notifications').doc(docId).delete();
       if (mounted) {
+        ZyiarahCoreService.triggerHapticSuccess();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم إلغاء الإشعار المجدول بنجاح")));
       }
     } catch (e) {

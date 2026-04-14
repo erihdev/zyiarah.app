@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:zyiarah/services/zyiarah_core_services.dart';
 
 class ZyiarahRatingDialog extends StatefulWidget {
   final Function(double rating, String comment) onSubmitted;
@@ -39,7 +40,10 @@ class _ZyiarahRatingDialogState extends State<ZyiarahRatingDialog> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(5, (index) {
                 return IconButton(
-                  onPressed: () => setState(() => _rating = index + 1.0),
+                  onPressed: () {
+                    setState(() => _rating = index + 1.0);
+                    ZyiarahCoreService.triggerHapticSelection();
+                  },
                   icon: Icon(
                     index < _rating ? Icons.star_rounded : Icons.star_border_rounded,
                     color: index < _rating ? Colors.amber : Colors.grey[300],
@@ -70,6 +74,7 @@ class _ZyiarahRatingDialogState extends State<ZyiarahRatingDialog> {
               height: 55,
               child: ElevatedButton(
                 onPressed: () {
+                  ZyiarahCoreService.triggerHapticSuccess();
                   widget.onSubmitted(_rating, _commentCtrl.text.trim());
                   Navigator.pop(context);
                 },

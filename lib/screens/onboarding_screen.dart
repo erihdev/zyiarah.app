@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lottie/lottie.dart';
 import 'package:zyiarah/screens/login_screen.dart';
+import 'package:zyiarah/services/zyiarah_core_services.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -17,17 +18,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     {
       "title": "أهلاً بكِ في زيارة",
       "desc": "المنصة الأولى لخدمات النظافة والصيانة في القطاع الجبلي بجازان.",
-      "icon": "🏡"
+      "lottie": "https://lottie.host/9972352b-4780-4545-8f65-021199346747/XJzQitkR2f.json"
     },
     {
       "title": "دفع آمن وتقسيط",
       "desc": "احجزي خدمتكِ الآن وادفعي بكل سهولة عبر تمارا بنظام التقسيط المريح.",
-      "icon": "💳"
+      "lottie": "https://lottie.host/341f22e8-9614-4114-8785-30fa9831c238/X73rA1Z5a1.json"
     },
     {
       "title": "تتبع حي ودقيق",
       "desc": "تابعي موقع السائق والعاملة لحظة بلحظة حتى وصولهم لباب منزلكِ.",
-      "icon": "📍"
+      "lottie": "https://lottie.host/6429f55e-a61d-4519-94b2-0545cf026131/V088G0M8hS.json"
     }
   ];
 
@@ -56,11 +57,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Widget _buildPage(Map<String, String> item) {
     return Padding(
-      padding: const EdgeInsets.all(40.0),
+      padding: const EdgeInsets.symmetric(horizontal: 40.0),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(item['icon']!, style: const TextStyle(fontSize: 100)),
+          Lottie.network(item['lottie']!, height: 280, repeat: true),
           const SizedBox(height: 40),
           Text(
             item['title']!,
@@ -99,10 +100,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           // زر الانتقال
           ElevatedButton(
             onPressed: () {
+              ZyiarahCoreService.triggerHapticSelection();
               if (_currentPage == _data.length - 1) {
                 Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ZyiarahLoginScreen()));
               } else {
-                _controller.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.ease);
+                _controller.nextPage(duration: const Duration(milliseconds: 500), curve: Curves.easeInOutExpo);
               }
             },
             style: ElevatedButton.styleFrom(

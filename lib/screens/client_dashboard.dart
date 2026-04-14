@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:zyiarah/screens/profile_screen.dart';
 import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/screens/hourly_details_screen.dart';
@@ -143,25 +144,25 @@ class _ClientDashboardState extends State<ClientDashboard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildActiveTrackingCard(),
-                _buildPromoBanners(),
-                _buildMaintenanceAlertCard(),
-                if (_currentUser?.hasActiveSubscription == true) _buildSubscriptionCard(),
+                _buildAnimatedItem(_buildActiveTrackingCard()),
+                _buildAnimatedItem(_buildPromoBanners()),
+                _buildAnimatedItem(_buildMaintenanceAlertCard()),
+                if (_currentUser?.hasActiveSubscription == true) _buildAnimatedItem(_buildSubscriptionCard()),
                 const SizedBox(height: 10),
-                _buildMetricsList(),
+                _buildAnimatedItem(_buildMetricsList()),
                 const SizedBox(height: 25),
-                _buildSectionTitle(ZyiarahStrings.servicesHeader, Icons.auto_awesome, Colors.amber),
+                _buildAnimatedItem(_buildSectionTitle(ZyiarahStrings.servicesHeader, Icons.auto_awesome, Colors.amber)),
                 const SizedBox(height: 15),
-                _isLoading ? _buildShimmerGrid() : _buildServicesGrid(),
+                _isLoading ? _buildShimmerGrid() : _buildAnimatedItem(_buildServicesGrid()),
                 const SizedBox(height: 25),
-                _buildSectionTitle(ZyiarahStrings.latestBookings, Icons.calendar_month, Colors.blue.shade800),
+                _buildAnimatedItem(_buildSectionTitle(ZyiarahStrings.latestBookings, Icons.calendar_month, Colors.blue.shade800)),
                 const SizedBox(height: 15),
                 _isLoading 
                   ? _buildShimmerList()
                   : StreamBuilder<QuerySnapshot>(
                     stream: _getOrdersStream(),
                     builder: (context, snapshot) {
-                      return _buildLatestBookings(snapshot.data?.docs ?? []);
+                      return _buildAnimatedItem(_buildLatestBookings(snapshot.data?.docs ?? []));
                     },
                   ),
                 const SizedBox(height: 30),
@@ -934,8 +935,29 @@ class _ClientDashboardState extends State<ClientDashboard> {
             fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
           ),
         ),
-        onTap: onTap,
+        onTap: () {
+          ZyiarahCoreService.triggerHapticLight();
+          onTap();
+        },
       ),
+    );
+  }
+
+  Widget _buildAnimatedItem(Widget child) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 800),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 30 * (1 - value)),
+            child: child,
+          ),
+        );
+      },
+      child: child,
     );
   }
 }

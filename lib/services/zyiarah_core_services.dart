@@ -1,5 +1,5 @@
-import 'dart:math' show cos, sqrt, asin;
 import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:flutter/services.dart';
 
 /// خدمة إدارة العمليات الجوهرية (قفل الوقت والجيوفنسينج)
 /// تم التطوير بواسطة: إرث (erihdev.com)
@@ -91,5 +91,27 @@ class ZyiarahCoreService {
         'category': category,
       },
     );
+  }
+
+  // --- 5. نظام التفاعل الحسي (Sensory UI) ---
+
+  /// اهتزاز خفيف للتفاعلات العادية (مثل اختيار خيار)
+  static Future<void> triggerHapticSelection() async {
+    await HapticFeedback.selectionClick();
+  }
+
+  /// اهتزاز قوي للنجاح (مثل إتمام الحجز)
+  static Future<void> triggerHapticSuccess() async {
+    await HapticFeedback.heavyImpact();
+  }
+
+  /// اهتزاز تحذيري (مثل وجود خطأ)
+  static Future<void> triggerHapticWarning() async {
+    await HapticFeedback.vibrate();
+  }
+
+  /// تأثير خفيف للمس الأزرار
+  static Future<void> triggerHapticLight() async {
+    await HapticFeedback.lightImpact();
   }
 }

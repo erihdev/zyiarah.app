@@ -128,10 +128,26 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
                       crossAxisSpacing: 16,
                     ),
                     itemCount: products.length,
-                    itemBuilder: (context, index) => _ProductCard(
-                      product: products[index],
-                      onAdd: () => _addToCart(products[index]),
-                    ),
+                    itemBuilder: (context, index) {
+                      return TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 600),
+                        curve: Curves.easeOut,
+                        builder: (context, value, child) {
+                          return Opacity(
+                            opacity: value,
+                            child: Transform.translate(
+                              offset: Offset(0, 20 * (1 - value)),
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: _ProductCard(
+                          product: products[index],
+                          onAdd: () => _addToCart(products[index]),
+                        ),
+                      );
+                    },
                   );
                 },
               ),
