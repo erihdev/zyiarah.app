@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:zyiarah/screens/subscription_plans_screen.dart';
 import 'package:zyiarah/screens/maintenance_request_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
@@ -95,12 +96,13 @@ class ZyiarahPopupService {
                     if (imageUrl != null && imageUrl.isNotEmpty)
                       ClipRRect(
                         borderRadius: BorderRadius.circular(15),
-                        child: Image.network(
-                          imageUrl,
+                        child: CachedNetworkImage(
+                          imageUrl: imageUrl,
                           height: 150,
                           width: double.infinity,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                          placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: Colors.white70)),
+                          errorWidget: (context, url, error) => const SizedBox.shrink(),
                         ),
                       ),
                     if (imageUrl != null && imageUrl.isNotEmpty) const SizedBox(height: 25),

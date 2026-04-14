@@ -25,8 +25,10 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
   List<DocumentSnapshot> _maintenance = [];
   List<DocumentSnapshot> _users = [];
   List<DocumentSnapshot> _drivers = [];
+  List<DocumentSnapshot> _storeOrders = [];
   List<DocumentSnapshot> _auditLogs = [];
   StreamSubscription? _driversSub;
+  StreamSubscription? _storeOrdersSub;
   StreamSubscription? _auditSub;
   bool _isLoading = true;
 
@@ -42,6 +44,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     _maintenanceSub?.cancel();
     _usersSub?.cancel();
     _driversSub?.cancel();
+    _storeOrdersSub?.cancel();
     _auditSub?.cancel();
     super.dispose();
   }
@@ -65,6 +68,10 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       if (mounted) setState(() { _drivers = snap.docs; _isLoading = false; });
     });
 
+    _storeOrdersSub = db.collection('store_orders').snapshots().listen((snap) {
+      if (mounted) setState(() { _storeOrders = snap.docs; _isLoading = false; });
+    });
+
     _auditSub = db.collection('audit_logs').orderBy('timestamp', descending: true).limit(10).snapshots().listen((snap) {
       if (mounted) setState(() { _auditLogs = snap.docs; });
     });
@@ -76,7 +83,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       return const Center(child: CircularProgressIndicator(color: Color(0xFF1E293B)));
     }
 
-    final stats = _calculateStats(_orders, _maintenance, _users);
+    final stats = _calculateStats(_orders, _maintenance, _users, _storeOrders);
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -164,7 +171,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     );
   }
 
-  Map<String, dynamic> _calculateStats(List<DocumentSnapshot> orders, List<DocumentSnapshot> maintenance, List<DocumentSnapshot> users) {
+  Map<String, dynamic> _calculateStats(List<DocumentSnapshot> orders, List<DocumentSnapshot> maintenance, List<DocumentSnapshot> users, List<DocumentSnapshot> storeOrders) {
     double totalRevenue = 0;
     int activeOrders = 0;
 
@@ -186,6 +193,15 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
         totalRevenue += (data['quotePrice'] ?? 0.0);
       }
       if (status == 'under_review' || status == 'waiting_payment' || status == 'approved') {
+        activeOrders++;
+      }
+    }
+
+    // Include Store Orders Revenue
+    for (var doc in storeOrders) {
+      final data = doc.data() as Map<String, dynamic>;
+      totalRevenue += (data['total_price'] ?? 0.0);
+      if (data['status'] == 'pending' || data['status'] == 'processing') {
         activeOrders++;
       }
     }
@@ -286,6 +302,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
 
     processDocs(orders, 'created_at', 'final_amount');
     processDocs(maintenance, 'createdAt', 'quotePrice');
+    processDocs(_storeOrders, 'created_at', 'total_price');
 
     List<String> sortedDays = dailyRevenue.keys.toList().reversed.toList();
     List<FlSpot> spots = [];

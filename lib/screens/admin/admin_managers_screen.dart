@@ -21,7 +21,7 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
     final TextEditingController nameCtrl = TextEditingController(text: currentData?['name'] ?? '');
     final TextEditingController emailCtrl = TextEditingController(text: currentData?['email'] ?? '');
     final TextEditingController passwordCtrl = TextEditingController();
-    String role = currentData?['role'] ?? 'orders_manager';
+    String role = currentData?['staff_role'] ?? currentData?['role'] ?? 'orders_manager';
     bool isSaving = false;
 
     final List<Map<String, String>> roles = [

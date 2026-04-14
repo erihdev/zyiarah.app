@@ -15,14 +15,16 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
   late TabController _tabController;
   
   List<DocumentSnapshot> _orderResults = [];
+  List<DocumentSnapshot> _storeResults = [];
   List<DocumentSnapshot> _userResults = [];
+  List<DocumentSnapshot> _productResults = [];
   List<DocumentSnapshot> _driverResults = [];
   bool _isSearching = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -35,42 +37,38 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
   Future<void> _performSearch(String query) async {
     if (query.length < 3) {
       setState(() {
-        _orderResults = [];
-        _userResults = [];
-        _driverResults = [];
+        _orderResults = []; _storeResults = []; _userResults = []; _productResults = []; _driverResults = [];
       });
       return;
     }
 
     setState(() => _isSearching = true);
-
     final db = FirebaseFirestore.instance;
-    final q = query.toLowerCase().trim();
+    final q = query.trim();
+    final qUpper = q.toUpperCase();
 
     try {
-      // 1. Search Orders by Code (if likely a code)
-      final ordersSnap = await db.collection('orders')
-          .where('code', isGreaterThanOrEqualTo: q.toUpperCase())
-          .where('code', isLessThanOrEqualTo: '${q.toUpperCase()}\uf8ff')
-          .limit(10).get();
-
-      // 2. Search Users by Name
-      final usersSnap = await db.collection('users')
-          .where('name', isGreaterThanOrEqualTo: query)
-          .where('name', isLessThanOrEqualTo: '$query\uf8ff')
-          .limit(10).get();
-
-      // 3. Search Drivers by Name
-      final driversSnap = await db.collection('drivers')
-          .where('name', isGreaterThanOrEqualTo: query)
-          .where('name', isLessThanOrEqualTo: '$query\uf8ff')
-          .limit(10).get();
+      // Parallel searches
+      final results = await Future.wait([
+        // 1. Regular Orders
+        db.collection('orders').where('code', isGreaterThanOrEqualTo: qUpper).where('code', isLessThanOrEqualTo: '$qUpper\uf8ff').limit(10).get(),
+        // 2. Store Orders
+        db.collection('store_orders').orderBy('created_at', descending: true).limit(20).get(), // Basic retrieval for now as it lacks code-based search usually
+        // 3. Users
+        db.collection('users').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(10).get(),
+        // 4. Products
+        db.collection('products').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(10).get(),
+        // 5. Drivers
+        db.collection('drivers').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(10).get(),
+      ]);
 
       if (mounted) {
         setState(() {
-          _orderResults = ordersSnap.docs;
-          _userResults = usersSnap.docs;
-          _driverResults = driversSnap.docs;
+          _orderResults = results[0].docs;
+          _storeResults = results[1].docs; // Note: Filtering store orders locally if needed
+          _userResults = results[2].docs;
+          _productResults = results[3].docs;
+          _driverResults = results[4].docs;
           _isSearching = false;
         });
       }
@@ -98,10 +96,9 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
               style: const TextStyle(color: Colors.white, fontSize: 14),
               onChanged: _performSearch,
               decoration: InputDecoration(
-                hintText: "ابحث عن طلب، عميل، أو كادر...",
+                hintText: "ابحث عن أي شيء في المنصة...",
                 hintStyle: const TextStyle(color: Colors.white54, fontSize: 12),
-                prefixIcon: const Icon(Icons.search_rounded, color: Colors.white70),
-                suffixIcon: IconButton(icon: const Icon(Icons.close, color: Colors.white54, size: 18), onPressed: () => _searchCtrl.clear()),
+                prefixIcon: const Icon(Icons.manage_search_rounded, color: Colors.white70),
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(vertical: 10),
               ),
@@ -109,10 +106,14 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
           ),
           bottom: TabBar(
             controller: _tabController,
-            indicatorColor: Colors.white,
+            indicatorColor: Colors.blueAccent,
+            labelStyle: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 11),
+            isScrollable: true,
             tabs: const [
               Tab(text: "الطلبات"),
+              Tab(text: "المتجر"),
               Tab(text: "العملاء"),
+              Tab(text: "المنتجات"),
               Tab(text: "الكوادر"),
             ],
           ),
@@ -123,7 +124,9 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
               controller: _tabController,
               children: [
                 _buildResultsList(_orderResults, 'order'),
+                _buildResultsList(_storeResults, 'store_order'),
                 _buildResultsList(_userResults, 'user'),
+                _buildResultsList(_productResults, 'product'),
                 _buildResultsList(_driverResults, 'driver'),
               ],
             ),
@@ -137,9 +140,9 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search_off_rounded, size: 64, color: Colors.grey[300]),
+            Icon(Icons.search_off_rounded, size: 60, color: Colors.grey[300]),
             const SizedBox(height: 16),
-            Text("لا توجد نتائج مطابقة", style: GoogleFonts.tajawal(color: Colors.grey)),
+            Text("لا توجد نتائج متوفرة", style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 13)),
           ],
         ),
       );
@@ -159,45 +162,55 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
     IconData icon = Icons.help_outline;
     Color color = Colors.grey;
 
-    if (type == 'order') {
-      title = data['service_name'] ?? 'طلب';
-      subtitle = "رقم الطلب: #${data['code'] ?? doc.id.substring(0, 8)}";
-      icon = Icons.receipt_long_rounded;
-      color = Colors.blue;
-    } else if (type == 'user') {
-      title = data['name'] ?? 'عميل';
-      subtitle = data['phone'] ?? 'بدون رقم';
-      icon = Icons.person_rounded;
-      color = Colors.purple;
-    } else if (type == 'driver') {
-      title = data['name'] ?? 'سائق';
-      subtitle = "${data['type'] == 'worker' ? 'كادر تنظيف' : 'سائق توصيل'} - ${data['phone']}";
-      icon = Icons.local_shipping_rounded;
-      color = Colors.orange;
+    switch (type) {
+      case 'order':
+        title = data['service_name'] ?? 'خدمة';
+        subtitle = "رقم: #${data['code'] ?? doc.id.substring(0, 5)} - ${data['amount']} ر.س";
+        icon = Icons.receipt_long_rounded;
+        color = Colors.blue;
+        break;
+      case 'store_order':
+        title = "طلب متجر #${doc.id.substring(0, 6)}";
+        subtitle = "الإجمالي: ${data['total_price']} ر.س - الحالة: ${data['status']}";
+        icon = Icons.shopping_basket_rounded;
+        color = Colors.teal;
+        break;
+      case 'user':
+        title = data['name'] ?? 'عميل';
+        subtitle = data['phone'] ?? 'بدون رقم';
+        icon = Icons.person_pin_rounded;
+        color = Colors.purple;
+        break;
+      case 'product':
+        title = data['name'] ?? 'منتج';
+        subtitle = "السعر: ${data['price']} ر.س";
+        icon = Icons.inventory_2_rounded;
+        color = Colors.indigo;
+        break;
+      case 'driver':
+        title = data['name'] ?? 'سائق/عامل';
+        subtitle = "${data['phone']} - ${data['type']}";
+        icon = Icons.engineering_rounded;
+        color = Colors.orange;
+        break;
     }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))],
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 3))],
       ),
       child: ListTile(
         onTap: () {
-          if (type == 'order') {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => AdminOrderDetailsScreen(orderId: doc.id)));
-          } else {
-             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("جاري فتح ملف: $title")));
-          }
+          if (type == 'order') Navigator.push(context, MaterialPageRoute(builder: (_) => AdminOrderDetailsScreen(orderId: doc.id)));
+          else ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("ملف: $title")));
         },
-        leading: CircleAvatar(
-          backgroundColor: color.withValues(alpha: 0.1),
-          child: Icon(icon, color: color, size: 20),
-        ),
+        leading: CircleAvatar(backgroundColor: color.withValues(alpha: 0.1), child: Icon(icon, color: color, size: 18)),
         title: Text(title, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 14)),
         subtitle: Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-        trailing: const Icon(Icons.arrow_back_ios_new_rounded, size: 14, color: Colors.grey),
+        trailing: const Icon(Icons.arrow_back_ios_rounded, size: 12, color: Colors.grey),
       ),
     );
   }

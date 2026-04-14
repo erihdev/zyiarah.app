@@ -9,14 +9,22 @@ service cloud.firestore {
       return isLoggedIn() && request.auth.uid == userId;
     }
     function isAdmin() {
-      return isLoggedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      let uid = request.auth.uid;
+      return isLoggedIn() && (
+        exists(/databases/$(database)/documents/admins/$(uid)) ||
+        get(/databases/$(database)/documents/users/$(uid)).data.role == 'admin' ||
+        get(/databases/$(database)/documents/users/$(uid)).data.role == 'super_admin' ||
+        get(/databases/$(database)/documents/users/$(uid)).data.role == 'orders_manager' ||
+        get(/databases/$(database)/documents/users/$(uid)).data.role == 'accountant_admin' ||
+        get(/databases/$(database)/documents/users/$(uid)).data.role == 'marketing_admin'
+      );
     }
 
     // User profiles
     match /users/{userId} {
       allow read: if isLoggedIn() && (isOwner(userId) || isAdmin());
       allow create: if isLoggedIn();
-      allow update: if isLoggedIn() && isOwner(userId);
+      allow update: if isLoggedIn() && (isOwner(userId) || isAdmin());
       allow delete: if isAdmin();
     }
 
@@ -33,7 +41,6 @@ service cloud.firestore {
       allow delete: if isAdmin();
 
       match /messages/{messageId} {
-        // Only ticket owner or admin can read/write messages
         allow read, create: if isLoggedIn() && (
           request.auth.uid == get(/databases/$(database)/documents/support_tickets/$(ticketId)).data.userId
           || isAdmin()
@@ -41,14 +48,14 @@ service cloud.firestore {
       }
     }
 
-    // Legacy Tickets Collection (Protected)
+    // Legacy Tickets Collection
     match /tickets/{ticketId} {
       allow read, update: if isLoggedIn() && (request.auth.uid == resource.data.userId || isAdmin());
       allow create: if isLoggedIn();
       allow delete: if isAdmin();
     }
 
-    // Orders & Transactions (Hardened)
+    // Orders & Transactions
     match /orders/{orderId} {
       allow read: if isLoggedIn() && (request.auth.uid == resource.data.client_id || request.auth.uid == resource.data.driver_id || isAdmin());
       allow create: if isLoggedIn() && (request.resource.data.status == 'pending' || request.resource.data.status == 'waiting_payment_cod');
@@ -59,8 +66,7 @@ service cloud.firestore {
     // Driver Data
     match /drivers/{driverId} {
       allow read: if isLoggedIn() && (request.auth.uid == driverId || isAdmin());
-      allow write: if isAdmin();
-      allow update: if isLoggedIn() && (request.auth.uid == driverId || isAdmin());
+      allow write, update: if isAdmin();
     }
 
     // FCM Tokens
@@ -79,17 +85,36 @@ service cloud.firestore {
     match /maintenance_requests/{requestId} {
       allow create: if isLoggedIn();
       allow read: if isLoggedIn() && (request.auth.uid == resource.data.userId || isAdmin());
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow update, delete: if isAdmin();
     }
 
-    // System Admins (Restricted access)
+    // Marketing & Content
+    match /subscription_packages/{packageId} {
+      allow read: if isLoggedIn();
+      allow write: if isAdmin();
+    }
+    match /promo_banners/{bannerId} {
+      allow read: if isLoggedIn();
+      allow write: if isAdmin();
+    }
+    match /promo_codes/{codeId} {
+      allow read: if isLoggedIn();
+      allow write: if isAdmin();
+    }
+    match /coupons/{couponId} {
+      allow read: if isLoggedIn();
+      allow write: if isAdmin();
+    }
+
+    // System Settings
+    match /system_configs/{configId} {
+      allow read: if isLoggedIn();
+      allow write: if isAdmin();
+    }
     match /admins/{adminId} {
       allow read: if isLoggedIn() && (request.auth.uid == adminId || isAdmin());
-      allow write: if isAdmin(); // Only super admins can add other managers
+      allow write: if isAdmin();
     }
-
-    // Dynamic Services
     match /services/{serviceId} {
       allow read: if isLoggedIn();
       allow write: if isAdmin();
@@ -102,15 +127,34 @@ service cloud.firestore {
     }
     match /store_orders/{orderId} {
       allow create: if isLoggedIn();
-      allow read, update, delete: if isAdmin();
+      allow read: if isLoggedIn() && (request.auth.uid == resource.data.client_id || isAdmin());
+      allow update, delete: if isAdmin();
     }
 
-    // Notification Triggers (SECURITY HARDENED)
+    // Geographic Zones
+    match /regions/{regionId} {
+      allow read: if isLoggedIn();
+      allow write: if isAdmin();
+    }
+    match /hourly_zones/{zoneId} {
+      allow read: if isLoggedIn();
+      allow write: if isAdmin();
+    }
+
+    // Logs & Triggers
+    match /audit_logs/{logId} {
+      allow create: if isLoggedIn();
+      allow read, delete: if isAdmin();
+    }
     match /notification_triggers/{triggerId} {
-      // Users can only create triggers of type 'maintenance_request' or 'order' for themself
       allow create: if isLoggedIn() && request.resource.data.userId == request.auth.uid;
       allow read, delete: if isAdmin();
     }
+    match /notifications_log/{logId} {
+      allow read, write: if isAdmin();
+    }
+    match /broadcasts/{broadcastId} {
+      allow read, write: if isAdmin();
+    }
   }
 }
-
