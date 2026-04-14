@@ -93,4 +93,28 @@ class ZyiarahNotificationTriggerService {
       data: {'code': orderCode, 'type': type},
     );
   }
+
+  /// يجدول إشعار ليتم إرساله في وقت لاحق
+  Future<void> scheduleBroadcast({
+    required String title,
+    required String body,
+    required String target,
+    required DateTime scheduledAt,
+    String? createdBy,
+  }) async {
+    try {
+      await _db.collection('scheduled_notifications').add({
+        'title': title,
+        'body': body,
+        'target': target,
+        'scheduled_at': Timestamp.fromDate(scheduledAt),
+        'created_at': FieldValue.serverTimestamp(),
+        'created_by': createdBy ?? 'Admin',
+        'isProcessed': false,
+        'status': 'pending',
+      });
+    } catch (e) {
+      debugPrint("Error scheduling broadcast: $e");
+    }
+  }
 }

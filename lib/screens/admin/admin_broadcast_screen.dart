@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart' as intl;
+import 'package:zyiarah/services/notification_trigger_service.dart';
 
 class AdminBroadcastScreen extends StatefulWidget {
   const AdminBroadcastScreen({super.key});
@@ -14,6 +16,9 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
   final TextEditingController _bodyCtrl = TextEditingController();
   String _target = 'all_users'; // all_users, drivers, clients
   bool _isSending = false;
+  
+  bool _isScheduled = false;
+  DateTime? _scheduledTime;
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +46,7 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
               
               const SizedBox(height: 30),
               _buildLuxuryField(controller: _titleCtrl, label: "عنوان الرسالة (مثلاً: تنبيه هام، عرض جديد)", icon: Icons.title_rounded),
-              const SizedBox(height: 20),
+              const SizedBox(height: 30),
               _buildLuxuryField(
                 controller: _bodyCtrl, 
                 label: "محتوى الرسالة...", 
@@ -49,8 +54,16 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
                 maxLines: 5,
               ),
               
+              const SizedBox(height: 30),
+              _buildSchedulingSection(),
+              
               const SizedBox(height: 40),
               _buildSendButton(),
+              const SizedBox(height: 40),
+
+              _buildScheduledQueueHeader(),
+              const SizedBox(height: 15),
+              _buildScheduledQueueList(),
               const SizedBox(height: 40),
               
               _buildRecentBroadcastsHeader(),
@@ -61,6 +74,87 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildSchedulingSection() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: _isScheduled ? const Color(0xFF1E293B).withValues(alpha: 0.1) : Colors.transparent),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.schedule_send_rounded, color: _isScheduled ? const Color(0xFF1E293B) : Colors.grey),
+                  const SizedBox(width: 12),
+                  Text("جدولة الإرسال لاحقاً", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: _isScheduled ? const Color(0xFF1E293B) : Colors.grey[700])),
+                ],
+              ),
+              Switch(
+                value: _isScheduled,
+                activeColor: const Color(0xFF1E293B),
+                onChanged: (val) => setState(() => _isScheduled = val),
+              ),
+            ],
+          ),
+          if (_isScheduled) ...[
+            const Divider(height: 30),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickDateTime,
+                    icon: const Icon(Icons.calendar_month_rounded, size: 18),
+                    label: Text(_scheduledTime == null ? "اختر التاريخ والوقت" : intl.DateFormat('yyyy/MM/dd HH:mm').format(_scheduledTime!)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      foregroundColor: const Color(0xFF1E293B),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (_scheduledTime != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  "سيتم الإرسال تلقائياً في الموعد المحدد أعلاه.",
+                  style: GoogleFonts.tajawal(fontSize: 11, color: Colors.blue[800], fontWeight: FontWeight.bold),
+                ),
+              ),
+          ]
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickDateTime() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().add(const Duration(minutes: 10)),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      locale: const Locale('ar'),
+    );
+    if (date != null && mounted) {
+      final time = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.now(),
+      );
+      if (time != null) {
+        setState(() {
+          _scheduledTime = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+        });
+      }
+    }
   }
 
   Widget _buildInfoCard() {
@@ -164,8 +258,8 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
             elevation: 5,
             shadowColor: const Color(0xFF1E293B).withValues(alpha: 0.4),
           ),
-          icon: const Icon(Icons.send_rounded),
-          label: Text("إطلاق البث الموحد الآن", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),
+          icon: Icon(_isScheduled ? Icons.calendar_today_rounded : Icons.send_rounded),
+          label: Text(_isScheduled ? "جدولة عملية البث" : "إطلاق البث الموحد الآن", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),
         ),
     );
   }
@@ -176,25 +270,43 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
       return;
     }
 
+    if (_isScheduled && (_scheduledTime == null || _scheduledTime!.isBefore(DateTime.now()))) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى اختيار موعد مستقبلي صالح للجدولة")));
+      return;
+    }
+
     setState(() => _isSending = true);
 
     try {
-      await FirebaseFirestore.instance.collection('broadcasts').add({
-        'title': _titleCtrl.text.trim(),
-        'body': _bodyCtrl.text.trim(),
-        'target': _target,
-        'timestamp': FieldValue.serverTimestamp(),
-        'sent_by': 'Admin',
-      });
+      if (_isScheduled) {
+        await ZyiarahNotificationTriggerService().scheduleBroadcast(
+          title: _titleCtrl.text.trim(),
+          body: _bodyCtrl.text.trim(),
+          target: _target,
+          scheduledAt: _scheduledTime!,
+        );
+      } else {
+        await FirebaseFirestore.instance.collection('broadcasts').add({
+          'title': _titleCtrl.text.trim(),
+          'body': _bodyCtrl.text.trim(),
+          'target': _target,
+          'timestamp': FieldValue.serverTimestamp(),
+          'sent_by': 'Admin',
+        });
+      }
 
       if (mounted) {
         setState(() {
           _isSending = false;
-          _titleCtrl.clear();
-          _bodyCtrl.clear();
+          if (!_isScheduled) {
+            _titleCtrl.clear();
+            _bodyCtrl.clear();
+          }
+          _isScheduled = false;
+          _scheduledTime = null;
         });
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("تم إطلاق البث بنجاح 🚀"),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(_isScheduled ? "تم جدولة البث بنجاح" : "تم إطلاق البث بنجاح 🚀"),
           backgroundColor: Colors.green,
         ));
       }
@@ -260,5 +372,85 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
         );
       },
     );
+  }
+
+  Widget _buildScheduledQueueHeader() {
+    return Row(
+      children: [
+        const Icon(Icons.watch_later_outlined, size: 20, color: Colors.blue),
+        const SizedBox(width: 8),
+        Text("قائمة الإشعارات المجدولة القادمة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.blue[800])),
+      ],
+    );
+  }
+
+  Widget _buildScheduledQueueList() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('scheduled_notifications')
+          .where('isProcessed', isEqualTo: false)
+          .orderBy('scheduled_at', descending: false)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox.shrink();
+        final docs = snapshot.data!.docs;
+        if (docs.isEmpty) return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade100)),
+          child: Center(child: Text("لا توجد إشعارات مجدولة حالياً", style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 12))),
+        );
+
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: docs.length,
+          itemBuilder: (context, index) {
+            final doc = docs[index];
+            final data = doc.data() as Map<String, dynamic>;
+            final DateTime? sched = (data['scheduled_at'] as Timestamp?)?.toDate();
+            final String timeStr = sched != null ? intl.DateFormat('yyyy/MM/dd HH:mm').format(sched) : '';
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.blue.withValues(alpha: 0.1)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(data['title'] ?? '', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 14)),
+                        const SizedBox(height: 4),
+                        Text(timeStr, style: GoogleFonts.tajawal(fontSize: 12, color: Colors.blue[700], fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent),
+                    onPressed: () => _deleteScheduled(doc.id),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteScheduled(String docId) async {
+    try {
+      await FirebaseFirestore.instance.collection('scheduled_notifications').doc(docId).delete();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم إلغاء الإشعار المجدول بنجاح")));
+      }
+    } catch (e) {
+       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل الإلغاء: $e")));
+    }
   }
 }

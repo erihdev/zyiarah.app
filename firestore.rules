@@ -156,5 +156,8 @@ service cloud.firestore {
     match /broadcasts/{broadcastId} {
       allow read, write: if isAdmin();
     }
+    match /scheduled_notifications/{notifId} {
+      allow read, write: if isAdmin();
+    }
   }
 }
