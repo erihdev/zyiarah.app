@@ -12,6 +12,15 @@ class AdminAuditLogsScreen extends StatefulWidget {
 
 class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  String _selectedFilter = 'ALL';
+
+  final List<Map<String, String>> _filters = [
+    {'id': 'ALL', 'label': 'الكل'},
+    {'id': 'ORDER', 'label': 'الطلبات'},
+    {'id': 'STAFF', 'label': 'الموظفين'},
+    {'id': 'COUPON', 'label': 'الأكواد'},
+    {'id': 'DRIVER', 'label': 'الكوادر'},
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -28,9 +37,10 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
         body: Column(
           children: [
             _buildHeaderInfo(),
+            _buildFilterBar(),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: _db.collection('audit_logs').orderBy('timestamp', descending: true).limit(100).snapshots(),
+                stream: _getFilteredStream(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator(color: Color(0xFF1E293B)));
@@ -90,6 +100,49 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildFilterBar() {
+    return Container(
+      height: 60,
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: _filters.length,
+        itemBuilder: (context, index) {
+          final filter = _filters[index];
+          final isSelected = _selectedFilter == filter['id'];
+          return Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: FilterChip(
+              label: Text(filter['label']!,
+                  style: GoogleFonts.tajawal(
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+              selected: isSelected,
+              onSelected: (val) => setState(() => _selectedFilter = filter['id']!),
+              selectedColor: const Color(0xFF1E293B).withValues(alpha: 0.1),
+              checkmarkColor: const Color(0xFF1E293B),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  borderSide: BorderSide(
+                      color: isSelected ? const Color(0xFF1E293B) : Colors.grey.shade300)),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Stream<QuerySnapshot> _getFilteredStream() {
+    var query = _db.collection('audit_logs').orderBy('timestamp', descending: true);
+    if (_selectedFilter != 'ALL') {
+      query = query
+          .where('action', isGreaterThanOrEqualTo: _selectedFilter)
+          .where('action', isLessThan: '${_selectedFilter}z');
+    }
+    return query.limit(100).snapshots();
   }
 
   Widget _buildLogCard(Map<String, dynamic> log) {
@@ -178,6 +231,8 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
       case 'DELETE_ZONE': return "حذف منطقة تغطية";
       case 'ADMIN_LOGIN_SUCCESS': return "دخول ناجح للوحة الإدارة";
       case 'ADMIN_LOGIN_FAILED': return "محاولة دخول فاشلة للمسؤول";
+      case 'UPDATE_ORDER_STATUS': return "تحديث حالة الطلب";
+      case 'ASSIGN_DRIVER': return "تعيين كادر للطلب";
       default: return action;
     }
   }
@@ -188,6 +243,10 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
       case 'email': return "البريد";
       case 'role': return "الدور";
       case 'code': return "الكود";
+      case 'order_code': return "رقم الطلب";
+      case 'new_status': return "الحالة الجديدة";
+      case 'old_status': return "الحالة السابقة";
+      case 'assigned_driver': return "الكادر المعين";
       case 'price': return "السعر";
       case 'service': return "الخدمة";
       case 'type': return "النوع";

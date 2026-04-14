@@ -60,4 +60,7 @@ class ZyiarahAuditService {
 
   static const String actionAdminLogin = 'ADMIN_LOGIN_SUCCESS';
   static const String actionAdminLoginFailed = 'ADMIN_LOGIN_FAILED';
+
+  static const String actionUpdateOrderStatus = 'UPDATE_ORDER_STATUS';
+  static const String actionAssignDriver = 'ASSIGN_DRIVER';
 }

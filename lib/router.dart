@@ -4,6 +4,7 @@ import 'package:zyiarah/screens/login_screen.dart';
 import 'package:zyiarah/screens/client_dashboard.dart';
 import 'package:zyiarah/screens/driver_dashboard.dart';
 import 'package:zyiarah/screens/admin/admin_dashboard_screen.dart';
+import 'package:zyiarah/screens/order_tracking_screen.dart';
 import 'package:zyiarah/main.dart'; // To access AuthWrapper and navigatorKey
 
 final GoRouter appRouter = GoRouter(
@@ -33,6 +34,13 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/admin',
       builder: (context, state) => const AdminDashboardScreen(),
+    ),
+    GoRoute(
+      path: '/track/:orderId',
+      builder: (context, state) {
+        final orderId = state.pathParameters['orderId']!;
+        return OrderTrackingScreen(orderId: orderId);
+      },
     ),
   ],
 );

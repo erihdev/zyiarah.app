@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/services/notification_trigger_service.dart';
+import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/status_util.dart';
 
 class AdminOrderDetailsScreen extends StatefulWidget {
@@ -85,6 +86,18 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
         'assigned_driver': _selectedDriverName,
         'updated_at': FieldValue.serverTimestamp(),
       });
+
+      // Audit Log
+      await ZyiarahAuditService().logAction(
+        action: ZyiarahAuditService.actionUpdateOrderStatus,
+        targetId: widget.orderId,
+        details: {
+          'order_code': _orderData?['code'] ?? widget.orderId.substring(0,8),
+          'new_status': _currentStatus,
+          'old_status': _orderData?['status'] ?? 'pending',
+          'assigned_driver': _selectedDriverName ?? 'None',
+        },
+      );
         if (mounted) {
           if (_selectedDriverId != null && _currentStatus == 'assigned') {
             await _notificationService.notifyDriverOfAssignment(_selectedDriverId!, widget.orderId);
