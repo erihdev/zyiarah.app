@@ -64,22 +64,13 @@ class _AdminMarketingScreenState extends State<AdminMarketingScreen> {
           createdBy: 'Marketing',
         );
       } else {
-        // 1. تسجيل العملية في سجل الإشعارات
+        // تسجيل العملية في سجل الإشعارات وإطلاق البث (Backend Trigger)
         await FirebaseFirestore.instance.collection('notifications_log').add({
           'title': _titleController.text,
           'body': _bodyController.text,
           'target': 'all',
           'created_at': FieldValue.serverTimestamp(),
           'type': 'marketing_broadcast',
-        });
-
-        // 2. إرسال أمر بربط الإشعار بنظام التنبيهات (Broadcast Trigger)
-        await FirebaseFirestore.instance.collection('notification_triggers').add({
-          'userId': 'broadcast_all',
-          'title': _titleController.text,
-          'body': _bodyController.text,
-          'type': 'marketing_broadcast',
-          'created_at': FieldValue.serverTimestamp(),
         });
       }
 
@@ -225,7 +216,7 @@ class _AdminMarketingScreenState extends State<AdminMarketingScreen> {
               Switch(
                 value: _isScheduled,
                 onChanged: (val) => setState(() => _isScheduled = val),
-                activeColor: Colors.blue,
+                activeThumbColor: Colors.blue,
               ),
             ],
           ),

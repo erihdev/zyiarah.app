@@ -99,12 +99,12 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
               autofocus: true,
               style: const TextStyle(color: Colors.white, fontSize: 14),
               onChanged: _performSearch,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 hintText: "ابحث عن أي شيء في المنصة...",
-                hintStyle: const TextStyle(color: Colors.white54, fontSize: 12),
-                prefixIcon: const Icon(Icons.manage_search_rounded, color: Colors.white70),
+                hintStyle: TextStyle(color: Colors.white54, fontSize: 12),
+                prefixIcon: Icon(Icons.manage_search_rounded, color: Colors.white70),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                contentPadding: EdgeInsets.symmetric(vertical: 10),
               ),
             ),
           ),
@@ -216,12 +216,14 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
       ),
       child: ListTile(
         onTap: () {
-          if (type == 'order') Navigator.push(context, MaterialPageRoute(builder: (_) => AdminOrderDetailsScreen(orderId: doc.id)));
-          else if (type == 'maintenance') {
+          if (type == 'order') {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => AdminOrderDetailsScreen(orderId: doc.id)));
+          } else if (type == 'maintenance') {
              // Future: AdminMaintenanceDetailsScreen
              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("طلب صيانة: $title")));
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("ملف: $title")));
           }
-          else ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("ملف: $title")));
         },
         leading: CircleAvatar(backgroundColor: color.withValues(alpha: 0.1), child: Icon(icon, color: color, size: 18)),
         title: Text(title, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 14)),

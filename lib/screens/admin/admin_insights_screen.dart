@@ -597,38 +597,69 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle("نبض النظام الآن ⚡"),
+        Row(
+          children: [
+            _buildSectionTitle("نبض النظام الآن"),
+            const SizedBox(width: 8),
+            const Text("⚡", style: TextStyle(fontSize: 18)),
+          ],
+        ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 85,
+          height: 95,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: _auditLogs.length,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
             itemBuilder: (context, index) {
               final log = _auditLogs[index].data() as Map<String, dynamic>;
-              final action = log['action'] ?? 'عملية مجهولة';
+              final String action = log['action'] ?? 'عملية مجهولة';
               final admin = (log['admin_email']?.toString() ?? 'Admin').split('@').first;
               
+              final pulseData = _getPulseInfo(action);
+              final Color color = pulseData['color'] as Color;
+
               return Container(
-                width: 200,
-                margin: const EdgeInsets.only(left: 12),
+                width: 190,
+                margin: const EdgeInsets.only(left: 12, bottom: 5),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Color(0xFF1E293B), Color(0xFF334155)]),
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [BoxShadow(color: const Color(0xFF1E293B).withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))],
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border(right: BorderSide(color: color, width: 4)),
+                  boxShadow: [
+                    BoxShadow(color: color.withValues(alpha: 0.1), blurRadius: 8, offset: const Offset(0, 4))
+                  ],
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
+                child: Row(
                   children: [
-                    Text(_formatActionName(action), style: GoogleFonts.tajawal(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 11)),
-                    const SizedBox(height: 4),
-                    Text("بواسطة: $admin", style: const TextStyle(color: Colors.white70, fontSize: 9)),
-                    const SizedBox(height: 4),
-                    Text(
-                      log['timestamp'] != null ? intl.DateFormat('HH:mm:ss').format((log['timestamp'] as Timestamp).toDate()) : 'الآن',
-                      style: const TextStyle(color: Colors.white38, fontSize: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
+                      child: Icon(pulseData['icon'] as IconData, color: color, size: 16),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            pulseData['title'] as String,
+                            style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 11, color: const Color(0xFF1E293B)),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text("بواسطة: $admin", style: const TextStyle(color: Colors.grey, fontSize: 8, fontWeight: FontWeight.bold)),
+                          Text(
+                            log['timestamp'] != null 
+                              ? intl.DateFormat('HH:mm').format((log['timestamp'] as Timestamp).toDate()) 
+                              : 'الآن',
+                            style: TextStyle(color: color.withValues(alpha: 0.6), fontSize: 7, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -640,17 +671,34 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     );
   }
 
-  String _formatActionName(String raw) {
-    switch (raw) {
-      case 'CREATE_COUPON': return 'إنشاء كود خصم';
-      case 'DELETE_DRIVER': return 'حذف كادر';
-      case 'UPDATE_SERVICE_PRICE': return 'تحديث الأسعار';
-      case 'REGISTER_DRIVER': return 'تسجيل كادر جديد';
-      case 'TOGGLE_DRIVER_STATUS': return 'تغيير حالة كادر';
-      case 'CREATE_CLEANING_ORDER': return 'طلب نظافة جديد 🧹';
-      case 'CREATE_STORE_ORDER': return 'طلب متجر جديد 📦';
-      case 'CREATE_MAINTENANCE_REQUEST': return 'طلب صيانة جديد 🛠️';
-      default: return raw.replaceAll('_', ' ');
+  Map<String, dynamic> _getPulseInfo(String action) {
+    switch (action) {
+      case 'CREATE_COUPON': 
+        return {'title': 'إنشاء كود خصم جديد', 'icon': Icons.local_offer_rounded, 'color': Colors.purple};
+      case 'DELETE_PRODUCT': 
+        return {'title': 'حذف منتج من المتجر', 'icon': Icons.delete_sweep_rounded, 'color': Colors.red};
+      case 'UPDATE_PRODUCT': 
+        return {'title': 'تحديث بيانات منتج', 'icon': Icons.edit_calendar_rounded, 'color': Colors.blue};
+      case 'CREATE_PRODUCT': 
+        return {'title': 'أضف منتج جديد 🛍️', 'icon': Icons.add_business_rounded, 'color': const Color(0xFF10B981)};
+      case 'UPDATE_ORDER_STATUS': 
+        return {'title': 'تحديث حالة طلب', 'icon': Icons.sync_problem_rounded, 'color': Colors.orange};
+      case 'REGISTER_DRIVER': 
+        return {'title': 'تسجيل كادر جديد', 'icon': Icons.person_add_alt_1_rounded, 'color': Colors.teal};
+      case 'UPDATE_SERVICE_PRICE': 
+        return {'title': 'تعديل أسعار الخدمة', 'icon': Icons.price_change_rounded, 'color': Colors.indigo};
+      case 'CREATE_CLEANING_ORDER': 
+        return {'title': 'طلب نظافة جديد 🧹', 'icon': Icons.cleaning_services_rounded, 'color': Colors.blueAccent};
+      case 'CREATE_STORE_ORDER': 
+        return {'title': 'طلب متجر جديد 📦', 'icon': Icons.shopping_cart_checkout_rounded, 'color': Colors.deepPurple};
+      case 'CREATE_MAINTENANCE_REQUEST': 
+        return {'title': 'طلب صيانة جديد 🛠️', 'icon': Icons.handyman_rounded, 'color': Colors.orangeAccent};
+      case 'TOGGLE_SERVICE_STATUS': 
+        return {'title': 'تغيير إتاحة خدمة', 'icon': Icons.visibility_rounded, 'color': Colors.blueGrey};
+      case 'ADMIN_LOGIN_SUCCESS': 
+        return {'title': 'دخول ناجح للمدير', 'icon': Icons.admin_panel_settings_rounded, 'color': Colors.green};
+      default: 
+        return {'title': action.replaceAll('_', ' '), 'icon': Icons.bolt_rounded, 'color': Colors.blue};
     }
   }
 

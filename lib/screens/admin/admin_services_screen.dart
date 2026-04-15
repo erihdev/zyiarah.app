@@ -115,56 +115,216 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,
-      child: StreamBuilder<QuerySnapshot>(
-        stream: _db.collection('services').orderBy('order_index').snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          title: const Text(
+            "إدارة الخدمات",
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+          ),
+          backgroundColor: const Color(0xFF1E293B),
+          foregroundColor: Colors.white,
+          elevation: 0,
+        ),
+        body: StreamBuilder<QuerySnapshot>(
+          stream: _db.collection('services').orderBy('order_index').snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-          final docs = snapshot.data?.docs ?? [];
-          if (docs.isEmpty) {
-            return const Center(child: Text("لا توجد خدمات، يمكنك إضافتها من لوحة الويب."));
-          }
+            final docs = snapshot.data?.docs ?? [];
+            if (docs.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.cleaning_services_outlined, size: 80, color: Colors.grey[300]),
+                    const SizedBox(height: 20),
+                    const Text("لا توجد خدمات حالياً، يرجى إضافتها من لوحة القيادة."),
+                  ],
+                ),
+              );
+            }
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: docs.length,
-            itemBuilder: (context, index) {
-              final service = ZyiarahService.fromMap(docs[index].id, docs[index].data() as Map<String, dynamic>);
-              
-              return Card(
-                elevation: 2,
-                margin: const EdgeInsets.only(bottom: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(16),
-                  leading: CircleAvatar(
-                    backgroundColor: service.isActive ? Colors.blue[50] : Colors.grey[200],
-                    child: Icon(ZyiarahService.getIcon(service.iconName), color: service.isActive ? Colors.blue : Colors.grey),
+            return ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+              itemCount: docs.length,
+              itemBuilder: (context, index) {
+                final service = ZyiarahService.fromMap(
+                  docs[index].id,
+                  docs[index].data() as Map<String, dynamic>,
+                );
+                return _buildPremiumServiceCard(service);
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPremiumServiceCard(ZyiarahService service) {
+    final bool active = service.isActive;
+    final Color accentColor = active ? const Color(0xFF4F46E5) : Colors.grey;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: active ? accentColor.withValues(alpha: 0.1) : Colors.grey.shade200, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: accentColor.withValues(alpha: 0.05),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                // Stylized Icon Holder
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(18),
                   ),
-                  title: Text(service.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text("${service.subtitle}\n${service.priceText}"),
-                  isThreeLine: true,
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
+                  child: Icon(
+                    ZyiarahService.getIcon(service.iconName),
+                    color: accentColor,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // Title and Subtitle
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit, color: Colors.blueGrey),
-                        onPressed: () => _showEditPriceDialog(service),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              service.title,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 16,
+                                color: Color(0xFF1E293B),
+                              ),
+                            ),
+                          ),
+                          _buildStatusBadge(active),
+                        ],
                       ),
-                      Switch(
-                        value: service.isActive,
-                        onChanged: (val) => _toggleServiceStatus(service),
-                        activeThumbColor: Colors.blue,
+                      const SizedBox(height: 4),
+                      Text(
+                        service.subtitle,
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 12,
+                          height: 1.2,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
                 ),
-              );
-            },
-          );
-        },
+              ],
+            ),
+            const Divider(height: 32, thickness: 0.8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Pricing Info
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "التسعير الحالي",
+                      style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      service.priceText,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                        color: Color(0xFF4F46E5),
+                      ),
+                    ),
+                  ],
+                ),
+                // Actions Area
+                Row(
+                  children: [
+                    // Edit Button
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => _showEditPriceDialog(service),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade200),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.edit_note_rounded, color: Colors.blueGrey, size: 22),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Visibility Toggle
+                    Transform.scale(
+                      scale: 0.9,
+                      child: Switch(
+                        value: active,
+                        onChanged: (val) => _toggleServiceStatus(service),
+                        activeThumbColor: const Color(0xFF4F46E5),
+                        activeTrackColor: const Color(0xFF4F46E5).withValues(alpha: 0.2),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(bool active) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: active ? const Color(0xFF10B981).withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(
+            radius: 3,
+            backgroundColor: active ? const Color(0xFF10B981) : Colors.orange,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            active ? "نشط" : "معطل",
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              color: active ? const Color(0xFF059669) : Colors.orange.shade800,
+            ),
+          ),
+        ],
       ),
     );
   }

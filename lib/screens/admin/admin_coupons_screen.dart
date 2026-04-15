@@ -60,6 +60,8 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
     DateTime expiryDate = data?['expiry'] != null ? DateTime.tryParse(data!['expiry']) ?? DateTime.now().add(const Duration(days: 30)) : DateTime.now().add(const Duration(days: 30));
     bool isSaving = false;
     List<String> restrictedZones = List<String>.from(data?['restricted_zones'] ?? []);
+    bool codeEmpty = false;
+    bool valueEmpty = false;
 
     showDialog(
       context: context,
@@ -69,77 +71,122 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
             return Directionality(
               textDirection: TextDirection.rtl,
               child: AlertDialog(
-                title: Text(doc == null ? 'إضافة كود خصم' : 'تعديل كود الخصم', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                title: Text(doc == null ? 'إضافة كود خصم جديد' : 'تعديل كود الخصم', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
                 content: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      TextField(
-                        controller: codeCtrl,
-                        decoration: const InputDecoration(labelText: 'كود الخصم (Letters & Numbers)'),
-                        textCapitalization: TextCapitalization.characters,
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('كود الخصم', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 12)),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: codeCtrl,
+                                    decoration: InputDecoration(
+                                      hintText: 'مثال: ZYIARAH20',
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                      errorText: codeEmpty ? 'هذا الحقل مطلوب' : null,
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                                    ),
+                                    textCapitalization: TextCapitalization.characters,
+                                    onChanged: (v) => setDialogState(() => codeEmpty = v.trim().isEmpty),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                ElevatedButton(
+                                  onPressed: () {
+                                    final random = DateTime.now().millisecondsSinceEpoch.toString().substring(9);
+                                    setDialogState(() {
+                                      codeCtrl.text = "ZY-$random"; 
+                                      codeEmpty = false;
+                                    });
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                                    backgroundColor: Colors.blueGrey,
+                                  ),
+                                  child: const Text('توليد', style: TextStyle(color: Colors.white, fontSize: 10)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: RadioListTile<String>(
-                              title: const Text('نسبة مئوية %', style: TextStyle(fontSize: 12)),
-                              value: 'percentage',
-                              // ignore: deprecated_member_use
-                              groupValue: type,
-                              // ignore: deprecated_member_use
-                              onChanged: (val) => setDialogState(() => type = val!),
-                              contentPadding: EdgeInsets.zero,
+                      const SizedBox(height: 15),
+                      RadioGroup<String>(
+                        groupValue: type,
+                        onChanged: (val) => setDialogState(() => type = val!),
+                        child: const Row(
+                          children: [
+                            Expanded(
+                              child: RadioListTile<String>(
+                                title: Text('نسبة %', style: TextStyle(fontSize: 11)),
+                                value: 'percentage',
+                                contentPadding: EdgeInsets.zero,
+                              ),
                             ),
-                          ),
-                          Expanded(
-                            child: RadioListTile<String>(
-                              title: const Text('مبلغ ثابت', style: TextStyle(fontSize: 12)),
-                              value: 'fixed',
-                              // ignore: deprecated_member_use
-                              groupValue: type,
-                              // ignore: deprecated_member_use
-                              onChanged: (val) => setDialogState(() => type = val!),
-                              contentPadding: EdgeInsets.zero,
+                            Expanded(
+                              child: RadioListTile<String>(
+                                title: Text('مبلغ ثابت', style: TextStyle(fontSize: 11)),
+                                value: 'fixed',
+                                contentPadding: EdgeInsets.zero,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                       TextField(
                         controller: valueCtrl,
                         keyboardType: TextInputType.number,
-                        decoration: InputDecoration(labelText: type == 'percentage' ? 'قيمة الخصم (من 1 إلى 100)' : 'قيمة الخصم بالريال (ر.س)'),
+                        decoration: InputDecoration(
+                          labelText: type == 'percentage' ? 'قيمة الخصم (1-100)' : 'قيمة الخصم بالريال',
+                          errorText: valueEmpty ? 'يرجى تحديد القيمة' : null,
+                        ),
+                        onChanged: (v) => setDialogState(() => valueEmpty = v.trim().isEmpty),
                       ),
                       const SizedBox(height: 15),
                       TextField(
                         controller: maxUsesCtrl,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'الحد الأقصى لمرات الاستخدام'),
+                        decoration: const InputDecoration(labelText: 'الحد الأقصى للاستخدام'),
                       ),
                       const SizedBox(height: 15),
-                      Row(
-                        children: [
-                          const Text('تاريخ الانتهاء: '),
-                          TextButton(
-                            onPressed: () async {
-                              final picked = await showDatePicker(
-                                context: context,
-                                initialDate: expiryDate,
-                                firstDate: DateTime.now(),
-                                lastDate: DateTime.now().add(const Duration(days: 1000)),
-                              );
-                              if (picked != null) {
-                                setDialogState(() => expiryDate = picked);
-                              }
-                            },
-                            child: Text(intl.DateFormat('yyyy-MM-dd').format(expiryDate)),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: expiryDate,
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime.now().add(const Duration(days: 1000)),
+                          );
+                          if (picked != null) {
+                            setDialogState(() => expiryDate = picked);
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                          decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(10)),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('تاريخ الانتهاء:'),
+                              Text(intl.DateFormat('yyyy-MM-dd').format(expiryDate), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
-                      const SizedBox(height: 10),
-                      // Information display for restricted zones
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 15),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.location_city, size: 18),
                         label: Text(restrictedZones.isEmpty ? 'متاح لكل المناطق' : 'محصور لـ ${restrictedZones.length} مناطق'),
@@ -202,8 +249,14 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                   ),
                   ElevatedButton(
                     onPressed: isSaving ? null : () async {
-                      if (codeCtrl.text.isEmpty || valueCtrl.text.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى إكمال البيانات")));
+                      // Auto-generate if forgotten (Radical Fix for Image 3)
+                      if (codeCtrl.text.trim().isEmpty) {
+                        final random = DateTime.now().millisecondsSinceEpoch.toString().substring(9);
+                        codeCtrl.text = "AUTO-$random";
+                      }
+                      
+                      if (valueCtrl.text.isEmpty) {
+                        setDialogState(() => valueEmpty = true);
                         return;
                       }
 

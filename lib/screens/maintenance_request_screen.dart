@@ -42,23 +42,32 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
 
     try {
       final user = _auth.currentUser;
+      if (user == null) {
+        throw Exception("يجب تسجيل الدخول لإرسال طلب");
+      }
       
       // Fetch user name
       String userName = 'عميل زيارة';
-      String userPhone = user?.phoneNumber ?? '000000000';
+      String userPhone = user.phoneNumber ?? '000000000';
       try {
-        final userDoc = await _firestore.collection('users').doc(user?.uid).get();
+        final userDoc = await _firestore.collection('users').doc(user.uid).get();
         if (userDoc.exists) {
           userName = userDoc.data()?['name'] ?? 'عميل زيارة';
           userPhone = userDoc.data()?['phone'] ?? userPhone;
         }
       } catch (e) {
-        // Fallback
+        debugPrint("User data fetch failed: $e");
       }
 
       // Generate Smart Sequential Code
-      final seq = await ZyiarahCounterService().getNextOrderNumber();
-      final orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
+      String orderCode;
+      try {
+        final seq = await ZyiarahCounterService().getNextOrderNumber();
+        orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
+      } catch (e) {
+        debugPrint("Counter service failed, using fallback code: $e");
+        orderCode = "SRV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}";
+      }
 
       final scheduledDateTime = DateTime(
         _selectedDate.year, _selectedDate.month, _selectedDate.day,
@@ -79,7 +88,7 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
       await _firestore.collection('maintenance_requests').add({
         'requestId': orderCode,
         'code': orderCode,
-        'userId': user?.uid,
+        'userId': user.uid,
         'userName': userName,
         'userPhone': userPhone,
         'serviceType': _selectedService,
@@ -99,17 +108,19 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
           'user': userName,
           'service': _selectedService,
         },
-        targetId: user?.uid,
+        targetId: user.uid,
       );
 
       if (mounted) {
         // Trigger Notifications
         await ZyiarahNotificationTriggerService().notifyOrderCreated(
-          clientId: user?.uid ?? '',
+          clientId: user.uid,
           orderCode: orderCode,
           serviceName: _selectedService ?? 'صيانة',
           type: 'maintenance',
         );
+
+        if (!mounted) return;
 
         Navigator.pushReplacement(
           context,

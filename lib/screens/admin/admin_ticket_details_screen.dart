@@ -96,22 +96,49 @@ class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
                     itemBuilder: (context, index) {
                       final msg = docs[index].data() as Map<String, dynamic>;
                       final senderRole = msg['senderRole'] ?? '';
-                      final sender = msg['sender'] ?? ''; // Legacy
-                      final isUser = senderRole != 'admin' && sender != 'admin';
+                      final isUser = senderRole != 'admin';
+
+                      // RTL Logic: Me (Admin) on the Right, Other (User) on the Left
+                      final isMe = !isUser;
 
                       return Align(
-                        alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                         child: Container(
                           margin: const EdgeInsets.only(bottom: 10),
                           padding: const EdgeInsets.all(12),
+                          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
                           decoration: BoxDecoration(
-                            color: isUser ? Colors.white : const Color(0xFF1E293B),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: isUser ? Colors.grey.shade300 : Colors.transparent),
+                            color: isMe ? const Color(0xFF1E293B) : Colors.white,
+                            borderRadius: BorderRadius.only(
+                              topLeft: const Radius.circular(15),
+                              topRight: const Radius.circular(15),
+                              bottomLeft: isMe ? const Radius.circular(15) : Radius.zero,
+                              bottomRight: isMe ? Radius.zero : const Radius.circular(15),
+                            ),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 5, offset: const Offset(0, 2))
+                            ],
+                            border: Border.all(color: isMe ? Colors.transparent : Colors.grey.shade200),
                           ),
-                          child: Text(
-                            msg['text'] ?? '',
-                            style: TextStyle(color: isUser ? Colors.black : Colors.white),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                msg['text'] ?? '',
+                                style: TextStyle(color: isMe ? Colors.white : Colors.black87, fontSize: 13),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                msg['sentAt'] != null 
+                                  ? "${(msg['sentAt'] as Timestamp).toDate().hour}:${(msg['sentAt'] as Timestamp).toDate().minute}"
+                                  : "...",
+                                style: TextStyle(
+                                  color: isMe ? Colors.white70 : Colors.grey, 
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       );

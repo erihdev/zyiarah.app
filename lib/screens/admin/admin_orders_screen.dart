@@ -92,8 +92,14 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
       itemBuilder: (context, index) {
         final data = docs[index].data() as Map<String, dynamic>;
         final status = data['status'] ?? 'pending';
-        final service = data['service_name'] ?? 'خدمة غير معروفة';
-        final amount = data['final_amount'] ?? data['amount'] ?? 0;
+        
+        // Improved service name mapping with fallbacks
+        final service = data['service_name'] ?? data['service_type'] ?? data['service_name_ar'] ?? 'خدمة غير معروفة';
+        
+        // Secure amount formatting
+        final rawAmount = data['final_amount'] ?? data['amount'] ?? 0;
+        final String formattedAmount = double.parse(rawAmount.toString()).toStringAsFixed(2);
+        
         final code = data['code'] ?? docs[index].id.substring(0, 8).toUpperCase();
         
         if (data['created_at'] != null) {
@@ -133,7 +139,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text("$amount ر.س", style: GoogleFonts.tajawal(fontWeight: FontWeight.w900, color: const Color(0xFF1E293B), fontSize: 14)),
+                      Text("$formattedAmount ر.س", style: GoogleFonts.tajawal(fontWeight: FontWeight.w900, color: const Color(0xFF1E293B), fontSize: 14)),
                       const SizedBox(height: 4),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

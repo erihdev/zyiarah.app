@@ -58,7 +58,7 @@ service cloud.firestore {
     // Orders & Transactions
     match /orders/{orderId} {
       allow read: if isLoggedIn() && (request.auth.uid == resource.data.client_id || request.auth.uid == resource.data.driver_id || isAdmin());
-      allow create: if isLoggedIn() && (request.resource.data.status == 'pending' || request.resource.data.status == 'waiting_payment_cod');
+      allow create: if isLoggedIn();
       allow update: if isLoggedIn() && (request.auth.uid == resource.data.driver_id || isAdmin());
       allow delete: if isAdmin();
     }
@@ -99,6 +99,7 @@ service cloud.firestore {
     }
     match /promo_codes/{codeId} {
       allow read: if isLoggedIn();
+      allow update: if isLoggedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uses']);
       allow write: if isAdmin();
     }
     match /coupons/{couponId} {
@@ -113,7 +114,7 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     match /metadata/{docId} {
-      allow get, update: if isLoggedIn() && docId == 'order_counter';
+      allow get, create, update: if isLoggedIn() && docId == 'order_counter';
     }
     match /admins/{adminId} {
       allow read: if isLoggedIn() && (request.auth.uid == adminId || isAdmin());

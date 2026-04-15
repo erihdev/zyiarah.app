@@ -180,7 +180,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                           point: _selectedLatLng,
                           radius: widget.radius! * 1000, // Convert km to meters
                           useRadiusInMeter: true,
-                          color: (widget.circleColor ?? Colors.blue).withOpacity(0.3),
+                          color: (widget.circleColor ?? Colors.blue).withValues(alpha: 0.3),
                           borderColor: widget.circleColor ?? Colors.blue,
                           borderStrokeWidth: 2,
                         ),

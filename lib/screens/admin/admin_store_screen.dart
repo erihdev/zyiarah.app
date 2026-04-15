@@ -66,7 +66,6 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
     final priceCtrl = TextEditingController(text: (product?['price'] ?? '').toString());
     final descCtrl = TextEditingController(text: product?['description'] ?? '');
     String? imageUrl = product?['image_url'];
-    XFile? pickedFile;
     bool isSaving = false;
     bool isUploading = false;
 
@@ -119,7 +118,6 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                           final file = await _picker.pickImage(source: source, imageQuality: 70);
                           if (file != null) {
                             setDialogState(() {
-                              pickedFile = file;
                               isUploading = true;
                             });
 
@@ -127,13 +125,17 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                               final fileName = 'products/${DateTime.now().millisecondsSinceEpoch}.jpg';
                               final ref = FirebaseStorage.instance.ref().child(fileName);
                               
+                              UploadTask uploadTask;
                               if (kIsWeb) {
-                                await ref.putData(await file.readAsBytes());
+                                uploadTask = ref.putData(await file.readAsBytes());
                               } else {
-                                await ref.putFile(File(file.path));
+                                uploadTask = ref.putFile(File(file.path));
                               }
                               
-                              final url = await ref.getDownloadURL();
+                              // Wait for upload to complete
+                              final snapshot = await uploadTask;
+                              final url = await snapshot.ref.getDownloadURL();
+                              
                               setDialogState(() {
                                 imageUrl = url;
                                 isUploading = false;
@@ -375,7 +377,7 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                             Switch(
                               value: !isHidden,
                               onChanged: (val) => _toggleProductVisibility(doc),
-                              activeColor: Colors.green,
+                              activeThumbColor: Colors.green,
                             ),
                             Text(isHidden ? "مخفي" : "نشط", style: TextStyle(fontSize: 9, color: isHidden ? Colors.red : Colors.green, fontWeight: FontWeight.bold)),
                           ],

@@ -96,42 +96,74 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.schedule_send_rounded, color: _isScheduled ? const Color(0xFF1E293B) : Colors.grey),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: (_isScheduled ? const Color(0xFF1E293B) : Colors.grey).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+                    child: Icon(Icons.schedule_send_rounded, color: _isScheduled ? const Color(0xFF1E293B) : Colors.grey, size: 20),
+                  ),
                   const SizedBox(width: 12),
-                  Text("جدولة الإرسال لاحقاً", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: _isScheduled ? const Color(0xFF1E293B) : Colors.grey[700])),
+                  Text("جدولة الإرسال لاحقاً", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: _isScheduled ? const Color(0xFF1E293B) : Colors.grey[700], fontSize: 14)),
                 ],
               ),
-              Switch(
+              Switch.adaptive(
                 value: _isScheduled,
-                activeColor: const Color(0xFF1E293B),
-                onChanged: (val) => setState(() => _isScheduled = val),
+                activeTrackColor: const Color(0xFF1E293B).withValues(alpha: 0.5),
+                activeThumbColor: const Color(0xFF1E293B),
+                onChanged: (val) {
+                  setState(() {
+                    _isScheduled = val;
+                    if (!val) {
+                      _scheduledTime = null;
+                    }
+                  });
+                },
               ),
             ],
           ),
           if (_isScheduled) ...[
-            const Divider(height: 30),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _pickDateTime,
-                    icon: const Icon(Icons.calendar_month_rounded, size: 18),
-                    label: Text(_scheduledTime == null ? "اختر التاريخ والوقت" : intl.DateFormat('yyyy/MM/dd HH:mm').format(_scheduledTime!)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      foregroundColor: const Color(0xFF1E293B),
-                    ),
-                  ),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 15),
+              child: Divider(),
+            ),
+            InkWell(
+              onTap: _pickDateTime,
+              borderRadius: BorderRadius.circular(15),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: Colors.grey.shade200),
                 ),
-              ],
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_month_rounded, color: Color(0xFF1E293B), size: 22),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: Text(
+                        _scheduledTime == null ? "اختر التاريخ والوقت" : intl.DateFormat('yyyy/MM/dd | HH:mm').format(_scheduledTime!),
+                        style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: _scheduledTime == null ? Colors.grey : const Color(0xFF1E293B)),
+                      ),
+                    ),
+                    const Icon(Icons.edit_calendar_rounded, color: Colors.grey, size: 18),
+                  ],
+                ),
+              ),
             ),
             if (_scheduledTime != null)
               Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  "سيتم الإرسال تلقائياً في الموعد المحدد أعلاه.",
-                  style: GoogleFonts.tajawal(fontSize: 11, color: Colors.blue[800], fontWeight: FontWeight.bold),
+                padding: const EdgeInsets.only(top: 15),
+                child: Row(
+                  children: [
+                    const Icon(Icons.auto_awesome_rounded, color: Colors.blue, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "سيتم إطلاق البث تلقائياً في الموعد المختار.\nتأكد من بقاء الخادم نشطاً أو الجدولة المسبقة.",
+                        style: GoogleFonts.tajawal(fontSize: 10, color: Colors.blue[800], height: 1.5),
+                      ),
+                    ),
+                  ],
                 ),
               ),
           ]
@@ -364,12 +396,25 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
           scheduledAt: _scheduledTime!,
         );
       } else {
+        // 1. تسجيل العملية في سجل البث (History)
         await FirebaseFirestore.instance.collection('broadcasts').add({
           'title': _titleCtrl.text.trim(),
           'body': _bodyCtrl.text.trim(),
           'target': _target,
           'timestamp': FieldValue.serverTimestamp(),
           'sent_by': 'Admin',
+        });
+
+        // 2. إطلاق التنبيه الفعلي لنظام الإشعارات (Backend Trigger)
+        // التحويل للفئة التي يتوقعها الـ Cloud Function
+        final String mappedTarget = _target == 'all_users' ? 'all' : _target;
+        
+        await FirebaseFirestore.instance.collection('notifications_log').add({
+          'title': _titleCtrl.text.trim(),
+          'body': _bodyCtrl.text.trim(),
+          'target': mappedTarget,
+          'created_at': FieldValue.serverTimestamp(),
+          'type': 'admin_broadcast',
         });
       }
 
@@ -472,12 +517,14 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox.shrink();
         final docs = snapshot.data!.docs;
-        if (docs.isEmpty) return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade100)),
-          child: Center(child: Text("لا توجد إشعارات مجدولة حالياً", style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 12))),
-        );
+        if (docs.isEmpty) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade100)),
+            child: Center(child: Text("لا توجد إشعارات مجدولة حالياً", style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 12))),
+          );
+        }
 
         return ListView.builder(
           shrinkWrap: true,

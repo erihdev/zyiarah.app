@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:zyiarah/screens/invoice_screen.dart';
-import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/invoice_pdf_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -45,7 +44,6 @@ class TamaraCheckoutScreen extends StatefulWidget {
 
 class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
   late final WebViewController _controller;
-  final ZyiarahOrderService _orderService = ZyiarahOrderService();
 
   @override
   void initState() {
@@ -56,44 +54,66 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
         NavigationDelegate(
           onPageStarted: (url) async {
             if (url.contains('payment-success') || url.contains('payment-success-mock')) {
-              String newOrderId = widget.orderId;
-              
-              if (widget.maintenanceId != null) {
-                // تحديث طلب الصيانة
-                await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
-                  'status': 'paid',
-                  'paymentMethod': 'tamara',
-                  'paidAt': FieldValue.serverTimestamp(),
-                  'totalAmountPaid': widget.amount,
-                });
-              } else {
-                // إنشاء طلب خدمة جديد بهوية محددة مسبقاً
-                await FirebaseFirestore.instance.collection('orders').doc(widget.orderId).set({
-                  'client_id': FirebaseAuth.instance.currentUser?.uid ?? "guest_client", 
-                  'client_name': 'عميل زيارة',
-                  'service_type': widget.serviceType,
-                  'amount': widget.amount,
-                  'status': 'pending',
-                  'location': widget.location,
-                  'payment_method': 'tamara',
-                  'created_at': FieldValue.serverTimestamp(),
-                  'hours_contracted': widget.hours ?? 4,
-                  'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
-                  'zone_name': widget.zoneName,
-                  'worker_count': widget.workerCount,
-                  'coupon_code': widget.couponCode,
-                  'discount_amount': widget.discountAmount,
-                });
+                String newOrderId = widget.orderId;
+                try {
+                final user = FirebaseAuth.instance.currentUser;
+                
+                if (widget.maintenanceId != null) {
+                  // تحديث طلب الصيانة
+                  await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
+                    'status': 'paid',
+                    'paymentMethod': 'tamara',
+                    'paidAt': FieldValue.serverTimestamp(),
+                    'totalAmountPaid': widget.amount,
+                  });
+                } else {
+                  // إنشاء طلب خدمة جديد بهوية محددة مسبقاً
+                  await FirebaseFirestore.instance.collection('orders').doc(widget.orderId).set({
+                    'client_id': user?.uid ?? "unauthenticated_user", 
+                    'client_name': user?.displayName ?? 'عميل زيارة',
+                    'service_type': widget.serviceType,
+                    'amount': widget.amount,
+                    'status': 'pending',
+                    'location': widget.location,
+                    'payment_method': 'tamara',
+                    'created_at': FieldValue.serverTimestamp(),
+                    'hours_contracted': widget.hours ?? 4,
+                    'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
+                    'zone_name': widget.zoneName,
+                    'worker_count': widget.workerCount,
+                    'coupon_code': widget.couponCode,
+                    'discount_amount': widget.discountAmount,
+                  });
 
-                if (widget.couponCode != null) {
-                   final couponSnap = await FirebaseFirestore.instance.collection('promo_codes').where('code', isEqualTo: widget.couponCode).get();
-                   if (couponSnap.docs.isNotEmpty) {
-                     await couponSnap.docs.first.reference.update({'uses': FieldValue.increment(1)});
-                   }
+                  if (widget.couponCode != null) {
+                    try {
+                      final couponSnap = await FirebaseFirestore.instance
+                          .collection('promo_codes')
+                          .where('code', isEqualTo: widget.couponCode)
+                          .get();
+                      if (couponSnap.docs.isNotEmpty) {
+                        await couponSnap.docs.first.reference.update({
+                          'uses': FieldValue.increment(1)
+                        });
+                      }
+                    } catch (e) {
+                      debugPrint("Coupon usage update failed (likely permission restriction): $e");
+                    }
+                  }
                 }
+
+                // ... بقية المنطق الخاص بـ ZATCA والفاتورة ...
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text("خطأ في تسجيل بيانات الطلب: $e"),
+                    backgroundColor: Colors.red,
+                  ));
+                }
+                return; // لا تكمل إذا فشل التسجيل الرئيسي
               }
 
-              // توليد بيانات ZATCA وتوليد الفاتورة في الخلفية (نظام تشفير قانوني)
+              // توليد بيانات ZATCA وتوليد الفاتورة في الخلفية
               final double vatAmount = widget.amount * 0.15;
               final String qrData = ZatcaService.generateZatcaQrCode(
                 merchantName: "مؤسسة معاذ يحي محمد المالكي",

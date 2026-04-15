@@ -268,49 +268,62 @@ class _CartSheetState extends State<_CartSheet> {
   void _checkout(List<StoreProduct> products) async {
     setState(() => _isSubmitting = true);
     
-    final items = widget.cart.entries.map((entry) {
-      final product = products.firstWhere((p) => p.id == entry.key);
-      return {
-        'id': entry.key,
-        'name': product.name,
-        'quantity': entry.value,
-        'price': product.price,
-      };
-    }).toList();
+    try {
+      final items = widget.cart.entries.map((entry) {
+        final product = products.firstWhere((p) => p.id == entry.key);
+        return {
+          'id': entry.key,
+          'name': product.name,
+          'quantity': entry.value,
+          'price': product.price,
+        };
+      }).toList();
 
-    double total = items.fold(0, (sum, item) => sum + (item['price'] as double) * (item['quantity'] as int));
+      double total = items.fold(0, (sum, item) => sum + (item['price'] as double) * (item['quantity'] as int));
 
-    final orderCode = await widget.storeService.createStoreOrder(
-      items: items, 
-      totalAmount: total,
-      paymentMethod: _selectedPaymentMethod,
-    );
-    
-    if (mounted) {
-      setState(() => _isSubmitting = false);
-      
-      // Trigger Notifications
-      await ZyiarahNotificationTriggerService().notifyOrderCreated(
-        clientId: FirebaseAuth.instance.currentUser?.uid ?? '',
-        orderCode: orderCode,
-        serviceName: 'طلب منتجات من المتجر',
-        type: 'store',
+      final orderCode = await widget.storeService.createStoreOrder(
+        items: items, 
+        totalAmount: total,
+        paymentMethod: _selectedPaymentMethod,
       );
-
-      Navigator.pop(context); // Close cart sheet
       
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ZyiarahOrderSuccessScreen(
-            orderCode: orderCode,
-            title: "تم استلام طلب المتجر!",
-            subtitle: "لقد وصل طلبك للإدارة، سنقوم بتجهيز منتجاتك والتواصل معك فوراً.",
+      if (mounted) {
+        // Trigger Notifications
+        await ZyiarahNotificationTriggerService().notifyOrderCreated(
+          clientId: FirebaseAuth.instance.currentUser?.uid ?? '',
+          orderCode: orderCode,
+          serviceName: 'طلب منتجات من المتجر',
+          type: 'store',
+        );
+
+        if (!mounted) return;
+
+        Navigator.pop(context); // Close cart sheet
+        
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ZyiarahOrderSuccessScreen(
+              orderCode: orderCode,
+              title: "تم استلام طلب المتجر!",
+              subtitle: "لقد وصل طلبك للإدارة، سنقوم بتجهيز منتجاتك والتواصل معك فوراً.",
+            ),
           ),
-        ),
-      );
-      
-      widget.cart.clear();
+        );
+        
+        widget.cart.clear();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text("فشل إرسال الطلب: $e"),
+          backgroundColor: Colors.red,
+        ));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 

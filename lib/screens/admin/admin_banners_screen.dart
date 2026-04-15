@@ -94,15 +94,13 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                     if (isSaving || isUploading)
                       const Padding(padding: EdgeInsets.only(bottom: 15), child: LinearProgressIndicator(color: Color(0xFF2563EB))),
                     
-                    // Designing Tip
                     Container(
                       padding: const EdgeInsets.all(10),
                       margin: const EdgeInsets.only(bottom: 15),
-                      decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(10)),
+                      decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
                       child: Text("المقاس المفضل: نسبة 2:1 (مثل 1200×600 بكسل)", style: TextStyle(fontSize: 11, color: Colors.blue.shade800)),
                     ),
 
-                    // Image Section
                     GestureDetector(
                       onTap: isUploading || isSaving ? null : () async {
                         final source = await showModalBottomSheet<ImageSource>(
@@ -121,24 +119,36 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                           if (file != null) {
                             setDialogState(() => isUploading = true);
                             try {
-                              final ref = FirebaseStorage.instance.ref().child('banners/${DateTime.now().millisecondsSinceEpoch}.jpg');
+                              final storageRef = FirebaseStorage.instance.ref().child('banners/${DateTime.now().millisecondsSinceEpoch}.jpg');
+                              UploadTask uploadTask;
                               if (kIsWeb) {
-                                await ref.putData(await file.readAsBytes());
+                                uploadTask = storageRef.putData(await file.readAsBytes());
                               } else {
-                                await ref.putFile(File(file.path));
+                                uploadTask = storageRef.putFile(File(file.path));
                               }
-                              final url = await ref.getDownloadURL();
-                              setDialogState(() { imageUrl = url; isUploading = false; });
+
+                              final TaskSnapshot snapshot = await uploadTask;
+                              if (snapshot.state == TaskState.success) {
+                                final url = await snapshot.ref.getDownloadURL();
+                                setDialogState(() { 
+                                  imageUrl = url; 
+                                  isUploading = false; 
+                                });
+                              } else {
+                                throw Exception("Upload task ended with state: ${snapshot.state}");
+                              }
                             } catch (e) {
                               setDialogState(() => isUploading = false);
-                              if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل الرفع: $e")));
+                              if (ctx.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل الرفع: ${e.toString()}"), backgroundColor: Colors.redAccent));
+                              }
                             }
                           }
                         }
                       },
                       child: Container(
                         width: double.infinity,
-                        height: 140,
+                        height: 160,
                         decoration: BoxDecoration(
                           color: Colors.grey[100],
                           borderRadius: BorderRadius.circular(15),
@@ -152,7 +162,7 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                     const SizedBox(height: 20),
 
                     DropdownButtonFormField<String>(
-                      value: selectedRoute,
+                      initialValue: selectedRoute,
                       decoration: const InputDecoration(labelText: 'توجيه العميل', border: OutlineInputBorder()),
                       items: routingOptions.map((e) => DropdownMenuItem(value: e['value'], child: Text(e['label']!))).toList(),
                       onChanged: (val) => setDialogState(() => selectedRoute = val!),

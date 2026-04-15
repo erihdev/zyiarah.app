@@ -642,7 +642,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF2563EB).withOpacity(0.1) : Colors.grey.shade50, 
+                color: isSelected ? const Color(0xFF2563EB).withValues(alpha: 0.1) : Colors.grey.shade50, 
                 shape: BoxShape.circle, 
               ),
               child: Icon(icon, color: color ?? const Color(0xFF2563EB)),
