@@ -43,9 +43,41 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   Future<void> _fetchOrder() async {
     try {
       final doc = await _db.collection('orders').doc(widget.orderId).get();
-      if (doc.exists && mounted) {
+      
+      // Try maintenance collection if not in orders
+      DocumentSnapshot? finalDoc = doc;
+      if (!finalDoc.exists) {
+        finalDoc = await _db.collection('maintenance_requests').doc(widget.orderId).get();
+      }
+
+      if (finalDoc.exists && mounted) {
+        final data = finalDoc.data() as Map<String, dynamic>;
+        
+        // Unified field extraction with fallbacks
+        String? phone = data['user_phone'] ?? data['userPhone'] ?? data['client_phone'];
+        String? name = data['client_name'] ?? data['userName'];
+        
+        // If phone/name is missing in order doc, fetch from user profile
+        final userId = data['client_id'] ?? data['userId'];
+        if (userId != null && (phone == null || name == null)) {
+          try {
+            final userDoc = await _db.collection('users').doc(userId).get();
+            if (userDoc.exists) {
+              final userData = userDoc.data() as Map<String, dynamic>;
+              phone ??= userData['phone'];
+              name ??= userData['name'];
+            }
+          } catch (e) {
+             debugPrint("Error fetching fallback user data: $e");
+          }
+        }
+
         setState(() {
-          _orderData = doc.data();
+          _orderData = {
+            ...data,
+            'user_phone': phone,
+            'client_name': name,
+          };
           _currentStatus = _orderData?['status'] ?? 'pending';
           _selectedDriverId = _orderData?['driver_id'];
           _selectedDriverName = _orderData?['assigned_driver'];
@@ -164,8 +196,14 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                   children: [
                     const Text("معلومات الخدمة", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF2563EB))),
                     const Divider(),
-                    ListTile(title: const Text("الخدمة"), subtitle: Text(data['service_name'] ?? '-')),
-                    ListTile(title: const Text("المبلغ الإجمالي"), subtitle: Text("${data['final_amount'] ?? data['amount'] ?? 0} ر.س")),
+                    ListTile(
+                      title: const Text("الخدمة"), 
+                      subtitle: Text(data['service_name'] ?? data['serviceType'] ?? data['service_type'] ?? '-'),
+                    ),
+                    ListTile(
+                      title: const Text("المبلغ الإجمالي"), 
+                      subtitle: Text("${data['final_amount'] ?? data['amount'] ?? data['totalAmountPaid'] ?? data['quotePrice'] ?? 0} ر.س"),
+                    ),
                     ListTile(title: const Text("تاريخ إنشاء الطلب"), subtitle: Text(DateFormat('yyyy-MM-dd HH:mm').format(date))),
                   ],
                 ),

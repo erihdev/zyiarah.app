@@ -16,6 +16,8 @@ class LocationPickerScreen extends StatefulWidget {
   final double? amount;
   final String? zoneName;
   final int workerCount;
+  final double? radius;
+  final Color? circleColor;
 
   const LocationPickerScreen({
     super.key, 
@@ -25,6 +27,8 @@ class LocationPickerScreen extends StatefulWidget {
     this.amount,
     this.zoneName,
     this.workerCount = 1,
+    this.radius,
+    this.circleColor,
   });
 
   @override
@@ -169,6 +173,19 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                     additionalOptions: {'accessToken': _mapboxToken},
                     userAgentPackageName: 'com.zyiarah.zyiarah',
                   ),
+                  if (widget.radius != null)
+                    CircleLayer(
+                      circles: [
+                        CircleMarker(
+                          point: _selectedLatLng,
+                          radius: widget.radius! * 1000, // Convert km to meters
+                          useRadiusInMeter: true,
+                          color: (widget.circleColor ?? Colors.blue).withOpacity(0.3),
+                          borderColor: widget.circleColor ?? Colors.blue,
+                          borderStrokeWidth: 2,
+                        ),
+                      ],
+                    ),
                 ],
               ),
             

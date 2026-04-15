@@ -6,6 +6,7 @@ import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/counter_service.dart';
+import 'package:zyiarah/services/location_service.dart';
 import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 
@@ -64,6 +65,17 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
         _selectedTime.hour, _selectedTime.minute,
       );
 
+      // Get User Location
+      GeoPoint? location;
+      try {
+        final pos = await ZyiarahLocationService().getCurrentLocation();
+        if (pos != null) {
+          location = GeoPoint(pos.latitude, pos.longitude);
+        }
+      } catch (e) {
+        debugPrint("Location capture failed: $e");
+      }
+
       await _firestore.collection('maintenance_requests').add({
         'requestId': orderCode,
         'code': orderCode,
@@ -73,6 +85,7 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
         'serviceType': _selectedService,
         'quantity': _quantity,
         'floor': _selectedFloor,
+        'location': location, // New field for mapping
         'scheduledAt': Timestamp.fromDate(scheduledDateTime),
         'status': 'under_review',
         'createdAt': FieldValue.serverTimestamp(),

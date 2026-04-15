@@ -122,6 +122,61 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
     }
   }
 
+  Future<void> _showHouseRulesDialog() async {
+    final controller = TextEditingController(text: _currentUser?.houseRules ?? '');
+    
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: Text('تفضيلات الخدمة (قوانين المنزل)', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'سيتم عرض هذه التنبيهات للسائق عند وصوله لموقعك لضمان تقديم الخدمة كما تحبين تماماً.',
+                style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey),
+              ),
+              const SizedBox(height: 15),
+              TextField(
+                controller: controller,
+                maxLines: 5,
+                decoration: InputDecoration(
+                  hintText: 'مثال: يرجى عدم رن الجرس، استخدم ملمع الخشب للكنب، لا تلمس التحف الزجاجية...',
+                  hintStyle: GoogleFonts.tajawal(fontSize: 12),
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('إلغـاء', style: GoogleFonts.tajawal()),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E)),
+              child: Text('حفـظ التفضيلات', style: GoogleFonts.tajawal(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == true) {
+      final uid = _auth.currentUser?.uid;
+      if (uid != null) {
+        setState(() => _isLoading = true);
+        await _firestore.collection('users').doc(uid).update({
+          'house_rules': controller.text.trim(),
+        });
+        await _loadUserData();
+      }
+    }
+  }
+
   Future<void> _deleteAccount() async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
@@ -202,6 +257,9 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                       _currentUser?.role == 'driver' ? '🚗 سائق' : '👤 عميل',
                     ),
                     const Divider(height: 10, indent: 20, endIndent: 20),
+                    _buildMenuTile(Icons.home_work_outlined, 'تفضيلات الخدمة / قوانين المنزل', () {
+                      _showHouseRulesDialog();
+                    }, color: Colors.blueAccent),
                     _buildMenuTile(Icons.history, 'سجل الطلبات', () {
                       Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen()));
                     }),

@@ -16,11 +16,22 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
   final ZyiarahAuditService _audit = ZyiarahAuditService();
   bool _isLoading = true;
   List<QueryDocumentSnapshot> _coupons = [];
+  List<String> _availableZones = [];
 
   @override
   void initState() {
     super.initState();
     _fetchCoupons();
+    _fetchZones();
+  }
+
+  Future<void> _fetchZones() async {
+    try {
+      final snapshot = await _db.collection('hourly_zones').get();
+      setState(() {
+        _availableZones = snapshot.docs.map((d) => d['name'] as String).toList();
+      });
+    } catch (_) {}
   }
 
   Future<void> _fetchCoupons() async {
@@ -126,13 +137,57 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      SwitchListTile(
-                        title: const Text('حالة الكود (فعال / غير فعال)'),
-                        value: status == 'active',
-                        onChanged: (val) {
-                          setDialogState(() {
-                            status = val ? 'active' : 'inactive';
-                          });
+                      List<String> restrictedZones = List<String>.from(data?['restricted_zones'] ?? []);
+
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.location_city, size: 18),
+                        label: Text(restrictedZones.isEmpty ? 'متاح لكل المناطق' : 'محصور لـ ${restrictedZones.length} مناطق'),
+                        onPressed: () async {
+                          final selected = await showDialog<List<String>>(
+                            context: context,
+                            builder: (ctx) {
+                              List<String> tempSelected = List<String>.from(restrictedZones);
+                              return StatefulBuilder(
+                                builder: (context, setTempState) => Directionality(
+                                  textDirection: TextDirection.rtl,
+                                  child: AlertDialog(
+                                    title: const Text('اختر المناطق المحصورة'),
+                                    content: SizedBox(
+                                      width: double.maxFinite,
+                                      child: ListView.builder(
+                                        shrinkWrap: true,
+                                        itemCount: _availableZones.length,
+                                        itemBuilder: (context, index) {
+                                          final zone = _availableZones[index];
+                                          return CheckboxListTile(
+                                            title: Text(zone),
+                                            value: tempSelected.contains(zone),
+                                            onChanged: (val) {
+                                              setTempState(() {
+                                                if (val!) {
+                                                  tempSelected.add(zone);
+                                                } else {
+                                                  tempSelected.remove(zone);
+                                                }
+                                              });
+                                            },
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                                      ElevatedButton(onPressed: () => Navigator.pop(ctx, tempSelected), child: const Text('تأكيد')),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                          if (selected != null) {
+                            setDialogState(() => restrictedZones = selected);
+                          }
                         },
                       ),
                     ],
@@ -161,6 +216,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                           'uses': data?['uses'] ?? 0,
                           'expiry': expiryDate.toIso8601String(),
                           'status': status,
+                          'restricted_zones': restrictedZones,
                           'updatedAt': FieldValue.serverTimestamp(),
                         };
 

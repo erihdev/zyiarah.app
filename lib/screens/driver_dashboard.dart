@@ -194,27 +194,64 @@ class _DriverDashboardState extends State<DriverDashboard> {
           return endTime != null && endTime.isAfter(todayStart);
         }).length;
 
-        return StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('drivers')
-              .doc(_currentDriverId)
-              .snapshots(),
-          builder: (context, driverSnapshot) {
-            final driverData = driverSnapshot.data?.data() as Map<String, dynamic>?;
-            final rating = (driverData?['rating_avg'] ?? 5.0).toStringAsFixed(1);
+        // Badge Logic
+        String rank = "عامل جديد";
+        Color rankColor = Colors.grey;
+        if (totalTasks >= 100) { rank = "عامل ماسي"; rankColor = Colors.blue; }
+        else if (totalTasks >= 50) { rank = "عامل ذهبي"; rankColor = Colors.amber; }
+        else if (totalTasks >= 10) { rank = "عامل فضي"; rankColor = Colors.blueGrey; }
 
-            return Row(
+        return Column(
+          children: [
+            Row(
               children: [
                 _buildCompactStat("مهام اليوم", "$todayTasks", Icons.today, Colors.blue),
                 const SizedBox(width: 12),
-                _buildCompactStat("إجمالي المهام", "$totalTasks", Icons.assignment_turned_in, Colors.orange),
-                const SizedBox(width: 12),
-                _buildCompactStat("التقييم", "$rating ★", Icons.star, Colors.amber),
+                _buildCompactStat("الرتبة المهنية", rank, Icons.military_tech, rankColor),
               ],
-            );
-          },
+            ),
+            const SizedBox(height: 12),
+            _buildAchievementBadges(totalTasks),
+          ],
         );
       },
+    );
+  }
+
+  Widget _buildAchievementBadges(int totalTasks) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("أوسمة التميز", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13)),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildBadgeIcon(Icons.verified, "مبتدئ", totalTasks >= 1),
+              _buildBadgeIcon(Icons.workspace_premium, "نشط", totalTasks >= 10),
+              _buildBadgeIcon(Icons.auto_awesome, "محترف", totalTasks >= 50),
+              _buildBadgeIcon(Icons.diamond, "نخبة", totalTasks >= 100),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBadgeIcon(IconData icon, String label, bool earned) {
+    return Column(
+      children: [
+        Icon(icon, color: earned ? const Color(0xFF5D1B5E) : Colors.grey[200], size: 30),
+        const SizedBox(height: 4),
+        Text(label, style: GoogleFonts.tajawal(fontSize: 10, color: earned ? Colors.black87 : Colors.grey[300])),
+      ],
     );
   }
 
@@ -241,25 +278,71 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
   Widget _buildMainSection() {
     if (!_isOnline) {
-      return _buildStatusPlaceholder(Icons.cloud_off, "أنت حالياً غير متصل", "قم بتغيير حالتك للأعلى لبدء استقبال الطلبات");
+      return Column(
+        children: [
+          _buildStatusPlaceholder(Icons.cloud_off, "أنت حالياً غير متصل", "قم بتغيير حالتك للأعلى لبدء استقبال الطلبات"),
+          const SizedBox(height: 20),
+          _buildCustomerLove(),
+        ],
+      );
     }
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: _orderService.streamDriverActiveOrders(_currentDriverId!),
-      builder: (context, snapshot) {
-        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-          final orderDoc = snapshot.data!.docs.first;
-          final status = orderDoc.get('status');
-          if (status == 'accepted' || status == 'arrived' || status == 'in_progress') {
-            _startSync(orderDoc.id);
-          } else {
+    return Column(
+      children: [
+        StreamBuilder<QuerySnapshot>(
+          stream: _orderService.streamDriverActiveOrders(_currentDriverId!),
+          builder: (context, snapshot) {
+            if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+              final orderDoc = snapshot.data!.docs.first;
+              final status = orderDoc.get('status');
+              if (status == 'accepted' || status == 'arrived' || status == 'in_progress') {
+                _startSync(orderDoc.id);
+              } else {
+                _stopSync();
+              }
+              return _buildActivePipeline(orderDoc);
+            }
             _stopSync();
-          }
-          return _buildActivePipeline(orderDoc);
-        }
-        _stopSync();
-        return _buildAvailableTasksSection();
-      },
+            return _buildAvailableTasksSection();
+          },
+        ),
+        const SizedBox(height: 20),
+        _buildCustomerLove(),
+      ],
+    );
+  }
+
+  Widget _buildCustomerLove() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Color(0xFF0F172A), Color(0xFF1E293B)]),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.favorite, color: Colors.pinkAccent, size: 20),
+              const SizedBox(width: 8),
+              Text("حب العملاء لك", style: GoogleFonts.tajawal(color: Colors.white, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Text(
+            "\"سائق محترم جداً، وصل في الموعد وكان العمل متقناً للغاية. شكراً جزيلاً زيارة.\"",
+            style: GoogleFonts.tajawal(color: Colors.white70, fontSize: 13, fontStyle: FontStyle.italic),
+          ),
+          const SizedBox(height: 10),
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text("- سارة العتيبي (صبيا)", style: TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -356,6 +439,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
             ],
           ),
           const Divider(height: 30),
+          if (data['client_id'] != null) _buildHouseRulesAlert(data['client_id']),
+          const Divider(height: 30),
           if (status == 'in_progress') _buildTimer(data['hours_contracted'] ?? 4),
           const SizedBox(height: 10),
           SizedBox(
@@ -381,6 +466,36 @@ class _DriverDashboardState extends State<DriverDashboard> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildHouseRulesAlert(String clientId) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance.collection('users').doc(clientId).get(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox.shrink();
+        final rules = snapshot.data?.get('house_rules') as String?;
+        if (rules == null || rules.isEmpty) return const SizedBox.shrink();
+
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.amber.shade200)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.tips_and_updates, color: Colors.amber, size: 18),
+                  const SizedBox(width: 8),
+                  Text("قوانين البيت وتفضيلات العميل:", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.orange.shade900)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(rules, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+            ],
+          ),
+        );
+      },
     );
   }
 

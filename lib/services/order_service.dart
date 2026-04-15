@@ -44,6 +44,7 @@ class ZyiarahOrderService {
       'client_id': clientId,
       'client_name': clientName,
       'client_phone': clientPhone,
+      'user_phone': clientPhone, // Added for consistency with Admin Panel mapping
       'service_type': serviceType,
       'service_name': serviceType, // Ensuring service_name is present for UI consistency
       'amount': amount,
@@ -80,7 +81,7 @@ class ZyiarahOrderService {
   }
 
   // التحقق من كود الخصم
-  Future<Map<String, dynamic>?> validateCoupon(String code) async {
+  Future<Map<String, dynamic>?> validateCoupon(String code, {String? currentUserZone}) async {
     try {
       final snapshot = await _db
           .collection('promo_codes')
@@ -95,6 +96,7 @@ class ZyiarahOrderService {
       final expiry = data['expiry'] as String;
       final maxUses = data['maxUses'] as int;
       final uses = data['uses'] as int;
+      final List<dynamic>? restrictedZones = data['restricted_zones'];
 
       // تحقق من التاريخ
       if (DateTime.parse(expiry).isBefore(DateTime.now())) {
@@ -104,6 +106,13 @@ class ZyiarahOrderService {
       // تحقق من عدد مرات الاستخدام
       if (uses >= maxUses) {
         return null;
+      }
+
+      // تحقق من القيود الجغرافية
+      if (restrictedZones != null && restrictedZones.isNotEmpty) {
+        if (currentUserZone == null || !restrictedZones.contains(currentUserZone)) {
+          return null; // الكوبون غير متاح في هذه المنطقة
+        }
       }
 
       return data;

@@ -11,6 +11,7 @@ class ZyiarahUser {
   final int visitsRemaining;
   final DateTime? subscriptionExpiry;
   final String? subscriptionType;
+  final String? houseRules;
 
   ZyiarahUser({
     required this.uid,
@@ -23,6 +24,7 @@ class ZyiarahUser {
     this.visitsRemaining = 0,
     this.subscriptionExpiry,
     this.subscriptionType,
+    this.houseRules,
   });
 
   factory ZyiarahUser.fromMap(String id, Map<String, dynamic> data) {
@@ -39,6 +41,7 @@ class ZyiarahUser {
           ? (data['subscription_expiry'] as Timestamp).toDate() 
           : null,
       subscriptionType: data['subscription_type'],
+      houseRules: data['house_rules'],
     );
   }
 
@@ -53,6 +56,7 @@ class ZyiarahUser {
       'visits_remaining': visitsRemaining,
       'subscription_expiry': subscriptionExpiry != null ? Timestamp.fromDate(subscriptionExpiry!) : null,
       'subscription_type': subscriptionType,
+      'house_rules': houseRules,
     };
   }
 }

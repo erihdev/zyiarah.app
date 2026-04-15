@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/screens/admin/admin_compliance_screen.dart';
 import 'package:zyiarah/screens/admin/admin_broadcast_screen.dart';
 import 'package:zyiarah/screens/admin/admin_search_screen.dart';
+import 'package:zyiarah/screens/admin/admin_staff_performance_screen.dart';
 import 'package:zyiarah/utils/pdf_report_util.dart';
 
 class AdminInsightsScreen extends StatefulWidget {
@@ -564,6 +565,16 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
                   subtitle: expiringSoon > 0 ? "يوجد $expiringSoon كادر تنتهي هوياتهم قريباً (اضغط للتفاصيل)" : "جميع الهويات سارية المفعول (اضغط للمعاينة)",
                   icon: Icons.gavel_rounded,
                   color: expiringSoon > 0 ? Colors.red : Colors.green,
+                ),
+                const Divider(height: 30),
+                GestureDetector(
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminStaffPerformanceScreen())),
+                  child: _buildHealthItem(
+                    title: "كفاءة الكوادر (Performance)",
+                    subtitle: "متابعة الإنجازات، التقييمات، والنشاط (اضغط للتفاصيل)",
+                    icon: Icons.insights_rounded,
+                    color: const Color(0xFF5D1B5E),
+                  ),
                 ),
                 const Divider(height: 30),
                 _buildHealthItem(

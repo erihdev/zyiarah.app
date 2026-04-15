@@ -147,11 +147,48 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
       locale: const Locale('ar'),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF1E293B), // استخدام لون العلامة التجارية
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF1E293B),
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF1E293B),
+                textStyle: GoogleFonts.tajawal(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
+
     if (date != null && mounted) {
       final time = await showTimePicker(
         context: context,
         initialTime: TimeOfDay.now(),
+        builder: (context, child) {
+          return Theme(
+            data: Theme.of(context).copyWith(
+              colorScheme: const ColorScheme.light(
+                primary: Color(0xFF1E293B),
+                onPrimary: Colors.white,
+                onSurface: Color(0xFF1E293B),
+              ),
+              textButtonTheme: TextButtonThemeData(
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF1E293B),
+                  textStyle: GoogleFonts.tajawal(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+            child: child!,
+          );
+        },
       );
       if (time != null) {
         setState(() {

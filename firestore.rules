@@ -107,9 +107,13 @@ service cloud.firestore {
     }
 
     // System Settings
+    // System Settings
     match /system_configs/{configId} {
       allow read: if isLoggedIn();
       allow write: if isAdmin();
+    }
+    match /metadata/{docId} {
+      allow get, update: if isLoggedIn() && docId == 'order_counter';
     }
     match /admins/{adminId} {
       allow read: if isLoggedIn() && (request.auth.uid == adminId || isAdmin());
@@ -147,7 +151,10 @@ service cloud.firestore {
       allow read, delete: if isAdmin();
     }
     match /notification_triggers/{triggerId} {
-      allow create: if isLoggedIn() && request.resource.data.userId == request.auth.uid;
+      allow create: if isLoggedIn() && (
+        request.resource.data.toUid == request.auth.uid || 
+        request.resource.data.toUid == 'ADMIN_BROADCAST'
+      );
       allow read, delete: if isAdmin();
     }
     match /notifications_log/{logId} {

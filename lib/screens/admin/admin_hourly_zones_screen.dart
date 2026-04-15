@@ -90,7 +90,10 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     // Map Selection
                     InkWell(
                       onTap: () async {
-                        final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => const LocationPickerScreen(serviceName: 'تحديد موقع المنطقة')));
+                        final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => LocationPickerScreen(
+                          serviceName: 'تحديد موقع المنطقة',
+                          radius: double.tryParse(radiusCtrl.text) ?? 15.0,
+                        )));
                         if (result != null && result is GeoPoint) {
                           setDialogState(() => selectedGeo = result);
                         }
@@ -124,9 +127,17 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Expanded(child: TextField(controller: p6Ctrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '6 ساعات', border: OutlineInputBorder()))),
+                        Expanded(child: TextField(controller: p5Ctrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '5 ساعات', border: OutlineInputBorder()))),
                         const SizedBox(width: 8),
+                        Expanded(child: TextField(controller: p6Ctrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '6 ساعات', border: OutlineInputBorder()))),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Spacer(),
                         Expanded(child: TextField(controller: p8Ctrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '8 ساعات', border: OutlineInputBorder()))),
+                        const Spacer(),
                       ],
                     ),
                     
@@ -160,7 +171,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                         'prices': {
                           '1': double.tryParse(p1Ctrl.text) ?? 0,
                           '4': double.tryParse(p4Ctrl.text) ?? 0,
-                          '5': double.tryParse(p1Ctrl.text) ?? 0, // Fallback p5
+                          '5': double.tryParse(p5Ctrl.text) ?? 0,
                           '6': double.tryParse(p6Ctrl.text) ?? 0,
                           '8': double.tryParse(p8Ctrl.text) ?? 0,
                         },
@@ -169,6 +180,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                         'rank': rank,
                         'updated_at': FieldValue.serverTimestamp(),
                       };
+
                       if (doc == null) {
                         await _db.collection('hourly_zones').add(newData);
                       } else {

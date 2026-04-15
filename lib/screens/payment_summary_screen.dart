@@ -1,19 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:lottie/lottie.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/services/tamara_service.dart';
 import 'package:zyiarah/services/edfapay_service.dart';
 import 'package:zyiarah/screens/checkout_screen.dart';
-import 'package:zyiarah/screens/invoice_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/models/user_model.dart';
-
 import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/services/counter_service.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
+import 'package:intl/intl.dart' as intl;
 
 class PaymentSummaryScreen extends StatefulWidget {
   final String serviceName;
@@ -52,9 +50,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   bool _agreeToTerms = false;
 
   final TextEditingController _couponController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   double _discountAmount = 0.0;
   String? _appliedCoupon;
   bool _isValidatingCoupon = false;
+  bool _needsPhoneUpdate = false;
 
   @override
   void initState() {
@@ -69,6 +69,13 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       if (doc.exists && mounted) {
         setState(() {
           _currentUser = ZyiarahUser.fromMap(user.uid, doc.data()!);
+          
+          final phone = _currentUser?.phone ?? '';
+          if (phone.isEmpty || phone == '000000000' || phone.length < 9) {
+            _needsPhoneUpdate = true;
+          } else {
+            _phoneController.text = phone;
+          }
 
           // Auto-select subscription if available
           if ((_currentUser?.visitsRemaining ?? 0) > 0) {
@@ -80,7 +87,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   bool _isCodAvailableForService() {
-    // تم تفعيل الدفع عند الاستلام ليكون متاحاً لجميع الخدمات
     return true;
   }
 
@@ -89,10 +95,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
   Future<void> _validateCoupon() async {
     if (_couponController.text.isEmpty) return;
-
     setState(() => _isValidatingCoupon = true);
     
-    final couponData = await _orderService.validateCoupon(_couponController.text);
+    final couponData = await _orderService.validateCoupon(
+      _couponController.text,
+      currentUserZone: widget.zoneName,
+    );
     
     if (mounted) {
       setState(() {
@@ -132,29 +140,43 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   void _handlePayment() async {
+    if (!_agreeToTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى الموافقة على الشروط والأحكام"), backgroundColor: Colors.red));
+      return;
+    }
+
+    if (_needsPhoneUpdate && (_phoneController.text.isEmpty || _phoneController.text.length < 9)) {
+       ScaffoldMessenger.of(context).showSnackBar(
+         const SnackBar(content: Text("يرجى إدخال رقم جوال صحيح (مثال: 0500000000)"), backgroundColor: Colors.red),
+       );
+       return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
-      // Pre-allocate a Firestore ID if this is a new order, or use the maintenance ID
+      if (_needsPhoneUpdate) {
+        await FirebaseFirestore.instance.collection('users').doc(_currentUser?.uid).update({
+          'phone': _phoneController.text.trim(),
+        });
+      }
+
       final String finalOrderId = widget.maintenanceId ?? FirebaseFirestore.instance.collection('orders').doc().id;
-      
-      // Generate Smart Sequential Code
       final seq = await ZyiarahCounterService().getNextOrderNumber();
       final orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
 
       if (_selectedPaymentMethod == 'subscription') {
-        // دفع عبر الاشتراك
         if (widget.maintenanceId != null) {
-          // Fetch existing maintenance code if possible, or use new one
           await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
             'status': 'paid',
             'paymentMethod': 'subscription',
             'paidAt': FieldValue.serverTimestamp(),
           });
         } else {
-          // دفع للخدمات العادية (تنظيف، إلخ)
           await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
             'code': orderCode,
+            'client_id': FirebaseAuth.instance.currentUser?.uid,
+            'client_name': _currentUser?.name ?? 'عميل زيارة',
             'service_type': widget.serviceName,
             'amount': 0.0,
             'status': 'pending',
@@ -168,39 +190,26 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             'coupon_code': _appliedCoupon,
             'discount_amount': _discountAmount,
           });
-          
-          if (_appliedCoupon != null) {
-             // Increment coupon usage manually since we're bypassing createOrder for ID consistency
-             final couponSnap = await FirebaseFirestore.instance.collection('promo_codes').where('code', isEqualTo: _appliedCoupon).get();
-             if (couponSnap.docs.isNotEmpty) {
-               await couponSnap.docs.first.reference.update({'uses': FieldValue.increment(1)});
-             }
-          }
         }
         
         if (mounted) {
           setState(() => _isLoading = false);
-          
-          // Trigger Notifications
           await ZyiarahNotificationTriggerService().notifyOrderCreated(
             clientId: FirebaseAuth.instance.currentUser?.uid ?? '',
             orderCode: orderCode,
             serviceName: widget.serviceName,
             type: widget.maintenanceId != null ? 'maintenance' : 'cleaning',
           );
-
           await _navigateToSuccess(orderCode);
         }
       } else if (_selectedPaymentMethod == 'cod') {
-        // دفع عند الاستلام
         if (widget.maintenanceId != null) {
           await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
-            'status': 'waiting_payment_cod', // Or approved
+            'status': 'waiting_payment_cod',
             'paymentMethod': 'cod',
             'paidAt': FieldValue.serverTimestamp(),
           });
         } else {
-          // دفع للخدمات العادية
           await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
             'code': orderCode,
             'client_id': FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
@@ -218,26 +227,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             'coupon_code': _appliedCoupon,
             'discount_amount': _discountAmount,
           });
-          
-          if (_appliedCoupon != null) {
-             final couponSnap = await FirebaseFirestore.instance.collection('promo_codes').where('code', isEqualTo: _appliedCoupon).get();
-             if (couponSnap.docs.isNotEmpty) {
-               await couponSnap.docs.first.reference.update({'uses': FieldValue.increment(1)});
-             }
-          }
         }
         
         if (mounted) {
           setState(() => _isLoading = false);
-          
-          // Trigger Notifications
           await ZyiarahNotificationTriggerService().notifyOrderCreated(
             clientId: FirebaseAuth.instance.currentUser?.uid ?? '',
             orderCode: orderCode,
             serviceName: widget.serviceName,
             type: widget.maintenanceId != null ? 'maintenance' : 'cleaning',
           );
-
           await _navigateToSuccess(orderCode);
         }
       } else if (_selectedPaymentMethod == 'tamara') {
@@ -270,13 +269,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             ),
           );
           if (paymentSuccess == true && mounted) {
-            Navigator.pop(context, true); // Success back to dashboard
+            Navigator.pop(context, true);
           }
         } else {
           throw Exception("خطأ في بدء جلسة تمارا");
         }
       } else {
-        // EdfaPay / Card Payment
         final result = await _edfaPayService.processPayment(
           amount: totalWithVat,
           orderId: finalOrderId,
@@ -286,51 +284,40 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         );
 
         if (result['success'] == true && mounted) {
-      if (widget.maintenanceId != null) {
-        // تحديث حالة طلب الصيانة بعد الدفع
-        await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
-          'status': 'paid',
-          'paymentMethod': _selectedPaymentMethod,
-          'paidAt': FieldValue.serverTimestamp(),
-          'totalAmount': totalWithVat,
-        });
-      } else {
-        // دفع للخدمات العادية (تنظيف، إلخ) - إنشاء طلب جديد بهوية محددة مسبقاً
-        await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
-          'client_id': FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
-          'client_name': _currentUser?.name ?? 'عميل زيارة',
-          'service_type': widget.serviceName,
-          'amount': totalWithVat,
-          'status': 'pending',
-          'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
-          'payment_method': _selectedPaymentMethod,
-          'created_at': FieldValue.serverTimestamp(),
-          'hours_contracted': widget.hours ?? 4,
-          'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
-          'zone_name': widget.zoneName,
-          'worker_count': widget.workerCount,
-          'coupon_code': _appliedCoupon,
-          'discount_amount': _discountAmount,
-        });
-        
-        if (_appliedCoupon != null) {
-           final couponSnap = await FirebaseFirestore.instance.collection('promo_codes').where('code', isEqualTo: _appliedCoupon).get();
-           if (couponSnap.docs.isNotEmpty) {
-             await couponSnap.docs.first.reference.update({'uses': FieldValue.increment(1)});
-           }
-        }
-      }
+          if (widget.maintenanceId != null) {
+            await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
+              'status': 'paid',
+              'paymentMethod': _selectedPaymentMethod,
+              'paidAt': FieldValue.serverTimestamp(),
+              'totalAmount': totalWithVat,
+            });
+          } else {
+            await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
+              'client_id': FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
+              'client_name': _currentUser?.name ?? 'عميل زيارة',
+              'service_type': widget.serviceName,
+              'amount': totalWithVat,
+              'status': 'pending',
+              'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
+              'payment_method': _selectedPaymentMethod,
+              'created_at': FieldValue.serverTimestamp(),
+              'hours_contracted': widget.hours ?? 4,
+              'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
+              'zone_name': widget.zoneName,
+              'worker_count': widget.workerCount,
+              'coupon_code': _appliedCoupon,
+              'discount_amount': _discountAmount,
+            });
+          }
 
           setState(() => _isLoading = false);
           if (mounted) {
-            // Trigger Notifications
             await ZyiarahNotificationTriggerService().notifyOrderCreated(
               clientId: FirebaseAuth.instance.currentUser?.uid ?? '',
               orderCode: orderCode,
               serviceName: widget.serviceName,
               type: widget.maintenanceId != null ? 'maintenance' : 'cleaning',
             );
-
             await _navigateToSuccess(orderCode);
           }
         } else {
@@ -350,24 +337,19 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF8FAFC),
-        appBar: AppBar(
-          title: Text('ملخص الطلب والدفع', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF5D1B5E),
-          foregroundColor: Colors.white,
-          elevation: 0,
-        ),
+        backgroundColor: const Color(0xFFF1F5F9),
         body: Stack(
           children: [
             SingleChildScrollView(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildInvoiceHeader(),
                   Padding(
-                    padding: const EdgeInsets.all(20.0),
+                    padding: const EdgeInsets.all(20),
                     child: Column(
                       children: [
+                        if (_needsPhoneUpdate) _buildPhoneUpdateCard(),
+                        const SizedBox(height: 20),
                         _buildOrderDetailsCard(),
                         const SizedBox(height: 20),
                         _buildCouponSection(),
@@ -375,7 +357,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                         _buildPaymentMethods(),
                         const SizedBox(height: 25),
                         _buildTermsAndConditions(),
-                        const SizedBox(height: 100), // Space for sticky button
+                        const SizedBox(height: 100),
                       ],
                     ),
                   ),
@@ -410,6 +392,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       ),
       child: Column(
         children: [
+          const SizedBox(height: 20),
           const Icon(Icons.receipt_long_rounded, color: Colors.white, size: 48),
           const SizedBox(height: 16),
           Text(
@@ -444,7 +427,40 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     );
   }
 
-
+  Widget _buildPhoneUpdateCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.phone_android_rounded, color: Colors.red),
+              const SizedBox(width: 8),
+              Text('مطلوب رقم الجوال للتواصل', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.red)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _phoneController,
+            keyboardType: TextInputType.phone,
+            decoration: InputDecoration(
+              hintText: 'مثال: 0501234567',
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildOrderDetailsCard() {
     return Container(
@@ -459,17 +475,17 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         children: [
           Text('تفاصيل الفاتورة', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),
           const Divider(height: 30),
-          _buildRow('الخدمة', widget.serviceName),
-          if (widget.hours != null) _buildRow('المدة', '${widget.hours} ساعات'),
-          _buildRow('عدد العاملات', widget.workerCount == 1 ? "عاملة واحدة" : "عاملتين"),
+          _buildRowDetail('الخدمة', widget.serviceName),
+          if (widget.hours != null) _buildRowDetail('المدة', '${widget.hours} ساعات'),
+          _buildRowDetail('عدد العاملات', widget.workerCount == 1 ? "عاملة واحدة" : "عاملتين"),
           if (widget.serviceDate != null) 
-            _buildRow('التاريخ', '${widget.serviceDate!.year}-${widget.serviceDate!.month}-${widget.serviceDate!.day}'),
-          if (widget.zoneName != null) _buildRow('المنطقة', widget.zoneName!),
+            _buildRowDetail('التاريخ', intl.DateFormat('yyyy-MM-dd').format(widget.serviceDate!)),
+          if (widget.zoneName != null) _buildRowDetail('المنطقة', widget.zoneName!),
           const Divider(height: 30),
-          _buildRow('المبلغ الأساسي', '${widget.amount.toStringAsFixed(2)} ر.س'),
+          _buildRowDetail('المبلغ الأساسي', '${widget.amount.toStringAsFixed(2)} ر.س'),
           if (_discountAmount > 0) 
-            _buildRow('الخصم ($_appliedCoupon)', '-${_discountAmount.toStringAsFixed(2)} ر.س', isDiscount: true),
-          _buildRow('الضريبة (15%)', '${vatAmount.toStringAsFixed(2)} ر.س'),
+            _buildRowDetail('الخصم ($_appliedCoupon)', '-${_discountAmount.toStringAsFixed(2)} ر.س', isDiscount: true),
+          _buildRowDetail('الضريبة (15%)', '${vatAmount.toStringAsFixed(2)} ر.س'),
           const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -484,7 +500,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     );
   }
 
-  Widget _buildRow(String label, String value, {bool isDiscount = false}) {
+  Widget _buildRowDetail(String label, String value, {bool isDiscount = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -562,7 +578,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
   Widget _buildPaymentMethods() {
     final int remainingVisits = _currentUser?.visitsRemaining ?? 0;
-    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -588,14 +603,15 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           id: 'tamara',
           title: 'تمارا | Tamara',
           subtitle: 'قسم فاتورتك على 4 دفعات',
-          iconPath: 'assets/logo.png', // Ideally a Tamara logo
+          icon: Icons.timer_outlined,
+          color: const Color(0xFFE5A170),
         ),
         if (_isCodAvailableForService()) ...[
           const SizedBox(height: 12),
           _buildPaymentOption(
             id: 'cod',
             title: 'الدفع عند الاستلام',
-            subtitle: 'دفع نقدي لمقدم الخدمة بعد أو قبل البدء',
+            subtitle: 'دفع نقدي لمقدم الخدمة عند الوصول',
             icon: Icons.money,
             color: Colors.green,
           ),
@@ -608,8 +624,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     required String id, 
     required String title, 
     required String subtitle, 
-    IconData? icon, 
-    String? iconPath,
+    required IconData icon, 
     Color? color,
   }) {
     bool isSelected = _selectedPaymentMethod == id;
@@ -627,36 +642,17 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: id == 'card' ? Colors.black : Colors.white, 
+                color: isSelected ? const Color(0xFF2563EB).withOpacity(0.1) : Colors.grey.shade50, 
                 shape: BoxShape.circle, 
-                border: Border.all(color: Colors.grey.shade100)
               ),
-              child: id == 'card' 
-                ? const Icon(Icons.apple, color: Colors.white, size: 24) // Apple Pay representation
-                : id == 'tamara'
-                  ? const Icon(Icons.timer_outlined, color: Color(0xFFE5A170))
-                  : icon != null 
-                    ? Icon(icon, color: color ?? const Color(0xFF2563EB))
-                    : Image.asset('assets/logo.png', width: 24, height: 24), // Fallback
+              child: Icon(icon, color: color ?? const Color(0xFF2563EB)),
             ),
             const SizedBox(width: 15),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Text(title, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 14)),
-                      if (id == 'card') ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(4)),
-                          child: const Text('STC Pay', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.purple)),
-                        ),
-                      ],
-                    ],
-                  ),
+                  Text(title, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 14)),
                   Text(subtitle, style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey[600])),
                 ],
               ),
@@ -684,12 +680,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           "أوافق على شروط الخدمة وسياسة الخصوصية الخاصة بزيارة",
           style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold),
         ),
-        subtitle: InkWell(
-          onTap: () {
-             // Navigation to terms screen could be here
-          },
-          child: Text("اضغط هنا لقراءة التفاصيل", style: GoogleFonts.tajawal(fontSize: 10, color: const Color(0xFF2563EB), decoration: TextDecoration.underline)),
-        ),
         controlAffinity: ListTileControlAffinity.leading,
         contentPadding: EdgeInsets.zero,
       ),
@@ -708,7 +698,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
         ),
         child: ElevatedButton(
-          onPressed: _agreeToTerms ? _handlePayment : null,
+          onPressed: _handlePayment,
           style: ElevatedButton.styleFrom(
             backgroundColor: _agreeToTerms ? const Color(0xFF2563EB) : Colors.grey.shade300,
             foregroundColor: Colors.white,
