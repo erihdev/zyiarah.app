@@ -59,6 +59,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
     String status = data?['status'] ?? 'active';
     DateTime expiryDate = data?['expiry'] != null ? DateTime.tryParse(data!['expiry']) ?? DateTime.now().add(const Duration(days: 30)) : DateTime.now().add(const Duration(days: 30));
     bool isSaving = false;
+    List<String> restrictedZones = List<String>.from(data?['restricted_zones'] ?? []);
 
     showDialog(
       context: context,
@@ -137,8 +138,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      List<String> restrictedZones = List<String>.from(data?['restricted_zones'] ?? []);
-
+                      // Information display for restricted zones
                       const SizedBox(height: 10),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.location_city, size: 18),
@@ -186,7 +186,9 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                             },
                           );
                           if (selected != null) {
-                            setDialogState(() => restrictedZones = selected);
+                            setDialogState(() {
+                              restrictedZones = selected;
+                            });
                           }
                         },
                       ),
