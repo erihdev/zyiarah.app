@@ -1,0 +1,76 @@
+{
+  "price_intelligence_workflow": {
+    "nodes": [
+      {
+        "parameters": {
+          "rule": "0 8 * * *"
+        },
+        "id": "schedule_trigger",
+        "name": "Daily 8AM AST",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1,
+        "position": [250, 300]
+      },
+      {
+        "parameters": {
+          "command": "node /home/node/scripts/price_intelligence.mjs"
+        },
+        "id": "execute_price_agent",
+        "name": "Execute Price Agent",
+        "type": "n8n-nodes-base.executeCommand",
+        "typeVersion": 1,
+        "position": [450, 300]
+      }
+    ],
+    "connections": {
+      "Daily 8AM AST": {
+        "main": [
+          [
+            {
+              "node": "Execute Price Agent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    }
+  },
+  "predictive_marketing_workflow": {
+    "nodes": [
+      {
+        "parameters": {
+          "rule": "0 9 * * 0"
+        },
+        "id": "weekly_trigger",
+        "name": "Weekly Analysis",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1,
+        "position": [250, 500]
+      },
+      {
+        "parameters": {
+          "command": "node /home/node/scripts/predictive_marketing.mjs"
+        },
+        "id": "execute_marketing_agent",
+        "name": "Execute Marketing Agent",
+        "type": "n8n-nodes-base.executeCommand",
+        "typeVersion": 1,
+        "position": [450, 500]
+      }
+    ],
+    "connections": {
+      "Weekly Analysis": {
+        "main": [
+          [
+            {
+              "node": "Execute Marketing Agent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    }
+  }
+}

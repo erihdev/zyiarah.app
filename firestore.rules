@@ -161,6 +161,12 @@ service cloud.firestore {
     match /notifications_log/{logId} {
       allow read, write: if isAdmin();
     }
+    match /marketing_campaigns/{campaignId} {
+      allow read, write: if isAdmin();
+    }
+    match /config/{configId} {
+      allow read, write: if isAdmin();
+    }
     match /broadcasts/{broadcastId} {
       allow read, write: if isAdmin();
     }

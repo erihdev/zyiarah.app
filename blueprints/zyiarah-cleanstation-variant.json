@@ -1,0 +1,14 @@
+{
+  "base_project": "zyiarah-core",
+  "target_market": "Laundry focus",
+  "customization": {
+    "appName": "Zyiarah CleanStation Edition",
+    "primaryColor": "#33FF57",
+    "features_to_enable": [
+      "On-demand laundry",
+      "Dry cleaning",
+      "Shoe polish"
+    ],
+    "generated_at": "2026-04-15T05:59:16.858Z"
+  }
+}

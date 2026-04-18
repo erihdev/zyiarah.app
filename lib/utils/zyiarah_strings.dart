@@ -10,7 +10,7 @@ class ZyiarahStrings {
   static bool get isArabic => _currentLocale.languageCode == 'ar';
 
   // --- Common Strings ---
-  static String get appName => "زيارة - Zyiarah";
+  static String get appName => "Zyiarah MaidJoy Edition";
   static String get hello => isArabic ? "أهلاً بك" : "Welcome";
   static String get loading => isArabic ? "جاري التحميل..." : "Loading...";
   static String get save => isArabic ? "حفظ" : "Save";

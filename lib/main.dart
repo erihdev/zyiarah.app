@@ -55,12 +55,12 @@ class ZyiarahApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: messengerKey,
       theme: ThemeData(
-        primaryColor: const Color(0xFF2563EB),
+        primaryColor: const Color(0xFFFF5733),
         scaffoldBackgroundColor: const Color(0xFFF8FAFC),
         textTheme: GoogleFonts.tajawalTextTheme(
           Theme.of(context).textTheme.apply(bodyColor: const Color(0xFF0F172A), displayColor: const Color(0xFF0F172A)),
         ),
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB), surface: const Color(0xFFF8FAFC)),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFFF5733), surface: const Color(0xFFF8FAFC)),
         useMaterial3: true,
       ),
     );

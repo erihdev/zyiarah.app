@@ -1,0 +1,14 @@
+{
+  "base_project": "zyiarah-core",
+  "target_market": "Subscription based cleaning",
+  "customization": {
+    "appName": "Zyiarah MaidJoy Edition",
+    "primaryColor": "#FF5733",
+    "features_to_enable": [
+      "Live tracking",
+      "Package subscriptions",
+      "In-app chat"
+    ],
+    "generated_at": "2026-04-15T05:59:16.857Z"
+  }
+}
