@@ -142,7 +142,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - erihdev@gmail.com
+          - admin@zyiarah.com
         notify:
           success: true
           failure: true

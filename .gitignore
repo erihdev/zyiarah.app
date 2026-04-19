@@ -69,3 +69,7 @@ zyiarah_backend/serviceAccountKey.json
 # Signing files
 *.jks
 /android/key.properties
+
+# Distribution
+testers.txt
+.env.automation
