@@ -10,7 +10,7 @@ workflows:
       xcode: latest
       cocoapods: default
       vars:
-        BUNDLE_ID: "com.zyiarah.app"
+        BUNDLE_ID: "com.zyiarah.zyiarah"
         TEAM_ID: "RPTPMXA436"
         APP_STORE_CONNECT_KEY_IDENTIFIER: "RJMPC4734X"
         APP_STORE_CONNECT_ISSUER_ID: "6dd67287-cfcd-40fc-a3db-8bf378a1ac8f"
