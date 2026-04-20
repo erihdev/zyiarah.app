@@ -304,10 +304,49 @@ class AdminMaintenanceScreen extends StatelessWidget {
       quotedAmount = double.tryParse(price) ?? 0.0;
       updates['quotePrice'] = quotedAmount;
     }
+    
+    final docSnap = await FirebaseFirestore.instance.collection('maintenance_requests').doc(docId).get();
+    final reqData = docSnap.data();
+
     await FirebaseFirestore.instance.collection('maintenance_requests').doc(docId).update(updates);
 
     if (status == 'waiting_payment' && userId.isNotEmpty) {
       await _notificationService.notifyClientOfMaintenanceQuote(userId, docId, quotedAmount);
+    }
+    
+    if (status == 'approved' && reqData != null) {
+      final orderQuery = await FirebaseFirestore.instance.collection('orders').where('maintenance_id', isEqualTo: docId).get();
+      if (orderQuery.docs.isEmpty) {
+        try {
+           final seqResp = await FirebaseFirestore.instance.collection('counters').doc('orders_seq').get();
+           int seq = 1000;
+           if (seqResp.exists) {
+             seq = seqResp.data()?['current'] ?? 1000;
+             await seqResp.reference.update({'current': FieldValue.increment(1)});
+           } else {
+             await seqResp.reference.set({'current': 1001});
+           }
+           final orderCode = "ZY-$seq";
+
+           await FirebaseFirestore.instance.collection('orders').add({
+             'code': orderCode,
+             'client_id': userId,
+             'client_name': reqData['userName'] ?? 'عميل صيانة',
+             'client_phone': reqData['userPhone'] ?? '000000000',
+             'service_type': reqData['serviceType'] ?? 'صيانة وتكييف',
+             'amount': quotedAmount > 0 ? quotedAmount : (reqData['totalAmount'] ?? reqData['quotePrice'] ?? 0.0),
+             'status': 'pending', 
+             'location': reqData['location'] ?? const GeoPoint(24.7136, 46.6753),
+             'payment_method': reqData['paymentMethod'] ?? 'card',
+             'created_at': FieldValue.serverTimestamp(),
+             'hours_contracted': 2,
+             'worker_count': 1,
+             'maintenance_id': docId,
+           });
+        } catch (e) {
+           debugPrint("Error creating order for driver: $e");
+        }
+      }
     }
   }
 }

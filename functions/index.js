@@ -189,6 +189,40 @@ exports.onNotificationCreated = onDocumentCreated("notifications_log/{id}",
           await admin.messaging().send({...payload, topic: target});
         }
 
+        // --- Save notifications to Firestore for in-app viewing ---
+        let query = admin.firestore().collection("users");
+        if (target === "clients") {
+          query = query.where("role", "==", "client");
+        } else if (target === "drivers") {
+          query = query.where("role", "==", "driver");
+        }
+
+        const usersSnap = await query.get();
+        let batch = admin.firestore().batch();
+        let count = 0;
+
+        for (const userDoc of usersSnap.docs) {
+          const notifRef = admin.firestore().collection("notifications").doc();
+          batch.set(notifRef, {
+            userId: userDoc.id,
+            title: title,
+            body: body,
+            type: "global_broadcast",
+            isRead: false,
+            sentAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          count++;
+          if (count === 400) {
+            await batch.commit();
+            batch = admin.firestore().batch();
+            count = 0;
+          }
+        }
+        if (count > 0) {
+          await batch.commit();
+        }
+        // ------------------------------------------------------------
+
         await snap.ref.update({
           processed: true,
           processed_at: admin.firestore.FieldValue.serverTimestamp(),

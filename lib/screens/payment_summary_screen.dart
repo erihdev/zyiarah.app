@@ -12,6 +12,7 @@ import 'package:zyiarah/services/counter_service.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:zyiarah/services/audit_service.dart';
 
 class PaymentSummaryScreen extends StatefulWidget {
   final String serviceName;
@@ -22,6 +23,8 @@ class PaymentSummaryScreen extends StatefulWidget {
   final String? zoneName;
   final int workerCount;
   final String? maintenanceId;
+  final String? contractId;
+  final int? planVisits;
 
   const PaymentSummaryScreen({
     super.key,
@@ -33,6 +36,8 @@ class PaymentSummaryScreen extends StatefulWidget {
     this.zoneName,
     this.workerCount = 1,
     this.maintenanceId,
+    this.contractId,
+    this.planVisits,
   });
 
   @override
@@ -77,8 +82,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             _phoneController.text = phone;
           }
 
-          // Auto-select subscription if available
-          if ((_currentUser?.visitsRemaining ?? 0) > 0) {
+          // Auto-select subscription if available and not paying for a contract
+          if ((_currentUser?.visitsRemaining ?? 0) > 0 && widget.contractId == null) {
             _selectedPaymentMethod = 'subscription';
           }
         });
@@ -87,6 +92,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   bool _isCodAvailableForService() {
+    if (widget.contractId != null) return false;
     return true;
   }
 
@@ -265,6 +271,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 couponCode: _appliedCoupon,
                 discountAmount: _discountAmount,
                 maintenanceId: widget.maintenanceId,
+                contractId: widget.contractId,
+                planVisits: widget.planVisits,
               ),
             ),
           );
@@ -291,6 +299,32 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               'paidAt': FieldValue.serverTimestamp(),
               'totalAmount': totalWithVat,
             });
+          } else if (widget.contractId != null) {
+            await FirebaseFirestore.instance.collection('contracts').doc(widget.contractId).update({
+              'status': 'active',
+              'paymentMethod': _selectedPaymentMethod,
+              'activatedAt': FieldValue.serverTimestamp(),
+            });
+            await FirebaseFirestore.instance.collection('users').doc(_currentUser?.uid).update({
+              'visits_remaining': FieldValue.increment(widget.planVisits ?? 0),
+            });
+            await ZyiarahNotificationTriggerService().notifyContractActivated(
+              _currentUser?.uid ?? '', 
+              widget.serviceName, 
+              widget.planVisits ?? 0
+            );
+
+            // تسجيل تفعيل العقد في سجل التدقيق
+            ZyiarahAuditService().logAction(
+              action: 'ACTIVATE_CONTRACT',
+              details: {
+                'contract_id': widget.contractId,
+                'client': _currentUser?.name ?? 'غير معروف',
+                'plan': widget.serviceName,
+                'visits': widget.planVisits ?? 0,
+              },
+              targetId: widget.contractId,
+            );
           } else {
             await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
               'client_id': FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
@@ -312,12 +346,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
           setState(() => _isLoading = false);
           if (mounted) {
-            await ZyiarahNotificationTriggerService().notifyOrderCreated(
-              clientId: FirebaseAuth.instance.currentUser?.uid ?? '',
-              orderCode: orderCode,
-              serviceName: widget.serviceName,
-              type: widget.maintenanceId != null ? 'maintenance' : 'cleaning',
-            );
+            if (widget.contractId == null && widget.maintenanceId == null) {
+              await ZyiarahNotificationTriggerService().notifyOrderCreated(
+                clientId: FirebaseAuth.instance.currentUser?.uid ?? '',
+                orderCode: orderCode,
+                serviceName: widget.serviceName,
+                type: 'cleaning',
+              );
+            }
             await _navigateToSuccess(orderCode);
           }
         } else {
@@ -583,7 +619,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       children: [
         Text('اختر طريقة الدفع', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),
         const SizedBox(height: 15),
-        if (remainingVisits > 0)
+        if (remainingVisits > 0 && widget.contractId == null)
           _buildPaymentOption(
             id: 'subscription',
             title: 'باقة زيارة جولد',

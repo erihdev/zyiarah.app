@@ -89,6 +89,8 @@ class _ZyiarahSubscriptionPlansScreenState extends State<ZyiarahSubscriptionPlan
                         features,
                         cardColor,
                         isPremium: isPremium,
+                        priceValue: (data['price'] ?? 0).toDouble(),
+                        visits: (data['visits'] ?? 0).toInt(),
                       ),
                     );
                   }),
@@ -122,7 +124,7 @@ class _ZyiarahSubscriptionPlansScreenState extends State<ZyiarahSubscriptionPlan
     );
   }
 
-  Widget _buildPlanCard(BuildContext context, String title, String subtitle, String price, List<String> features, Color color, {bool isPremium = false}) {
+  Widget _buildPlanCard(BuildContext context, String title, String subtitle, String price, List<String> features, Color color, {bool isPremium = false, double priceValue = 0.0, int visits = 0}) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -173,7 +175,7 @@ class _ZyiarahSubscriptionPlansScreenState extends State<ZyiarahSubscriptionPlan
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => ZyiarahContractSigningScreen(planName: title)),
+                  MaterialPageRoute(builder: (context) => ZyiarahContractSigningScreen(planName: title, planPrice: priceValue, planVisits: visits)),
                 );
               },
               style: ElevatedButton.styleFrom(

@@ -7,6 +7,11 @@ import 'package:zyiarah/firebase_options.dart';
 import 'dart:math';
 /// خدمة إدارة Firebase لتطبيق زيارة
 class ZyiarahFirebaseService {
+  // Singleton Pattern
+  static final ZyiarahFirebaseService _instance = ZyiarahFirebaseService._internal();
+  factory ZyiarahFirebaseService() => _instance;
+  ZyiarahFirebaseService._internal();
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 

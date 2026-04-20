@@ -18,6 +18,9 @@ import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/services/deep_link_service.dart';
 import 'package:zyiarah/router.dart';
 
+import 'package:provider/provider.dart';
+import 'package:zyiarah/providers/user_provider.dart';
+
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> messengerKey = GlobalKey<ScaffoldMessengerState>();
 
@@ -41,7 +44,15 @@ void main() async {
 
   ZyiarahNotificationService().initialize();
   ZyiarahDeepLinkService().initialize(navigatorKey);
-  runApp(const ZyiarahApp());
+  
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ZyiarahUserProvider()),
+      ],
+      child: const ZyiarahApp(),
+    ),
+  );
 }
 
 class ZyiarahApp extends StatelessWidget {
@@ -72,43 +83,29 @@ class AuthWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        // حالة التحميل
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
+    final userProvider = Provider.of<ZyiarahUserProvider>(context);
 
-        // إذا كان المستخدم مسجلاً دخوله
-        if (snapshot.hasData && snapshot.data != null) {
-          return FutureBuilder<String>(
-            future: ZyiarahFirebaseService().getUserRole(snapshot.data!.uid),
-            builder: (context, roleSnapshot) {
-              if (roleSnapshot.connectionState == ConnectionState.waiting) {
-                return const Scaffold(
-                  body: Center(child: CircularProgressIndicator()),
-                );
-              }
+    // حالة التحميل - تظهر فقط عند التغيير الحقيقي للحالة
+    if (userProvider.isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
-              final String role = roleSnapshot.data ?? 'client';
-              
-              if (role == 'driver') {
-                return const DriverDashboard();
-              } else if (['admin', 'super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin'].contains(role)) {
-                return const AdminDashboardScreen();
-              } else {
-                return const ClientDashboard();
-              }
-            },
-          );
-        }
+    // إذا كان المستخدم مسجلاً دخوله
+    if (userProvider.isAuthenticated) {
+      final String role = userProvider.role ?? 'client';
+      
+      if (role == 'driver') {
+        return const DriverDashboard();
+      } else if (['admin', 'super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin'].contains(role)) {
+        return const AdminDashboardScreen();
+      } else {
+        return const ClientDashboard();
+      }
+    }
 
-        // إذا لم يكن مسجلاً دخوله، نعرض شاشة الترحيب
-        return const OnboardingScreen();
-      },
-    );
+    // إذا لم يكن مسجلاً دخوله، نعرض شاشة الترحيب
+    return const OnboardingScreen();
   }
 }

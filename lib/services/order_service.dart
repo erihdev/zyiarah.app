@@ -155,50 +155,75 @@ class ZyiarahOrderService {
     });
   }
 
-  // تحديث حالة الطلب مع إضافة بيانات السائق والمنطق الزمني
+  // تحديث حالة الطلب باستخدام Transaction لضمان سلامة البيانات ومنع التعارض
   Future<void> updateOrderStatus(String orderId, String status, {String? driverId}) async {
-    // التحقق من الحالة الحالية لمنع التكرار (مثل خصم الزيارات مرتين)
-    final docSnap = await _db.collection('orders').doc(orderId).get();
-    final currentStatus = docSnap.data()?['status'] as String?;
-    
-    if (currentStatus == status) return;
-
-    final batch = _db.batch();
-    final orderRef = _db.collection('orders').doc(orderId);
-
-    final Map<String, dynamic> updates = {
-      'status': status,
-      if (driverId != null) 'driver_id': driverId,
-      if (status == 'accepted') 'accepted_at': FieldValue.serverTimestamp(),
-      if (status == 'arrived') 'arrived_at': FieldValue.serverTimestamp(),
-      if (status == 'in_progress') 'start_time': FieldValue.serverTimestamp(),
-      if (status == 'completed') 'end_time': FieldValue.serverTimestamp(),
-    };
-
-    batch.update(orderRef, updates);
-
-    // تحديث حالة السائق بالتزامن مع الطلب (Atomic Update) في Batch واحد
-    if (driverId != null) {
-      final driverRef = _db.collection('drivers').doc(driverId);
-      String driverStatus = 'available';
-      if (status == 'accepted' || status == 'arrived') driverStatus = 'en_route';
-      if (status == 'in_progress') driverStatus = 'in_service';
+    await _db.runTransaction((transaction) async {
+      final orderRef = _db.collection('orders').doc(orderId);
+      final orderSnap = await transaction.get(orderRef);
       
-      batch.update(driverRef, {
-        'status': driverStatus,
-        'current_order_id': status == 'completed' ? null : orderId,
-        'is_available': status == 'completed',
-      });
-    }
+      if (!orderSnap.exists) throw Exception("الطلب غير موجود");
+      
+      final currentStatus = orderSnap.data()?['status'] as String?;
+      
+      // منع التحديث إذا كانت الحالة هي نفسها أو إذا كانت الحالة النهائية (مكتمل/ملغي) قد تم الوصول إليها
+      if (currentStatus == status) return;
+      if (currentStatus == 'completed' || currentStatus == 'cancelled') {
+        throw Exception("لا يمكن تعديل حالة طلب مكتمل أو ملغي");
+      }
 
-    await batch.commit();
+      final Map<String, dynamic> updates = {
+        'status': status,
+        if (driverId != null) 'driver_id': driverId,
+        if (status == 'accepted') 'accepted_at': FieldValue.serverTimestamp(),
+        if (status == 'arrived') 'arrived_at': FieldValue.serverTimestamp(),
+        if (status == 'in_progress') 'start_time': FieldValue.serverTimestamp(),
+        if (status == 'completed') 'end_time': FieldValue.serverTimestamp(),
+      };
 
-    // معالجة المكافآت والاشتراكات عند اكتمال الطلب
-    if (status == 'completed' && currentStatus != 'completed') {
+      transaction.update(orderRef, updates);
+
+      // تحديث حالة السائق بالتزامن (Atomic)
+      if (driverId != null) {
+        final driverRef = _db.collection('drivers').doc(driverId);
+        String driverStatus = 'available';
+        if (status == 'accepted' || status == 'arrived') driverStatus = 'en_route';
+        if (status == 'in_progress') driverStatus = 'in_service';
+        
+        transaction.update(driverRef, {
+          'status': driverStatus,
+          'current_order_id': status == 'completed' ? null : orderId,
+          'is_available': status == 'completed',
+        });
+      }
+    });
+
+    // معالجة المكافآت والاشتراكات عند اكتمال الطلب (هذا الجزء يمكن أن يبقى خارج الـ Transaction لتقليل وقت القفل، أو داخله للأمان القصوى)
+    // سأقوم بإعادة التحميل للتأكد من الحالة النهائية
+    final finalDoc = await _db.collection('orders').doc(orderId).get();
+    final finalStatus = finalDoc.data()?['status'] as String?;
+    
+    if (finalStatus == 'completed') {
       final orderData = docSnap.data() as Map<String, dynamic>;
       final clientId = orderData['client_id'];
       final amount = (orderData['amount'] ?? 0.0).toDouble();
       final isSubscriptionOrder = orderData['payment_method'] == 'subscription';
+      final maintenanceId = orderData['maintenance_id'];
+
+      if (maintenanceId != null) {
+        if (status == 'completed') {
+          // تحديث حالة طلب الصيانة ليصبح مكتمل
+          await _db.collection('maintenance_requests').doc(maintenanceId).update({
+            'status': 'completed',
+            'completedAt': FieldValue.serverTimestamp(),
+          });
+        } else if (status == 'in_progress') {
+          // تحديث حالة طلب الصيانة ليصبح جاري التنفيذ
+          await _db.collection('maintenance_requests').doc(maintenanceId).update({
+            'status': 'in_progress',
+            'startedAt': FieldValue.serverTimestamp(),
+          });
+        }
+      }
 
       if (clientId != null) {
         if (isSubscriptionOrder) {

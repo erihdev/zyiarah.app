@@ -5,6 +5,8 @@ import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/invoice_pdf_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/services/notification_trigger_service.dart';
 
 class TamaraCheckoutScreen extends StatefulWidget {
   final String checkoutUrl;
@@ -18,6 +20,9 @@ class TamaraCheckoutScreen extends StatefulWidget {
   final int workerCount;
   final String? couponCode;
   final double discountAmount;
+  final String? maintenanceId;
+  final String? contractId;
+  final int? planVisits;
 
   const TamaraCheckoutScreen({
     super.key,
@@ -33,10 +38,9 @@ class TamaraCheckoutScreen extends StatefulWidget {
     this.couponCode,
     this.discountAmount = 0.0,
     this.maintenanceId,
+    this.contractId,
+    this.planVisits,
   });
-
-  final String? maintenanceId;
-
 
   @override
   State<TamaraCheckoutScreen> createState() => _TamaraCheckoutScreenState();
@@ -66,6 +70,35 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                     'paidAt': FieldValue.serverTimestamp(),
                     'totalAmountPaid': widget.amount,
                   });
+                } else if (widget.contractId != null) {
+                  // تفعيل العقد الإلكتروني
+                  await FirebaseFirestore.instance.collection('contracts').doc(widget.contractId).update({
+                    'status': 'active',
+                    'paymentMethod': 'tamara',
+                    'activatedAt': FieldValue.serverTimestamp(),
+                  });
+
+                  await FirebaseFirestore.instance.collection('users').doc(user?.uid).update({
+                    'visits_remaining': FieldValue.increment(widget.planVisits ?? 0),
+                  });
+
+                  // إرسال إشعار التفعيل
+                  await ZyiarahNotificationTriggerService().notifyContractActivated(
+                    user?.uid ?? '',
+                    widget.serviceType,
+                    widget.planVisits ?? 0,
+                  );
+
+                  // سجل التدقيق
+                  ZyiarahAuditService().logAction(
+                    action: 'ACTIVATE_CONTRACT_TAMARA',
+                    details: {
+                      'contract_id': widget.contractId,
+                      'plan': widget.serviceType,
+                      'visits': widget.planVisits,
+                    },
+                    targetId: widget.contractId,
+                  );
                 } else {
                   // إنشاء طلب خدمة جديد بهوية محددة مسبقاً
                   await FirebaseFirestore.instance.collection('orders').doc(widget.orderId).set({

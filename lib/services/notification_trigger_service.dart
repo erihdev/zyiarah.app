@@ -68,6 +68,33 @@ class ZyiarahNotificationTriggerService {
     );
   }
 
+  Future<void> notifyContractApproved(String userId, String planName) async {
+    await triggerNotification(
+      toUid: userId,
+      title: "تمت الموافقة على طلبك بنجاح! 📄",
+      body: "تم اعتماد عقد باقة ($planName) من قبل الإدارة. يرجى إتمام الدفع لتفعيل الباقة.",
+      type: 'contract_approved',
+      data: {
+        'planName': planName,
+        'deepLink': 'zyiarah://app/contracts'
+      },
+    );
+  }
+
+  Future<void> notifyContractActivated(String userId, String planName, int visits) async {
+    await triggerNotification(
+      toUid: userId,
+      title: "تم تفعيل باقتك! ✨",
+      body: "أهلاً بك في باقة ($planName). تمت إضافة $visits زيارة لرصيدك بنجاح.",
+      type: 'contract_active',
+      data: {
+        'planName': planName,
+        'visits': visits,
+        'deepLink': 'zyiarah://app/home'
+      },
+    );
+  }
+
   /// يرسل تنبيه مزدوج (للعميل وللإدارة) عند إنشاء طلب جديد
   Future<void> notifyOrderCreated({
     required String clientId,
