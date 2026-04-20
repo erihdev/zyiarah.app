@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:go_router/go_router.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/models/user_model.dart';
@@ -273,18 +274,12 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                       launchUrl(Uri.parse('https://zyiarah.com/privacy'),
                           mode: LaunchMode.externalApplication);
                     }),
-                    _buildMenuTile(Icons.support_agent, 'الدعم الفني', () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const ZyiarahSupportScreen()),
-                      );
-                    }),
                     const Divider(height: 40),
                     _buildMenuTile(Icons.logout, 'تسجيل الخروج', () async {
                       MaintenanceListenerService().stopListening();
                       await _firebaseService.signOut();
                       if (!context.mounted) return;
-                      Navigator.of(context).popUntil((route) => route.isFirst);
+                      context.go('/');
                     }, color: Colors.orange),
                     _buildMenuTile(Icons.delete_forever, 'حذف الحساب نهائياً', () {
                       _showDeleteConfirmation(context);

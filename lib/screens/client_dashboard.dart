@@ -28,6 +28,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:zyiarah/services/location_service.dart';
 import 'package:zyiarah/services/notification_service.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:provider/provider.dart';
 import 'package:zyiarah/providers/user_provider.dart';
@@ -848,13 +849,14 @@ class _ClientDashboardState extends State<ClientDashboard> {
               Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahContractsListScreen()));
             }),
             const Spacer(),
-            ListTile(
+             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 24),
               leading: const Icon(Icons.logout, color: Colors.white),
               title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
               onTap: () async {
+                ZyiarahCoreService.triggerHapticSelection();
                 await FirebaseAuth.instance.signOut();
-                if (mounted) Navigator.of(context).pushReplacementNamed('/');
+                if (mounted) context.go('/');
               },
             ),
             const SizedBox(height: 20),

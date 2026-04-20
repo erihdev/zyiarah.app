@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/payment_summary_screen.dart';
+import 'package:zyiarah/services/zyiarah_contract_pdf_service.dart';
 
 class ZyiarahContractsListScreen extends StatelessWidget {
   const ZyiarahContractsListScreen({super.key});
@@ -50,7 +51,16 @@ class ZyiarahContractsListScreen extends StatelessWidget {
               return _buildEmptyState();
             }
 
-            final contracts = snapshot.data!.docs;
+            final rawDocs = snapshot.data!.docs;
+            final Map<String, DocumentSnapshot> uniqueMap = {};
+            for (var doc in rawDocs) {
+              final data = doc.data() as Map<String, dynamic>;
+              final cId = data['contractId'] ?? doc.id;
+              if (!uniqueMap.containsKey(cId)) {
+                uniqueMap[cId] = doc;
+              }
+            }
+            final contracts = uniqueMap.values.toList();
             return ListView.separated(
               padding: const EdgeInsets.all(20),
               itemCount: contracts.length,
@@ -189,12 +199,22 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                             child: Text('دفع وتفعيل', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
                           ),
                         )
-                      else if (status == 'active')
+                      else if (status == 'active' || status == 'completed' || status == 'pending')
                          Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: () => _viewContractDetails(context, data),
-                            icon: const Icon(Icons.remove_red_eye_outlined, size: 18),
-                            label: Text('عرض التفاصيل', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                            onPressed: () {
+                              ZyiarahContractPdfService.generateAndDownloadContract(
+                                contractId: data['contractId'] ?? contractDocId.substring(0, 8),
+                                planName: planName,
+                                userName: data['userName'] ?? 'عميل زيارة',
+                                userPhone: data['userPhone'] ?? '000000000',
+                                price: (data['planPrice'] ?? 0.0).toDouble(),
+                                visits: (data['planVisits'] ?? 0).toInt(),
+                                startDate: createdAt,
+                              );
+                            },
+                            icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                            label: Text('تحميل العقد (PDF)', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: brandPurple,
                               side: BorderSide(color: brandPurple.withValues(alpha: 0.3)),
@@ -205,7 +225,7 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                       const SizedBox(width: 10),
                       TextButton(
                         onPressed: () => _viewContractDetails(context, data),
-                        child: Text(status == 'approved_waiting_payment' ? 'عرض البنود' : 'مشاهدة', 
+                        child: Text(status == 'approved_waiting_payment' ? 'عرض البنود' : 'مشاهدة التفاصيل', 
                           style: GoogleFonts.tajawal(color: Colors.grey.shade600, fontSize: 13)),
                       ),
                     ],
