@@ -4,9 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 class ZyiarahCommService {
-  // CONFIGURATION
-  static const String _webhookUrl = 'https://n8n.zyiarah.com/webhook/zyiarah-comm';
-  static const String _adminEmail = 'admin@zyiarah.com'; // Official app email
+  // FALLBACKS (Use Firestore for actual settings)
+  static const String _fallbackWebhookUrl = 'https://n8n.zyiarah.com/webhook/zyiarah-comm';
+  static const String _fallbackAdminEmail = 'admin@zyiarah.com';
 
   /// Sends a Luxurious Email to one or more recipients
   Future<void> sendPremiumEmail({
@@ -36,10 +36,11 @@ class ZyiarahCommService {
   Future<void> notifyNewOrder(Map<String, dynamic> orderData, {String? customerEmail}) async {
     final orderCode = orderData['code'];
     final clientName = orderData['client_name'];
+    final String targetAdmin = await _getAdminEmail();
     
     // 1. Notify Admin (Internal Alert)
     await sendPremiumEmail(
-      recipient: _adminEmail,
+      recipient: targetAdmin,
       subject: "🔔 طلب جديد - رقم #$orderCode",
       title: "تم استلام طلب جديد بنجاح",
       bodyHtml: """
@@ -83,10 +84,11 @@ class ZyiarahCommService {
     required String? evidenceUrl,
     required String clientName,
   }) async {
+    final String targetAdmin = await _getAdminEmail();
     final String severityColor = rating <= 1.0 ? "#ef4444" : "#f59e0b";
     
     await sendPremiumEmail(
-      recipient: _adminEmail,
+      recipient: targetAdmin,
       subject: "⚠️ تنبيه جودة: تقييم منخفض للطلب #$orderCode",
       title: "بلاغ متعثر في جودة الخدمة",
       greeting: "تنبيه إداري عاجل،",
@@ -141,10 +143,22 @@ class ZyiarahCommService {
     """;
   }
 
+  Future<String> _getAdminEmail() async {
+    try {
+      final doc = await FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get();
+      if (doc.exists && doc.data()?['admin_email'] != null) {
+        return doc.data()!['admin_email'];
+      }
+    } catch (e) {
+      debugPrint('Error fetching admin email: $e');
+    }
+    return _fallbackAdminEmail;
+  }
+
   Future<void> _triggerWebhook({required String action, required Map<String, dynamic> payload}) async {
     try {
       // 1. Fetch dynamic webhook from Firestore config
-      String dynamicUrl = 'https://n8n.zyiarah.com/webhook/zyiarah-comm'; // Safe Fallback
+      String dynamicUrl = _fallbackWebhookUrl;
       try {
         final doc = await FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get();
         if (doc.exists && doc.data()?['webhook_url'] != null) {
@@ -155,15 +169,22 @@ class ZyiarahCommService {
       }
 
       // 2. Execute the request
-      await http.post(
+      final response = await http.post(
         Uri.parse(dynamicUrl),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'action': action,
           'app': 'ZYIARAH_LUXE',
+          'environment': kReleaseMode ? 'production' : 'development',
+          'timestamp': DateTime.now().toIso8601String(),
+          'device_platform': defaultTargetPlatform.toString(),
           'data': payload,
         }),
       );
+
+      if (response.statusCode >= 400) {
+        debugPrint('Webhook returned error status: ${response.statusCode}');
+      }
     } catch (e) {
       debugPrint('Webhook error: $e');
     }

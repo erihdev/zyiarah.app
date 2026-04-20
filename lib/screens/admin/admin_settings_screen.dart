@@ -23,6 +23,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   final TextEditingController _whatsappSupportCtrl = TextEditingController();
   final TextEditingController _phoneSupportCtrl = TextEditingController();
   final TextEditingController _webhookUrlCtrl = TextEditingController();
+  final TextEditingController _adminEmailCtrl = TextEditingController();
   List<int> _selectedHours = [4, 5, 6, 8];
   bool _codEnabled = false;
 
@@ -46,6 +47,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
             _whatsappSupportCtrl.text = data['support_whatsapp'] ?? "966500000000";
             _phoneSupportCtrl.text = data['support_phone'] ?? "920000000";
             _webhookUrlCtrl.text = data['webhook_url'] ?? "https://n8n.zyiarah.com/webhook/zyiarah-comm";
+            _adminEmailCtrl.text = data['admin_email'] ?? "admin@zyiarah.com";
             _isLoading = false;
           });
           
@@ -93,6 +95,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         'support_whatsapp': _whatsappSupportCtrl.text.trim(),
         'support_phone': _phoneSupportCtrl.text.trim(),
         'webhook_url': _webhookUrlCtrl.text.trim(),
+        'admin_email': _adminEmailCtrl.text.trim(),
       }, SetOptions(merge: true));
 
       List<int> validHours = List<int>.from(_selectedHours)..sort();
@@ -135,6 +138,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
     _maxWorkerCtrl.dispose();
     _whatsappSupportCtrl.dispose();
     _phoneSupportCtrl.dispose();
+    _webhookUrlCtrl.dispose();
+    _adminEmailCtrl.dispose();
     super.dispose();
   }
 
@@ -253,6 +258,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                            _buildPremiumField("رقم الواتساب (للدعم المباشر)", "WhatsApp", _whatsappSupportCtrl, Icons.chat_bubble_outline_rounded),
                            const SizedBox(height: 16),
                            _buildPremiumField("رقم الاتصال الموحد", "Call", _phoneSupportCtrl, Icons.phone_forwarded_rounded),
+                           const SizedBox(height: 16),
+                           _buildPremiumField("البريد الإلكتروني لاستلام التنبيهات", "Admin Email", _adminEmailCtrl, Icons.alternate_email_rounded),
                         ],
                       ),
 
