@@ -54,4 +54,13 @@ class ZyiarahStrings {
   static String get accessDenied => isArabic ? "عذراً.. غير مصرح لك" : "Sorry.. Access Denied";
   static String get contactAdmin => isArabic ? "لا تملك صلاحيات كافية للوصول للوحة التحكم. يرجى التواصل مع المسؤول." : "You do not have sufficient permissions. Contact admin.";
   static String get logout => isArabic ? "تسجيل الخروج" : "Logout";
+
+  // --- Feedback & Ratings ---
+  static String get lowRatingPrompt => isArabic ? "يؤسفنا سماع ذلك، ما هو السبب الرئيسي؟" : "We are sorry to hear that. What is the reason?";
+  static String get selectReasonHint => isArabic ? "اختر السبب..." : "Select reason...";
+  static String get attachEvidence => isArabic ? "إرفاق صورة للمشكلة (اختياري)" : "Attach problem image (optional)";
+  static String get evidenceAttached => isArabic ? "تم إرفاق صورة الإثبات" : "Evidence image attached";
+  static List<String> get lowRatingReasons => isArabic 
+    ? ["عدم تقديم الخدمة المتوقعة", "تأخر الكادر عن الموعد", "سوء في التعامل", "عمل غير مكتمل", "أخرى"]
+    : ["Expectations not met", "Staff delayed", "Poor treatment", "Incomplete work", "Other"];
 }

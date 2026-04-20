@@ -26,6 +26,18 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     return ZyiarahStatus.getOrderStatus(status)['text'];
   }
 
+  String _getTimeAgo(Timestamp? timestamp) {
+    if (timestamp == null) return "غير محدد";
+    final now = DateTime.now();
+    final date = timestamp.toDate();
+    final difference = now.difference(date);
+
+    if (difference.inSeconds < 60) return "الآن";
+    if (difference.inMinutes < 60) return "منذ ${difference.inMinutes} د";
+    if (difference.inHours < 24) return "منذ ${difference.inHours} س";
+    return "منذ ${difference.inDays} يوم";
+  }
+
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -133,6 +145,21 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                         Text(service, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF1E293B))),
                         const SizedBox(height: 2),
                         Text("رقم الطلب: #$code", style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.timer_outlined, size: 10, color: (status == 'pending' && DateTime.now().difference((data['created_at'] as Timestamp?)?.toDate() ?? DateTime.now()).inMinutes > 15) ? Colors.red : Colors.grey),
+                            const SizedBox(width: 4),
+                            Text(
+                              _getTimeAgo(data['created_at'] as Timestamp?),
+                              style: TextStyle(
+                                fontSize: 9, 
+                                fontWeight: FontWeight.bold,
+                                color: (status == 'pending' && DateTime.now().difference((data['created_at'] as Timestamp?)?.toDate() ?? DateTime.now()).inMinutes > 15) ? Colors.red : Colors.grey
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),

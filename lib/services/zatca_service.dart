@@ -4,29 +4,27 @@ import 'dart:typed_data';
 /// خدمة متوافقة مع متطلبات هيئة الزكاة والضريبة والجمارك (ZATCA)
 /// تقوم بتوليد رمز الاستجابة السريعة (QR Code) بنظام التشفير (TLV) المطلوب قانونياً
 class ZatcaService {
+  // Establishment Metadata (Centralized for Consistency)
+  static const String merchantName = "مؤسسة معاذ يحي محمد المالكي";
+  static const String vatNumber = "310885360200003";
+  static const String crNumber = "7030376342";
   
   /// توليد رمز QR متوافق مع ZATCA للفواتير الإلكترونية (المرحلة الأولى والثانية)
   static String generateZatcaQrCode({
-    String? merchantName,
-    String? vatNumber,
     required DateTime timestamp,
     required double totalAmount,
     required double vatAmount,
   }) {
-    // استخدام البيانات الممررة أو القيم الافتراضية للمؤسسة
-    final String name = merchantName ?? "مؤسسة معاذ يحي محمد المالكي";
-    final String vat = vatNumber ?? "310885360200003";
-
     final bytesBuilder = BytesBuilder();
 
     // Tag 1: Merchant Name (اسم المنشأة)
-    bytesBuilder.add(_encodeTlv(1, name));
+    bytesBuilder.add(_encodeTlv(1, merchantName));
 
     // Tag 2: VAT Number (الرقم الضريبي للمنشأة)
-    bytesBuilder.add(_encodeTlv(2, vat));
+    bytesBuilder.add(_encodeTlv(2, vatNumber));
 
     // Tag 3: Timestamp (وقت إصدار الفاتورة بصيغة ISO 8601)
-    bytesBuilder.add(_encodeTlv(3, timestamp.toIso8601String()));
+    bytesBuilder.add(_encodeTlv(3, timestamp.toIso8601String().split('.').first + 'Z'));
 
     // Tag 4: Total Amount (المبلغ الإجمالي مع الضريبة)
     bytesBuilder.add(_encodeTlv(4, totalAmount.toStringAsFixed(2)));

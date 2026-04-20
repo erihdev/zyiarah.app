@@ -18,11 +18,12 @@ class OrdersListScreen extends StatefulWidget {
 
 class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  int _activePhase = 0; // 0 for Active, 1 for History
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -49,17 +50,75 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
             tabs: const [
               Tab(text: "الخدمات المنزلية", icon: Icon(Icons.cleaning_services)),
               Tab(text: "قسم الصيانة", icon: Icon(Icons.settings_suggest)),
+              Tab(text: "طلبات المتجر", icon: Icon(Icons.shopping_bag)),
             ],
             indicatorColor: Colors.white,
             labelStyle: GoogleFonts.tajawal(fontWeight: FontWeight.bold),
           ),
         ),
-        body: TabBarView(
-          controller: _tabController,
+        body: Column(
           children: [
-            _buildOrdersTab(user),
-            _buildMaintenanceTab(user),
+            _buildPhaseFilter(),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildOrdersTab(user),
+                  _buildMaintenanceTab(user),
+                  _buildStoreOrdersTab(user),
+                ],
+              ),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPhaseFilter() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          _buildPhaseButton(0, "الطلبات النشطة", Icons.bolt),
+          _buildPhaseButton(1, "سجل الطلبات", Icons.history),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhaseButton(int index, String title, IconData icon) {
+    bool isSelected = _activePhase == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _activePhase = index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: isSelected ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4)] : [],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: isSelected ? const Color(0xFF5D1B5E) : Colors.grey),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: GoogleFonts.tajawal(
+                  fontSize: 13,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? const Color(0xFF5D1B5E) : Colors.grey,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -83,12 +142,24 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
         if (snapshot.hasError) {
           return Center(child: Text('خطأ: ${snapshot.error}'));
         }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        // Filter based on phase
+        final List<String> activeStatuses = ['pending', 'assigned', 'accepted', 'arrived', 'in_progress'];
+        final List<String> historyStatuses = ['completed', 'cancelled'];
+        
+        final allDocs = snapshot.data!.docs;
+        final orders = allDocs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final status = data['status'] ?? 'pending';
+          return _activePhase == 0 
+              ? activeStatuses.contains(status)
+              : historyStatuses.contains(status);
+        }).toList();
+
+        if (orders.isEmpty) {
           return _buildEmptyState();
         }
 
         // Sort in-memory to avoid composite index requirement
-        final orders = snapshot.data!.docs.toList();
         orders.sort((a, b) {
           final aTime = (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
           final bTime = (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
@@ -126,12 +197,23 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
         if (snapshot.hasError) {
           return Center(child: Text('خطأ: ${snapshot.error}'));
         }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        // Filter based on phase
+        final List<String> historyStatuses = ['completed', 'rejected'];
+        
+        final allDocs = snapshot.data!.docs;
+        final reqs = allDocs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final status = data['status'] ?? 'under_review';
+          return _activePhase == 0 
+              ? !historyStatuses.contains(status)
+              : historyStatuses.contains(status);
+        }).toList();
+
+        if (reqs.isEmpty) {
           return _buildEmptyState();
         }
 
         // Sort in-memory to avoid composite index requirement
-        final reqs = snapshot.data!.docs.toList();
         reqs.sort((a, b) {
           final aTime = (a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
           final bTime = (b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
@@ -148,6 +230,118 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           },
         );
       },
+    );
+  }
+
+  Widget _buildStoreOrdersTab(User? user) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('store_orders')
+          .where('client_id', isEqualTo: user?.uid)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (user == null) return const Center(child: Text('يرجى تسجيل الدخول'));
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: 5,
+            itemBuilder: (context, index) => const ShimmerCard(),
+          );
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text('خطأ: ${snapshot.error}'));
+        }
+        
+        final List<String> activeStatuses = ['pending', 'processing', 'shipped'];
+        final List<String> historyStatuses = ['delivered', 'cancelled'];
+        
+        final allDocs = snapshot.data!.docs;
+        final storeOrders = allDocs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final status = data['status'] ?? 'pending';
+          return _activePhase == 0 
+              ? activeStatuses.contains(status)
+              : historyStatuses.contains(status);
+        }).toList();
+
+        if (storeOrders.isEmpty) {
+          return _buildEmptyState();
+        }
+
+        storeOrders.sort((a, b) {
+          final aTime = (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+          final bTime = (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
+          return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
+        });
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: storeOrders.length,
+          itemBuilder: (context, index) {
+            final data = storeOrders[index].data() as Map<String, dynamic>;
+            return _buildStoreOrderCard(context, data);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildStoreOrderCard(BuildContext context, Map<String, dynamic> data) {
+    final status = data['status'] ?? 'pending';
+    final code = data['code'] ?? 'ORD-000';
+    final total = data['total_amount'] ?? 0;
+    
+    Color statusColor = Colors.orange;
+    String statusText = "قيد المعالجة";
+    
+    if (status == 'pending') { statusColor = Colors.orange; statusText = "بانتظار التأكيد"; }
+    else if (status == 'processing') { statusColor = Colors.blue; statusText = "قيد التجهيز"; }
+    else if (status == 'shipped') { statusColor = Colors.indigo; statusText = "تم الشحن"; }
+    else if (status == 'delivered') { statusColor = Colors.green; statusText = "تم التوصيل"; }
+    else if (status == 'cancelled') { statusColor = Colors.red; statusText = "ملغي"; }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+                  child: Icon(Icons.shopping_bag_outlined, color: statusColor),
+                ),
+                const SizedBox(width: 15),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("طلب أدوات ومنظفات", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                      Text('رقم الطلب: #$code', style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey)),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                  child: Text(statusText, style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text("المجموع: $total ر.س", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF5D1B5E))),
+                Text("${(data['items'] as List?)?.length ?? 0} منتجات", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -273,8 +467,15 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(order['service_type'] ?? 'خدمة عامة', 
-                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(order['service_type'] ?? 'خدمة عامة', 
+                    style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),
+                  if (order['code'] != null)
+                    Text('رقم الطلب: #${order['code']}', style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
+                ],
+              ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(

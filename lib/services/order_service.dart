@@ -1,8 +1,11 @@
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/counter_service.dart';
+import 'package:zyiarah/services/zyiarah_comm_service.dart';
 
 /// خدمة إدارة دورة حياة الطلب - تطبيق زيارة
 class ZyiarahOrderService {
@@ -22,31 +25,37 @@ class ZyiarahOrderService {
     String? couponCode,
     double discountAmount = 0.0,
   }) async {
-    // جلب اسم العميل لتسهيل العرض في لوحة التحكم
+    // 1. Fetch Client Details once for efficiency (Name, Phone, Email)
     String clientName = 'عميل زيارة';
     String clientPhone = '000000000';
+    String? clientEmail;
+    
     try {
       final userDoc = await _db.collection('users').doc(clientId).get();
       if (userDoc.exists) {
-        clientName = userDoc.data()?['name'] ?? 'عميل زيارة';
-        clientPhone = userDoc.data()?['phone'] ?? '000000000';
+        final userData = userDoc.data();
+        clientName = userData?['name'] ?? 'عميل زيارة';
+        clientPhone = userData?['phone'] ?? '000000000';
+        clientEmail = userData?['email'];
       }
     } catch (e) {
       debugPrint('Error fetching user data: $e');
     }
 
-    // Generate Smart Sequential Code
+    // 2. Generate Smart Sequential Code
     final seq = await ZyiarahCounterService().getNextOrderNumber();
     final orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
 
+    // 3. Create the Order Document
     DocumentReference doc = await _db.collection('orders').add({
       'code': orderCode,
       'client_id': clientId,
       'client_name': clientName,
       'client_phone': clientPhone,
-      'user_phone': clientPhone, // Added for consistency with Admin Panel mapping
+      'client_email': clientEmail,
+      'user_phone': clientPhone,
       'service_type': serviceType,
-      'service_name': serviceType, // Ensuring service_name is present for UI consistency
+      'service_name': serviceType,
       'amount': amount,
       'status': 'pending',
       'location': location,
@@ -60,23 +69,29 @@ class ZyiarahOrderService {
       'discount_amount': discountAmount,
     });
 
-    // Log the order creation in audit trail
+    // 4. Log and Execute Side-Effects (Coupons & Alerts)
     ZyiarahAuditService().logAction(
       action: 'CREATE_CLEANING_ORDER',
-      details: {
-        'code': orderCode,
-        'amount': amount,
-        'client': clientName,
-        'service': serviceType,
-      },
+      details: {'code': orderCode, 'amount': amount, 'client': clientName},
       targetId: doc.id,
     );
 
-    // إذا كان هناك كود خصم، نحدث عدد مرات استخدامه
     if (couponCode != null) {
       await _incrementCouponUsage(couponCode);
     }
 
+    final orderMap = {
+      'code': orderCode,
+      'client_name': clientName,
+      'client_phone': clientPhone,
+      'service_type': serviceType,
+      'amount': amount,
+      'location': location,
+    };
+    
+    final comm = ZyiarahCommService();
+    await comm.notifyNewOrder(orderMap, customerEmail: clientEmail);
+    
     return orderCode;
   }
 
@@ -163,7 +178,8 @@ class ZyiarahOrderService {
       
       if (!orderSnap.exists) throw Exception("الطلب غير موجود");
       
-      final currentStatus = orderSnap.data()?['status'] as String?;
+      final orderData = orderSnap.data() as Map<String, dynamic>;
+      final currentStatus = orderData['status'] as String?;
       
       // منع التحديث إذا كانت الحالة هي نفسها أو إذا كانت الحالة النهائية (مكتمل/ملغي) قد تم الوصول إليها
       if (currentStatus == status) return;
@@ -195,44 +211,51 @@ class ZyiarahOrderService {
           'is_available': status == 'completed',
         });
       }
-    });
 
-    // معالجة المكافآت والاشتراكات عند اكتمال الطلب (هذا الجزء يمكن أن يبقى خارج الـ Transaction لتقليل وقت القفل، أو داخله للأمان القصوى)
-    // سأقوم بإعادة التحميل للتأكد من الحالة النهائية
-    final finalDoc = await _db.collection('orders').doc(orderId).get();
-    final finalStatus = finalDoc.data()?['status'] as String?;
-    
-    if (finalStatus == 'completed') {
-      final orderData = docSnap.data() as Map<String, dynamic>;
-      final clientId = orderData['client_id'];
-      final amount = (orderData['amount'] ?? 0.0).toDouble();
-      final isSubscriptionOrder = orderData['payment_method'] == 'subscription';
-      final maintenanceId = orderData['maintenance_id'];
+      // --- العمليات المرتبطة بالاكتمال (داخل الـ Transaction لضمان التكامل) ---
+      if (status == 'completed') {
+        final clientId = orderData['client_id'];
+        final isSubscriptionOrder = orderData['payment_method'] == 'subscription';
+        final maintenanceId = orderData['maintenance_id'];
 
-      if (maintenanceId != null) {
-        if (status == 'completed') {
-          // تحديث حالة طلب الصيانة ليصبح مكتمل
-          await _db.collection('maintenance_requests').doc(maintenanceId).update({
+        if (maintenanceId != null) {
+          final maintenanceRef = _db.collection('maintenance_requests').doc(maintenanceId);
+          transaction.update(maintenanceRef, {
             'status': 'completed',
             'completedAt': FieldValue.serverTimestamp(),
           });
-        } else if (status == 'in_progress') {
-          // تحديث حالة طلب الصيانة ليصبح جاري التنفيذ
-          await _db.collection('maintenance_requests').doc(maintenanceId).update({
+        }
+
+        if (clientId != null && isSubscriptionOrder) {
+          final userRef = _db.collection('users').doc(clientId);
+          transaction.update(userRef, {
+            'visits_remaining': FieldValue.increment(-1),
+          });
+        }
+      } else if (status == 'in_progress') {
+        final maintenanceId = orderData['maintenance_id'];
+        if (maintenanceId != null) {
+          final maintenanceRef = _db.collection('maintenance_requests').doc(maintenanceId);
+          transaction.update(maintenanceRef, {
             'status': 'in_progress',
             'startedAt': FieldValue.serverTimestamp(),
           });
         }
       }
+    });
 
-      if (clientId != null) {
-        if (isSubscriptionOrder) {
-          // خصم زيارة من الاشتراك
-          await _deductSubscriptionVisit(clientId);
-        } else {
-          // منح كاش باك 5% للطلبات المدفوعة
-          await _applyCashback(clientId, amount);
+    // العمليات غير الحرجة (خارج الـ Transaction)
+    if (status == 'completed') {
+      try {
+        final doc = await _db.collection('orders').doc(orderId).get();
+        final data = doc.data();
+        if (data != null && data['payment_method'] != 'subscription') {
+          final clientId = data['client_id'];
+          final amount = (data['amount'] ?? 0.0).toDouble();
+          if (clientId != null) await _applyCashback(clientId, amount);
         }
+      } catch (e) {
+        debugPrint("Non-critical post-processing error: $e");
       }
     }
   }
@@ -250,9 +273,17 @@ class ZyiarahOrderService {
         return false;
       }
 
-      // 2. التحقق من عدم وجود طلبات نشطة للسائق
-      bool hasActive = await hasActiveOrder(driverId);
-      if (hasActive) return false;
+      // 2. التحقق من عدم وجود طلبات نشطة للسائق (بشكل ذري داخل الـ Transaction)
+      final activeSnap = await _db
+          .collection('orders')
+          .where('driver_id', isEqualTo: driverId)
+          .where('status', whereIn: ['accepted', 'arrived', 'in_progress'])
+          .limit(1)
+          .get();
+      
+      if (activeSnap.docs.isNotEmpty) {
+        return false;
+      }
 
       // 3. جلب بيانات السائق لمزامنتها داخل الطلب (لضمان عمل زر الاتصال)
       final driverSnap = await transaction.get(driverRef);
@@ -319,19 +350,45 @@ class ZyiarahOrderService {
   }
 
   // تقديم تقييم للطلب وتحديث معدل تقييم الكادر
-  Future<void> submitOrderRating(String orderId, double rating, String comment) async {
+  Future<void> submitOrderRating(String orderId, double rating, String comment, {String? reason, File? evidence}) async {
     final orderDoc = await _db.collection('orders').doc(orderId).get();
     if (!orderDoc.exists) return;
 
     final data = orderDoc.data() as Map<String, dynamic>;
     final String? driverId = data['driver_id'];
+    String? evidenceUrl;
+
+    // 0. رفع صورة الإثبات إذا وجدت
+    if (evidence != null) {
+      try {
+        final ref = FirebaseStorage.instance.ref().child('order_feedback/${orderId}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+        await ref.putFile(evidence);
+        evidenceUrl = await ref.getDownloadURL();
+      } catch (e) {
+        debugPrint("Error uploading feedback evidence: $e");
+      }
+    }
 
     // 1. تحديث الطلب بالتقييم
     await _db.collection('orders').doc(orderId).update({
       'rating': rating,
       'rating_comment': comment,
+      'rating_reason': reason,
+      'rating_evidence_url': evidenceUrl,
       'rated_at': FieldValue.serverTimestamp(),
     });
+
+    // 2. إطلاق رادار حماية السمعة الفاخر إذا كان التقييم منخفضاً
+    if (rating <= 2.0) {
+      ZyiarahCommService().alertReputationRisk(
+        orderCode: data['code'] ?? 'N/A',
+        rating: rating,
+        reason: reason,
+        comment: comment,
+        evidenceUrl: evidenceUrl,
+        clientName: data['client_name'] ?? 'عميل',
+      );
+    }
 
     // 2. تحديث معدل تقييم الكادر (Atomic Calculation)
     if (driverId != null) {

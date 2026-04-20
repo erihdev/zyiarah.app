@@ -20,6 +20,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   final TextEditingController _maxWorkerCtrl = TextEditingController();
   final TextEditingController _merchantNameCtrl = TextEditingController();
   final TextEditingController _vatNumberCtrl = TextEditingController();
+  final TextEditingController _whatsappSupportCtrl = TextEditingController();
+  final TextEditingController _phoneSupportCtrl = TextEditingController();
+  final TextEditingController _webhookUrlCtrl = TextEditingController();
   List<int> _selectedHours = [4, 5, 6, 8];
   bool _codEnabled = false;
 
@@ -40,6 +43,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
             _codEnabled = data['cod_enabled'] ?? false;
             _merchantNameCtrl.text = data['merchant_name'] ?? "مؤسسة معاذ يحي محمد المالكي";
             _vatNumberCtrl.text = data['vat_number'] ?? "310885360200003";
+            _whatsappSupportCtrl.text = data['support_whatsapp'] ?? "966500000000";
+            _phoneSupportCtrl.text = data['support_phone'] ?? "920000000";
+            _webhookUrlCtrl.text = data['webhook_url'] ?? "https://n8n.zyiarah.com/webhook/zyiarah-comm";
             _isLoading = false;
           });
           
@@ -84,6 +90,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         'cod_enabled': _codEnabled,
         'merchant_name': _merchantNameCtrl.text.trim(),
         'vat_number': _vatNumberCtrl.text.trim(),
+        'support_whatsapp': _whatsappSupportCtrl.text.trim(),
+        'support_phone': _phoneSupportCtrl.text.trim(),
+        'webhook_url': _webhookUrlCtrl.text.trim(),
       }, SetOptions(merge: true));
 
       List<int> validHours = List<int>.from(_selectedHours)..sort();
@@ -124,6 +133,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   void dispose() {
     _fadeController.dispose();
     _maxWorkerCtrl.dispose();
+    _whatsappSupportCtrl.dispose();
+    _phoneSupportCtrl.dispose();
     super.dispose();
   }
 
@@ -232,6 +243,37 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                       ),
 
                        const SizedBox(height: 24),
+
+                      // Support Contacts Card
+                      _buildSectionCard(
+                        title: "إعدادات العناية بالعملاء",
+                        icon: Icons.support_agent_rounded,
+                        color: const Color(0xFF10B981),
+                        children: [
+                           _buildPremiumField("رقم الواتساب (للدعم المباشر)", "WhatsApp", _whatsappSupportCtrl, Icons.chat_bubble_outline_rounded),
+                           const SizedBox(height: 16),
+                           _buildPremiumField("رقم الاتصال الموحد", "Call", _phoneSupportCtrl, Icons.phone_forwarded_rounded),
+                        ],
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Technical Hook Card
+                      _buildSectionCard(
+                        title: "إعدادات الربط التقني (Advanced)",
+                        icon: Icons.code_rounded,
+                        color: const Color(0xFF6366F1),
+                        children: [
+                          const Text(
+                            "يستخدم هذا الرابط لإرسال التنبيهات الفورية وإيميلات العملاء عبر منصة n8n.",
+                            style: TextStyle(fontSize: 11, color: Colors.grey, height: 1.5),
+                          ),
+                          const SizedBox(height: 12),
+                          _buildPremiumField("رابط Webhook التنبيهات", "https://...", _webhookUrlCtrl, Icons.link_rounded),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 24),
                       
                       // Packages Pricing Card
                       _buildSectionCard(

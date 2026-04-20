@@ -68,8 +68,14 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                   isScrollControlled: true,
                   backgroundColor: Colors.transparent,
                   builder: (ctx) => ZyiarahRatingDialog(
-                    onSubmitted: (rating, comment) {
-                      _orderService.submitOrderRating(widget.orderId, rating, comment);
+                    onSubmitted: (rating, comment, {reason, evidence}) {
+                      _orderService.submitOrderRating(
+                        widget.orderId, 
+                        rating, 
+                        comment,
+                        reason: reason,
+                        evidence: evidence,
+                      );
                     },
                   ),
                 );

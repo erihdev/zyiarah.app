@@ -96,8 +96,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     return true;
   }
 
-  double get vatAmount => (widget.amount - _discountAmount) * 0.15;
-  double get totalWithVat => (widget.amount - _discountAmount) + vatAmount;
+  // Correct Financial Math for ZATCA (Assumes amount is inclusive of VAT)
+  double get totalWithVat => widget.amount - _discountAmount;
+  double get subtotal => totalWithVat / 1.15;
+  double get vatAmount => totalWithVat - subtotal;
 
   Future<void> _validateCoupon() async {
     if (_couponController.text.isEmpty) return;
@@ -200,11 +202,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         
         if (mounted) {
           setState(() => _isLoading = false);
-          await ZyiarahNotificationTriggerService().notifyOrderCreated(
-            clientId: FirebaseAuth.instance.currentUser?.uid ?? '',
+          await _finalizeOrderWithInvoice(
+            orderId: finalOrderId,
             orderCode: orderCode,
-            serviceName: widget.serviceName,
-            type: widget.maintenanceId != null ? 'maintenance' : 'cleaning',
+            paymentMethod: 'subscription',
           );
           await _navigateToSuccess(orderCode);
         }
@@ -237,11 +238,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         
         if (mounted) {
           setState(() => _isLoading = false);
-          await ZyiarahNotificationTriggerService().notifyOrderCreated(
-            clientId: FirebaseAuth.instance.currentUser?.uid ?? '',
+          await _finalizeOrderWithInvoice(
+            orderId: finalOrderId,
             orderCode: orderCode,
-            serviceName: widget.serviceName,
-            type: widget.maintenanceId != null ? 'maintenance' : 'cleaning',
+            paymentMethod: 'cod',
+            paidAmount: totalWithVat,
           );
           await _navigateToSuccess(orderCode);
         }
@@ -327,6 +328,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             );
           } else {
             await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
+              'code': orderCode,
               'client_id': FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
               'client_name': _currentUser?.name ?? 'عميل زيارة',
               'service_type': widget.serviceName,
@@ -347,13 +349,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           setState(() => _isLoading = false);
           if (mounted) {
             if (widget.contractId == null && widget.maintenanceId == null) {
-              await ZyiarahNotificationTriggerService().notifyOrderCreated(
-                clientId: FirebaseAuth.instance.currentUser?.uid ?? '',
-                orderCode: orderCode,
-                serviceName: widget.serviceName,
-                type: 'cleaning',
-              );
-            }
+            await _finalizeOrderWithInvoice(
+              orderId: finalOrderId,
+              orderCode: orderCode,
+              paymentMethod: _selectedPaymentMethod,
+              paidAmount: totalWithVat,
+            );
             await _navigateToSuccess(orderCode);
           }
         } else {
@@ -366,6 +367,32 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
       }
     }
+  }
+
+  /// Unified Finalization: Saves Order + Triggers ZATCA Invoice
+  Future<void> _finalizeOrderWithInvoice({
+    required String orderId,
+    required String orderCode,
+    required String paymentMethod,
+    double paidAmount = 0,
+  }) async {
+    // 1. Generate ZATCA QR Code Data
+    final String qrData = ZatcaService.generateZatcaQrCode(
+      timestamp: DateTime.now(),
+      totalAmount: totalWithVat,
+      vatAmount: vatAmount,
+    );
+
+    // 2. Trigger PDF Invoice Generation (Bilingual)
+    InvoicePdfService.generateAndUploadInvoice(
+      orderId: orderId,
+      orderCode: orderCode,
+      amount: totalWithVat,
+      qrData: qrData,
+      serviceName: widget.serviceName,
+      discountAmount: _discountAmount,
+      couponCode: _appliedCoupon,
+    );
   }
 
   @override

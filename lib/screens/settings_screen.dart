@@ -1,7 +1,6 @@
-import 'package:flutter/material.dart';
-import 'package:zyiarah/screens/support_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ZyiarahSettingsScreen extends StatelessWidget {
   const ZyiarahSettingsScreen({super.key});
@@ -43,17 +42,41 @@ class ZyiarahSettingsScreen extends StatelessWidget {
                 );
               },
             ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.support_agent, color: Colors.green),
-              title: const Text("الدعم الفني (WhatsApp)"),
-              subtitle: const Text("تواصل معنا لأي استفسار أو مشكلة"),
-              onTap: () {
-                // هنا سيتم فتح واتساب المؤسسة
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('سيتم تحويلك إلى خدمة العملاء')),
+            StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance.collection('system_configs').doc('main_settings').snapshots(),
+              builder: (context, snapshot) {
+                final data = snapshot.data?.data() as Map<String, dynamic>?;
+                final whatsapp = data?['support_whatsapp'] ?? "966500000000";
+                final phone = data?['support_phone'] ?? "920000000";
+
+                return Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.support_agent, color: Colors.green),
+                      title: const Text("الدعم الفني (WhatsApp)"),
+                      subtitle: const Text("تواصل معنا لأي استفسار أو مشكلة"),
+                      onTap: () async {
+                        final url = "https://wa.me/$whatsapp";
+                        if (await canLaunchUrl(Uri.parse(url))) {
+                          await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                        }
+                      },
+                    ),
+                    const Divider(),
+                    ListTile(
+                      leading: const Icon(Icons.phone_in_talk_rounded, color: Colors.blue),
+                      title: const Text("الاتصال المباشر"),
+                      subtitle: const Text("تواصل هاتفياً مع خدمة العملاء"),
+                      onTap: () async {
+                        final url = "tel:$phone";
+                        if (await canLaunchUrl(Uri.parse(url))) {
+                          await launchUrl(Uri.parse(url));
+                        }
+                      },
+                    ),
+                  ],
                 );
-              },
+              }
             ),
             const Divider(),
             ListTile(

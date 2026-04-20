@@ -155,6 +155,8 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildLivePulseSection(),
+                const SizedBox(height: 15),
+                _buildReputationSentinel(),
                 const SizedBox(height: 25),
                 _buildSectionTitle("نظرة سريعة"),
                 const SizedBox(height: 15),
@@ -238,8 +240,13 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       }
     }
 
+    final double totalRevenue = cleaningRevenue + maintenanceRevenue + storeRevenue;
+    // VAT in KSA is 15% inclusive. Tax = Total - (Total / 1.15)
+    final double vatLiability = totalRevenue - (totalRevenue / 1.15);
+
     return {
-      'revenue': cleaningRevenue + maintenanceRevenue + storeRevenue,
+      'revenue': totalRevenue,
+      'vat': vatLiability,
       'cleaning': cleaningRevenue,
       'maintenance': maintenanceRevenue,
       'store': storeRevenue,
@@ -261,6 +268,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
             scrollDirection: Axis.horizontal,
             children: [
               _buildStatCard("إجمالي الإيرادات", "${stats['revenue'].toStringAsFixed(0)} ر.س", const Color(0xFF059669), Icons.account_balance_wallet_rounded),
+              _buildStatCard("الوعاء الضريبي (VAT)", "${stats['vat'].toStringAsFixed(0)} ر.س", const Color(0xFFD97706), Icons.account_balance_rounded),
               _buildStatCard("طلبات نشطة", stats['active'].toString(), const Color(0xFF2563EB), Icons.speed_rounded),
               _buildStatCard("إجمالي العملاء", stats['users'].toString(), const Color(0xFF7C3AED), Icons.people_alt_rounded),
             ],
@@ -665,6 +673,67 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
                 ),
               );
             },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildReputationSentinel() {
+    final lowRatings = _orders.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      final rating = (data['rating'] ?? 5.0).toDouble();
+      return rating <= 2.0 && data['rating_comment'] != null;
+    }).toList();
+
+    if (lowRatings.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle("رادار حماية السمعة ⚠️"),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.red[50],
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.red[100]!),
+          ),
+          child: Column(
+            children: lowRatings.take(3).map((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                      child: Text("${data['rating']}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text("العميل: ${data['client_name']}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text("السبب: ${data['rating_reason'] ?? 'غير محدد'}", style: TextStyle(color: Colors.red[700], fontSize: 11, fontWeight: FontWeight.bold)),
+                          if (data['rating_comment'] != null)
+                            Text(data['rating_comment'], style: const TextStyle(fontSize: 11, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ],
+                      ),
+                    ),
+                    if (data['rating_evidence_url'] != null)
+                      const Icon(Icons.image_search_rounded, color: Colors.blue),
+                    const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                  ],
+                ),
+              );
+            }).toList(),
           ),
         ),
       ],

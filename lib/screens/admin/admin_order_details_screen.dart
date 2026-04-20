@@ -5,6 +5,7 @@ import 'package:intl/intl.dart' hide TextDirection;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/utils/status_util.dart';
 
 class AdminOrderDetailsScreen extends StatefulWidget {
@@ -19,6 +20,7 @@ class AdminOrderDetailsScreen extends StatefulWidget {
 class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final ZyiarahNotificationTriggerService _notificationService = ZyiarahNotificationTriggerService();
+  final ZyiarahOrderService _orderService = ZyiarahOrderService();
   bool _isLoading = true;
   Map<String, dynamic>? _orderData;
 
@@ -112,12 +114,12 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   Future<void> _updateOrder() async {
     setState(() => _isLoading = true);
     try {
-      await _db.collection('orders').doc(widget.orderId).update({
-        'status': _currentStatus,
-        'driver_id': _selectedDriverId,
-        'assigned_driver': _selectedDriverName,
-        'updated_at': FieldValue.serverTimestamp(),
-      });
+      // Use the unified OrderService to ensure all atomic logic (like visit deduction) runs
+      await _orderService.updateOrderStatus(
+        widget.orderId, 
+        _currentStatus, 
+        driverId: _selectedDriverId
+      );
 
       // Audit Log
       await ZyiarahAuditService().logAction(

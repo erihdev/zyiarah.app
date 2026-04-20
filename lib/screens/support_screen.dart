@@ -16,81 +16,106 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
   bool _isSending = false;
 
   @override
+  @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("تذاكر الدعم الفني", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF5D1B5E),
-        foregroundColor: Colors.white,
-      ),
-      body: Directionality(
-        textDirection: TextDirection.rtl,
-        child: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('support_tickets')
-              .where('userId', isEqualTo: user?.uid)
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return Center(child: Text("خطأ: ${snapshot.error}"));
-            }
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            var tickets = snapshot.data?.docs ?? [];
-
-            if (tickets.isEmpty) {
-              return _buildEmptyState();
-            }
-
-            // Sort locally to avoid requiring a Firestore composite index
-            tickets = tickets.toList()..sort((a, b) {
-              final aMap = a.data() as Map<String, dynamic>;
-              final bMap = b.data() as Map<String, dynamic>;
-              final aDate = (aMap['createdAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
-              final bDate = (bMap['createdAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
-              return bDate.compareTo(aDate);
-            });
-
-            return ListView.separated(
-              padding: const EdgeInsets.all(20),
-              itemCount: tickets.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 15),
-              itemBuilder: (context, index) {
-                final ticket = tickets[index].data() as Map<String, dynamic>;
-                final ticketId = tickets[index].id;
-                return _buildTicketCard(ticketId, ticket);
-              },
-            );
-          },
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text("تذاكر الدعم الفني", style: TextStyle(fontWeight: FontWeight.bold)),
+          backgroundColor: const Color(0xFF5D1B5E),
+          foregroundColor: Colors.white,
+          bottom: const TabBar(
+            indicatorColor: Colors.white,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            tabs: [
+              Tab(text: "التذاكر النشطة"),
+              Tab(text: "السجلات السابقة"),
+            ],
+          ),
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showNewTicketDialog(context),
-        label: const Text("تذكرة جديدة"),
-        icon: const Icon(Icons.add),
-        backgroundColor: const Color(0xFF5D1B5E),
-        foregroundColor: Colors.white,
+        body: Directionality(
+          textDirection: TextDirection.rtl,
+          child: TabBarView(
+            children: [
+              _buildTicketList(user, ['open', 'replied']),
+              _buildTicketList(user, ['resolved', 'closed']),
+            ],
+          ),
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => _showNewTicketDialog(context),
+          label: const Text("تذكرة جديدة"),
+          icon: const Icon(Icons.add),
+          backgroundColor: const Color(0xFF5D1B5E),
+          foregroundColor: Colors.white,
+        ),
       ),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildTicketList(User? user, List<String> statuses) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('support_tickets')
+          .where('userId', isEqualTo: user?.uid)
+          .where('status', whereIn: statuses)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text("خطأ: ${snapshot.error}"));
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        var tickets = snapshot.data?.docs ?? [];
+
+        if (tickets.isEmpty) {
+          return _buildEmptyState(statuses.contains('open'));
+        }
+
+        // Sort locally
+        tickets = tickets.toList()..sort((a, b) {
+          final aMap = a.data() as Map<String, dynamic>;
+          final bMap = b.data() as Map<String, dynamic>;
+          final aDate = (aMap['createdAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+          final bDate = (bMap['createdAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+          return bDate.compareTo(aDate);
+        });
+
+        return ListView.separated(
+          padding: const EdgeInsets.all(20),
+          itemCount: tickets.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 15),
+          itemBuilder: (context, index) {
+            final ticket = tickets[index].data() as Map<String, dynamic>;
+            final ticketId = tickets[index].id;
+            return _buildTicketCard(ticketId, ticket);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyState(bool isActive) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.support_agent, size: 80, color: Colors.grey[300]),
+          Icon(isActive ? Icons.support_agent : Icons.history_rounded, size: 80, color: Colors.grey[300]),
           const SizedBox(height: 20),
-          const Text(
-            "لا توجد لديك تذاكر دعم حالياً",
-            style: TextStyle(fontSize: 18, color: Colors.grey, fontWeight: FontWeight.bold),
+          Text(
+            isActive ? "لا توجد تذاكر نشطة حالياً" : "لا توجد سجلات سابقة",
+            style: const TextStyle(fontSize: 18, color: Colors.grey, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 10),
-          const Text("اضغط على الزر أدناه لفتح تذكرة جديدة", style: TextStyle(color: Colors.grey)),
+          if (isActive) ...[
+            const SizedBox(height: 10),
+            const Text("اضغط على الزر أدناه لفتح تذكرة جديدة", style: TextStyle(color: Colors.grey)),
+          ],
         ],
       ),
     );

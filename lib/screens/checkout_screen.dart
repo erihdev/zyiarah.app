@@ -3,6 +3,8 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:zyiarah/screens/invoice_screen.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/invoice_pdf_service.dart';
+import 'package:zyiarah/services/counter_service.dart';
+import 'package:zyiarah/utils/order_util.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/audit_service.dart';
@@ -100,8 +102,13 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                     targetId: widget.contractId,
                   );
                 } else {
+                  // Generate Alphanumeric Code for Tamara Order (Ensures consistency)
+                  final seq = await ZyiarahCounterService().getNextOrderNumber();
+                  final orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
+
                   // إنشاء طلب خدمة جديد بهوية محددة مسبقاً
                   await FirebaseFirestore.instance.collection('orders').doc(widget.orderId).set({
+                    'code': orderCode,
                     'client_id': user?.uid ?? "unauthenticated_user", 
                     'client_name': user?.displayName ?? 'عميل زيارة',
                     'service_type': widget.serviceType,
@@ -146,20 +153,26 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                 return; // لا تكمل إذا فشل التسجيل الرئيسي
               }
 
-              // توليد بيانات ZATCA وتوليد الفاتورة في الخلفية
-              final double vatAmount = widget.amount * 0.15;
+              // توليد بيانات ZATCA وتوليد الفاتورة في الخلفية (باستخدام الحسابات الصحيحة)
+              final double vatAmount = widget.amount - (widget.amount / 1.15);
               final String qrData = ZatcaService.generateZatcaQrCode(
-                merchantName: "مؤسسة معاذ يحي محمد المالكي",
-                vatNumber: "310885360200003",
                 timestamp: DateTime.now(),
                 totalAmount: widget.amount,
                 vatAmount: vatAmount,
               );
 
+              // جلب الكود المنشأ حديثاً لإدراجه في الفاتورة
+              final orderDoc = await FirebaseFirestore.instance.collection('orders').doc(newOrderId).get();
+              final String orderCode = orderDoc.data()?['code'] ?? newOrderId.substring(0, 8).toUpperCase();
+
               InvoicePdfService.generateAndUploadInvoice(
                 orderId: newOrderId,
+                orderCode: orderCode,
                 amount: widget.amount,
                 qrData: qrData,
+                serviceName: widget.serviceType,
+                discountAmount: widget.discountAmount,
+                couponCode: widget.couponCode,
               ).then((downloadUrl) {
                 if (downloadUrl != null) {
                   FirebaseFirestore.instance

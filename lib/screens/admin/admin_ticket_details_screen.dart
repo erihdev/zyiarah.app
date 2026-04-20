@@ -55,7 +55,7 @@ class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
 
   void _closeTicket() async {
     await _db.collection('support_tickets').doc(widget.ticketId).update({
-      'status': 'Resolved',
+      'status': 'resolved',
       'updatedAt': FieldValue.serverTimestamp(),
     });
     if (mounted) Navigator.pop(context);

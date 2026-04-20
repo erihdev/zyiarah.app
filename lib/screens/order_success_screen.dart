@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/screens/orders_list_screen.dart';
 
 class ZyiarahOrderSuccessScreen extends StatefulWidget {
@@ -101,7 +103,12 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
                   ],
                 ),
               ),
-              const SizedBox(height: 60),
+              const SizedBox(height: 30),
+              
+              // Invoice Download Section (Listener)
+              _buildInvoiceSection(),
+
+              const SizedBox(height: 40),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -128,6 +135,44 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildInvoiceSection() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('orders')
+          .where('code', isEqualTo: widget.orderCode)
+          .limit(1)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const SizedBox();
+        
+        final data = snapshot.data!.docs.first.data() as Map<String, dynamic>;
+        final invoiceUrl = data['invoice_pdf_url'] as String?;
+
+        if (invoiceUrl == null) {
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2)),
+              const SizedBox(width: 10),
+              Text("جاري إنشاء الفاتورة الضريبية...", style: GoogleFonts.tajawal(fontSize: 12, color: Colors.blueGrey)),
+            ],
+          );
+        }
+
+        return OutlinedButton.icon(
+          onPressed: () => launchUrl(Uri.parse(invoiceUrl)),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            side: const BorderSide(color: Color(0xFF1E293B)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          icon: const Icon(Icons.picture_as_pdf_rounded, size: 20, color: Color(0xFF1E293B)),
+          label: Text("تحميل الفاتورة الضريبية", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF1E293B))),
+        );
+      },
     );
   }
 }

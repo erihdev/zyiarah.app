@@ -55,13 +55,20 @@ class _ClientDashboardState extends State<ClientDashboard> {
     // ... existing permission logic ...
   }
 
-  Stream<QuerySnapshot> _getRecentOrdersStream(String uid) {
+  Stream<List<DocumentSnapshot>> _getRecentOrdersStream(String uid) {
     return FirebaseFirestore.instance
         .collection('orders')
         .where('client_id', isEqualTo: uid)
         .orderBy('created_at', descending: true)
-        .limit(5)
-        .snapshots();
+        .limit(20)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs.where((doc) {
+            final data = doc.data();
+            final status = data['status'] ?? 'pending';
+            return status != 'completed' && status != 'cancelled';
+          }).take(5).toList();
+        });
   }
 
 
@@ -99,10 +106,10 @@ class _ClientDashboardState extends State<ClientDashboard> {
                 const SizedBox(height: 25),
                 _buildAnimatedItem(_buildSectionTitle(ZyiarahStrings.latestBookings, Icons.calendar_month, Colors.blue.shade800)),
                 const SizedBox(height: 15),
-                StreamBuilder<QuerySnapshot>(
+                StreamBuilder<List<DocumentSnapshot>>(
                     stream: _getRecentOrdersStream(user?.uid ?? ''),
                     builder: (context, snapshot) {
-                      return _buildAnimatedItem(_buildLatestBookings(snapshot.data?.docs ?? []));
+                      return _buildAnimatedItem(_buildLatestBookings(snapshot.data ?? []));
                     },
                   ),
                 const SizedBox(height: 30),
@@ -828,11 +835,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
               Navigator.pop(context);
               Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahProfileScreen()));
             }),
-            _buildDrawerItem(Icons.calendar_today_outlined, 'حجوزاتي', false, onTap: () {
-              Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen()));
-            }),
-            _buildDrawerItem(Icons.inventory_2_outlined, 'الطلبات', false, onTap: () {
+            _buildDrawerItem(Icons.calendar_today_outlined, 'حجوزاتي والطلبات', false, onTap: () {
               Navigator.pop(context);
               Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen()));
             }),
