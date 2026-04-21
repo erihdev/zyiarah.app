@@ -9,6 +9,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/notification_trigger_service.dart';
+import 'package:zyiarah/services/zyiarah_comm_service.dart';
+
 
 class TamaraCheckoutScreen extends StatefulWidget {
   final String checkoutUrl;
@@ -25,6 +27,8 @@ class TamaraCheckoutScreen extends StatefulWidget {
   final String? maintenanceId;
   final String? contractId;
   final int? planVisits;
+  final String? customerName;
+  final String? customerPhone;
 
   const TamaraCheckoutScreen({
     super.key,
@@ -42,7 +46,11 @@ class TamaraCheckoutScreen extends StatefulWidget {
     this.maintenanceId,
     this.contractId,
     this.planVisits,
+    this.customerName,
+    this.customerPhone,
   });
+
+
 
   @override
   State<TamaraCheckoutScreen> createState() => _TamaraCheckoutScreenState();
@@ -183,6 +191,21 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                   });
                 }
               });
+
+              // إرسال تأكيد بالبريد الإلكتروني للعميل والمسؤول (تمارا)
+              ZyiarahCommService().notifyNewOrder({
+                'code': orderCode,
+                'client_name': widget.customerName ?? user?.displayName ?? 'عميل زيارة',
+                'client_phone': widget.customerPhone ?? user?.phoneNumber ?? 'غير متوفر',
+                'service_type': widget.serviceType,
+                'amount': widget.amount,
+                'zone': widget.zoneName ?? 'غير محدد',
+                'date_time': widget.serviceDate != null ? intl.DateFormat('yyyy-MM-dd').format(widget.serviceDate!) : 'غير محدد',
+                'worker_count': widget.workerCount,
+                'coupon': widget.couponCode ?? 'لا يوجد',
+              }, customerEmail: user?.email);
+
+
 
               // توجيه المستخدم لصفحة النجاح (الفاتورة) داخل التطبيق
               if (!mounted) return;

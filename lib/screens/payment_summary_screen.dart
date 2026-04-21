@@ -13,6 +13,8 @@ import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/services/zyiarah_comm_service.dart';
+
 
 class PaymentSummaryScreen extends StatefulWidget {
   final String serviceName;
@@ -207,8 +209,24 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             orderCode: orderCode,
             paymentMethod: 'subscription',
           );
+
+          // إرسال تأكيد بالبريد الإلكتروني للفخامة
+          await ZyiarahCommService().notifyNewOrder({
+            'code': orderCode,
+            'client_name': _currentUser?.name ?? 'عميل زيارة',
+            'client_phone': _currentUser?.phone ?? 'غير متوفر',
+            'service_type': widget.serviceName,
+            'amount': 0.0,
+            'zone': widget.zoneName ?? 'غير محدد',
+            'date_time': widget.serviceDate != null ? intl.DateFormat('yyyy-MM-dd').format(widget.serviceDate!) : 'غير محدد',
+            'worker_count': widget.workerCount,
+            'coupon': _appliedCoupon ?? 'لا يوجد',
+          }, customerEmail: _currentUser?.email);
+
+
           await _navigateToSuccess(orderCode);
         }
+
       } else if (_selectedPaymentMethod == 'cod') {
         if (widget.maintenanceId != null) {
           await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
@@ -244,8 +262,24 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             paymentMethod: 'cod',
             paidAmount: totalWithVat,
           );
+
+          // إرسال تأكيد بالبريد الإلكتروني للعميل والمسؤول
+          await ZyiarahCommService().notifyNewOrder({
+            'code': orderCode,
+            'client_name': _currentUser?.name ?? 'عميل زيارة',
+            'client_phone': _currentUser?.phone ?? 'غير متوفر',
+            'service_type': widget.serviceName,
+            'amount': totalWithVat,
+            'zone': widget.zoneName ?? 'غير محدد',
+            'date_time': widget.serviceDate != null ? intl.DateFormat('yyyy-MM-dd').format(widget.serviceDate!) : 'غير محدد',
+            'worker_count': widget.workerCount,
+            'coupon': _appliedCoupon ?? 'لا يوجد',
+          }, customerEmail: _currentUser?.email);
+
+
           await _navigateToSuccess(orderCode);
         }
+
       } else if (_selectedPaymentMethod == 'tamara') {
         String? checkoutUrl = await _tamaraService.createCheckoutSession(
           orderId: finalOrderId,
@@ -274,6 +308,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 maintenanceId: widget.maintenanceId,
                 contractId: widget.contractId,
                 planVisits: widget.planVisits,
+                customerName: _currentUser?.name ?? "عميل زيارة",
+                customerPhone: _currentUser?.phone ?? "0500000000",
               ),
             ),
           );
@@ -355,9 +391,25 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               paymentMethod: _selectedPaymentMethod,
               paidAmount: totalWithVat,
             );
+
+            // إرسال تأكيد بالبريد الإلكتروني بعد نجاح الدفع بالبطاقة
+            await ZyiarahCommService().notifyNewOrder({
+              'code': orderCode,
+              'client_name': _currentUser?.name ?? 'عميل زيارة',
+              'client_phone': _currentUser?.phone ?? 'غير متوفر',
+              'service_type': widget.serviceName,
+              'amount': totalWithVat,
+              'zone': widget.zoneName ?? 'غير محدد',
+              'date_time': widget.serviceDate != null ? intl.DateFormat('yyyy-MM-dd').format(widget.serviceDate!) : 'غير محدد',
+              'worker_count': widget.workerCount,
+              'coupon': _appliedCoupon ?? 'لا يوجد',
+            }, customerEmail: _currentUser?.email);
+
+
             await _navigateToSuccess(orderCode);
           }
-        } else {
+        }
+ else {
           throw Exception(result['error'] ?? "فشلت عملية الدفع بالبطاقة");
         }
       }

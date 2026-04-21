@@ -8,7 +8,9 @@ import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/counter_service.dart';
 import 'package:zyiarah/services/location_service.dart';
 import 'package:zyiarah/services/notification_trigger_service.dart';
+import 'package:zyiarah/services/zyiarah_comm_service.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
+
 
 class ZyiarahMaintenanceRequestScreen extends StatefulWidget {
   const ZyiarahMaintenanceRequestScreen({super.key});
@@ -119,6 +121,20 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
           serviceName: _selectedService ?? 'صيانة',
           type: 'maintenance',
         );
+        
+        // إرسال تأكيد بالبريد الإلكتروني لطلب الصيانة (قيد المراجعة)
+        await ZyiarahCommService().notifyNewOrder({
+          'code': orderCode,
+          'client_name': userName,
+          'client_phone': userPhone,
+          'service_type': _selectedService ?? 'صيانة وتكييف',
+          'amount': 0.0, // قيد التسعير
+          'zone': _selectedFloor ?? 'غير محدد',
+          'date_time': intl.DateFormat('yyyy-MM-dd HH:mm').format(scheduledDateTime),
+          'worker_count': _quantity,
+          'coupon': 'لا يوجد',
+        }, customerEmail: user.email);
+
 
         if (!mounted) return;
 

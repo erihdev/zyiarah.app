@@ -7,6 +7,8 @@ import 'package:lottie/lottie.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zyiarah/services/zyiarah_comm_service.dart';
+
 
 class ZyiarahStoreScreen extends StatefulWidget {
   const ZyiarahStoreScreen({super.key});
@@ -295,6 +297,21 @@ class _CartSheetState extends State<_CartSheet> {
           serviceName: 'طلب منتجات من المتجر',
           type: 'store',
         );
+
+        // إرسال تأكيد بالبريد الإلكتروني لطلب المتجر
+        final user = FirebaseAuth.instance.currentUser;
+        await ZyiarahCommService().notifyNewOrder({
+          'code': orderCode,
+          'client_name': user?.displayName ?? 'عميل زيارة',
+          'client_phone': user?.phoneNumber ?? 'غير متوفر', // Note: Store uses Firebase phone if available
+          'service_type': 'طلب منتجات نظافة من المتجر',
+          'amount': total,
+          'zone': 'طلب عبر المتجر',
+          'date_time': DateTime.now().toString().split('.')[0],
+          'worker_count': 0, // N/A for store
+          'coupon': 'لا يوجد',
+        }, customerEmail: user?.email);
+
 
         if (!mounted) return;
 

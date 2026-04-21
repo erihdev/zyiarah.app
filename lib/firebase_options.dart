@@ -58,7 +58,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyAbbW7MmqVa4nPyxLURj1bj9DAAYE_U4GI',
-    appId: '1:275681992607:android:6d3c2ac98b63371bb127aa',
+    appId: '1:275681992607:android:369f833ebbd0a9f7b127aa',
     messagingSenderId: '275681992607',
     projectId: 'zyiarah-app',
     storageBucket: 'zyiarah-app.firebasestorage.app',

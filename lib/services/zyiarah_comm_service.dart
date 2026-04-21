@@ -39,22 +39,35 @@ class ZyiarahCommService {
     final String targetAdmin = await _getAdminEmail();
     
     // 1. Notify Admin (Internal Alert)
+    final String clientPhone = orderData['client_phone'] ?? 'غير متوفر';
+    final String zone = orderData['zone'] ?? 'غير محدد';
+    final String serviceDate = orderData['date_time'] ?? 'غير محدد';
+    final String workers = orderData['worker_count']?.toString() ?? '1';
+    final String coupon = orderData['coupon'] ?? 'لا يوجد';
+
     await sendPremiumEmail(
       recipient: targetAdmin,
       subject: "🔔 طلب جديد - رقم #$orderCode",
       title: "تم استلام طلب جديد بنجاح",
       bodyHtml: """
-        <div style="background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-          <p><strong>كود الطلب:</strong> $orderCode</p>
+        <div style="background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 20px; text-align: right; border: 1px solid #e2e8f0;">
+          <h3 style="color: #5d1b5e; margin-top: 0;">تفاصيل الطلب:</h3>
+          <p><strong>كود الطلب:</strong> <span style="color: #2563eb;">#$orderCode</span></p>
           <p><strong>العميل:</strong> $clientName</p>
+          <p><strong>الجوال:</strong> $clientPhone</p>
           <p><strong>نوع الخدمة:</strong> ${orderData['service_type']}</p>
-          <p><strong>المبلغ:</strong> ${orderData['amount']} ر.س</p>
+          <p><strong>المنطقة:</strong> $zone</p>
+          <p><strong>موعد الخدمة:</strong> $serviceDate</p>
+          <p><strong>عدد العاملات:</strong> $workers</p>
+          <p><strong>الكوبون:</strong> $coupon</p>
+          <p style="font-size: 18px; border-top: 1px solid #e2e8f0; pt: 10px;"><strong>المبلغ الإجمالي:</strong> <span style="color: #16a34a;">${orderData['amount']} ر.س</span></p>
         </div>
-        <p style="text-align: center;">
-          <a href="https://admin.zyiarah.com/orders/$orderCode" style="background: #1e293b; color: white; padding: 12px 25px; text-decoration: none; border-radius: 8px; font-weight: bold;">فتح تفاصيل الطلب</a>
+        <p style="text-align: center; margin-top: 30px;">
+          <a href="https://admin.zyiarah.com/orders/$orderCode" style="background: #5d1b5e; color: white; padding: 14px 30px; text-decoration: none; border-radius: 12px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">فتح لوحة التحكم</a>
         </p>
       """,
     );
+
 
     // 2. Notify Customer (Fakhma Customer Experience)
     if (customerEmail != null && customerEmail.isNotEmpty) {
