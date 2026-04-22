@@ -41,7 +41,7 @@ android {
 
     defaultConfig {
         applicationId = "com.zyiarah.app"
-        minSdk = 21 // Force 21 to match local.properties
+        minSdk = flutter.minSdkVersion // Force 21 to match local.properties
         targetSdk = 34 // Force 34 to match local.properties
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -51,7 +51,8 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
-            minifyEnabled = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
