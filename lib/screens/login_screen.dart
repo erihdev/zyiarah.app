@@ -47,7 +47,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
         
         if (role == 'driver') {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const DriverDashboard()));
-        } else if (role == 'admin') {
+        } else if (['admin', 'super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin'].contains(role)) {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AdminDashboardScreen()));
         } else {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ClientDashboard()));

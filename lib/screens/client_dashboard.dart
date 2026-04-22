@@ -395,7 +395,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('الزيارات المتبقية لهذا الشهر', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12)),
-              if (_currentUser?.subscriptionExpiry != null)
+              if (user.subscriptionExpiry != null)
                 Text(
                   'التجديد في: ${user.subscriptionExpiry!.day}/${user.subscriptionExpiry!.month}',
                   style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 10),
@@ -487,10 +487,10 @@ class _ClientDashboardState extends State<ClientDashboard> {
         final userData = userSnapshot.data?.data() as Map<String, dynamic>?;
         final rating = (userData?['rating'] ?? 4.9).toString();
 
-        return StreamBuilder<QuerySnapshot>(
+        return StreamBuilder<List<DocumentSnapshot>>(
           stream: _getRecentOrdersStream(uid),
           builder: (context, orderSnapshot) {
-            final totalBookings = (orderSnapshot.data?.docs.length ?? 0).toString();
+            final totalBookings = (orderSnapshot.data?.length ?? 0).toString();
 
             return SingleChildScrollView(
               scrollDirection: Axis.horizontal,

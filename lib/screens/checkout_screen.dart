@@ -10,7 +10,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/services/zyiarah_comm_service.dart';
-
+import 'package:intl/intl.dart' as intl;
 
 class TamaraCheckoutScreen extends StatefulWidget {
   final String checkoutUrl;
@@ -69,9 +69,9 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
           onPageStarted: (url) async {
             if (url.contains('payment-success') || url.contains('payment-success-mock')) {
                 String newOrderId = widget.orderId;
-                try {
                 final user = FirebaseAuth.instance.currentUser;
-                
+                try {
+
                 if (widget.maintenanceId != null) {
                   // تحديث طلب الصيانة
                   await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
@@ -193,8 +193,12 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
               });
 
               // إرسال تأكيد بالبريد الإلكتروني للعميل والمسؤول (تمارا)
-              ZyiarahCommService().notifyNewOrder({
-                'code': orderCode,
+              String finalCommCode = orderCode;
+              if (widget.maintenanceId != null) finalCommCode = widget.maintenanceId!;
+              if (widget.contractId != null) finalCommCode = widget.contractId!;
+
+              await ZyiarahCommService().notifyNewOrder({
+                'code': finalCommCode,
                 'client_name': widget.customerName ?? user?.displayName ?? 'عميل زيارة',
                 'client_phone': widget.customerPhone ?? user?.phoneNumber ?? 'غير متوفر',
                 'service_type': widget.serviceType,

@@ -10,7 +10,6 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/screens/client_dashboard.dart';
 import 'package:zyiarah/screens/driver_dashboard.dart';
 import 'package:zyiarah/screens/admin/admin_dashboard_screen.dart';
@@ -20,6 +19,7 @@ import 'package:zyiarah/router.dart';
 
 import 'package:provider/provider.dart';
 import 'package:zyiarah/providers/user_provider.dart';
+import 'package:zyiarah/providers/config_provider.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -49,6 +49,7 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ZyiarahUserProvider()),
+        ChangeNotifierProvider(create: (_) => ZyiarahConfigProvider()),
       ],
       child: const ZyiarahApp(),
     ),

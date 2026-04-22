@@ -124,27 +124,52 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                         ),
                       ),
                       const SizedBox(height: 15),
-                      RadioGroup<String>(
-                        groupValue: type,
-                        onChanged: (val) => setDialogState(() => type = val!),
-                        child: const Row(
-                          children: [
-                            Expanded(
-                              child: RadioListTile<String>(
-                                title: Text('نسبة %', style: TextStyle(fontSize: 11)),
-                                value: 'percentage',
-                                contentPadding: EdgeInsets.zero,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => setDialogState(() => type = 'percentage'),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: type == 'percentage' ? const Color(0xFFE11D48).withValues(alpha: 0.1) : Colors.grey[100],
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: type == 'percentage' ? const Color(0xFFE11D48) : Colors.transparent),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.percent_rounded, size: 16, color: type == 'percentage' ? const Color(0xFFE11D48) : Colors.grey),
+                                    const SizedBox(width: 6),
+                                    Text('نسبة %', style: TextStyle(fontSize: 13, fontWeight: type == 'percentage' ? FontWeight.bold : FontWeight.normal, color: type == 'percentage' ? const Color(0xFFE11D48) : Colors.grey)),
+                                  ],
+                                ),
                               ),
                             ),
-                            Expanded(
-                              child: RadioListTile<String>(
-                                title: Text('مبلغ ثابت', style: TextStyle(fontSize: 11)),
-                                value: 'fixed',
-                                contentPadding: EdgeInsets.zero,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => setDialogState(() => type = 'fixed'),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: type == 'fixed' ? const Color(0xFFE11D48).withValues(alpha: 0.1) : Colors.grey[100],
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: type == 'fixed' ? const Color(0xFFE11D48) : Colors.transparent),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.attach_money_rounded, size: 16, color: type == 'fixed' ? const Color(0xFFE11D48) : Colors.grey),
+                                    const SizedBox(width: 6),
+                                    Text('مبلغ ثابت', style: TextStyle(fontSize: 13, fontWeight: type == 'fixed' ? FontWeight.bold : FontWeight.normal, color: type == 'fixed' ? const Color(0xFFE11D48) : Colors.grey)),
+                                  ],
+                                ),
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                       TextField(
                         controller: valueCtrl,

@@ -1,16 +1,20 @@
-const functions = require("firebase-functions");
-const {onDocumentCreated} = require("firebase-functions/v2/firestore");
+/* eslint-disable max-len */
+const {onDocumentCreated, onDocumentUpdated} = require("firebase-functions/v2/firestore");
+const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 admin.initializeApp();
+// const functions = require("firebase-functions");
 
 // 1. Notify user when admin replies to a support ticket
-exports.sendNotificationOnTicketReply = functions.firestore
-    .document("support_tickets/{ticketId}/messages/{messageId}")
-    .onCreate(async (snap, context) => {
+exports.sendNotificationOnTicketReply = onDocumentCreated("support_tickets/{ticketId}/messages/{messageId}",
+    async (event) => {
+      const snap = event.data;
+      if (!snap) return null;
+
       const newMessage = snap.data();
       if (newMessage.senderId !== "admin") return null;
 
-      const ticketId = context.params.ticketId;
+      const ticketId = event.params.ticketId;
       const ticketRef = admin.firestore().collection("support_tickets")
           .doc(ticketId);
       const ticketDoc = await ticketRef.get();
@@ -42,8 +46,7 @@ exports.sendNotificationOnTicketReply = functions.firestore
 
       try {
         await admin.messaging().send(payload);
-        console.log(`Notification sent to user ${userId} ` +
-            `for ticket ${ticketId}`);
+        console.log(`Notification sent to user ${userId} for ticket ${ticketId}`);
 
         // Save to notifications collection for in-app history
         await admin.firestore().collection("notifications").add({
@@ -61,11 +64,12 @@ exports.sendNotificationOnTicketReply = functions.firestore
     });
 
 // 1.5 Notify Admins on New Order
-exports.sendNotificationToAdminsOnNewOrder = functions.firestore
-    .document("orders/{orderId}")
-    .onCreate(async (snap, context) => {
-      const newOrder = snap.data();
-      const orderId = context.params.orderId;
+exports.sendNotificationToAdminsOnNewOrder = onDocumentCreated("orders/{orderId}",
+    async (event) => {
+      const snap = event.data;
+      if (!snap) return null;
+
+      const orderId = event.params.orderId;
 
       const payload = {
         notification: {
@@ -89,12 +93,14 @@ exports.sendNotificationToAdminsOnNewOrder = functions.firestore
     });
 
 // 2. Notify driver/client when order status changes
-exports.sendNotificationOnOrderStatusChange = functions.firestore
-    .document("orders/{orderId}")
-    .onUpdate(async (change, context) => {
+exports.sendNotificationOnOrderStatusChange = onDocumentUpdated("orders/{orderId}",
+    async (event) => {
+      const change = event.data;
+      if (!change) return null;
+
       const beforeData = change.before.data();
       const afterData = change.after.data();
-      const orderId = context.params.orderId;
+      const orderId = event.params.orderId;
 
       if (beforeData.status === afterData.status) return null;
 
@@ -140,8 +146,7 @@ exports.sendNotificationOnOrderStatusChange = functions.firestore
 
       try {
         await admin.messaging().send(payload);
-        console.log(`Notification sent to ${targetUserId} ` +
-            `for order ${orderId}`);
+        console.log(`Notification sent to ${targetUserId} for order ${orderId}`);
 
         // Save to notifications collection for in-app history
         await admin.firestore().collection("notifications").add({
@@ -239,29 +244,28 @@ exports.onNotificationCreated = onDocumentCreated("notifications_log/{id}",
     });
 
 // 4. Callable function for direct sending
-exports.manualSendNotification = functions.https.onCall(
-    async (data, _context) => {
-      const {title, body, target = "all"} = data;
+exports.manualSendNotification = onCall(async (request) => {
+  const {title, body, target = "all"} = request.data;
 
-      const payload = {
-        notification: {title, body},
-        data: {click_action: "FLUTTER_NOTIFICATION_CLICK"},
-      };
+  const payload = {
+    notification: {title, body},
+    data: {click_action: "FLUTTER_NOTIFICATION_CLICK"},
+  };
 
-      try {
-        if (target === "all") {
-          await admin.messaging().send({...payload, topic: "all_users"});
-        } else {
-          await admin.messaging().send({...payload, topic: target});
-        }
-        return {success: true};
-      } catch (error) {
-        throw new functions.https.HttpsError("internal", error.message);
-      }
-    });
+  try {
+    if (target === "all") {
+      await admin.messaging().send({...payload, topic: "all_users"});
+    } else {
+      await admin.messaging().send({...payload, topic: target});
+    }
+    return {success: true};
+  } catch (error) {
+    throw new HttpsError("internal", error.message);
+  }
+});
 
 // 5. Tamara Webhook Handler (Security/Reliability Fix)
-exports.tamaraWebhook = functions.https.onRequest(async (req, res) => {
+exports.tamaraWebhook = onRequest(async (req, res) => {
   // ⚠️ IMPORTANT: In production, verify the Tamara signature header!
   const notification = req.body;
   console.log("Received Tamara Webhook:", JSON.stringify(notification));
@@ -280,6 +284,121 @@ exports.tamaraWebhook = functions.https.onRequest(async (req, res) => {
       console.error("Error updating order from Tamara webhook:", error);
     }
   }
+  res.status(200).send("Webhook received");
+});
 
-  res.status(200).send("OK");
+const nodemailer = require("nodemailer");
+
+// 6. Unified Notification Trigger Processor (MODERN DIRECT EMAIL FIX)
+exports.processNotificationTriggers = onDocumentCreated("notification_triggers/{id}", async (event) => {
+  const snap = event.data;
+  if (!snap) return;
+
+  const trigger = snap.data();
+  if (!trigger || trigger.processed === true) return;
+
+  const {toUid, title, body, type, data = {}} = trigger;
+
+  console.log(`Processing trigger ${event.params.id} of type ${type} via Direct Mailer`);
+
+  try {
+    // ------------------------------------------------------------
+    // A. Handle Email Logic (DIRECT NODEMAILER)
+    // ------------------------------------------------------------
+    if (type === "email" || type === "hybrid" || type === "admin_order_alert") {
+      // 1. Fetch SMTP Config from Firestore
+      const configDoc = await admin.firestore().collection("system_configs").doc("email_settings").get();
+
+      if (!configDoc.exists) {
+        throw new Error("Email configuration missing in Firestore (system_configs/email_settings)");
+      }
+
+      const config = configDoc.data();
+      const {host, port, user, pass, fromName, fromEmail} = config;
+
+      if (!host || !user || !pass) {
+        throw new Error("Incomplete SMTP configuration. Please check host, user, and pass.");
+      }
+
+      // 2. Initialize Nodemailer Transporter
+      const transporter = nodemailer.createTransport({
+        host: host,
+        port: port || 587,
+        secure: port === 465, // Use SSL for port 465
+        auth: {
+          user: user,
+          pass: pass,
+        },
+      });
+
+      // 3. Prepare Email
+      const recipient = trigger.recipientEmail || data.customerEmail || "admin@zyiarah.com";
+
+      const mailOptions = {
+        from: `"${fromName || "Zyiarah | زيارة"}" <${fromEmail || user}>`,
+        to: recipient,
+        subject: title,
+        html: body, // Body is already HTML template from ZyiarahCommService
+      };
+
+      // 4. Send Email
+      const info = await transporter.sendMail(mailOptions);
+      console.log("Email sent successfully:", info.messageId);
+
+      await snap.ref.update({
+        emailStatus: "sent",
+        messageId: info.messageId,
+      });
+    }
+
+    // ------------------------------------------------------------
+    // B. Handle Push Notification Logic (FCM)
+    // ------------------------------------------------------------
+    if (type !== "email") {
+      let targetTokens = [];
+
+      if (toUid === "ADMIN_BROADCAST") {
+        const adminTokensSnap = await admin.firestore().collection("fcm_tokens").where("role", "==", "admin").get();
+        targetTokens = adminTokensSnap.docs.map((doc) => doc.data().fcmToken).filter((t) => !!t);
+      } else if (toUid) {
+        const tokenDoc = await admin.firestore().collection("fcm_tokens").doc(toUid).get();
+        if (tokenDoc.exists && tokenDoc.data().fcmToken) {
+          targetTokens = [tokenDoc.data().fcmToken];
+        }
+      }
+
+      if (targetTokens.length > 0) {
+        const message = {
+          notification: {title, body: body.replace(/<[^>]*>?/gm, "")},
+          data: {...data, click_action: "FLUTTER_NOTIFICATION_CLICK"},
+          tokens: targetTokens.length === 1 ? undefined : targetTokens,
+          token: targetTokens.length === 1 ? targetTokens[0] : undefined,
+        };
+
+        if (targetTokens.length === 1) {
+          await admin.messaging().send(message);
+        } else {
+          await admin.messaging().sendEachForMulticast({
+            tokens: targetTokens,
+            notification: message.notification,
+            data: message.data,
+          });
+        }
+        console.log(`Push notification sent to ${targetTokens.length} devices`);
+      }
+    }
+
+    // Mark as processed
+    await snap.ref.update({
+      processed: true,
+      processedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  } catch (error) {
+    console.error(`Error processing trigger ${event.params.id}:`, error);
+    await snap.ref.update({
+      processed: false,
+      error: error.message,
+      lastAttempt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
 });

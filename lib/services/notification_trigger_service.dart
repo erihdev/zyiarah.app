@@ -20,7 +20,7 @@ class ZyiarahNotificationTriggerService {
         'type': type,
         'data': data ?? {},
         'createdAt': FieldValue.serverTimestamp(),
-        'isProcessed': false, // المبرمج سيعتمد على Cloud Function لتغييرها لـ true
+        'processed': false, // المبرمج سيعتمد على Cloud Function لتغييرها لـ true
       });
     } catch (e) {
       debugPrint("Error triggering notification: $e");
@@ -137,7 +137,7 @@ class ZyiarahNotificationTriggerService {
         'scheduled_at': Timestamp.fromDate(scheduledAt),
         'created_at': FieldValue.serverTimestamp(),
         'created_by': createdBy ?? 'Admin',
-        'isProcessed': false,
+        'processed': false,
         'status': 'pending',
       });
     } catch (e) {

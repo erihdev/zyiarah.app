@@ -68,7 +68,7 @@ class ZyiarahContractsListScreen extends StatelessWidget {
               itemBuilder: (context, index) {
                 final data = contracts[index].data() as Map<String, dynamic>;
                 final contractDocId = contracts[index].id;
-                return _buildContractCard(data, contractDocId);
+                return _buildContractCard(context, data, contractDocId);
               },
             );
           },

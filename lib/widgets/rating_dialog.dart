@@ -60,48 +60,51 @@ class _ZyiarahRatingDialogState extends State<ZyiarahRatingDialog> {
             ),
             
               const SizedBox(height: 20),
-              Text(ZyiarahStrings.lowRatingPrompt, style: GoogleFonts.tajawal(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.red[700])),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _selectedReason,
-                hint: Text(ZyiarahStrings.selectReasonHint, style: GoogleFonts.tajawal(fontSize: 13)),
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: Colors.red[50]?.withValues(alpha: 0.5),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.red[100]!)),
-                ),
-                items: ZyiarahStrings.lowRatingReasons.map((r) => DropdownMenuItem(value: r, child: Text(r, style: GoogleFonts.tajawal(fontSize: 13)))).toList(),
-                onChanged: (val) => setState(() => _selectedReason = val),
-              ),
-              const SizedBox(height: 15),
-              GestureDetector(
-                onTap: () async {
-                  final picker = ImagePicker();
-                  final picked = await picker.pickImage(source: ImageSource.camera, imageQuality: 50);
-                  if (picked != null) {
-                    setState(() => _evidenceImage = File(picked.path));
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(15),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(15),
-                    border: Border.all(color: Colors.grey[300]!),
+              if (_rating <= 2) ...[
+                Text(ZyiarahStrings.lowRatingPrompt, style: GoogleFonts.tajawal(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.red[700])),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: _selectedReason,
+                  hint: Text(ZyiarahStrings.selectReasonHint, style: GoogleFonts.tajawal(fontSize: 13)),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: Colors.red[50]?.withValues(alpha: 0.5),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.red[100]!)),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(_evidenceImage != null ? Icons.check_circle : Icons.add_a_photo_rounded, color: _evidenceImage != null ? Colors.green : Colors.grey),
-                      const SizedBox(width: 10),
-                      Text(
-                        _evidenceImage != null ? ZyiarahStrings.evidenceAttached : ZyiarahStrings.attachEvidence,
-                        style: GoogleFonts.tajawal(color: Colors.grey[700], fontSize: 13),
-                      ),
-                    ],
+                  items: ZyiarahStrings.lowRatingReasons.map((r) => DropdownMenuItem(value: r, child: Text(r, style: GoogleFonts.tajawal(fontSize: 13)))).toList(),
+                  onChanged: (val) => setState(() => _selectedReason = val),
+                ),
+                const SizedBox(height: 15),
+                GestureDetector(
+                  onTap: () async {
+                    final picker = ImagePicker();
+                    final picked = await picker.pickImage(source: ImageSource.camera, imageQuality: 50);
+                    if (picked != null) {
+                      setState(() => _evidenceImage = File(picked.path));
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(15),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(_evidenceImage != null ? Icons.check_circle : Icons.add_a_photo_rounded, color: _evidenceImage != null ? Colors.green : Colors.grey),
+                        const SizedBox(width: 10),
+                        Text(
+                          _evidenceImage != null ? ZyiarahStrings.evidenceAttached : ZyiarahStrings.attachEvidence,
+                          style: GoogleFonts.tajawal(color: Colors.grey[700], fontSize: 13),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(height: 15),
+              ],
 
             const SizedBox(height: 30),
             TextField(

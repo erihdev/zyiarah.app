@@ -1,11 +1,8 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 class ZyiarahCommService {
-  // FALLBACKS (Use Firestore for actual settings)
-  static const String _fallbackWebhookUrl = 'https://n8n.zyiarah.com/webhook/zyiarah-comm';
+  // Configuration constants
   static const String _fallbackAdminEmail = 'admin@zyiarah.com';
 
   /// Sends a Luxurious Email to one or more recipients
@@ -22,7 +19,7 @@ class ZyiarahCommService {
       greeting: greeting ?? "مرحباً بكم في زيارة",
     );
 
-    await _triggerWebhook(
+    await _queueNotification(
       action: 'SEND_EMAIL',
       payload: {
         'to': recipient,
@@ -168,38 +165,29 @@ class ZyiarahCommService {
     return _fallbackAdminEmail;
   }
 
-  Future<void> _triggerWebhook({required String action, required Map<String, dynamic> payload}) async {
+  Future<void> _queueNotification({required String action, required Map<String, dynamic> payload}) async {
     try {
-      // 1. Fetch dynamic webhook from Firestore config
-      String dynamicUrl = _fallbackWebhookUrl;
-      try {
-        final doc = await FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get();
-        if (doc.exists && doc.data()?['webhook_url'] != null) {
-          dynamicUrl = doc.data()!['webhook_url'];
-        }
-      } catch (e) {
-        debugPrint('Config fetch error, using fallback: $e');
-      }
-
-      // 2. Execute the request
-      final response = await http.post(
-        Uri.parse(dynamicUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'action': action,
-          'app': 'ZYIARAH_LUXE',
+      // THE ROOT FIX: Instead of direct HTTP, we write to a Firestore Queue.
+      // This ensures the email is sent even if the app closes immediately.
+      await FirebaseFirestore.instance.collection('notification_triggers').add({
+        'toUid': payload['to_uid'], // Optional, if we want to target a specific user's tokens too
+        'recipientEmail': payload['to'],
+        'title': payload['subject'],
+        'body': payload['html_body'],
+        'type': 'email', // Cloud Function will detect this and use n8n
+        'action': action,
+        'app': 'ZYIARAH_LUXE',
+        'createdAt': FieldValue.serverTimestamp(),
+        'processed': false,
+        'data': {
+          ...payload,
           'environment': kReleaseMode ? 'production' : 'development',
-          'timestamp': DateTime.now().toIso8601String(),
-          'device_platform': defaultTargetPlatform.toString(),
-          'data': payload,
-        }),
-      );
-
-      if (response.statusCode >= 400) {
-        debugPrint('Webhook returned error status: ${response.statusCode}');
-      }
+        },
+      });
+      
+      debugPrint('Email queued successfully in Firestore');
     } catch (e) {
-      debugPrint('Webhook error: $e');
+      debugPrint('Error queueing email trigger: $e');
     }
   }
 }

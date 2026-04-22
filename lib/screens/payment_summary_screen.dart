@@ -14,6 +14,12 @@ import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/zyiarah_comm_service.dart';
+import 'package:zyiarah/services/zatca_service.dart';
+import 'package:zyiarah/services/invoice_pdf_service.dart';
+
+import 'package:zyiarah/providers/config_provider.dart';
+import 'package:provider/provider.dart';
+
 
 
 class PaymentSummaryScreen extends StatefulWidget {
@@ -384,17 +390,22 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
           setState(() => _isLoading = false);
           if (mounted) {
-            if (widget.contractId == null && widget.maintenanceId == null) {
-            await _finalizeOrderWithInvoice(
-              orderId: finalOrderId,
-              orderCode: orderCode,
-              paymentMethod: _selectedPaymentMethod,
-              paidAmount: totalWithVat,
-            );
+            String notificationCode = orderCode;
+            if (widget.maintenanceId != null) notificationCode = widget.maintenanceId!;
+            if (widget.contractId != null) notificationCode = widget.contractId!;
 
-            // إرسال تأكيد بالبريد الإلكتروني بعد نجاح الدفع بالبطاقة
+            if (widget.contractId == null && widget.maintenanceId == null) {
+              await _finalizeOrderWithInvoice(
+                orderId: finalOrderId,
+                orderCode: orderCode,
+                paymentMethod: _selectedPaymentMethod,
+                paidAmount: totalWithVat,
+              );
+            }
+
+            // إرسال تأكيد بالبريد الإلكتروني للجميع (بشكل جذري)
             await ZyiarahCommService().notifyNewOrder({
-              'code': orderCode,
+              'code': notificationCode,
               'client_name': _currentUser?.name ?? 'عميل زيارة',
               'client_phone': _currentUser?.phone ?? 'غير متوفر',
               'service_type': widget.serviceName,
@@ -405,11 +416,17 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               'coupon': _appliedCoupon ?? 'لا يوجد',
             }, customerEmail: _currentUser?.email);
 
+            if (!mounted) return;
 
-            await _navigateToSuccess(orderCode);
+            if (widget.contractId == null && widget.maintenanceId == null) {
+              await _navigateToSuccess(orderCode);
+            } else {
+              // For maintenance or contract, just show success and pop
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تمت العملية بنجاح"), backgroundColor: Colors.green));
+              Navigator.pop(context, true);
+            }
           }
-        }
- else {
+        } else {
           throw Exception(result['error'] ?? "فشلت عملية الدفع بالبطاقة");
         }
       }
@@ -802,6 +819,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   Widget _buildBottomButton() {
+    final config = Provider.of<ZyiarahConfigProvider>(context);
     return Positioned(
       bottom: 0,
       left: 0,
@@ -815,7 +833,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         child: ElevatedButton(
           onPressed: _handlePayment,
           style: ElevatedButton.styleFrom(
-            backgroundColor: _agreeToTerms ? const Color(0xFF2563EB) : Colors.grey.shade300,
+            backgroundColor: _agreeToTerms ? config.checkoutButtonColor : Colors.grey.shade300,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

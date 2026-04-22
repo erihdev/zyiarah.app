@@ -35,8 +35,6 @@ class ZyiarahInvoiceScreen extends StatelessWidget {
 
     // ZATCA QR base64
     final String qrData = ZatcaService.generateZatcaQrCode(
-      merchantName: "مؤسسة معاذ يحي محمد المالكي",
-      vatNumber: "310885360200003",
       timestamp: now,
       totalAmount: amount,
       vatAmount: vatAmount,

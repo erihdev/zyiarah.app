@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:intl/intl.dart' as intl;
@@ -31,7 +30,14 @@ class AdminContractsScreen extends StatelessWidget {
               itemBuilder: (context, index) {
                 final contract = snapshot.data!.docs[index].data() as Map<String, dynamic>;
                 final contractId = snapshot.data!.docs[index].id;
-                final bool hasPdf = contract['pdfUrl'] != null && contract['pdfUrl'].toString().isNotEmpty;
+                return _buildContractCard(context, contract, contractId);
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
 
   Widget _buildContractCard(BuildContext context, Map<String, dynamic> data, String id) {
     final status = data['status'] ?? 'pending';
@@ -107,7 +113,7 @@ class AdminContractsScreen extends StatelessWidget {
                   Row(
                     children: [
                       if (status == 'pending')
-                         TextButton(
+                        TextButton(
                           onPressed: () => _showContractDetails(context, data, id),
                           child: Text("مراجعة واعتماد", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.blue)),
                         )
@@ -264,15 +270,12 @@ class AdminContractsScreen extends StatelessWidget {
     );
   }
 
-
-
   Future<void> _updateContractStatus(String id, String status, {String? userId, String? planName, String? clientName}) async {
     await FirebaseFirestore.instance.collection('contracts').doc(id).update({
       'status': status,
       'adminApprovedAt': status == 'approved_waiting_payment' ? FieldValue.serverTimestamp() : null,
     });
 
-    // تسجيل في سجل التدقيق
     ZyiarahAuditService().logAction(
       action: status == 'approved_waiting_payment' ? 'APPROVE_CONTRACT' : 'REJECT_CONTRACT',
       details: {
@@ -299,9 +302,9 @@ class AdminContractsScreen extends StatelessWidget {
           title: Text('تأكيد الحذف', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
           content: const Text('هل أنت متأكد من حذف هذا العقد نهائياً؟'),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(_, false), child: const Text('إلغاء')),
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
             ElevatedButton(
-              onPressed: () => Navigator.pop(_, true), 
+              onPressed: () => Navigator.pop(context, true),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
               child: const Text('حذف', style: TextStyle(color: Colors.white)),
             ),
