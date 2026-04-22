@@ -29,14 +29,20 @@ class ZyiarahExportUtil {
       for (var header in headerList) {
         var value = data[header];
         
-        // Sanitize value (handle commas and timestamps)
+        // Sanitize value (handle Firebase primitives)
         String valStr = "";
         if (value is Timestamp) {
-          valStr = value.toDate().toIso8601String();
+          valStr = value.toDate().toLocal().toString();
+        } else if (value is GeoPoint) {
+          valStr = "Lat: ${value.latitude} Lng: ${value.longitude}";
+        } else if (value is Map) {
+          valStr = "Map Data"; // Or JSON encode if needed
+        } else if (value is List) {
+          valStr = value.join(' | ');
         } else if (value == null) {
           valStr = "";
         } else {
-          valStr = value.toString().replaceAll(',', ';').replaceAll('\n', ' ');
+          valStr = value.toString().replaceAll('"', '""'); // Escape double quotes for standard CSV
         }
         
         row.add('"$valStr"');

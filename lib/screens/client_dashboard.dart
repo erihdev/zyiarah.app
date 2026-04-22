@@ -32,6 +32,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:provider/provider.dart';
 import 'package:zyiarah/providers/user_provider.dart';
+import 'package:zyiarah/providers/order_provider.dart';
 
 class ClientDashboard extends StatefulWidget {
   const ClientDashboard({super.key});
@@ -56,28 +57,15 @@ class _ClientDashboardState extends State<ClientDashboard> {
     // ... existing permission logic ...
   }
 
-  Stream<List<DocumentSnapshot>> _getRecentOrdersStream(String uid) {
-    return FirebaseFirestore.instance
-        .collection('orders')
-        .where('client_id', isEqualTo: uid)
-        .orderBy('created_at', descending: true)
-        .limit(20)
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs.where((doc) {
-            final data = doc.data();
-            final status = data['status'] ?? 'pending';
-            return status != 'completed' && status != 'cancelled';
-          }).take(5).toList();
-        });
-  }
+
 
 
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<ZyiarahUserProvider>(context);
+    final orderProvider = Provider.of<ZyiarahOrderProvider>(context);
     final user = userProvider.user;
-    final isLoading = userProvider.isLoading;
+    final isLoading = userProvider.isLoading || orderProvider.isLoading;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -107,12 +95,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                 const SizedBox(height: 25),
                 _buildAnimatedItem(_buildSectionTitle(ZyiarahStrings.latestBookings, Icons.calendar_month, Colors.blue.shade800)),
                 const SizedBox(height: 15),
-                StreamBuilder<List<DocumentSnapshot>>(
-                    stream: _getRecentOrdersStream(user?.uid ?? ''),
-                    builder: (context, snapshot) {
-                      return _buildAnimatedItem(_buildLatestBookings(snapshot.data ?? []));
-                    },
-                  ),
+                _buildAnimatedItem(_buildLatestBookings(orderProvider.activeOrders.take(5).toList())),
                 const SizedBox(height: 30),
               ],
             ),
@@ -486,17 +469,14 @@ class _ClientDashboardState extends State<ClientDashboard> {
       builder: (context, userSnapshot) {
         final userData = userSnapshot.data?.data() as Map<String, dynamic>?;
         final rating = (userData?['rating'] ?? 4.9).toString();
+        final orderProvider = Provider.of<ZyiarahOrderProvider>(context, listen: false);
+        final totalBookings = orderProvider.recentOrders.length.toString();
 
-        return StreamBuilder<List<DocumentSnapshot>>(
-          stream: _getRecentOrdersStream(uid),
-          builder: (context, orderSnapshot) {
-            final totalBookings = (orderSnapshot.data?.length ?? 0).toString();
-
-            return SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              clipBehavior: Clip.none,
-              child: Row(
-                children: [
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          clipBehavior: Clip.none,
+          child: Row(
+            children: [
                   _buildColorfulMetricCard(
                     title: 'إجمالي الحجوزات',
                     value: totalBookings,
@@ -515,8 +495,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
                 ],
               ),
             );
-          }
-        );
       }
     );
   }

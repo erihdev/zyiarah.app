@@ -16,10 +16,12 @@ import 'package:zyiarah/screens/admin/admin_dashboard_screen.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/services/deep_link_service.dart';
 import 'package:zyiarah/router.dart';
+import 'package:zyiarah/utils/global_error_handler.dart';
 
 import 'package:provider/provider.dart';
 import 'package:zyiarah/providers/user_provider.dart';
 import 'package:zyiarah/providers/config_provider.dart';
+import 'package:zyiarah/providers/order_provider.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -36,9 +38,13 @@ void main() async {
   );
 
   // System-wide crash reporting setup
-  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+  FlutterError.onError = (details) {
+    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    GlobalErrorHandler.handleError(details.exception, details.stack);
+  };
   PlatformDispatcher.instance.onError = (error, stack) {
     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    GlobalErrorHandler.handleError(error, stack);
     return true;
   };
 
@@ -50,6 +56,7 @@ void main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => ZyiarahUserProvider()),
         ChangeNotifierProvider(create: (_) => ZyiarahConfigProvider()),
+        ChangeNotifierProvider(create: (_) => ZyiarahOrderProvider()),
       ],
       child: const ZyiarahApp(),
     ),

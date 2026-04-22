@@ -12,14 +12,17 @@ class ZyiarahPdfReportUtil {
     required int activeOrders,
   }) async {
     final pdf = pw.Document();
-    
-    // In a real environment with Arabic, you must load a font that supports Arabic glyphs.
-    // Since we are in a dev environment, we'll use a standard font for structure, 
-    // but a production app would use: pw.Font.ttf(await rootBundle.load("assets/fonts/Tajawal.ttf"))
+    final ttf = await PdfGoogleFonts.tajawalRegular();
+    final ttfBold = await PdfGoogleFonts.tajawalBold();
     
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
+        theme: pw.ThemeData.withFont(
+          base: ttf,
+          bold: ttfBold,
+        ),
+        textDirection: pw.TextDirection.rtl,
         build: (pw.Context context) {
           return pw.Padding(
             padding: const pw.EdgeInsets.all(32),
