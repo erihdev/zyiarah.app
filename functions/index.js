@@ -288,8 +288,9 @@ exports.tamaraWebhook = onRequest(async (req, res) => {
 });
 
 const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 
-// 6. Unified Notification Trigger Processor (MODERN DIRECT EMAIL FIX)
+// 6. Unified Notification Trigger Processor (THE BEST: DIRECT MAIL + ATTACHMENTS + IN-APP SYNC)
 exports.processNotificationTriggers = onDocumentCreated("notification_triggers/{id}", async (event) => {
   const snap = event.data;
   if (!snap) return;
@@ -297,62 +298,89 @@ exports.processNotificationTriggers = onDocumentCreated("notification_triggers/{
   const trigger = snap.data();
   if (!trigger || trigger.processed === true) return;
 
-  const {toUid, title, body, type, data = {}} = trigger;
+  const {toUid, title, body, type, template, data = {}, attachmentUrls = []} = trigger;
+  const recipientEmail = trigger.recipientEmail || data.customerEmail || "admin@zyiarah.com";
 
-  console.log(`Processing trigger ${event.params.id} of type ${type} via Direct Mailer`);
+  console.log(`Processing trigger ${event.params.id} via Advanced Communications Pipeline`);
 
   try {
     // ------------------------------------------------------------
-    // A. Handle Email Logic (DIRECT NODEMAILER)
+    // 1. Sync to In-App Notification History (Universal)
     // ------------------------------------------------------------
-    if (type === "email" || type === "hybrid" || type === "admin_order_alert") {
-      // 1. Fetch SMTP Config from Firestore
-      const configDoc = await admin.firestore().collection("system_configs").doc("email_settings").get();
-
-      if (!configDoc.exists) {
-        throw new Error("Email configuration missing in Firestore (system_configs/email_settings)");
-      }
-
-      const config = configDoc.data();
-      const {host, port, user, pass, fromName, fromEmail} = config;
-
-      if (!host || !user || !pass) {
-        throw new Error("Incomplete SMTP configuration. Please check host, user, and pass.");
-      }
-
-      // 2. Initialize Nodemailer Transporter
-      const transporter = nodemailer.createTransport({
-        host: host,
-        port: port || 587,
-        secure: port === 465, // Use SSL for port 465
-        auth: {
-          user: user,
-          pass: pass,
-        },
-      });
-
-      // 3. Prepare Email
-      const recipient = trigger.recipientEmail || data.customerEmail || "admin@zyiarah.com";
-
-      const mailOptions = {
-        from: `"${fromName || "Zyiarah | زيارة"}" <${fromEmail || user}>`,
-        to: recipient,
-        subject: title,
-        html: body, // Body is already HTML template from ZyiarahCommService
-      };
-
-      // 4. Send Email
-      const info = await transporter.sendMail(mailOptions);
-      console.log("Email sent successfully:", info.messageId);
-
-      await snap.ref.update({
-        emailStatus: "sent",
-        messageId: info.messageId,
+    if (toUid && toUid !== "ADMIN_BROADCAST") {
+      await admin.firestore().collection("notifications").add({
+        userId: toUid,
+        title: title,
+        body: body.replace(/<[^>]*>?/gm, ""), // Clean text for UI
+        type: type,
+        relatedId: data.orderId || data.code || event.params.id,
+        isRead: false,
+        sentAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     }
 
     // ------------------------------------------------------------
-    // B. Handle Push Notification Logic (FCM)
+    // 2. Handle Email Logic (Resend / SMTP)
+    // ------------------------------------------------------------
+    if (type === "email" || type === "hybrid" || type === "admin_order_alert") {
+      const configDoc = await admin.firestore().collection("system_configs").doc("email_settings").get();
+      if (!configDoc.exists) throw new Error("Email settings missing");
+
+      const {fromName, fromEmail, resendApiKey} = configDoc.data();
+      const fromString = `"${fromName || "Zyiarah | زيارة"}" <${fromEmail || "no-reply@zyiarah.com"}>`;
+
+      if (resendApiKey) {
+        const resend = new Resend(resendApiKey);
+
+        // 2a. Process Attachments (e.g., Invoice PDF)
+        const attachments = [];
+        for (const url of attachmentUrls) {
+          try {
+            // Very basic download logic using standard fetch (Node 18+)
+            const response = await fetch(url);
+            if (response.ok) {
+              const arrayBuffer = await response.arrayBuffer();
+              const filename = url.split("/").pop().split("?")[0] || "attachment.pdf";
+              attachments.push({
+                filename: filename,
+                content: Buffer.from(arrayBuffer),
+              });
+              console.log(`Attached file: ${filename}`);
+            }
+          } catch (attError) {
+            console.error(`Failed to attach file ${url}:`, attError);
+          }
+        }
+
+        const emailPayload = {
+          from: fromString,
+          to: recipientEmail,
+          subject: title,
+          attachments: attachments.length > 0 ? attachments : undefined,
+        };
+
+        if (template && template.id) {
+          emailPayload.template = {
+            id: template.id,
+            variables: template.variables || {},
+          };
+        } else {
+          emailPayload.html = body;
+        }
+
+        const {data: resendData, error: resendError} = await resend.emails.send(emailPayload);
+        if (resendError) throw new Error(`Resend Error: ${resendError.message}`);
+
+        await snap.ref.update({
+          emailStatus: "sent",
+          messageId: resendData.id,
+          provider: "resend",
+        });
+      }
+    }
+
+    // ------------------------------------------------------------
+    // 3. Handle Push Notification Logic (FCM)
     // ------------------------------------------------------------
     if (type !== "email") {
       let targetTokens = [];
@@ -384,11 +412,11 @@ exports.processNotificationTriggers = onDocumentCreated("notification_triggers/{
             data: message.data,
           });
         }
-        console.log(`Push notification sent to ${targetTokens.length} devices`);
+        console.log(`Push sent to ${targetTokens.length} devices`);
       }
     }
 
-    // Mark as processed
+    // Final signature
     await snap.ref.update({
       processed: true,
       processedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -398,7 +426,7 @@ exports.processNotificationTriggers = onDocumentCreated("notification_triggers/{
     await snap.ref.update({
       processed: false,
       error: error.message,
-      lastAttempt: admin.firestore.FieldValue.serverTimestamp(),
+      lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
     });
   }
 });

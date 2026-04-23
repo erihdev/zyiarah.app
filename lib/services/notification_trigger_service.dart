@@ -4,13 +4,14 @@ import 'package:flutter/foundation.dart';
 class ZyiarahNotificationTriggerService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  /// يرسل بلاغ تذكير لنظام الإشعارات (Clound Functions) لإرسال Payload الـ FCM
+  /// يرسل بلاغ تذكير لنظام الإشعارات (Clound Functions) لإرسال Payload الـ FCM و/أو البريد الإلكتروني
   Future<void> triggerNotification({
     required String toUid,
     required String title,
     required String body,
-    required String type, // 'order_assignment', 'maintenance_quote', 'support_reply'
+    required String type, // 'order_assignment', 'maintenance_quote', 'support_reply', 'hybrid'
     Map<String, dynamic>? data,
+    Map<String, dynamic>? template, // اختيار لتفعيل قوالب Resend
   }) async {
     try {
       await _db.collection('notification_triggers').add({
@@ -19,8 +20,9 @@ class ZyiarahNotificationTriggerService {
         'body': body,
         'type': type,
         'data': data ?? {},
+        if (template != null) 'template': template,
         'createdAt': FieldValue.serverTimestamp(),
-        'processed': false, // المبرمج سيعتمد على Cloud Function لتغييرها لـ true
+        'processed': false,
       });
     } catch (e) {
       debugPrint("Error triggering notification: $e");
@@ -41,16 +43,26 @@ class ZyiarahNotificationTriggerService {
     );
   }
 
-  Future<void> notifyClientOfMaintenanceQuote(String clientId, String requestId, double price) async {
+  Future<void> notifyClientOfMaintenanceQuote(String clientId, String requestId, double price, {String? customerEmail, String? clientName}) async {
     await triggerNotification(
       toUid: clientId,
       title: "عرض سعر جديد 💰",
       body: "تم تحديد تكلفة طلب الصيانة الخاص بك بمبلغ $price ر.س. يرجى الدفع للمتابعة.",
-      type: 'maintenance_quote',
+      type: 'hybrid', // إشعار دفع + بريد إلكتروني
       data: {
         'requestId': requestId, 
         'price': price,
+        'customerEmail': customerEmail,
         'deepLink': 'zyiarah://app/maintenance/$requestId'
+      },
+      template: {
+        'id': 'maintenance-quote',
+        'variables': {
+          'clientName': clientName ?? 'عميلنا العزيز',
+          'serviceType': 'صيانة',
+          'amount': '$price ر.س',
+          'paymentUrl': 'https://zyiarah.com/maintenance/pay/$requestId',
+        }
       },
     );
   }
@@ -68,29 +80,47 @@ class ZyiarahNotificationTriggerService {
     );
   }
 
-  Future<void> notifyContractApproved(String userId, String planName) async {
+  Future<void> notifyContractApproved(String userId, String planName, {String? customerEmail, String? clientName}) async {
     await triggerNotification(
       toUid: userId,
       title: "تمت الموافقة على طلبك بنجاح! 📄",
       body: "تم اعتماد عقد باقة ($planName) من قبل الإدارة. يرجى إتمام الدفع لتفعيل الباقة.",
-      type: 'contract_approved',
+      type: 'hybrid',
       data: {
         'planName': planName,
+        'customerEmail': customerEmail,
         'deepLink': 'zyiarah://app/contracts'
+      },
+      template: {
+        'id': 'contract-approved',
+        'variables': {
+          'clientName': clientName ?? 'عميلنا العزيز',
+          'planName': planName,
+          'actionUrl': 'https://zyiarah.com/contracts',
+        }
       },
     );
   }
 
-  Future<void> notifyContractActivated(String userId, String planName, int visits) async {
+  Future<void> notifyContractActivated(String userId, String planName, int visits, {String? customerEmail, String? clientName}) async {
     await triggerNotification(
       toUid: userId,
       title: "تم تفعيل باقتك! ✨",
       body: "أهلاً بك في باقة ($planName). تمت إضافة $visits زيارة لرصيدك بنجاح.",
-      type: 'contract_active',
+      type: 'hybrid',
       data: {
         'planName': planName,
         'visits': visits,
+        'customerEmail': customerEmail,
         'deepLink': 'zyiarah://app/home'
+      },
+      template: {
+        'id': 'contract-activated',
+        'variables': {
+          'clientName': clientName ?? 'عميلنا العزيز',
+          'planName': planName,
+          'visits': visits.toString(),
+        }
       },
     );
   }

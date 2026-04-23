@@ -5,6 +5,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:zyiarah/firebase_options.dart';
 import 'dart:math';
+import 'package:zyiarah/services/zyiarah_comm_service.dart';
+
 /// خدمة إدارة Firebase لتطبيق زيارة
 class ZyiarahFirebaseService {
   // Singleton Pattern
@@ -14,6 +16,7 @@ class ZyiarahFirebaseService {
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final ZyiarahCommService _commService = ZyiarahCommService();
 
   // --- التحقق بالبريد الإلكتروني وكلمة المرور (Email & Password) ---
 
@@ -39,6 +42,9 @@ class ZyiarahFirebaseService {
         'phone': phone,
         'email': email,
       });
+
+      // Send Welcome Email via Resend
+      await _commService.sendWelcomeEmail(recipient: email, name: name);
     }
     return userCredential;
   }
@@ -87,6 +93,11 @@ class ZyiarahFirebaseService {
         'phone': phone,
         'real_email': email,
       });
+
+      // Send Welcome Email if email is provided
+      if (email.isNotEmpty && email.contains('@')) {
+        await _commService.sendWelcomeEmail(recipient: email, name: name);
+      }
     }
     return userCredential;
   }

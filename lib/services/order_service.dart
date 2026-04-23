@@ -6,6 +6,8 @@ import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/counter_service.dart';
 import 'package:zyiarah/services/zyiarah_comm_service.dart';
+import 'package:zyiarah/services/invoice_pdf_service.dart';
+import 'package:zyiarah/services/zatca_service.dart';
 
 /// خدمة إدارة دورة حياة الطلب - تطبيق زيارة
 class ZyiarahOrderService {
@@ -89,8 +91,25 @@ class ZyiarahOrderService {
       'location': location,
     };
     
+    // 5. Generate ZATCA QR and Invoice PDF (Professional Touch)
+    final String qrData = ZatcaService.generateZatcaQrCode(
+      timestamp: DateTime.now(),
+      totalAmount: amount,
+      vatAmount: amount - (amount / 1.15),
+    );
+
+    final String? invoiceUrl = await InvoicePdfService.generateAndUploadInvoice(
+      orderId: doc.id,
+      orderCode: orderCode,
+      amount: amount,
+      qrData: qrData,
+      serviceName: serviceType,
+      discountAmount: discountAmount,
+      couponCode: couponCode,
+    );
+    
     final comm = ZyiarahCommService();
-    await comm.notifyNewOrder(orderMap, customerEmail: clientEmail);
+    await comm.notifyNewOrder(orderMap, customerEmail: clientEmail, invoiceUrl: invoiceUrl);
     
     return orderCode;
   }
