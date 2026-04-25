@@ -410,32 +410,39 @@ exports.processNotificationTriggers = onDocumentCreated("notification_triggers/{
     // 2. Handle Email Logic (Resend / SMTP)
     // ------------------------------------------------------------
     if (type === "email" || type === "hybrid" || type === "admin_order_alert") {
+      console.log(`[EMAIL_WORKER] Starting email task for: ${recipientEmail} with type: ${type}`);
       const configDoc = await admin.firestore().collection("system_configs").doc("email_settings").get();
-      if (!configDoc.exists) throw new Error("Email settings missing");
+      if (!configDoc.exists) {
+        console.error("[EMAIL_WORKER] CRITICAL: system_configs/email_settings document is MISSING");
+        throw new Error("Email settings missing");
+      }
 
       const {fromName, fromEmail, resendApiKey} = configDoc.data();
+      console.log(`[EMAIL_WORKER] Config loaded. From: ${fromEmail}, Key Present: ${!!resendApiKey}`);
+      
       const fromString = `"${fromName || "Zyiarah | زيارة"}" <${fromEmail || "no-reply@zyiarah.com"}>`;
 
       if (resendApiKey) {
         const resend = new Resend(resendApiKey);
 
-        // 2a. Process Attachments (e.g., Invoice PDF)
+        // 2a. Process Attachments
         const attachments = [];
-        for (const url of attachmentUrls) {
-          try {
-            // Very basic download logic using standard fetch (Node 18+)
-            const response = await fetch(url);
-            if (response.ok) {
-              const arrayBuffer = await response.arrayBuffer();
-              const filename = url.split("/").pop().split("?")[0] || "attachment.pdf";
-              attachments.push({
-                filename: filename,
-                content: Buffer.from(arrayBuffer),
-              });
-              console.log(`Attached file: ${filename}`);
+        if (attachmentUrls && attachmentUrls.length > 0) {
+          console.log(`[EMAIL_WORKER] Processing ${attachmentUrls.length} attachments...`);
+          for (const url of attachmentUrls) {
+            try {
+              const response = await fetch(url);
+              if (response.ok) {
+                const arrayBuffer = await response.arrayBuffer();
+                const filename = url.split("/").pop().split("?")[0] || "invoice.pdf";
+                attachments.push({
+                  filename: filename,
+                  content: Buffer.from(arrayBuffer),
+                });
+              }
+            } catch (attError) {
+              console.error(`[EMAIL_WORKER] Attachment download failed for ${url}:`, attError);
             }
-          } catch (attError) {
-            console.error(`Failed to attach file ${url}:`, attError);
           }
         }
 
@@ -447,22 +454,33 @@ exports.processNotificationTriggers = onDocumentCreated("notification_triggers/{
         };
 
         if (template && template.id) {
+          console.log(`[EMAIL_WORKER] Sending TEMPLATED email: ${template.id}`);
           emailPayload.template = {
             id: template.id,
             variables: template.variables || {},
           };
         } else {
+          console.log("[EMAIL_WORKER] Sending HTML email (no template)");
           emailPayload.html = body;
         }
 
+        console.log("[EMAIL_WORKER] Dispatching to Resend API...");
         const {data: resendData, error: resendError} = await resend.emails.send(emailPayload);
-        if (resendError) throw new Error(`Resend Error: ${resendError.message}`);
+        
+        if (resendError) {
+          console.error("[EMAIL_WORKER] RESEND API ERROR:", JSON.stringify(resendError));
+          throw new Error(`Resend Error: ${resendError.message}`);
+        }
 
+        console.log(`[EMAIL_WORKER] SUCCESS! Message ID: ${resendData.id}`);
         await snap.ref.update({
           emailStatus: "sent",
           messageId: resendData.id,
           provider: "resend",
+          processedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
+      } else {
+        console.error("[EMAIL_WORKER] Skipping email: resendApiKey is empty in settings");
       }
     }
 

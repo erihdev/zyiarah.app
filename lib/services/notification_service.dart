@@ -90,7 +90,10 @@ class ZyiarahNotificationService {
       );
 
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        _showLocalNotification(message);
+        // We skip showing local notification banners while the app is in foreground
+        // as requested to follow modern minimalist app standards. 
+        // Real-time status updates are handled via Firestore listeners in the UI.
+        debugPrint("Foreground message received: ${message.notification?.title}");
       });
     } catch (e) {
       debugPrint("Error initializing notifications: $e");

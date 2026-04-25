@@ -1,0 +1,6 @@
+{
+  "from": "onboarding@resend.dev",
+  "to": "admin@zyiarah.com",
+  "subject": "Zyiarah Diagnostic Test",
+  "html": "<strong>Test Success!</strong> Email infrastructure is alive."
+}

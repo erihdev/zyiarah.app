@@ -16,6 +16,8 @@ import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/zyiarah_comm_service.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/invoice_pdf_service.dart';
+import 'package:pay/pay.dart';
+import 'dart:io';
 
 import 'package:zyiarah/providers/config_provider.dart';
 import 'package:provider/provider.dart';
@@ -204,26 +206,40 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         }
 
       } else if (_selectedPaymentMethod == 'tamara') {
-        final result = await _tamaraService.createCheckoutSession(
+        String? checkoutUrl = await _tamaraService.createCheckoutSession(
           orderId: finalOrderId,
           amount: totalWithVat,
           customerPhone: _phoneController.text.trim(),
           customerName: _currentUser?.name ?? 'عميل زيارة',
-          orderCode: orderCode,
         );
 
-        if (result['success'] == true && mounted) {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => TamaraWebView(
-            checkoutUrl: result['checkout_url'],
-            successUrl: result['success_url'],
-            failureUrl: result['failure_url'],
-            onSuccess: () async {
-              await _processUnifiedSuccess(finalOrderId, orderCode, 'tamara');
-              if (mounted) Navigator.pop(context); // Close Tamara WebView
-            },
-          )));
+        if (checkoutUrl != null && mounted) {
+          setState(() => _isLoading = false);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => TamaraCheckoutScreen(
+                checkoutUrl: checkoutUrl,
+                amount: totalWithVat,
+                orderId: finalOrderId,
+                serviceType: widget.serviceName,
+                location: widget.location ?? const GeoPoint(24.7136, 46.6753),
+                hours: widget.hours,
+                serviceDate: widget.serviceDate,
+                zoneName: widget.zoneName,
+                workerCount: widget.workerCount,
+                customerName: _currentUser?.name,
+                customerPhone: _phoneController.text,
+                couponCode: _appliedCoupon,
+                discountAmount: _discountAmount,
+                maintenanceId: widget.maintenanceId,
+                contractId: widget.contractId,
+                planVisits: widget.planVisits,
+              ),
+            ),
+          );
         } else {
-          throw Exception(result['error'] ?? 'خطأ في بدء جلسة تمارا');
+          throw Exception('خطأ في بدء جلسة تمارا');
         }
 
       } else {
@@ -291,14 +307,19 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     }
 
     // 2. Trigger ZATCA Invoice & Notifications
-    await _finalizeOrderWithInvoice(orderId: id, orderCode: code, paymentMethod: method, paidAmount: amountToSave);
+    final String? invoiceUrl = await _finalizeOrderWithInvoice(orderId: id, orderCode: code, paymentMethod: method, paidAmount: amountToSave);
     
     await ZyiarahCommService().notifyNewOrder({
       'code': code,
       'client_name': _currentUser?.name ?? 'عميل زيارة',
       'amount': amountToSave,
       'service_type': widget.serviceName,
-    }, customerEmail: _currentUser?.email);
+      'client_phone': _phoneController.text,
+      'date_time': widget.serviceDate != null ? intl.DateFormat('yyyy-MM-dd').format(widget.serviceDate!) : 'غير محدد',
+      'worker_count': widget.workerCount,
+      'zone': widget.zoneName,
+      'coupon': _appliedCoupon,
+    }, customerEmail: _currentUser?.email, invoiceUrl: invoiceUrl);
 
     // 3. Final Step
     if (mounted) {
@@ -313,7 +334,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   /// Finalization: Invoice & DB check
-  Future<void> _finalizeOrderWithInvoice({
+  Future<String?> _finalizeOrderWithInvoice({
     required String orderId,
     required String orderCode,
     required String paymentMethod,
@@ -329,7 +350,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       vatAmount: vatAmount,
     );
 
-    await InvoicePdfService.generateAndUploadInvoice(
+    return await InvoicePdfService.generateAndUploadInvoice(
       orderId: orderId,
       orderCode: orderCode,
       amount: totalWithVat,
@@ -603,10 +624,20 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         const SizedBox(height: 12),
         _buildPaymentOption(
           id: 'card',
-          title: 'بطاقة فيزا / مدى / Apple Pay',
+          title: 'بطاقة فيزا / مدى',
           subtitle: 'دفع آمن وسريع عبر EdfaPay',
           icon: Icons.credit_card,
         ),
+        if (Platform.isIOS) ...[
+          const SizedBox(height: 12),
+          _buildPaymentOption(
+            id: 'apple_pay',
+            title: 'Apple Pay',
+            subtitle: 'دفع سريع وآمن بلمسة واحدة',
+            icon: Icons.apple,
+            color: Colors.black,
+          ),
+        ],
         if (totalWithVat >= 100) ...[
           const SizedBox(height: 12),
           _buildPaymentOption(
@@ -699,6 +730,19 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
   Widget _buildBottomButton() {
     final config = Provider.of<ZyiarahConfigProvider>(context);
+    final List<PaymentItem> paymentItems = [
+      PaymentItem(
+        label: widget.serviceName,
+        amount: totalWithVat.toStringAsFixed(2),
+        status: PaymentItemStatus.final_price,
+      ),
+      PaymentItem(
+        label: 'Zyiarah - زيارة',
+        amount: totalWithVat.toStringAsFixed(2),
+        status: PaymentItemStatus.final_price,
+      ),
+    ];
+
     return Positioned(
       bottom: 0,
       left: 0,
@@ -709,16 +753,56 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           color: Colors.white,
           boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
         ),
-        child: ElevatedButton(
-          onPressed: _handlePayment,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _agreeToTerms ? config.checkoutButtonColor : Colors.grey.shade300,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-          child: Text('تأكيد وإتمام الدفع', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
-        ),
+        child: _selectedPaymentMethod == 'apple_pay' && Platform.isIOS
+          ? ApplePayButton(
+              paymentConfiguration: PaymentConfiguration.fromJsonString(
+                '''{
+                  "provider": "apple_pay",
+                  "data": {
+                    "merchantIdentifier": "merchant.com.zyiarah.app",
+                    "displayName": "Zyiarah - زيارة",
+                    "merchantCapabilities": ["3DS", "debit", "credit"],
+                    "supportedNetworks": ["amex", "visa", "mada", "masterCard"],
+                    "countryCode": "SA",
+                    "currencyCode": "SAR"
+                  }
+                }'''
+              ),
+              paymentItems: paymentItems,
+              style: ApplePayButtonStyle.black,
+              type: ApplePayButtonType.checkout,
+              margin: const EdgeInsets.only(top: 0),
+              onPaymentResult: (result) async {
+                setState(() => _isLoading = true);
+                final res = await _edfaPayService.processApplePay(
+                  paymentData: result,
+                  amount: totalWithVat,
+                  orderId: "TEMP-${DateTime.now().millisecondsSinceEpoch}",
+                );
+                if (res['success'] == true) {
+                   // Proceed to unified success handler
+                   final seq = await ZyiarahCounterService().getNextOrderNumber();
+                   final orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
+                   await _processUnifiedSuccess("ORDER-${DateTime.now().millisecondsSinceEpoch}", orderCode, 'apple_pay');
+                } else {
+                   setState(() => _isLoading = false);
+                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل دفع Apple Pay: ${res['error']}")));
+                }
+              },
+              loadingIndicator: const Center(child: CircularProgressIndicator()),
+              width: double.infinity,
+              height: 55,
+            )
+          : ElevatedButton(
+              onPressed: _handlePayment,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _agreeToTerms ? config.checkoutButtonColor : Colors.grey.shade300,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text('تأكيد وإتمام الدفع', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
+            ),
       ),
     );
   }
