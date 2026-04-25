@@ -104,7 +104,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     return true;
   }
 
-  // Correct Financial Math for ZATCA (Assumes amount is inclusive of VAT)
+  // الحسابات المالية الصحيحة (بافتراض أن المبلغ شامل للضريبة)
   double get totalWithVat => widget.amount - _discountAmount;
   double get subtotal => totalWithVat / 1.15;
   double get vatAmount => totalWithVat - subtotal;
@@ -196,6 +196,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             clientName: _currentUser?.name,
           );
         } else {
+          // Update visits_remaining immediately for local consistency
+          await FirebaseFirestore.instance.collection('users').doc(_currentUser?.uid).update({
+            'visits_remaining': FieldValue.increment(-1),
+          });
+
           await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
             'code': orderCode,
             'client_id': FirebaseAuth.instance.currentUser?.uid,
@@ -364,7 +369,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               clientName: _currentUser?.name,
             );
           } else if (widget.contractId != null) {
-          } else if (widget.contractId != null) {
             await FirebaseFirestore.instance.collection('contracts').doc(widget.contractId).update({
               'status': 'active',
               'paymentMethod': _selectedPaymentMethod,
@@ -467,6 +471,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     required String paymentMethod,
     double paidAmount = 0,
   }) async {
+    String collection = 'orders';
+    if (widget.maintenanceId != null) collection = 'maintenance_requests';
+    if (widget.contractId != null) collection = 'contracts';
+
     // 1. Generate ZATCA QR Code Data
     final String qrData = ZatcaService.generateZatcaQrCode(
       timestamp: DateTime.now(),
@@ -483,6 +491,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       serviceName: widget.serviceName,
       discountAmount: _discountAmount,
       couponCode: _appliedCoupon,
+      collectionPath: collection,
     );
   }
 
@@ -531,9 +540,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   Widget _buildInvoiceHeader() {
-    final double basePrice = widget.amount - _discountAmount;
-    final double vat = basePrice * 0.15;
-    final double total = basePrice + vat;
+    final double total = widget.amount - _discountAmount;
+    final double vat = total - (total / 1.15);
+    final double basePrice = total - vat;
 
     return Container(
       padding: const EdgeInsets.all(30),
@@ -636,7 +645,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             _buildRowDetail('التاريخ', intl.DateFormat('yyyy-MM-dd').format(widget.serviceDate!)),
           if (widget.zoneName != null) _buildRowDetail('المنطقة', widget.zoneName!),
           const Divider(height: 30),
-          _buildRowDetail('المبلغ الأساسي', '${widget.amount.toStringAsFixed(2)} ر.س'),
+          _buildRowDetail('المبلغ الأساسي', '${subtotal.toStringAsFixed(2)} ر.س'),
           if (_discountAmount > 0) 
             _buildRowDetail('الخصم ($_appliedCoupon)', '-${_discountAmount.toStringAsFixed(2)} ر.س', isDiscount: true),
           _buildRowDetail('الضريبة (15%)', '${vatAmount.toStringAsFixed(2)} ر.س'),
@@ -644,7 +653,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('الإجمالي', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
+              Text('الإجمالي المستحق', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
               Text('${totalWithVat.toStringAsFixed(2)} ر.س', 
                 style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF2563EB))),
             ],

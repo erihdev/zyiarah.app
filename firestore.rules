@@ -59,7 +59,11 @@ service cloud.firestore {
     match /orders/{orderId} {
       allow read: if isLoggedIn() && (request.auth.uid == resource.data.client_id || request.auth.uid == resource.data.driver_id || isAdmin());
       allow create: if isLoggedIn();
-      allow update: if isLoggedIn() && (request.auth.uid == resource.data.driver_id || isAdmin());
+      allow update: if isLoggedIn() && (
+        request.auth.uid == resource.data.client_id || 
+        request.auth.uid == resource.data.driver_id || 
+        isAdmin()
+      );
       allow delete: if isAdmin();
     }
 

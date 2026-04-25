@@ -16,6 +16,7 @@ class InvoicePdfService {
     required String serviceName,
     double discountAmount = 0.0,
     String? couponCode,
+    String collectionPath = 'orders', // مسار افتراضي (orders, maintenance_requests, contracts)
   }) async {
     final pdf = pw.Document();
 
@@ -23,7 +24,7 @@ class InvoicePdfService {
     final arabicFont = await PdfGoogleFonts.tajawalRegular();
     final arabicFontBold = await PdfGoogleFonts.tajawalBold();
 
-    // الحسابات المالية الصحيحة (شامل الضريبة)
+    // الحسابات المالية الصحيحة (شامل الضريبة بنسبة 15%)
     final double total = amount;
     final double subtotal = total / 1.15;
     final double vatAmount = total - subtotal;
@@ -149,13 +150,14 @@ class InvoicePdfService {
       await storageRef.putData(pdfBytes, SettableMetadata(contentType: 'application/pdf'));
       final downloadUrl = await storageRef.getDownloadURL();
       
-      await FirebaseFirestore.instance.collection('orders').doc(orderId).update({
+      // تحديث الوثيقة في المجلد الصحيح بناءً على نوع الطلب
+      await FirebaseFirestore.instance.collection(collectionPath).doc(orderId).update({
         'invoice_pdf_url': downloadUrl,
       });
       
       return downloadUrl;
     } catch (e) {
-      debugPrint('Error uploading PDF: $e');
+      debugPrint('Error generating ZATCA PDF: $e');
       return null;
     }
   }
