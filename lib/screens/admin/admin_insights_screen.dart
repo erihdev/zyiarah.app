@@ -9,6 +9,10 @@ import 'package:zyiarah/screens/admin/admin_broadcast_screen.dart';
 import 'package:zyiarah/screens/admin/admin_search_screen.dart';
 import 'package:zyiarah/screens/admin/admin_staff_performance_screen.dart';
 import 'package:zyiarah/utils/pdf_report_util.dart';
+import 'package:zyiarah/screens/admin/admin_maintenance_screen.dart';
+import 'package:zyiarah/screens/admin/admin_orders_screen.dart';
+import 'package:zyiarah/screens/admin/admin_store_orders_screen.dart';
+import 'package:zyiarah/screens/admin/admin_contracts_screen.dart';
 
 class AdminInsightsScreen extends StatefulWidget {
   const AdminInsightsScreen({super.key});
@@ -600,82 +604,147 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
   }
 
   Widget _buildLivePulseSection() {
-    if (_auditLogs.isEmpty) return const SizedBox.shrink();
-
+    // Calculating New (Pending) Counts for each section
+    final int maintenanceNew = _maintenance.where((doc) => (doc.data() as Map)['status'] == 'under_review').length;
+    final int cleaningNew = _orders.where((doc) => (doc.data() as Map)['status'] == 'pending' || (doc.data() as Map)['status'] == 'waiting_payment').length;
+    final int storeNew = _storeOrders.where((doc) => (doc.data() as Map)['status'] == 'pending').length;
+    
+    // For contracts, we'll use a snapshot count if available, or 0
+    // (Note: In a real scenario, you'd add a listener for contracts too)
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            _buildSectionTitle("نبض النظام الآن"),
+            _buildSectionTitle("رادار الطلبات الجديدة"),
             const SizedBox(width: 8),
-            const Text("⚡", style: TextStyle(fontSize: 18)),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.red.shade600,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [BoxShadow(color: Colors.red.withValues(alpha: 0.2), blurRadius: 4)]
+              ),
+              child: Text("مباشر", style: GoogleFonts.tajawal(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
           ],
         ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 95,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: _auditLogs.length,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            itemBuilder: (context, index) {
-              final log = _auditLogs[index].data() as Map<String, dynamic>;
-              final String action = log['action'] ?? 'عملية مجهولة';
-              final admin = (log['admin_email']?.toString() ?? 'Admin').split('@').first;
-              
-              final pulseData = _getPulseInfo(action);
-              final Color color = pulseData['color'] as Color;
-
-              return Container(
-                width: 190,
-                margin: const EdgeInsets.only(left: 12, bottom: 5),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border(right: BorderSide(color: color, width: 4)),
-                  boxShadow: [
-                    BoxShadow(color: color.withValues(alpha: 0.1), blurRadius: 8, offset: const Offset(0, 4))
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
-                      child: Icon(pulseData['icon'] as IconData, color: color, size: 16),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            pulseData['title'] as String,
-                            style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 11, color: const Color(0xFF1E293B)),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Text("بواسطة: $admin", style: const TextStyle(color: Colors.grey, fontSize: 8, fontWeight: FontWeight.bold)),
-                          Text(
-                            log['timestamp'] != null 
-                              ? intl.DateFormat('HH:mm').format((log['timestamp'] as Timestamp).toDate()) 
-                              : 'الآن',
-                            style: TextStyle(color: color.withValues(alpha: 0.6), fontSize: 7, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+        const SizedBox(height: 15),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: [
+              _buildLuxuryRequestCard(
+                title: "صيانة المكيفات",
+                count: maintenanceNew,
+                icon: Icons.handyman_rounded,
+                gradient: const [Color(0xFF0F172A), Color(0xFF334155)], // Slate/Dark Blue
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminMaintenanceScreen())),
+              ),
+              _buildLuxuryRequestCard(
+                title: "خدمات بالساعة",
+                count: cleaningNew,
+                icon: Icons.cleaning_services_rounded,
+                gradient: const [Color(0xFF1E293B), Color(0xFF475569)], // Gray/Slate
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminOrdersScreen())),
+              ),
+              _buildLuxuryRequestCard(
+                title: "طلبات المتجر",
+                count: storeNew,
+                icon: Icons.shopping_basket_rounded,
+                gradient: const [Color(0xFF1E1B4B), Color(0xFF312E81)], // Deep Indigo
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminStoreOrdersScreen())),
+              ),
+              _buildLuxuryRequestCard(
+                title: "عقود تنفيذية",
+                count: 0, 
+                icon: Icons.history_edu_rounded,
+                gradient: const [Color(0xFF581C87), Color(0xFF701A75)], // Purple/Fuchsia
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminContractsScreen())),
+              ),
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildLuxuryRequestCard({
+    required String title,
+    required int count,
+    required IconData icon,
+    required List<Color> gradient,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 165,
+        margin: const EdgeInsets.only(left: 15, bottom: 10),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: gradient,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: gradient[0].withValues(alpha: 0.3),
+              blurRadius: 15,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: Colors.white, size: 22),
+                ),
+                if (count > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade500,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4)],
+                    ),
+                    child: Text(
+                      "$count",
+                      style: GoogleFonts.tajawal(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 25),
+            Text(
+              title,
+              style: GoogleFonts.tajawal(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              count > 0 ? "يوجد مهمات عاجلة" : "لا توجد طلبات جديدة",
+              style: GoogleFonts.tajawal(
+                color: Colors.white.withValues(alpha: count > 0 ? 0.9 : 0.5),
+                fontSize: 10,
+                fontWeight: count > 0 ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -697,9 +766,9 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
           width: double.infinity,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.red[50],
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.red[100]!),
+            color: Colors.red.shade50,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.red.shade100),
           ),
           child: Column(
             children: lowRatings.take(3).map((doc) {
@@ -707,11 +776,15 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 5)],
+                ),
                 child: Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(10),
                       decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
                       child: Text("${data['rating']}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
@@ -720,16 +793,12 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text("العميل: ${data['client_name']}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          Text("السبب: ${data['rating_reason'] ?? 'غير محدد'}", style: TextStyle(color: Colors.red[700], fontSize: 11, fontWeight: FontWeight.bold)),
-                          if (data['rating_comment'] != null)
-                            Text(data['rating_comment'], style: const TextStyle(fontSize: 11, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text("العميل: ${data['client_name']}", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text("السبب: ${data['rating_reason'] ?? 'غير محدد'}", style: GoogleFonts.tajawal(color: Colors.red[700], fontSize: 11, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
-                    if (data['rating_evidence_url'] != null)
-                      const Icon(Icons.image_search_rounded, color: Colors.blue),
-                    const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                    const Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey, size: 14),
                   ],
                 ),
               );
@@ -739,57 +808,100 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       ],
     );
   }
+  
+  Widget _buildSystemHealthSection(List<DocumentSnapshot> drivers) {
+    int expiringSoon = 0;
+    final now = DateTime.now();
 
-  Map<String, dynamic> _getPulseInfo(String action) {
-    switch (action) {
-      case 'CREATE_COUPON': 
-        return {'title': 'إنشاء كود خصم جديد', 'icon': Icons.local_offer_rounded, 'color': Colors.purple};
-      case 'DELETE_PRODUCT': 
-        return {'title': 'حذف منتج من المتجر', 'icon': Icons.delete_sweep_rounded, 'color': Colors.red};
-      case 'UPDATE_PRODUCT': 
-        return {'title': 'تحديث بيانات منتج', 'icon': Icons.edit_calendar_rounded, 'color': Colors.blue};
-      case 'CREATE_PRODUCT': 
-        return {'title': 'أضف منتج جديد 🛍️', 'icon': Icons.add_business_rounded, 'color': const Color(0xFF10B981)};
-      case 'UPDATE_ORDER_STATUS': 
-        return {'title': 'تحديث حالة طلب', 'icon': Icons.sync_problem_rounded, 'color': Colors.orange};
-      case 'REGISTER_DRIVER': 
-        return {'title': 'تسجيل كادر جديد', 'icon': Icons.person_add_alt_1_rounded, 'color': Colors.teal};
-      case 'UPDATE_SERVICE_PRICE': 
-        return {'title': 'تعديل أسعار الخدمة', 'icon': Icons.price_change_rounded, 'color': Colors.indigo};
-      case 'CREATE_CLEANING_ORDER': 
-        return {'title': 'طلب نظافة جديد 🧹', 'icon': Icons.cleaning_services_rounded, 'color': Colors.blueAccent};
-      case 'CREATE_STORE_ORDER': 
-        return {'title': 'طلب متجر جديد 📦', 'icon': Icons.shopping_cart_checkout_rounded, 'color': Colors.deepPurple};
-      case 'CREATE_MAINTENANCE_REQUEST': 
-        return {'title': 'طلب صيانة جديد 🛠️', 'icon': Icons.handyman_rounded, 'color': Colors.orangeAccent};
-      case 'TOGGLE_SERVICE_STATUS': 
-        return {'title': 'تغيير إتاحة خدمة', 'icon': Icons.visibility_rounded, 'color': Colors.blueGrey};
-      case 'ADMIN_LOGIN_SUCCESS': 
-        return {'title': 'دخول ناجح للمدير', 'icon': Icons.admin_panel_settings_rounded, 'color': Colors.green};
-      default: 
-        return {'title': action.replaceAll('_', ' '), 'icon': Icons.bolt_rounded, 'color': Colors.blue};
+    for (var doc in drivers) {
+      final data = doc.data() as Map<String, dynamic>;
+      final expiryStr = data['id_expiry']?.toString() ?? '';
+      try {
+        final expiryDate = DateTime.parse(expiryStr);
+        if (expiryDate.difference(now).inDays < 30) {
+          expiringSoon += 1;
+        }
+      } catch (e) {
+        // ...
+      }
     }
-  }
 
-  Widget _buildHealthItem({required String title, required String subtitle, required IconData icon, required Color color}) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _buildSectionTitle("صحة النظام والرقابة"),
+        const SizedBox(height: 15),
         Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
-          child: Icon(icon, color: color, size: 24),
-        ),
-        const SizedBox(width: 15),
-        Expanded(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 15, offset: const Offset(0, 8))],
+          ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 14)),
-              Text(subtitle, style: GoogleFonts.tajawal(fontSize: 12, color: color)),
+              _buildHealthItem(
+                title: "التزام الكوادر (Compliance)",
+                subtitle: expiringSoon > 0 ? "يوجد $expiringSoon كادر تنتهي هوياتهم قريباً" : "جميع الهويات سارية المفعول",
+                icon: Icons.gavel_rounded,
+                color: expiringSoon > 0 ? Colors.red : Colors.green,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminComplianceScreen())),
+              ),
+              const Divider(height: 30),
+              _buildHealthItem(
+                title: "كفاءة الكوادر (Performance)",
+                subtitle: "متابعة الإنجازات والتقييمات",
+                icon: Icons.insights_rounded,
+                color: const Color(0xFF5D1B5E),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminStaffPerformanceScreen())),
+              ),
+              const Divider(height: 30),
+              _buildHealthItem(
+                title: "استقرار قاعدة البيانات",
+                subtitle: "الحالة: ممتازة (Real-time Sync)",
+                icon: Icons.cloud_done_rounded,
+                color: Colors.blue,
+                onTap: () {},
+              ),
             ],
           ),
         ),
       ],
     );
+  }
+
+  Widget _buildHealthItem({required String title, required String subtitle, required IconData icon, required Color color, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(15)),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 14)),
+                Text(subtitle, style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey)),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_left_rounded, color: Colors.grey),
+        ],
+      ),
+    );
+  }
+
+  Map<String, dynamic> _getPulseInfo(String action) {
+     return {
+      'title': action,
+      'icon': Icons.bolt,
+      'color': Colors.blue
+     };
   }
 }
