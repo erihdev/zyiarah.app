@@ -155,22 +155,21 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     );
   }
 
-  void _handlePayment() async {
-    if (!_agreeToTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى الموافقة على الشروط والأحكام"), backgroundColor: Colors.red));
+  Future<void> _handlePayment() async {
+    if (_needsPhoneUpdate && _phoneController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى التأكد من بيانات التواصل")));
       return;
     }
 
-    if (_needsPhoneUpdate && (_phoneController.text.isEmpty || _phoneController.text.length < 9)) {
-       ScaffoldMessenger.of(context).showSnackBar(
-         const SnackBar(content: Text("يرجى إدخال رقم جوال صحيح (مثال: 0500000000)"), backgroundColor: Colors.red),
-       );
-       return;
+    if (!_agreeToTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى الموافقة على الشروط والأحكام")));
+      return;
     }
 
     setState(() => _isLoading = true);
 
     try {
+      // 1. Update user phone if changed
       if (_needsPhoneUpdate) {
         await FirebaseFirestore.instance.collection('users').doc(_currentUser?.uid).update({
           'phone': _phoneController.text.trim(),
@@ -183,66 +182,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
       if (_selectedPaymentMethod == 'subscription') {
         if (widget.maintenanceId != null) {
-          await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
-            'status': 'paid',
-            'paymentMethod': 'subscription',
-            'paidAt': FieldValue.serverTimestamp(),
-          });
-          // Notify Admin via Centralized Service
-          await ZyiarahNotificationTriggerService().notifyAdminOfPayment(
-            orderCode: widget.maintenanceId!,
-            amount: 0.0,
-            type: 'maintenance_subscription',
-            clientName: _currentUser?.name,
-          );
+           await _processUnifiedSuccess(finalOrderId, orderCode, 'subscription', isFree: true);
         } else {
-          // Update visits_remaining immediately for local consistency
           await FirebaseFirestore.instance.collection('users').doc(_currentUser?.uid).update({
             'visits_remaining': FieldValue.increment(-1),
           });
-
-          await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
-            'code': orderCode,
-            'client_id': FirebaseAuth.instance.currentUser?.uid,
-            'client_name': _currentUser?.name ?? 'عميل زيارة',
-            'service_type': widget.serviceName,
-            'amount': 0.0,
-            'status': 'pending',
-            'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
-            'payment_method': 'subscription',
-            'created_at': FieldValue.serverTimestamp(),
-            'hours_contracted': widget.hours ?? 4,
-            'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
-            'zone_name': widget.zoneName,
-            'worker_count': widget.workerCount,
-            'coupon_code': _appliedCoupon,
-            'discount_amount': _discountAmount,
-          });
-        }
-        
-        if (mounted) {
-          setState(() => _isLoading = false);
-          await _finalizeOrderWithInvoice(
-            orderId: finalOrderId,
-            orderCode: orderCode,
-            paymentMethod: 'subscription',
-          );
-
-          // إرسال تأكيد بالبريد الإلكتروني للفخامة
-          await ZyiarahCommService().notifyNewOrder({
-            'code': orderCode,
-            'client_name': _currentUser?.name ?? 'عميل زيارة',
-            'client_phone': _currentUser?.phone ?? 'غير متوفر',
-            'service_type': widget.serviceName,
-            'amount': 0.0,
-            'zone': widget.zoneName ?? 'غير محدد',
-            'date_time': widget.serviceDate != null ? intl.DateFormat('yyyy-MM-dd').format(widget.serviceDate!) : 'غير محدد',
-            'worker_count': widget.workerCount,
-            'coupon': _appliedCoupon ?? 'لا يوجد',
-          }, customerEmail: _currentUser?.email);
-
-
-          await _navigateToSuccess(orderCode);
+          await _processUnifiedSuccess(finalOrderId, orderCode, 'subscription', isFree: true);
         }
 
       } else if (_selectedPaymentMethod == 'cod') {
@@ -252,99 +197,37 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             'paymentMethod': 'cod',
             'paidAt': FieldValue.serverTimestamp(),
           });
-          // Notify Admin of COD choice via Centralized Service
-          await ZyiarahNotificationTriggerService().notifyAdminOfPayment(
-            orderCode: widget.maintenanceId!,
-            amount: widget.amount, // Total quote amount
-            type: 'maintenance_cod',
-            clientName: _currentUser?.name,
-          );
-        } else {
-          await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
-            'code': orderCode,
-            'client_id': FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
-            'client_name': _currentUser?.name ?? 'عميل زيارة',
-            'service_type': widget.serviceName,
-            'amount': totalWithVat,
-            'status': 'pending',
-            'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
-            'payment_method': 'cod',
-            'created_at': FieldValue.serverTimestamp(),
-            'hours_contracted': widget.hours ?? 4,
-            'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
-            'zone_name': widget.zoneName,
-            'worker_count': widget.workerCount,
-            'coupon_code': _appliedCoupon,
-            'discount_amount': _discountAmount,
-          });
-        }
-        
-        if (mounted) {
-          setState(() => _isLoading = false);
-          await _finalizeOrderWithInvoice(
-            orderId: finalOrderId,
-            orderCode: orderCode,
-            paymentMethod: 'cod',
-            paidAmount: totalWithVat,
-          );
-
-          // إرسال تأكيد بالبريد الإلكتروني للعميل والمسؤول
-          await ZyiarahCommService().notifyNewOrder({
-            'code': orderCode,
-            'client_name': _currentUser?.name ?? 'عميل زيارة',
-            'client_phone': _currentUser?.phone ?? 'غير متوفر',
-            'service_type': widget.serviceName,
-            'amount': totalWithVat,
-            'zone': widget.zoneName ?? 'غير محدد',
-            'date_time': widget.serviceDate != null ? intl.DateFormat('yyyy-MM-dd').format(widget.serviceDate!) : 'غير محدد',
-            'worker_count': widget.workerCount,
-            'coupon': _appliedCoupon ?? 'لا يوجد',
-          }, customerEmail: _currentUser?.email);
-
-
+          await _finalizeOrderWithInvoice(orderId: finalOrderId, orderCode: orderCode, paymentMethod: 'cod', paidAmount: 0);
           await _navigateToSuccess(orderCode);
+        } else {
+          await _processUnifiedSuccess(finalOrderId, orderCode, 'cod', isFree: false);
         }
 
       } else if (_selectedPaymentMethod == 'tamara') {
-        String? checkoutUrl = await _tamaraService.createCheckoutSession(
+        final result = await _tamaraService.createCheckoutSession(
           orderId: finalOrderId,
           amount: totalWithVat,
-          customerPhone: _currentUser?.phone ?? "500000000",
-          customerName: _currentUser?.name ?? "عميل زيارة",
+          customerPhone: _phoneController.text.trim(),
+          customerName: _currentUser?.name ?? 'عميل زيارة',
+          orderCode: orderCode,
         );
 
-        if (checkoutUrl != null && mounted) {
-          setState(() => _isLoading = false);
-          bool? paymentSuccess = await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => TamaraCheckoutScreen(
-                checkoutUrl: checkoutUrl,
-                amount: totalWithVat,
-                orderId: finalOrderId,
-                serviceType: widget.serviceName,
-                location: widget.location ?? const GeoPoint(24.7136, 46.6753),
-                hours: widget.hours,
-                serviceDate: widget.serviceDate,
-                zoneName: widget.zoneName,
-                workerCount: widget.workerCount,
-                couponCode: _appliedCoupon,
-                discountAmount: _discountAmount,
-                maintenanceId: widget.maintenanceId,
-                contractId: widget.contractId,
-                planVisits: widget.planVisits,
-                customerName: _currentUser?.name ?? "عميل زيارة",
-                customerPhone: _currentUser?.phone ?? "0500000000",
-              ),
-            ),
-          );
-          if (paymentSuccess == true && mounted) {
-            Navigator.pop(context, true);
-          }
+        if (result['success'] == true && mounted) {
+          Navigator.push(context, MaterialPageRoute(builder: (context) => TamaraWebView(
+            checkoutUrl: result['checkout_url'],
+            successUrl: result['success_url'],
+            failureUrl: result['failure_url'],
+            onSuccess: () async {
+              await _processUnifiedSuccess(finalOrderId, orderCode, 'tamara');
+              if (mounted) Navigator.pop(context); // Close Tamara WebView
+            },
+          )));
         } else {
-          throw Exception("خطأ في بدء جلسة تمارا");
+          throw Exception(result['error'] ?? 'خطأ في بدء جلسة تمارا');
         }
+
       } else {
+        // EDFA PAY (CARD)
         final result = await _edfaPayService.processPayment(
           amount: totalWithVat,
           orderId: finalOrderId,
@@ -354,117 +237,82 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         );
 
         if (result['success'] == true && mounted) {
-          if (widget.maintenanceId != null) {
-            await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
-              'status': 'paid',
-              'paymentMethod': _selectedPaymentMethod,
-              'paidAt': FieldValue.serverTimestamp(),
-              'totalAmount': totalWithVat,
-            });
-            // Notify Admin via Centralized Service
-            await ZyiarahNotificationTriggerService().notifyAdminOfPayment(
-              orderCode: widget.maintenanceId!,
-              amount: totalWithVat,
-              type: 'maintenance_card',
-              clientName: _currentUser?.name,
-            );
-          } else if (widget.contractId != null) {
-            await FirebaseFirestore.instance.collection('contracts').doc(widget.contractId).update({
-              'status': 'active',
-              'paymentMethod': _selectedPaymentMethod,
-              'activatedAt': FieldValue.serverTimestamp(),
-            });
-            await FirebaseFirestore.instance.collection('users').doc(_currentUser?.uid).update({
-              'visits_remaining': FieldValue.increment(widget.planVisits ?? 0),
-            });
-            await ZyiarahNotificationTriggerService().notifyContractActivated(
-              _currentUser?.uid ?? '', 
-              widget.serviceName, 
-              widget.planVisits ?? 0
-            );
-
-            // تسجيل تفعيل العقد في سجل التدقيق
-            ZyiarahAuditService().logAction(
-              action: 'ACTIVATE_CONTRACT',
-              details: {
-                'contract_id': widget.contractId,
-                'client': _currentUser?.name ?? 'غير معروف',
-                'plan': widget.serviceName,
-                'visits': widget.planVisits ?? 0,
-              },
-              targetId: widget.contractId,
-            );
-          } else {
-            await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
-              'code': orderCode,
-              'client_id': FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
-              'client_name': _currentUser?.name ?? 'عميل زيارة',
-              'service_type': widget.serviceName,
-              'amount': totalWithVat,
-              'status': 'pending',
-              'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
-              'payment_method': _selectedPaymentMethod,
-              'created_at': FieldValue.serverTimestamp(),
-              'hours_contracted': widget.hours ?? 4,
-              'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
-              'zone_name': widget.zoneName,
-              'worker_count': widget.workerCount,
-              'coupon_code': _appliedCoupon,
-              'discount_amount': _discountAmount,
-            });
-          }
-
-          setState(() => _isLoading = false);
-          if (mounted) {
-            String notificationCode = orderCode;
-            if (widget.maintenanceId != null) notificationCode = widget.maintenanceId!;
-            if (widget.contractId != null) notificationCode = widget.contractId!;
-
-            if (widget.contractId == null && widget.maintenanceId == null) {
-              await _finalizeOrderWithInvoice(
-                orderId: finalOrderId,
-                orderCode: orderCode,
-                paymentMethod: _selectedPaymentMethod,
-                paidAmount: totalWithVat,
-              );
-            }
-
-            // إرسال تأكيد بالبريد الإلكتروني للجميع (بشكل جذري)
-            await ZyiarahCommService().notifyNewOrder({
-              'code': notificationCode,
-              'client_name': _currentUser?.name ?? 'عميل زيارة',
-              'client_phone': _currentUser?.phone ?? 'غير متوفر',
-              'service_type': widget.serviceName,
-              'amount': totalWithVat,
-              'zone': widget.zoneName ?? 'غير محدد',
-              'date_time': widget.serviceDate != null ? intl.DateFormat('yyyy-MM-dd').format(widget.serviceDate!) : 'غير محدد',
-              'worker_count': widget.workerCount,
-              'coupon': _appliedCoupon ?? 'لا يوجد',
-            }, customerEmail: _currentUser?.email);
-
-            if (!mounted) return;
-
-            if (widget.contractId == null && widget.maintenanceId == null) {
-              await _navigateToSuccess(orderCode);
-            } else {
-              // For maintenance or contract, just show success and pop
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تمت العملية بنجاح"), backgroundColor: Colors.green));
-              Navigator.pop(context, true);
-            }
-          }
+          await _processUnifiedSuccess(finalOrderId, orderCode, 'card');
         } else {
-          throw Exception(result['error'] ?? "فشلت عملية الدفع بالبطاقة");
+          throw Exception(result['error'] ?? 'فشل عملية الدفع بالبطاقة');
         }
       }
+
     } catch (e) {
+      debugPrint("PAYMENT_ERROR: $e");
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ: $e"), backgroundColor: Colors.red));
       }
     }
   }
 
-  /// Unified Finalization: Saves Order + Triggers ZATCA Invoice
+  /// Unified Success Handler
+  Future<void> _processUnifiedSuccess(String id, String code, String method, {bool isFree = false}) async {
+    final double amountToSave = isFree ? 0.0 : totalWithVat;
+
+    // 1. Update Database
+    if (widget.maintenanceId != null) {
+      await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
+        'status': 'paid',
+        'paymentMethod': method,
+        'paidAt': FieldValue.serverTimestamp(),
+        'totalAmount': amountToSave,
+      });
+      await ZyiarahNotificationTriggerService().notifyAdminOfPayment(orderCode: code, amount: amountToSave, type: 'maintenance', clientName: _currentUser?.name);
+    } else if (widget.contractId != null) {
+      await FirebaseFirestore.instance.collection('contracts').doc(widget.contractId).update({
+        'status': 'active',
+        'paymentMethod': method,
+        'activatedAt': FieldValue.serverTimestamp(),
+      });
+      await FirebaseFirestore.instance.collection('users').doc(_currentUser?.uid).update({
+        'visits_remaining': FieldValue.increment(widget.planVisits ?? 0),
+      });
+      await ZyiarahNotificationTriggerService().notifyContractActivated(_currentUser?.uid ?? '', widget.serviceName, widget.planVisits ?? 0);
+    } else {
+      await FirebaseFirestore.instance.collection('orders').doc(id).set({
+        'code': code,
+        'client_id': _currentUser?.uid,
+        'client_name': _currentUser?.name ?? 'عميل زيارة',
+        'service_type': widget.serviceName,
+        'amount': amountToSave,
+        'status': 'pending',
+        'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
+        'payment_method': method,
+        'created_at': FieldValue.serverTimestamp(),
+      });
+      await ZyiarahNotificationTriggerService().notifyAdminOfPayment(orderCode: code, amount: amountToSave, type: 'cleaning', clientName: _currentUser?.name);
+    }
+
+    // 2. Trigger ZATCA Invoice & Notifications
+    await _finalizeOrderWithInvoice(orderId: id, orderCode: code, paymentMethod: method, paidAmount: amountToSave);
+    
+    await ZyiarahCommService().notifyNewOrder({
+      'code': code,
+      'client_name': _currentUser?.name ?? 'عميل زيارة',
+      'amount': amountToSave,
+      'service_type': widget.serviceName,
+    }, customerEmail: _currentUser?.email);
+
+    // 3. Final Step
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (widget.maintenanceId == null && widget.contractId == null) {
+        await _navigateToSuccess(code);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تمت العملية بنجاح"), backgroundColor: Colors.green));
+        Navigator.pop(context, true);
+      }
+    }
+  }
+
+  /// Finalization: Invoice & DB check
   Future<void> _finalizeOrderWithInvoice({
     required String orderId,
     required String orderCode,
@@ -475,15 +323,13 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     if (widget.maintenanceId != null) collection = 'maintenance_requests';
     if (widget.contractId != null) collection = 'contracts';
 
-    // 1. Generate ZATCA QR Code Data
     final String qrData = ZatcaService.generateZatcaQrCode(
       timestamp: DateTime.now(),
       totalAmount: totalWithVat,
       vatAmount: vatAmount,
     );
 
-    // 2. Trigger PDF Invoice Generation (Bilingual)
-    InvoicePdfService.generateAndUploadInvoice(
+    await InvoicePdfService.generateAndUploadInvoice(
       orderId: orderId,
       orderCode: orderCode,
       amount: totalWithVat,

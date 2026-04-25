@@ -91,7 +91,8 @@ service cloud.firestore {
     // Maintenance Requests
     match /maintenance_requests/{requestId} {
       allow create: if isLoggedIn();
-      allow read, update: if isLoggedIn() && (request.auth.uid == (resource == null ? request.resource.data.userId : resource.data.userId) || isAdmin());
+      allow read: if isLoggedIn() && (request.auth.uid == (resource.data.userId == null ? resource.data.client_id : resource.data.userId) || isAdmin());
+      allow update: if isLoggedIn() && (request.auth.uid == (resource.data.userId == null ? resource.data.client_id : resource.data.userId) || isAdmin());
       allow delete: if isAdmin();
     }
 
