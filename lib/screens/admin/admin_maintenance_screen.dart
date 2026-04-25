@@ -315,20 +315,13 @@ class AdminMaintenanceScreen extends StatelessWidget {
     await FirebaseFirestore.instance.collection('maintenance_requests').doc(docId).update(updates);
 
     if (status == 'waiting_payment' && userId.isNotEmpty) {
-      // --- TRIGGER EXTERNAL NOTIFICATION TO CLIENT ---
-      await FirebaseFirestore.instance.collection('notification_triggers').add({
-        'type': 'maintenance_priced',
-        'title': 'تم تحديد تكلفة طلبك! 🏷️',
-        'body': 'تم تسعير خدمة ($serviceType) بمبلغ $quotedAmount ر.س. يرجى الدفع للبدء.',
-        'toUid': userId,
-        'data': {
-          'type': 'maintenance_payment',
-          'requestId': docId,
-        },
-        'processed': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      // ------------------------------------------------
+      // --- TRIGGER CENTRAL NOTIFICATION SERVICE (Push + Email) ---
+      await ZyiarahNotificationTriggerService().notifyClientOfMaintenanceQuote(
+        userId,
+        docId,
+        quotedAmount,
+      );
+      // ------------------------------------------------------------
     }
     
     // Create actual order if approved (paid) - legacy logic

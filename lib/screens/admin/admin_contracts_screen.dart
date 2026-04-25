@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/services/zyiarah_contract_pdf_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
-import 'package:url_launcher/url_launcher.dart';
+import 'package:zyiarah/services/notification_trigger_service.dart';
 
 class AdminContractsScreen extends StatefulWidget {
   const AdminContractsScreen({super.key});
@@ -238,20 +238,12 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
         'adminApprovedAt': FieldValue.serverTimestamp(),
       });
 
-      // --- SEND NOTIFICATION TO CLIENT ---
-      await FirebaseFirestore.instance.collection('notification_triggers').add({
-        'type': 'client_contract_approved',
-        'title': 'تم اعتماد عقدك! 🎉',
-        'body': 'عقدك لباقة (${data['planName']}) جاهز الآن. يرجى الدفع للتفعيل.',
-        'toUid': data['userId'], // Sends specifically to this client
-        'data': {
-          'type': 'contract_approved',
-          'contractId': doc.id,
-        },
-        'processed': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      // -----------------------------------
+      // --- SEND NOTIFICATION TO CLIENT VIA CENTRAL SERVICE ---
+      await ZyiarahNotificationTriggerService().notifyContractApproved(
+        data['userId'],
+        data['planName'] ?? 'باقة اشتراك',
+      );
+      // -----------------------------------------------------
     }
   }
 

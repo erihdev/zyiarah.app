@@ -111,18 +111,11 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
       );
 
       // --- إرسال تنبيه فوري للإدارة عبر النظام المتقدم ---
-      await firestore.collection('notification_triggers').add({
-        'type': 'admin_contract_alert',
-        'title': 'طلب تعاقد جديد! 📄',
-        'body': 'العميل ($_userName) قام بتوقيع عقد (${widget.planName}) وينتظر موافقتك الآن.',
-        'toUid': 'ADMIN_BROADCAST', // سيصل لكل المدراء
-        'data': {
-          'type': 'new_contract_admin',
-          'contractId': contractId,
-        },
-        'processed': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      await ZyiarahNotificationTriggerService().notifyAdminOfNewContractRequest(
+        clientName: _userName,
+        planName: widget.planName,
+        contractId: contractId,
+      );
       // ----------------------------------------------
       
       if (mounted) {

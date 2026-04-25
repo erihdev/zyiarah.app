@@ -231,6 +231,52 @@ class ZyiarahNotificationTriggerService {
     }
   }
 
+  /// تنبيه الإدارة بوجود تقييم منخفض (لرقابة الجودة)
+  Future<void> notifyAdminOfLowRating({
+    required String orderCode,
+    required double rating,
+    required String clientName,
+    String? comment,
+  }) async {
+    await triggerNotification(
+      toUid: 'ADMIN_BROADCAST',
+      title: "تحذير: تقييم منخفض ⚠️",
+      body: "قام العميل $clientName بتقييم الطلب #$orderCode بـ $rating نجوم. يرجى المراجعة.",
+      type: 'admin_security_alert',
+      data: {'code': orderCode, 'rating': rating, 'comment': comment},
+    );
+  }
+
+  /// تنبيه الإدارة بطلب عقد جديد (بانتظار المراجعة)
+  Future<void> notifyAdminOfNewContractRequest({
+    required String clientName,
+    required String planName,
+    required String contractId,
+  }) async {
+    await triggerNotification(
+      toUid: 'ADMIN_BROADCAST',
+      title: "طلب باقة جديد 📜",
+      body: "العميل $clientName تقدم بطلب للاشتراك في ($planName). بانتظار موافقتك.",
+      type: 'admin_contract_request',
+      data: {'contractId': contractId, 'client': clientName, 'plan': planName},
+    );
+  }
+
+  /// تنبيه الإدارة بطلب صيانة جديد (بانتظار التسعير)
+  Future<void> notifyAdminOfNewMaintenanceRequest({
+    required String clientName,
+    required String serviceType,
+    required String requestId,
+  }) async {
+    await triggerNotification(
+      toUid: 'ADMIN_BROADCAST',
+      title: "طلب صيانة جديد 🛠️",
+      body: "العميل $clientName رفع طلب صيانة ($serviceType). يرجى معاينة الطلب وتحديد السعر.",
+      type: 'admin_maintenance_request',
+      data: {'requestId': requestId, 'client': clientName, 'service': serviceType},
+    );
+  }
+
   /// يجدول إشعار ليتم إرساله في وقت لاحق
   Future<void> scheduleBroadcast({
     required String title,

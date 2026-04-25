@@ -121,6 +121,13 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
           serviceName: _selectedService ?? 'صيانة',
           type: 'maintenance',
         );
+
+        // إرسال تنبيه مخصص للإدارة لطلب الصيانة الجديد
+        await ZyiarahNotificationTriggerService().notifyAdminOfNewMaintenanceRequest(
+          clientName: userName,
+          serviceType: _selectedService ?? 'صيانة',
+          requestId: orderCode,
+        );
         
         // إرسال تأكيد بالبريد الإلكتروني لطلب الصيانة (قيد المراجعة)
         await ZyiarahCommService().notifyNewOrder({

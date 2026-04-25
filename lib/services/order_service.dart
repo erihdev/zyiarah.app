@@ -6,6 +6,7 @@ import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/counter_service.dart';
 import 'package:zyiarah/services/zyiarah_comm_service.dart';
+import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/services/invoice_pdf_service.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 
@@ -115,6 +116,15 @@ class ZyiarahOrderService {
     final comm = ZyiarahCommService();
     await comm.notifyNewOrder(orderMap, customerEmail: clientEmail, invoiceUrl: invoiceUrl);
     
+    // --- ارسل تنبيه لحظي للإدارة وللعميل عبر النظام الجديد ---
+    await ZyiarahNotificationTriggerService().notifyOrderCreated(
+      clientId: clientId,
+      orderCode: orderCode,
+      type: serviceType,
+      serviceName: serviceType,
+    );
+    // -----------------------------------------------------
+
     return orderCode;
   }
 
@@ -410,6 +420,14 @@ class ZyiarahOrderService {
         comment: comment,
         evidenceUrl: evidenceUrl,
         clientName: data['client_name'] ?? 'عميل',
+      );
+
+      // تنبيه الإدارة اللحظي على الجوال
+      ZyiarahNotificationTriggerService().notifyAdminOfLowRating(
+        orderCode: data['code'] ?? orderId,
+        rating: rating,
+        clientName: data['client_name'] ?? 'عميل',
+        comment: comment,
       );
     }
 
