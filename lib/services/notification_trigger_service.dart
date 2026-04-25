@@ -231,6 +231,21 @@ class ZyiarahNotificationTriggerService {
     }
   }
 
+  /// تنبيه الإدارة عند تحصيل مبلغ نقدًا (COD)
+  Future<void> notifyAdminOfCashCollection({
+    required String driverName,
+    required String orderCode,
+    required double amount,
+  }) async {
+    await triggerNotification(
+      toUid: 'ADMIN_BROADCAST',
+      title: "تم استلام نقدًا 💰",
+      body: "أكد السائق $driverName استلام $amount ر.س نقدًا للطلب #$orderCode.",
+      type: 'admin_cash_collected',
+      data: {'code': orderCode, 'amount': amount, 'driver': driverName},
+    );
+  }
+
   /// تنبيه الإدارة بوجود تقييم منخفض (لرقابة الجودة)
   Future<void> notifyAdminOfLowRating({
     required String orderCode,

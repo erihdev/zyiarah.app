@@ -671,16 +671,79 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   void _updateStatus(String id, String status) async {
-    await _orderService.updateOrderStatus(id, status);
-    
-    // إرسال إشعار لحظي للعميل بالحالة الجديدة
+    // 1. Fetch Order Data to check for COD
     final doc = await FirebaseFirestore.instance.collection('orders').doc(id).get();
     final data = doc.data();
-    if (data != null && data['client_id'] != null) {
+    if (data == null) return;
+
+    final paymentMethod = data['payment_method'];
+    final amount = (data['amount'] ?? 0.0).toDouble();
+    final clientName = data['client_name'] ?? 'العميل';
+
+    // 2. Specialized Flow for COD Completion
+    if (status == 'completed' && paymentMethod == 'cod') {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            title: Text("تأكيد تحصيل النقد 💸", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.green)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text("هل قمت باستلام المبلغ نقدًا من $clientName؟", style: GoogleFonts.tajawal()),
+                const SizedBox(height: 15),
+                Container(
+                  padding: const EdgeInsets.all(15),
+                  decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(12)),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text("المبلغ المطلوب: ", style: GoogleFonts.tajawal(fontSize: 14)),
+                      Text("${amount.toStringAsFixed(2)} ر.س", style: GoogleFonts.tajawal(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.green.shade900)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false), child: Text("إلغاء", style: TextStyle(color: Colors.grey[600]))),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                child: const Text("نعم، تم استلام المبلغ"),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (confirmed != true) return; // User cancelled
+      
+      // Mark as paid since cash is collected
+      await FirebaseFirestore.instance.collection('orders').doc(id).update({
+        'is_paid': true,
+        'paid_at': FieldValue.serverTimestamp(),
+        'cash_collected_by': _currentDriverId,
+      });
+
+      // 2.5 Notify Admin of Cash Collection
+      await _notificationService.notifyAdminOfCashCollection(
+        driverName: "السائق المتواجد", // Can be enhanced later to fetch full name
+        orderCode: data['code'] ?? id,
+        amount: amount,
+      );
+    }
+
+    // 3. Normal Status Update
+    await _orderService.updateOrderStatus(id, status, driverId: _currentDriverId);
+    
+    // إرسال إشعار لحظي للعميل بالحالة الجديدة
+    if (data['client_id'] != null) {
       final driverName = "فريق زيارة";
       final orderCode = data['code'] ?? id;
 
-      // 1. تنبيه العميل
       await _notificationService.notifyClientOfDriverStatus(
         clientId: data['client_id'],
         status: status,
@@ -688,8 +751,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
         driverName: driverName,
       );
 
-      // 2. تنبيه الإدارة (للمتابعة اللحظية)
-      if (status == 'accepted' || status == 'started' || status == 'completed') {
+      if (status == 'accepted' || status == 'completed') {
         await _notificationService.notifyAdminOfDriverUpdate(
           driverName: driverName,
           status: status,
