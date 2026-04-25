@@ -761,14 +761,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           subtitle: 'دفع آمن وسريع عبر EdfaPay',
           icon: Icons.credit_card,
         ),
-        const SizedBox(height: 12),
-        _buildPaymentOption(
-          id: 'tamara',
-          title: 'تمارا | Tamara',
-          subtitle: 'قسم فاتورتك على 4 دفعات',
-          icon: Icons.timer_outlined,
-          color: const Color(0xFFE5A170),
-        ),
+        if (totalWithVat >= 100) ...[
+          const SizedBox(height: 12),
+          _buildPaymentOption(
+            id: 'tamara',
+            title: 'تمارا | Tamara',
+            subtitle: 'قسم فاتورتك على 4 دفعات',
+            icon: Icons.timer_outlined,
+            color: const Color(0xFFE5A170),
+          ),
+        ],
         if (_isCodAvailableForService()) ...[
           const SizedBox(height: 12),
           _buildPaymentOption(
