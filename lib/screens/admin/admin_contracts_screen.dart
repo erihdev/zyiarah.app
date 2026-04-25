@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:zyiarah/services/zyiarah_contract_pdf_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:url_launcher/url_launcher.dart';
@@ -66,7 +67,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.slate.shade100, width: 2),
+        border: Border.all(color: Colors.blueGrey.shade100, width: 2),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
@@ -97,7 +98,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
                     children: [
                       Text(
                         planName,
-                        style: GoogleFonts.tajawal(fontWeight: FontWeight.black, fontSize: 16, color: primaryNavy),
+                        style: GoogleFonts.tajawal(fontWeight: FontWeight.w900, fontSize: 16, color: primaryNavy),
                       ),
                       Text(
                         "رقم العقد: #$contractId",
@@ -139,7 +140,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
                         backgroundColor: Colors.green[600],
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangle.circular(14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         elevation: 0,
                       ),
                     ),
@@ -148,7 +149,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
                 IconButton.filled(
                   onPressed: () => _showDetails(data),
                   icon: const Icon(Icons.info_outline_rounded),
-                  style: IconButton.styleFrom(backgroundColor: Colors.slate[50], foregroundColor: Colors.slate[600]),
+                  style: IconButton.styleFrom(backgroundColor: Colors.blueGrey[50], foregroundColor: Colors.blueGrey[600]),
                 ),
                 IconButton.filled(
                   onPressed: () => _deleteContract(doc.id),
@@ -262,14 +263,44 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
           children: [
             Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 24),
-            Text("تفاصيل العقد", style: GoogleFonts.tajawal(fontWeight: FontWeight.black, fontSize: 20)),
+            Text("تفاصيل العقد", style: GoogleFonts.tajawal(fontWeight: FontWeight.w900, fontSize: 20)),
             const Divider(height: 32),
-            _buildDetailRow("اسم العميل", data['userName'] ?? data['clientName'] ?? 'غير معروف'),
+            _buildDetailRow("اسم العميل", data['userName'] ?? data['clientName'] ?? 'عميل زيارة'),
             _buildDetailRow("الباقة", data['planName'] ?? 'باقة اشتراك'),
-            _buildDetailRow("السعر المحتسب", "${data['planPrice'] ?? 0} ر.س"),
-            _buildDetailRow("عدد الزيارات", "${data['planVisits'] ?? 0} زيارة"),
-            _buildDetailRow("رقم الهاتف", data['userPhone'] ?? 'غير مسجل'),
-            _buildDetailRow("معرف العميل", data['userId'] ?? 'غير متوفر'),
+            _buildDetailRow("قيمة التعاقد", "${data['planPrice'] ?? 0} ر.س"),
+            _buildDetailRow("الزيارات المتاحة", "${data['planVisits'] ?? 0} زيارة"),
+            _buildDetailRow("رقم الاتصال", data['userPhone'] ?? 'غير مسجل'),
+            const Divider(height: 32),
+            if (data['status'] == 'active' || data['status'] == 'approved_waiting_payment')
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    try {
+                      await ZyiarahContractPdfService.generateAndDownloadContract(
+                        contractId: data['contractId'] ?? 'XXXX',
+                        planName: data['planName'] ?? 'باقة اشتراك',
+                        userName: data['userName'] ?? data['clientName'] ?? 'عميل زيارة',
+                        userPhone: data['userPhone'] ?? 'غير مسجل',
+                        price: (data['planPrice'] ?? 0).toDouble(),
+                        visits: data['planVisits'] ?? 0,
+                        startDate: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+                      );
+                    } catch (e) {
+                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل إنشاء الملف: $e')));
+                    }
+                  },
+                  icon: const Icon(Icons.picture_as_pdf),
+                  label: const Text("تحميل نسخة العقد (PDF)", style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: const BorderSide(color: Colors.blue),
+                    foregroundColor: Colors.blue,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 16),
             const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
@@ -279,7 +310,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
                   backgroundColor: primaryNavy,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangle.circular(16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
                 child: const Text("إغلاق", style: TextStyle(fontWeight: FontWeight.bold)),
               ),

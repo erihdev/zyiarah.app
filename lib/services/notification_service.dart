@@ -54,7 +54,8 @@ class ZyiarahNotificationService {
             final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
             if (userDoc.exists) {
               final role = userDoc.data()?['role'];
-              if (role == 'admin') {
+              final adminRoles = ['admin', 'super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin'];
+              if (adminRoles.contains(role)) {
                 await _fcm.subscribeToTopic('admins');
                 await _fcm.unsubscribeFromTopic('clients');
                 await _fcm.unsubscribeFromTopic('drivers');

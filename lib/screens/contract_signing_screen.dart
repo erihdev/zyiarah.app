@@ -73,12 +73,17 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
       
       final contractId = 'CTR-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
 
+      // Re-fetch latest user data to be 100% sure we have the name
+      final userDoc = await firestore.collection('users').doc(user?.uid).get();
+      final String finalName = userDoc.data()?['name'] ?? user?.displayName ?? 'عميل زيارة';
+      final String finalPhone = userDoc.data()?['phone'] ?? user?.phoneNumber ?? 'غير مسجل';
+
       await firestore.collection('contracts').add({
         'contractId': contractId,
         'userId': user?.uid,
-        'userPhone': _userPhone,
-        'userName': _userName,
-        'clientName': _userName, // consistency with admin screen
+        'userPhone': finalPhone,
+        'userName': finalName,
+        'clientName': finalName, // consistency with admin screen
         'planName': widget.planName,
         'planPrice': widget.planPrice,
         'planVisits': widget.planVisits,
@@ -98,6 +103,21 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
         },
         targetId: contractId,
       );
+
+      // --- إرسال تنبيه فوري للإدارة عبر النظام المتقدم ---
+      await firestore.collection('notification_triggers').add({
+        'type': 'admin_contract_alert',
+        'title': 'طلب تعاقد جديد! 📄',
+        'body': 'العميل ($_userName) قام بتوقيع عقد (${widget.planName}) وينتظر موافقتك الآن.',
+        'toUid': 'ADMIN_BROADCAST', // سيصل لكل المدراء
+        'data': {
+          'type': 'new_contract_admin',
+          'contractId': contractId,
+        },
+        'processed': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      // ----------------------------------------------
       
       if (mounted) {
         _showSuccessDialog();
