@@ -3,8 +3,15 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:arabic_reshaper/arabic_reshaper.dart';
 
 class ZyiarahContractPdfService {
+  static String _ar(String input) {
+    if (input.isEmpty) return "";
+    // Connect Arabic characters properly
+    return ArabicReshaper().reshape(input);
+  }
+
   static Future<void> generateAndDownloadContract({
     required String contractId,
     required String planName,
@@ -37,14 +44,14 @@ class ZyiarahContractPdfService {
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Text('Electronic Service Contract', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.purple800)),
-                      pw.Text('عقد تقديم خدمات إلكتروني', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.purple800)),
+                      pw.Text(_ar('عقد تقديم خدمات إلكتروني'), textDirection: pw.TextDirection.rtl, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.purple800)),
                     ],
                   ),
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
-                      pw.Text('Zyiarah Platform / منصة زيارة', style: const pw.TextStyle(fontSize: 12)),
-                      pw.Text('Contract ID / رقم العقد: #$contractId', style: const pw.TextStyle(fontSize: 10)),
+                      pw.Text(_ar('منصة زيارة / Zyiarah Platform'), textDirection: pw.TextDirection.rtl, style: const pw.TextStyle(fontSize: 12)),
+                      pw.Text(_ar('رقم العقد: #$contractId / Contract ID'), textDirection: pw.TextDirection.rtl, style: const pw.TextStyle(fontSize: 10)),
                     ],
                   ),
                 ],
@@ -54,7 +61,7 @@ class ZyiarahContractPdfService {
               pw.SizedBox(height: 20),
 
               // Parties Info
-              pw.Text('Parties to the Contract / طرفي التعاقد:', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+              pw.Text(_ar('طرفي التعاقد / Parties to the Contract:'), textDirection: pw.TextDirection.rtl, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 10),
               pw.Container(
                 padding: const pw.EdgeInsets.all(12),
@@ -65,45 +72,48 @@ class ZyiarahContractPdfService {
                 ),
                 child: pw.Column(
                   children: [
-                    _buildTextRow('First Party:', 'Zyiarah General Services Foundation', 'الطرف الأول:', 'مؤسسة زيارة للخدمات العامة'),
+                    _buildTextRow('First Party:', _ar('مؤسسة زيارة للخدمات العامة'), 'الطرف الأول:', 'Zyiarah General Services Foundation'),
                     pw.SizedBox(height: 5),
-                    _buildTextRow('Second Party:', userName, 'الطرف الثاني:', 'العميل المذكور أعلاه'),
+                    _buildTextRow('Second Party:', _ar(userName), 'الطرف الثاني:', 'The Client mentioned above'),
                     pw.SizedBox(height: 5),
-                    _buildTextRow('Phone / الجوال:', userPhone, '', ''),
+                    _buildTextRow('Phone / الجوال:', _ar(userPhone), '', ''),
                   ],
                 ),
               ),
               pw.SizedBox(height: 30),
 
               // Contract Details Table
-              pw.Text('Contract Details / تفاصيل العقد:', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+              pw.Text(_ar('تفاصيل العقد / Contract Details:'), textDirection: pw.TextDirection.rtl, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 10),
               pw.Table(
                 border: pw.TableBorder.all(color: PdfColors.grey300),
                 children: [
-                  _buildTableHeader(['Description / الوصف', 'Details / التفاصيل']),
-                  _buildTableRow('Service Plan / الباقة المشتراة', planName),
-                  _buildTableRow('Total Visits / إجمالي الزيارات', '$visits visits'),
-                  _buildTableRow('Contract Price / قيمة العقد', '${price.toStringAsFixed(2)} SAR'),
-                  _buildTableRow('Issue Date / تاريخ الإصدار', intl.DateFormat('yyyy-MM-dd').format(startDate)),
+                  _buildTableHeader([_ar('الوصف / Description'), _ar('التفاصيل / Details')]),
+                  _buildTableRow(_ar('الباقة المشتراة / Service Plan'), _ar(planName)),
+                  _buildTableRow(_ar('إجمالي الزيارات / Total Visits'), _ar('$visits زيارة')),
+                  _buildTableRow(_ar('قيمة العقد / Contract Price'), _ar('${price.toStringAsFixed(2)} ر.س')),
+                  _buildTableRow(_ar('تاريخ الإصدار / Issue Date'), intl.DateFormat('yyyy-MM-dd').format(startDate)),
                 ],
               ),
               pw.SizedBox(height: 30),
 
               // Terms & Conditions
-              pw.Text('Terms and Conditions / الشروط والأحكام:', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+              pw.Text(_ar('الشروط والأحكام / Terms and Conditions:'), textDirection: pw.TextDirection.rtl, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 10),
               pw.Container(
                 padding: const pw.EdgeInsets.all(10),
                 decoration: pw.BoxDecoration(border: pw.TableBorder.all(color: PdfColors.grey200)),
-                child: pw.Text(
-                  '1. The provider is committed to delivering the scheduled visits according to the professional standards.\n'
-                  '2. The client must ensure arrival of workers is facilitated at the agreed locations.\n'
-                  '3. This contract is considered electronically signed and binding upon payment.\n'
-                  '1. يلتزم مقدم الخدمة بتنفيذ الزيارات المجدولة حسب معايير التشغيل المعتمدة.\n'
-                  '2. يلتزم العميل بتسهيل دخول الكوادر للموقع في المواعيد المحددة.\n'
-                  '3. يعتبر هذا العقد موثقاً إلكترونياً وملزماً فور إتمام عملية الدفع.',
-                  style: const pw.TextStyle(fontSize: 10, color: PdfColors.black),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(_ar('1. يلتزم مقدم الخدمة بتنفيذ الزيارات المجدولة حسب معايير التشغيل المعتمدة.'), textDirection: pw.TextDirection.rtl, style: const pw.TextStyle(fontSize: 10)),
+                    pw.Text(_ar('2. يلتزم العميل بتسهيل دخول الكوادر للموقع في المواعيد المحددة.'), textDirection: pw.TextDirection.rtl, style: const pw.TextStyle(fontSize: 10)),
+                    pw.Text(_ar('3. يعتبر هذا العقد موثقاً إلكترونياً وملزماً فور إتمام عملية الدفع.'), textDirection: pw.TextDirection.rtl, style: const pw.TextStyle(fontSize: 10)),
+                    pw.SizedBox(height: 5),
+                    pw.Text('1. The provider is committed to delivering the scheduled visits according to the professional standards.', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                    pw.Text('2. The client must ensure arrival of workers is facilitated at the agreed locations.', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                    pw.Text('3. This contract is considered electronically signed and binding upon payment.', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                  ],
                 ),
               ),
 
@@ -113,8 +123,8 @@ class ZyiarahContractPdfService {
               pw.Center(
                 child: pw.Column(
                   children: [
+                    pw.Text(_ar('هذا مستند إلكتروني آلي - لا يتطلب توقيع فعلي'), textDirection: pw.TextDirection.rtl, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
                     pw.Text('This is an automated electronic document - No physical signature required', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                    pw.Text('هذا مستند إلكتروني آلي - لا يتطلب توقيع فعلي', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
                     pw.SizedBox(height: 10),
                     pw.BarcodeWidget(
                       barcode: pw.Barcode.qrCode(),
@@ -131,7 +141,6 @@ class ZyiarahContractPdfService {
       ),
     );
 
-    // Printing/Previewing is better for "Download" behavior in Flutter
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
       name: 'Zyiarah_Contract_$contractId.pdf',
@@ -141,15 +150,15 @@ class ZyiarahContractPdfService {
   static pw.TableRow _buildTableHeader(List<String> labels) {
     return pw.TableRow(
       decoration: const pw.BoxDecoration(color: PdfColors.grey100),
-      children: labels.map((label) => pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(label, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)))).toList(),
+      children: labels.map((label) => pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(label, textDirection: pw.TextDirection.rtl, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)))).toList(),
     );
   }
 
   static pw.TableRow _buildTableRow(String label, String value) {
     return pw.TableRow(
       children: [
-        pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(label)),
-        pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(value)),
+        pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(label, textDirection: pw.TextDirection.rtl)),
+        pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(value, textDirection: pw.TextDirection.rtl)),
       ],
     );
   }
@@ -159,7 +168,7 @@ class ZyiarahContractPdfService {
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       children: [
         pw.Text('$labelEn $valueEn', style: const pw.TextStyle(fontSize: 10)),
-        pw.Text('$valueAr $labelAr', style: const pw.TextStyle(fontSize: 10)),
+        pw.Text('$valueAr $labelAr', textDirection: pw.TextDirection.rtl, style: const pw.TextStyle(fontSize: 10)),
       ],
     );
   }
