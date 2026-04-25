@@ -7,7 +7,7 @@ workflows:
       flutter: stable
       xcode: latest
       groups:
-        - apple_auth # We will create this group in Codemagic UI
+        - appstore_credentials
       vars:
         APP_STORE_APP_ID: "6760955777"
         BUNDLE_ID: "com.zyiarah.zyiarah"
