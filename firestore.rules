@@ -75,7 +75,10 @@ service cloud.firestore {
 
     // FCM Tokens
     match /fcm_tokens/{tokenId} {
-      allow read, write: if isLoggedIn() && (request.auth.uid == tokenId || isAdmin());
+      allow read, write: if isLoggedIn();
+    }
+    match /fcm_token/{tokenId} {
+      allow read, write: if isLoggedIn();
     }
 
     // Electronic Contracts
@@ -156,10 +159,7 @@ service cloud.firestore {
       allow read, delete: if isAdmin();
     }
     match /notification_triggers/{triggerId} {
-      allow create: if isLoggedIn() && (
-        request.resource.data.toUid == request.auth.uid || 
-        request.resource.data.toUid == 'ADMIN_BROADCAST'
-      );
+      allow create: if isLoggedIn();
       allow read, delete: if isAdmin();
     }
     match /notifications_log/{logId} {
