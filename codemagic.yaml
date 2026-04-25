@@ -9,7 +9,7 @@ workflows:
       groups:
         - apple_auth # We will create this group in Codemagic UI
       vars:
-        APP_STORE_APPLE_ID: "6760955777"
+        APP_STORE_APP_ID: "6760955777"
         BUNDLE_ID: "com.zyiarah.zyiarah"
     scripts:
       - name: Set up code signing
