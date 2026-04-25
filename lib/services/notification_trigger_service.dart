@@ -151,6 +151,86 @@ class ZyiarahNotificationTriggerService {
     );
   }
 
+  /// تنبيه الإدارة عند استلام دفعة مالية
+  Future<void> notifyAdminOfPayment({
+    required String orderCode,
+    required double amount,
+    required String type, // 'maintenance', 'contract', 'store'
+    String? clientName,
+  }) async {
+    await triggerNotification(
+      toUid: 'ADMIN_BROADCAST',
+      title: "تم استلام دفعة مالية 💸",
+      body: "قام العميل ${clientName ?? 'عميل'} بدفع $amount ر.س للطلب #$orderCode ($type).",
+      type: 'admin_payment_alert',
+      data: {'code': orderCode, 'amount': amount, 'type': type},
+    );
+  }
+
+  /// تنبيه العميل بحركات السائق
+  Future<void> notifyClientOfDriverStatus({
+    required String clientId,
+    required String status, // 'accepted', 'arrived', 'started', 'completed'
+    required String orderCode,
+    String? driverName,
+  }) async {
+    String title = "";
+    String body = "";
+
+    switch (status) {
+      case 'accepted':
+        title = "تم قبول طلبك! 🚚";
+        body = "السائق ${driverName ?? ''} في الطريق إليك الآن لتنفيذ الطلب #$orderCode.";
+        break;
+      case 'arrived':
+        title = "وصل السائق! 🏠";
+        body = "السائق ${driverName ?? ''} متواجد الآن عند موقعك لتنفيذ الطلب #$orderCode.";
+        break;
+      case 'started':
+        title = "بدأ العمل 🛠️";
+        body = "بدأ فريق زيارة الآن في تنفيذ خدمتك للطلب #$orderCode.";
+        break;
+      case 'completed':
+        title = "تم الإنجاز! ✨";
+        body = "انتهى العمل على الطلب #$orderCode بنجاح. شكراً لثقتك بنا، ننتظر تقييمك.";
+        break;
+    }
+
+    if (title.isNotEmpty) {
+      await triggerNotification(
+        toUid: clientId,
+        title: title,
+        body: body,
+        type: 'driver_update',
+        data: {'code': orderCode, 'status': status},
+      );
+    }
+  }
+
+  /// تنبيه الإدارة بحركات السائق الميدانية
+  Future<void> notifyAdminOfDriverUpdate({
+    required String driverName,
+    required String status, // 'accepted', 'started', 'completed'
+    required String orderCode,
+  }) async {
+    String action = "";
+    switch (status) {
+      case 'accepted': action = "قبل المهمة 🚚"; break;
+      case 'started': action = "بدأ العمل 🛠️"; break;
+      case 'completed': action = "أتم المهمة ✨"; break;
+    }
+
+    if (action.isNotEmpty) {
+      await triggerNotification(
+        toUid: 'ADMIN_BROADCAST',
+        title: "تحديث ميداني 📡",
+        body: "السائق $driverName $action للطلب #$orderCode.",
+        type: 'admin_driver_update',
+        data: {'code': orderCode, 'status': status, 'driver': driverName},
+      );
+    }
+  }
+
   /// يجدول إشعار ليتم إرساله في وقت لاحق
   Future<void> scheduleBroadcast({
     required String title,

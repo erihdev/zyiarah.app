@@ -653,11 +653,51 @@ class _DriverDashboardState extends State<DriverDashboard> {
   
   void _acceptOrder(String id) async {
     bool success = await _orderService.acceptOrder(id, _currentDriverId!);
-    if (!success && mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("لديك طلب نشط بالفعل!")));
+    if (success) {
+      // جلب بيانات الطلب لإرسال إشعار للعميل
+      final doc = await FirebaseFirestore.instance.collection('orders').doc(id).get();
+      final data = doc.data();
+      if (data != null && data['client_id'] != null) {
+        await _notificationService.notifyClientOfDriverStatus(
+          clientId: data['client_id'],
+          status: 'accepted',
+          orderCode: data['code'] ?? id,
+          driverName: "فريق زيارة",
+        );
+      }
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("لديك طلب نشط بالفعل!")));
+    }
   }
 
   void _updateStatus(String id, String status) async {
     await _orderService.updateOrderStatus(id, status);
+    
+    // إرسال إشعار لحظي للعميل بالحالة الجديدة
+    final doc = await FirebaseFirestore.instance.collection('orders').doc(id).get();
+    final data = doc.data();
+    if (data != null && data['client_id'] != null) {
+      final driverName = "فريق زيارة";
+      final orderCode = data['code'] ?? id;
+
+      // 1. تنبيه العميل
+      await _notificationService.notifyClientOfDriverStatus(
+        clientId: data['client_id'],
+        status: status,
+        orderCode: orderCode,
+        driverName: driverName,
+      );
+
+      // 2. تنبيه الإدارة (للمتابعة اللحظية)
+      if (status == 'accepted' || status == 'started' || status == 'completed') {
+        await _notificationService.notifyAdminOfDriverUpdate(
+          driverName: driverName,
+          status: status,
+          orderCode: orderCode,
+        );
+      }
+    }
+
     if (status == 'completed' && mounted) _showSuccessDialog();
   }
 

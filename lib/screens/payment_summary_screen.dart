@@ -188,16 +188,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             'paymentMethod': 'subscription',
             'paidAt': FieldValue.serverTimestamp(),
           });
-          // Notify Admin
-          await FirebaseFirestore.instance.collection('notification_triggers').add({
-            'type': 'new_maintenance_paid',
-            'title': 'تم دفع طلب صيانة! ✅',
-            'body': 'قام العميل ${_currentUser?.name} بدفع رسوم الصيانة عبر الباقة.',
-            'toUid': 'ADMIN_BROADCAST', // Broadcast to all admins
-            'createdAt': FieldValue.serverTimestamp(),
-            'processed': false,
-            'data': {'id': widget.maintenanceId},
-          });
+          // Notify Admin via Centralized Service
+          await ZyiarahNotificationTriggerService().notifyAdminOfPayment(
+            orderCode: widget.maintenanceId!,
+            amount: 0.0,
+            type: 'maintenance_subscription',
+            clientName: _currentUser?.name,
+          );
+        } else {
         } else {
           await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
             'code': orderCode,
@@ -250,16 +248,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             'paymentMethod': 'cod',
             'paidAt': FieldValue.serverTimestamp(),
           });
-          // Notify Admin of COD choice
-          await FirebaseFirestore.instance.collection('notification_triggers').add({
-            'type': 'maintenance_cod_selected',
-            'title': 'طلب صيانة (دفع عند الاستلام) 💵',
-            'body': 'العميل ${_currentUser?.name} اختار الدفع عند الاستلام لطلب الصيانة.',
-            'toUid': 'ADMIN_BROADCAST',
-            'createdAt': FieldValue.serverTimestamp(),
-            'processed': false,
-            'data': {'id': widget.maintenanceId},
-          });
+          // Notify Admin of COD choice via Centralized Service
+          await ZyiarahNotificationTriggerService().notifyAdminOfPayment(
+            orderCode: widget.maintenanceId!,
+            amount: widget.amount, // Total quote amount
+            type: 'maintenance_cod',
+            clientName: _currentUser?.name,
+          );
+        } else {
         } else {
           await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
             'code': orderCode,
@@ -362,16 +358,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               'paidAt': FieldValue.serverTimestamp(),
               'totalAmount': totalWithVat,
             });
-            // Notify Admin
-            await FirebaseFirestore.instance.collection('notification_triggers').add({
-              'type': 'maintenance_paid_card',
-              'title': 'دفع إلكتروني ناجح لصيانة! 💳',
-              'body': 'تم دفع مبلغ $totalWithVat ر.س لطلب صيانة العميل ${_currentUser?.name}.',
-              'toUid': 'ADMIN_BROADCAST',
-              'createdAt': FieldValue.serverTimestamp(),
-              'processed': false,
-              'data': {'id': widget.maintenanceId},
-            });
+            // Notify Admin via Centralized Service
+            await ZyiarahNotificationTriggerService().notifyAdminOfPayment(
+              orderCode: widget.maintenanceId!,
+              amount: totalWithVat,
+              type: 'maintenance_card',
+              clientName: _currentUser?.name,
+            );
+          } else if (widget.contractId != null) {
           } else if (widget.contractId != null) {
             await FirebaseFirestore.instance.collection('contracts').doc(widget.contractId).update({
               'status': 'active',
