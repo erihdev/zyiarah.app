@@ -16,7 +16,6 @@ import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/zyiarah_comm_service.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/invoice_pdf_service.dart';
-import 'package:pay/pay.dart';
 import 'dart:io';
 
 import 'package:zyiarah/providers/config_provider.dart';
@@ -242,8 +241,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           throw Exception('خطأ في بدء جلسة تمارا');
         }
 
-      } else {
-        // EDFA PAY (CARD)
+      } else if (_selectedPaymentMethod == 'card' || _selectedPaymentMethod == 'apple_pay') {
+        // EDFA PAY (Unified Card / Apple Pay)
+        final String paymentType = _selectedPaymentMethod == 'apple_pay' ? 'Apple Pay' : 'Card';
         final result = await _edfaPayService.processPayment(
           amount: totalWithVat,
           orderId: finalOrderId,
@@ -253,9 +253,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         );
 
         if (result['success'] == true && mounted) {
-          await _processUnifiedSuccess(finalOrderId, orderCode, 'card');
+          await _processUnifiedSuccess(finalOrderId, orderCode, _selectedPaymentMethod);
         } else {
-          throw Exception(result['error'] ?? 'فشل عملية الدفع بالبطاقة');
+          throw Exception(result['error'] ?? 'فشل عملية الدفع عبر $paymentType');
         }
       }
 
@@ -730,18 +730,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
   Widget _buildBottomButton() {
     final config = Provider.of<ZyiarahConfigProvider>(context);
-    final List<PaymentItem> paymentItems = [
-      PaymentItem(
-        label: widget.serviceName,
-        amount: totalWithVat.toStringAsFixed(2),
-        status: PaymentItemStatus.final_price,
-      ),
-      PaymentItem(
-        label: 'Zyiarah - زيارة',
-        amount: totalWithVat.toStringAsFixed(2),
-        status: PaymentItemStatus.final_price,
-      ),
-    ];
 
     return Positioned(
       bottom: 0,
@@ -753,56 +741,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           color: Colors.white,
           boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
         ),
-        child: _selectedPaymentMethod == 'apple_pay' && Platform.isIOS
-          ? ApplePayButton(
-              paymentConfiguration: PaymentConfiguration.fromJsonString(
-                '''{
-                  "provider": "apple_pay",
-                  "data": {
-                    "merchantIdentifier": "merchant.com.zyiarah.app",
-                    "displayName": "Zyiarah - زيارة",
-                    "merchantCapabilities": ["3DS", "debit", "credit"],
-                    "supportedNetworks": ["amex", "visa", "mada", "masterCard"],
-                    "countryCode": "SA",
-                    "currencyCode": "SAR"
-                  }
-                }'''
-              ),
-              paymentItems: paymentItems,
-              style: ApplePayButtonStyle.black,
-              type: ApplePayButtonType.checkout,
-              margin: const EdgeInsets.only(top: 0),
-              onPaymentResult: (result) async {
-                setState(() => _isLoading = true);
-                final res = await _edfaPayService.processApplePay(
-                  paymentData: result,
-                  amount: totalWithVat,
-                  orderId: "TEMP-${DateTime.now().millisecondsSinceEpoch}",
-                );
-                if (res['success'] == true) {
-                   // Proceed to unified success handler
-                   final seq = await ZyiarahCounterService().getNextOrderNumber();
-                   final orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
-                   await _processUnifiedSuccess("ORDER-${DateTime.now().millisecondsSinceEpoch}", orderCode, 'apple_pay');
-                } else {
-                   setState(() => _isLoading = false);
-                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل دفع Apple Pay: ${res['error']}")));
-                }
-              },
-              loadingIndicator: const Center(child: CircularProgressIndicator()),
-              width: double.infinity,
-              height: 55,
-            )
-          : ElevatedButton(
-              onPressed: _handlePayment,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _agreeToTerms ? config.checkoutButtonColor : Colors.grey.shade300,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: Text('تأكيد وإتمام الدفع', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
-            ),
+        child: ElevatedButton(
+          onPressed: _handlePayment,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _agreeToTerms ? config.checkoutButtonColor : Colors.grey.shade300,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          child: Text('تأكيد وإتمام الدفع', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
+        ),
       ),
     );
   }

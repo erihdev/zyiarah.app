@@ -1,155 +1,35 @@
 workflows:
-  ios-workflow:
-    name: Zyiarah iOS Build & TestFlight
+  ios-release:
+    name: Zyiarah iOS Release
     max_build_duration: 120
     instance_type: mac_mini_m2
     environment:
-      groups:
-        - appstore_credentials
-      flutter: default
+      flutter: stable
       xcode: latest
-      cocoapods: default
+      groups:
+        - apple_auth # We will create this group in Codemagic UI
       vars:
+        APP_STORE_APPLE_ID: "6760955777"
         BUNDLE_ID: "com.zyiarah.zyiarah"
-        TEAM_ID: "RPTPMXA436"
-        APP_STORE_CONNECT_KEY_IDENTIFIER: "RJMPC4734X"
-        APP_STORE_CONNECT_ISSUER_ID: "6dd67287-cfcd-40fc-a3db-8bf378a1ac8f"
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
     scripts:
-      - name: Get Flutter Packages
-        script: |
-          set -e
-          
-          # Clean architecture to prevent stale/Windows files
-          rm -f ios/Flutter/Generated.xcconfig
-
-          # Fetch Packages
+      - name: Set up code signing
+        script: | 
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --project-id "$APP_STORE_APP_ID" --create
+          keychain add-certificates
+      - name: Get Flutter dependencies
+        script: | 
           flutter pub get
-          
-          # Generate proper xcconfig for CocoaPods
-          flutter build ios --config-only
-          
-          cd ios
-          rm -rf Pods Podfile.lock
-          echo "Running explicit pod install to capture raw errors..."
-          pod install --repo-update || { echo "==== POD INSTALL FAILED ===="; exit 1; }
-      - name: Setup Code Signing
-        script: |
-          set -e
-
-          # Create isolated keychain
-          security create-keychain -p "BuildKeychain123!" build.keychain-db
-          security default-keychain -s build.keychain-db
-          security unlock-keychain -p "BuildKeychain123!" build.keychain-db
-          security set-keychain-settings -t 3600 -u build.keychain-db
-          security list-keychains -d user -s build.keychain-db login.keychain-db
-
-          # Import distribution certificate
-          echo "CM_CERTIFICATE_PASSWORD contains ${#CM_CERTIFICATE_PASSWORD} characters"
-          security import ios/zyiarah_dist_cert.p12 -k build.keychain-db -P "$CM_CERTIFICATE_PASSWORD" -A -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "BuildKeychain123!" build.keychain-db
-
-          # Import Apple WWDR certificates for trust chain
-          curl -sL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o AppleWWDRCAG3.cer
-          security import AppleWWDRCAG3.cer -k build.keychain-db -T /usr/bin/codesign
-          curl -sL https://www.apple.com/certificateauthority/AppleWWDRCAG4.cer -o AppleWWDRCAG4.cer
-          security import AppleWWDRCAG4.cer -k build.keychain-db -T /usr/bin/codesign
-
-          # Install provisioning profile
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-
-          # Get UUID from the provisioning profile
-          PROFILE_UUID=$(security cms -D -i ios/Zyiarah_App_Store_Profile.mobileprovision 2>/dev/null | plutil -extract UUID raw -)
-          echo "Profile UUID: $PROFILE_UUID"
-
-          # Copy with UUID as filename (required by Xcode)
-          cp ios/Zyiarah_App_Store_Profile.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
-
-          echo "=== Provisioning Profiles ==="
-          ls -l "$HOME/Library/MobileDevice/Provisioning Profiles/"
-
-          echo "=== Profile Content (Certs) ==="
-          security cms -D -i ios/Zyiarah_App_Store_Profile.mobileprovision | grep -A 10 "DeveloperCertificates" || true
-
-      - name: Generate Export Options
-        script: |
-          set -e
-          # Extract provisioning profile UUID
-          PROFILE_UUID=$(security cms -D -i ios/Zyiarah_App_Store_Profile.mobileprovision 2>/dev/null | plutil -extract UUID raw -)
-
-          cat <<EOF > export_options.plist
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>app-store</string>
-            <key>teamID</key>
-            <string>$TEAM_ID</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>$BUNDLE_ID</key>
-              <string>$PROFILE_UUID</string>
-            </dict>
-            <key>uploadBitcode</key>
-            <false/>
-            <key>uploadSymbols</key>
-            <true/>
-          </dict>
-          </plist>
-          EOF
-
-          echo "=== Export Options ==="
-          cat export_options.plist
-
-      - name: Build IPA
-        script: |
-          set -e
-          echo "MAPBOX_TOKEN=${MAPBOX_TOKEN:-pk.eyJ1IjoiZXJpaGRldiIsImEiOiJjbW1jbGZpcnIwNzh4MnJzaXcyM3I3dG1jIn0.Hqs-3sGgQCsGK0yHamvdug}" > .env
-          security unlock-keychain -p "BuildKeychain123!" build.keychain-db || true
-          
-          # Extract profile UUID locally so it's available in this script block
-          PROFILE_UUID=$(security cms -D -i ios/Zyiarah_App_Store_Profile.mobileprovision 2>/dev/null | plutil -extract UUID raw -)
-          echo "Using Profile UUID: $PROFILE_UUID"
-
-          # We must append code signing overrides explicitly to Release.xcconfig 
-          # to ensure xcodebuild securely uses our manual provisioning profile internally.
-          echo "PROVISIONING_PROFILE_SPECIFIER=$PROFILE_UUID" >> ios/Flutter/Release.xcconfig
-          echo "CODE_SIGN_STYLE=Manual" >> ios/Flutter/Release.xcconfig
-          echo "DEVELOPMENT_TEAM=$TEAM_ID" >> ios/Flutter/Release.xcconfig
-          
-          # Native Flutter command to build and package IPA with our export options
-          echo "Running flutter build ipa..."
+      - name: Install Pods
+        script: | 
+          cd ios && pod install
+      - name: Flutter build IPA
+        script: | 
           flutter build ipa --release \
-            --build-number=$BUILD_NUMBER \
-            --export-options-plist=export_options.plist || {
-            echo "==== FLUTTER BUILD IPA FAILED ===="
-            exit 1
-          }
-
+            --export-options-plist=$HOME/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
-      - build/ios/archive/Runner.xcarchive/Products/Applications/*.app
-
     publishing:
-      email:
-        recipients:
-          - admin@zyiarah.com
-        notify:
-          success: true
-          failure: true
       app_store_connect:
+        auth: integration
         submit_to_testflight: true
-        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-        beta_groups:
-          - Internal Testers

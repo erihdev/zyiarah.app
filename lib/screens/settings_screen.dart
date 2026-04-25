@@ -38,11 +38,11 @@ class ZyiarahSettingsScreen extends StatelessWidget {
               leading: const Icon(Icons.privacy_tip, color: Color(0xFF5D1B5E)),
               title: const Text("سياسة الخصوصية"),
               subtitle: const Text("كيفية استخدامنا للموقع الجغرافي والبيانات"),
-              onTap: () {
-                // هنا سيتم فتح رابط سياسة الخصوصية عبر url_launcher
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('سيتم فتح رابط سياسة الخصوصية لاحقاً')),
-                );
+              onTap: () async {
+                const url = "https://zyiarah.com/privacy";
+                if (await canLaunchUrl(Uri.parse(url))) {
+                  await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                }
               },
             ),
             StreamBuilder<DocumentSnapshot>(
