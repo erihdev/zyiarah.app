@@ -196,7 +196,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             clientName: _currentUser?.name,
           );
         } else {
-        } else {
           await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
             'code': orderCode,
             'client_id': FirebaseAuth.instance.currentUser?.uid,
@@ -255,7 +254,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             type: 'maintenance_cod',
             clientName: _currentUser?.name,
           );
-        } else {
         } else {
           await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
             'code': orderCode,
