@@ -108,6 +108,10 @@ class ZyiarahOrderService {
       couponCode: couponCode,
     );
     
+    if (invoiceUrl != null) {
+      await doc.update({'invoice_pdf_url': invoiceUrl});
+    }
+
     final comm = ZyiarahCommService();
     await comm.notifyNewOrder(orderMap, customerEmail: clientEmail, invoiceUrl: invoiceUrl);
     

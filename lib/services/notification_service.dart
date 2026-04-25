@@ -104,13 +104,25 @@ class ZyiarahNotificationService {
         return;
       }
 
+      // Fetch user role to include it in the token document for backend targeting
+      String role = 'client';
+      try {
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        if (userDoc.exists) {
+          role = userDoc.data()?['role'] ?? 'client';
+        }
+      } catch (e) {
+        debugPrint("⚠️ Could not fetch user role for token: $e");
+      }
+
       await FirebaseFirestore.instance.collection('fcm_tokens').doc(uid).set({
-        'token': token,
+        'fcmToken': token, // Backend expects 'fcmToken', not 'token'
+        'role': role,      // Added role for administrative broadcasts
         'updated_at': FieldValue.serverTimestamp(),
         'platform': defaultTargetPlatform.name,
       }, SetOptions(merge: true));
 
-      debugPrint("✅ FCM Token saved for user: $uid");
+      debugPrint("✅ FCM Token ($role) saved for user: $uid");
     } catch (e) {
       debugPrint("❌ Error saving FCM token to Firestore: $e");
     }

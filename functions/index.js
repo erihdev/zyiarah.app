@@ -28,7 +28,7 @@ exports.sendNotificationOnTicketReply = onDocumentCreated("support_tickets/{tick
           .doc(userId).get();
       if (!tokenDoc.exists) return null;
 
-      const fcmToken = tokenDoc.data().fcmToken;
+      const fcmToken = tokenDoc.data()?.fcmToken || tokenDoc.data()?.token;
       if (!fcmToken) return null;
 
       const payload = {
@@ -63,18 +63,20 @@ exports.sendNotificationOnTicketReply = onDocumentCreated("support_tickets/{tick
       return null;
     });
 
-// 1.5 Notify Admins on New Order
+// 1.5 Notify Admins on New Order (Services)
 exports.sendNotificationToAdminsOnNewOrder = onDocumentCreated("orders/{orderId}",
     async (event) => {
       const snap = event.data;
       if (!snap) return null;
 
       const orderId = event.params.orderId;
+      const orderData = snap.data();
+      const displayCode = orderData.code || orderId.substring(0, 6);
 
       const payload = {
         notification: {
-          title: "طلب جديد! 🚨",
-          body: `وصلك طلب تنظيف جديد من العميل. رقم الطلب: ${orderId.substring(0, 6)}`,
+          title: "طلب خدمات جديد! 🚨",
+          body: `وصلك طلب تنظيف جديد من العميل. رقم الطلب: ${displayCode}`,
         },
         data: {
           click_action: "FLUTTER_NOTIFICATION_CLICK",
@@ -88,6 +90,91 @@ exports.sendNotificationToAdminsOnNewOrder = onDocumentCreated("orders/{orderId}
         console.log(`Admin notification sent for new order: ${orderId}`);
       } catch (error) {
         console.error("Error sending admin notification for new order:", error);
+      }
+      return null;
+    });
+
+// 1.6 Notify Admins on New Store Order
+exports.sendNotificationToAdminsOnNewStoreOrder = onDocumentCreated("store_orders/{orderId}",
+    async (event) => {
+      const snap = event.data;
+      if (!snap) return null;
+
+      const orderData = snap.data();
+      const displayCode = orderData.code || event.params.orderId.substring(0, 6);
+
+      const payload = {
+        notification: {
+          title: "طلب متجر جديد! 🛒",
+          body: `وصلك طلب منتجات من المتجر. رقم الطلب: ${displayCode}`,
+        },
+        data: {
+          click_action: "FLUTTER_NOTIFICATION_CLICK",
+          type: "new_store_order_admin",
+          orderId: event.params.orderId,
+        },
+      };
+
+      try {
+        await admin.messaging().send({...payload, topic: "admins"});
+      } catch (error) {
+        console.error("Error sending store order alert:", error);
+      }
+      return null;
+    });
+
+// 1.7 Notify Admins on New Maintenance Request
+exports.sendNotificationToAdminsOnNewMaintenance = onDocumentCreated("maintenance_requests/{requestId}",
+    async (event) => {
+      const snap = event.data;
+      if (!snap) return null;
+
+      const payload = {
+        notification: {
+          title: "طلب صيانة جديد! 🛠️",
+          body: `وصلك طلب صيانة جديد من عميل.`,
+        },
+        data: {
+          click_action: "FLUTTER_NOTIFICATION_CLICK",
+          type: "new_maintenance_admin",
+          requestId: event.params.requestId,
+        },
+      };
+
+      try {
+        await admin.messaging().send({...payload, topic: "admins"});
+      } catch (error) {
+        console.error("Error sending maintenance alert:", error);
+      }
+      return null;
+    });
+
+// 1.8 Notify Admins on New Contract (Pending Approval)
+exports.sendNotificationToAdminsOnNewContract = onDocumentCreated("contracts/{contractId}",
+    async (event) => {
+      const snap = event.data;
+      if (!snap) return null;
+
+      const contractData = snap.data();
+      const planName = contractData.planName || "باقة غير محددة";
+
+      const payload = {
+        notification: {
+          title: "طلب تعاقد جديد! 📄",
+          body: `هناك طلب اشتراك في (${planName}) ينتظر موافقتك.`,
+        },
+        data: {
+          click_action: "FLUTTER_NOTIFICATION_CLICK",
+          type: "new_contract_admin",
+          contractId: event.params.contractId,
+        },
+      };
+
+      try {
+        await admin.messaging().send({...payload, topic: "admins"});
+        console.log(`Admin alert sent for contract: ${event.params.contractId}`);
+      } catch (error) {
+        console.error("Error sending contract alert:", error);
       }
       return null;
     });
@@ -128,7 +215,7 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated("orders/{orderId
           .doc(targetUserId).get();
       if (!tokenDoc.exists) return null;
 
-      const fcmToken = tokenDoc.data().fcmToken;
+      const fcmToken = tokenDoc.data()?.fcmToken || tokenDoc.data()?.token;
       if (!fcmToken) return null;
 
       const payload = {
@@ -387,11 +474,12 @@ exports.processNotificationTriggers = onDocumentCreated("notification_triggers/{
 
       if (toUid === "ADMIN_BROADCAST") {
         const adminTokensSnap = await admin.firestore().collection("fcm_tokens").where("role", "==", "admin").get();
-        targetTokens = adminTokensSnap.docs.map((doc) => doc.data().fcmToken).filter((t) => !!t);
+        targetTokens = adminTokensSnap.docs.map((doc) => doc.data()?.fcmToken || doc.data()?.token).filter((t) => !!t);
       } else if (toUid) {
         const tokenDoc = await admin.firestore().collection("fcm_tokens").doc(toUid).get();
-        if (tokenDoc.exists && tokenDoc.data().fcmToken) {
-          targetTokens = [tokenDoc.data().fcmToken];
+        if (tokenDoc.exists) {
+          const t = tokenDoc.data()?.fcmToken || tokenDoc.data()?.token;
+          if (t) targetTokens = [t];
         }
       }
 

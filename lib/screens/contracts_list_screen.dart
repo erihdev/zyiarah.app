@@ -123,16 +123,16 @@ class ZyiarahContractsListScreen extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              color: statusColor.withValues(alpha: 0.05),
+              color: statusColor.withValues(alpha: 0.1),
               child: Row(
                 children: [
-                  Icon(statusIcon, size: 16, color: statusColor),
+                  Icon(statusIcon, size: 18, color: statusColor),
                   const SizedBox(width: 8),
-                  Text(statusText, style: GoogleFonts.tajawal(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(statusText, style: GoogleFonts.tajawal(color: statusColor, fontSize: 13, fontWeight: FontWeight.bold)),
                   const Spacer(),
                   Text(
                     intl.DateFormat('yyyy/MM/dd').format(createdAt),
-                    style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 11),
+                    style: GoogleFonts.tajawal(color: Colors.grey.shade600, fontSize: 12),
                   ),
                 ],
               ),
@@ -145,12 +145,12 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: brandPurple.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        child: Icon(Icons.description_outlined, color: brandPurple, size: 24),
+                        child: Icon(Icons.assignment_turned_in_outlined, color: brandPurple, size: 28),
                       ),
                       const SizedBox(width: 15),
                       Expanded(
@@ -158,9 +158,9 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(planName, 
-                              style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16, color: const Color(0xFF0F172A))),
-                            Text('رقم العقد: #${data['contractId'] ?? contractDocId.substring(0, 8).toUpperCase()}', 
-                              style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey)),
+                              style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF1E293B))),
+                            Text('رقم المرجعي: #${(data['contractId'] ?? contractDocId).toString().toUpperCase().substring(0, 8)}', 
+                              style: GoogleFonts.tajawal(fontSize: 12, color: Colors.blueGrey)),
                           ],
                         ),
                       ),
@@ -169,17 +169,17 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      _buildQuickInfo(Icons.event_available, 'الزيارات', '${data['planVisits'] ?? 0} زيارة'),
-                      const SizedBox(width: 20),
-                      _buildQuickInfo(Icons.sell_outlined, 'القيمة', '${data['planPrice'] ?? 0} ر.س'),
+                      _buildQuickInfo(Icons.calendar_today_outlined, 'الزيارات المتبقية', '${data['planVisits'] ?? 0} زيارة'),
+                      const SizedBox(width: 25),
+                      _buildQuickInfo(Icons.payments_outlined, 'قيمة التعاقد', '${data['planPrice'] ?? 0} ر.س'),
                     ],
                   ),
-                  const Divider(height: 30),
+                  const Divider(height: 35),
                   Row(
                     children: [
                       if (status == 'approved_waiting_payment')
                         Expanded(
-                          child: ElevatedButton(
+                          child: ElevatedButton.icon(
                             onPressed: () {
                               Navigator.push(context, MaterialPageRoute(
                                 builder: (_) => PaymentSummaryScreen(
@@ -190,43 +190,49 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                                 )
                               ));
                             },
+                            icon: const Icon(Icons.payment_rounded, size: 18),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF2563EB),
                               foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              elevation: 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              elevation: 2,
                             ),
-                            child: Text('دفع وتفعيل', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                            label: Text('دفع وتفعيل العقد', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
                           ),
                         )
-                      else if (status == 'active' || status == 'completed' || status == 'pending')
+                      else
                          Expanded(
                           child: OutlinedButton.icon(
                             onPressed: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('جاري تجهيز نسخة العقد...'))
+                              );
                               ZyiarahContractPdfService.generateAndDownloadContract(
                                 contractId: data['contractId'] ?? contractDocId.substring(0, 8),
                                 planName: planName,
-                                userName: data['userName'] ?? 'عميل زيارة',
-                                userPhone: data['userPhone'] ?? '000000000',
+                                userName: data['userName'] ?? data['clientName'] ?? 'عميل زيارة',
+                                userPhone: data['userPhone'] ?? data['clientPhone'] ?? '000000000',
                                 price: (data['planPrice'] ?? 0.0).toDouble(),
                                 visits: (data['planVisits'] ?? 0).toInt(),
                                 startDate: createdAt,
                               );
                             },
                             icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                            label: Text('تحميل العقد (PDF)', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                            label: Text('تحميل العقد', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: brandPurple,
-                              side: BorderSide(color: brandPurple.withValues(alpha: 0.3)),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              side: BorderSide(color: brandPurple.withValues(alpha: 0.5), width: 1.5),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                           ),
                         ),
                       const SizedBox(width: 10),
-                      TextButton(
+                      IconButton(
                         onPressed: () => _viewContractDetails(context, data),
-                        child: Text(status == 'approved_waiting_payment' ? 'عرض البنود' : 'مشاهدة التفاصيل', 
-                          style: GoogleFonts.tajawal(color: Colors.grey.shade600, fontSize: 13)),
+                        icon: const Icon(Icons.info_outline_rounded, color: Colors.grey),
+                        tooltip: 'التفاصيل',
                       ),
                     ],
                   )

@@ -173,5 +173,9 @@ service cloud.firestore {
     match /scheduled_notifications/{notifId} {
       allow read, write: if isAdmin();
     }
+    match /notifications/{notifId} {
+      allow read: if isLoggedIn() && (request.auth.uid == resource.data.userId || isAdmin());
+      allow write: if isAdmin();
+    }
   }
 }

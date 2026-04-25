@@ -1,36 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:zyiarah/services/notification_trigger_service.dart';
-import 'package:zyiarah/services/audit_service.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:url_launcher/url_launcher.dart';
 
-class AdminContractsScreen extends StatelessWidget {
+class AdminContractsScreen extends StatefulWidget {
   const AdminContractsScreen({super.key});
+
+  @override
+  State<AdminContractsScreen> createState() => _AdminContractsScreenState();
+}
+
+class _AdminContractsScreenState extends State<AdminContractsScreen> {
+  final Color primaryNavy = const Color(0xFF1E293B);
+  final Color brandBlue = const Color(0xFF2563EB);
 
   @override
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
-          title: Text("العقود الإلكترونية", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF1E293B),
+          title: Text("العقود الإلكترونية", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 20)),
+          backgroundColor: primaryNavy,
           foregroundColor: Colors.white,
+          elevation: 0,
+          centerTitle: true,
         ),
         body: StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance.collection('contracts').orderBy('createdAt', descending: true).snapshots(),
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("لا توجد عقود حتى الآن"));
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+              return _buildEmptyState();
+            }
 
             return ListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: snapshot.data!.docs.length,
               itemBuilder: (context, index) {
-                final contract = snapshot.data!.docs[index].data() as Map<String, dynamic>;
-                final contractId = snapshot.data!.docs[index].id;
-                return _buildContractCard(context, contract, contractId);
+                final doc = snapshot.data!.docs[index];
+                return _buildContractCard(doc);
               },
             );
           },
@@ -39,281 +53,281 @@ class AdminContractsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildContractCard(BuildContext context, Map<String, dynamic> data, String id) {
-    final status = data['status'] ?? 'pending';
-    final createdAt = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
-    final clientName = data['clientName'] ?? data['userName'] ?? 'عميل غير معروف';
-    final planName = data['planName'] ?? 'باقة اشتراك';
+  Widget _buildContractCard(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final String planName = data['planName'] ?? 'باقة اشتراك';
+    final String clientName = data['userName'] ?? data['clientName'] ?? 'عميل زيارة';
+    final String status = data['status'] ?? 'pending';
+    final DateTime createdAt = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+    final String contractId = doc.id.substring(0, 8).toUpperCase();
 
-    Color statusColor = Colors.orange;
-    String statusText = "بانتظار المراجعة";
-    if (status == 'active') {
-      statusColor = Colors.green;
-      statusText = "نشط";
-    } else if (status == 'approved_waiting_payment') {
-      statusColor = Colors.blue;
-      statusText = "بانتظار الدفع";
-    } else if (status == 'rejected') {
-      statusColor = Colors.red;
-      statusText = "مرفوض";
-    }
-
-    return Card(
-      elevation: 0,
+    return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: Colors.grey.shade200),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.slate.shade100, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: InkWell(
-        onTap: () => _showContractDetails(context, data, id),
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.description_rounded, color: statusColor, size: 24),
+      child: Column(
+        children: [
+          // Header Section
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: brandBlue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(clientName, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text(planName, style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey)),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(statusText, style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-              const Divider(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "التاريخ: ${intl.DateFormat('yyyy/MM/dd').format(createdAt)}",
-                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                  ),
-                  Row(
+                  child: Icon(Icons.description_rounded, color: brandBlue, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (status == 'pending')
-                        TextButton(
-                          onPressed: () => _showContractDetails(context, data, id),
-                          child: Text("مراجعة واعتماد", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.blue)),
-                        )
-                      else
-                        TextButton(
-                          onPressed: () => _showContractDetails(context, data, id),
-                          child: Text("عرض التفاصيل", style: GoogleFonts.tajawal(color: Colors.grey)),
-                        ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                        onPressed: () => _deleteContract(context, id),
+                      Text(
+                        planName,
+                        style: GoogleFonts.tajawal(fontWeight: FontWeight.black, fontSize: 16, color: primaryNavy),
+                      ),
+                      Text(
+                        "رقم العقد: #$contractId",
+                        style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
-                ],
-              ),
-            ],
+                ),
+                _buildStatusBadge(status),
+              ],
+            ),
           ),
-        ),
+          
+          const Divider(height: 1, indent: 16, endIndent: 16),
+
+          // Details Section
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                _buildInfoBit("العميل", clientName, Icons.person_outline),
+                _buildInfoBit("تاريخ التوقيع", intl.DateFormat('dd-MM-yyyy').format(createdAt), Icons.calendar_today_outlined),
+              ],
+            ),
+          ),
+
+          // Actions
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Row(
+              children: [
+                if (status == 'pending')
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _approveContract(doc.id, planName),
+                      icon: const Icon(Icons.check_circle_outline, size: 18),
+                      label: Text("اعتماد العقد", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green[600],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangle.circular(14),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: 8),
+                IconButton.filled(
+                  onPressed: () => _showDetails(data),
+                  icon: const Icon(Icons.info_outline_rounded),
+                  style: IconButton.styleFrom(backgroundColor: Colors.slate[50], foregroundColor: Colors.slate[600]),
+                ),
+                IconButton.filled(
+                  onPressed: () => _deleteContract(doc.id),
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  style: IconButton.styleFrom(backgroundColor: Colors.red[50], foregroundColor: Colors.red[600]),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  void _showContractDetails(BuildContext context, Map<String, dynamic> data, String id) {
+  Widget _buildInfoBit(String label, String value, IconData icon) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 12, color: Colors.grey),
+              const SizedBox(width: 4),
+              Text(label, style: GoogleFonts.tajawal(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: GoogleFonts.tajawal(fontSize: 13, fontWeight: FontWeight.bold, color: primaryNavy),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color color = Colors.grey;
+    String text = status;
+    IconData icon = Icons.help_outline;
+
+    switch (status) {
+      case 'active':
+        color = Colors.green;
+        text = "مفعل";
+        icon = Icons.verified_user_rounded;
+        break;
+      case 'approved_waiting_payment':
+        color = Colors.blue;
+        text = "بانتظار الدفع";
+        icon = Icons.payments_rounded;
+        break;
+      case 'pending':
+        color = Colors.orange;
+        text = "قيد المراجعة";
+        icon = Icons.timer_rounded;
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.1)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(text, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  void _approveContract(String id, String plan) async {
+    final confirm = await _showConfirm("اعتماد العقد", "هل أنت متأكد من اعتماد باقة ($plan)؟");
+    if (confirm) {
+      await FirebaseFirestore.instance.collection('contracts').doc(id).update({
+        'status': 'approved_waiting_payment',
+        'adminApprovedAt': FieldValue.serverTimestamp(),
+      });
+    }
+  }
+
+  void _deleteContract(String id) async {
+    final confirm = await _showConfirm("حذف العقد", "سيتم حذف هذا السجل نهائياً. هل أنت متأكد؟");
+    if (confirm) {
+      await FirebaseFirestore.instance.collection('contracts').doc(id).delete();
+    }
+  }
+
+  void _showDetails(Map<String, dynamic> data) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: Container(
-          height: MediaQuery.of(context).size.height * 0.9,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 12),
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
-              const SizedBox(height: 20),
-              Text("مراجعة العقد", style: GoogleFonts.tajawal(fontSize: 20, fontWeight: FontWeight.bold)),
-              const Divider(),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildInfoSection("بيانات العميل:", [
-                        "الاسم: ${data['clientName'] ?? data['userName'] ?? 'غير معروف'}",
-                        "الجوال: ${data['userPhone'] ?? 'غير متوفر'}",
-                        "المعرف: ${data['userId'] ?? 'غير متوفر'}",
-                      ]),
-                      const SizedBox(height: 20),
-                      _buildInfoSection("تفاصيل الباقة:", [
-                        "اسم الباقة: ${data['planName']}",
-                        "السعر: ${data['planPrice']} ر.س",
-                        "الزيارات: ${data['planVisits']} زيارة",
-                      ]),
-                      const SizedBox(height: 30),
-                      Text("معاينة التوثيق:", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),
-                      const SizedBox(height: 10),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.grey[200]!),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(
-                              "أقر أنا الطرف الثاني بالموافقة على بنود العقد الإلكتروني الموضح أعلاه.",
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.tajawal(fontSize: 13, height: 1.6),
-                            ),
-                            const SizedBox(height: 20),
-                            if (data['hasSignature'] == true)
-                              Column(
-                                children: [
-                                  const Icon(Icons.gesture, color: Colors.blueGrey, size: 40),
-                                  Text("تم التوقيع إلكترونياً", style: GoogleFonts.tajawal(fontSize: 11, color: Colors.blueGrey)),
-                                ],
-                              ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 40),
-                    ],
-                  ),
-                ),
-              ),
-              if (data['status'] == 'pending')
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          icon: const Icon(Icons.check_circle),
-                          label: const Text("اعتماد وطلب دفع"),
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            _updateContractStatus(id, 'approved_waiting_payment', userId: data['userId'], planName: data['planName'], clientName: data['clientName'] ?? data['userName']);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          icon: const Icon(Icons.cancel),
-                          label: const Text("رفض العقد"),
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            _updateContractStatus(id, 'rejected', userId: data['userId'], planName: data['planName'], clientName: data['clientName'] ?? data['userName']);
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.red,
-                            side: const BorderSide(color: Colors.red),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
         ),
-      ),
-    );
-  }
-
-  Widget _buildInfoSection(String title, List<String> items) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF1E293B))),
-        const SizedBox(height: 8),
-        ...items.map((item) => Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: Text(item, style: GoogleFonts.tajawal(fontSize: 13, color: Colors.grey[700])),
-        )),
-      ],
-    );
-  }
-
-  Future<void> _updateContractStatus(String id, String status, {String? userId, String? planName, String? clientName}) async {
-    await FirebaseFirestore.instance.collection('contracts').doc(id).update({
-      'status': status,
-      'adminApprovedAt': status == 'approved_waiting_payment' ? FieldValue.serverTimestamp() : null,
-    });
-
-    ZyiarahAuditService().logAction(
-      action: status == 'approved_waiting_payment' ? 'APPROVE_CONTRACT' : 'REJECT_CONTRACT',
-      details: {
-        'contract_id': id,
-        'client': clientName ?? 'غير متوفر',
-        'plan': planName ?? 'غير متوفر',
-        'new_status': status,
-      },
-      targetId: id,
-    );
-
-    if (userId != null && status == 'approved_waiting_payment') {
-      await ZyiarahNotificationTriggerService().notifyContractApproved(userId, planName ?? 'باقة اشتراك');
-    }
-  }
-
-  Future<void> _deleteContract(BuildContext context, String id) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: Text('تأكيد الحذف', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          content: const Text('هل أنت متأكد من حذف هذا العقد نهائياً؟'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('حذف', style: TextStyle(color: Colors.white)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 24),
+            Text("تفاصيل العقد", style: GoogleFonts.tajawal(fontWeight: FontWeight.black, fontSize: 20)),
+            const Divider(height: 32),
+            _buildDetailRow("اسم العميل", data['userName'] ?? data['clientName'] ?? 'غير معروف'),
+            _buildDetailRow("الباقة", data['planName'] ?? 'باقة اشتراك'),
+            _buildDetailRow("السعر المحتسب", "${data['planPrice'] ?? 0} ر.س"),
+            _buildDetailRow("عدد الزيارات", "${data['planVisits'] ?? 0} زيارة"),
+            _buildDetailRow("رقم الهاتف", data['userPhone'] ?? 'غير مسجل'),
+            _buildDetailRow("معرف العميل", data['userId'] ?? 'غير متوفر'),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryNavy,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangle.circular(16),
+                ),
+                child: const Text("إغلاق", style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
             ),
+            const SizedBox(height: 16),
           ],
         ),
       ),
     );
-    if (confirm == true) {
-      await FirebaseFirestore.instance.collection('contracts').doc(id).delete();
-    }
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold)),
+          Text(value, style: GoogleFonts.tajawal(color: primaryNavy, fontSize: 14, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _showConfirm(String title, String body) async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+        content: Text(body, style: GoogleFonts.tajawal()),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("إلغاء")),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), style: ElevatedButton.styleFrom(backgroundColor: primaryNavy, foregroundColor: Colors.white), child: const Text("تأكيد")),
+        ],
+      ),
+    ) ?? false;
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.description_outlined, size: 80, color: Colors.grey[200]),
+          const SizedBox(height: 16),
+          Text("لا توجد عقود حالياً", style: GoogleFonts.tajawal(fontSize: 18, color: Colors.grey, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
   }
 }
