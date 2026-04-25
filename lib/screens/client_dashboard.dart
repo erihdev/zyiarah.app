@@ -21,6 +21,7 @@ import 'package:zyiarah/screens/sofa_rug_details_screen.dart';
 import 'package:zyiarah/screens/subscription_plans_screen.dart';
 import 'package:zyiarah/screens/maintenance_request_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
+import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/maintenance_listener_service.dart';
 import 'package:zyiarah/widgets/permission_sheet.dart';
 import 'package:zyiarah/widgets/support_fab.dart';
@@ -268,7 +269,17 @@ class _ClientDashboardState extends State<ClientDashboard> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen()));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => PaymentSummaryScreen(
+                          serviceName: serviceType,
+                          amount: price,
+                          maintenanceId: reqDoc.id,
+                          location: data['location'] is GeoPoint ? data['location'] : null,
+                        ),
+                      ),
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.orange,

@@ -188,6 +188,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             'paymentMethod': 'subscription',
             'paidAt': FieldValue.serverTimestamp(),
           });
+          // Notify Admin
+          await FirebaseFirestore.instance.collection('notification_triggers').add({
+            'type': 'new_maintenance_paid',
+            'title': 'تم دفع طلب صيانة! ✅',
+            'body': 'قام العميل ${_currentUser?.name} بدفع رسوم الصيانة عبر الباقة.',
+            'toUid': 'ADMIN_BROADCAST', // Broadcast to all admins
+            'createdAt': FieldValue.serverTimestamp(),
+            'processed': false,
+            'data': {'id': widget.maintenanceId},
+          });
         } else {
           await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
             'code': orderCode,
@@ -239,6 +249,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             'status': 'waiting_payment_cod',
             'paymentMethod': 'cod',
             'paidAt': FieldValue.serverTimestamp(),
+          });
+          // Notify Admin of COD choice
+          await FirebaseFirestore.instance.collection('notification_triggers').add({
+            'type': 'maintenance_cod_selected',
+            'title': 'طلب صيانة (دفع عند الاستلام) 💵',
+            'body': 'العميل ${_currentUser?.name} اختار الدفع عند الاستلام لطلب الصيانة.',
+            'toUid': 'ADMIN_BROADCAST',
+            'createdAt': FieldValue.serverTimestamp(),
+            'processed': false,
+            'data': {'id': widget.maintenanceId},
           });
         } else {
           await FirebaseFirestore.instance.collection('orders').doc(finalOrderId).set({
@@ -341,6 +361,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               'paymentMethod': _selectedPaymentMethod,
               'paidAt': FieldValue.serverTimestamp(),
               'totalAmount': totalWithVat,
+            });
+            // Notify Admin
+            await FirebaseFirestore.instance.collection('notification_triggers').add({
+              'type': 'maintenance_paid_card',
+              'title': 'دفع إلكتروني ناجح لصيانة! 💳',
+              'body': 'تم دفع مبلغ $totalWithVat ر.س لطلب صيانة العميل ${_currentUser?.name}.',
+              'toUid': 'ADMIN_BROADCAST',
+              'createdAt': FieldValue.serverTimestamp(),
+              'processed': false,
+              'data': {'id': widget.maintenanceId},
             });
           } else if (widget.contractId != null) {
             await FirebaseFirestore.instance.collection('contracts').doc(widget.contractId).update({
