@@ -133,7 +133,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
                 if (status == 'pending')
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () => _approveContract(doc.id, planName),
+                      onPressed: () => _approveContract(doc),
                       icon: const Icon(Icons.check_circle_outline, size: 18),
                       label: Text("اعتماد العقد", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
                       style: ElevatedButton.styleFrom(
@@ -229,13 +229,29 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
     );
   }
 
-  void _approveContract(String id, String plan) async {
-    final confirm = await _showConfirm("اعتماد العقد", "هل أنت متأكد من اعتماد باقة ($plan)؟");
+  void _approveContract(DocumentSnapshot doc) async {
+    final data = doc.data() as Map<String, dynamic>;
+    final confirm = await _showConfirm("اعتماد العقد", "هل أنت متأكد من اعتماد باقة (${data['planName']})؟");
     if (confirm) {
-      await FirebaseFirestore.instance.collection('contracts').doc(id).update({
+      await FirebaseFirestore.instance.collection('contracts').doc(doc.id).update({
         'status': 'approved_waiting_payment',
         'adminApprovedAt': FieldValue.serverTimestamp(),
       });
+
+      // --- SEND NOTIFICATION TO CLIENT ---
+      await FirebaseFirestore.instance.collection('notification_triggers').add({
+        'type': 'client_contract_approved',
+        'title': 'تم اعتماد عقدك! 🎉',
+        'body': 'عقدك لباقة (${data['planName']}) جاهز الآن. يرجى الدفع للتفعيل.',
+        'toUid': data['userId'], // Sends specifically to this client
+        'data': {
+          'type': 'contract_approved',
+          'contractId': doc.id,
+        },
+        'processed': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      // -----------------------------------
     }
   }
 

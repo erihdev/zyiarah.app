@@ -236,6 +236,9 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
       case 'ADMIN_LOGIN_FAILED': return "محاولة دخول فاشلة للمسؤول";
       case 'UPDATE_ORDER_STATUS': return "تحديث حالة الطلب";
       case 'ASSIGN_DRIVER': return "تعيين كادر للطلب";
+      case 'ACTIVATE_CONTRACT': return "تفعيل عقد واحتساب رصيد";
+      case 'CLIENT_SIGN_CONTRACT': return "توقيع عقد الكتروني جديد";
+      case 'APPROVE_CONTRACT': return "اعتماد عقد بانتظار الدفع";
       default: return action;
     }
   }
@@ -257,6 +260,10 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
       case 'status': return "الحالة";
       case 'staff_role': return "تخصص الإدارة";
       case 'admin_email': return "بريد المسؤول";
+      case 'contract_id': return "رقم العقد";
+      case 'plan': return "الباقة";
+      case 'visits': return "عدد الزيارات";
+      case 'client': return "اسم العميل";
       default: return key;
     }
   }
