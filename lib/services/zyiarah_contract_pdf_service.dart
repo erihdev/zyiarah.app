@@ -4,6 +4,9 @@ import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:arabic_reshaper/arabic_reshaper.dart';
+import 'dart:typed_data';
+import 'dart:convert';
+import 'package:flutter/services.dart' show rootBundle;
 
 class ZyiarahContractPdfService {
   static String _ar(String input) {
@@ -20,10 +23,18 @@ class ZyiarahContractPdfService {
     required double price,
     required int visits,
     required DateTime startDate,
+    String? signatureData, // Base64 signature image
   }) async {
     final pdf = pw.Document();
     final arabicFont = await PdfGoogleFonts.tajawalRegular();
     final arabicFontBold = await PdfGoogleFonts.tajawalBold();
+
+    // Load Logo asset
+    Uint8List? logoBytes;
+    try {
+      final ByteData data = await rootBundle.load('assets/logo.png');
+      logoBytes = data.buffer.asUint8List();
+    } catch (_) {}
 
     pdf.addPage(
       pw.Page(
@@ -36,17 +47,14 @@ class ZyiarahContractPdfService {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              // Header
+              // Header with logo
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text('Electronic Service Contract', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.purple800)),
-                      pw.Text(_ar('عقد تقديم خدمات إلكتروني'), textDirection: pw.TextDirection.rtl, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.purple800)),
-                    ],
-                  ),
+                  if (logoBytes != null)
+                    pw.Image(pw.MemoryImage(logoBytes), width: 80)
+                  else
+                    pw.SizedBox(width: 80),
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
@@ -56,6 +64,8 @@ class ZyiarahContractPdfService {
                   ),
                 ],
               ),
+              pw.SizedBox(height: 10),
+              pw.Center(child: pw.Text(_ar('عقد تقديم خدمات إلكتروني'), textDirection: pw.TextDirection.rtl, style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: PdfColors.purple800))),
               pw.SizedBox(height: 20),
               pw.Divider(color: PdfColors.purple),
               pw.SizedBox(height: 20),
@@ -119,18 +129,42 @@ class ZyiarahContractPdfService {
 
               pw.Spacer(),
               
+              // Signature Area
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    children: [
+                      pw.Text(_ar('ختم المنصة'), textDirection: pw.TextDirection.rtl, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                      pw.SizedBox(height: 5),
+                      if (logoBytes != null)
+                        pw.Opacity(opacity: 0.5, child: pw.Image(pw.MemoryImage(logoBytes), width: 60)),
+                    ],
+                  ),
+                  pw.Column(
+                    children: [
+                      pw.Text(_ar('توقيع العميل (الطرف الثاني)'), textDirection: pw.TextDirection.rtl, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                      pw.SizedBox(height: 5),
+                      if (signatureData != null)
+                        pw.Image(pw.MemoryImage(base64Decode(signatureData)), width: 100),
+                    ],
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 20),
+              
               // Footer / Security
               pw.Center(
                 child: pw.Column(
                   children: [
                     pw.Text(_ar('هذا مستند إلكتروني آلي - لا يتطلب توقيع فعلي'), textDirection: pw.TextDirection.rtl, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                    pw.Text('This is an automated electronic document - No physical signature required', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                    pw.Text('This is an automated electronic document - Trusted by Zyiarah Platform', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
                     pw.SizedBox(height: 10),
                     pw.BarcodeWidget(
                       barcode: pw.Barcode.qrCode(),
                       data: 'Zyiarah-Contract-$contractId-$userName',
-                      width: 60,
-                      height: 60,
+                      width: 50,
+                      height: 50,
                     ),
                   ],
                 ),

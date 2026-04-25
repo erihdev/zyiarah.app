@@ -4,6 +4,7 @@ import 'package:signature/signature.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart' as intl;
+import 'dart:convert';
 import 'package:zyiarah/services/audit_service.dart';
 
 class ZyiarahContractSigningScreen extends StatefulWidget {
@@ -68,8 +69,12 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
     try {
       final user = auth.currentUser;
       
-      // In a real scenario, we would upload the signature image to Firebase Storage
-      // and save the URL. For this version, we save the metadata and a flag.
+      // Capture signature as bytes and convert to Base64
+      final signatureBytes = await _controller.toPngBytes();
+      String? signatureBase64;
+      if (signatureBytes != null) {
+        signatureBase64 = base64Encode(signatureBytes);
+      }
       
       final contractId = 'CTR-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
 
@@ -91,6 +96,7 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
         'createdAt': FieldValue.serverTimestamp(),
         'signedAt': FieldValue.serverTimestamp(),
         'hasSignature': true,
+        'signatureData': signatureBase64, // The actual image data
       });
 
       // تسجيل في سجل التدقيق (اختياري للعملاء كإجراء أمان)

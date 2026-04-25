@@ -285,6 +285,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
                         price: (data['planPrice'] ?? 0).toDouble(),
                         visits: data['planVisits'] ?? 0,
                         startDate: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+                        signatureData: data['signatureData'], // Passing the actual signature data
                       );
                     } catch (e) {
                       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل إنشاء الملف: $e')));
