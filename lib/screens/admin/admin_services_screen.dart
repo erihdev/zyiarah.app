@@ -273,7 +273,7 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
                   // Intelligence Metrics Row
                   Row(
                     children: [
-                      _buildIntelligenceMetric(Icons.trending_up, ordersCount, Colors.emerald),
+                      _buildIntelligenceMetric(Icons.trending_up, ordersCount, const Color(0xFF10B981)),
                       const SizedBox(width: 12),
                       _buildIntelligenceMetric(Icons.star_rounded, rating, Colors.amber),
                       const Spacer(),
