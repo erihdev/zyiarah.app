@@ -161,7 +161,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
                 _buildLivePulseSection(),
                 const SizedBox(height: 15),
                 _buildReputationSentinel(),
-                const SizedBox(height: 25),
+                const Spacer(),
                 _buildSectionTitle("نظرة سريعة"),
                 const SizedBox(height: 15),
                 _buildQuickStats(stats),
@@ -197,7 +197,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
                 ),
                 const SizedBox(height: 20),
                 _buildRecentActivityList(_orders, _maintenance),
-                const SizedBox(height: 25),
+                const Spacer(),
                 _buildSystemHealthSection(_drivers),
                 const SizedBox(height: 40),
               ],
@@ -347,7 +347,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
         children: [
           Text(title, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),
           Text(subtitle, style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey)),
-          const SizedBox(height: 25),
+          const Spacer(),
           Expanded(child: child),
         ],
       ),
@@ -567,41 +567,43 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
           ],
         ),
         const SizedBox(height: 15),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          child: Row(
-            children: [
-              _buildLuxuryRequestCard(
-                title: "صيانة المكيفات",
-                count: maintenanceNew,
-                icon: Icons.handyman_rounded,
-                gradient: const [Color(0xFF0F172A), Color(0xFF334155)], // Slate/Dark Blue
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminMaintenanceScreen())),
-              ),
-              _buildLuxuryRequestCard(
-                title: "خدمات بالساعة",
-                count: cleaningNew,
-                icon: Icons.cleaning_services_rounded,
-                gradient: const [Color(0xFF1E293B), Color(0xFF475569)], // Gray/Slate
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminOrdersScreen())),
-              ),
-              _buildLuxuryRequestCard(
-                title: "طلبات المتجر",
-                count: storeNew,
-                icon: Icons.shopping_basket_rounded,
-                gradient: const [Color(0xFF1E1B4B), Color(0xFF312E81)], // Deep Indigo
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminStoreOrdersScreen())),
-              ),
-              _buildLuxuryRequestCard(
-                title: "عقود تنفيذية",
-                count: 0, 
-                icon: Icons.history_edu_rounded,
-                gradient: const [Color(0xFF581C87), Color(0xFF701A75)], // Purple/Fuchsia
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminContractsScreen())),
-              ),
-            ],
-          ),
+        GridView.count(
+          crossAxisCount: MediaQuery.of(context).size.width > 600 ? 4 : 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: MediaQuery.of(context).size.width > 600 ? 1.3 : 1.15,
+          children: [
+            _buildLuxuryRequestCard(
+              title: "صيانة المكيفات",
+              count: maintenanceNew,
+              icon: Icons.handyman_rounded,
+              gradient: const [Color(0xFF0F172A), Color(0xFF334155)], // Slate/Dark Blue
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminMaintenanceScreen())),
+            ),
+            _buildLuxuryRequestCard(
+              title: "خدمات بالساعة",
+              count: cleaningNew,
+              icon: Icons.cleaning_services_rounded,
+              gradient: const [Color(0xFF1E293B), Color(0xFF475569)], // Gray/Slate
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminOrdersScreen())),
+            ),
+            _buildLuxuryRequestCard(
+              title: "طلبات المتجر",
+              count: storeNew,
+              icon: Icons.shopping_basket_rounded,
+              gradient: const [Color(0xFF1E1B4B), Color(0xFF312E81)], // Deep Indigo
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminStoreOrdersScreen())),
+            ),
+            _buildLuxuryRequestCard(
+              title: "عقود تنفيذية",
+              count: 0, 
+              icon: Icons.history_edu_rounded,
+              gradient: const [Color(0xFF581C87), Color(0xFF701A75)], // Purple/Fuchsia
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminContractsScreen())),
+            ),
+          ],
         ),
       ],
     );
@@ -617,9 +619,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 165,
-        margin: const EdgeInsets.only(left: 15, bottom: 10),
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: gradient,
@@ -664,7 +664,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
                   ),
               ],
             ),
-            const SizedBox(height: 25),
+            const Spacer(),
             Text(
               title,
               style: GoogleFonts.tajawal(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
