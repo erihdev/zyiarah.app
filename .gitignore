@@ -73,3 +73,7 @@ zyiarah_backend/serviceAccountKey.json
 # Distribution
 testers.txt
 .env.automation
+
+# Secrets & private keys
+AuthKey_*.p8
+.claude/
