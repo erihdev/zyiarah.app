@@ -196,11 +196,61 @@ class ZyiarahOrderService {
     });
   }
 
-  // خصم زيارة من الاشتراك
-  Future<void> _deductSubscriptionVisit(String userId) async {
-    await _db.collection('users').doc(userId).update({
-      'visits_remaining': FieldValue.increment(-1),
+  // إلغاء الطلب — يسمح فقط للطلبات في حالة pending أو accepted
+  Future<void> cancelOrder(String orderId, {String cancelledBy = 'client'}) async {
+    String? orderCode;
+    bool needsRefund = false;
+
+    await _db.runTransaction((transaction) async {
+      final orderRef = _db.collection('orders').doc(orderId);
+      final orderSnap = await transaction.get(orderRef);
+
+      if (!orderSnap.exists) throw Exception("الطلب غير موجود");
+
+      final orderData = orderSnap.data() as Map<String, dynamic>;
+      final currentStatus = orderData['status'] as String?;
+
+      if (currentStatus == 'completed' || currentStatus == 'cancelled') {
+        throw Exception("لا يمكن إلغاء طلب مكتمل أو ملغي بالفعل");
+      }
+      if (currentStatus == 'in_progress') {
+        throw Exception("لا يمكن إلغاء طلب قيد التنفيذ — تواصل مع الدعم");
+      }
+
+      orderCode = orderData['code'] as String?;
+      needsRefund = orderData['is_paid'] == true;
+      final driverId = orderData['driver_id'] as String?;
+
+      transaction.update(orderRef, {
+        'status': 'cancelled',
+        'cancelled_at': FieldValue.serverTimestamp(),
+        'cancelled_by': cancelledBy,
+        'needs_refund': needsRefund,
+      });
+
+      if (driverId != null) {
+        final driverRef = _db.collection('drivers').doc(driverId);
+        transaction.update(driverRef, {
+          'status': 'available',
+          'current_order_id': null,
+          'is_available': true,
+        });
+      }
     });
+
+    ZyiarahAuditService().logAction(
+      action: 'CANCEL_ORDER',
+      details: {'code': orderCode, 'by': cancelledBy, 'needs_refund': needsRefund},
+      targetId: orderId,
+    );
+
+    await ZyiarahNotificationTriggerService().triggerNotification(
+      toUid: 'ADMIN_BROADCAST',
+      title: "تم إلغاء طلب ⚠️",
+      body: "تم إلغاء الطلب #${orderCode ?? orderId} بواسطة ${cancelledBy == 'client' ? 'العميل' : 'الإدارة'}.",
+      type: 'admin_order_alert',
+      data: {'orderId': orderId, 'code': orderCode ?? orderId, 'needs_refund': needsRefund},
+    );
   }
 
   // تحديث حالة الطلب باستخدام Transaction لضمان سلامة البيانات ومنع التعارض

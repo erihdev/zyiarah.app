@@ -12,7 +12,7 @@ interface PromoCode {
     maxUses: number;
     status: 'active' | 'expired';
     expiry: string;
-    createdAt?: any;
+    createdAt?: { toDate: () => Date };
 }
 
 export default function Marketing() {

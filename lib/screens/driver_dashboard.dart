@@ -682,6 +682,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
     // 2. Specialized Flow for COD Completion
     if (status == 'completed' && paymentMethod == 'cod') {
+      if (!mounted) return;
       final confirmed = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
@@ -741,7 +742,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     
     // إرسال إشعار لحظي للعميل بالحالة الجديدة
     if (data['client_id'] != null) {
-      final driverName = "فريق زيارة";
+      const driverName = "فريق زيارة";
       final orderCode = data['code'] ?? id;
 
       await _notificationService.notifyClientOfDriverStatus(

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, ShieldCheck, MapPin, Phone, Star, ShieldAlert, X, Loader2 } from 'lucide-react';
-import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { Search, Filter, ShieldCheck, MapPin, Phone, Star, ShieldAlert, X, Loader2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { collection, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, query, orderBy, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 
 interface DriverData {
@@ -9,6 +9,7 @@ interface DriverData {
     phone: string;
     vehicle: string;
     is_available: boolean;
+    is_suspended?: boolean;
     rating: number;
     rides: number;
     wallet: number;
@@ -31,6 +32,7 @@ export default function Drivers() {
 
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isAdding, setIsAdding] = useState(false);
+    const [togglingId, setTogglingId] = useState<string | null>(null);
     const [newDriver, setNewDriver] = useState({ name: '', phone: '', vehicle: '' });
 
     useEffect(() => {
@@ -46,6 +48,7 @@ export default function Drivers() {
                     phone: data.phone || 'غير محدد',
                     vehicle: data.vehicle || 'غير محدد',
                     is_available: data.is_available || false,
+                    is_suspended: data.is_suspended || false,
                     rating: data.rating || 5.0,
                     rides: data.rides || 0,
                     wallet: data.wallet || 0,
@@ -80,6 +83,22 @@ export default function Drivers() {
             alert("حدث خطأ أثناء إضافة السائق.");
         } finally {
             setIsAdding(false);
+        }
+    };
+
+    const handleToggleSuspension = async (driver: DriverData) => {
+        setTogglingId(driver.id);
+        try {
+            const nowSuspended = !driver.is_suspended;
+            await updateDoc(doc(db, 'drivers', driver.id), {
+                is_suspended: nowSuspended,
+                is_available: nowSuspended ? false : driver.is_available,
+            });
+        } catch (err) {
+            console.error('Error toggling suspension:', err);
+            alert('حدث خطأ');
+        } finally {
+            setTogglingId(null);
         }
     };
 
@@ -165,7 +184,7 @@ export default function Drivers() {
                                         <span className="text-slate-400 text-xs font-bold font-mono">#{driver.id.substring(0, 6).toUpperCase()}</span>
                                     </div>
                                 </div>
-                                <StatusBadge is_available={driver.is_available} />
+                                <StatusBadge is_available={driver.is_available} is_suspended={driver.is_suspended} />
                             </div>
 
                             <div className="space-y-3 mb-6">
@@ -179,7 +198,7 @@ export default function Drivers() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-4">
+                            <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-4 mb-4">
                                 <div className="text-center">
                                     <span className="block text-xs font-bold text-slate-400 mb-1">التقييم</span>
                                     <div className="flex items-center justify-center gap-1 font-bold text-slate-700">
@@ -195,6 +214,23 @@ export default function Drivers() {
                                     <span className={`font-bold ${driver.wallet < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{driver.wallet} ر.س</span>
                                 </div>
                             </div>
+                            <button
+                                type="button"
+                                disabled={togglingId === driver.id}
+                                onClick={() => handleToggleSuspension(driver)}
+                                className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-bold transition-colors border ${
+                                    driver.is_suspended
+                                        ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                                        : 'border-rose-200 text-rose-600 hover:bg-rose-50'
+                                } disabled:opacity-50`}
+                            >
+                                {togglingId === driver.id
+                                    ? <Loader2 size={16} className="animate-spin" />
+                                    : driver.is_suspended
+                                        ? <><ToggleRight size={16} />رفع الإيقاف</>
+                                        : <><ToggleLeft size={16} />إيقاف الحساب</>
+                                }
+                            </button>
                         </div>
                     ))}
                 </div>

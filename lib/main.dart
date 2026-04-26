@@ -13,7 +13,6 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:zyiarah/screens/client_dashboard.dart';
 import 'package:zyiarah/screens/driver_dashboard.dart';
 import 'package:zyiarah/screens/admin/admin_dashboard_screen.dart';
-import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/services/deep_link_service.dart';
 import 'package:zyiarah/router.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';

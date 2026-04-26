@@ -8,6 +8,7 @@ import 'package:zyiarah/screens/order_tracking_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/widgets/shimmer_loading.dart';
 import 'package:zyiarah/utils/status_util.dart';
+import 'package:zyiarah/services/order_service.dart';
 
 class OrdersListScreen extends StatefulWidget {
   const OrdersListScreen({super.key});
@@ -442,6 +443,54 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     );
   }
 
+  Future<void> _confirmCancelOrder(BuildContext context, String docId, String? code) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text('إلغاء الطلب', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+          content: Text(
+            'هل أنت متأكد من إلغاء الطلب #${code ?? docId}؟\nلا يمكن التراجع عن هذا الإجراء.',
+            style: GoogleFonts.tajawal(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('تراجع', style: GoogleFonts.tajawal()),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+              child: Text('نعم، إلغاء الطلب', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ZyiarahOrderService().cancelOrder(docId, cancelledBy: 'client');
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('تم إلغاء الطلب بنجاح', style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('خطأ: ${e.toString().replaceAll("Exception: ", "")}', style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   Widget _buildOrderCard(BuildContext context, Map<String, dynamic> order, String docId) {
     final status = order['status'] ?? 'pending';
     final createdAt = (order['created_at'] as Timestamp?)?.toDate() ?? DateTime.now();
@@ -514,7 +563,19 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                   label: Text('أعد الطلب', style: GoogleFonts.tajawal(fontSize: 12)),
                   style: TextButton.styleFrom(foregroundColor: const Color(0xFF5D1B5E)),
                 )
-              else if (status != 'pending')
+              else if (status == 'pending')
+                OutlinedButton.icon(
+                  onPressed: () => _confirmCancelOrder(context, docId, order['code']),
+                  icon: const Icon(Icons.cancel_outlined, size: 16),
+                  label: Text('إلغاء', style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                )
+              else
                 ElevatedButton.icon(
                   onPressed: () {
                     if (order['driver_id'] != null && order['location'] != null) {
@@ -526,14 +587,12 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                   icon: const Icon(Icons.map_outlined, size: 16),
                   label: Text('تتبع السائق', style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
-      backgroundColor: const Color(0xFF5D1B5E),
+                    backgroundColor: const Color(0xFF5D1B5E),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                )
-              else
-                 const Icon(Icons.chevron_left, color: Colors.grey, size: 18),
+                ),
             ],
           ),
         ],

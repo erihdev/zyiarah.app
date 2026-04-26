@@ -31,10 +31,8 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
   List<DocumentSnapshot> _users = [];
   List<DocumentSnapshot> _drivers = [];
   List<DocumentSnapshot> _storeOrders = [];
-  List<DocumentSnapshot> _auditLogs = [];
   StreamSubscription? _driversSub;
   StreamSubscription? _storeOrdersSub;
-  StreamSubscription? _auditSub;
   bool _isLoading = true;
 
   @override
@@ -50,7 +48,6 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     _usersSub?.cancel();
     _driversSub?.cancel();
     _storeOrdersSub?.cancel();
-    _auditSub?.cancel();
     super.dispose();
   }
 
@@ -77,9 +74,6 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       if (mounted) setState(() { _storeOrders = snap.docs; _isLoading = false; });
     });
 
-    _auditSub = db.collection('audit_logs').orderBy('timestamp', descending: true).limit(10).snapshots().listen((snap) {
-      if (mounted) setState(() { _auditLogs = snap.docs; });
-    });
   }
 
   void _exportDataToCSV() {
@@ -833,11 +827,4 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     );
   }
 
-  Map<String, dynamic> _getPulseInfo(String action) {
-     return {
-      'title': action,
-      'icon': Icons.bolt,
-      'color': Colors.blue
-     };
-  }
 }

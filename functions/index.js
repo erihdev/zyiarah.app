@@ -1,9 +1,13 @@
 /* eslint-disable max-len */
 const {onDocumentCreated, onDocumentUpdated} = require("firebase-functions/v2/firestore");
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
+const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
 admin.initializeApp();
-// const functions = require("firebase-functions");
+
+// Secrets — stored in Firebase Secret Manager, never in source code
+const tamaraApiToken = defineSecret("TAMARA_API_TOKEN");
+const resendApiKeySecret = defineSecret("RESEND_API_KEY");
 
 // 1. Notify user when admin replies to a support ticket
 exports.sendNotificationOnTicketReply = onDocumentCreated("support_tickets/{ticketId}/messages/{messageId}",
@@ -250,6 +254,84 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated("orders/{orderId
       return null;
     });
 
+// 2.5 Notify all available drivers when a new pending order is created
+exports.notifyAvailableDriversOnNewOrder = onDocumentCreated("orders/{orderId}",
+    async (event) => {
+      const snap = event.data;
+      if (!snap) return null;
+
+      const orderData = snap.data();
+      if (orderData.status !== "pending") return null;
+
+      const displayCode = orderData.code || event.params.orderId.substring(0, 6);
+      const serviceType = orderData.service_type || "خدمة";
+      const zoneName = orderData.zone_name || "";
+
+      const payload = {
+        notification: {
+          title: "طلب جديد متاح 🚀",
+          body: `طلب ${serviceType} جديد${zoneName ? " في " + zoneName : ""}. رقم #${displayCode} — اضغط للقبول.`,
+        },
+        data: {
+          click_action: "FLUTTER_NOTIFICATION_CLICK",
+          type: "new_order_driver",
+          orderId: event.params.orderId,
+          code: displayCode,
+        },
+      };
+
+      try {
+        await admin.messaging().send({...payload, topic: "drivers"});
+        console.log(`Available drivers notified for order: ${displayCode}`);
+      } catch (error) {
+        console.error("Error notifying drivers:", error);
+      }
+      return null;
+    });
+
+// 2.6 Notify client when their order is cancelled by admin
+exports.notifyClientOnOrderCancellation = onDocumentUpdated("orders/{orderId}",
+    async (event) => {
+      const change = event.data;
+      if (!change) return null;
+
+      const before = change.before.data();
+      const after = change.after.data();
+
+      if (before.status === after.status || after.status !== "cancelled") return null;
+      if (after.cancelled_by === "client") return null; // Client already knows
+
+      const clientId = after.client_id;
+      if (!clientId) return null;
+
+      const tokenDoc = await admin.firestore().collection("fcm_tokens").doc(clientId).get();
+      if (!tokenDoc.exists) return null;
+
+      const fcmToken = tokenDoc.data()?.fcmToken || tokenDoc.data()?.token;
+      if (!fcmToken) return null;
+
+      const displayCode = after.code || event.params.orderId.substring(0, 6);
+
+      try {
+        await admin.messaging().send({
+          notification: {
+            title: "تم إلغاء طلبك ⚠️",
+            body: `تم إلغاء الطلب #${displayCode} من قبل الإدارة. تواصل معنا لمزيد من التفاصيل.`,
+          },
+          data: {
+            click_action: "FLUTTER_NOTIFICATION_CLICK",
+            type: "order_cancelled",
+            orderId: event.params.orderId,
+          },
+          token: fcmToken,
+        });
+        console.log(`Cancellation notification sent to client ${clientId}`);
+      } catch (error) {
+        console.error("Error sending cancellation notification:", error);
+      }
+      return null;
+    });
+
 // 3. Unified Global Notification Trigger
 exports.onNotificationCreated = onDocumentCreated("notifications_log/{id}",
     async (event) => {
@@ -330,9 +412,35 @@ exports.onNotificationCreated = onDocumentCreated("notifications_log/{id}",
       }
     });
 
-// 4. Callable function for direct sending
+// 4. Callable function for direct sending (admin only, validated)
 exports.manualSendNotification = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً");
+  }
+
   const {title, body, target = "all"} = request.data;
+
+  if (!title || typeof title !== "string" || title.trim().length === 0) {
+    throw new HttpsError("invalid-argument", "العنوان مطلوب");
+  }
+  if (!body || typeof body !== "string" || body.trim().length === 0) {
+    throw new HttpsError("invalid-argument", "نص الإشعار مطلوب");
+  }
+  const validTargets = ["all", "drivers", "clients", "admins"];
+  if (!validTargets.includes(target)) {
+    throw new HttpsError("invalid-argument", "هدف الإشعار غير صالح");
+  }
+
+  const userDoc = await admin.firestore()
+      .collection("users").doc(request.auth.uid).get();
+  const role = userDoc.exists ? userDoc.data()?.role : null;
+  const adminRoles = [
+    "super_admin", "admin", "orders_manager",
+    "accountant_admin", "marketing_admin",
+  ];
+  if (!adminRoles.includes(role)) {
+    throw new HttpsError("permission-denied", "غير مصرح بهذه العملية");
+  }
 
   const payload = {
     notification: {title, body},
@@ -340,16 +448,69 @@ exports.manualSendNotification = onCall(async (request) => {
   };
 
   try {
-    if (target === "all") {
-      await admin.messaging().send({...payload, topic: "all_users"});
-    } else {
-      await admin.messaging().send({...payload, topic: target});
-    }
-    return {success: true};
+    const topic = target === "all" ? "all_users" : target;
+    await admin.messaging().send({...payload, topic});
+    return {success: true, topic, sentAt: new Date().toISOString()};
   } catch (error) {
     throw new HttpsError("internal", error.message);
   }
 });
+
+// 4.5 Create Tamara checkout session (server-side — token never exposed to client)
+exports.createTamaraCheckout = onCall(
+    {secrets: ["TAMARA_API_TOKEN"]},
+    async (request) => {
+      if (!request.auth) {
+        throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً");
+      }
+
+      const {orderId, amount, customerPhone, customerName} = request.data;
+
+      if (!orderId || !amount || !customerPhone || !customerName) {
+        throw new HttpsError("invalid-argument", "بيانات الطلب ناقصة");
+      }
+      if (typeof amount !== "number" || amount <= 0) {
+        throw new HttpsError("invalid-argument", "المبلغ غير صالح");
+      }
+
+      const token = tamaraApiToken.value();
+      const phone = customerPhone.startsWith("+") ?
+        customerPhone : `+966${customerPhone}`;
+
+      try {
+        const response = await fetch("https://api.tamara.co/checkout", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            order_reference_id: orderId,
+            total_amount: {amount, currency: "SAR"},
+            consumer: {first_name: customerName, phone_number: phone},
+            merchant_url: {
+              success: "https://zyiarah.com/payment-success",
+              failure: "https://zyiarah.com/payment-failure",
+              cancel: "https://zyiarah.com/payment-cancel",
+            },
+            description: "خدمات منزلية - مؤسسة معاذ يحي محمد المالكي",
+          }),
+        });
+
+        if (response.status !== 201) {
+          const errText = await response.text();
+          console.error(`Tamara API error ${response.status}: ${errText}`);
+          throw new HttpsError(
+              "internal", "فشل إنشاء جلسة الدفع — تحقق من بيانات الطلب");
+        }
+
+        const data = await response.json();
+        return {checkoutUrl: data.checkout_url};
+      } catch (error) {
+        if (error instanceof HttpsError) throw error;
+        throw new HttpsError("internal", error.message);
+      }
+    });
 
 // 5. Tamara Webhook Handler (Security/Reliability Fix)
 exports.tamaraWebhook = onRequest(async (req, res) => {
@@ -374,165 +535,144 @@ exports.tamaraWebhook = onRequest(async (req, res) => {
   res.status(200).send("Webhook received");
 });
 
-const nodemailer = require("nodemailer");
-const { Resend } = require("resend");
+const {Resend} = require("resend");
 
-// 6. Unified Notification Trigger Processor (THE BEST: DIRECT MAIL + ATTACHMENTS + IN-APP SYNC)
-exports.processNotificationTriggers = onDocumentCreated("notification_triggers/{id}", async (event) => {
-  const snap = event.data;
-  if (!snap) return;
+// 6. Unified Notification Trigger Processor
+exports.processNotificationTriggers = onDocumentCreated(
+    {document: "notification_triggers/{id}", secrets: ["RESEND_API_KEY"]},
+    async (event) => {
+      const snap = event.data;
+      if (!snap) return;
 
-  const trigger = snap.data();
-  if (!trigger || trigger.processed === true) return;
+      const trigger = snap.data();
+      if (!trigger || trigger.processed === true) return;
 
-  const {toUid, title, body, type, template, data = {}, attachmentUrls = []} = trigger;
-  const recipientEmail = trigger.recipientEmail || data.customerEmail || "admin@zyiarah.com";
+      const {toUid, title, body, type, template, data = {}, attachmentUrls = []} = trigger;
+      const recipientEmail =
+        trigger.recipientEmail || data.customerEmail || "admin@zyiarah.com";
 
-  console.log(`Processing trigger ${event.params.id} via Advanced Communications Pipeline`);
+      console.log(`Processing trigger ${event.params.id}`);
 
-  try {
-    // ------------------------------------------------------------
-    // 1. Sync to In-App Notification History (Universal)
-    // ------------------------------------------------------------
-    if (toUid && toUid !== "ADMIN_BROADCAST") {
-      await admin.firestore().collection("notifications").add({
-        userId: toUid,
-        title: title,
-        body: body.replace(/<[^>]*>?/gm, ""), // Clean text for UI
-        type: type,
-        relatedId: data.orderId || data.code || event.params.id,
-        isRead: false,
-        sentAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    }
+      try {
+        // 1. Sync to In-App Notification History
+        if (toUid && toUid !== "ADMIN_BROADCAST") {
+          await admin.firestore().collection("notifications").add({
+            userId: toUid,
+            title: title,
+            body: body.replace(/<[^>]*>?/gm, ""),
+            type: type,
+            relatedId: data.orderId || data.code || event.params.id,
+            isRead: false,
+            sentAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
 
-    // ------------------------------------------------------------
-    // 2. Handle Email Logic (Resend / SMTP)
-    // ------------------------------------------------------------
-    if (type === "email" || type === "hybrid" || type === "admin_order_alert") {
-      console.log(`[EMAIL_WORKER] Starting email task for: ${recipientEmail} with type: ${type}`);
-      const configDoc = await admin.firestore().collection("system_configs").doc("email_settings").get();
-      if (!configDoc.exists) {
-        console.error("[EMAIL_WORKER] CRITICAL: system_configs/email_settings document is MISSING");
-        throw new Error("Email settings missing");
-      }
+        // 2. Email via Resend (key from Secret Manager)
+        if (type === "email" || type === "hybrid" || type === "admin_order_alert") {
+          const resendKey = resendApiKeySecret.value();
+          if (!resendKey) {
+            console.error("[EMAIL] RESEND_API_KEY secret is not set");
+            throw new Error("Email service not configured");
+          }
 
-      const {fromName, fromEmail, resendApiKey} = configDoc.data();
-      console.log(`[EMAIL_WORKER] Config loaded. From: ${fromEmail}, Key Present: ${!!resendApiKey}`);
-      
-      const fromString = `"${fromName || "Zyiarah | زيارة"}" <${fromEmail || "no-reply@zyiarah.com"}>`;
+          let fromName = "Zyiarah | زيارة";
+          let fromEmail = "no-reply@zyiarah.com";
+          const configDoc = await admin.firestore()
+              .collection("system_configs").doc("email_settings").get();
+          if (configDoc.exists) {
+            fromName = configDoc.data()?.fromName || fromName;
+            fromEmail = configDoc.data()?.fromEmail || fromEmail;
+          }
 
-      if (resendApiKey) {
-        const resend = new Resend(resendApiKey);
+          const fromString = `"${fromName}" <${fromEmail}>`;
+          const resend = new Resend(resendKey);
 
-        // 2a. Process Attachments
-        const attachments = [];
-        if (attachmentUrls && attachmentUrls.length > 0) {
-          console.log(`[EMAIL_WORKER] Processing ${attachmentUrls.length} attachments...`);
+          const attachments = [];
           for (const url of attachmentUrls) {
             try {
-              const response = await fetch(url);
-              if (response.ok) {
-                const arrayBuffer = await response.arrayBuffer();
+              const res = await fetch(url);
+              if (res.ok) {
+                const buf = await res.arrayBuffer();
                 const filename = url.split("/").pop().split("?")[0] || "invoice.pdf";
-                attachments.push({
-                  filename: filename,
-                  content: Buffer.from(arrayBuffer),
-                });
+                attachments.push({filename, content: Buffer.from(buf)});
               }
-            } catch (attError) {
-              console.error(`[EMAIL_WORKER] Attachment download failed for ${url}:`, attError);
+            } catch (attErr) {
+              console.error(`[EMAIL] Attachment failed for ${url}:`, attErr);
             }
+          }
+
+          const emailPayload = {
+            from: fromString,
+            to: recipientEmail,
+            subject: title,
+            attachments: attachments.length > 0 ? attachments : undefined,
+          };
+
+          if (template && template.id) {
+            emailPayload.template = {id: template.id, variables: template.variables || {}};
+          } else {
+            emailPayload.html = body;
+          }
+
+          const {data: resendData, error: resendError} = await resend.emails.send(emailPayload);
+          if (resendError) {
+            throw new Error(`Resend Error: ${resendError.message}`);
+          }
+          await snap.ref.update({
+            emailStatus: "sent",
+            messageId: resendData.id,
+            provider: "resend",
+            processedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          console.log(`[EMAIL] Sent. Message ID: ${resendData.id}`);
+        }
+
+        // 3. Push Notification via FCM
+        if (type !== "email") {
+          let targetTokens = [];
+          if (toUid === "ADMIN_BROADCAST") {
+            const snap2 = await admin.firestore()
+                .collection("fcm_tokens").where("role", "==", "admin").get();
+            targetTokens = snap2.docs
+                .map((d) => d.data()?.fcmToken || d.data()?.token)
+                .filter((t) => !!t);
+          } else if (toUid) {
+            const tokenDoc = await admin.firestore()
+                .collection("fcm_tokens").doc(toUid).get();
+            if (tokenDoc.exists) {
+              const t = tokenDoc.data()?.fcmToken || tokenDoc.data()?.token;
+              if (t) targetTokens = [t];
+            }
+          }
+
+          if (targetTokens.length > 0) {
+            const pushMsg = {
+              notification: {title, body: body.replace(/<[^>]*>?/gm, "")},
+              data: {...data, click_action: "FLUTTER_NOTIFICATION_CLICK"},
+            };
+            if (targetTokens.length === 1) {
+              await admin.messaging().send({...pushMsg, token: targetTokens[0]});
+            } else {
+              await admin.messaging().sendEachForMulticast({
+                tokens: targetTokens,
+                notification: pushMsg.notification,
+                data: pushMsg.data,
+              });
+            }
+            console.log(`Push sent to ${targetTokens.length} devices`);
           }
         }
 
-        const emailPayload = {
-          from: fromString,
-          to: recipientEmail,
-          subject: title,
-          attachments: attachments.length > 0 ? attachments : undefined,
-        };
-
-        if (template && template.id) {
-          console.log(`[EMAIL_WORKER] Sending TEMPLATED email: ${template.id}`);
-          emailPayload.template = {
-            id: template.id,
-            variables: template.variables || {},
-          };
-        } else {
-          console.log("[EMAIL_WORKER] Sending HTML email (no template)");
-          emailPayload.html = body;
-        }
-
-        console.log("[EMAIL_WORKER] Dispatching to Resend API...");
-        const {data: resendData, error: resendError} = await resend.emails.send(emailPayload);
-        
-        if (resendError) {
-          console.error("[EMAIL_WORKER] RESEND API ERROR:", JSON.stringify(resendError));
-          throw new Error(`Resend Error: ${resendError.message}`);
-        }
-
-        console.log(`[EMAIL_WORKER] SUCCESS! Message ID: ${resendData.id}`);
         await snap.ref.update({
-          emailStatus: "sent",
-          messageId: resendData.id,
-          provider: "resend",
+          processed: true,
           processedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-      } else {
-        console.error("[EMAIL_WORKER] Skipping email: resendApiKey is empty in settings");
+      } catch (error) {
+        console.error(`Error processing trigger ${event.params.id}:`, error);
+        await snap.ref.update({
+          processed: false,
+          error: error.message,
+          lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
       }
-    }
-
-    // ------------------------------------------------------------
-    // 3. Handle Push Notification Logic (FCM)
-    // ------------------------------------------------------------
-    if (type !== "email") {
-      let targetTokens = [];
-
-      if (toUid === "ADMIN_BROADCAST") {
-        const adminTokensSnap = await admin.firestore().collection("fcm_tokens").where("role", "==", "admin").get();
-        targetTokens = adminTokensSnap.docs.map((doc) => doc.data()?.fcmToken || doc.data()?.token).filter((t) => !!t);
-      } else if (toUid) {
-        const tokenDoc = await admin.firestore().collection("fcm_tokens").doc(toUid).get();
-        if (tokenDoc.exists) {
-          const t = tokenDoc.data()?.fcmToken || tokenDoc.data()?.token;
-          if (t) targetTokens = [t];
-        }
-      }
-
-      if (targetTokens.length > 0) {
-        const message = {
-          notification: {title, body: body.replace(/<[^>]*>?/gm, "")},
-          data: {...data, click_action: "FLUTTER_NOTIFICATION_CLICK"},
-          tokens: targetTokens.length === 1 ? undefined : targetTokens,
-          token: targetTokens.length === 1 ? targetTokens[0] : undefined,
-        };
-
-        if (targetTokens.length === 1) {
-          await admin.messaging().send(message);
-        } else {
-          await admin.messaging().sendEachForMulticast({
-            tokens: targetTokens,
-            notification: message.notification,
-            data: message.data,
-          });
-        }
-        console.log(`Push sent to ${targetTokens.length} devices`);
-      }
-    }
-
-    // Final signature
-    await snap.ref.update({
-      processed: true,
-      processedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
-  } catch (error) {
-    console.error(`Error processing trigger ${event.params.id}:`, error);
-    await snap.ref.update({
-      processed: false,
-      error: error.message,
-      lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-  }
-});

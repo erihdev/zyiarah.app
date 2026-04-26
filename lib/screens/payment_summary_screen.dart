@@ -12,7 +12,6 @@ import 'package:zyiarah/services/counter_service.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:intl/intl.dart' as intl;
-import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/zyiarah_comm_service.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/invoice_pdf_service.dart';

@@ -25,7 +25,7 @@ android {
             storePassword = keystoreProperties["storePassword"] as String?
         }
     }
-    namespace = "com.zyiarah.app"
+    namespace = "com.zyiarah.zyiarah"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -40,7 +40,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.zyiarah.app"
+        applicationId = "com.zyiarah.zyiarah"
         minSdk = flutter.minSdkVersion // Force 21 to match local.properties
         targetSdk = 34 // Force 34 to match local.properties
         versionCode = flutter.versionCode

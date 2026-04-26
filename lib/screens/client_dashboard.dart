@@ -23,12 +23,7 @@ import 'package:zyiarah/screens/maintenance_request_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/maintenance_listener_service.dart';
-import 'package:zyiarah/widgets/permission_sheet.dart';
 import 'package:zyiarah/widgets/support_fab.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:zyiarah/services/location_service.dart';
-import 'package:zyiarah/services/notification_service.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:provider/provider.dart';
@@ -129,20 +124,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
         childAspectRatio: 0.75,
         children: List.generate(4, (index) => Container(
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
-        )),
-      ),
-    );
-  }
-
-  Widget _buildShimmerList() {
-    return Shimmer.fromColors(
-      baseColor: Colors.grey[200]!,
-      highlightColor: Colors.grey[100]!,
-      child: Column(
-        children: List.generate(3, (index) => Container(
-          height: 80,
-          margin: const EdgeInsets.only(bottom: 10),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
         )),
       ),
     );

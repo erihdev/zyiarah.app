@@ -208,19 +208,6 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                   ],
                 ),
                 const SizedBox(height: 60),
-                TextButton(
-                  onPressed: () {
-                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ClientDashboard()));
-                  },
-                  child: Text(
-                    "تخطي",
-                    style: GoogleFonts.tajawal(
-                      color: Colors.black,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
               ],
             ),
           ),

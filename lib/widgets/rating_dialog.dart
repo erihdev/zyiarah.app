@@ -19,7 +19,7 @@ class _ZyiarahRatingDialogState extends State<ZyiarahRatingDialog> {
   final TextEditingController _commentCtrl = TextEditingController();
   String? _selectedReason;
   File? _evidenceImage;
-  bool _isUploading = false;
+  final bool _isUploading = false;
 
   @override
   Widget build(BuildContext context) {
@@ -64,7 +64,7 @@ class _ZyiarahRatingDialogState extends State<ZyiarahRatingDialog> {
                 Text(ZyiarahStrings.lowRatingPrompt, style: GoogleFonts.tajawal(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.red[700])),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: _selectedReason,
+                  initialValue: _selectedReason,
                   hint: Text(ZyiarahStrings.selectReasonHint, style: GoogleFonts.tajawal(fontSize: 13)),
                   decoration: InputDecoration(
                     filled: true,

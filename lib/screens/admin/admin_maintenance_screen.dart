@@ -9,8 +9,6 @@ import 'package:zyiarah/utils/status_util.dart';
 class AdminMaintenanceScreen extends StatelessWidget {
   const AdminMaintenanceScreen({super.key});
 
-  static final ZyiarahNotificationTriggerService _notificationService = ZyiarahNotificationTriggerService();
-
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -207,11 +205,11 @@ class AdminMaintenanceScreen extends StatelessWidget {
             textDirection: TextDirection.rtl,
             child: AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              title: Row(
+              title: const Row(
                 children: [
-                  Icon(Icons.edit_attributes, color: const Color(0xFF1E293B)),
-                  const SizedBox(width: 10),
-                  const Text('تحديث الحالة والتسعير'),
+                  Icon(Icons.edit_attributes, color: Color(0xFF1E293B)),
+                  SizedBox(width: 10),
+                  Text('تحديث الحالة والتسعير'),
                 ],
               ),
               content: Column(

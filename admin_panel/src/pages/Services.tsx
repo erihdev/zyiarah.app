@@ -83,8 +83,8 @@ export default function Services() {
                     outside_deposit: data.outside_deposit ?? 50
                 });
             }
-        } catch (_error) {
-            console.error("Error fetching data:", _error);
+        } catch (error) {
+            console.error("Error fetching data:", error);
         } finally {
             setIsLoading(false);
         }
@@ -95,7 +95,7 @@ export default function Services() {
             const ref = doc(db, 'services', service.id);
             await updateDoc(ref, { is_active: !service.is_active });
             setServices(prev => prev.map(s => s.id === service.id ? { ...s, is_active: !s.is_active } : s));
-        } catch (_error) {
+        } catch {
             alert("حدث خطأ أثناء التحديث");
         }
     };
@@ -105,7 +105,7 @@ export default function Services() {
         try {
             await deleteDoc(doc(db, 'services', id));
             setServices(prev => prev.filter(s => s.id !== id));
-        } catch (_error) {
+        } catch {
             alert("حدث خطأ أثناء الحذف");
         }
     };
@@ -116,7 +116,7 @@ export default function Services() {
             const docRef = doc(db, 'system_configs', 'main_settings');
             await setDoc(docRef, pricing, { merge: true });
             alert("تم حفظ أسعار الأمتار بنجاح!");
-        } catch (_error) {
+        } catch {
             alert("حدث خطأ أثناء الحفظ");
         } finally {
             setIsSavingPricing(false);
@@ -147,7 +147,7 @@ export default function Services() {
             setIsAddingService(false);
             setEditingService(null);
             fetchData();
-        } catch (_error) {
+        } catch {
             alert("حدث خطأ أثناء الحفظ");
         }
     };

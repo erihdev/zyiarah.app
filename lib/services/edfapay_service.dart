@@ -2,14 +2,15 @@
 import 'package:edfapg_sdk/edfapg_sdk.dart'; // Reserved for future SDK integration
 
 class EdfaPayService {
-  // Demo Credentials - Replace with real ones later
-  static const String mId = "12345678"; // Merchant ID
-  static const String tId = "87654321"; // Terminal ID
-  static const String pKw = "payment_key_here"; // Payment Key
+  // ⚠️ استبدل هذه القيم ببيانات حساب EDFAPAY الفعلية قبل الإطلاق
+  static const String mId = "12345678";
+  static const String tId = "87654321";
+  static const String pKw = "payment_key_here";
 
-  Future<void> initialize() async {
-    // Initialization logic if needed by the SDK
-  }
+  static bool get _isConfigured =>
+      mId != "12345678" && tId != "87654321" && pKw != "payment_key_here";
+
+  Future<void> initialize() async {}
 
   Future<Map<String, dynamic>> processPayment({
     required double amount,
@@ -18,14 +19,23 @@ class EdfaPayService {
     required String customerPhone,
     required String customerName,
   }) async {
-    try {
-      // For now, we simulate a successful transaction for testing
-      await Future.delayed(const Duration(seconds: 2));
+    if (!_isConfigured) {
       return {
-        'success': true, 
-        'transactionId': 'EDFA-${DateTime.now().millisecondsSinceEpoch}',
-        'method': 'card'
+        'success': false,
+        'error': 'بوابة الدفع غير مكوّنة — يرجى تحديث بيانات EDFAPAY في edfapay_service.dart',
       };
+    }
+
+    try {
+      // TODO: استبدل بالتكامل الحقيقي مع edfapg_sdk
+      // مثال:
+      // final result = await EdfaPgSdk.instance.sale(
+      //   mId: mId, tId: tId, pKw: pKw,
+      //   amount: amount.toString(), orderId: orderId,
+      //   email: customerEmail, phone: customerPhone, name: customerName,
+      // );
+      // return {'success': result.status == 'approved', 'transactionId': result.transId};
+      throw UnimplementedError("يرجى تفعيل التكامل مع EDFAPAY SDK");
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
@@ -36,14 +46,16 @@ class EdfaPayService {
     required double amount,
     required String orderId,
   }) async {
-    try {
-      // Simulating successful Apple Pay processing
-      await Future.delayed(const Duration(seconds: 2));
+    if (!_isConfigured) {
       return {
-        'success': true, 
-        'transactionId': 'APAY-${DateTime.now().millisecondsSinceEpoch}',
-        'method': 'apple_pay'
+        'success': false,
+        'error': 'بوابة الدفع غير مكوّنة — يرجى تحديث بيانات EDFAPAY في edfapay_service.dart',
       };
+    }
+
+    try {
+      // TODO: استبدل بالتكامل الحقيقي لـ Apple Pay عبر EDFAPAY
+      throw UnimplementedError("يرجى تفعيل Apple Pay عبر EDFAPAY SDK");
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }

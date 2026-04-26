@@ -24,7 +24,7 @@ class ZatcaService {
     bytesBuilder.add(_encodeTlv(2, vatNumber));
 
     // Tag 3: Timestamp (وقت إصدار الفاتورة بصيغة ISO 8601)
-    bytesBuilder.add(_encodeTlv(3, timestamp.toIso8601String().split('.').first + 'Z'));
+    bytesBuilder.add(_encodeTlv(3, '${timestamp.toIso8601String().split('.').first}Z'));
 
     // Tag 4: Total Amount (المبلغ الإجمالي مع الضريبة)
     bytesBuilder.add(_encodeTlv(4, totalAmount.toStringAsFixed(2)));

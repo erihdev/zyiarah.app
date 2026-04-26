@@ -57,20 +57,35 @@ service cloud.firestore {
 
     // Orders & Transactions
     match /orders/{orderId} {
-      allow read: if isLoggedIn() && (request.auth.uid == resource.data.client_id || request.auth.uid == resource.data.driver_id || isAdmin());
-      allow create: if isLoggedIn();
-      allow update: if isLoggedIn() && (
-        request.auth.uid == resource.data.client_id || 
-        request.auth.uid == resource.data.driver_id || 
+      allow read: if isLoggedIn() && (
+        request.auth.uid == resource.data.client_id ||
+        request.auth.uid == resource.data.driver_id ||
         isAdmin()
       );
+      allow create: if isLoggedIn();
+      // Client: can only set status to 'cancelled' on their own pending orders — nothing else
+      allow update: if isLoggedIn() && isAdmin();
+      allow update: if isLoggedIn() &&
+        request.auth.uid == resource.data.driver_id &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['is_paid', 'payment_status', 'amount', 'client_id', 'client_email', 'client_phone']);
+      allow update: if isLoggedIn() &&
+        request.auth.uid == resource.data.client_id &&
+        resource.data.status == 'pending' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelled_at', 'cancelled_by', 'needs_refund']) &&
+        request.resource.data.status == 'cancelled';
       allow delete: if isAdmin();
     }
 
     // Driver Data
     match /drivers/{driverId} {
       allow read: if isLoggedIn() && (request.auth.uid == driverId || isAdmin());
-      allow write, update: if isAdmin();
+      allow write: if isAdmin();
+      // Drivers can update their own availability and status (set by order flow)
+      allow update: if isLoggedIn() &&
+        request.auth.uid == driverId &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['name', 'phone', 'wallet', 'rating_avg', 'rating_count', 'rides']);
     }
 
     // FCM Tokens

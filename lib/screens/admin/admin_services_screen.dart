@@ -331,7 +331,7 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
                             child: Switch(
                               value: active,
                               onChanged: (val) => _toggleServiceStatus(service),
-                              activeColor: const Color(0xFF4F46E5),
+                              activeThumbColor: const Color(0xFF4F46E5),
                               activeTrackColor: const Color(0xFF4F46E5).withValues(alpha: 0.2),
                               inactiveThumbColor: Colors.white,
                               inactiveTrackColor: Colors.grey.shade300,
