@@ -5,12 +5,13 @@ import { DollarSign, ArrowUpRight, TrendingUp, Download, Users, Banknote, Shoppi
 
 interface Order {
     id: string;
-    total_price: number;
+    amount: number;
     payment_method?: string;
     status: string;
     created_at?: Timestamp;
     client_name?: string;
     service_name?: string;
+    service_type?: string;
 }
 
 interface Driver {
@@ -80,14 +81,14 @@ export default function Accountants() {
         return () => { unsubOrders(); unsubDrivers(); };
     }, []);
 
-    const totalRevenue = orders.reduce((sum, o) => sum + (o.total_price || 0), 0);
+    const totalRevenue = orders.reduce((sum, o) => sum + (o.amount || 0), 0);
     const totalPayroll = drivers.reduce((sum, d) => sum + (d.monthly_salary || 0), 0);
     const netProfit = totalRevenue - totalPayroll;
 
     const paymentBreakdown: Record<string, number> = {};
     orders.forEach(o => {
         const method = o.payment_method || 'cash';
-        paymentBreakdown[method] = (paymentBreakdown[method] || 0) + (o.total_price || 0);
+        paymentBreakdown[method] = (paymentBreakdown[method] || 0) + (o.amount || 0);
     });
 
     const transactions: Transaction[] = orders
@@ -97,8 +98,8 @@ export default function Accountants() {
         .map(o => ({
             id: o.id,
             client_name: o.client_name || 'عميل',
-            service_name: o.service_name || 'خدمة تنظيف',
-            amount: o.total_price || 0,
+            service_name: o.service_name || o.service_type || 'خدمة تنظيف',
+            amount: o.amount || 0,
             payment_method: o.payment_method || 'cash',
             date: o.created_at!.toDate(),
             status: o.status,

@@ -58,6 +58,7 @@ class TamaraCheckoutScreen extends StatefulWidget {
 
 class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
   late final WebViewController _controller;
+  bool _paymentProcessed = false; // guard against duplicate onPageStarted fires
 
   @override
   void initState() {
@@ -67,9 +68,25 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) async {
+            if (_paymentProcessed) return;
             if (url.contains('payment-success') || url.contains('payment-success-mock')) {
+                _paymentProcessed = true;
                 String newOrderId = widget.orderId;
                 final user = FirebaseAuth.instance.currentUser;
+
+                // جلب اسم العميل الحقيقي من Firestore (displayName فارغ في معظم الحالات)
+                String clientName = 'عميل زيارة';
+                String clientPhone = widget.customerPhone ?? 'غير متوفر';
+                if (user != null) {
+                  try {
+                    final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+                    if (userDoc.exists) {
+                      clientName = userDoc.data()?['name'] ?? clientName;
+                      clientPhone = userDoc.data()?['phone'] ?? clientPhone;
+                    }
+                  } catch (_) {}
+                }
+
                 try {
 
                 if (widget.maintenanceId != null) {
@@ -117,10 +134,14 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                   // إنشاء طلب خدمة جديد بهوية محددة مسبقاً
                   await FirebaseFirestore.instance.collection('orders').doc(widget.orderId).set({
                     'code': orderCode,
-                    'client_id': user?.uid ?? "unauthenticated_user", 
-                    'client_name': user?.displayName ?? 'عميل زيارة',
+                    'client_id': user?.uid ?? "unauthenticated_user",
+                    'client_name': clientName,
+                    'client_phone': clientPhone,
+                    'user_phone': clientPhone,
                     'service_type': widget.serviceType,
+                    'service_name': widget.serviceType,
                     'amount': widget.amount,
+                    'is_paid': true,
                     'status': 'pending',
                     'location': widget.location,
                     'payment_method': 'tamara',
@@ -132,6 +153,14 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                     'coupon_code': widget.couponCode,
                     'discount_amount': widget.discountAmount,
                   });
+
+                  // إشعار السائقين والإدارة بالطلب الجديد
+                  await ZyiarahNotificationTriggerService().notifyOrderCreated(
+                    clientId: user?.uid ?? '',
+                    orderCode: orderCode,
+                    type: 'cleaning',
+                    serviceName: widget.serviceType,
+                  );
 
                   if (widget.couponCode != null) {
                     try {

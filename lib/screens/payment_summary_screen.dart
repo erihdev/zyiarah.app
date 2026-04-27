@@ -295,14 +295,30 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         'code': code,
         'client_id': _currentUser?.uid,
         'client_name': _currentUser?.name ?? 'عميل زيارة',
+        'client_phone': _phoneController.text.trim(),
+        'user_phone': _phoneController.text.trim(),
+        'client_email': _currentUser?.email,
         'service_type': widget.serviceName,
+        'service_name': widget.serviceName,
         'amount': amountToSave,
+        'is_paid': method != 'cod',
         'status': 'pending',
         'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
         'payment_method': method,
         'created_at': FieldValue.serverTimestamp(),
+        'hours_contracted': widget.hours ?? 4,
+        'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
+        'zone_name': widget.zoneName,
+        'worker_count': widget.workerCount,
+        'coupon_code': _appliedCoupon,
+        'discount_amount': _discountAmount,
       });
-      await ZyiarahNotificationTriggerService().notifyAdminOfPayment(orderCode: code, amount: amountToSave, type: 'cleaning', clientName: _currentUser?.name);
+      await ZyiarahNotificationTriggerService().notifyOrderCreated(
+        clientId: _currentUser?.uid ?? '',
+        orderCode: code,
+        type: 'cleaning',
+        serviceName: widget.serviceName,
+      );
     }
 
     // 2. Trigger ZATCA Invoice & Notifications

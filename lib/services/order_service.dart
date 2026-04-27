@@ -189,11 +189,9 @@ class ZyiarahOrderService {
     }
   }
 
-  // منح كاش باك 5%
+  // منح كاش باك 5% (معطّل حالياً)
   Future<void> _applyCashback(String userId, double orderAmount) async {
-    // Cashback disabled for now
-    await _db.collection('users').doc(userId).update({
-    });
+    // Cashback feature is disabled — no-op to avoid empty Firestore write
   }
 
   // إلغاء الطلب — يسمح فقط للطلبات في حالة pending أو accepted
@@ -370,7 +368,7 @@ class ZyiarahOrderService {
 
       // 3. جلب بيانات السائق لمزامنتها داخل الطلب (لضمان عمل زر الاتصال)
       final driverSnap = await transaction.get(driverRef);
-      final driverData = driverSnap.data() as Map<String, dynamic>;
+      final driverData = driverSnap.data() ?? {};
 
       // 4. تنفيذ التحديث بشكل ذري (Atomic)
       transaction.update(orderRef, {
