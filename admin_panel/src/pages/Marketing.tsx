@@ -198,6 +198,8 @@ export default function Marketing() {
                                     </td>
                                     <td className="px-6 py-4">
                                         <button
+                                            type="button"
+                                            title="تغيير الحالة"
                                             onClick={() => toggleStatus(coupon)}
                                             className="transition-transform hover:scale-105"
                                         >
@@ -209,6 +211,8 @@ export default function Marketing() {
                                     <td className="px-6 py-4 text-center">
                                         <div className="flex items-center justify-center gap-1">
                                             <button
+                                                type="button"
+                                                title="حذف الكوبون"
                                                 onClick={() => handleDelete(coupon.id)}
                                                 className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                                             >
@@ -233,7 +237,7 @@ export default function Marketing() {
                                 <Tag size={20} className="text-purple-600" />
                                 إضافة كوبون خصم
                             </h3>
-                            <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-slate-100 p-2 rounded-full transition-colors">
+                            <button type="button" title="إغلاق" onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-slate-100 p-2 rounded-full transition-colors">
                                 <X size={20} />
                             </button>
                         </div>
@@ -256,6 +260,7 @@ export default function Marketing() {
                                 <div className="space-y-2">
                                     <label className="block text-sm font-bold text-slate-700">نوع الخصم</label>
                                     <select
+                                        aria-label="نوع الخصم"
                                         value={newType}
                                         onChange={(e) => setNewType(e.target.value as 'percentage' | 'fixed')}
                                         className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-xl px-4 py-3 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
@@ -268,6 +273,7 @@ export default function Marketing() {
                                     <label className="block text-sm font-bold text-slate-700">القيمة</label>
                                     <input
                                         type="number"
+                                        aria-label="قيمة الخصم"
                                         required
                                         min="1"
                                         value={newValue}
@@ -283,6 +289,7 @@ export default function Marketing() {
                                     <label className="block text-sm font-bold text-slate-700">تاريخ الانتهاء</label>
                                     <input
                                         type="date"
+                                        aria-label="تاريخ الانتهاء"
                                         required
                                         value={newExpiry}
                                         onChange={(e) => setNewExpiry(e.target.value)}

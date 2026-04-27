@@ -316,7 +316,7 @@ export default function Settings() {
                                                     <div className="flex items-center bg-white border border-slate-200 p-2 pl-4 pr-2 rounded-2xl shadow-sm self-start md:self-auto">
                                                         <span className="ml-4 text-sm font-bold text-slate-700">تفعيل الإجبار</span>
                                                         <label className="relative inline-flex items-center cursor-pointer">
-                                                            <input type="checkbox" className="sr-only peer" checked={settings.force_update_enabled} onChange={(e) => handleChange('force_update_enabled', e.target.checked)} />
+                                                            <input type="checkbox" aria-label="تفعيل الإجبار على التحديث" className="sr-only peer" checked={settings.force_update_enabled} onChange={(e) => handleChange('force_update_enabled', e.target.checked)} />
                                                             <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all after:shadow-sm peer-checked:bg-indigo-600"></div>
                                                         </label>
                                                     </div>
@@ -408,10 +408,11 @@ export default function Settings() {
                                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                         <div className="bg-white border border-slate-200 p-8 rounded-[2rem] shadow-sm relative overflow-hidden group hover:border-emerald-200 hover:shadow-md transition-all">
                                             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><CreditCard size={64} /></div>
-                                            <label className="block text-sm font-bold text-slate-800 mb-2 relative z-10">نسبة عمولة المنصة</label>
+                                            <label htmlFor="commission-rate" className="block text-sm font-bold text-slate-800 mb-2 relative z-10">نسبة عمولة المنصة</label>
                                             <p className="text-xs text-slate-500 font-medium mb-4 h-8 relative z-10">يتم استقطاعها من السائق من كل طلب.</p>
                                             <div className="relative z-10 flex items-center">
                                                 <input
+                                                    id="commission-rate"
                                                     type="number" value={settings.commission_rate} onChange={(e) => handleChange('commission_rate', Number(e.target.value))}
                                                     className="w-full bg-slate-50 border border-slate-200 text-slate-800 font-black text-2xl rounded-xl px-5 py-4 outline-none focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all text-center"
                                                     dir="ltr"
@@ -422,10 +423,11 @@ export default function Settings() {
 
                                         <div className="bg-white border border-slate-200 p-8 rounded-[2rem] shadow-sm relative overflow-hidden group hover:border-emerald-200 hover:shadow-md transition-all">
                                             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Activity size={64} /></div>
-                                            <label className="block text-sm font-bold text-slate-800 mb-2 relative z-10">ضريبة القيمة المضافة</label>
+                                            <label htmlFor="vat-rate" className="block text-sm font-bold text-slate-800 mb-2 relative z-10">ضريبة القيمة المضافة</label>
                                             <p className="text-xs text-slate-500 font-medium mb-4 h-8 relative z-10">تضاف على تكلفة الخدمة كرسوم إضافية.</p>
                                             <div className="relative z-10 flex items-center">
                                                 <input
+                                                    id="vat-rate"
                                                     type="number" value={settings.vat_rate} onChange={(e) => handleChange('vat_rate', Number(e.target.value))}
                                                     className="w-full bg-slate-50 border border-slate-200 text-slate-800 font-black text-2xl rounded-xl px-5 py-4 outline-none focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all text-center"
                                                     dir="ltr"
@@ -436,10 +438,11 @@ export default function Settings() {
 
                                         <div className="bg-white border border-red-100 p-8 rounded-[2rem] shadow-sm relative overflow-hidden group hover:border-red-300 hover:shadow-md transition-all">
                                             <div className="absolute top-0 right-0 p-4 text-red-500 opacity-5 group-hover:opacity-10 transition-opacity"><ArrowRight size={64} className="rotate-90" /></div>
-                                            <label className="block text-sm font-bold text-slate-800 mb-2 relative z-10">الحد الأدنى للمحفظة</label>
+                                            <label htmlFor="min-wallet" className="block text-sm font-bold text-slate-800 mb-2 relative z-10">الحد الأدنى للمحفظة</label>
                                             <p className="text-xs text-slate-500 font-medium mb-4 h-8 relative z-10">حد المديونية الذي يتم عنده إيقاف السائق.</p>
                                             <div className="relative z-10 flex items-center">
                                                 <input
+                                                    id="min-wallet"
                                                     type="number" value={settings.min_wallet_balance} onChange={(e) => handleChange('min_wallet_balance', Number(e.target.value))}
                                                     className="w-full bg-red-50 border border-red-200 text-red-700 font-black text-2xl rounded-xl px-5 py-4 outline-none focus:bg-white focus:border-red-500 focus:ring-4 focus:ring-red-500/10 transition-all text-center"
                                                     dir="ltr"
@@ -462,7 +465,7 @@ export default function Settings() {
                                             <div className="mt-4 md:mt-0 bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex items-center">
                                                 <span className="px-4 font-bold text-slate-700 text-sm">الحالة العامة</span>
                                                 <label className="relative inline-flex items-center cursor-pointer mr-2">
-                                                    <input type="checkbox" className="sr-only peer" checked={settings.cod_enabled} onChange={(e) => handleChange('cod_enabled', e.target.checked)} />
+                                                    <input type="checkbox" aria-label="تفعيل الدفع النقدي" className="sr-only peer" checked={settings.cod_enabled} onChange={(e) => handleChange('cod_enabled', e.target.checked)} />
                                                     <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all after:shadow-sm peer-checked:bg-emerald-500"></div>
                                                 </label>
                                             </div>
@@ -609,7 +612,7 @@ function NotificationRow({ title, desc, checked, onChange, icon, colorTheme }: {
             </div>
             <div className="mt-4 sm:mt-0 mr-14 sm:mr-0 pl-2">
                 <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+                    <input type="checkbox" aria-label={title} className="sr-only peer" checked={checked} onChange={(e) => onChange(e.target.checked)} />
                     <div className={`w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all after:shadow-sm peer-checked:bg-${colorTheme}-500`}></div>
                 </label>
             </div>
@@ -636,7 +639,7 @@ function CoverageCard({ city, region, checked, onChange, bgImage }: { city: stri
             </div>
             <div className="relative z-10">
                 <label className="relative inline-flex items-center cursor-pointer scale-110">
-                    <input type="checkbox" className="sr-only peer" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+                    <input type="checkbox" aria-label={city} className="sr-only peer" checked={checked} onChange={(e) => onChange(e.target.checked)} />
                     <div className="w-12 h-6 bg-slate-300/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
                 </label>
             </div>
