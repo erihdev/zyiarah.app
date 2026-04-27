@@ -12,7 +12,7 @@ interface DriverData {
     is_suspended?: boolean;
     rating: number;
     rides: number;
-    wallet: number;
+    monthly_salary: number;
 }
 
 const StatusBadge = ({ is_available, is_suspended = false }: { is_available: boolean, is_suspended?: boolean }) => {
@@ -33,7 +33,7 @@ export default function Drivers() {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isAdding, setIsAdding] = useState(false);
     const [togglingId, setTogglingId] = useState<string | null>(null);
-    const [newDriver, setNewDriver] = useState({ name: '', phone: '', vehicle: '' });
+    const [newDriver, setNewDriver] = useState({ name: '', phone: '', vehicle: '', monthly_salary: 0 });
 
     useEffect(() => {
         const q = query(collection(db, 'drivers'), orderBy('created_at', 'desc'));
@@ -51,7 +51,7 @@ export default function Drivers() {
                     is_suspended: data.is_suspended || false,
                     rating: data.rating || 5.0,
                     rides: data.rides || 0,
-                    wallet: data.wallet || 0,
+                    monthly_salary: data.monthly_salary || 0,
                     ...data
                 } as DriverData;
             });
@@ -73,11 +73,11 @@ export default function Drivers() {
                 is_available: false,
                 rating: 5.0,
                 rides: 0,
-                wallet: 0,
+                monthly_salary: newDriver.monthly_salary,
                 created_at: serverTimestamp()
             });
             setIsAddModalOpen(false);
-            setNewDriver({ name: '', phone: '', vehicle: '' });
+            setNewDriver({ name: '', phone: '', vehicle: '', monthly_salary: 0 });
         } catch (error) {
             console.error("Error adding driver: ", error);
             alert("حدث خطأ أثناء إضافة السائق.");
@@ -210,8 +210,8 @@ export default function Drivers() {
                                     <span className="font-bold text-slate-700">{driver.rides}</span>
                                 </div>
                                 <div className="text-center border-r border-slate-100">
-                                    <span className="block text-xs font-bold text-slate-400 mb-1">المحفظة</span>
-                                    <span className={`font-bold ${driver.wallet < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{driver.wallet} ر.س</span>
+                                    <span className="block text-xs font-bold text-slate-400 mb-1">الراتب الشهري</span>
+                                    <span className="font-bold text-emerald-600">{driver.monthly_salary} ر.س</span>
                                 </div>
                             </div>
                             <button
@@ -281,6 +281,19 @@ export default function Drivers() {
                                     value={newDriver.vehicle}
                                     onChange={e => setNewDriver({ ...newDriver, vehicle: e.target.value })}
                                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="block text-sm font-extrabold text-slate-700">الراتب الشهري (ر.س)</label>
+                                <input
+                                    type="number"
+                                    aria-label="الراتب الشهري"
+                                    min="0"
+                                    placeholder="مثال: 3000"
+                                    value={newDriver.monthly_salary || ''}
+                                    onChange={e => setNewDriver({ ...newDriver, monthly_salary: Number(e.target.value) })}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium"
+                                    dir="ltr"
                                 />
                             </div>
                             <div className="pt-4 flex gap-3">

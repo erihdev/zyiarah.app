@@ -27,7 +27,8 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
     final TextEditingController nationalityCtrl = TextEditingController(text: currentData?['nationality'] ?? '');
     final TextEditingController idNumberCtrl = TextEditingController(text: currentData?['id_number'] ?? '');
     final TextEditingController idExpiryCtrl = TextEditingController(text: currentData?['id_expiry'] ?? '');
-    
+    final TextEditingController salaryCtrl = TextEditingController(text: (currentData?['monthly_salary'] ?? '').toString());
+
     String type = currentData?['type'] ?? 'driver'; 
     String? photoUrl = currentData?['photo_url'];
     Uint8List? selectedImageBytes;
@@ -257,7 +258,9 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                             const SizedBox(height: 20),
                             _buildLuxuryField(controller: licenseCtrl, label: "رقم رخصة القيادة", icon: Icons.checklist_rtl_rounded, enabled: !isSaving),
                           ],
-                          
+                          const SizedBox(height: 20),
+                          _buildLuxuryField(controller: salaryCtrl, label: "الراتب الشهري (ر.س)", icon: Icons.payments_rounded, keyboardType: TextInputType.number, enabled: !isSaving),
+
                           const SizedBox(height: 40),
                           
                           // Save Button
@@ -302,6 +305,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                         'id_number': idNumberCtrl.text.trim(),
                                         'id_expiry': idExpiryCtrl.text.trim(),
                                         'photo_url': photoUrl,
+                                        'monthly_salary': double.tryParse(salaryCtrl.text.trim()) ?? 0,
                                         'updated_at': FieldValue.serverTimestamp(),
                                       };
                                       await FirebaseFirestore.instance.collection('drivers').doc(docId).update(data);
@@ -328,6 +332,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                         idNumber: idNumberCtrl.text.trim(),
                                         idExpiry: idExpiryCtrl.text.trim(),
                                         photoUrl: photoUrl,
+                                        monthlySalary: double.tryParse(salaryCtrl.text.trim()) ?? 0,
                                       );
 
                                       await _audit.logAction(
