@@ -17,7 +17,8 @@ import {
     Wrench,
     FileSignature,
     ShoppingBasket,
-    ShoppingBag
+    ShoppingBag,
+    Banknote
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -83,6 +84,7 @@ export default function Layout({ onLogout }: LayoutProps) {
                         <p className="px-4 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 mt-8">المالية والتسويق</p>
                         <nav className="space-y-1">
                             <SidebarItem icon={Calculator} label="المحاسبة والمالية" path="/accountants" active={location.pathname === '/accountants'} />
+                            <SidebarItem icon={Banknote} label="إدارة الرواتب" path="/payroll" active={location.pathname === '/payroll'} />
                             <SidebarItem icon={Megaphone} label="إدارة التسويق" path="/marketing" active={location.pathname === '/marketing'} />
                         </nav>
                     </div>
@@ -128,7 +130,9 @@ export default function Layout({ onLogout }: LayoutProps) {
                                                 location.pathname === '/store-products' ? 'إدارة منتجات المتجر' :
                                                     location.pathname === '/store-orders' ? 'طلبات المتجر' :
                                                         location.pathname === '/users' ? 'إدارة العملاء' :
-                                                            location.pathname === '/settings' ? 'إعدادات النظام' : 'لوحة التحكم'}
+                                                            location.pathname === '/settings' ? 'إعدادات النظام' :
+                                                location.pathname === '/payroll' ? 'إدارة الرواتب' :
+                                                    location.pathname === '/accountants' ? 'المحاسبة والمالية' : 'لوحة التحكم'}
                         </h2>
                     </div>
 
