@@ -11,7 +11,7 @@ import 'package:latlong2/latlong.dart';
 import 'dart:async';
 import 'package:lottie/lottie.dart' hide Marker;
 import 'package:zyiarah/services/notification_trigger_service.dart';
-import 'package:zyiarah/screens/login_screen.dart';
+import 'package:go_router/go_router.dart';
 
 class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
@@ -85,11 +85,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                ScaffoldMessenger.of(context).showSnackBar(
                    const SnackBar(content: Text('تم تعطيل حسابك من قبل الإدارة.'), backgroundColor: Colors.red)
                  );
-                 /* GOROUTER-READY: Once GoRouter is active, this becomes context.go('/login') */
-                 Navigator.of(context).pushAndRemoveUntil(
-                   MaterialPageRoute(builder: (_) => const ZyiarahLoginScreen()),
-                   (route) => false,
-                 );
+               context.go('/login');
             });
             return const Scaffold(body: Center(child: Text("تم حظر أو تعطيل حسابك.")));
           }
@@ -422,7 +418,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   children: [
                     Text(stateTitle, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: stateColor)),
                     Text("عميل: ${data['client_name'] ?? 'بدون اسم'}", style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                    if (status == 'accepted' || status == 'arrived') _buildDistanceInfo(data['location']),
+                    if ((status == 'accepted' || status == 'arrived') && data['location'] is GeoPoint)
+                    _buildDistanceInfo(data['location'] as GeoPoint),
                   ],
                 ),
               ),
@@ -499,7 +496,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
-  Widget _buildDistanceInfo(GeoPoint clientLoc) {
+  Widget _buildDistanceInfo(GeoPoint clientLoc) { // caller already type-checks
     return StreamBuilder<Position>(
       stream: Geolocator.getPositionStream(),
       builder: (context, snapshot) {
@@ -646,8 +643,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   void _reportIssue(String orderId) async {
-    final message = "بلاغ عن الطلب #$orderId: لدي مشكلة في هذا الطلب السائق: $_currentDriverId";
-    final url = "https://wa.me/966XXXXXXXXX?text=${Uri.encodeComponent(message)}";
+    final message = "بلاغ عن الطلب #$orderId: لدي مشكلة في هذا الطلب — السائق: $_currentDriverId";
+    // Read admin WhatsApp number from Firestore system config
+    String adminPhone = "966500000000";
+    try {
+      final configDoc = await FirebaseFirestore.instance
+          .collection('system_configs').doc('main_settings').get();
+      adminPhone = configDoc.data()?['admin_whatsapp'] ?? adminPhone;
+    } catch (_) {}
+    final url = "https://wa.me/$adminPhone?text=${Uri.encodeComponent(message)}";
     if (await canLaunchUrl(Uri.parse(url))) await launchUrl(Uri.parse(url));
   }
   

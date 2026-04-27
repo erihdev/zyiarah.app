@@ -199,18 +199,27 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated("orders/{orderId
       let title = "تحديث مبدئي للطلب";
       let body = "حدث تغيير في حالة طلبك للتطبيق.";
 
+      // FIX: field is `client_id` (snake_case) not `clientId`
       if (afterData.status === "accepted") {
-        targetUserId = afterData.clientId;
-        title = "تم قبول طلبك!";
-        body = "لقد تم قبول طلبك وجارٍ تجهيزه.";
+        targetUserId = afterData.client_id;
+        title = "تم قبول طلبك! 🚚";
+        body = `السائق ${afterData.assigned_driver || "فريق زيارة"} في الطريق إليك.`;
+      } else if (afterData.status === "arrived") {
+        targetUserId = afterData.client_id;
+        title = "وصل السائق! 🏠";
+        body = "السائق متواجد الآن عند موقعك، استعد لاستقباله.";
       } else if (afterData.status === "in_progress") {
-        targetUserId = afterData.clientId;
-        title = "سائقك في الطريق";
-        body = "السائق متجه إليك الآن.";
+        targetUserId = afterData.client_id;
+        title = "بدأ العمل 🛠️";
+        body = "فريق زيارة بدأ في تنفيذ خدمتك.";
       } else if (afterData.status === "completed") {
-        targetUserId = afterData.clientId;
-        title = "تم إكمال الطلب";
-        body = "نشكرك لاستخدام تطبيق زيارة.";
+        targetUserId = afterData.client_id;
+        title = "تم الإنجاز! ✨";
+        body = "انتهى العمل بنجاح. شكراً لثقتك بزيارة، ننتظر تقييمك.";
+      } else if (afterData.status === "cancelled") {
+        targetUserId = afterData.client_id;
+        title = "تم إلغاء الطلب ⚠️";
+        body = `تم إلغاء الطلب #${afterData.code || ""}. تواصل معنا لمزيد من التفاصيل.`;
       }
 
       if (!targetUserId) return null;
@@ -355,10 +364,9 @@ exports.onNotificationCreated = onDocumentCreated("notifications_log/{id}",
       };
 
       try {
+        // FIX: use single `all_users` topic to avoid double-delivery to clients/drivers
         if (target === "all") {
           await admin.messaging().send({...payload, topic: "all_users"});
-          await admin.messaging().send({...payload, topic: "clients"});
-          await admin.messaging().send({...payload, topic: "drivers"});
         } else if (target === "clients" || target === "drivers") {
           await admin.messaging().send({...payload, topic: target});
         }
@@ -512,28 +520,61 @@ exports.createTamaraCheckout = onCall(
       }
     });
 
-// 5. Tamara Webhook Handler (Security/Reliability Fix)
-exports.tamaraWebhook = onRequest(async (req, res) => {
-  // ⚠️ IMPORTANT: In production, verify the Tamara signature header!
-  const notification = req.body;
-  console.log("Received Tamara Webhook:", JSON.stringify(notification));
+// 5. Tamara Webhook Handler
+exports.tamaraWebhook = onRequest(
+    {secrets: ["TAMARA_API_TOKEN"]},
+    async (req, res) => {
+      // Verify Tamara signature to prevent spoofed payment events
+      const signature = req.headers["tamara-signature"] || req.headers["x-tamara-signature"];
+      if (!signature) {
+        console.warn("Tamara webhook rejected: missing signature header");
+        res.status(401).send("Unauthorized");
+        return;
+      }
 
-  const {order_id: orderId, status} = notification;
+      const crypto = require("crypto");
+      const secret = tamaraApiToken.value();
+      const rawBody = JSON.stringify(req.body);
+      const expectedSig = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
 
-  if (status === "authorised" || status === "captured") {
-    try {
-      await admin.firestore().collection("orders").doc(orderId).update({
-        payment_status: "paid",
-        status: "accepted",
-        updated_at: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      console.log(`Order ${orderId} marked as PAID via Tamara Webhook`);
-    } catch (error) {
-      console.error("Error updating order from Tamara webhook:", error);
-    }
-  }
-  res.status(200).send("Webhook received");
-});
+      if (signature !== expectedSig && !signature.includes(expectedSig)) {
+        console.warn("Tamara webhook rejected: invalid signature");
+        res.status(401).send("Invalid signature");
+        return;
+      }
+
+      const notification = req.body;
+      console.log("Verified Tamara Webhook:", JSON.stringify(notification));
+
+      const {order_id: orderId, status} = notification;
+
+      if (status === "authorised" || status === "captured") {
+        try {
+          // FIX: only update payment fields — do NOT set status to 'accepted'
+          // The order stays 'pending' until a driver accepts it manually
+          await admin.firestore().collection("orders").doc(orderId).update({
+            payment_status: "paid",
+            is_paid: true,
+            tamara_status: status,
+            updated_at: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          console.log(`Order ${orderId} marked as PAID via Tamara Webhook`);
+        } catch (error) {
+          console.error("Error updating order from Tamara webhook:", error);
+        }
+      } else if (status === "declined" || status === "expired") {
+        try {
+          await admin.firestore().collection("orders").doc(orderId).update({
+            payment_status: "failed",
+            tamara_status: status,
+            updated_at: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        } catch (error) {
+          console.error("Error updating failed Tamara order:", error);
+        }
+      }
+      res.status(200).send("OK");
+    });
 
 const {Resend} = require("resend");
 
@@ -631,8 +672,10 @@ exports.processNotificationTriggers = onDocumentCreated(
         if (type !== "email") {
           let targetTokens = [];
           if (toUid === "ADMIN_BROADCAST") {
+            // FIX: include all admin role variants, not just 'admin'
+            const adminRoles = ["admin", "super_admin", "orders_manager", "accountant_admin", "marketing_admin"];
             const snap2 = await admin.firestore()
-                .collection("fcm_tokens").where("role", "==", "admin").get();
+                .collection("fcm_tokens").where("role", "in", adminRoles).get();
             targetTokens = snap2.docs
                 .map((d) => d.data()?.fcmToken || d.data()?.token)
                 .filter((t) => !!t);

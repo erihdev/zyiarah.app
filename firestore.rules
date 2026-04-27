@@ -81,19 +81,19 @@ service cloud.firestore {
     match /drivers/{driverId} {
       allow read: if isLoggedIn() && (request.auth.uid == driverId || isAdmin());
       allow write: if isAdmin();
-      // Drivers can update their own availability and status (set by order flow)
+      // Drivers can only update their own availability/status — financial & identity fields are locked
       allow update: if isLoggedIn() &&
         request.auth.uid == driverId &&
         !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['name', 'phone', 'wallet', 'rating_avg', 'rating_count', 'rides']);
+          .hasAny(['name', 'phone', 'monthly_salary', 'wallet', 'rating_avg', 'rating_count', 'rides', 'email']);
     }
 
-    // FCM Tokens
+    // FCM Tokens — only owner can read/write their own token; admins can read all for broadcasts
     match /fcm_tokens/{tokenId} {
-      allow read, write: if isLoggedIn();
+      allow read, write: if isLoggedIn() && (request.auth.uid == tokenId || isAdmin());
     }
     match /fcm_token/{tokenId} {
-      allow read, write: if isLoggedIn();
+      allow read, write: if isLoggedIn() && (request.auth.uid == tokenId || isAdmin());
     }
 
     // Electronic Contracts
@@ -122,7 +122,10 @@ service cloud.firestore {
     }
     match /promo_codes/{codeId} {
       allow read: if isLoggedIn();
-      allow update: if isLoggedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uses']);
+      // only allow incrementing `uses` by exactly 1 — prevents abuse (setting to -9999 or 999999)
+      allow update: if isLoggedIn() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uses']) &&
+        request.resource.data.uses == resource.data.uses + 1;
       allow write: if isAdmin();
     }
     match /coupons/{couponId} {
@@ -175,7 +178,13 @@ service cloud.firestore {
       allow read, delete: if isAdmin();
     }
     match /notification_triggers/{triggerId} {
-      allow create: if isLoggedIn();
+      // only authenticated users can create triggers for their own UID — prevents email spam abuse
+      allow create: if isLoggedIn() && (
+        !('toUid' in request.resource.data) ||
+        request.resource.data.toUid == request.auth.uid ||
+        request.resource.data.toUid == 'ADMIN_BROADCAST' ||
+        request.resource.data.type == 'email'
+      );
       allow read, delete: if isAdmin();
     }
     match /notifications_log/{logId} {

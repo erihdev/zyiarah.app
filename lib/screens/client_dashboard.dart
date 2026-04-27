@@ -305,8 +305,8 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
   Widget _buildSubscriptionCard(ZyiarahUser user) {
     final int remaining = user.visitsRemaining;
-    const int total = 4;
-    final double progress = remaining / total;
+    final int total = user.subscriptionTotalVisits > 0 ? user.subscriptionTotalVisits : 4;
+    final double progress = (remaining / total).clamp(0.0, 1.0);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
