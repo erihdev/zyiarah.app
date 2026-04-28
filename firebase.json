@@ -21,17 +21,11 @@
     },
     {
       "target": "web",
-      "public": "build/web",
+      "public": "landing_page",
       "ignore": [
         "firebase.json",
         "**/.*",
         "**/node_modules/**"
-      ],
-      "rewrites": [
-        {
-          "source": "**",
-          "destination": "/index.html"
-        }
       ]
     }
   ],
