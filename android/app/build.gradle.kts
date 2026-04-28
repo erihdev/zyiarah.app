@@ -42,7 +42,7 @@ android {
     defaultConfig {
         applicationId = "com.zyiarah.zyiarah"
         minSdk = flutter.minSdkVersion // Force 21 to match local.properties
-        targetSdk = 34 // Force 34 to match local.properties
+        targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true
