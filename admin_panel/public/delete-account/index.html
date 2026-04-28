@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>طلب حذف الحساب — زيارة</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      line-height: 1.8;
+    }
+    header {
+      background: linear-gradient(135deg, #3a0c59, #6a3094);
+      color: white;
+      padding: 40px 20px;
+      text-align: center;
+    }
+    header h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 8px; }
+    header p { opacity: 0.85; font-size: 0.95rem; }
+    .container { max-width: 680px; margin: 40px auto; padding: 0 20px 60px; }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 36px 40px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      border-right: 4px solid #3a0c59;
+    }
+    h2 { font-size: 1.1rem; font-weight: 700; color: #3a0c59; margin-bottom: 14px; }
+    p { color: #374151; margin-bottom: 12px; }
+    ul { padding-right: 20px; margin-bottom: 12px; }
+    ul li { margin-bottom: 8px; color: #374151; list-style: none; padding-right: 16px; position: relative; }
+    ul li::before { content: "◈"; color: #7dc242; position: absolute; right: 0; font-size: 0.75rem; top: 4px; }
+    .warning {
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      border-radius: 10px;
+      padding: 16px 20px;
+      color: #9a3412;
+      margin-bottom: 20px;
+      font-size: 0.95rem;
+    }
+    .steps { counter-reset: step; }
+    .step {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 20px;
+      align-items: flex-start;
+    }
+    .step-num {
+      background: #3a0c59;
+      color: white;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      flex-shrink: 0;
+      font-size: 0.9rem;
+    }
+    .step-text { padding-top: 4px; }
+    .step-text strong { display: block; color: #1e293b; margin-bottom: 4px; }
+    .step-text span { color: #64748b; font-size: 0.95rem; }
+    .email-box {
+      background: #f1e9fe;
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-top: 16px;
+      text-align: center;
+    }
+    .email-box a {
+      color: #3a0c59;
+      font-weight: 700;
+      font-size: 1.1rem;
+      text-decoration: none;
+    }
+    .email-box p { color: #6a3094; margin: 0; font-size: 0.9rem; margin-top: 6px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.95rem; }
+    th { background: #f1e9fe; color: #3a0c59; padding: 12px 16px; text-align: right; font-weight: 700; }
+    td { padding: 11px 16px; border-bottom: 1px solid #f0f0f5; color: #374151; }
+    tr:last-child td { border-bottom: none; }
+    footer { text-align: center; padding: 24px; color: #94a3b8; font-size: 0.875rem; border-top: 1px solid #e2e8f0; }
+    @media (max-width: 600px) { .card { padding: 24px 20px; } header h1 { font-size: 1.4rem; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>طلب حذف الحساب</h1>
+  <p>تطبيق زيارة — مؤسسة معاذ يحي محمد المالكي</p>
+</header>
+
+<div class="container">
+
+  <div class="card">
+    <h2>كيف تطلب حذف حسابك؟</h2>
+    <p>يمكنك طلب حذف حسابك وجميع بياناتك الشخصية بإرسال بريد إلكتروني إلينا. سنعالج طلبك خلال <strong>30 يوماً</strong> من تاريخ استلامه.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text">
+          <strong>أرسل بريداً إلكترونياً على العنوان أدناه</strong>
+          <span>يجب أن يكون من نفس البريد الإلكتروني المسجّل في تطبيق زيارة</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text">
+          <strong>اكتب في موضوع الرسالة: طلب حذف حساب زيارة</strong>
+          <span>أو: Zyiarah Account Deletion Request</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text">
+          <strong>اذكر في نص الرسالة اسمك ورقم جوالك المسجّل</strong>
+          <span>للتحقق من هويتك وتحديد الحساب بدقة</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-text">
+          <strong>سنؤكد استلام طلبك ونحذف حسابك خلال 30 يوماً</strong>
+          <span>ستتلقى بريداً إلكترونياً بتأكيد الحذف</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="email-box">
+      <a href="mailto:support@zyiarah.com?subject=طلب حذف حساب زيارة">support@zyiarah.com</a>
+      <p>اضغط للإرسال مباشرة</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>ما الذي يتم حذفه؟</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>نوع البيانات</th>
+          <th>الإجراء عند الحذف</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>الاسم والبريد الإلكتروني ورقم الجوال</td>
+          <td>حذف نهائي فور معالجة الطلب</td>
+        </tr>
+        <tr>
+          <td>كلمة المرور</td>
+          <td>حذف نهائي (كانت مشفّرة أصلاً)</td>
+        </tr>
+        <tr>
+          <td>سجل الطلبات والحجوزات</td>
+          <td>حذف نهائي</td>
+        </tr>
+        <tr>
+          <td>بيانات الموقع الجغرافي</td>
+          <td>حذف نهائي</td>
+        </tr>
+        <tr>
+          <td>الفواتير الضريبية</td>
+          <td>محتفَظ بها 5 سنوات وفق النظام السعودي ثم تُحذف</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="warning" style="margin-top:20px;">
+      تنبيه: بعد حذف الحساب لا يمكن استعادة أي بيانات. يُرجى التأكد من رغبتك في الحذف قبل إرسال الطلب.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>هل تريد إلغاء الاشتراك فقط؟</h2>
+    <p>إذا كنت تريد إلغاء اشتراكك الشهري فقط دون حذف الحساب، يمكنك التواصل معنا على نفس البريد الإلكتروني أو من داخل التطبيق عبر قسم الدعم والمساعدة.</p>
+  </div>
+
+</div>
+
+<footer>
+  © 2026 زيارة — مؤسسة معاذ يحي محمد المالكي. جميع الحقوق محفوظة.
+</footer>
+
+</body>
+</html>
