@@ -1,0 +1,38 @@
+name: iOS Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Pod install
+        run: cd ios && pod install
+
+      - name: Write App Store Connect API Key
+        run: |
+          echo "${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}" > /tmp/AuthKey.p8
+
+      - name: Install Fastlane
+        run: gem install fastlane --no-document
+
+      - name: Build and Upload to App Store
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: fastlane ios release

@@ -1,0 +1,38 @@
+default_platform(:ios)
+
+platform :ios do
+  lane :release do
+    api_key = app_store_connect_api_key(
+      key_id: ENV["APP_STORE_CONNECT_KEY_ID"],
+      issuer_id: ENV["APP_STORE_CONNECT_ISSUER_ID"],
+      key_content: ENV["APP_STORE_CONNECT_PRIVATE_KEY"]
+    )
+
+    build_app(
+      workspace: "ios/Runner.xcworkspace",
+      scheme: "Runner",
+      configuration: "Release",
+      xcargs: "-allowProvisioningUpdates " \
+              "-authenticationKeyPath /tmp/AuthKey.p8 " \
+              "-authenticationKeyID #{ENV['APP_STORE_CONNECT_KEY_ID']} " \
+              "-authenticationKeyIssuerID #{ENV['APP_STORE_CONNECT_ISSUER_ID']}",
+      export_method: "app-store",
+      output_name: "zyiarah",
+      export_options: {
+        teamID: "RPTPMXA436",
+        signingStyle: "automatic",
+        compileBitcode: false,
+        uploadBitcode: false
+      }
+    )
+
+    upload_to_app_store(
+      api_key: api_key,
+      skip_metadata: true,
+      skip_screenshots: true,
+      force: true,
+      submit_for_review: false,
+      precheck_include_in_app_purchases: false
+    )
+  end
+end
