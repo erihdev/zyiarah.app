@@ -13,10 +13,16 @@ workflows:
         BUNDLE_ID: "com.zyiarah.zyiarah"
     scripts:
       - name: Set up code signing
-        script: | 
+        script: |
           keychain initialize
-          app-store-connect fetch-signing-files "$BUNDLE_ID" --platform IOS --type IOS_APP_STORE --create
+          openssl genrsa -out /tmp/cert_key.pem 2048
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --platform IOS \
+            --type IOS_APP_STORE \
+            --certificate-key "$(cat /tmp/cert_key.pem)" \
+            --create
           keychain add-certificates
+          xcode-project use-profiles
       - name: Get Flutter dependencies
         script: | 
           flutter pub get
