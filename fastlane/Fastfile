@@ -8,19 +8,43 @@ platform :ios do
       key_content: ENV["APP_STORE_CONNECT_PRIVATE_KEY"]
     )
 
+    cert(
+      api_key: api_key,
+      team_id: "RPTPMXA436"
+    )
+
+    sigh(
+      api_key: api_key,
+      bundle_id: "com.zyiarah.zyiarah",
+      team_id: "RPTPMXA436",
+      force: true
+    )
+
+    profile_name = Actions.lane_context[SharedValues::SIGH_NAME]
+
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "ios/Runner.xcodeproj",
+      team_id: "RPTPMXA436",
+      bundle_identifier: "com.zyiarah.zyiarah",
+      profile_name: profile_name,
+      code_sign_identity: "Apple Distribution",
+      targets: ["Runner"],
+      build_configurations: ["Release"]
+    )
+
     build_app(
       workspace: "ios/Runner.xcworkspace",
       scheme: "Runner",
       configuration: "Release",
-      xcargs: "-allowProvisioningUpdates " \
-              "-authenticationKeyPath /tmp/AuthKey.p8 " \
-              "-authenticationKeyID #{ENV['APP_STORE_CONNECT_KEY_ID']} " \
-              "-authenticationKeyIssuerID #{ENV['APP_STORE_CONNECT_ISSUER_ID']}",
       export_method: "app-store",
       output_name: "zyiarah",
       export_options: {
         teamID: "RPTPMXA436",
-        signingStyle: "automatic",
+        signingStyle: "manual",
+        provisioningProfiles: {
+          "com.zyiarah.zyiarah" => profile_name
+        },
         compileBitcode: false,
         uploadBitcode: false
       }
