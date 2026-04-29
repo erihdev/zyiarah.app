@@ -21,5 +21,8 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
+      - name: Create placeholder .env
+        run: touch .env
+
       - name: Analyze
         run: flutter analyze --no-fatal-infos
