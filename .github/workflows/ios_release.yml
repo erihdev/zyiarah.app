@@ -2,10 +2,15 @@ name: iOS Release
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   build-ios:
+    name: Build & Upload to App Store
     runs-on: macos-latest
+    environment: production
 
     steps:
       - name: Checkout
