@@ -8,58 +8,18 @@ workflows:
     environment:
       flutter: stable
       xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.zyiarah.zyiarah
       vars:
         APP_STORE_APP_ID: "6760955777"
-        BUNDLE_ID: "com.zyiarah.zyiarah"
     scripts:
-      - name: Set up code signing
-        script: |
-          keychain initialize
-          openssl genrsa -out /tmp/cert_key.pem 2048
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --platform IOS \
-            --type IOS_APP_STORE \
-            --certificate-key "$(cat /tmp/cert_key.pem)" \
-            --create
-          keychain add-certificates
-
-          # Get the installed profile name
-          PROFILE_PATH=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null | head -1)
-          PROFILE_NAME=$(security cms -D -i "$PROFILE_PATH" | plutil -extract Name raw -)
-          echo "Using profile: $PROFILE_NAME"
-
-          # Set profile in Xcode project
-          sed -i '' "s/PROVISIONING_PROFILE_SPECIFIER = \"\";/PROVISIONING_PROFILE_SPECIFIER = \"$PROFILE_NAME\";/g" \
-            ios/Runner.xcodeproj/project.pbxproj
-
-          # Create export_options.plist manually
-          cat > $HOME/export_options.plist << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>app-store-connect</string>
-            <key>teamID</key>
-            <string>RPTPMXA436</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>$BUNDLE_ID</key>
-              <string>$PROFILE_NAME</string>
-            </dict>
-          </dict>
-          </plist>
-          EOF
       - name: Get Flutter dependencies
-        script: | 
-          flutter pub get
+        script: flutter pub get
       - name: Install Pods
-        script: | 
-          cd ios && pod install
+        script: cd ios && pod install
       - name: Flutter build IPA
-        script: | 
+        script: |
           flutter build ipa --release \
             --export-options-plist=$HOME/export_options.plist
     artifacts:
