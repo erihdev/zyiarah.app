@@ -17,7 +17,7 @@
     "firebase-admin": "^13.7.0",
     "firebase-functions": "^7.0.6",
     "handlebars": "^4.7.9",
-    "nodemailer": "^8.0.5",
+    "nodemailer": "^8.0.7",
     "resend": "^6.12.2"
   },
   "devDependencies": {
