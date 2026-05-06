@@ -77,7 +77,5 @@
 	<string>قد نحتاج للكاميرا للسماح لك بمسح الـ QR Code الخاص بالفواتير أو تحديث صورة الملف الشخصي.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>نحتاج للوصول للمكتبة للسماح لك بحفظ صور الفواتير الضريبية أو تحديث ملفك الشخصي.</string>
-	<key>NSUserTrackingUsageDescription</key>
-	<string>نستخدم البيانات لتقديم تجربة مخصصة لك وتقديم عروض تناسب اهتماماتك عبر التطبيق.</string>
 </dict>
 </plist>
