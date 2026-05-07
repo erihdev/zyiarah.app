@@ -13,8 +13,6 @@ workflows:
     scripts:
       - name: Initialize keychain
         script: keychain initialize
-      - name: Add certificates to keychain
-        script: keychain add-certificates
       - name: Fetch signing files
         script: |
           app-store-connect fetch-signing-files com.zyiarah.zyiarah \
