@@ -1,4 +1,4 @@
-package com.zyiarah.app
+package com.zyiarah.zyiarah
 
 import io.flutter.embedding.android.FlutterActivity
 
