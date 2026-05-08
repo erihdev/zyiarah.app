@@ -63,6 +63,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
             if (status == 'completed' && data['rating'] == null && !_ratingPromptShown && mounted) {
               _ratingPromptShown = true;
               WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
                 showModalBottomSheet(
                   context: context,
                   isScrollControlled: true,

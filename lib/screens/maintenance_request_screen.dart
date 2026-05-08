@@ -10,6 +10,7 @@ import 'package:zyiarah/services/location_service.dart';
 import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/services/zyiarah_comm_service.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
+import 'package:zyiarah/utils/global_error_handler.dart';
 
 
 class ZyiarahMaintenanceRequestScreen extends StatefulWidget {
@@ -114,34 +115,31 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
       );
 
       if (mounted) {
-        // Trigger Notifications
-        await ZyiarahNotificationTriggerService().notifyOrderCreated(
+        // Fire notifications without blocking navigation — errors are non-fatal
+        ZyiarahNotificationTriggerService().notifyOrderCreated(
           clientId: user.uid,
           orderCode: orderCode,
           serviceName: _selectedService ?? 'صيانة',
           type: 'maintenance',
-        );
+        ).catchError((_) {});
 
-        // إرسال تنبيه مخصص للإدارة لطلب الصيانة الجديد
-        await ZyiarahNotificationTriggerService().notifyAdminOfNewMaintenanceRequest(
+        ZyiarahNotificationTriggerService().notifyAdminOfNewMaintenanceRequest(
           clientName: userName,
           serviceType: _selectedService ?? 'صيانة',
           requestId: orderCode,
-        );
-        
-        // إرسال تأكيد بالبريد الإلكتروني لطلب الصيانة (قيد المراجعة)
-        await ZyiarahCommService().notifyNewOrder({
+        ).catchError((_) {});
+
+        ZyiarahCommService().notifyNewOrder({
           'code': orderCode,
           'client_name': userName,
           'client_phone': userPhone,
           'service_type': _selectedService ?? 'صيانة وتكييف',
-          'amount': 0.0, // قيد التسعير
+          'amount': 0.0,
           'zone': _selectedFloor ?? 'غير محدد',
           'date_time': intl.DateFormat('yyyy-MM-dd HH:mm').format(scheduledDateTime),
           'worker_count': _quantity,
           'coupon': 'لا يوجد',
-        }, customerEmail: user.email);
-
+        }, customerEmail: user.email).catchError((_) {});
 
         if (!mounted) return;
 
@@ -157,9 +155,7 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
         );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ في الإرسال: $e')));
-      }
+      GlobalErrorHandler.handleError(e);
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
