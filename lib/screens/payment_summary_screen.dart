@@ -19,6 +19,7 @@ import 'dart:io';
 
 import 'package:zyiarah/providers/config_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:zyiarah/utils/global_error_handler.dart';
 
 
 
@@ -262,7 +263,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       debugPrint("PAYMENT_ERROR: $e");
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ: $e"), backgroundColor: Colors.red));
+        GlobalErrorHandler.handleError(e);
       }
     }
   }

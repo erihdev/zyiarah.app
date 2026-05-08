@@ -11,6 +11,8 @@ class GlobalErrorHandler {
     // Customize user message based on standard exceptions
     if (error.toString().contains("network") || error.toString().contains("offline")) {
       message = "لا يوجد اتصال بالإنترنت. يرجى التحقق من الشبكة.";
+    } else if (error.toString().contains("unavailable")) {
+      message = "تعذّر الاتصال بالخادم. يرجى المحاولة مرة أخرى.";
     } else if (error.toString().contains("permission-denied")) {
       message = "ليس لديك الصلاحية لإتمام هذه العملية.";
     }
