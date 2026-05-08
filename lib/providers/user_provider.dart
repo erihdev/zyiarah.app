@@ -58,6 +58,10 @@ class ZyiarahUserProvider extends ChangeNotifier {
         }
         _isLoading = false;
         notifyListeners();
+      }, onError: (e) {
+        debugPrint("UserProvider stream error: $e");
+        _isLoading = false;
+        notifyListeners();
       });
     } catch (e) {
       debugPrint("Error in UserProvider: $e");

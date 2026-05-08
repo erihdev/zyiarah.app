@@ -21,14 +21,14 @@ class ZyiarahPopupService {
       if (snapshot.docs.isNotEmpty) {
         final data = snapshot.docs.first.data();
         final sentAt = (data['sent_at'] as Timestamp?)?.toDate();
-        
+
         // Only show if sent in the last 24 hours (or adjust as needed)
         if (sentAt != null && DateTime.now().difference(sentAt).inHours < 24) {
           if (!context.mounted) return;
           _showRahaStylePopup(context, data);
         }
       }
-    });
+    }).catchError((_) {});
   }
 
   static void _showRahaStylePopup(BuildContext context, Map<String, dynamic> data) {

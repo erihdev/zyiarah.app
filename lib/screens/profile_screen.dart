@@ -104,7 +104,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
     if (result == true) {
       final uid = _auth.currentUser?.uid;
       if (uid != null) {
-        setState(() => _isLoading = true);
+        if (mounted) setState(() => _isLoading = true);
         try {
           await _firestore.collection('users').doc(uid).set({
             'name': nameController.text.trim(),
@@ -169,11 +169,15 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
     if (result == true) {
       final uid = _auth.currentUser?.uid;
       if (uid != null) {
-        setState(() => _isLoading = true);
-        await _firestore.collection('users').doc(uid).update({
-          'house_rules': controller.text.trim(),
-        });
-        await _loadUserData();
+        if (mounted) setState(() => _isLoading = true);
+        try {
+          await _firestore.collection('users').doc(uid).update({
+            'house_rules': controller.text.trim(),
+          });
+          await _loadUserData();
+        } catch (e) {
+          if (mounted) setState(() => _isLoading = false);
+        }
       }
     }
   }

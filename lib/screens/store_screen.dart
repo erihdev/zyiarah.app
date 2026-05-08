@@ -8,6 +8,7 @@ import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/zyiarah_comm_service.dart';
+import 'package:zyiarah/utils/global_error_handler.dart';
 
 
 class ZyiarahStoreScreen extends StatefulWidget {
@@ -290,28 +291,27 @@ class _CartSheetState extends State<_CartSheet> {
       );
       
       if (mounted) {
-        // Trigger Notifications
-        await ZyiarahNotificationTriggerService().notifyOrderCreated(
-          clientId: FirebaseAuth.instance.currentUser?.uid ?? '',
+        final user = FirebaseAuth.instance.currentUser;
+
+        // Fire notifications without blocking navigation
+        ZyiarahNotificationTriggerService().notifyOrderCreated(
+          clientId: user?.uid ?? '',
           orderCode: orderCode,
           serviceName: 'طلب منتجات من المتجر',
           type: 'store',
-        );
+        ).catchError((_) {});
 
-        // إرسال تأكيد بالبريد الإلكتروني لطلب المتجر
-        final user = FirebaseAuth.instance.currentUser;
-        await ZyiarahCommService().notifyNewOrder({
+        ZyiarahCommService().notifyNewOrder({
           'code': orderCode,
           'client_name': user?.displayName ?? 'عميل زيارة',
-          'client_phone': user?.phoneNumber ?? 'غير متوفر', // Note: Store uses Firebase phone if available
+          'client_phone': user?.phoneNumber ?? 'غير متوفر',
           'service_type': 'طلب منتجات نظافة من المتجر',
           'amount': total,
           'zone': 'طلب عبر المتجر',
           'date_time': DateTime.now().toString().split('.')[0],
-          'worker_count': 0, // N/A for store
+          'worker_count': 0,
           'coupon': 'لا يوجد',
-        }, customerEmail: user?.email);
-
+        }, customerEmail: user?.email).catchError((_) {});
 
         if (!mounted) return;
 
@@ -331,12 +331,7 @@ class _CartSheetState extends State<_CartSheet> {
         widget.cart.clear();
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("فشل إرسال الطلب: $e"),
-          backgroundColor: Colors.red,
-        ));
-      }
+      GlobalErrorHandler.handleError(e);
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);

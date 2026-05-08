@@ -98,14 +98,15 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
         setState(() {
           _selectedLocation = loc;
           _selectedZoneName = matchedZone!['name'];
-          _updatePriceForZone(matchedZone);
         });
-        
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("تم تحديد موقعك تلقائياً: $_selectedZoneName"),
-          backgroundColor: const Color(0xFF6366F1),
-          duration: const Duration(seconds: 2),
-        ));
+        _updatePriceForZone(matchedZone);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text("تم تحديد موقعك تلقائياً: $_selectedZoneName"),
+            backgroundColor: const Color(0xFF6366F1),
+            duration: const Duration(seconds: 2),
+          ));
+        }
       }
     } catch (e) {
       // Silent error, let user pick manually
@@ -147,8 +148,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
         setState(() {
           _selectedLocation = loc;
           _selectedZoneName = matchedZone!['name'];
-          _updatePriceForZone(matchedZone);
         });
+        _updatePriceForZone(matchedZone);
       }
     } else {
       if (mounted) {
