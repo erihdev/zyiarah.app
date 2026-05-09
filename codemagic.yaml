@@ -22,13 +22,12 @@ workflows:
               app-store-connect certificates revoke "$cid" || true
             done
           fi
-      - name: Create distribution certificate
-        script: |
-          app-store-connect certificates create --type IOS_DISTRIBUTION
       - name: Fetch signing files
         script: |
+          openssl genrsa -out /tmp/cert_key.pem 2048
           app-store-connect fetch-signing-files com.zyiarah.zyiarah \
             --type IOS_APP_STORE \
+            --certificate-key @file:/tmp/cert_key.pem \
             --create
       - name: Set up code signing
         script: xcode-project use-profiles
