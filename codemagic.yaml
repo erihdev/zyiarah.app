@@ -15,26 +15,12 @@ workflows:
         script: keychain initialize
       - name: Revoke existing distribution certificates
         script: |
-          echo "=== Listing IOS_DISTRIBUTION certificates ==="
-          CERT_JSON=$(app-store-connect certificates list --type IOS_DISTRIBUTION --json 2>&1 || echo "[]")
-          echo "Raw: $CERT_JSON"
-          CERT_IDS=$(echo "$CERT_JSON" | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    ids = ' '.join(str(c['id']) for c in data)
-    print(ids)
-except Exception as e:
-    import sys as s; print(f'Parse error: {e}', file=s.stderr)
-" 2>/dev/null || echo "")
-          echo "IDs to revoke: [$CERT_IDS]"
+          CERT_IDS=$(app-store-connect certificates list --type IOS_DISTRIBUTION --json 2>/dev/null \
+            | python3 -c "import sys,json; print(' '.join(c['id'] for c in json.load(sys.stdin)))" 2>/dev/null || true)
           if [ -n "$CERT_IDS" ]; then
             for cid in $CERT_IDS; do
-              echo "Revoking: $cid"
-              app-store-connect certificates revoke "$cid" && echo "Revoked OK" || echo "Revoke failed for $cid"
+              app-store-connect certificates revoke "$cid" || true
             done
-          else
-            echo "No certificates found — manual revoke may be needed at developer.apple.com"
           fi
       - name: Create distribution certificate
         script: |
