@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
@@ -175,17 +176,48 @@ class _SofaRugCleaningDetailsScreenState extends State<SofaRugCleaningDetailsScr
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.serviceName),
-        backgroundColor: const Color(0xFF5D1B5E),
-        foregroundColor: Colors.white,
-      ),
-      body: Directionality(
-        textDirection: TextDirection.rtl,
-        child: _isLoading 
-          ? const Center(child: CircularProgressIndicator()) 
-          : SingleChildScrollView(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          title: Text(widget.serviceName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF3D1040), Colors.transparent],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+          ),
+        ),
+        body: Directionality(
+          textDirection: TextDirection.rtl,
+          child: _isLoading
+            ? const Center(child: CircularProgressIndicator(color: Color(0xFF5D1B5E)))
+            : Column(
+                children: [
+                  Hero(
+                    tag: 'svc-assets/images/sofa_cleaning.png',
+                    child: SizedBox(
+                      height: 220,
+                      width: double.infinity,
+                      child: Image.asset(
+                        'assets/images/sofa_cleaning.png',
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: const Color(0xFFF1E9FE),
+                          child: const Icon(Icons.chair, color: Color(0xFF8B5CF6), size: 60),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -228,6 +260,10 @@ class _SofaRugCleaningDetailsScreenState extends State<SofaRugCleaningDetailsScr
                 ],
               ),
             ),
+                  ),
+                ],
+              ),
+        ),
       ),
     );
   }

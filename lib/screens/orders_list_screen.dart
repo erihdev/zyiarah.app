@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:lottie/lottie.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/order_tracking_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
@@ -426,19 +425,45 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Lottie.network(
-            'https://lottie.host/9972352b-4780-4545-8f65-021199346747/XJzQitkR2f.json', // Search/Empty anim
-            height: 200,
-          ),
-          const SizedBox(height: 20),
-          Text('لا توجد حجوزات سابقة', 
-            style: GoogleFonts.tajawal(fontSize: 18, color: Colors.grey, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          Text('ابدأ بحجز أول خدمة لك الآن', style: GoogleFonts.tajawal(color: Colors.grey)),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                color: const Color(0xFF5D1B5E).withValues(alpha: 0.06),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.calendar_today_rounded, size: 52, color: Color(0xFF5D1B5E)),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'لا توجد طلبات',
+              style: GoogleFonts.tajawal(fontSize: 20, color: const Color(0xFF0F172A), fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'لم تقم بأي حجز بعد.\nابدأ بطلب خدمتك الأولى الآن!',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.tajawal(color: const Color(0xFF64748B), height: 1.6, fontSize: 14),
+            ),
+            const SizedBox(height: 28),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.home_rounded),
+              label: Text('العودة للرئيسية', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF5D1B5E),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 0,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

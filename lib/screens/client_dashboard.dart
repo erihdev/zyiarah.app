@@ -763,7 +763,10 @@ class _ClientDashboardState extends State<ClientDashboard> {
     VoidCallback? onTap,
   }) {
     return InkWell(
-      onTap: onTap,
+      onTap: () {
+        ZyiarahCoreService.triggerHapticLight();
+        onTap?.call();
+      },
       borderRadius: BorderRadius.circular(24),
       child: Container(
       decoration: BoxDecoration(
@@ -781,20 +784,23 @@ class _ClientDashboardState extends State<ClientDashboard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (imagePath != null)
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              child: Image.asset(
-                imagePath,
-                height: 90,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
+            Hero(
+              tag: 'svc-$imagePath',
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                child: Image.asset(
+                  imagePath,
                   height: 90,
                   width: double.infinity,
-                  color: iconBgColor,
-                  child: Icon(icon, color: themeColor, size: 40),
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    height: 90,
+                    width: double.infinity,
+                    color: iconBgColor,
+                    child: Icon(icon, color: themeColor, size: 40),
+                  ),
                 ),
-              )
+              ),
             )
           else
             Container(
