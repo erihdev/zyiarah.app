@@ -7,7 +7,7 @@ workflows:
       app_store_connect: Zyiarah Key
     environment:
       flutter: stable
-      xcode: latest
+      xcode: 16.3
       vars:
         APP_STORE_APP_ID: "6760955777"
     scripts:
