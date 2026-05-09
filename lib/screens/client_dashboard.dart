@@ -104,9 +104,16 @@ class _ClientDashboardState extends State<ClientDashboard> {
   Widget _buildSectionTitle(String title, IconData icon, Color color) {
     return Row(
       children: [
-        Icon(icon, color: color, size: 20),
-        const SizedBox(width: 8),
-        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: color, size: 16),
+        ),
+        const SizedBox(width: 10),
+        Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
       ],
     );
   }
@@ -154,43 +161,58 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
         return Container(
           margin: const EdgeInsets.only(bottom: 20),
-          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            gradient: const LinearGradient(
+              colors: [Color(0xFF5D1B5E), Color(0xFF8B3D8C)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.blue.shade100, width: 2),
-            boxShadow: [BoxShadow(color: Colors.blue.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+            boxShadow: [
+              BoxShadow(color: const Color(0xFF5D1B5E).withValues(alpha: 0.25), blurRadius: 16, offset: const Offset(0, 6)),
+            ],
           ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.blue.shade50, shape: BoxShape.circle),
-                child: const Icon(Icons.cleaning_services, color: Colors.blue),
-              ),
-              const SizedBox(width: 15),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OrderTrackingScreen(orderId: orderId))),
+              borderRadius: BorderRadius.circular(20),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
                   children: [
-                    Text(statusText, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    Text(ZyiarahStrings.tapToTrackMap, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(Icons.cleaning_services, color: Colors.white, size: 22),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(statusText, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white)),
+                          const SizedBox(height: 2),
+                          Text(ZyiarahStrings.tapToTrackMap, style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.75))),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                      ),
+                      child: Text(ZyiarahStrings.track, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
                   ],
                 ),
               ),
-              ElevatedButton(
-                onPressed: () {
-                   Navigator.push(context, MaterialPageRoute(builder: (_) => OrderTrackingScreen(orderId: orderId)));
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  elevation: 0,
-                ),
-                child: Text(ZyiarahStrings.track, style: const TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ],
+            ),
           ),
         );
       },
@@ -281,23 +303,35 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
   PreferredSizeWidget _buildTopBar() {
     return AppBar(
-      backgroundColor: Colors.white.withValues(alpha: 0.7),
+      backgroundColor: Colors.white.withValues(alpha: 0.85),
       elevation: 0,
+      scrolledUnderElevation: 0,
       flexibleSpace: ClipRect(
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(color: Colors.transparent),
         ),
       ),
       iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
       title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(ZyiarahStrings.portalSubtitle, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13, color: Color(0xFF64748B))),
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF5D1B5E),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.maps_home_work_rounded, color: Colors.white, size: 18),
           ),
-          const SizedBox(width: 48),
+          const SizedBox(width: 10),
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('زيارة', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFF0F172A))),
+              Text('بوابة العميل', style: TextStyle(fontWeight: FontWeight.w400, fontSize: 11, color: Color(0xFF64748B))),
+            ],
+          ),
         ],
       ),
     );
@@ -313,16 +347,16 @@ class _ClientDashboardState extends State<ClientDashboard> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF1E3A8A), Color(0xFF2563EB)],
+          colors: [Color(0xFF3D1040), Color(0xFF5D1B5E), Color(0xFF8B3D8C)],
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2563EB).withValues(alpha: 0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
+            color: const Color(0xFF5D1B5E).withValues(alpha: 0.35),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
@@ -699,10 +733,10 @@ class _ClientDashboardState extends State<ClientDashboard> {
                       Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF2563EB),
+                          color: themeColor,
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Icon(Icons.arrow_back, color: Colors.white, size: 16),
+                        child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 14),
                       ),
                     ],
                   ),
@@ -745,33 +779,50 @@ class _ClientDashboardState extends State<ClientDashboard> {
           ...orders.map((doc) {
             final data = doc.data() as Map<String, dynamic>;
             final status = data['status'] ?? 'pending';
-            return Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade100),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(12)),
-                    child: const Icon(Icons.cleaning_services, color: Color(0xFF2563EB)),
-                  ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(data['service_type'] ?? 'خدمة زيارة', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                        Text(status == 'completed' ? 'تم التنفيذ' : 'تحت المعالجة', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-                      ],
+            final isCompleted = status == 'completed';
+            return GestureDetector(
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen())),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(0, 4)),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF5D1B5E).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.cleaning_services_rounded, color: Color(0xFF5D1B5E), size: 20),
                     ),
-                  ),
-                  const Icon(Icons.chevron_left, color: Colors.grey),
-                ],
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(data['service_type'] ?? 'خدمة زيارة', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A))),
+                          const SizedBox(height: 2),
+                          Text(
+                            isCompleted ? 'تم التنفيذ ✓' : 'قيد المعالجة',
+                            style: TextStyle(
+                              color: isCompleted ? const Color(0xFF10B981) : const Color(0xFF64748B),
+                              fontSize: 11,
+                              fontWeight: isCompleted ? FontWeight.w600 : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.chevron_left_rounded, color: Color(0xFFCBD5E1), size: 20),
+                  ],
+                ),
               ),
             );
           }),
@@ -781,21 +832,34 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
   Widget _buildDrawer() {
     return Drawer(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: const Color(0xFF3D1040),
       child: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(20.0),
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
               child: Row(
                 children: [
-                  const Icon(Icons.maps_home_work, color: Colors.white, size: 32),
-                  const SizedBox(width: 12),
-                  const Text('زيارة', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white)),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(Icons.maps_home_work_rounded, color: Colors.white, size: 26),
+                  ),
+                  const SizedBox(width: 14),
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('زيارة', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white)),
+                      Text('خدمات المنزل', style: TextStyle(fontSize: 12, color: Colors.white60)),
+                    ],
+                  ),
                   const Spacer(),
                   IconButton(
                      onPressed: ()=> Navigator.pop(context),
-                     icon: const Icon(Icons.chevron_left, color: Colors.white, size: 30),
+                     icon: const Icon(Icons.close_rounded, color: Colors.white60, size: 22),
                   )
                 ],
               ),
@@ -819,15 +883,19 @@ class _ClientDashboardState extends State<ClientDashboard> {
               Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahContractsListScreen()));
             }),
             const Spacer(),
-             ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-              leading: const Icon(Icons.logout, color: Colors.white),
-              title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
-              onTap: () async {
-                ZyiarahCoreService.triggerHapticSelection();
-                await FirebaseAuth.instance.signOut();
-                if (mounted) context.go('/');
-              },
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: ListTile(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                tileColor: Colors.white.withValues(alpha: 0.08),
+                leading: const Icon(Icons.logout_rounded, color: Colors.white60, size: 20),
+                title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w500, fontSize: 14)),
+                onTap: () async {
+                  ZyiarahCoreService.triggerHapticSelection();
+                  await FirebaseAuth.instance.signOut();
+                  if (mounted) context.go('/');
+                },
+              ),
             ),
             const SizedBox(height: 20),
           ],
@@ -838,18 +906,24 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
   Widget _buildDrawerItem(IconData icon, String title, bool isActive, {required VoidCallback onTap}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
       child: ListTile(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        tileColor: isActive ? Colors.white : Colors.transparent,
-        leading: Icon(icon, color: isActive ? const Color(0xFF2563EB) : Colors.white),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        tileColor: isActive ? Colors.white.withValues(alpha: 0.15) : Colors.transparent,
+        leading: Icon(icon, color: isActive ? Colors.white : Colors.white70, size: 20),
         title: Text(
-          title, 
+          title,
           style: TextStyle(
-            color: isActive ? const Color(0xFF2563EB) : Colors.white,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+            color: isActive ? Colors.white : Colors.white70,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.w400,
+            fontSize: 14,
           ),
         ),
+        trailing: isActive ? Container(
+          width: 5,
+          height: 5,
+          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+        ) : null,
         onTap: () {
           ZyiarahCoreService.triggerHapticLight();
           onTap();

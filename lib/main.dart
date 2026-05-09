@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/screens/onboarding_screen.dart';
+import 'package:zyiarah/screens/splash_screen.dart';
+import 'package:zyiarah/theme/app_theme.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:zyiarah/firebase_options.dart';
 import 'package:zyiarah/services/notification_service.dart';
@@ -72,15 +73,7 @@ class ZyiarahApp extends StatelessWidget {
       routerConfig: appRouter,
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: messengerKey,
-      theme: ThemeData(
-        primaryColor: const Color(0xFFFF5733),
-        scaffoldBackgroundColor: const Color(0xFFF8FAFC),
-        textTheme: GoogleFonts.tajawalTextTheme(
-          Theme.of(context).textTheme.apply(bodyColor: const Color(0xFF0F172A), displayColor: const Color(0xFF0F172A)),
-        ),
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFFF5733), surface: const Color(0xFFF8FAFC)),
-        useMaterial3: true,
-      ),
+      theme: ZyiarahTheme.light,
     );
   }
 }
@@ -94,9 +87,7 @@ class AuthWrapper extends StatelessWidget {
 
     // حالة التحميل - تظهر فقط عند التغيير الحقيقي للحالة
     if (userProvider.isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const ZyiarahSplashScreen();
     }
 
     // إذا كان المستخدم مسجلاً دخوله
