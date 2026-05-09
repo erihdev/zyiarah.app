@@ -8,20 +8,27 @@ workflows:
     environment:
       flutter: stable
       xcode: latest
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.zyiarah.zyiarah
       vars:
+        BUNDLE_ID: "com.zyiarah.zyiarah"
         APP_STORE_APP_ID: "6760955777"
     scripts:
       - name: Get Flutter dependencies
         script: flutter pub get
       - name: Install Pods
         script: cd ios && pod install
-      - name: Flutter build IPA
+      - name: Initialize keychain
+        script: keychain initialize
+      - name: Fetch or create signing files
         script: |
-          flutter build ipa --release \
-            --export-options-plist=$HOME/export_options.plist
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+      - name: Add certificates to keychain
+        script: keychain add-certificates
+      - name: Set up Xcode code signing
+        script: xcode-project use-profiles
+      - name: Flutter build IPA
+        script: flutter build ipa --release
     artifacts:
       - build/ios/ipa/*.ipa
     publishing:
