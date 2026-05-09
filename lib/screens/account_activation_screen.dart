@@ -23,7 +23,7 @@ class _ZyiarahAccountActivationScreenState extends State<ZyiarahAccountActivatio
   bool _isLoading = false;
   bool _isPasswordVisible = false;
 
-  final Color brandColor = const Color(0xFF4A0E0E);
+  final Color brandColor = const Color(0xFF5D1B5E);
 
   void _sendOTP() async {
     final phone = _phoneController.text.trim();
