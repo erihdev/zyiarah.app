@@ -684,13 +684,23 @@ class _ClientDashboardState extends State<ClientDashboard> {
   }
 
   Widget _buildDefaultStaticGrid() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cols = constraints.maxWidth > 500 ? 3 : 2;
+        final ratio = constraints.maxWidth > 500 ? 0.85 : 0.75;
+        return _buildGrid(cols, ratio);
+      },
+    );
+  }
+
+  Widget _buildGrid(int crossAxisCount, double childAspectRatio) {
     return GridView.count(
-      crossAxisCount: 2,
+      crossAxisCount: crossAxisCount,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 15,
       crossAxisSpacing: 15,
-      childAspectRatio: 0.75,
+      childAspectRatio: childAspectRatio,
       children: [
         _buildWebStyleServiceCard(
           title: "خدمة بالساعة",

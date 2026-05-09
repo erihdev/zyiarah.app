@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -91,7 +92,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
           }
         }
 
-        return Scaffold(
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle.light,
+          child: Scaffold(
           backgroundColor: const Color(0xFFF1F5F9),
           body: Directionality(
             textDirection: TextDirection.rtl,
@@ -113,6 +116,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 ),
               ],
             ),
+          ),
           ),
         );
       }
