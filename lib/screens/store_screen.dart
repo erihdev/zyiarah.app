@@ -26,9 +26,6 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
     setState(() {
       _cart[product.id] = (_cart[product.id] ?? 0) + 1;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('تم إضافة ${product.name} للسلة'), duration: const Duration(seconds: 1)),
-    );
   }
 
 
