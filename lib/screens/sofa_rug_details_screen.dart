@@ -89,7 +89,7 @@ class _SofaRugCleaningDetailsScreenState extends State<SofaRugCleaningDetailsScr
         
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text("تم تحديد موقعك تلقائياً: $_selectedZoneName"),
-          backgroundColor: const Color(0xFF6366F1),
+          backgroundColor: const Color(0xFF5D1B5E),
           duration: const Duration(seconds: 2),
         ));
       }
@@ -225,11 +225,15 @@ class _SofaRugCleaningDetailsScreenState extends State<SofaRugCleaningDetailsScr
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.blue.shade200)),
+                    decoration: BoxDecoration(
+                    color: const Color(0xFF5D1B5E).withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF5D1B5E).withValues(alpha: 0.2)),
+                  ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text("موقع تقديم الخدمة:", style: TextStyle(fontWeight: FontWeight.bold)),
+                        const Text("موقع تقديم الخدمة:", style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF5D1B5E))),
                         const SizedBox(height: 10),
                         if (_selectedLocation != null)
                           Text("المنطقة المحددة: $_selectedZoneName", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold))
@@ -237,9 +241,15 @@ class _SofaRugCleaningDetailsScreenState extends State<SofaRugCleaningDetailsScr
                           const Text("لم يتم تحديد الموقع بعد", style: TextStyle(color: Colors.red)),
                         const SizedBox(height: 15),
                         ElevatedButton.icon(
-                          onPressed: _pickLocation, 
-                          icon: const Icon(Icons.map), 
+                          onPressed: _pickLocation,
+                          icon: const Icon(Icons.map_outlined),
                           label: Text(_selectedLocation == null ? "تحديد الموقع من الخريطة" : "تغيير الموقع"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF5D1B5E),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
                         ),
                       ],
                     ),
@@ -278,7 +288,7 @@ class _SofaRugCleaningDetailsScreenState extends State<SofaRugCleaningDetailsScr
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-              Text("($pricePerMeter ر.س/متر)", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+              Text("($pricePerMeter ر.س/متر)", style: const TextStyle(color: Color(0xFF5D1B5E), fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 15),
@@ -300,7 +310,7 @@ class _SofaRugCleaningDetailsScreenState extends State<SofaRugCleaningDetailsScr
   Widget _buildAdjustButton(IconData icon, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
-      child: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: const Color(0xFF6366F1).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: const Color(0xFF6366F1))),
+      child: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: const Color(0xFF5D1B5E).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: const Color(0xFF5D1B5E))),
     );
   }
 
@@ -318,7 +328,7 @@ class _SofaRugCleaningDetailsScreenState extends State<SofaRugCleaningDetailsScr
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text("الإجمالي المطلوب:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-              Text("${totalAmount.toStringAsFixed(2)} ر.س", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF6366F1))),
+              Text("${totalAmount.toStringAsFixed(2)} ر.س", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF5D1B5E))),
             ],
           )
         ],
@@ -339,7 +349,7 @@ class _SofaRugCleaningDetailsScreenState extends State<SofaRugCleaningDetailsScr
       height: 60,
       child: ElevatedButton(
         onPressed: _handleNext,
-        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6366F1), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), elevation: 4),
+        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), elevation: 4),
         child: const Text("متابعة لملخص الدفع", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
       ),
     );

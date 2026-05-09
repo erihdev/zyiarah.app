@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
-import 'package:table_calendar/table_calendar.dart';
 
 
 class HourlyCleaningDetailsScreen extends StatefulWidget {
@@ -104,7 +103,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text("تم تحديد موقعك تلقائياً: $_selectedZoneName"),
-            backgroundColor: const Color(0xFF6366F1),
+            backgroundColor: const Color(0xFF5D1B5E),
             duration: const Duration(seconds: 2),
           ));
         }
@@ -178,9 +177,10 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     });
   }
 
-  double get totalAmount {
-     return _hourlyBasePrice * _workerCount;
-  }
+  double get totalAmount => _hourlyBasePrice * _workerCount;
+
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
   void _handleInitiateFlow() async {
     if (_selectedLocation == null) {
@@ -311,14 +311,14 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isOutOfRange ? Colors.red.shade50 : Colors.blue.shade50, 
-        borderRadius: BorderRadius.circular(15), 
-        border: Border.all(color: isOutOfRange ? Colors.red.shade200 : Colors.blue.shade200)
+        color: isOutOfRange ? Colors.red.shade50 : const Color(0xFF5D1B5E).withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isOutOfRange ? Colors.red.shade200 : const Color(0xFF5D1B5E).withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("تحديد موقع السكن:", style: TextStyle(fontWeight: FontWeight.bold, color: isOutOfRange ? Colors.red : Colors.blue.shade900)),
+          Text("تحديد موقع السكن:", style: TextStyle(fontWeight: FontWeight.bold, color: isOutOfRange ? Colors.red : const Color(0xFF5D1B5E))),
           const SizedBox(height: 10),
           if (_selectedLocation != null)
             Row(
@@ -347,9 +347,10 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
             icon: const Icon(Icons.map_outlined), 
             label: Text(_selectedLocation == null ? "تحديد من الخريطة يدوياً" : "تغيير الموقع"),
             style: ElevatedButton.styleFrom(
-              backgroundColor: isOutOfRange ? Colors.red : Colors.blueAccent, 
+              backgroundColor: isOutOfRange ? Colors.red : const Color(0xFF5D1B5E),
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
         ],
@@ -398,19 +399,60 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   }
 
   Widget _buildDateSelector() {
-    return Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade200), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)]),
-      child: TableCalendar(
-        firstDay: DateTime.now(),
-        lastDay: DateTime.now().add(const Duration(days: 90)),
-        focusedDay: _selectedDate,
-        selectedDayPredicate: (day) => isSameDay(_selectedDate, day),
-        onDaySelected: (selected, focused) => setState(() => _selectedDate = selected),
-        calendarStyle: const CalendarStyle(
-          selectedDecoration: BoxDecoration(color: Color(0xFF5D1B5E), shape: BoxShape.circle),
-          todayDecoration: BoxDecoration(color: Color(0x665D1B5E), shape: BoxShape.circle),
-        ),
-        headerStyle: const HeaderStyle(formatButtonVisible: false, titleCentered: true),
+    const dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+    final now = DateTime.now();
+    return SizedBox(
+      height: 82,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: 30,
+        itemBuilder: (context, index) {
+          final date = now.add(Duration(days: index + 1));
+          final isSelected = _isSameDay(_selectedDate, date);
+          return GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              setState(() => _selectedDate = date);
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              margin: const EdgeInsets.symmetric(horizontal: 5),
+              width: 58,
+              decoration: BoxDecoration(
+                color: isSelected ? const Color(0xFF5D1B5E) : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isSelected ? const Color(0xFF5D1B5E) : Colors.grey.shade200,
+                ),
+                boxShadow: isSelected
+                    ? [BoxShadow(color: const Color(0xFF5D1B5E).withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))]
+                    : [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4)],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    dayNames[date.weekday % 7],
+                    style: TextStyle(fontSize: 9, color: isSelected ? Colors.white70 : Colors.grey[500]),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${date.day}',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? Colors.white : const Color(0xFF1E293B),
+                    ),
+                  ),
+                  Text(
+                    '/${date.month}',
+                    style: TextStyle(fontSize: 10, color: isSelected ? Colors.white60 : Colors.grey[400]),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
