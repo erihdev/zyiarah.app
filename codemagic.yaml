@@ -18,6 +18,16 @@ workflows:
         script: cd ios && pod install
       - name: Initialize keychain
         script: keychain initialize
+      - name: Revoke stale distribution certificates
+        script: |
+          CERT_IDS=$(app-store-connect certificates list --type IOS_DISTRIBUTION --json \
+            | python3 -c "import sys,json; print(' '.join(c['id'] for c in json.load(sys.stdin)))" 2>/dev/null || true)
+          if [ -n "$CERT_IDS" ]; then
+            echo "Revoking: $CERT_IDS"
+            app-store-connect certificates revoke $CERT_IDS
+          else
+            echo "No certificates to revoke"
+          fi
       - name: Fetch or create signing files
         script: |
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
