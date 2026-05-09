@@ -25,7 +25,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
   bool _acceptTerms = false;
   bool _acceptPrivacy = false;
 
-  final Color brandColor = const Color(0xFF4A0E0E);
+  final Color brandColor = const Color(0xFF5D1B5E);
 
   void _signup() async {
     final name = _nameController.text.trim();
