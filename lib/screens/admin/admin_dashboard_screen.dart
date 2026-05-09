@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/screens/admin/admin_services_screen.dart';
 import 'package:zyiarah/screens/admin/admin_orders_screen.dart';
@@ -6,6 +7,7 @@ import 'package:zyiarah/screens/admin/admin_more_screen.dart';
 import 'package:zyiarah/screens/admin/admin_store_screen.dart';
 import 'package:zyiarah/screens/admin/admin_insights_screen.dart';
 import 'package:zyiarah/screens/onboarding_screen.dart';
+import 'package:zyiarah/screens/splash_screen.dart';
 import 'package:lottie/lottie.dart';
 import 'package:zyiarah/utils/zyiarah_strings.dart';
 import 'package:zyiarah/services/firebase_service.dart';
@@ -100,18 +102,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoadingRole) {
-      return const Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(color: Color(0xFF1E293B)),
-              SizedBox(height: 20),
-              Text("جاري التحقق من الصلاحيات...", style: TextStyle(fontWeight: FontWeight.bold)),
-            ],
-          ),
-        ),
-      );
+      return const ZyiarahSplashScreen();
     }
 
     if (_role == 'none') {
@@ -145,10 +136,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   icon: const Icon(Icons.logout),
                   label: Text(ZyiarahStrings.logout),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E293B),
+                    backgroundColor: const Color(0xFF5D1B5E),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    elevation: 0,
                   ),
                 ),
               ],
@@ -161,31 +153,45 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final filteredTabs = _getFilteredTabs();
     if (_currentIndex >= filteredTabs.length) _currentIndex = 0;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(ZyiarahStrings.adminPanel, style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1E293B), // Slate 800
-        foregroundColor: Colors.white,
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logout,
-            tooltip: "تسجيل الخروج",
-          )
-        ],
-      ),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: filteredTabs.map((t) => t['page'] as Widget).toList(),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xFF2563EB), // Blue 600
-        unselectedItemColor: Colors.grey,
-        items: filteredTabs.map((t) => BottomNavigationBarItem(icon: Icon(t['icon'] as IconData), label: t['label'] as String)).toList(),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(ZyiarahStrings.adminPanel, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+          backgroundColor: const Color(0xFF5D1B5E),
+          foregroundColor: Colors.white,
+          centerTitle: true,
+          elevation: 0,
+          systemOverlayStyle: SystemUiOverlayStyle.light,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.logout_rounded),
+              onPressed: _logout,
+              tooltip: "تسجيل الخروج",
+            )
+          ],
+        ),
+        body: IndexedStack(
+          index: _currentIndex,
+          children: filteredTabs.map((t) => t['page'] as Widget).toList(),
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _currentIndex,
+          onDestinationSelected: (index) {
+            HapticFeedback.lightImpact();
+            setState(() => _currentIndex = index);
+          },
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          shadowColor: Colors.black.withValues(alpha: 0.08),
+          elevation: 8,
+          indicatorColor: const Color(0xFF5D1B5E).withValues(alpha: 0.12),
+          destinations: filteredTabs.map((t) => NavigationDestination(
+            icon: Icon(t['icon'] as IconData),
+            selectedIcon: Icon(t['icon'] as IconData, color: const Color(0xFF5D1B5E)),
+            label: t['label'] as String,
+          )).toList(),
+        ),
       ),
     );
   }

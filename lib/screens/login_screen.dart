@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/screens/client_dashboard.dart';
@@ -25,7 +26,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
   bool _isPasswordVisible = false;
   bool _rememberMe = false;
 
-  final Color brandColor = const Color(0xFF4A0E0E); // اللون العنابي الغامق
+  final Color brandColor = const Color(0xFF5D1B5E);
 
   void _login() async {
     final email = _emailController.text.trim();
@@ -81,7 +82,9 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark,
+      child: Scaffold(
       backgroundColor: Colors.white,
       body: Directionality(
         textDirection: TextDirection.rtl,
@@ -212,6 +215,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
             ),
           ),
         ),
+      ),
       ),
     );
   }
