@@ -1,7 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:zyiarah/screens/profile_screen.dart';
 import 'package:zyiarah/models/user_model.dart';
@@ -20,11 +19,9 @@ import 'package:zyiarah/screens/store_screen.dart';
 import 'package:zyiarah/screens/sofa_rug_details_screen.dart';
 import 'package:zyiarah/screens/subscription_plans_screen.dart';
 import 'package:zyiarah/screens/maintenance_request_screen.dart';
-import 'package:zyiarah/screens/contracts_list_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/maintenance_listener_service.dart';
 import 'package:zyiarah/widgets/support_fab.dart';
-import 'package:go_router/go_router.dart';
 
 import 'package:provider/provider.dart';
 import 'package:zyiarah/providers/user_provider.dart';
@@ -38,6 +35,7 @@ class ClientDashboard extends StatefulWidget {
 }
 
 class _ClientDashboardState extends State<ClientDashboard> {
+  int _selectedNavIndex = 0;
 
   @override
   void initState() {
@@ -53,8 +51,41 @@ class _ClientDashboardState extends State<ClientDashboard> {
     // ... existing permission logic ...
   }
 
+  void _onNavTap(int index) {
+    ZyiarahCoreService.triggerHapticLight();
+    if (index == 0) {
+      setState(() => _selectedNavIndex = 0);
+    } else if (index == 1) {
+      setState(() => _selectedNavIndex = 1);
+      Navigator.push(context, _pageRoute(const OrdersListScreen())).then((_) {
+        if (mounted) setState(() => _selectedNavIndex = 0);
+      });
+    } else if (index == 2) {
+      setState(() => _selectedNavIndex = 2);
+      Navigator.push(context, _pageRoute(const ZyiarahStoreScreen())).then((_) {
+        if (mounted) setState(() => _selectedNavIndex = 0);
+      });
+    } else if (index == 3) {
+      setState(() => _selectedNavIndex = 3);
+      Navigator.push(context, _pageRoute(const ZyiarahProfileScreen())).then((_) {
+        if (mounted) setState(() => _selectedNavIndex = 0);
+      });
+    }
+  }
 
-
+  PageRouteBuilder _pageRoute(Widget page) {
+    return PageRouteBuilder(
+      pageBuilder: (_, animation, __) => page,
+      transitionsBuilder: (_, animation, __, child) {
+        return SlideTransition(
+          position: Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero)
+              .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+          child: FadeTransition(opacity: animation, child: child),
+        );
+      },
+      transitionDuration: const Duration(milliseconds: 280),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -68,36 +99,80 @@ class _ClientDashboardState extends State<ClientDashboard> {
       child: Scaffold(
         backgroundColor: const Color(0xFFF9FAFB),
         appBar: _buildTopBar(),
-        drawer: _buildDrawer(),
         floatingActionButton: const ZyiarahSupportFab(),
+        floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
+        bottomNavigationBar: _buildNavBar(),
         body: SafeArea(
-          child: isLoading 
-              ? _buildShimmerGrid() 
-              : SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildActiveTrackingCard(user?.uid),
-                _buildAnimatedItem(_buildPromoBanners()),
-                _buildMaintenanceAlertCard(user?.uid),
-                if (user?.hasActiveSubscription == true) _buildAnimatedItem(_buildSubscriptionCard(user!)),
-                const SizedBox(height: 10),
-                _buildAnimatedItem(_buildMetricsList(user?.uid)),
-                const SizedBox(height: 25),
-                _buildAnimatedItem(_buildSectionTitle(ZyiarahStrings.servicesHeader, Icons.auto_awesome, Colors.amber)),
-                const SizedBox(height: 15),
-                _buildAnimatedItem(_buildServicesGrid()),
-                const SizedBox(height: 25),
-                _buildAnimatedItem(_buildSectionTitle(ZyiarahStrings.latestBookings, Icons.calendar_month, Colors.blue.shade800)),
-                const SizedBox(height: 15),
-                _buildAnimatedItem(_buildLatestBookings(orderProvider.activeOrders.take(5).toList())),
-                const SizedBox(height: 30),
-              ],
-            ),
-          ),
+          child: isLoading
+              ? _buildShimmerLoading()
+              : RefreshIndicator(
+                  color: const Color(0xFF5D1B5E),
+                  onRefresh: () async {
+                    await Future.delayed(const Duration(milliseconds: 600));
+                    if (mounted) setState(() {});
+                  },
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildActiveTrackingCard(user?.uid),
+                        _buildAnimatedItem(_buildPromoBanners()),
+                        _buildMaintenanceAlertCard(user?.uid),
+                        if (user?.hasActiveSubscription == true) _buildAnimatedItem(_buildSubscriptionCard(user!)),
+                        const SizedBox(height: 10),
+                        _buildAnimatedItem(_buildMetricsList(user?.uid)),
+                        const SizedBox(height: 25),
+                        _buildAnimatedItem(_buildSectionTitle(ZyiarahStrings.servicesHeader, Icons.auto_awesome, Colors.amber)),
+                        const SizedBox(height: 15),
+                        _buildAnimatedItem(_buildServicesGrid()),
+                        const SizedBox(height: 25),
+                        _buildAnimatedItem(_buildSectionTitle(ZyiarahStrings.latestBookings, Icons.calendar_month, const Color(0xFF5D1B5E))),
+                        const SizedBox(height: 15),
+                        _buildAnimatedItem(_buildLatestBookings(orderProvider.activeOrders.take(5).toList())),
+                        const SizedBox(height: 30),
+                      ],
+                    ),
+                  ),
+                ),
         ),
       ),
+    );
+  }
+
+  Widget _buildNavBar() {
+    return NavigationBar(
+      selectedIndex: _selectedNavIndex,
+      onDestinationSelected: _onNavTap,
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      shadowColor: Colors.black.withValues(alpha: 0.08),
+      elevation: 8,
+      indicatorColor: const Color(0xFF5D1B5E).withValues(alpha: 0.12),
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.home_outlined),
+          selectedIcon: Icon(Icons.home_rounded, color: Color(0xFF5D1B5E)),
+          label: 'الرئيسية',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.calendar_today_outlined),
+          selectedIcon: Icon(Icons.calendar_today_rounded, color: Color(0xFF5D1B5E)),
+          label: 'طلباتي',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.storefront_outlined),
+          selectedIcon: Icon(Icons.storefront_rounded, color: Color(0xFF5D1B5E)),
+          label: 'المتجر',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.person_outline_rounded),
+          selectedIcon: Icon(Icons.person_rounded, color: Color(0xFF5D1B5E)),
+          label: 'حسابي',
+        ),
+      ],
     );
   }
 
@@ -118,20 +193,51 @@ class _ClientDashboardState extends State<ClientDashboard> {
     );
   }
 
-  Widget _buildShimmerGrid() {
+  Widget _buildShimmerLoading() {
     return Shimmer.fromColors(
-      baseColor: Colors.grey[200]!,
-      highlightColor: Colors.grey[100]!,
-      child: GridView.count(
-        crossAxisCount: 2,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        mainAxisSpacing: 15,
-        crossAxisSpacing: 15,
-        childAspectRatio: 0.75,
-        children: List.generate(4, (index) => Container(
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
-        )),
+      baseColor: const Color(0xFFE2E8F0),
+      highlightColor: const Color(0xFFF8FAFC),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Banner skeleton
+            Container(height: 160, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20))),
+            const SizedBox(height: 20),
+            // Metric cards row skeleton
+            Row(children: [
+              Expanded(child: Container(height: 80, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)))),
+              const SizedBox(width: 15),
+              Expanded(child: Container(height: 80, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)))),
+            ]),
+            const SizedBox(height: 25),
+            // Section title skeleton
+            Container(height: 24, width: 140, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8))),
+            const SizedBox(height: 15),
+            // Service cards grid skeleton
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 15,
+              crossAxisSpacing: 15,
+              childAspectRatio: 0.75,
+              children: List.generate(4, (_) => Container(
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
+              )),
+            ),
+            const SizedBox(height: 25),
+            // Orders skeleton
+            Container(height: 24, width: 120, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8))),
+            const SizedBox(height: 15),
+            ...List.generate(3, (_) => Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              height: 68,
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+            )),
+          ],
+        ),
       ),
     );
   }
@@ -830,107 +936,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
     );
   }
 
-  Widget _buildDrawer() {
-    return Drawer(
-      backgroundColor: const Color(0xFF3D1040),
-      child: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Icon(Icons.maps_home_work_rounded, color: Colors.white, size: 26),
-                  ),
-                  const SizedBox(width: 14),
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('زيارة', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white)),
-                      Text('خدمات المنزل', style: TextStyle(fontSize: 12, color: Colors.white60)),
-                    ],
-                  ),
-                  const Spacer(),
-                  IconButton(
-                     onPressed: ()=> Navigator.pop(context),
-                     icon: const Icon(Icons.close_rounded, color: Colors.white60, size: 22),
-                  )
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            _buildDrawerItem(Icons.home_outlined, 'الرئيسية', true, onTap: () => Navigator.pop(context)),
-            _buildDrawerItem(Icons.person_outline, 'الملف الشخصي', false, onTap: () {
-              Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahProfileScreen()));
-            }),
-            _buildDrawerItem(Icons.calendar_today_outlined, 'حجوزاتي والطلبات', false, onTap: () {
-              Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen()));
-            }),
-            _buildDrawerItem(Icons.support_agent, 'الدعم الفني', false, onTap: () {
-              Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahSupportScreen()));
-            }),
-            _buildDrawerItem(Icons.description_outlined, 'عقودي الإلكتـرونية', false, onTap: () {
-              Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahContractsListScreen()));
-            }),
-            const Spacer(),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ListTile(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                tileColor: Colors.white.withValues(alpha: 0.08),
-                leading: const Icon(Icons.logout_rounded, color: Colors.white60, size: 20),
-                title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w500, fontSize: 14)),
-                onTap: () async {
-                  ZyiarahCoreService.triggerHapticSelection();
-                  await FirebaseAuth.instance.signOut();
-                  if (mounted) context.go('/');
-                },
-              ),
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawerItem(IconData icon, String title, bool isActive, {required VoidCallback onTap}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
-      child: ListTile(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        tileColor: isActive ? Colors.white.withValues(alpha: 0.15) : Colors.transparent,
-        leading: Icon(icon, color: isActive ? Colors.white : Colors.white70, size: 20),
-        title: Text(
-          title,
-          style: TextStyle(
-            color: isActive ? Colors.white : Colors.white70,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.w400,
-            fontSize: 14,
-          ),
-        ),
-        trailing: isActive ? Container(
-          width: 5,
-          height: 5,
-          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-        ) : null,
-        onTap: () {
-          ZyiarahCoreService.triggerHapticLight();
-          onTap();
-        },
-      ),
-    );
-  }
 
   Widget _buildAnimatedItem(Widget child) {
     return TweenAnimationBuilder<double>(
