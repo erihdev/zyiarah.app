@@ -145,7 +145,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                     onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (c) => const ZyiarahForgotPasswordScreen())),
                     child: Text(
                       "نسيت كلمة المرور؟",
-                      style: GoogleFonts.tajawal(color: const Color(0xFF4A0E0E), fontWeight: FontWeight.bold),
+                      style: GoogleFonts.tajawal(color: brandColor, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
@@ -166,7 +166,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text("مستخدم سابق؟ ", style: GoogleFonts.tajawal(color: Colors.white70)),
+                    Text("مستخدم سابق؟ ", style: GoogleFonts.tajawal(color: Colors.grey[600])),
                     GestureDetector(
                       onTap: () {
                         Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahAccountActivationScreen()));
@@ -180,7 +180,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                 ),
                 const SizedBox(height: 30),
                 _isLoading
-                    ? const Center(child: CircularProgressIndicator(color: Color(0xFF4A0E0E)))
+                    ? Center(child: CircularProgressIndicator(color: brandColor))
                     : ElevatedButton(
                         onPressed: _login,
                         style: ElevatedButton.styleFrom(

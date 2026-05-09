@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -34,15 +35,18 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: Text("تتبع طلبك", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
           elevation: 0,
+          systemOverlayStyle: SystemUiOverlayStyle.light,
         ),
         body: StreamBuilder<DocumentSnapshot>(
           stream: FirebaseFirestore.instance.collection('orders').doc(widget.orderId).snapshots(),
@@ -98,7 +102,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           },
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildLiveMap(GeoPoint? clientLoc, GeoPoint? driverLoc) {
@@ -136,10 +141,10 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                   children: [
                     Container(
                       padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]),
+                      decoration: const BoxDecoration(color: Color(0xFF5D1B5E), shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]),
                       child: const Icon(Icons.directions_car, color: Colors.white, size: 20),
                     ),
-                    const Icon(Icons.arrow_drop_down, color: Colors.blue, size: 15),
+                    const Icon(Icons.arrow_drop_down, color: Color(0xFF5D1B5E), size: 15),
                   ],
                 ),
               ),
@@ -176,7 +181,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Text(distanceInfo, style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 12)),
+                          Text(distanceInfo, style: const TextStyle(color: Color(0xFF5D1B5E), fontWeight: FontWeight.bold, fontSize: 12)),
                           _buildStaleStatus(data['last_location_update']),
                         ],
                       ),

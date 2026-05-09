@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart' as intl;
@@ -16,17 +18,19 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
   bool _isSending = false;
 
   @override
-  @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
 
-    return DefaultTabController(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: DefaultTabController(
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text("تذاكر الدعم الفني", style: TextStyle(fontWeight: FontWeight.bold)),
+          title: Text("تذاكر الدعم الفني", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
           backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
+          systemOverlayStyle: SystemUiOverlayStyle.light,
           bottom: const TabBar(
             indicatorColor: Colors.white,
             labelColor: Colors.white,
@@ -54,7 +58,8 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
           foregroundColor: Colors.white,
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildTicketList(User? user, List<String> statuses) {

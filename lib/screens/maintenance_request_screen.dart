@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -163,13 +164,16 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text('طلب صيانة', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
         backgroundColor: brandPurple,
         foregroundColor: Colors.white,
         elevation: 0,
+        systemOverlayStyle: SystemUiOverlayStyle.light,
       ),
       body: Directionality(
         textDirection: TextDirection.rtl,
@@ -214,7 +218,8 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildSectionTitle(String title) {
