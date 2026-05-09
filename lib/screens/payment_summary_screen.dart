@@ -185,9 +185,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         if (widget.maintenanceId != null) {
            await _processUnifiedSuccess(finalOrderId, orderCode, 'subscription', isFree: true);
         } else {
-          await FirebaseFirestore.instance.collection('users').doc(_currentUser?.uid).update({
-            'visits_remaining': FieldValue.increment(-1),
-          });
+          // الخصم يتم عند إكمال الطلب في order_service.dart — لا نخصم هنا
           await _processUnifiedSuccess(finalOrderId, orderCode, 'subscription', isFree: true);
         }
 

@@ -198,6 +198,7 @@ class ZyiarahOrderService {
   Future<void> cancelOrder(String orderId, {String cancelledBy = 'client'}) async {
     String? orderCode;
     bool needsRefund = false;
+    String? cancelledDriverId;
 
     await _db.runTransaction((transaction) async {
       final orderRef = _db.collection('orders').doc(orderId);
@@ -218,6 +219,7 @@ class ZyiarahOrderService {
       orderCode = orderData['code'] as String?;
       needsRefund = orderData['is_paid'] == true;
       final driverId = orderData['driver_id'] as String?;
+      cancelledDriverId = driverId;
 
       transaction.update(orderRef, {
         'status': 'cancelled',
@@ -234,6 +236,14 @@ class ZyiarahOrderService {
           'is_available': true,
         });
       }
+
+      // إعادة الزيارة إذا كان الدفع باشتراك — الخصم يتم عند الإنشاء فقط
+      final isSubscription = orderData['payment_method'] == 'subscription';
+      final clientId = orderData['client_id'] as String?;
+      if (isSubscription && clientId != null) {
+        final userRef = _db.collection('users').doc(clientId);
+        transaction.update(userRef, {'visits_remaining': FieldValue.increment(1)});
+      }
     });
 
     ZyiarahAuditService().logAction(
@@ -242,6 +252,18 @@ class ZyiarahOrderService {
       targetId: orderId,
     );
 
+    // إشعار السائق إذا كان مُسنَّداً
+    if (cancelledDriverId != null) {
+      ZyiarahNotificationTriggerService().triggerNotification(
+        toUid: cancelledDriverId!,
+        title: "تم إلغاء الطلب",
+        body: "تم إلغاء الطلب #${orderCode ?? orderId} بواسطة ${cancelledBy == 'client' ? 'العميل' : 'الإدارة'}.",
+        type: 'driver_order_cancelled',
+        data: {'orderId': orderId, 'code': orderCode ?? orderId},
+      ).catchError((_) {});
+    }
+
+    // إشعار الإدارة
     await ZyiarahNotificationTriggerService().triggerNotification(
       toUid: 'ADMIN_BROADCAST',
       title: "تم إلغاء طلب ⚠️",
