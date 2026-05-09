@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:zyiarah/services/store_service.dart';
 import 'package:zyiarah/widgets/shimmer_loading.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -41,7 +42,9 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
@@ -155,7 +158,8 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildEmptyState() {
@@ -189,7 +193,7 @@ class _ProductCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2563EB).withValues(alpha: 0.08), 
+            color: const Color(0xFF5D1B5E).withValues(alpha: 0.08), 
             blurRadius: 20, 
             offset: const Offset(0, 8)
           )
@@ -230,7 +234,7 @@ class _ProductCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('${product.price} ر.س', style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF2563EB))),
+                    Text('${product.price} ر.س', style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF5D1B5E))),
                     InkWell(
                       onTap: onAdd,
                       child: Container(
@@ -391,7 +395,7 @@ class _CartSheetState extends State<_CartSheet> {
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    border: Border.all(color: _selectedPaymentMethod == 'cash_on_delivery' ? const Color(0xFF2563EB) : Colors.grey.shade200),
+                    border: Border.all(color: _selectedPaymentMethod == 'cash_on_delivery' ? const Color(0xFF5D1B5E) : Colors.grey.shade200),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: RadioListTile(
@@ -403,7 +407,7 @@ class _CartSheetState extends State<_CartSheet> {
                     title: const Text('الدفع عند الاستلام', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                     subtitle: const Text('الدفع كاش أو عبر الشبكة عند استلام المنتجات', style: TextStyle(fontSize: 11, color: Colors.grey)),
                     secondary: const Icon(Icons.money, color: Colors.green),
-                    fillColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? const Color(0xFF2563EB) : null),
+                    fillColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? const Color(0xFF5D1B5E) : null),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   ),
                 ),
@@ -411,7 +415,7 @@ class _CartSheetState extends State<_CartSheet> {
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    border: Border.all(color: _selectedPaymentMethod == 'online' ? const Color(0xFF2563EB) : Colors.grey.shade200),
+                    border: Border.all(color: _selectedPaymentMethod == 'online' ? const Color(0xFF5D1B5E) : Colors.grey.shade200),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: RadioListTile(
@@ -423,7 +427,7 @@ class _CartSheetState extends State<_CartSheet> {
                     title: const Text('دفع إلكتروني (تمارا / بطاقة)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                     subtitle: const Text('دفع آمن عبر بوابة EdfaPay أو Tamara', style: TextStyle(fontSize: 11, color: Colors.grey)),
                     secondary: const Icon(Icons.payment, color: Colors.blue),
-                    fillColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? const Color(0xFF2563EB) : null),
+                    fillColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? const Color(0xFF5D1B5E) : null),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   ),
                 ),
@@ -455,12 +459,12 @@ class _CartSheetState extends State<_CartSheet> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _agreeToTerms ? const Color(0xFF2563EB) : Colors.grey.shade200),
+        border: Border.all(color: _agreeToTerms ? const Color(0xFF5D1B5E) : Colors.grey.shade200),
       ),
       child: CheckboxListTile(
         value: _agreeToTerms,
         onChanged: (val) => setState(() => _agreeToTerms = val ?? false),
-        activeColor: const Color(0xFF2563EB),
+        activeColor: const Color(0xFF5D1B5E),
         title: Text(
           "أوافق على شروط المتجر وسياسة الخصوصية",
           style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold),

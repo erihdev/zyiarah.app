@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/services/tamara_service.dart';
@@ -378,7 +379,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFFF1F5F9),
@@ -412,12 +415,13 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             if (_isLoading)
               Container(
                 color: Colors.black.withValues(alpha: 0.3),
-                child: const Center(child: CircularProgressIndicator(color: Color(0xFF2563EB))),
+                child: const Center(child: CircularProgressIndicator(color: Color(0xFF5D1B5E))),
               ),
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildInvoiceHeader() {
@@ -536,7 +540,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             children: [
               Text('الإجمالي المستحق', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
               Text('${totalWithVat.toStringAsFixed(2)} ر.س', 
-                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF2563EB))),
+                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF5D1B5E))),
             ],
           ),
         ],
@@ -689,19 +693,19 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFEFF6FF) : Colors.white,
+          color: isSelected ? const Color(0xFFF3E8F4) : Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade200, width: 2),
+          border: Border.all(color: isSelected ? const Color(0xFF5D1B5E) : Colors.grey.shade200, width: 2),
         ),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF2563EB).withValues(alpha: 0.1) : Colors.grey.shade50, 
+                color: isSelected ? const Color(0xFF5D1B5E).withValues(alpha: 0.1) : Colors.grey.shade50, 
                 shape: BoxShape.circle, 
               ),
-              child: Icon(icon, color: color ?? const Color(0xFF2563EB)),
+              child: Icon(icon, color: color ?? const Color(0xFF5D1B5E)),
             ),
             const SizedBox(width: 15),
             Expanded(
@@ -713,7 +717,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 ],
               ),
             ),
-            if (isSelected) const Icon(Icons.check_circle, color: Color(0xFF2563EB)),
+            if (isSelected) const Icon(Icons.check_circle, color: Color(0xFF5D1B5E)),
           ],
         ),
       ),
@@ -726,12 +730,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _agreeToTerms ? const Color(0xFF2563EB) : Colors.grey.shade200),
+        border: Border.all(color: _agreeToTerms ? const Color(0xFF5D1B5E) : Colors.grey.shade200),
       ),
       child: CheckboxListTile(
         value: _agreeToTerms,
         onChanged: (val) => setState(() => _agreeToTerms = val ?? false),
-        activeColor: const Color(0xFF2563EB),
+        activeColor: const Color(0xFF5D1B5E),
         title: Text(
           "أوافق على شروط الخدمة وسياسة الخصوصية الخاصة بزيارة",
           style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -45,7 +46,9 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark,
+      child: Scaffold(
       backgroundColor: Colors.white,
       body: Directionality(
         textDirection: TextDirection.rtl,
@@ -76,7 +79,7 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
               Text(
                 widget.title,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 24, color: const Color(0xFF1E293B)),
+                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 24, color: const Color(0xFF5D1B5E)),
               ),
               const SizedBox(height: 15),
               Text(
@@ -98,7 +101,7 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
                     const SizedBox(height: 5),
                     Text(
                       widget.orderCode,
-                      style: GoogleFonts.ibmPlexMono(fontWeight: FontWeight.w900, fontSize: 32, letterSpacing: 2, color: const Color(0xFF1E293B)),
+                      style: GoogleFonts.ibmPlexMono(fontWeight: FontWeight.w900, fontSize: 32, letterSpacing: 2, color: const Color(0xFF5D1B5E)),
                     ),
                   ],
                 ),
@@ -113,7 +116,7 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E293B),
+                    backgroundColor: const Color(0xFF5D1B5E),
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
@@ -135,7 +138,8 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildInvoiceSection() {
@@ -170,7 +174,7 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
           icon: const Icon(Icons.picture_as_pdf_rounded, size: 20, color: Color(0xFF1E293B)),
-          label: Text("تحميل الفاتورة الضريبية", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF1E293B))),
+          label: Text("تحميل الفاتورة الضريبية", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF5D1B5E))),
         );
       },
     );
