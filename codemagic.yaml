@@ -8,10 +8,15 @@ workflows:
     environment:
       flutter: stable
       xcode: latest
+      groups:
+        - appstore_credentials
       vars:
         BUNDLE_ID: "com.zyiarah.zyiarah"
         APP_STORE_APP_ID: "6760955777"
     scripts:
+      - name: Create .env file
+        script: |
+          echo "MAPBOX_TOKEN=$MAPBOX_TOKEN" > .env
       - name: Get Flutter dependencies
         script: flutter pub get
       - name: Install Pods
