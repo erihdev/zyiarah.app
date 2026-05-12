@@ -249,7 +249,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
       stream: FirebaseFirestore.instance
           .collection('orders')
           .where('client_id', isEqualTo: uid)
-          .where('status', whereIn: ['accepted', 'arrived', 'in_progress'])
+          .where('status', whereIn: ['accepted', 'in_progress'])
           .limit(1)
           .snapshots(),
       builder: (context, snapshot) {
@@ -262,7 +262,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
         final String orderId = orderDoc.id;
         final String status = data['status'] ?? '';
         String statusText = ZyiarahStrings.driverOnWay;
-        if (status == 'arrived') statusText = ZyiarahStrings.driverArrived;
         if (status == 'in_progress') statusText = ZyiarahStrings.serviceInProgress;
 
         return Container(

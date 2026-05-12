@@ -295,7 +295,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
             if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
               final orderDoc = snapshot.data!.docs.first;
               final status = orderDoc.get('status');
-              if (status == 'accepted' || status == 'arrived' || status == 'in_progress') {
+              if (status == 'accepted' || status == 'in_progress') {
                 _startSync(orderDoc.id);
               } else {
                 _stopSync();
@@ -377,17 +377,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
     switch (status) {
       case 'accepted':
         stateTitle = "في الطريق للعميل";
-        actionLabel = "لقد وصلت للموقع";
-        nextStatus = "arrived";
+        actionLabel = "وصلت — بدء الخدمة الآن";
+        nextStatus = "in_progress";
         stateColor = Colors.blue;
         stateIcon = Icons.map;
-        break;
-      case 'arrived':
-        stateTitle = "وصلت للموقع";
-        actionLabel = "بدء الخدمة الآن";
-        nextStatus = "in_progress";
-        stateColor = Colors.orange;
-        stateIcon = Icons.location_on;
         break;
       case 'in_progress':
         stateTitle = "الخدمة قيد التنفيذ";
@@ -422,7 +415,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   children: [
                     Text(stateTitle, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: stateColor)),
                     Text("عميل: ${data['client_name'] ?? 'بدون اسم'}", style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                    if ((status == 'accepted' || status == 'arrived') && data['location'] is GeoPoint)
+                    if (status == 'accepted' && data['location'] is GeoPoint)
                     _buildDistanceInfo(data['location'] as GeoPoint),
                   ],
                 ),
