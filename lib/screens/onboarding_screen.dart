@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 import 'package:zyiarah/screens/login_screen.dart';
+import 'package:zyiarah/screens/guest_explore_screen.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -38,6 +39,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   void _goToLogin() {
     ZyiarahCoreService.triggerHapticSelection();
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ZyiarahLoginScreen()));
+  }
+
+  void _goToGuest() {
+    ZyiarahCoreService.triggerHapticLight();
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const GuestExploreScreen()));
   }
 
   @override
@@ -139,6 +145,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         curve: Curves.easeInOutExpo,
                       );
                     }),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton(
+              onPressed: _goToGuest,
+              child: Text(
+                'تصفّح بدون تسجيل',
+                style: GoogleFonts.tajawal(fontSize: 14, color: Colors.grey[500]),
+              ),
             ),
           ),
         ],
