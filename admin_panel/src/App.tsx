@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
-import { auth } from './services/firebase.ts';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from './services/firebase.ts';
 import Layout from './components/Layout.tsx';
 import Dashboard from './pages/Dashboard.tsx';
 import Login from './pages/Login.tsx';
@@ -23,13 +24,27 @@ import StoreOrders from './pages/StoreOrders.tsx';
 import Services from './pages/Services.tsx';
 import Payroll from './pages/Payroll.tsx';
 
+const ADMIN_ROLES = ['super_admin', 'admin', 'orders_manager', 'accountant_admin', 'marketing_admin'];
+
 function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      if (currentUser) {
+        try {
+          const snap = await getDoc(doc(db, 'users', currentUser.uid));
+          const role = snap.data()?.role as string | undefined;
+          setIsAdmin(!!role && ADMIN_ROLES.includes(role));
+        } catch {
+          setIsAdmin(false);
+        }
+      } else {
+        setIsAdmin(false);
+      }
       setLoading(false);
     });
     return () => unsubscribe();
@@ -46,6 +61,27 @@ function App() {
     );
   }
 
+  if (user && !isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50" dir="rtl">
+        <div className="flex flex-col items-center text-center p-8 max-w-sm">
+          <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center mb-4">
+            <span className="text-3xl">🚫</span>
+          </div>
+          <h2 className="text-xl font-black text-slate-800 mb-2">غير مصرّح لك بالدخول</h2>
+          <p className="text-slate-500 font-medium mb-6">هذا الحساب لا يملك صلاحية الوصول للوحة التحكم.</p>
+          <button
+            type="button"
+            onClick={() => auth.signOut()}
+            className="px-6 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-700 transition-colors"
+          >
+            تسجيل الخروج
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const handleLogout = () => {
     auth.signOut();
   };
@@ -55,13 +91,13 @@ function App() {
       <Routes>
         <Route
           path="/login"
-          element={user ? <Navigate to="/" /> : <Login />}
+          element={user && isAdmin ? <Navigate to="/" /> : <Login />}
         />
 
         {/* Protected Routes */}
         <Route
           path="/"
-          element={user ? <Layout onLogout={handleLogout} /> : <Navigate to="/login" />}
+          element={user && isAdmin ? <Layout onLogout={handleLogout} /> : <Navigate to="/login" />}
         >
           <Route index element={<Dashboard />} />
           <Route path="orders" element={<Orders />} />

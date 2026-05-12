@@ -206,7 +206,7 @@ export default function Drivers() {
                                     </div>
                                 </div>
                                 <div className="text-center border-r border-slate-100">
-                                    <span className="block text-xs font-bold text-slate-400 mb-1">الرحلات</span>
+                                    <span className="block text-xs font-bold text-slate-400 mb-1">الخدمات</span>
                                     <span className="font-bold text-slate-700">{driver.rides}</span>
                                 </div>
                                 <div className="text-center border-r border-slate-100">

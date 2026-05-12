@@ -122,17 +122,25 @@ export default function Layout({ onLogout }: LayoutProps) {
                 <header className="h-24 sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-slate-200/50 flex items-center justify-between px-10 transition-all duration-300">
                     <div className="flex items-center space-x-4 space-x-reverse">
                         <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">
-                            {location.pathname === '/' ? 'لوحة القيادة' :
-                                location.pathname === '/orders' ? 'إدارة الطلبات' :
-                                    location.pathname === '/drivers' ? 'إدارة السائقين' :
-                                        location.pathname === '/maintenance' ? 'إدارة طلبات الصيانة' :
-                                            location.pathname === '/contracts' ? 'إدارة العقود الإلكترونية' :
-                                                location.pathname === '/store-products' ? 'إدارة منتجات المتجر' :
-                                                    location.pathname === '/store-orders' ? 'طلبات المتجر' :
-                                                        location.pathname === '/users' ? 'إدارة العملاء' :
-                                                            location.pathname === '/settings' ? 'إعدادات النظام' :
-                                                location.pathname === '/payroll' ? 'إدارة الرواتب' :
-                                                    location.pathname === '/accountants' ? 'المحاسبة والمالية' : 'لوحة التحكم'}
+                            {{
+                                '/': 'لوحة القيادة',
+                                '/orders': 'إدارة الطلبات',
+                                '/drivers': 'إدارة السائقين',
+                                '/users': 'إدارة العملاء',
+                                '/services': 'إدارة الخدمات والتسعير',
+                                '/maintenance': 'إدارة طلبات الصيانة',
+                                '/contracts': 'العقود الإلكترونية',
+                                '/store-products': 'إدارة منتجات المتجر',
+                                '/store-orders': 'طلبات المتجر',
+                                '/accountants': 'المحاسبة والمالية',
+                                '/payroll': 'إدارة الرواتب',
+                                '/marketing': 'إدارة التسويق',
+                                '/notifications': 'إرسال الإشعارات',
+                                '/support': 'الدعم الفني والشكاوى',
+                                '/account-deletion': 'طلبات حذف الحساب',
+                                '/admins': 'المشرفون والصلاحيات',
+                                '/settings': 'إعدادات النظام',
+                            }[location.pathname] ?? 'لوحة التحكم'}
                         </h2>
                     </div>
 

@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Banknote, CheckCircle2, Clock, Users, ChevronRight, ChevronLeft, Loader2, BadgeCheck, Wallet } from 'lucide-react';
 import { collection, onSnapshot, query, doc, setDoc, serverTimestamp, where } from 'firebase/firestore';
-import { db } from '../services/firebase.ts';
-import { auth } from '../services/firebase.ts';
+import { db, auth } from '../services/firebase.ts';
 
 interface Driver {
     id: string;
