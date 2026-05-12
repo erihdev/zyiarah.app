@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 import 'package:zyiarah/screens/onboarding_screen.dart';
 import 'package:zyiarah/screens/login_screen.dart';
+import 'package:zyiarah/screens/guest_explore_screen.dart';
 import 'package:zyiarah/screens/client_dashboard.dart';
 import 'package:zyiarah/screens/driver_dashboard.dart';
 import 'package:zyiarah/screens/admin/admin_dashboard_screen.dart';
@@ -22,6 +23,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/login',
       builder: (context, state) => const ZyiarahLoginScreen(),
+    ),
+    GoRoute(
+      path: '/guest',
+      builder: (context, state) => const GuestExploreScreen(),
     ),
     GoRoute(
       path: '/client',
