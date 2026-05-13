@@ -23,17 +23,6 @@ workflows:
         script: cd ios && pod install
       - name: Initialize keychain
         script: keychain initialize
-      - name: Revoke stale distribution certificates
-        script: |
-          for TYPE in IOS_DISTRIBUTION DISTRIBUTION APPLE_DISTRIBUTION; do
-            CERT_IDS=$(app-store-connect certificates list --type $TYPE --json \
-              | python3 -c "import sys,json; print(' '.join(c['id'] for c in json.load(sys.stdin)))" 2>/dev/null || true)
-            if [ -n "$CERT_IDS" ]; then
-              echo "Revoking $TYPE: $CERT_IDS"
-              app-store-connect certificates revoke $CERT_IDS || true
-            fi
-          done
-          sleep 5
       - name: Generate certificate private key
         script: |
           openssl genrsa 2048 > /tmp/private.key
@@ -45,7 +34,8 @@ workflows:
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --certificate-key @file:/tmp/private.key \
-            --create
+            --create \
+            --revoke-certificates
       - name: Add certificates to keychain
         script: keychain add-certificates
       - name: Set up Xcode code signing
