@@ -37,23 +37,24 @@ workflows:
               with open('/tmp/all_certs.json') as f:
                   content = f.read()
               certs = json.loads(content)
-              found = False
+              revoked = 0
               for c in certs:
-                  ct = c.get('certificateType', '')
+                  # Apple API format: certificateType is inside attributes{}
+                  attrs = c.get('attributes', {})
+                  ct = attrs.get('certificateType', '')
                   cid = c.get('id', '')
                   print(f'  Cert: type={ct}, id={cid}')
-                  if 'DISTRIBUTION' in ct.upper() and cid:
-                      found = True
+                  if cid:  # revoke any cert that has an id
                       result = subprocess.run(
                           ['app-store-connect', 'certificates', 'revoke', cid],
                           capture_output=True, text=True
                       )
                       if result.returncode == 0:
+                          revoked += 1
                           print(f'  ✓ Revoked {cid}')
                       else:
                           print(f'  ✗ Failed to revoke {cid}: {result.stderr}')
-              if not found:
-                  print('  No distribution certificates found.')
+              print(f'  Total revoked: {revoked}')
           except Exception as e:
               print(f'Error parsing certs: {e}', file=sys.stderr)
           PYEOF
