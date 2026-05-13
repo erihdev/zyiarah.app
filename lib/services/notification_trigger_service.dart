@@ -170,7 +170,7 @@ class ZyiarahNotificationTriggerService {
   /// تنبيه العميل بحركات السائق
   Future<void> notifyClientOfDriverStatus({
     required String clientId,
-    required String status, // 'accepted', 'arrived', 'started', 'completed'
+    required String status, // 'accepted', 'in_progress', 'completed'
     required String orderCode,
     String? driverName,
   }) async {
@@ -182,13 +182,9 @@ class ZyiarahNotificationTriggerService {
         title = "تم قبول طلبك! 🚚";
         body = "السائق ${driverName ?? ''} في الطريق إليك الآن لتنفيذ الطلب #$orderCode.";
         break;
-      case 'arrived':
-        title = "وصل السائق! 🏠";
-        body = "السائق ${driverName ?? ''} متواجد الآن عند موقعك لتنفيذ الطلب #$orderCode.";
-        break;
-      case 'started':
-        title = "بدأ العمل 🛠️";
-        body = "بدأ فريق زيارة الآن في تنفيذ خدمتك للطلب #$orderCode.";
+      case 'in_progress':
+        title = "وصل السائق وبدأ العمل! 🏠🛠️";
+        body = "السائق ${driverName ?? ''} وصل وبدأ تنفيذ خدمتك للطلب #$orderCode.";
         break;
       case 'completed':
         title = "تم الإنجاز! ✨";

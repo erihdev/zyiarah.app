@@ -135,7 +135,7 @@ export default function Dashboard() {
             }
         });
         const unsubOrders = onSnapshot(
-            query(collection(db, 'orders'), where('status', 'in', ['pending', 'in_progress', 'accepted', 'arrived'])),
+            query(collection(db, 'orders'), where('status', 'in', ['pending', 'in_progress', 'accepted'])),
             (snap: QuerySnapshot<DocumentData>) => setActiveOrders(snap.size.toString())
         );
         const unsubDrivers = onSnapshot(

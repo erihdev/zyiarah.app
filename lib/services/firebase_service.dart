@@ -208,7 +208,7 @@ class ZyiarahFirebaseService {
         return data['role'] ?? 'client';
       }
 
-      // 2. إذا لم يوجد، وكان هناك رقم جوال، نتحقق من مجموعة السائقين
+      // 3. إذا لم يوجد، وكان هناك رقم جوال، نتحقق من مجموعة السائقين
       if (phone != null) {
         // تنظيف رقم الجوال (التأكد من الصيغة: 5XXXXXXXX)
         String cleanPhone = phone.replaceAll(RegExp(r'\D'), '');

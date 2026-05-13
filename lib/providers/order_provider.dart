@@ -64,7 +64,7 @@ class ZyiarahOrderProvider extends ChangeNotifier {
     return recentOrders.where((doc) {
       final data = doc.data() as Map<String, dynamic>;
       final status = data['status'] ?? 'pending';
-      return ['accepted', 'arrived', 'in_progress'].contains(status);
+      return ['accepted', 'in_progress'].contains(status);
     }).toList();
   }
 }

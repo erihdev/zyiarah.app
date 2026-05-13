@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Search, Filter, ShieldCheck, MapPin, Phone, Star, ShieldAlert, X, Loader2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { collection, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, query, orderBy, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
+import { useNotification } from '../components/Notification.tsx';
 
 interface DriverData {
     id: string;
@@ -26,6 +27,7 @@ const StatusBadge = ({ is_available, is_suspended = false }: { is_available: boo
 };
 
 export default function Drivers() {
+    const { toast } = useNotification();
     const [searchTerm, setSearchTerm] = useState('');
     const [drivers, setDrivers] = useState<DriverData[]>([]);
     const [isAvailableCount, setIsAvailableCount] = useState(0);
@@ -80,7 +82,7 @@ export default function Drivers() {
             setNewDriver({ name: '', phone: '', vehicle: '', monthly_salary: 0 });
         } catch (error) {
             console.error("Error adding driver: ", error);
-            alert("حدث خطأ أثناء إضافة السائق.");
+            toast.error("حدث خطأ أثناء إضافة السائق.");
         } finally {
             setIsAdding(false);
         }
@@ -96,7 +98,7 @@ export default function Drivers() {
             });
         } catch (err) {
             console.error('Error toggling suspension:', err);
-            alert('حدث خطأ');
+            toast.error("حدث خطأ أثناء تعديل حالة السائق.");
         } finally {
             setTogglingId(null);
         }
@@ -206,7 +208,7 @@ export default function Drivers() {
                                     </div>
                                 </div>
                                 <div className="text-center border-r border-slate-100">
-                                    <span className="block text-xs font-bold text-slate-400 mb-1">الرحلات</span>
+                                    <span className="block text-xs font-bold text-slate-400 mb-1">الخدمات</span>
                                     <span className="font-bold text-slate-700">{driver.rides}</span>
                                 </div>
                                 <div className="text-center border-r border-slate-100">

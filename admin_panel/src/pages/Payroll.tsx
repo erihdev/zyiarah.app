@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Banknote, CheckCircle2, Clock, Users, ChevronRight, ChevronLeft, Loader2, BadgeCheck, Wallet } from 'lucide-react';
 import { collection, onSnapshot, query, doc, setDoc, serverTimestamp, where } from 'firebase/firestore';
-import { db } from '../services/firebase.ts';
-import { auth } from '../services/firebase.ts';
+import { db, auth } from '../services/firebase.ts';
+import { useNotification } from '../components/Notification.tsx';
 
 interface Driver {
     id: string;
@@ -52,6 +52,7 @@ function nextMonth(key: string) {
 }
 
 export default function Payroll() {
+    const { confirm } = useNotification();
     const [currentMonth, setCurrentMonth] = useState(() => getMonthKey(new Date()));
     const [drivers, setDrivers] = useState<Driver[]>([]);
     const [payrollRecords, setPayrollRecords] = useState<Record<string, PayrollRecord>>({});
@@ -129,7 +130,7 @@ export default function Payroll() {
     const markAllPaid = async () => {
         const unpaid = rows.filter(r => r.status === 'unpaid');
         if (!unpaid.length) return;
-        if (!confirm(`هل تريد تأكيد صرف رواتب ${unpaid.length} موظف؟`)) return;
+        if (!await confirm(`هل تريد تأكيد صرف رواتب ${unpaid.length} موظف؟`)) return;
         setPayingAll(true);
         try {
             await Promise.all(unpaid.map(r =>

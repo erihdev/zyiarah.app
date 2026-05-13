@@ -30,7 +30,6 @@ class ZyiarahStatus {
       case 'assigned':
         return {'text': 'تم التعيين', 'color': Colors.blue};
       case 'accepted':
-      case 'arrived':
       case 'in_progress':
         return {'text': 'جاري التنفيذ', 'color': Colors.purple};
       case 'completed':

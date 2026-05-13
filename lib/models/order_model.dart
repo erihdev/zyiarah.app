@@ -36,17 +36,17 @@ class ZyiarahOrder {
   factory ZyiarahOrder.fromMap(String id, Map<String, dynamic> data) {
     return ZyiarahOrder(
       id: id,
-      clientId: data['clientId'] ?? '',
-      driverId: data['driverId'],
-      serviceType: data['serviceType'] ?? '',
+      clientId: data['client_id'] ?? '',
+      driverId: data['driver_id'],
+      serviceType: data['service_type'] ?? data['service_name'] ?? '',
       amount: (data['amount'] ?? 0.0).toDouble(),
       status: data['status'] ?? 'pending',
-      paymentStatus: data['paymentStatus'] ?? 'unpaid',
+      paymentStatus: data['payment_method'] ?? 'unpaid',
       location: data['location'] as GeoPoint,
-      createdAt: (data['createdAt'] as Timestamp).toDate(),
-      hours: data['hours'],
-      serviceDate: data['serviceDate'] != null 
-          ? (data['serviceDate'] as Timestamp).toDate() 
+      createdAt: (data['created_at'] as Timestamp).toDate(),
+      hours: data['hours_contracted'],
+      serviceDate: data['service_date'] != null
+          ? (data['service_date'] as Timestamp).toDate()
           : null,
       workerCount: data['worker_count'] ?? 1,
       couponCode: data['coupon_code'],
@@ -56,16 +56,16 @@ class ZyiarahOrder {
 
   Map<String, dynamic> toMap() {
     return {
-      'clientId': clientId,
-      'driverId': driverId,
-      'serviceType': serviceType,
+      'client_id': clientId,
+      'driver_id': driverId,
+      'service_type': serviceType,
       'amount': amount,
       'status': status,
-      'paymentStatus': paymentStatus,
+      'payment_method': paymentStatus,
       'location': location,
-      'createdAt': Timestamp.fromDate(createdAt),
-      'hours': hours,
-      'serviceDate': serviceDate != null ? Timestamp.fromDate(serviceDate!) : null,
+      'created_at': Timestamp.fromDate(createdAt),
+      'hours_contracted': hours,
+      'service_date': serviceDate != null ? Timestamp.fromDate(serviceDate!) : null,
       'worker_count': workerCount,
       'coupon_code': couponCode,
       'discount_amount': discountAmount,
