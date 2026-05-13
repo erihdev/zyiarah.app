@@ -28,8 +28,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
 
   final List<Map<String, dynamic>> _steps = [
     {'status': 'accepted', 'label': 'السائق في الطريق', 'icon': Icons.directions_car},
-    {'status': 'arrived', 'label': 'وصل السائق للموقع', 'icon': Icons.location_on},
-    {'status': 'in_progress', 'label': 'بدء الخدمة', 'icon': Icons.cleaning_services},
+    {'status': 'in_progress', 'label': 'وصل السائق وبدأ الخدمة', 'icon': Icons.cleaning_services},
     {'status': 'completed', 'label': 'تمت المهمة بنجاح', 'icon': Icons.verified},
   ];
 
@@ -211,9 +210,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     // Map Firestore status to our UI steps
     Map<String, int> stepMapping = {
       'accepted': 0,
-      'arrived': 1,
-      'in_progress': 2,
-      'completed': 3,
+      'in_progress': 1,
+      'completed': 2,
     };
     int uiIndex = stepMapping[currentStatus] ?? -1;
 

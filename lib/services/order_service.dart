@@ -294,7 +294,7 @@ class ZyiarahOrderService {
         'status': status,
         if (driverId != null) 'driver_id': driverId,
         if (status == 'accepted') 'accepted_at': FieldValue.serverTimestamp(),
-        if (status == 'arrived') 'arrived_at': FieldValue.serverTimestamp(),
+        if (status == 'in_progress') 'arrived_at': FieldValue.serverTimestamp(),
         if (status == 'in_progress') 'start_time': FieldValue.serverTimestamp(),
         if (status == 'completed') 'end_time': FieldValue.serverTimestamp(),
       };
@@ -305,7 +305,7 @@ class ZyiarahOrderService {
       if (driverId != null) {
         final driverRef = _db.collection('drivers').doc(driverId);
         String driverStatus = 'available';
-        if (status == 'accepted' || status == 'arrived') driverStatus = 'en_route';
+        if (status == 'accepted') driverStatus = 'en_route';
         if (status == 'in_progress') driverStatus = 'in_service';
         
         transaction.update(driverRef, {
@@ -380,10 +380,10 @@ class ZyiarahOrderService {
       final activeSnap = await _db
           .collection('orders')
           .where('driver_id', isEqualTo: driverId)
-          .where('status', whereIn: ['accepted', 'arrived', 'in_progress'])
+          .where('status', whereIn: ['accepted', 'in_progress'])
           .limit(1)
           .get();
-      
+
       if (activeSnap.docs.isNotEmpty) {
         return false;
       }
@@ -416,7 +416,7 @@ class ZyiarahOrderService {
     final activeSnap = await _db
         .collection('orders')
         .where('driver_id', isEqualTo: driverId)
-        .where('status', whereIn: ['accepted', 'arrived', 'in_progress'])
+        .where('status', whereIn: ['accepted', 'in_progress'])
         .limit(1)
         .get();
     return activeSnap.docs.isNotEmpty;
@@ -434,7 +434,7 @@ class ZyiarahOrderService {
   Stream<QuerySnapshot> streamDriverActiveOrders(String driverId) {
     return _db.collection('orders')
         .where('driver_id', isEqualTo: driverId)
-        .where('status', whereIn: ['accepted', 'arrived', 'in_progress'])
+        .where('status', whereIn: ['accepted', 'in_progress'])
         .snapshots();
   }
 
@@ -458,6 +458,7 @@ class ZyiarahOrderService {
     if (!orderDoc.exists) return;
 
     final data = orderDoc.data() as Map<String, dynamic>;
+    if (data['rating'] != null) return; // منع التقييم المزدوج
     final String? driverId = data['driver_id'];
     String? evidenceUrl;
 

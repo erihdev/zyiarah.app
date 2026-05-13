@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Tag, Trash2, PlusCircle, Calendar, Percent, X, Loader2 } from 'lucide-react';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { useNotification } from '../components/Notification.tsx';
 
 interface PromoCode {
     id: string;
@@ -16,6 +17,7 @@ interface PromoCode {
 }
 
 export default function Marketing() {
+    const { toast, confirm } = useNotification();
     const [coupons, setCoupons] = useState<PromoCode[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -71,20 +73,19 @@ export default function Marketing() {
             setNewExpiry('');
         } catch (error) {
             console.error("Error adding promo code: ", error);
-            alert("حدث خطأ أثناء إضافة الكوبون.");
+            toast.error("حدث خطأ أثناء إضافة الكوبون.");
         } finally {
             setIsSubmitting(false);
         }
     };
 
     const handleDelete = async (id: string) => {
-        if (window.confirm("هل أنت متأكد من حذف هذا الكوبون؟")) {
-            try {
-                await deleteDoc(doc(db, 'promo_codes', id));
-            } catch (error) {
-                console.error("Error deleting promo code: ", error);
-                alert("حدث خطأ أثناء الحذف.");
-            }
+        if (!await confirm("هل أنت متأكد من حذف هذا الكوبون؟")) return;
+        try {
+            await deleteDoc(doc(db, 'promo_codes', id));
+        } catch (error) {
+            console.error("Error deleting promo code: ", error);
+            toast.error("حدث خطأ أثناء الحذف.");
         }
     };
 

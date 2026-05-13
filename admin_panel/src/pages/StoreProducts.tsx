@@ -1,27 +1,28 @@
 import { useState, useEffect } from 'react';
-import { 
-  collection, 
-  query, 
-  onSnapshot, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  doc, 
-  serverTimestamp 
+import {
+  collection,
+  query,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
-import { 
-  Plus, 
-  Search, 
-  Edit2, 
-  Trash2, 
-  Eye, 
-  EyeOff, 
+import {
+  Plus,
+  Search,
+  Edit2,
+  Trash2,
+  Eye,
+  EyeOff,
   Package,
   X,
   Save,
   Loader2
 } from 'lucide-react';
+import { useNotification } from '../components/Notification.tsx';
 
 interface Product {
   id: string;
@@ -33,6 +34,7 @@ interface Product {
 }
 
 export default function StoreProducts() {
+  const { confirm } = useNotification();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -105,9 +107,8 @@ export default function StoreProducts() {
   };
 
   const handleDelete = async (id: string) => {
-    if (globalThis.confirm('هل أنت متأكد من حذف هذا المنتج؟')) {
-      await deleteDoc(doc(db, 'products', id));
-    }
+    if (!await confirm('هل أنت متأكد من حذف هذا المنتج؟')) return;
+    await deleteDoc(doc(db, 'products', id));
   };
 
   const toggleVisibility = async (product: Product) => {

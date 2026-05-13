@@ -5,6 +5,7 @@ import {
     doc, orderBy, query
 } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
+import { useNotification } from '../components/Notification.tsx';
 
 interface DeletionRequest {
     id: string;
@@ -23,6 +24,7 @@ const formatDate = (ts?: { toDate: () => Date }): string => {
 };
 
 export default function AccountDeletion() {
+    const { confirm } = useNotification();
     const [searchTerm, setSearchTerm] = useState('');
     const [requests, setRequests] = useState<DeletionRequest[]>([]);
     const [loading, setLoading] = useState(true);
@@ -43,7 +45,7 @@ export default function AccountDeletion() {
     );
 
     const handleDelete = async (req: DeletionRequest) => {
-        if (!confirm(`هل تريد مسح بيانات ${req.name ?? 'هذا المستخدم'} نهائياً؟ لا يمكن التراجع.`)) return;
+        if (!await confirm(`هل تريد مسح بيانات ${req.name ?? 'هذا المستخدم'} نهائياً؟ لا يمكن التراجع.`)) return;
         setProcessingId(req.id);
         try {
             if (req.userId) {

@@ -1,28 +1,29 @@
 import { useState, useEffect } from 'react';
-import { 
-    Plus, 
-    Edit2, 
-    Trash2, 
-    Eye, 
-    EyeOff, 
-    Save, 
-    Settings, 
-    LayoutGrid, 
+import {
+    Plus,
+    Edit2,
+    Trash2,
+    Eye,
+    EyeOff,
+    Save,
+    Settings,
+    LayoutGrid,
     Loader2
 } from 'lucide-react';
-import { 
-    collection, 
-    getDocs, 
-    doc, 
-    getDoc, 
-    setDoc, 
-    addDoc, 
-    updateDoc, 
-    deleteDoc, 
-    query, 
-    orderBy 
+import {
+    collection,
+    getDocs,
+    doc,
+    getDoc,
+    setDoc,
+    addDoc,
+    updateDoc,
+    deleteDoc,
+    query,
+    orderBy
 } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
+import { useNotification } from '../components/Notification.tsx';
 
 interface AppService {
     id: string;
@@ -46,6 +47,7 @@ interface SofaRugPricing {
 }
 
 export default function Services() {
+    const { toast, confirm } = useNotification();
     const [services, setServices] = useState<AppService[]>([]);
     const [pricing, setPricing] = useState<SofaRugPricing>({
         sofa_price_inside: 35,
@@ -58,6 +60,9 @@ export default function Services() {
     const [isSavingPricing, setIsSavingPricing] = useState(false);
     const [isAddingService, setIsAddingService] = useState(false);
     const [editingService, setEditingService] = useState<AppService | null>(null);
+
+    const emptyForm = { title: '', subtitle: '', price_text: '', base_price: 0, route_name: '', icon_name: '', image_path: '', order_index: 0 };
+    const [formData, setFormData] = useState(emptyForm);
 
     useEffect(() => {
         fetchData();
@@ -96,17 +101,17 @@ export default function Services() {
             await updateDoc(ref, { is_active: !service.is_active });
             setServices(prev => prev.map(s => s.id === service.id ? { ...s, is_active: !s.is_active } : s));
         } catch {
-            alert("حدث خطأ أثناء التحديث");
+            toast.error("حدث خطأ أثناء تحديث الخدمة");
         }
     };
 
     const handleDeleteService = async (id: string) => {
-        if (!globalThis.confirm("هل أنت متأكد من حذف هذه الخدمة؟")) return;
+        if (!await confirm("هل أنت متأكد من حذف هذه الخدمة؟")) return;
         try {
             await deleteDoc(doc(db, 'services', id));
             setServices(prev => prev.filter(s => s.id !== id));
         } catch {
-            alert("حدث خطأ أثناء الحذف");
+            toast.error("حدث خطأ أثناء الحذف");
         }
     };
 
@@ -115,27 +120,47 @@ export default function Services() {
         try {
             const docRef = doc(db, 'system_configs', 'main_settings');
             await setDoc(docRef, pricing, { merge: true });
-            alert("تم حفظ أسعار الأمتار بنجاح!");
+            toast.success("تم حفظ أسعار الأمتار بنجاح");
         } catch {
-            alert("حدث خطأ أثناء الحفظ");
+            toast.error("حدث خطأ أثناء الحفظ");
         } finally {
             setIsSavingPricing(false);
         }
     };
 
+    const openAddModal = () => {
+        setFormData(emptyForm);
+        setEditingService(null);
+        setIsAddingService(true);
+    };
+
+    const openEditModal = (service: AppService) => {
+        setFormData({
+            title: service.title,
+            subtitle: service.subtitle,
+            price_text: service.price_text,
+            base_price: service.base_price,
+            route_name: service.route_name,
+            icon_name: service.icon_name,
+            image_path: service.image_path ?? '',
+            order_index: service.order_index,
+        });
+        setEditingService(service);
+        setIsAddingService(true);
+    };
+
     const handleSaveService = async (e: React.FormEvent) => {
         e.preventDefault();
-        const formData = new FormData(e.target as HTMLFormElement);
         const data = {
-            title: formData.get('title') as string,
-            subtitle: formData.get('subtitle') as string,
-            price_text: formData.get('price_text') as string,
-            base_price: Number(formData.get('base_price')),
-            is_active: true,
-            icon_name: formData.get('icon_name') as string,
-            image_path: formData.get('image_path') as string,
-            route_name: formData.get('route_name') as string,
-            order_index: Number(formData.get('order_index')),
+            title: formData.title,
+            subtitle: formData.subtitle,
+            price_text: formData.price_text,
+            base_price: formData.base_price,
+            is_active: editingService ? editingService.is_active : true,
+            icon_name: formData.icon_name,
+            image_path: formData.image_path,
+            route_name: formData.route_name,
+            order_index: formData.order_index,
         };
 
         try {
@@ -148,7 +173,7 @@ export default function Services() {
             setEditingService(null);
             fetchData();
         } catch {
-            alert("حدث خطأ أثناء الحفظ");
+            toast.error("حدث خطأ أثناء حفظ الخدمة");
         }
     };
 
@@ -164,7 +189,7 @@ export default function Services() {
                 </div>
                 <button
                     type="button"
-                    onClick={() => setIsAddingService(true)}
+                    onClick={openAddModal}
                     className="flex items-center justify-center space-x-2 space-x-reverse bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold transition-all shadow-lg shadow-blue-200"
                 >
                     <Plus size={20} />
@@ -229,9 +254,9 @@ export default function Services() {
                                 >
                                     {service.is_active ? <Eye size={20} /> : <EyeOff size={20} />}
                                 </button>
-                                <button 
+                                <button
                                     type="button"
-                                    onClick={() => { setEditingService(service); setIsAddingService(true); }}
+                                    onClick={() => openEditModal(service)}
                                     title="تعديل الخدمة"
                                     aria-label="Edit service"
                                     className="p-2.5 bg-slate-50 text-slate-600 rounded-xl hover:bg-slate-100"
@@ -274,22 +299,22 @@ export default function Services() {
                     <div className="bg-white rounded-[32px] w-full max-w-2xl shadow-2xl overflow-hidden border border-slate-100">
                         <div className="p-8 border-b border-slate-50 flex items-center justify-between">
                             <h3 className="text-2xl font-black text-slate-800">{editingService ? 'تعديل الخدمة' : 'إضافة خدمة جديدة'}</h3>
-                            <button type="button" onClick={() => {setIsAddingService(false); setEditingService(null);}} title="إغلاق" aria-label="Close modal" className="p-2 hover:bg-slate-100 rounded-full transition-colors"><Trash2 className="text-slate-400" size={24} /></button>
+                            <button type="button" onClick={() => { setIsAddingService(false); setEditingService(null); }} title="إغلاق" aria-label="Close modal" className="p-2 hover:bg-slate-100 rounded-full transition-colors"><Trash2 className="text-slate-400" size={24} /></button>
                         </div>
                         <form onSubmit={handleSaveService} className="p-8 space-y-6">
                             <div className="grid grid-cols-2 gap-6">
-                                <FormInput label="عنوان الخدمة (مثلاً: تنظيف كنب)" name="title" defaultValue={editingService?.title} required />
-                                <FormInput label="وصف قصير (مثلاً: تنظيف عميق)" name="subtitle" defaultValue={editingService?.subtitle} />
-                                <FormInput label="السعر للعرض (مثلاً: من 50 ر.س)" name="price_text" defaultValue={editingService?.price_text} />
-                                <FormInput label="السعر الرقمي (للحساب)" name="base_price" type="number" defaultValue={editingService?.base_price} />
-                                <FormInput label="الرابط البرمجي (عند الحجز)" name="route_name" defaultValue={editingService?.route_name} placeholder="hourly, sofa_rug, store, maintenance" required />
-                                <FormInput label="اسم الأيقونة (flutter icon)" name="icon_name" defaultValue={editingService?.icon_name} placeholder="access_time_filled, chair" />
-                                <FormInput label="ترتيب العرض" name="order_index" type="number" defaultValue={editingService?.order_index} />
-                                <FormInput label="رابط الصورة (اختياري)" name="image_path" defaultValue={editingService?.image_path} />
+                                <FormInput label="عنوان الخدمة (مثلاً: تنظيف كنب)" value={formData.title} onChange={v => setFormData(p => ({ ...p, title: v }))} required />
+                                <FormInput label="وصف قصير (مثلاً: تنظيف عميق)" value={formData.subtitle} onChange={v => setFormData(p => ({ ...p, subtitle: v }))} />
+                                <FormInput label="السعر للعرض (مثلاً: من 50 ر.س)" value={formData.price_text} onChange={v => setFormData(p => ({ ...p, price_text: v }))} />
+                                <FormInput label="السعر الرقمي (للحساب)" type="number" value={String(formData.base_price)} onChange={v => setFormData(p => ({ ...p, base_price: Number(v) }))} />
+                                <FormInput label="الرابط البرمجي (عند الحجز)" value={formData.route_name} onChange={v => setFormData(p => ({ ...p, route_name: v }))} placeholder="hourly, sofa_rug, store, maintenance" required />
+                                <FormInput label="اسم الأيقونة (flutter icon)" value={formData.icon_name} onChange={v => setFormData(p => ({ ...p, icon_name: v }))} placeholder="access_time_filled, chair" />
+                                <FormInput label="ترتيب العرض" type="number" value={String(formData.order_index)} onChange={v => setFormData(p => ({ ...p, order_index: Number(v) }))} />
+                                <FormInput label="رابط الصورة (اختياري)" value={formData.image_path} onChange={v => setFormData(p => ({ ...p, image_path: v }))} />
                             </div>
                             <div className="pt-4 flex gap-4">
                                 <button type="submit" className="flex-1 bg-blue-600 text-white font-bold py-4 rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100">حفظ الخدمة</button>
-                                <button type="button" onClick={() => {setIsAddingService(false); setEditingService(null);}} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-all">إلغاء</button>
+                                <button type="button" onClick={() => { setIsAddingService(false); setEditingService(null); }} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-all">إلغاء</button>
                             </div>
                         </form>
                     </div>
@@ -314,14 +339,14 @@ function PriceInput({ label, value, onChange }: { label: string, value: number, 
     );
 }
 
-function FormInput({ label, name, type = "text", defaultValue, required, placeholder }: { label: string, name: string, type?: string, defaultValue?: string | number, required?: boolean, placeholder?: string }) {
+function FormInput({ label, type = "text", value, onChange, required, placeholder }: { label: string, type?: string, value: string, onChange: (v: string) => void, required?: boolean, placeholder?: string }) {
     return (
         <div className="space-y-2">
             <label className="text-xs font-black text-slate-400 uppercase tracking-wider">{label}</label>
-            <input 
-                name={name} 
-                type={type} 
-                defaultValue={defaultValue} 
+            <input
+                type={type}
+                value={value}
+                onChange={e => onChange(e.target.value)}
                 required={required}
                 placeholder={placeholder}
                 title={label}

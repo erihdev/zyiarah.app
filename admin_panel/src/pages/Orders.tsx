@@ -5,6 +5,7 @@ import {
     type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot
 } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
+import { useNotification } from '../components/Notification.tsx';
 
 interface OrderRecord {
     id: string;
@@ -37,6 +38,7 @@ const StatusBadge = ({ status }: { status: string }) => {
 };
 
 export default function Orders() {
+    const { toast, confirm } = useNotification();
     const [searchTerm, setSearchTerm] = useState('');
     const [orders, setOrders] = useState<OrderRecord[]>([]);
     const [drivers, setDrivers] = useState<DriverOption[]>([]);
@@ -102,14 +104,14 @@ export default function Orders() {
             setSelectedDriverId('');
         } catch (err) {
             console.error('Error assigning driver:', err);
-            alert('حدث خطأ أثناء التعيين');
+            toast.error('حدث خطأ أثناء التعيين');
         } finally {
             setIsAssigning(false);
         }
     };
 
     const handleCancelOrder = async (order: OrderRecord) => {
-        if (!confirm(`هل أنت متأكد من إلغاء الطلب #${order.code || order.id.substring(0, 6).toUpperCase()}؟`)) return;
+        if (!await confirm(`هل أنت متأكد من إلغاء الطلب #${order.code || order.id.substring(0, 6).toUpperCase()}؟`)) return;
         setIsCancelling(true);
         try {
             await updateDoc(doc(db, 'orders', order.id), {
@@ -127,7 +129,7 @@ export default function Orders() {
             }
         } catch (err) {
             console.error('Error cancelling order:', err);
-            alert('حدث خطأ أثناء الإلغاء');
+            toast.error('حدث خطأ أثناء الإلغاء');
         } finally {
             setIsCancelling(false);
             setActionMenuId(null);

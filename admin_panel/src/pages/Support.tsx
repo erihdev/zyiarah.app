@@ -4,6 +4,7 @@ import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc, addD
 import { db } from '../services/firebase.ts';
 
 interface SupportMessage {
+    id: string;
     text: string;
     sender: string;
     senderName?: string;
@@ -17,7 +18,6 @@ interface Ticket {
     issue: string;
     status: string;
     priority: string;
-    messages?: SupportMessage[];
     created_at?: Timestamp;
     uid?: string;
 }
@@ -25,6 +25,7 @@ interface Ticket {
 export default function Support() {
     const [searchTerm, setSearchTerm] = useState('');
     const [tickets, setTickets] = useState<Ticket[]>([]);
+    const [messages, setMessages] = useState<SupportMessage[]>([]);
     const [loading, setLoading] = useState(true);
     const [selected, setSelected] = useState<Ticket | null>(null);
     const [reply, setReply] = useState('');
@@ -36,20 +37,24 @@ export default function Support() {
         const unsub = onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
             const data = snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Ticket));
             setTickets(data);
-            if (!selected && data.length > 0) setSelected(data[0]);
-            else if (selected) {
-                const updated = data.find(t => t.id === selected.id);
-                if (updated) setSelected(updated);
-            }
             setLoading(false);
         }, () => setLoading(false));
         return () => unsub();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Load messages from subcollection whenever selected ticket changes
+    useEffect(() => {
+        if (!selected) { setMessages([]); return; }
+        const q = query(collection(db, 'tickets', selected.id, 'messages'), orderBy('created_at', 'asc'));
+        const unsub = onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
+            setMessages(snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as SupportMessage)));
+        });
+        return () => unsub();
+    }, [selected?.id]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [selected]);
+    }, [messages]);
 
     const filteredTickets = tickets.filter(t =>
         (t.sender || '').includes(searchTerm) ||
@@ -203,8 +208,8 @@ export default function Support() {
                             </div>
 
                             <div className="flex-1 overflow-y-auto p-6 space-y-5 z-10">
-                                {(selected.messages || []).map((msg: SupportMessage, idx: number) => (
-                                    <div key={idx} className={`flex gap-4 max-w-2xl ${msg.sender === 'admin' ? 'mr-auto flex-row-reverse' : ''}`}>
+                                {messages.map((msg: SupportMessage) => (
+                                    <div key={msg.id} className={`flex gap-4 max-w-2xl ${msg.sender === 'admin' ? 'mr-auto flex-row-reverse' : ''}`}>
                                         <div className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-sm font-bold mt-1 ${msg.sender === 'admin' ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white' : 'bg-slate-100 border border-slate-200 text-slate-600'}`}>
                                             {msg.sender === 'admin' ? 'Z' : (selected.sender || 'U')[0]}
                                         </div>
@@ -219,7 +224,7 @@ export default function Support() {
                                         </div>
                                     </div>
                                 ))}
-                                {(!selected.messages || selected.messages.length === 0) && (
+                                {messages.length === 0 && (
                                     <div className="text-center py-10 text-slate-400">
                                         <MessageSquare size={40} className="mx-auto mb-3 opacity-30" />
                                         <p className="font-bold text-sm">لا توجد رسائل بعد. كن أول من يرد!</p>

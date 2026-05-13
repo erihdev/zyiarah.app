@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Shield, Key, Search, UserPlus, Trash2, Edit, UserCheck, Loader2 } from 'lucide-react';
 import { collection, query, where, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
+import { useNotification } from '../components/Notification.tsx';
 
 interface AdminUser {
     id: string;
@@ -54,6 +55,7 @@ const formatLastLogin = (ts: { toDate: () => Date } | null | undefined): string 
 };
 
 export default function Admins() {
+    const { confirm } = useNotification();
     const [searchTerm, setSearchTerm] = useState('');
     const [admins, setAdmins] = useState<AdminUser[]>([]);
     const [loading, setLoading] = useState(true);
@@ -74,7 +76,7 @@ export default function Admins() {
     );
 
     const handleDelete = async (adminId: string) => {
-        if (!confirm('هل أنت متأكد من حذف هذا المشرف؟')) return;
+        if (!await confirm('هل أنت متأكد من حذف هذا المشرف؟')) return;
         setDeletingId(adminId);
         try {
             await deleteDoc(doc(db, 'users', adminId));
