@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Save, Bell, Shield, Wallet, MapPin, Search, Smartphone, Loader2, CheckCircle2, ChevronLeft, CreditCard, Activity, Globe, Database, KeyRound, ArrowRight } from 'lucide-react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
+import { useNotification } from '../components/Notification.tsx';
 
 interface SystemSettings {
     // General
@@ -59,6 +60,7 @@ const defaultSettings: SystemSettings = {
 type TabType = 'general' | 'payments' | 'notifications' | 'coverage';
 
 export default function Settings() {
+    const { toast } = useNotification();
     const [activeTab, setActiveTab] = useState<TabType>('general');
     const [settings, setSettings] = useState<SystemSettings>(defaultSettings);
     const [isLoading, setIsLoading] = useState(true);
@@ -93,7 +95,7 @@ export default function Settings() {
             setTimeout(() => setSaveSuccess(false), 3000);
         } catch (error) {
             console.error("Error saving settings:", error);
-            alert("حدث خطأ أثناء حفظ الإعدادات.");
+            toast.error("حدث خطأ أثناء حفظ الإعدادات.");
         } finally {
             setIsSaving(false);
         }
@@ -275,14 +277,14 @@ export default function Settings() {
                                                 <label htmlFor="zatca-key" className="block text-sm font-bold text-slate-700 mb-3">مفتاح ZATCA (هيئة الزكاة والدخل)</label>
                                                 <div className="relative">
                                                     <input id="zatca-key" type="password" value="••••••••••••••••••••••••" disabled className="w-full bg-white border border-slate-200 text-slate-400 text-sm rounded-xl px-4 py-3.5 outline-none font-mono tracking-widest cursor-not-allowed group-hover:border-blue-300 transition-colors shadow-inner" />
-                                                    <button type="button" onClick={() => alert('لأسباب أمنية، لا يمكن عرض أو تعديل مفتاح الزكاة والدخل من هنا. يرجى التواصل مع الإدارة الفنية.')} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white px-4 py-2 rounded-lg transition-all shadow-sm">مراجعة</button>
+                                                    <button type="button" onClick={() => toast.info('لأسباب أمنية، لا يمكن عرض أو تعديل مفتاح الزكاة والدخل من هنا. يرجى التواصل مع الإدارة الفنية.')} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white px-4 py-2 rounded-lg transition-all shadow-sm">مراجعة</button>
                                                 </div>
                                             </div>
                                             <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 transition-all hover:shadow-md hover:border-blue-200 group">
                                                 <label htmlFor="firebase-key" className="block text-sm font-bold text-slate-700 mb-3">مفتاح Firebase Admin</label>
                                                 <div className="relative">
                                                     <input id="firebase-key" type="password" value="••••••••••••••••••••••••" disabled className="w-full bg-white border border-slate-200 text-slate-400 text-sm rounded-xl px-4 py-3.5 outline-none font-mono tracking-widest cursor-not-allowed group-hover:border-blue-300 transition-colors shadow-inner" />
-                                                    <button type="button" onClick={() => alert('لأسباب أمنية، لا يمكن عرض أو تعديل مفتاح Firebase من هنا. يرجى التواصل مع الإدارة الفنية.')} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white px-4 py-2 rounded-lg transition-all shadow-sm">مراجعة</button>
+                                                    <button type="button" onClick={() => toast.info('لأسباب أمنية، لا يمكن عرض أو تعديل مفتاح Firebase من هنا. يرجى التواصل مع الإدارة الفنية.')} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white px-4 py-2 rounded-lg transition-all shadow-sm">مراجعة</button>
                                                 </div>
                                             </div>
                                         </div>

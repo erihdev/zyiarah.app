@@ -30,7 +30,6 @@ class ZyiarahStrings {
   // --- Tracking ---
   static String get track => isArabic ? "تتبع" : "Track";
   static String get driverOnWay => isArabic ? "السائق في الطريق" : "Driver is on the way";
-  static String get driverArrived => isArabic ? "وصل السائق لموقعك" : "Driver has arrived";
   static String get serviceInProgress => isArabic ? "جاري تنفيذ الخدمة" : "Service in progress";
   static String get tapToTrackMap => isArabic ? "اضغط للمتابعة المباشرة على الخريطة" : "Tap to track live on map";
 

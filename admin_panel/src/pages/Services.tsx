@@ -1,28 +1,29 @@
 import { useState, useEffect } from 'react';
-import { 
-    Plus, 
-    Edit2, 
-    Trash2, 
-    Eye, 
-    EyeOff, 
-    Save, 
-    Settings, 
-    LayoutGrid, 
+import {
+    Plus,
+    Edit2,
+    Trash2,
+    Eye,
+    EyeOff,
+    Save,
+    Settings,
+    LayoutGrid,
     Loader2
 } from 'lucide-react';
-import { 
-    collection, 
-    getDocs, 
-    doc, 
-    getDoc, 
-    setDoc, 
-    addDoc, 
-    updateDoc, 
-    deleteDoc, 
-    query, 
-    orderBy 
+import {
+    collection,
+    getDocs,
+    doc,
+    getDoc,
+    setDoc,
+    addDoc,
+    updateDoc,
+    deleteDoc,
+    query,
+    orderBy
 } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
+import { useNotification } from '../components/Notification.tsx';
 
 interface AppService {
     id: string;
@@ -46,6 +47,7 @@ interface SofaRugPricing {
 }
 
 export default function Services() {
+    const { toast, confirm } = useNotification();
     const [services, setServices] = useState<AppService[]>([]);
     const [pricing, setPricing] = useState<SofaRugPricing>({
         sofa_price_inside: 35,
@@ -99,17 +101,17 @@ export default function Services() {
             await updateDoc(ref, { is_active: !service.is_active });
             setServices(prev => prev.map(s => s.id === service.id ? { ...s, is_active: !s.is_active } : s));
         } catch {
-            alert("حدث خطأ أثناء التحديث");
+            toast.error("حدث خطأ أثناء تحديث الخدمة");
         }
     };
 
     const handleDeleteService = async (id: string) => {
-        if (!globalThis.confirm("هل أنت متأكد من حذف هذه الخدمة؟")) return;
+        if (!await confirm("هل أنت متأكد من حذف هذه الخدمة؟")) return;
         try {
             await deleteDoc(doc(db, 'services', id));
             setServices(prev => prev.filter(s => s.id !== id));
         } catch {
-            alert("حدث خطأ أثناء الحذف");
+            toast.error("حدث خطأ أثناء الحذف");
         }
     };
 
@@ -118,9 +120,9 @@ export default function Services() {
         try {
             const docRef = doc(db, 'system_configs', 'main_settings');
             await setDoc(docRef, pricing, { merge: true });
-            alert("تم حفظ أسعار الأمتار بنجاح!");
+            toast.success("تم حفظ أسعار الأمتار بنجاح");
         } catch {
-            alert("حدث خطأ أثناء الحفظ");
+            toast.error("حدث خطأ أثناء الحفظ");
         } finally {
             setIsSavingPricing(false);
         }
@@ -171,7 +173,7 @@ export default function Services() {
             setEditingService(null);
             fetchData();
         } catch {
-            alert("حدث خطأ أثناء الحفظ");
+            toast.error("حدث خطأ أثناء حفظ الخدمة");
         }
     };
 

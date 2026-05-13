@@ -5,6 +5,7 @@ import type { User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './services/firebase.ts';
 import Layout from './components/Layout.tsx';
+import { NotificationProvider } from './components/Notification.tsx';
 import Dashboard from './pages/Dashboard.tsx';
 import Login from './pages/Login.tsx';
 import Settings from './pages/Settings.tsx';
@@ -87,6 +88,7 @@ function App() {
   };
 
   return (
+    <NotificationProvider>
     <BrowserRouter>
       <Routes>
         <Route
@@ -119,6 +121,7 @@ function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </NotificationProvider>
   );
 }
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Search, FileSignature, CheckCircle2, Clock, XCircle, AlertCircle, Calendar, CreditCard, Trash2, Info } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc, deleteDoc, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
+import { useNotification } from '../components/Notification.tsx';
 
 interface ContractRecord {
     id: string;
@@ -31,6 +32,7 @@ const StatusBadge = ({ status }: { status: string }) => {
 };
 
 export default function Contracts() {
+    const { toast, confirm } = useNotification();
     const [searchTerm, setSearchTerm] = useState('');
     const [contracts, setContracts] = useState<ContractRecord[]>([]);
     const [loading, setLoading] = useState(true);
@@ -49,25 +51,27 @@ export default function Contracts() {
     }, []);
 
     const handleApprove = async (id: string, planName: string) => {
-        if (!globalThis.confirm(`هل أنت متأكد من رغبتك في اعتماد عقد (${planName})؟`)) return;
+        if (!await confirm(`هل أنت متأكد من رغبتك في اعتماد عقد (${planName})؟`)) return;
         try {
-            await updateDoc(doc(db, 'contracts', id), { 
+            await updateDoc(doc(db, 'contracts', id), {
                 status: 'approved_waiting_payment',
                 adminApprovedAt: Timestamp.now()
             });
-            alert("تم اعتماد العقد بنجاح وبانتظار دفع العميل");
+            toast.success("تم اعتماد العقد بنجاح وبانتظار دفع العميل");
         } catch (error) {
             console.error(error);
-            alert("حدث خطأ أثناء الاعتماد");
+            toast.error("حدث خطأ أثناء الاعتماد");
         }
     };
 
     const handleDelete = async (id: string) => {
-        if (!globalThis.confirm("هل أنت متأكد من حذف هذا العقد نهائياً؟")) return;
+        if (!await confirm("هل أنت متأكد من حذف هذا العقد نهائياً؟")) return;
         try {
             await deleteDoc(doc(db, 'contracts', id));
+            toast.success("تم حذف العقد");
         } catch (error) {
             console.error(error);
+            toast.error("حدث خطأ أثناء الحذف");
         }
     };
 

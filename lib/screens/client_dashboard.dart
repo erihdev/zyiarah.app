@@ -43,12 +43,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
     MaintenanceListenerService().startListening();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ZyiarahPopupService.checkAndShowPopup(context);
-      _checkAndRequestPermissions();
     });
-  }
-
-  Future<void> _checkAndRequestPermissions() async {
-    // ... existing permission logic ...
   }
 
   void _onNavTap(int index) {

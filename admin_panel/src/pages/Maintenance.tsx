@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Search, Wrench, CheckCircle2, Clock, XCircle, AlertCircle } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
+import { useNotification } from '../components/Notification.tsx';
 
 interface MaintenanceRecord {
     id: string;
@@ -22,6 +23,7 @@ const StatusBadge = ({ status }: { status: string }) => {
         case 'approved':
             return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-100 text-xs"><AlertCircle size={14} />بانتظار الدفع</span>;
         case 'paid':
+            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-100 text-xs"><CheckCircle2 size={14} />تم الدفع</span>;
         case 'completed':
             return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-100 text-xs"><CheckCircle2 size={14} />تم التنفيذ</span>;
         case 'rejected':
@@ -32,6 +34,7 @@ const StatusBadge = ({ status }: { status: string }) => {
 };
 
 export default function Maintenance() {
+    const { toast, confirm } = useNotification();
     const [searchTerm, setSearchTerm] = useState('');
     const [requests, setRequests] = useState<MaintenanceRecord[]>([]);
     const [loading, setLoading] = useState(true);
@@ -50,13 +53,14 @@ export default function Maintenance() {
     }, []);
 
     const updateStatus = async (id: string, newStatus: string) => {
-        if (!globalThis.confirm(`هل أنت متأكد من تغيير حالة الطلب إلى ${newStatus}؟`)) return;
+        const label = newStatus === 'approved' ? 'قبول' : 'رفض';
+        if (!await confirm(`هل أنت متأكد من ${label} هذا الطلب؟`)) return;
         try {
             await updateDoc(doc(db, 'maintenance_requests', id), { status: newStatus });
-            alert("تم تحديث الحالة بنجاح");
+            toast.success("تم تحديث حالة الطلب بنجاح");
         } catch (error) {
             console.error(error);
-            alert("حدث خطأ أثناء التحديث");
+            toast.error("حدث خطأ أثناء التحديث");
         }
     };
 
