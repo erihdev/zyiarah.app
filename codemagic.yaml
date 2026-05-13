@@ -46,14 +46,14 @@ workflows:
                   print(f'  Cert: type={ct}, id={cid}')
                   if cid:  # revoke any cert that has an id
                       result = subprocess.run(
-                          ['app-store-connect', 'certificates', 'revoke', cid],
+                          ['app-store-connect', 'certificates', 'delete', cid],
                           capture_output=True, text=True
                       )
                       if result.returncode == 0:
                           revoked += 1
-                          print(f'  ✓ Revoked {cid}')
+                          print(f'  ✓ Deleted {cid}')
                       else:
-                          print(f'  ✗ Failed to revoke {cid}: {result.stderr}')
+                          print(f'  ✗ Failed to delete {cid}: {result.stderr}')
               print(f'  Total revoked: {revoked}')
           except Exception as e:
               print(f'Error parsing certs: {e}', file=sys.stderr)
