@@ -23,6 +23,41 @@ workflows:
         script: cd ios && pod install
       - name: Initialize keychain
         script: keychain initialize
+      - name: Revoke existing distribution certificates
+        script: |
+          echo "=== Fetching all certificates from App Store Connect ==="
+          app-store-connect certificates list --json > /tmp/all_certs.json 2>&1
+          echo "Raw response:"
+          cat /tmp/all_certs.json
+          echo ""
+          echo "=== Revoking any distribution certificates ==="
+          python3 << 'PYEOF'
+          import json, subprocess, sys
+          try:
+              with open('/tmp/all_certs.json') as f:
+                  content = f.read()
+              certs = json.loads(content)
+              found = False
+              for c in certs:
+                  ct = c.get('certificateType', '')
+                  cid = c.get('id', '')
+                  print(f'  Cert: type={ct}, id={cid}')
+                  if 'DISTRIBUTION' in ct.upper() and cid:
+                      found = True
+                      result = subprocess.run(
+                          ['app-store-connect', 'certificates', 'revoke', cid],
+                          capture_output=True, text=True
+                      )
+                      if result.returncode == 0:
+                          print(f'  ✓ Revoked {cid}')
+                      else:
+                          print(f'  ✗ Failed to revoke {cid}: {result.stderr}')
+              if not found:
+                  print('  No distribution certificates found.')
+          except Exception as e:
+              print(f'Error parsing certs: {e}', file=sys.stderr)
+          PYEOF
+          sleep 10
       - name: Generate certificate private key
         script: |
           openssl genrsa 2048 > /tmp/private.key
@@ -34,8 +69,7 @@ workflows:
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --certificate-key @file:/tmp/private.key \
-            --create \
-            --revoke-certificates
+            --create
       - name: Add certificates to keychain
         script: keychain add-certificates
       - name: Set up Xcode code signing
