@@ -26,7 +26,7 @@ workflows:
       - name: Revoke existing distribution certificates
         script: |
           echo "=== Fetching all certificates from App Store Connect ==="
-          app-store-connect certificates list --json > /tmp/all_certs.json 2>&1
+          app-store-connect certificates list --json > /tmp/all_certs.json 2>/dev/null
           echo "Raw response:"
           cat /tmp/all_certs.json
           echo ""
