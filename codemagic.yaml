@@ -75,6 +75,47 @@ workflows:
         script: keychain add-certificates
       - name: Set up Xcode code signing
         script: xcode-project use-profiles
+      - name: Cancel existing App Store review submissions
+        script: |
+          python3 << 'PYEOF'
+          import jwt, time, requests, os, json
+          ISSUER_ID = "6dd67287-cfcd-40fc-a3db-8bf378a1ac8f"
+          KEY_ID = "RJMPC4734X"
+          APP_ID = os.environ.get("APP_STORE_APP_ID", "6760955777")
+          BASE_URL = "https://api.appstoreconnect.apple.com/v1"
+          private_key = os.environ.get("APP_STORE_CONNECT_PRIVATE_KEY", "")
+          def make_token():
+              payload = {"iss": ISSUER_ID, "exp": int(time.time()) + 1200, "aud": "appstoreconnect-v1"}
+              return jwt.encode(payload, private_key, algorithm="ES256", headers={"kid": KEY_ID})
+          def hdrs():
+              return {"Authorization": f"Bearer {make_token()}", "Content-Type": "application/json"}
+          r = requests.get(f"{BASE_URL}/apps/{APP_ID}/reviewSubmissions", headers=hdrs(), params={"limit": 20})
+          submissions = r.json().get("data", [])
+          print(f"Found {len(submissions)} existing submissions")
+          open_states = {"WAITING_FOR_REVIEW", "IN_REVIEW", "READY_FOR_REVIEW", "UNRESOLVED_ISSUES"}
+          for s in submissions:
+              sid = s["id"]
+              state = s.get("attributes", {}).get("state", "")
+              print(f"  {sid}: state={state}")
+              if state in open_states:
+                  r2 = requests.post(f"{BASE_URL}/reviewSubmissions/{sid}/actions/cancel", headers=hdrs(), json={})
+                  print(f"    cancel action => {r2.status_code}")
+                  if not r2.ok:
+                      r3 = requests.patch(f"{BASE_URL}/reviewSubmissions/{sid}", headers=hdrs(), json={
+                          "data": {"type": "reviewSubmissions", "id": sid, "attributes": {"submitted": False}}
+                      })
+                      print(f"    patch cancel => {r3.status_code}: {r3.text[:150]}")
+                  time.sleep(3)
+          print("Waiting 8s for Apple to process...")
+          time.sleep(8)
+          # Reset INVALID_BINARY version state by verifying current state
+          r4 = requests.get(f"{BASE_URL}/apps/{APP_ID}/appStoreVersions", headers=hdrs(), params={
+              "filter[platform]": "IOS", "limit": 5,
+              "fields[appStoreVersions]": "versionString,appStoreState"
+          })
+          for v in r4.json().get("data", []):
+              print(f"  Version {v['attributes']['versionString']}: {v['attributes']['appStoreState']}")
+          PYEOF
       - name: Flutter build IPA
         script: flutter build ipa --release
     artifacts:
