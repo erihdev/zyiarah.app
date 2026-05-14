@@ -76,14 +76,22 @@ workflows:
       - name: Set up Xcode code signing
         script: xcode-project use-profiles
       - name: Cancel existing App Store review submissions
+        ignore_failure: true
         script: |
           python3 << 'PYEOF'
-          import jwt, time, requests, os, json
+          import jwt, time, requests, os, json, tempfile, subprocess
           ISSUER_ID = "6dd67287-cfcd-40fc-a3db-8bf378a1ac8f"
           KEY_ID = "RJMPC4734X"
           APP_ID = os.environ.get("APP_STORE_APP_ID", "6760955777")
           BASE_URL = "https://api.appstoreconnect.apple.com/v1"
-          private_key = os.environ.get("APP_STORE_CONNECT_PRIVATE_KEY", "")
+          # Write key to temp file to avoid env var formatting issues
+          raw_key = os.environ.get("APP_STORE_CONNECT_PRIVATE_KEY", "")
+          raw_key = raw_key.replace("\\n", "\n")
+          with tempfile.NamedTemporaryFile(mode="w", suffix=".p8", delete=False) as f:
+              f.write(raw_key)
+              key_path = f.name
+          with open(key_path) as f:
+              private_key = f.read()
           def make_token():
               payload = {"iss": ISSUER_ID, "exp": int(time.time()) + 1200, "aud": "appstoreconnect-v1"}
               return jwt.encode(payload, private_key, algorithm="ES256", headers={"kid": KEY_ID})
