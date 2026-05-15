@@ -16,7 +16,6 @@ import 'package:zyiarah/screens/driver_dashboard.dart';
 import 'package:zyiarah/screens/admin/admin_dashboard_screen.dart';
 import 'package:zyiarah/services/deep_link_service.dart';
 import 'package:zyiarah/router.dart';
-import 'package:zyiarah/utils/global_error_handler.dart';
 
 import 'package:provider/provider.dart';
 import 'package:zyiarah/providers/user_provider.dart';
@@ -37,14 +36,12 @@ void main() async {
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
 
-  // System-wide crash reporting setup
+  // System-wide crash reporting (silent — no user-facing snackbar)
   FlutterError.onError = (details) {
     FirebaseCrashlytics.instance.recordFlutterFatalError(details);
-    GlobalErrorHandler.handleError(details.exception, details.stack);
   };
   PlatformDispatcher.instance.onError = (error, stack) {
     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-    GlobalErrorHandler.handleError(error, stack);
     return true;
   };
 
