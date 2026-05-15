@@ -15,7 +15,7 @@ class ZyiarahSupportScreen extends StatefulWidget {
 class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
   final TextEditingController _subjectController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
-  final TextEditingController __replyController = TextEditingController();
+  final TextEditingController _replyController = TextEditingController();
   bool _isSending = false;
 
   @override
