@@ -22,18 +22,44 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Create .env file
+        run: echo "MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }}" > .env
+
       - name: Flutter pub get
         run: flutter pub get
 
       - name: Pod install
         run: cd ios && pod install
 
-      - name: Write App Store Connect API Key
-        run: |
-          echo "${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}" > /tmp/AuthKey.p8
-
       - name: Install Fastlane
         run: gem install fastlane --no-document
+
+      - name: Revoke existing distribution certificates
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          pip3 install PyJWT requests cryptography
+          python3 << 'PYEOF'
+          import jwt, time, requests, os
+          ISSUER_ID = os.environ["APP_STORE_CONNECT_ISSUER_ID"]
+          KEY_ID = os.environ["APP_STORE_CONNECT_KEY_ID"]
+          raw_key = os.environ["APP_STORE_CONNECT_PRIVATE_KEY"].replace("\\n", "\n")
+          BASE = "https://api.appstoreconnect.apple.com/v1"
+          def token():
+              return jwt.encode({"iss": ISSUER_ID, "exp": int(time.time()) + 1200, "aud": "appstoreconnect-v1"}, raw_key, algorithm="ES256", headers={"kid": KEY_ID})
+          hdrs = {"Authorization": f"Bearer {token()}", "Content-Type": "application/json"}
+          r = requests.get(f"{BASE}/certificates", headers=hdrs, params={"filter[certificateType]": "DISTRIBUTION,IOS_DISTRIBUTION"})
+          certs = r.json().get("data", [])
+          print(f"Found {len(certs)} distribution certificates")
+          for c in certs:
+              cid = c["id"]
+              ctype = c.get("attributes", {}).get("certificateType", "")
+              print(f"  Revoking {cid} ({ctype})...")
+              requests.delete(f"{BASE}/certificates/{cid}", headers={"Authorization": f"Bearer {token()}"})
+          print("Done — cleared for new cert creation")
+          PYEOF
 
       - name: Build and Upload to App Store
         env:
