@@ -420,6 +420,7 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
 
       if (mounted) {
         ZyiarahCoreService.triggerHapticSuccess();
+        final wasScheduled = _isScheduled;
         setState(() {
           _isSending = false;
           if (!_isScheduled) {
@@ -430,7 +431,7 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
           _scheduledTime = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(_isScheduled ? "تم جدولة البث بنجاح" : "تم إطلاق البث بنجاح 🚀"),
+          content: Text(wasScheduled ? "تم جدولة البث بنجاح" : "تم إطلاق البث بنجاح 🚀"),
           backgroundColor: Colors.green,
         ));
       }

@@ -286,11 +286,19 @@ class _CartSheetState extends State<_CartSheet> {
       double total = items.fold(0, (sum, item) => sum + (item['price'] as double) * (item['quantity'] as int));
 
       final orderCode = await widget.storeService.createStoreOrder(
-        items: items, 
+        items: items,
         totalAmount: total,
         paymentMethod: _selectedPaymentMethod,
       );
-      
+
+      if (!mounted) return;
+      if (orderCode == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('يجب تسجيل الدخول لإتمام الطلب')),
+        );
+        return;
+      }
+
       if (mounted) {
         final user = FirebaseAuth.instance.currentUser;
 

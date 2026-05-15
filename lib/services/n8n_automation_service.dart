@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -28,8 +29,8 @@ class ZyiarahN8NAutomationService {
         body: jsonEncode(enrichedPayload),
       ).timeout(const Duration(seconds: 5));
 
-      // Asynchronously log to firestore for local audits
-      FirebaseFirestore.instance.collection('analytics_events').add(enrichedPayload);
+      // Asynchronously log to firestore for local audits (intentionally fire-and-forget)
+      unawaited(FirebaseFirestore.instance.collection('analytics_events').add(enrichedPayload));
 
     } catch (e) {
       // Non-fatal, just log silently because analytics should never block the UI

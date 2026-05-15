@@ -45,7 +45,7 @@ class ZyiarahPdfReportUtil {
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'Zyiarah_Financial_Report_${DateTime.now().millisecond}.pdf',
+      name: 'Zyiarah_Financial_Report_${DateTime.now().millisecondsSinceEpoch}.pdf',
     );
   }
 

@@ -214,11 +214,10 @@ class ZyiarahFirebaseService {
         String cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
         
         // التعامل مع مفتاح الدولة والصفريين
-        if (cleanPhone.startsWith('966')) {
-          cleanPhone = cleanPhone.substring(3);
-        }
         if (cleanPhone.startsWith('00966')) {
-           cleanPhone = cleanPhone.substring(5);
+          cleanPhone = cleanPhone.substring(5);
+        } else if (cleanPhone.startsWith('966')) {
+          cleanPhone = cleanPhone.substring(3);
         }
         if (cleanPhone.startsWith('0')) {
           cleanPhone = cleanPhone.substring(1);
@@ -250,11 +249,10 @@ class ZyiarahFirebaseService {
         }
       }
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint("Error fetching role: $e");
-      }
+      debugPrint("Error fetching role: $e");
+      rethrow;
     }
-    return 'client'; // في حالة الخطأ أو عدم وجود بيانات، نعتبره عميل
+    return 'client';
   }
 
   // --- رفع ملفات للعمالة ---
@@ -361,7 +359,7 @@ class ZyiarahFirebaseService {
 
   String _generateRandomPassword() {
     const chars = 'AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz1234567890!@#\$%^&*';
-    Random rnd = Random();
+    Random rnd = Random.secure();
     return String.fromCharCodes(Iterable.generate(
         16, (_) => chars.codeUnitAt(rnd.nextInt(chars.length))));
   }

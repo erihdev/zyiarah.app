@@ -55,6 +55,7 @@ class ZyiarahUserProvider extends ChangeNotifier {
           .listen((doc) {
         if (doc.exists && doc.data() != null) {
           _user = ZyiarahUser.fromMap(uid, doc.data()!);
+          _role = _user!.role;
         }
         _isLoading = false;
         notifyListeners();
