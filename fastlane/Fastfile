@@ -15,7 +15,7 @@ platform :ios do
 
     sigh(
       api_key: api_key,
-      bundle_id: "com.zyiarah.zyiarah",
+      app_identifier: "com.zyiarah.zyiarah",
       team_id: "RPTPMXA436",
       force: true
     )
