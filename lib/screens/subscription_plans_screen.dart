@@ -29,14 +29,23 @@ class _ZyiarahSubscriptionPlansScreenState
 
   Future<void> _fetchPackages() async {
     try {
-      final snapshot = await _db.collection('subscription_packages').orderBy('rank').get();
+      final snapshot = await _db.collection('subscription_packages').get();
       if (mounted) {
+        final docs = snapshot.docs;
+        docs.sort((a, b) {
+          final aData = a.data();
+          final bData = b.data();
+          final aRank = (aData['rank'] ?? 999) as num;
+          final bRank = (bData['rank'] ?? 999) as num;
+          return aRank.compareTo(bRank);
+        });
         setState(() {
-          _packages = snapshot.docs;
+          _packages = docs;
           _isLoading = false;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('SUBSCRIPTION_FETCH_ERROR: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
