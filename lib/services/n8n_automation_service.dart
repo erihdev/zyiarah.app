@@ -1,14 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:zyiarah/utils/global_error_handler.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 class ZyiarahN8NAutomationService {
-  static const String _n8nBaseUrl = "https://n8n.zyiarah.com/webhook"; // Replace with your actual n8n instance
+  static const String _n8nBaseUrl = "https://n8n.zyiarah.com/webhook";
 
-  /// Emits an event to n8n for A/B Testing, Cart Abandonment, or Predictive Marketing.
   static Future<void> triggerAnalyticsEvent({
     required String eventName,
     required Map<String, dynamic> payload,
@@ -29,16 +29,14 @@ class ZyiarahN8NAutomationService {
         body: jsonEncode(enrichedPayload),
       ).timeout(const Duration(seconds: 5));
 
-      // Asynchronously log to firestore for local audits (intentionally fire-and-forget)
       unawaited(FirebaseFirestore.instance.collection('analytics_events').add(enrichedPayload));
 
-    } catch (e) {
-      // Non-fatal, just log silently because analytics should never block the UI
-      GlobalErrorHandler.handleError(e);
+    } catch (e, stack) {
+      debugPrint('Analytics event failed silently: $e');
+      FirebaseCrashlytics.instance.recordError(e, stack, fatal: false);
     }
   }
 
-  /// Queries the n8n AI engine for optimal dynamic pricing based on user history and demand.
   static Future<double?> getDynamicPriceSuggestion({
     required String serviceType,
     required double basePrice,
@@ -65,7 +63,6 @@ class ZyiarahN8NAutomationService {
       }
       return null;
     } catch (e) {
-      // If AI engine is offline or timeout, fallback natively
       return null;
     }
   }
