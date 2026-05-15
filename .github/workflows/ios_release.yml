@@ -40,7 +40,8 @@ jobs:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
-          pip3 install PyJWT requests cryptography
+          python3 -m venv /tmp/certenv && source /tmp/certenv/bin/activate
+          pip install PyJWT requests cryptography
           python3 << 'PYEOF'
           import jwt, time, requests, os
           ISSUER_ID = os.environ["APP_STORE_CONNECT_ISSUER_ID"]
