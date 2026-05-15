@@ -42,8 +42,8 @@ class ZyiarahOrder {
       amount: (data['amount'] ?? 0.0).toDouble(),
       status: data['status'] ?? 'pending',
       paymentStatus: data['payment_method'] ?? 'unpaid',
-      location: data['location'] as GeoPoint,
-      createdAt: (data['created_at'] as Timestamp).toDate(),
+      location: data['location'] is GeoPoint ? data['location'] : const GeoPoint(0, 0),
+      createdAt: data['created_at'] is Timestamp ? (data['created_at'] as Timestamp).toDate() : DateTime.now(),
       hours: data['hours_contracted'],
       serviceDate: data['service_date'] != null
           ? (data['service_date'] as Timestamp).toDate()

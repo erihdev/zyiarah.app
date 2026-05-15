@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -14,6 +15,10 @@ class ZyiarahNotificationService {
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
+
+  StreamSubscription<String>? _tokenRefreshSub;
+  StreamSubscription<User?>? _authStateSub;
+  StreamSubscription<RemoteMessage>? _foregroundMessageSub;
 
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'zyiarah_high_importance',
@@ -37,13 +42,13 @@ class ZyiarahNotificationService {
       if (settings.authorizationStatus == AuthorizationStatus.authorized) {
         String? token = await _fcm.getToken();
         if (token != null) await _saveTokenToFirestore(token);
-        _fcm.onTokenRefresh.listen(_saveTokenToFirestore);
+        _tokenRefreshSub = _fcm.onTokenRefresh.listen(_saveTokenToFirestore);
         
         // Subscribe to general topic
         await _fcm.subscribeToTopic('all_users');
         
         // Check auth state for specific topics
-        FirebaseAuth.instance.authStateChanges().listen((User? user) async {
+        _authStateSub = FirebaseAuth.instance.authStateChanges().listen((User? user) async {
           if (user != null) {
             // Determine if user is client or driver (you might need logic here based on your app's user roles, 
             // but for simplicity, let's assume if they have the driver app they are a driver, 
@@ -89,7 +94,7 @@ class ZyiarahNotificationService {
         const InitializationSettings(android: androidSettings, iOS: iosSettings),
       );
 
-      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      _foregroundMessageSub = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         // We skip showing local notification banners while the app is in foreground
         // as requested to follow modern minimalist app standards. 
         // Real-time status updates are handled via Firestore listeners in the UI.
@@ -130,6 +135,25 @@ class ZyiarahNotificationService {
     } catch (e) {
       debugPrint("❌ Error saving FCM token to Firestore: $e");
     }
+  }
+
+  /// Unsubscribe from all FCM topics and cancel stream listeners on sign-out.
+  Future<void> cleanupOnSignOut() async {
+    try {
+      await _fcm.unsubscribeFromTopic('all_users');
+      await _fcm.unsubscribeFromTopic('clients');
+      await _fcm.unsubscribeFromTopic('drivers');
+      await _fcm.unsubscribeFromTopic('admins');
+    } catch (e) {
+      debugPrint("⚠️ Error unsubscribing from FCM topics: $e");
+    }
+  }
+
+  /// Cancel all stream subscriptions to prevent leaks.
+  void dispose() {
+    _tokenRefreshSub?.cancel();
+    _authStateSub?.cancel();
+    _foregroundMessageSub?.cancel();
   }
 
 }

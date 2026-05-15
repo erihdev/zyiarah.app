@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 
-class ZyiarahShimmer extends StatelessWidget {
+class ZyiarahShimmerWrapper extends StatelessWidget {
   final Widget child;
-  const ZyiarahShimmer({super.key, required this.child});
+  const ZyiarahShimmerWrapper({super.key, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +31,7 @@ class ShimmerCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          ZyiarahShimmer(
+          ZyiarahShimmerWrapper(
             child: Container(
               width: 50,
               height: 50,
@@ -46,7 +46,7 @@ class ShimmerCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ZyiarahShimmer(
+                ZyiarahShimmerWrapper(
                   child: Container(
                     width: 150,
                     height: 14,
@@ -57,7 +57,7 @@ class ShimmerCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                ZyiarahShimmer(
+                ZyiarahShimmerWrapper(
                   child: Container(
                     width: 100,
                     height: 10,
@@ -90,7 +90,7 @@ class ShimmerGridItem extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ZyiarahShimmer(
+          ZyiarahShimmerWrapper(
             child: Container(
               height: 120,
               decoration: const BoxDecoration(
@@ -104,7 +104,7 @@ class ShimmerGridItem extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ZyiarahShimmer(
+                ZyiarahShimmerWrapper(
                   child: Container(
                     width: 100,
                     height: 12,
@@ -115,7 +115,7 @@ class ShimmerGridItem extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                ZyiarahShimmer(
+                ZyiarahShimmerWrapper(
                   child: Container(
                     width: 60,
                     height: 10,

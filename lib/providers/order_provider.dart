@@ -7,13 +7,14 @@ class ZyiarahOrderProvider extends ChangeNotifier {
   List<DocumentSnapshot> recentOrders = [];
   bool isLoading = true;
   StreamSubscription? _ordersSub;
+  StreamSubscription? _authSub;
 
   ZyiarahOrderProvider() {
     _initAuthListener();
   }
 
   void _initAuthListener() {
-    FirebaseAuth.instance.authStateChanges().listen((user) {
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user != null) {
         _subscribeToOrders(user.uid);
       } else {
@@ -48,6 +49,7 @@ class ZyiarahOrderProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _ordersSub?.cancel();
     super.dispose();
   }

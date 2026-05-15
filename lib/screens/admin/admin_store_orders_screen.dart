@@ -51,7 +51,7 @@ class AdminStoreOrdersScreen extends StatelessWidget {
                     ),
                     title: Text(item['name'] ?? 'منتج غير معروف', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     subtitle: Text('الكمية: ${item['quantity']} × السعر: ${item['price']} ر.س'),
-                    trailing: Text('${(item['quantity'] as int) * (item['price'] as double)} ر.س', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.green)),
+                    trailing: Text('${(item['quantity'] as num).toInt() * (item['price'] as num).toDouble()} ر.س', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.green)),
                   );
                 },
               ),

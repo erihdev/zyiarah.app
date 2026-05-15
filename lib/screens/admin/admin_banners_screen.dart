@@ -162,7 +162,7 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                     const SizedBox(height: 20),
 
                     DropdownButtonFormField<String>(
-                      initialValue: selectedRoute,
+                      value: selectedRoute,
                       decoration: const InputDecoration(labelText: 'توجيه العميل', border: OutlineInputBorder()),
                       items: routingOptions.map((e) => DropdownMenuItem(value: e['value'], child: Text(e['label']!))).toList(),
                       onChanged: (val) => setDialogState(() => selectedRoute = val!),

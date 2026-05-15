@@ -109,10 +109,6 @@ class ZyiarahOrderService {
       couponCode: couponCode,
     );
     
-    if (invoiceUrl != null) {
-      await doc.update({'invoice_pdf_url': invoiceUrl});
-    }
-
     final comm = ZyiarahCommService();
     await comm.notifyNewOrder(orderMap, customerEmail: clientEmail, invoiceUrl: invoiceUrl);
     
@@ -141,14 +137,22 @@ class ZyiarahOrderService {
       if (snapshot.docs.isEmpty) return null;
 
       final data = snapshot.docs.first.data();
-      final expiry = data['expiry'] as String;
-      final maxUses = data['maxUses'] as int;
-      final uses = data['uses'] as int;
+      final expiry = data['expiry'];
+      final maxUses = (data['maxUses'] as num?)?.toInt() ?? 0;
+      final uses = (data['uses'] as num?)?.toInt() ?? 0;
       final List<dynamic>? restrictedZones = data['restricted_zones'];
 
       // تحقق من التاريخ
-      if (DateTime.parse(expiry).isBefore(DateTime.now())) {
-        return null;
+      if (expiry != null) {
+        DateTime? expiryDate;
+        if (expiry is Timestamp) {
+          expiryDate = expiry.toDate();
+        } else if (expiry is String) {
+          expiryDate = DateTime.tryParse(expiry);
+        }
+        if (expiryDate != null && expiryDate.isBefore(DateTime.now())) {
+          return null;
+        }
       }
 
       // تحقق من عدد مرات الاستخدام
@@ -376,23 +380,16 @@ class ZyiarahOrderService {
         return false;
       }
 
-      // 2. التحقق من عدم وجود طلبات نشطة للسائق (بشكل ذري داخل الـ Transaction)
-      final activeSnap = await _db
-          .collection('orders')
-          .where('driver_id', isEqualTo: driverId)
-          .where('status', whereIn: ['accepted', 'in_progress'])
-          .limit(1)
-          .get();
-
-      if (activeSnap.docs.isNotEmpty) {
-        return false;
-      }
-
-      // 3. جلب بيانات السائق لمزامنتها داخل الطلب (لضمان عمل زر الاتصال)
+      // 2. جلب بيانات السائق والتحقق من توفره (داخل الـ Transaction)
       final driverSnap = await transaction.get(driverRef);
       final driverData = driverSnap.data() ?? {};
 
-      // 4. تنفيذ التحديث بشكل ذري (Atomic)
+      // التحقق من أن السائق متاح (ليس في طلب آخر)
+      if (driverData['is_available'] == false) {
+        return false;
+      }
+
+      // 3. تنفيذ التحديث بشكل ذري (Atomic)
       transaction.update(orderRef, {
         'status': 'accepted',
         'driver_id': driverId,

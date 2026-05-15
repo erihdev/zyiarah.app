@@ -15,7 +15,16 @@ class ZyiarahSupportScreen extends StatefulWidget {
 class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
   final TextEditingController _subjectController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
+  final TextEditingController __replyController = TextEditingController();
   bool _isSending = false;
+
+  @override
+  void dispose() {
+    _subjectController.dispose();
+    _messageController.dispose();
+    _replyController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -177,7 +186,6 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
   }
 
   Widget _buildMessagesList(String ticketId) {
-    final TextEditingController replyController = TextEditingController();
     bool isSendingReply = false;
 
     return StreamBuilder<QuerySnapshot>(
@@ -239,7 +247,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
                   children: [
                     Expanded(
                       child: TextField(
-                        controller: replyController,
+                        controller: _replyController,
                         decoration: InputDecoration(
                           hintText: "اكتب ردك هنا...",
                           isDense: true,
@@ -253,7 +261,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
                       : IconButton(
                           icon: const Icon(Icons.send, color: Color(0xFF5D1B5E)),
                           onPressed: () async {
-                            final text = replyController.text.trim();
+                            final text = _replyController.text.trim();
                             if (text.isEmpty) return;
                             
                             setInternalState(() => isSendingReply = true);
@@ -277,7 +285,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
                                     'updatedAt': FieldValue.serverTimestamp(),
                                   });
                               
-                              replyController.clear();
+                              _replyController.clear();
                             } finally {
                               setInternalState(() => isSendingReply = false);
                             }

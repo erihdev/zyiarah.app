@@ -64,13 +64,13 @@ class ZyiarahStoreService {
             .toList());
   }
 
-  Future<String> createStoreOrder({
+  Future<String?> createStoreOrder({
     required List<Map<String, dynamic>> items,
     required double totalAmount,
     String paymentMethod = 'cash_on_delivery',
   }) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return '';
+    if (user == null) return null;
 
     String clientName = 'عميل زيارة';
     String clientPhone = '000000000';

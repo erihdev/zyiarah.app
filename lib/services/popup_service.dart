@@ -28,7 +28,9 @@ class ZyiarahPopupService {
           _showRahaStylePopup(context, data);
         }
       }
-    }).catchError((_) {});
+    }).catchError((e) {
+      debugPrint('POPUP_SERVICE_ERROR: $e');
+    });
   }
 
   static void _showRahaStylePopup(BuildContext context, Map<String, dynamic> data) {

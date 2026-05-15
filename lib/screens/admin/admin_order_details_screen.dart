@@ -257,7 +257,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                     const SizedBox(height: 10),
                     const Text("حالة الطلب"),
                     DropdownButtonFormField<String>(
-                      initialValue: _currentStatus,
+                      value: _currentStatus,
                       items: _statuses.map((s) => DropdownMenuItem(value: s, child: Text(_getStatusText(s)))).toList(),
                       onChanged: (val) {
                         if (val != null) setState(() => _currentStatus = val);
@@ -269,7 +269,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                     _isLoadingDrivers 
                       ? const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(strokeWidth: 2)))
                       : DropdownButtonFormField<String>(
-                        initialValue: _selectedDriverId,
+                        value: _selectedDriverId,
                         hint: const Text("اختر من قائمة الكوادر النشطة..."),
                         items: _drivers.map((d) => DropdownMenuItem(value: d['id'] as String, child: Text(d['name'] as String))).toList(),
                         onChanged: (val) {

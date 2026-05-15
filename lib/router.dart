@@ -1,4 +1,5 @@
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/screens/onboarding_screen.dart';
 import 'package:zyiarah/screens/login_screen.dart';
 import 'package:zyiarah/screens/guest_explore_screen.dart';
@@ -6,11 +7,20 @@ import 'package:zyiarah/screens/client_dashboard.dart';
 import 'package:zyiarah/screens/driver_dashboard.dart';
 import 'package:zyiarah/screens/admin/admin_dashboard_screen.dart';
 import 'package:zyiarah/screens/order_tracking_screen.dart';
-import 'package:zyiarah/main.dart'; // To access AuthWrapper and navigatorKey
+import 'package:zyiarah/main.dart';
 
 final GoRouter appRouter = GoRouter(
   navigatorKey: navigatorKey,
   initialLocation: '/',
+  redirect: (context, state) {
+    final user = FirebaseAuth.instance.currentUser;
+    final path = state.uri.path;
+    final publicPaths = ['/', '/onboarding', '/login', '/guest'];
+    if (user == null && !publicPaths.contains(path)) {
+      return '/login';
+    }
+    return null;
+  },
   routes: [
     GoRoute(
       path: '/',

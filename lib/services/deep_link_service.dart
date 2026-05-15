@@ -56,7 +56,7 @@ class ZyiarahDeepLinkService {
              : OrderTrackingScreen(orderId: id)
          )
        );
-    } else if (resource == 'ticket') {
+    } else if (resource == 'ticket' && isAdmin) {
        _navKey?.currentState?.push(
          MaterialPageRoute(builder: (_) => AdminTicketDetailsScreen(ticketId: id))
        );

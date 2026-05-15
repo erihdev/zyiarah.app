@@ -60,6 +60,7 @@ class ZyiarahUser {
       'subscription_expiry': subscriptionExpiry != null ? Timestamp.fromDate(subscriptionExpiry!) : null,
       'subscription_type': subscriptionType,
       'house_rules': houseRules,
+      'subscription_total_visits': subscriptionTotalVisits,
     };
   }
 }

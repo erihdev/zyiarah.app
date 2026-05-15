@@ -296,13 +296,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
               final orderDoc = snapshot.data!.docs.first;
               final status = orderDoc.get('status');
               if (status == 'accepted' || status == 'in_progress') {
-                _startSync(orderDoc.id);
+                WidgetsBinding.instance.addPostFrameCallback((_) => _startSync(orderDoc.id));
               } else {
-                _stopSync();
+                WidgetsBinding.instance.addPostFrameCallback((_) => _stopSync());
               }
               return _buildActivePipeline(orderDoc);
             }
-            _stopSync();
+            WidgetsBinding.instance.addPostFrameCallback((_) => _stopSync());
             return _buildAvailableTasksSection();
           },
         ),
@@ -468,7 +468,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
       future: FirebaseFirestore.instance.collection('users').doc(clientId).get(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox.shrink();
-        final rules = snapshot.data?.get('house_rules') as String?;
+        final docData = snapshot.data?.data() as Map<String, dynamic>?;
+        final rules = docData?['house_rules'] as String?;
         if (rules == null || rules.isEmpty) return const SizedBox.shrink();
 
         return Container(
@@ -780,7 +781,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
     Future.delayed(const Duration(seconds: 3), () { if (mounted) Navigator.pop(context); });
   }
 
-  void _openMaps(GeoPoint loc) async {
+  void _openMaps(dynamic loc) async {
+    if (loc is! GeoPoint) return;
     final url = 'https://www.google.com/maps/search/?api=1&query=${loc.latitude},${loc.longitude}';
     if (await canLaunchUrl(Uri.parse(url))) await launchUrl(Uri.parse(url));
   }

@@ -136,6 +136,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   void dispose() {
     _fadeController.dispose();
     _maxWorkerCtrl.dispose();
+    _merchantNameCtrl.dispose();
+    _vatNumberCtrl.dispose();
     _whatsappSupportCtrl.dispose();
     _phoneSupportCtrl.dispose();
     _webhookUrlCtrl.dispose();
