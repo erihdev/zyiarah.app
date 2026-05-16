@@ -17,6 +17,8 @@ import 'package:zyiarah/services/zyiarah_comm_service.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/invoice_pdf_service.dart';
 import 'dart:io';
+import 'package:pay/pay.dart';
+import 'package:zyiarah/services/moyasar_service.dart';
 
 import 'package:zyiarah/providers/config_provider.dart';
 import 'package:provider/provider.dart';
@@ -110,6 +112,47 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   double get totalWithVat => widget.amount - _discountAmount;
   double get subtotal => totalWithVat / 1.15;
   double get vatAmount => totalWithVat - subtotal;
+
+  /// Called when the user authorises payment via the native Apple Pay sheet.
+  /// Sends the token to Moyasar, then creates the order on success.
+  Future<void> _handleApplePayResult(Map<String, dynamic> result) async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final String orderId = widget.maintenanceId ??
+          FirebaseFirestore.instance.collection('orders').doc().id;
+      final seq = await ZyiarahCounterService().getNextOrderNumber();
+      final orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
+
+      await MoyasarService.processApplePayToken(
+        applePayToken: result,
+        amountSAR: totalWithVat,
+        description: 'خدمة زيارة - ${widget.serviceName}',
+        orderId: orderId,
+      );
+
+      if (mounted) {
+        await _processUnifiedSuccess(orderId, orderCode, 'apple_pay');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'فشل الدفع: ${e.toString().replaceAll('Exception: ', '')}',
+              style: GoogleFonts.tajawal(),
+            ),
+            backgroundColor: Colors.red.shade800,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            margin: const EdgeInsets.all(15),
+          ),
+        );
+      }
+    }
+  }
 
   Future<void> _validateCoupon() async {
     if (_couponController.text.isEmpty) return;
@@ -240,9 +283,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           throw Exception('خطأ في بدء جلسة تمارا');
         }
 
-      } else if (_selectedPaymentMethod == 'card' || _selectedPaymentMethod == 'apple_pay') {
-        // EDFA PAY (Unified Card / Apple Pay)
-        final String paymentType = _selectedPaymentMethod == 'apple_pay' ? 'Apple Pay' : 'Card';
+      } else if (_selectedPaymentMethod == 'card') {
+        // EDFA PAY (Card)
+        const String paymentType = 'Card';
         final result = await _edfaPayService.processPayment(
           amount: totalWithVat,
           orderId: finalOrderId,
@@ -647,13 +690,30 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           icon: Icons.credit_card,
         ),
         if (Platform.isIOS) ...[
+          const SizedBox(height: 16),
+          Row(children: [
+            const Expanded(child: Divider()),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Text('أو ادفع بـ', style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 13)),
+            ),
+            const Expanded(child: Divider()),
+          ]),
           const SizedBox(height: 12),
-          _buildPaymentOption(
-            id: 'apple_pay',
-            title: 'Apple Pay',
-            subtitle: 'دفع سريع وآمن بلمسة واحدة',
-            icon: Icons.apple,
-            color: Colors.black,
+          ApplePayButton(
+            paymentConfiguration: PaymentConfiguration.fromAsset('apple_pay_config.json'),
+            paymentItems: [
+              PaymentItem(
+                label: 'زيارة - ${widget.serviceName}',
+                amount: totalWithVat.toStringAsFixed(2),
+                status: PaymentItemStatus.final_price,
+              ),
+            ],
+            style: ApplePayButtonStyle.black,
+            type: ApplePayButtonType.buy,
+            margin: EdgeInsets.zero,
+            onPaymentResult: _handleApplePayResult,
+            loadingIndicator: const Center(child: CircularProgressIndicator()),
           ),
         ],
         if (totalWithVat >= 100) ...[
