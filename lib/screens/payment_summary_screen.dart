@@ -63,6 +63,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   bool _isLoading = false;
   ZyiarahUser? _currentUser;
   bool _agreeToTerms = false;
+  bool _tamaraEnabled = false;
 
   final TextEditingController _couponController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
@@ -80,11 +81,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   Future<void> _loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-      if (doc.exists && mounted) {
+      final results = await Future.wait([
+        FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
+        FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get(),
+      ]);
+      final userDoc = results[0];
+      final configDoc = results[1];
+      if (userDoc.exists && mounted) {
         setState(() {
-          _currentUser = ZyiarahUser.fromMap(user.uid, doc.data()!);
-          
+          _currentUser = ZyiarahUser.fromMap(user.uid, userDoc.data()!);
+
           final phone = _currentUser?.phone ?? '';
           if (phone.isEmpty || phone == '000000000' || phone.length < 9) {
             _needsPhoneUpdate = true;
@@ -96,6 +102,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           if ((_currentUser?.visitsRemaining ?? 0) > 0 && widget.contractId == null) {
             _selectedPaymentMethod = 'subscription';
           }
+
+          _tamaraEnabled = configDoc.data()?['tamara_enabled'] as bool? ?? false;
         });
       }
     }
@@ -719,7 +727,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             color: Colors.black,
           ),
         ],
-        if (totalWithVat >= 100) ...[
+        if (_tamaraEnabled && totalWithVat >= 100) ...[
           const SizedBox(height: 12),
           _buildPaymentOption(
             id: 'tamara',

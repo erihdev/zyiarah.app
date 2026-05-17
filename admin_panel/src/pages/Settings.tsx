@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Save, Bell, Shield, Wallet, MapPin, Search, Smartphone, Loader2, CheckCircle2, ChevronLeft, CreditCard, Activity, Globe, Database, KeyRound, ArrowRight } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Save, Bell, Shield, Wallet, MapPin, Search, Smartphone, Loader2, CheckCircle2, ChevronLeft, CreditCard, Activity, Globe, Database, KeyRound, ArrowRight, Plus, X } from 'lucide-react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
@@ -22,6 +22,7 @@ interface SystemSettings {
     cod_monthly: boolean;
     cod_maintenance: boolean;
     cod_contracts: boolean;
+    tamara_enabled: boolean;
 
     // Notifications
     sms_on_order: boolean;
@@ -29,9 +30,7 @@ interface SystemSettings {
     push_on_completed: boolean;
 
     // Coverage
-    riyadh_enabled: boolean;
-    jeddah_enabled: boolean;
-    dammam_enabled: boolean;
+    cities: string[];
 }
 
 const defaultSettings: SystemSettings = {
@@ -49,12 +48,11 @@ const defaultSettings: SystemSettings = {
     cod_monthly: false,
     cod_maintenance: true,
     cod_contracts: false,
+    tamara_enabled: false,
     sms_on_order: true,
     push_on_assign: true,
     push_on_completed: true,
-    riyadh_enabled: true,
-    jeddah_enabled: false,
-    dammam_enabled: false,
+    cities: ['الرياض'],
 };
 
 type TabType = 'general' | 'payments' | 'notifications' | 'coverage';
@@ -66,6 +64,8 @@ export default function Settings() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
+    const [newCityInput, setNewCityInput] = useState('');
+    const cityInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         const fetchSettings = async () => {
@@ -103,6 +103,18 @@ export default function Settings() {
 
     const handleChange = <K extends keyof SystemSettings>(key: K, value: SystemSettings[K]) => {
         setSettings(prev => ({ ...prev, [key]: value }));
+    };
+
+    const addCity = () => {
+        const name = newCityInput.trim();
+        if (!name || settings.cities.includes(name)) return;
+        setSettings(prev => ({ ...prev, cities: [...prev.cities, name] }));
+        setNewCityInput('');
+        cityInputRef.current?.focus();
+    };
+
+    const removeCity = (city: string) => {
+        setSettings(prev => ({ ...prev, cities: prev.cities.filter(c => c !== city) }));
     };
 
     if (isLoading) {
@@ -493,6 +505,28 @@ export default function Settings() {
                                         </div>
                                     </div>
 
+                                    {/* Tamara Section */}
+                                    <div className="bg-slate-50/50 border border-slate-200 rounded-[2.5rem] p-8">
+                                        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                                            <div className="flex items-center gap-5">
+                                                <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100">
+                                                    <CreditCard size={28} className="text-orange-500" />
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-xl font-black text-slate-800">تمارا | Tamara</h4>
+                                                    <p className="text-slate-500 font-medium mt-1 text-sm">السماح للعملاء بتقسيم الفاتورة على 4 دفعات عبر تمارا. يظهر الخيار للعميل عند الطلبات التي تتجاوز 100 ريال.</p>
+                                                </div>
+                                            </div>
+                                            <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
+                                                <span className="px-3 font-bold text-slate-700 text-sm">{settings.tamara_enabled ? 'مفعّل' : 'معطّل'}</span>
+                                                <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input type="checkbox" aria-label="تفعيل تمارا" className="sr-only peer" checked={settings.tamara_enabled} onChange={(e) => handleChange('tamara_enabled', e.target.checked)} />
+                                                    <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all after:shadow-sm peer-checked:bg-orange-500"></div>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                 </div>
                             </div>
                         )}
@@ -550,34 +584,73 @@ export default function Settings() {
                                         </div>
                                         <div>
                                             <h3 className="text-2xl font-black text-slate-800">مناطق التغطية التشغيلية</h3>
-                                            <p className="text-sm text-slate-500 font-medium mt-1">تحديد المدن والمناطق التي يعمل بها تطبيق زيارة حالياً.</p>
+                                            <p className="text-sm text-slate-500 font-medium mt-1">أضف أو احذف المدن التي تغطيها خدمة زيارة حالياً.</p>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="p-10">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
-                                        <CoverageCard 
-                                            city="الرياض"
-                                            region="المنطقة الوسطى"
-                                            checked={settings.riyadh_enabled}
-                                            onChange={(val) => handleChange('riyadh_enabled', val)}
-                                            bgImage="linear-gradient(to bottom right, #f8fafc, #ebf4ff)"
-                                        />
-                                        <CoverageCard 
-                                            city="جدة"
-                                            region="منطقة مكة المكرمة"
-                                            checked={settings.jeddah_enabled}
-                                            onChange={(val) => handleChange('jeddah_enabled', val)}
-                                            bgImage="linear-gradient(to bottom right, #f8fafc, #f0fdf4)"
-                                        />
-                                        <CoverageCard 
-                                            city="الدمام والخبر"
-                                            region="المنطقة الشرقية"
-                                            checked={settings.dammam_enabled}
-                                            onChange={(val) => handleChange('dammam_enabled', val)}
-                                            bgImage="linear-gradient(to bottom right, #f8fafc, #fff7ed)"
-                                        />
+                                <div className="p-10 space-y-8 max-w-4xl mx-auto w-full">
+                                    {/* Add city input */}
+                                    <div className="bg-white border border-purple-100 rounded-[2rem] p-6 shadow-sm">
+                                        <label className="block text-sm font-bold text-slate-700 mb-3">إضافة مدينة أو محافظة جديدة</label>
+                                        <div className="flex gap-3">
+                                            <input
+                                                ref={cityInputRef}
+                                                type="text"
+                                                value={newCityInput}
+                                                onChange={(e) => setNewCityInput(e.target.value)}
+                                                onKeyDown={(e) => e.key === 'Enter' && addCity()}
+                                                placeholder="مثال: مكة المكرمة، الطائف، أبها..."
+                                                className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-5 py-3 text-slate-800 font-bold outline-none focus:bg-white focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 transition-all"
+                                                dir="rtl"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={addCity}
+                                                disabled={!newCityInput.trim()}
+                                                className="flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white font-bold rounded-xl transition-all disabled:cursor-not-allowed"
+                                            >
+                                                <Plus size={18} />
+                                                إضافة
+                                            </button>
+                                        </div>
                                     </div>
+
+                                    {/* Cities list */}
+                                    {settings.cities.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                                            <MapPin size={48} className="mb-4 opacity-30" />
+                                            <p className="font-bold text-lg">لا توجد مدن مفعّلة</p>
+                                            <p className="text-sm mt-1">أضف مدينة لبدء التغطية</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            {settings.cities.map((city) => (
+                                                <div
+                                                    key={city}
+                                                    className="flex items-center justify-between p-5 bg-white border-2 border-purple-200 rounded-2xl shadow-sm shadow-purple-500/5 group hover:border-purple-400 transition-all"
+                                                >
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-12 h-12 rounded-xl bg-purple-50 flex items-center justify-center font-black text-purple-600 text-xl">
+                                                            {city.charAt(0)}
+                                                        </div>
+                                                        <span className="text-lg font-black text-slate-800">{city}</span>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeCity(city)}
+                                                        className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
+                                                        title="حذف المدينة"
+                                                    >
+                                                        <X size={18} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    <p className="text-xs text-slate-400 font-medium text-center">
+                                        {settings.cities.length} {settings.cities.length === 1 ? 'مدينة مفعّلة' : 'مدن مفعّلة'} — اضغط «حفظ التغييرات» لتطبيق التعديلات
+                                    </p>
                                 </div>
                             </div>
                         )}
@@ -622,29 +695,3 @@ function NotificationRow({ title, desc, checked, onChange, icon, colorTheme }: {
     );
 }
 
-function CoverageCard({ city, region, checked, onChange, bgImage }: { city: string, region: string, checked: boolean, onChange: (val: boolean) => void, bgImage: string }) {
-    return (
-        <div 
-            className={`relative overflow-hidden p-6 rounded-[2rem] border-2 transition-all duration-300 flex items-center justify-between group ${
-                checked ? 'border-purple-300 shadow-md shadow-purple-500/10' : 'border-slate-200 filter grayscale-[40%] hover:grayscale-0'
-            }`}
-            style={{ background: bgImage }}
-        >
-            <div className="relative z-10 flex items-center gap-4">
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl shadow-sm ${checked ? 'bg-white text-purple-600' : 'bg-slate-100 text-slate-400'}`}>
-                    {city.charAt(0)}
-                </div>
-                <div>
-                    <h4 className={`text-xl font-black mb-1 ${checked ? 'text-slate-800' : 'text-slate-600'}`}>{city}</h4>
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{region}</p>
-                </div>
-            </div>
-            <div className="relative z-10">
-                <label className="relative inline-flex items-center cursor-pointer scale-110">
-                    <input type="checkbox" aria-label={city} className="sr-only peer" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-                    <div className="w-12 h-6 bg-slate-300/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                </label>
-            </div>
-        </div>
-    );
-}
