@@ -63,6 +63,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   bool _isLoading = false;
   ZyiarahUser? _currentUser;
   bool _agreeToTerms = false;
+  bool _tamaraEnabled = false;
 
   final TextEditingController _couponController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
@@ -80,11 +81,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   Future<void> _loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-      if (doc.exists && mounted) {
+      final results = await Future.wait([
+        FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
+        FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get(),
+      ]);
+      final userDoc = results[0];
+      final configDoc = results[1];
+      if (userDoc.exists && mounted) {
         setState(() {
-          _currentUser = ZyiarahUser.fromMap(user.uid, doc.data()!);
-          
+          _currentUser = ZyiarahUser.fromMap(user.uid, userDoc.data()!);
+
           final phone = _currentUser?.phone ?? '';
           if (phone.isEmpty || phone == '000000000' || phone.length < 9) {
             _needsPhoneUpdate = true;
@@ -96,6 +102,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           if ((_currentUser?.visitsRemaining ?? 0) > 0 && widget.contractId == null) {
             _selectedPaymentMethod = 'subscription';
           }
+
+          _tamaraEnabled = configDoc.data()?['tamara_enabled'] as bool? ?? false;
         });
       }
     }
@@ -291,6 +299,28 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       });
       await ZyiarahNotificationTriggerService().notifyContractActivated(_currentUser?.uid ?? '', widget.serviceName, widget.planVisits ?? 0);
     } else {
+      final bool isHourly = widget.hours != null && widget.serviceDate != null;
+
+      // للخدمة بالساعة: تحقق من توفر سائق قبل إنشاء الطلب
+      Map<String, dynamic>? availabilityResult;
+      if (isHourly) {
+        availabilityResult = await _orderService.checkHourlySlotAvailability(
+          startDateTime: widget.serviceDate!,
+          durationHours: widget.hours!,
+        );
+        if (availabilityResult['available'] != true) {
+          if (mounted) {
+            setState(() => _isLoading = false);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('نعتذر، لا يوجد سائق متاح في الوقت المحدد. يرجى اختيار وقت آخر.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 4),
+            ));
+          }
+          return;
+        }
+      }
+
       await FirebaseFirestore.instance.collection('orders').doc(id).set({
         'code': code,
         'client_id': _currentUser?.uid,
@@ -302,7 +332,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         'service_name': widget.serviceName,
         'amount': amountToSave,
         'is_paid': method != 'cod',
-        'status': 'pending',
+        'status': isHourly ? 'pending' : 'pending',
         'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
         'payment_method': method,
         'created_at': FieldValue.serverTimestamp(),
@@ -313,12 +343,53 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         'coupon_code': _appliedCoupon,
         'discount_amount': _discountAmount,
       });
-      await ZyiarahNotificationTriggerService().notifyOrderCreated(
-        clientId: _currentUser?.uid ?? '',
-        orderCode: code,
-        type: 'cleaning',
-        serviceName: widget.serviceName,
-      );
+
+      if (isHourly) {
+        // تعيين سائق تلقائياً وتحديث الطلب إلى accepted
+        final assigned = await _orderService.autoAssignDriverForHourly(
+          orderId: id,
+          startDateTime: widget.serviceDate!,
+          durationHours: widget.hours!,
+        );
+        if (assigned) {
+          final av = availabilityResult!;
+          await ZyiarahNotificationTriggerService().notifyDriverOfAssignment(
+            av['driverId'] as String,
+            code,
+            driverEmail: av['driverEmail'] as String?,
+            driverName: av['driverName'] as String?,
+            serviceType: widget.serviceName,
+            serviceDate: widget.serviceDate != null
+                ? '${widget.serviceDate!.year}/${widget.serviceDate!.month.toString().padLeft(2,'0')}/${widget.serviceDate!.day.toString().padLeft(2,'0')} — ${widget.serviceDate!.hour.toString().padLeft(2,'0')}:00'
+                : null,
+          );
+          await ZyiarahNotificationTriggerService().notifyOrderCreated(
+            clientId: _currentUser?.uid ?? '',
+            orderCode: code,
+            type: 'cleaning',
+            serviceName: widget.serviceName,
+          );
+        } else {
+          // حالة نادرة: سُبق الوقت بين الفحص والتعيين — أبلغ العميل
+          await FirebaseFirestore.instance.collection('orders').doc(id).update({'status': 'cancelled'});
+          if (mounted) {
+            setState(() => _isLoading = false);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('نعتذر، تم حجز الوقت للتو من عميل آخر. يرجى اختيار وقت آخر.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 4),
+            ));
+          }
+          return;
+        }
+      } else {
+        await ZyiarahNotificationTriggerService().notifyOrderCreated(
+          clientId: _currentUser?.uid ?? '',
+          orderCode: code,
+          type: 'cleaning',
+          serviceName: widget.serviceName,
+        );
+      }
     }
 
     // 2. Trigger ZATCA Invoice & Notifications
@@ -656,7 +727,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             color: Colors.black,
           ),
         ],
-        if (totalWithVat >= 100) ...[
+        if (_tamaraEnabled && totalWithVat >= 100) ...[
           const SizedBox(height: 12),
           _buildPaymentOption(
             id: 'tamara',

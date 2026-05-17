@@ -239,14 +239,20 @@ export default function Dashboard() {
                         if (data.status === 'en_route') markerColor = "#f59e0b"; // Orange (En-route)
                         if (data.status === 'in_service') markerColor = "#ef4444"; // Red (Active)
 
+                        const escHtml = (s: string) => s
+                            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+                        const driverName = escHtml(data.name || 'سائق');
+                        const statusLabel = data.status === 'in_service' ? 'يخدم عميل'
+                            : data.status === 'en_route' ? 'في الطريق للعميل' : 'متاح';
+                        const orderBadge = data.current_order_id
+                            ? `<p class="text-[10px] bg-slate-100 p-1 rounded mt-2">طلب: #${escHtml(data.current_order_id.substring(0, 4))}</p>`
+                            : '';
                         const popupHtml = `
                             <div class="p-3 text-right" dir="rtl">
-                                <h4 class="font-bold text-slate-800">${data.name || 'سائق'}</h4>
-                                <p class="text-xs text-slate-500 mt-1">الحالة: ${
-                                    data.status === 'in_service' ? 'يخدم عميل' : 
-                                    data.status === 'en_route' ? 'في الطريق للعميل' : 'متاح'
-                                }</p>
-                                ${data.current_order_id ? `<p class="text-[10px] bg-slate-100 p-1 rounded mt-2">طلب: #${data.current_order_id.substring(0, 4)}</p>` : ''}
+                                <h4 class="font-bold text-slate-800">${driverName}</h4>
+                                <p class="text-xs text-slate-500 mt-1">الحالة: ${statusLabel}</p>
+                                ${orderBadge}
                             </div>
                         `;
 

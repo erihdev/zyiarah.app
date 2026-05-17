@@ -30,11 +30,24 @@ class _DriverDashboardState extends State<DriverDashboard> {
   bool _isOnline = true;
   String? _currentDriverId;
   String? _activeOrderId;
+  String _driverName = 'السائق';
 
   @override
   void initState() {
     super.initState();
     _currentDriverId = _auth.currentUser?.uid;
+    _syncOnlineStatus();
+  }
+
+  Future<void> _syncOnlineStatus() async {
+    if (_currentDriverId == null) return;
+    final doc = await FirebaseFirestore.instance.collection('drivers').doc(_currentDriverId).get();
+    if (!mounted) return;
+    final data = doc.data();
+    setState(() {
+      _isOnline = data?['is_available'] as bool? ?? true;
+      _driverName = data?['name'] as String? ?? 'السائق';
+    });
   }
 
   Timer? _syncTimer;
@@ -664,7 +677,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
           clientId: data['client_id'],
           status: 'accepted',
           orderCode: data['code'] ?? id,
-          driverName: "فريق زيارة",
+          driverName: _driverName,
         );
       }
     } else if (mounted) {
@@ -744,19 +757,18 @@ class _DriverDashboardState extends State<DriverDashboard> {
     
     // إرسال إشعار لحظي للعميل بالحالة الجديدة
     if (data['client_id'] != null) {
-      const driverName = "فريق زيارة";
       final orderCode = data['code'] ?? id;
 
       await _notificationService.notifyClientOfDriverStatus(
         clientId: data['client_id'],
         status: status,
         orderCode: orderCode,
-        driverName: driverName,
+        driverName: _driverName,
       );
 
       if (status == 'accepted' || status == 'completed') {
         await _notificationService.notifyAdminOfDriverUpdate(
-          driverName: driverName,
+          driverName: _driverName,
           status: status,
           orderCode: orderCode,
         );

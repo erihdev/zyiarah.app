@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, Filter, MoreVertical, CheckCircle2, Clock, XCircle, Package, UserCheck, X, Loader2 } from 'lucide-react';
 import {
-    collection, onSnapshot, query, orderBy, updateDoc, doc, Timestamp,
+    collection, onSnapshot, query, orderBy, doc, Timestamp, writeBatch,
     type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot
 } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
@@ -22,6 +22,7 @@ interface OrderRecord {
     service_type?: string;
     created_at?: Timestamp;
     code?: string;
+    payment_method?: string;
 }
 
 interface DriverOption { id: string; name: string; is_available: boolean; }
@@ -89,17 +90,19 @@ export default function Orders() {
         setIsAssigning(true);
         try {
             const driver = drivers.find(d => d.id === selectedDriverId);
-            await updateDoc(doc(db, 'orders', assignModal.id), {
+            const batch = writeBatch(db);
+            batch.update(doc(db, 'orders', assignModal.id), {
                 status: 'accepted',
                 driver_id: selectedDriverId,
                 assigned_driver: driver?.name || 'سائق',
                 accepted_at: Timestamp.now(),
             });
-            await updateDoc(doc(db, 'drivers', selectedDriverId), {
+            batch.update(doc(db, 'drivers', selectedDriverId), {
                 status: 'en_route',
                 current_order_id: assignModal.id,
                 is_available: false,
             });
+            await batch.commit();
             setAssignModal(null);
             setSelectedDriverId('');
         } catch (err) {
@@ -114,19 +117,21 @@ export default function Orders() {
         if (!await confirm(`هل أنت متأكد من إلغاء الطلب #${order.code || order.id.substring(0, 6).toUpperCase()}؟`)) return;
         setIsCancelling(true);
         try {
-            await updateDoc(doc(db, 'orders', order.id), {
+            const batch = writeBatch(db);
+            batch.update(doc(db, 'orders', order.id), {
                 status: 'cancelled',
                 cancelled_at: Timestamp.now(),
                 cancelled_by: 'admin',
-                needs_refund: false,
+                needs_refund: order.payment_method !== 'cod' && order.payment_method !== undefined,
             });
             if (order.driver_id) {
-                await updateDoc(doc(db, 'drivers', order.driver_id), {
+                batch.update(doc(db, 'drivers', order.driver_id), {
                     status: 'available',
                     current_order_id: null,
                     is_available: true,
                 });
             }
+            await batch.commit();
         } catch (err) {
             console.error('Error cancelling order:', err);
             toast.error('حدث خطأ أثناء الإلغاء');

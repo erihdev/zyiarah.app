@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
+import 'package:zyiarah/services/order_service.dart';
 
 
 class HourlyCleaningDetailsScreen extends StatefulWidget {
@@ -17,8 +18,12 @@ class HourlyCleaningDetailsScreen extends StatefulWidget {
 class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScreen> {
   int _selectedHours = 4;
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
+  int? _selectedStartHour;
+  Map<int, bool> _slotAvailability = {};
+  bool _checkingSlots = false;
   int _workerCount = 1;
   bool _isLoading = true;
+  final ZyiarahOrderService _orderService = ZyiarahOrderService();
 
   double _hourlyBasePrice = 0.0;
   String? _selectedZoneName;
@@ -177,6 +182,27 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     });
   }
 
+  // الفتحات الزمنية المتاحة (8ص حتى آخر وقت تنتهي فيه الخدمة قبل 10م)
+  List<int> _getStartHours() {
+    const endHour = 22;
+    final last = endHour - _selectedHours;
+    return List.generate(last - 8 + 1, (i) => 8 + i);
+  }
+
+  Future<void> _loadSlotAvailability() async {
+    if (!mounted) return;
+    setState(() { _checkingSlots = true; _slotAvailability = {}; _selectedStartHour = null; });
+    final slots = _getStartHours();
+    final Map<int, bool> result = {};
+    for (final h in slots) {
+      final dt = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, h);
+      final res = await _orderService.checkHourlySlotAvailability(startDateTime: dt, durationHours: _selectedHours);
+      result[h] = res['available'] as bool;
+      if (mounted) setState(() => _slotAvailability = Map.from(result));
+    }
+    if (mounted) setState(() => _checkingSlots = false);
+  }
+
   double get totalAmount => _hourlyBasePrice * _workerCount;
 
   bool _isSameDay(DateTime a, DateTime b) =>
@@ -187,11 +213,19 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى تحديد موقعك أولاً لمعرفة الأسعار المتاحة")));
       return;
     }
-    
     if (totalAmount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("هذه الخدمة غير مسعرة في منطقتك حالياً لعدد الساعات المحدد")));
       return;
     }
+    if (_selectedStartHour == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى اختيار وقت بدء الخدمة")));
+      return;
+    }
+
+    // دمج التاريخ مع وقت البدء المختار
+    final serviceDateTime = DateTime(
+      _selectedDate.year, _selectedDate.month, _selectedDate.day, _selectedStartHour!,
+    );
 
     if (mounted) {
       Navigator.push(
@@ -202,7 +236,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
             amount: totalAmount,
             location: _selectedLocation!,
             hours: _selectedHours,
-            serviceDate: _selectedDate,
+            serviceDate: serviceDateTime,
             workerCount: _workerCount,
           ),
         ),
@@ -272,6 +306,11 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                       const Text("تاريخ الخدمة:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
                       const SizedBox(height: 15),
                       _buildDateSelector(),
+                      const SizedBox(height: 30),
+
+                      const Text("وقت البدء:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                      const SizedBox(height: 15),
+                      _buildTimeSlotSelector(),
                       const SizedBox(height: 30),
 
                       const Text("عدد العاملات (اختياري):", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
@@ -368,12 +407,10 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           onTap: () {
             setState(() {
               _selectedHours = h;
-              // update price dynamically
               final matchedZone = _zones.firstWhere((z) => z['name'] == _selectedZoneName, orElse: () => {});
-              if (matchedZone.isNotEmpty) {
-                _updatePriceForZone(matchedZone);
-              }
+              if (matchedZone.isNotEmpty) _updatePriceForZone(matchedZone);
             });
+            if (_selectedLocation != null) _loadSlotAvailability();
           },
           child: Container(
             width: 70,
@@ -413,6 +450,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
             onTap: () {
               HapticFeedback.lightImpact();
               setState(() => _selectedDate = date);
+              _loadSlotAvailability();
             },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
@@ -456,6 +494,102 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       ),
     );
   }
+
+  Widget _buildTimeSlotSelector() {
+    if (_slotAvailability.isEmpty && !_checkingSlots) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.grey.shade200)),
+        child: const Text("اختر التاريخ أولاً لعرض الأوقات المتاحة", style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_checkingSlots)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Row(children: [
+              SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF5D1B5E))),
+              SizedBox(width: 10),
+              Text("جاري التحقق من التوفر...", style: TextStyle(color: Colors.grey, fontSize: 13)),
+            ]),
+          ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _getStartHours().map((h) {
+            final isBooked = _slotAvailability[h] == false;
+            final isChecked = _slotAvailability.containsKey(h);
+            final isSelected = _selectedStartHour == h;
+            final label = '${h.toString().padLeft(2, '0')}:00';
+            return GestureDetector(
+              onTap: (!isChecked || isBooked) ? null : () {
+                HapticFeedback.lightImpact();
+                setState(() => _selectedStartHour = h);
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isBooked
+                      ? Colors.red.shade50
+                      : isSelected
+                          ? const Color(0xFF5D1B5E)
+                          : !isChecked
+                              ? Colors.grey.shade100
+                              : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isBooked
+                        ? Colors.red.shade300
+                        : isSelected
+                            ? const Color(0xFF5D1B5E)
+                            : Colors.grey.shade200,
+                    width: 1.5,
+                  ),
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: isBooked
+                        ? Colors.red.shade400
+                        : isSelected
+                            ? Colors.white
+                            : !isChecked
+                                ? Colors.grey.shade400
+                                : const Color(0xFF1E293B),
+                    decoration: isBooked ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        if (_slotAvailability.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Row(children: [
+              _legendDot(Colors.red.shade200), const SizedBox(width: 4),
+              Text("محجوز", style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+              const SizedBox(width: 12),
+              _legendDot(const Color(0xFF5D1B5E)), const SizedBox(width: 4),
+              Text("مختار", style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+              const SizedBox(width: 12),
+              _legendDot(Colors.white, border: Colors.grey.shade300), const SizedBox(width: 4),
+              Text("متاح", style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+            ]),
+          ),
+      ],
+    );
+  }
+
+  Widget _legendDot(Color color, {Color? border}) => Container(
+    width: 12, height: 12,
+    decoration: BoxDecoration(color: color, shape: BoxShape.circle, border: Border.all(color: border ?? color)),
+  );
 
   Widget _buildWorkerCounter() {
     return Container(
