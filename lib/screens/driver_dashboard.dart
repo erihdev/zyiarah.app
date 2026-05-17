@@ -35,6 +35,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
   void initState() {
     super.initState();
     _currentDriverId = _auth.currentUser?.uid;
+    _syncOnlineStatus();
+  }
+
+  Future<void> _syncOnlineStatus() async {
+    if (_currentDriverId == null) return;
+    final doc = await FirebaseFirestore.instance.collection('drivers').doc(_currentDriverId).get();
+    if (!mounted) return;
+    final isAvailable = doc.data()?['is_available'] as bool? ?? true;
+    setState(() => _isOnline = isAvailable);
   }
 
   Timer? _syncTimer;

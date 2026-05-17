@@ -95,10 +95,27 @@ class ZyiarahNotificationService {
       );
 
       _foregroundMessageSub = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        // We skip showing local notification banners while the app is in foreground
-        // as requested to follow modern minimalist app standards. 
-        // Real-time status updates are handled via Firestore listeners in the UI.
         debugPrint("Foreground message received: ${message.notification?.title}");
+        final isNewOrder = message.data['type'] == 'new_order_driver';
+        final n = message.notification;
+        if (n != null && isNewOrder) {
+          _localNotifications.show(
+            message.hashCode,
+            n.title,
+            n.body,
+            NotificationDetails(
+              android: AndroidNotificationDetails(
+                _channel.id,
+                _channel.name,
+                channelDescription: _channel.description,
+                importance: Importance.max,
+                priority: Priority.high,
+                playSound: true,
+              ),
+              iOS: const DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true),
+            ),
+          );
+        }
       });
     } catch (e) {
       debugPrint("Error initializing notifications: $e");
