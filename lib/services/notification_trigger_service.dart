@@ -30,17 +30,66 @@ class ZyiarahNotificationTriggerService {
   }
 
   // Helper methodologies for common triggers
-  Future<void> notifyDriverOfAssignment(String driverId, String orderId) async {
+  Future<void> notifyDriverOfAssignment(
+    String driverId,
+    String orderId, {
+    String? driverEmail,
+    String? driverName,
+    String? serviceType,
+    String? serviceDate,
+  }) async {
+    final emailHtml = '''
+<div dir="rtl" style="font-family:Tajawal,Arial,sans-serif;max-width:600px;margin:auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0">
+  <div style="background:linear-gradient(135deg,#5D1B5E,#7E3080);padding:32px;text-align:center">
+    <h1 style="color:#fff;margin:0;font-size:24px">مهمة جديدة مسندة إليك 🚀</h1>
+    <p style="color:#e9d5ea;margin:8px 0 0">تطبيق زيارة للخدمات المنزلية</p>
+  </div>
+  <div style="padding:32px">
+    <p style="font-size:16px;color:#334155">مرحباً ${driverName ?? 'السائق الكريم'}،</p>
+    <p style="font-size:15px;color:#475569;line-height:1.7">تم تعيينك لتنفيذ طلب خدمة جديد. يرجى فتح التطبيق والاطلاع على التفاصيل والتوجه فوراً.</p>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin:20px 0">
+      <table style="width:100%;border-collapse:collapse">
+        <tr><td style="padding:8px 0;color:#64748b;font-size:14px">رقم الطلب</td><td style="padding:8px 0;font-weight:bold;color:#1e293b;text-align:left">#$orderId</td></tr>
+        ${serviceType != null ? '<tr><td style="padding:8px 0;color:#64748b;font-size:14px">نوع الخدمة</td><td style="padding:8px 0;font-weight:bold;color:#1e293b;text-align:left">$serviceType</td></tr>' : ''}
+        ${serviceDate != null ? '<tr><td style="padding:8px 0;color:#64748b;font-size:14px">التاريخ والوقت</td><td style="padding:8px 0;font-weight:bold;color:#1e293b;text-align:left">$serviceDate</td></tr>' : ''}
+      </table>
+    </div>
+    <div style="text-align:center;margin-top:24px">
+      <a href="zyiarah://app/order/$orderId" style="background:#5D1B5E;color:#fff;padding:14px 32px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:15px;display:inline-block">افتح التطبيق الآن</a>
+    </div>
+  </div>
+  <div style="background:#f8fafc;padding:16px;text-align:center;color:#94a3b8;font-size:12px">
+    زيارة للخدمات المنزلية — لا ترد على هذا الإيميل
+  </div>
+</div>''';
+
     await triggerNotification(
       toUid: driverId,
       title: "مهمة جديدة مسندة إليك 🚀",
-      body: "تم تعيينك لتنفيذ الطلب رقم #$orderId. يرجى الاطلاع على التفاصيل وبدء المهمة.",
-      type: 'order_assignment',
+      body: "تم تعيينك لتنفيذ الطلب رقم #$orderId. يرجى الاطلاع على التفاصيل وبدء المهمة فوراً.",
+      type: 'hybrid',
       data: {
         'orderId': orderId,
-        'deepLink': 'zyiarah://app/order/$orderId'
+        'deepLink': 'zyiarah://app/order/$orderId',
+        if (driverEmail != null) 'customerEmail': driverEmail,
+        'type': 'new_order_driver',
       },
+      template: driverEmail != null ? null : null,
     );
+
+    // إذا وجد إيميل — أرسل trigger منفصل للإيميل بـ HTML كامل
+    if (driverEmail != null) {
+      await _db.collection('notification_triggers').add({
+        'toUid': driverId,
+        'title': 'مهمة جديدة مسندة إليك 🚀 — طلب #$orderId',
+        'body': emailHtml,
+        'type': 'email',
+        'recipientEmail': driverEmail,
+        'data': {'orderId': orderId},
+        'createdAt': FieldValue.serverTimestamp(),
+        'processed': false,
+      });
+    }
   }
 
   Future<void> notifyClientOfMaintenanceQuote(String clientId, String requestId, double price, {String? customerEmail, String? clientName}) async {

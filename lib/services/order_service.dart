@@ -456,6 +456,7 @@ class ZyiarahOrderService {
       'available': true,
       'driverId': available.first.id,
       'driverName': available.first.data()['name'] ?? 'سائق',
+      'driverEmail': available.first.data()['email'] as String?,
     };
   }
 
