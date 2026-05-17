@@ -22,6 +22,7 @@ interface OrderRecord {
     service_type?: string;
     created_at?: Timestamp;
     code?: string;
+    payment_method?: string;
 }
 
 interface DriverOption { id: string; name: string; is_available: boolean; }
@@ -121,7 +122,7 @@ export default function Orders() {
                 status: 'cancelled',
                 cancelled_at: Timestamp.now(),
                 cancelled_by: 'admin',
-                needs_refund: false,
+                needs_refund: order.payment_method !== 'cod' && order.payment_method !== undefined,
             });
             if (order.driver_id) {
                 batch.update(doc(db, 'drivers', order.driver_id), {

@@ -155,8 +155,8 @@ class ZyiarahOrderService {
         }
       }
 
-      // تحقق من عدد مرات الاستخدام
-      if (uses >= maxUses) {
+      // تحقق من عدد مرات الاستخدام (0 تعني غير محدود)
+      if (maxUses > 0 && uses >= maxUses) {
         return null;
       }
 

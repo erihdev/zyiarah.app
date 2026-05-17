@@ -67,14 +67,12 @@ class ZyiarahNotificationTriggerService {
       toUid: driverId,
       title: "مهمة جديدة مسندة إليك 🚀",
       body: "تم تعيينك لتنفيذ الطلب رقم #$orderId. يرجى الاطلاع على التفاصيل وبدء المهمة فوراً.",
-      type: 'hybrid',
+      type: 'order_assignment',
       data: {
         'orderId': orderId,
         'deepLink': 'zyiarah://app/order/$orderId',
-        if (driverEmail != null) 'customerEmail': driverEmail,
         'type': 'new_order_driver',
       },
-      template: driverEmail != null ? null : null,
     );
 
     // إذا وجد إيميل — أرسل trigger منفصل للإيميل بـ HTML كامل
