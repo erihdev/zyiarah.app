@@ -291,6 +291,28 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       });
       await ZyiarahNotificationTriggerService().notifyContractActivated(_currentUser?.uid ?? '', widget.serviceName, widget.planVisits ?? 0);
     } else {
+      final bool isHourly = widget.hours != null && widget.serviceDate != null;
+
+      // للخدمة بالساعة: تحقق من توفر سائق قبل إنشاء الطلب
+      Map<String, dynamic>? availabilityResult;
+      if (isHourly) {
+        availabilityResult = await _orderService.checkHourlySlotAvailability(
+          startDateTime: widget.serviceDate!,
+          durationHours: widget.hours!,
+        );
+        if (availabilityResult['available'] != true) {
+          if (mounted) {
+            setState(() => _isLoading = false);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('نعتذر، لا يوجد سائق متاح في الوقت المحدد. يرجى اختيار وقت آخر.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 4),
+            ));
+          }
+          return;
+        }
+      }
+
       await FirebaseFirestore.instance.collection('orders').doc(id).set({
         'code': code,
         'client_id': _currentUser?.uid,
@@ -302,7 +324,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         'service_name': widget.serviceName,
         'amount': amountToSave,
         'is_paid': method != 'cod',
-        'status': 'pending',
+        'status': isHourly ? 'pending' : 'pending',
         'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
         'payment_method': method,
         'created_at': FieldValue.serverTimestamp(),
@@ -313,12 +335,46 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         'coupon_code': _appliedCoupon,
         'discount_amount': _discountAmount,
       });
-      await ZyiarahNotificationTriggerService().notifyOrderCreated(
-        clientId: _currentUser?.uid ?? '',
-        orderCode: code,
-        type: 'cleaning',
-        serviceName: widget.serviceName,
-      );
+
+      if (isHourly) {
+        // تعيين سائق تلقائياً وتحديث الطلب إلى accepted
+        final assigned = await _orderService.autoAssignDriverForHourly(
+          orderId: id,
+          startDateTime: widget.serviceDate!,
+          durationHours: widget.hours!,
+        );
+        if (assigned) {
+          await ZyiarahNotificationTriggerService().notifyDriverOfAssignment(
+            availabilityResult!['driverId'] as String,
+            code,
+          );
+          await ZyiarahNotificationTriggerService().notifyOrderCreated(
+            clientId: _currentUser?.uid ?? '',
+            orderCode: code,
+            type: 'cleaning',
+            serviceName: widget.serviceName,
+          );
+        } else {
+          // حالة نادرة: سُبق الوقت بين الفحص والتعيين — أبلغ العميل
+          await FirebaseFirestore.instance.collection('orders').doc(id).update({'status': 'cancelled'});
+          if (mounted) {
+            setState(() => _isLoading = false);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('نعتذر، تم حجز الوقت للتو من عميل آخر. يرجى اختيار وقت آخر.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 4),
+            ));
+          }
+          return;
+        }
+      } else {
+        await ZyiarahNotificationTriggerService().notifyOrderCreated(
+          clientId: _currentUser?.uid ?? '',
+          orderCode: code,
+          type: 'cleaning',
+          serviceName: widget.serviceName,
+        );
+      }
     }
 
     // 2. Trigger ZATCA Invoice & Notifications
