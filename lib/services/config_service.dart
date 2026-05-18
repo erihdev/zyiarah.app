@@ -14,10 +14,11 @@ class ZyiarahConfigService {
   }
 
   Color getColorFromHex(String hexColor) {
-    hexColor = hexColor.replaceAll("#", "");
+    hexColor = hexColor.replaceAll("#", "").trim();
     if (hexColor.length == 6) {
       hexColor = "FF$hexColor";
     }
-    return Color(int.parse(hexColor, radix: 16));
+    final value = int.tryParse(hexColor, radix: 16);
+    return Color(value ?? 0xFF5D1B5E);
   }
 }
