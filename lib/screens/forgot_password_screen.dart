@@ -32,20 +32,28 @@ class _ZyiarahForgotPasswordScreenState extends State<ZyiarahForgotPasswordScree
         if (mounted) Navigator.pop(context);
       });
     } catch (e) {
-      _showError('تأكد من صحة البريد الإلكتروني المدخل.');
+      if (mounted) _showError('تأكد من صحة البريد الإلكتروني المدخل.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   void _showError(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message, style: GoogleFonts.tajawal())));
   }
 
   void _showSuccess(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message, style: GoogleFonts.tajawal()), backgroundColor: Colors.green),
     );
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
   }
 
   @override

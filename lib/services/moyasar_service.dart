@@ -57,8 +57,14 @@ class MoyasarService {
           'حالة الدفع: $status — ${data['message'] ?? 'خطأ غير متوقع'}');
     }
 
-    final error = jsonDecode(response.body) as Map<String, dynamic>;
-    throw Exception(error['message'] ?? 'فشل معالجة الدفع عبر Apple Pay');
+    String message = 'فشل معالجة الدفع عبر Apple Pay';
+    try {
+      final error = jsonDecode(response.body) as Map<String, dynamic>;
+      message = error['message']?.toString() ?? message;
+    } catch (_) {
+      // Non-JSON error body (e.g. gateway HTML page) — keep generic message.
+    }
+    throw Exception(message);
   }
 
   /// Verifies a payment by ID — useful for server-side double-check.

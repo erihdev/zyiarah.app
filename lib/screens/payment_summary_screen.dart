@@ -79,6 +79,13 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     _loadUserData();
   }
 
+  @override
+  void dispose() {
+    _couponController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {

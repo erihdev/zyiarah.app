@@ -36,6 +36,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   ];
 
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   void _goToLogin() {
     ZyiarahCoreService.triggerHapticSelection();
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ZyiarahLoginScreen()));

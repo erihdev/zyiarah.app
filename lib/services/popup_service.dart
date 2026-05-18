@@ -118,8 +118,11 @@ class ZyiarahPopupService {
                           onPressed: () {
                             // 1. Handle External Links
                             if (btn['link'] != null && btn['link'].toString().isNotEmpty) {
-                              launchUrl(Uri.parse(btn['link']), mode: LaunchMode.externalApplication);
-                            } 
+                              final uri = Uri.tryParse(btn['link'].toString());
+                              if (uri != null) {
+                                launchUrl(uri, mode: LaunchMode.externalApplication);
+                              }
+                            }
                             // 2. Handle Internal Sections
                             else if (data['targetSection'] != null) {
                               final section = data['targetSection'];

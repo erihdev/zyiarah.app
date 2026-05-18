@@ -22,6 +22,13 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
   DateTime? _scheduledTime;
 
   @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _bodyCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,

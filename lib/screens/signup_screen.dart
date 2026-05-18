@@ -73,6 +73,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
   }
 
   void _showError(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message, style: GoogleFonts.tajawal())));
   }
 
