@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>الدعم والمساعدة — زيارة</title>
+  <meta name="description" content="مركز دعم تطبيق زيارة — تواصل معنا، الأسئلة الشائعة، وطرق الحصول على المساعدة." />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      line-height: 1.8;
+      font-size: 16px;
+    }
+
+    header {
+      background: linear-gradient(135deg, #3a0c59, #6a3094);
+      color: white;
+      padding: 40px 20px;
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    header p {
+      font-size: 0.95rem;
+      opacity: 0.85;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px 60px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 36px 40px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      border-right: 4px solid #3a0c59;
+    }
+
+    h2 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #3a0c59;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h2 .num {
+      background: #3a0c59;
+      color: white;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+
+    h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin: 18px 0 6px;
+    }
+
+    p { margin-bottom: 12px; color: #374151; }
+
+    ul {
+      padding-right: 20px;
+      margin-bottom: 12px;
+    }
+
+    ul li {
+      margin-bottom: 8px;
+      color: #374151;
+      list-style: none;
+      padding-right: 16px;
+      position: relative;
+    }
+
+    ul li::before {
+      content: "◈";
+      color: #7dc242;
+      position: absolute;
+      right: 0;
+      font-size: 0.75rem;
+      top: 4px;
+    }
+
+    .channels {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-top: 12px;
+    }
+
+    .channel {
+      background: #faf7ff;
+      border: 1px solid #ece3fb;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .channel .icon { font-size: 1.8rem; margin-bottom: 8px; }
+    .channel .title { font-weight: 700; color: #3a0c59; margin-bottom: 4px; }
+    .channel a { color: #3a0c59; text-decoration: none; font-weight: 600; }
+    .channel small { color: #64748b; font-size: 0.85rem; }
+
+    .faq-item {
+      border-bottom: 1px solid #f0f0f5;
+      padding: 14px 0;
+    }
+    .faq-item:last-child { border-bottom: none; }
+    .faq-item .q { font-weight: 700; color: #1e293b; margin-bottom: 4px; }
+    .faq-item .a { color: #374151; }
+
+    .highlight {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-top: 12px;
+      color: #166534;
+      font-size: 0.95rem;
+    }
+
+    .contact-box {
+      background: linear-gradient(135deg, #3a0c59, #6a3094);
+      color: white;
+      border-radius: 14px;
+      padding: 28px 32px;
+      margin-top: 32px;
+      text-align: center;
+    }
+
+    .contact-box h2 { color: white; justify-content: center; }
+    .contact-box h2 .num { background: rgba(255,255,255,0.25); }
+
+    .contact-box a {
+      color: #b9f0a0;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .contact-box p { color: rgba(255,255,255,0.9); }
+
+    footer {
+      text-align: center;
+      padding: 24px;
+      color: #94a3b8;
+      font-size: 0.875rem;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    @media (max-width: 600px) {
+      .card { padding: 24px 20px; }
+      header h1 { font-size: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>الدعم والمساعدة</h1>
+  <p>تطبيق زيارة — نحن هنا لمساعدتك</p>
+</header>
+
+<div class="container">
+
+  <div class="card">
+    <h2><span class="num">1</span> تواصل معنا</h2>
+    <p>فريق دعم زيارة جاهز للرد على استفساراتك ومساعدتك في أي مشكلة تواجهك أثناء استخدام التطبيق.</p>
+    <div class="channels">
+      <div class="channel">
+        <div class="icon">✉️</div>
+        <div class="title">البريد الإلكتروني</div>
+        <a href="mailto:support@zyiarah.com">support@zyiarah.com</a>
+      </div>
+      <div class="channel">
+        <div class="icon">📞</div>
+        <div class="title">الهاتف</div>
+        <a href="tel:+966530489016">+966 53 048 9016</a>
+      </div>
+      <div class="channel">
+        <div class="icon">💬</div>
+        <div class="title">واتساب</div>
+        <a href="https://wa.me/966530489016" target="_blank" rel="noopener">+966 53 048 9016</a>
+      </div>
+    </div>
+    <div class="highlight">
+      ساعات العمل: من الأحد إلى الخميس، 9 صباحاً حتى 6 مساءً (بتوقيت المملكة العربية السعودية). نسعى للرد على جميع الرسائل خلال 24 ساعة عمل.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="num">2</span> كيف نساعدك</h2>
+    <p>يمكنك التواصل مع فريق الدعم بخصوص:</p>
+    <ul>
+      <li>مشاكل تسجيل الدخول أو إنشاء الحساب</li>
+      <li>الاستفسار عن حالة طلب أو حجز</li>
+      <li>تعديل أو إلغاء حجز قائم</li>
+      <li>مشاكل الدفع أو الفواتير الضريبية</li>
+      <li>الإبلاغ عن خطأ تقني في التطبيق</li>
+      <li>طلب حذف الحساب أو الاطلاع على البيانات</li>
+      <li>اقتراحات لتحسين الخدمة</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2><span class="num">3</span> الأسئلة الشائعة</h2>
+
+    <div class="faq-item">
+      <div class="q">كيف أنشئ حساباً جديداً؟</div>
+      <div class="a">من شاشة الدخول، اختر "إنشاء حساب" وأدخل اسمك ورقم جوالك وبريدك الإلكتروني وكلمة المرور.</div>
+    </div>
+    <div class="faq-item">
+      <div class="q">نسيت كلمة المرور، ماذا أفعل؟</div>
+      <div class="a">من شاشة تسجيل الدخول اضغط "نسيت كلمة المرور" وأدخل بريدك الإلكتروني لاستلام رابط إعادة التعيين.</div>
+    </div>
+    <div class="faq-item">
+      <div class="q">كيف أحجز خدمة تنظيف؟</div>
+      <div class="a">اختر نوع الخدمة (بالساعة، شهري، غسيل كنب، أو شركات)، حدّد الموعد والعنوان، ثم أكمل الحجز.</div>
+    </div>
+    <div class="faq-item">
+      <div class="q">ما طرق الدفع المتاحة؟</div>
+      <div class="a">البطاقة البنكية، الدفع عند الاستلام، أو التقسيط بدون فوائد عبر تمارا.</div>
+    </div>
+    <div class="faq-item">
+      <div class="q">كيف ألغي أو أعدّل حجزاً؟</div>
+      <div class="a">من قسم "طلباتي" يمكنك تعديل أو إلغاء الحجز قبل بدء الخدمة. للمساعدة تواصل مع الدعم.</div>
+    </div>
+    <div class="faq-item">
+      <div class="q">في أي مناطق يتوفر التطبيق؟</div>
+      <div class="a">التطبيق متاح حالياً في منطقة جازان ويتوسع تدريجياً لتغطية باقي مناطق المملكة.</div>
+    </div>
+    <div class="faq-item">
+      <div class="q">كيف أحذف حسابي؟</div>
+      <div class="a">يمكنك طلب حذف الحساب من داخل التطبيق أو عبر صفحة <a href="/delete-account" style="color:#3a0c59;font-weight:600;">حذف الحساب</a>.</div>
+    </div>
+  </div>
+
+  <div class="contact-box">
+    <h2><span class="num">4</span> ما زلت بحاجة لمساعدة؟</h2>
+    <p style="margin-top:12px;">راسلنا وسيتواصل معك فريق الدعم في أقرب وقت:</p>
+    <p style="margin-top:16px; font-size:1.05rem;">
+      <strong>مؤسسة معاذ يحي محمد المالكي</strong><br/>
+      المملكة العربية السعودية<br/><br/>
+      البريد الإلكتروني:
+      <a href="mailto:support@zyiarah.com">support@zyiarah.com</a><br/>
+      الهاتف:
+      <a href="tel:+966530489016">+966 53 048 9016</a>
+    </p>
+  </div>
+
+</div>
+
+<footer>
+  © 2026 زيارة — مؤسسة معاذ يحي محمد المالكي. جميع الحقوق محفوظة.
+</footer>
+
+</body>
+</html>
