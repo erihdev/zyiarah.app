@@ -172,6 +172,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   Future<void> _handlePayment() async {
+    if (_isLoading) return;
+
     if (_needsPhoneUpdate && _phoneController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى التأكد من بيانات التواصل")));
       return;
@@ -827,14 +829,21 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
         ),
         child: ElevatedButton(
-          onPressed: _handlePayment,
+          onPressed: _isLoading ? null : _handlePayment,
           style: ElevatedButton.styleFrom(
             backgroundColor: _agreeToTerms ? config.checkoutButtonColor : Colors.grey.shade300,
             foregroundColor: Colors.white,
+            disabledBackgroundColor: Colors.grey.shade300,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
-          child: Text('تأكيد وإتمام الدفع', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
+          child: _isLoading
+              ? const SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                )
+              : Text('تأكيد وإتمام الدفع', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
         ),
       ),
     );
