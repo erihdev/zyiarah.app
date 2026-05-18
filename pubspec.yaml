@@ -58,6 +58,7 @@ flutter:
   assets:
     - .env
     - assets/logo.png
+    - assets/apple_pay_config.json
     - assets/images/hourly_cleaning.png
     - assets/images/monthly_cleaning.png
     - assets/images/sofa_cleaning.png

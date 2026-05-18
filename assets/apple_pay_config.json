@@ -1,0 +1,11 @@
+{
+  "provider": "apple_pay",
+  "data": {
+    "merchantIdentifier": "merchant.com.zyiarah.app",
+    "displayName": "Zyiarah - زيارة",
+    "merchantCapabilities": ["3DS", "debit", "credit"],
+    "supportedNetworks": ["amex", "visa", "mada", "masterCard"],
+    "countryCode": "SA",
+    "currencyCode": "SAR"
+  }
+}
