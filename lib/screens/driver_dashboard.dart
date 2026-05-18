@@ -169,8 +169,150 @@ class _DriverDashboardState extends State<DriverDashboard> {
             ],
           ),
         ),
+        IconButton(
+          icon: const Icon(Icons.account_circle, color: Colors.white, size: 28),
+          tooltip: 'الملف الشخصي',
+          onPressed: _showProfileSheet,
+        ),
+        const SizedBox(width: 6),
       ],
     );
+  }
+
+  void _showProfileSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 14, 24, 28),
+          child: FutureBuilder<DocumentSnapshot>(
+            future: FirebaseFirestore.instance
+                .collection('drivers')
+                .doc(_currentDriverId)
+                .get(),
+            builder: (context, snapshot) {
+              final data = snapshot.data?.data() as Map<String, dynamic>? ?? {};
+              final name = data['name'] ?? 'سائق زيارة';
+              final phone = data['phone'] ??
+                  _auth.currentUser?.phoneNumber ??
+                  'غير محدد';
+              final email = _auth.currentUser?.email ?? 'غير محدد';
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 50,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  const CircleAvatar(
+                    radius: 40,
+                    backgroundColor: Color(0xFF5D1B5E),
+                    child: Icon(Icons.person, color: Colors.white, size: 44),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(name,
+                      style: GoogleFonts.tajawal(
+                          fontWeight: FontWeight.bold, fontSize: 20)),
+                  const SizedBox(height: 4),
+                  Text('سائق معتمد لدى زيارة',
+                      style: GoogleFonts.tajawal(
+                          color: Colors.grey, fontSize: 13)),
+                  const SizedBox(height: 24),
+                  _buildProfileRow(Icons.phone_rounded, 'رقم الجوال', phone),
+                  _buildProfileRow(
+                      Icons.email_rounded, 'البريد الإلكتروني', email),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        _performLogout();
+                      },
+                      icon: const Icon(Icons.logout, color: Colors.white),
+                      label: Text('تسجيل الخروج',
+                          style: GoogleFonts.tajawal(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade700,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, color: const Color(0xFF5D1B5E), size: 22),
+          const SizedBox(width: 14),
+          Text('$label: ',
+              style:
+                  GoogleFonts.tajawal(color: Colors.grey[600], fontSize: 13)),
+          Expanded(
+            child: Text(value,
+                style: GoogleFonts.tajawal(
+                    fontWeight: FontWeight.w600, fontSize: 13),
+                textAlign: TextAlign.left),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _performLogout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: Text('تسجيل الخروج',
+              style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+          content: Text('هل تريد بالتأكيد تسجيل الخروج من التطبيق؟',
+              style: GoogleFonts.tajawal()),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text('إلغاء', style: GoogleFonts.tajawal())),
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text('نعم، خروج',
+                    style: GoogleFonts.tajawal(color: Colors.red))),
+          ],
+        ),
+      ),
+    );
+
+    if (confirm != true) return;
+    HapticFeedback.lightImpact();
+    _stopSync();
+    await FirebaseAuth.instance.signOut();
+    if (mounted) context.go('/login');
   }
 
   Widget _buildStatsRow() {
