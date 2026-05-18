@@ -1,10 +1,11 @@
 name: iOS Release
 
+# iOS App Store releases are handled by Codemagic. This workflow is kept
+# for manual runs only — auto-running it on tag pushes made it race with
+# the Codemagic build, and both revoke all distribution certificates,
+# which revoked the certificate the other had just signed with.
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - 'v*'
 
 jobs:
   build-ios:
