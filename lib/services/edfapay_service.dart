@@ -1,6 +1,3 @@
-// ignore: unused_import
-import 'package:edfapg_sdk/edfapg_sdk.dart'; // Reserved for future SDK integration
-
 class EdfaPayService {
   // ⚠️ استبدل هذه القيم ببيانات حساب EDFAPAY الفعلية قبل الإطلاق
   static const String mId = "12345678";
