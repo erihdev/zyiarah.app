@@ -73,10 +73,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   bool _isValidatingCoupon = false;
   bool _needsPhoneUpdate = false;
 
+  late final Future<PaymentConfiguration> _applePayConfigFuture;
+
   @override
   void initState() {
     super.initState();
     _loadUserData();
+    _applePayConfigFuture =
+        PaymentConfiguration.fromAsset('assets/apple_pay_config.json');
   }
 
   @override
@@ -707,20 +711,28 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             const Expanded(child: Divider()),
           ]),
           const SizedBox(height: 12),
-          ApplePayButton(
-            paymentConfiguration: PaymentConfiguration.fromAsset('apple_pay_config.json'),
-            paymentItems: [
-              PaymentItem(
-                label: 'زيارة - ${widget.serviceName}',
-                amount: totalWithVat.toStringAsFixed(2),
-                status: PaymentItemStatus.final_price,
-              ),
-            ],
-            style: ApplePayButtonStyle.black,
-            type: ApplePayButtonType.buy,
-            margin: EdgeInsets.zero,
-            onPaymentResult: _handleApplePayResult,
-            loadingIndicator: const Center(child: CircularProgressIndicator()),
+          FutureBuilder<PaymentConfiguration>(
+            future: _applePayConfigFuture,
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const SizedBox.shrink();
+              }
+              return ApplePayButton(
+                paymentConfiguration: snapshot.data!,
+                paymentItems: [
+                  PaymentItem(
+                    label: 'زيارة - ${widget.serviceName}',
+                    amount: totalWithVat.toStringAsFixed(2),
+                    status: PaymentItemStatus.final_price,
+                  ),
+                ],
+                style: ApplePayButtonStyle.black,
+                type: ApplePayButtonType.buy,
+                margin: EdgeInsets.zero,
+                onPaymentResult: _handleApplePayResult,
+                loadingIndicator: const Center(child: CircularProgressIndicator()),
+              );
+            },
           ),
         ],
         if (totalWithVat >= 100) ...[
