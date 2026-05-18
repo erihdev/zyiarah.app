@@ -54,3 +54,15 @@ jobs:
           name: app-release
           path: build/app/outputs/bundle/release/app-release.aab
           retention-days: 7
+
+      # Publishes to the Google Play "production" track as a draft release.
+      # Review and roll out the draft from the Play Console.
+      # To publish without the manual step, change status to "completed".
+      - name: Publish to Google Play
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.zyiarah.zyiarah
+          releaseFiles: build/app/outputs/bundle/release/app-release.aab
+          track: production
+          status: draft
