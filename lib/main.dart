@@ -15,6 +15,7 @@ import 'package:zyiarah/screens/client_dashboard.dart';
 import 'package:zyiarah/screens/driver_dashboard.dart';
 import 'package:zyiarah/screens/admin/admin_dashboard_screen.dart';
 import 'package:zyiarah/services/deep_link_service.dart';
+import 'package:zyiarah/services/geofence_service.dart';
 import 'package:zyiarah/router.dart';
 
 import 'package:provider/provider.dart';
@@ -47,6 +48,7 @@ void main() async {
 
   ZyiarahNotificationService().initialize();
   ZyiarahDeepLinkService().initialize(navigatorKey);
+  GeofenceService.initialize(); // تحميل مناطق التغطية من Firestore
   
   runApp(
     MultiProvider(

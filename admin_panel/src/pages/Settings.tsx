@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Save, Bell, Shield, Wallet, MapPin, Search, Smartphone, Loader2, CheckCircle2, ChevronLeft, CreditCard, Activity, Globe, Database, KeyRound, ArrowRight } from 'lucide-react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { useState, useEffect, useRef } from 'react';
+import { Save, Bell, Shield, Wallet, MapPin, Search, Smartphone, Loader2, CheckCircle2, ChevronLeft, CreditCard, Activity, Globe, Database, KeyRound, ArrowRight, Plus, Navigation, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
+import { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
 
@@ -22,17 +22,25 @@ interface SystemSettings {
     cod_monthly: boolean;
     cod_maintenance: boolean;
     cod_contracts: boolean;
+    tamara_enabled: boolean;
 
     // Notifications
     sms_on_order: boolean;
     push_on_assign: boolean;
     push_on_completed: boolean;
-
-    // Coverage
-    riyadh_enabled: boolean;
-    jeddah_enabled: boolean;
-    dammam_enabled: boolean;
 }
+
+interface CoverageZone {
+    id: string;
+    name: string;
+    latitude: number;
+    longitude: number;
+    radiusKm: number;
+    enabled: boolean;
+    rank: number;
+}
+
+const emptyZoneForm = { name: '', latitude: '', longitude: '', radiusKm: '15' };
 
 const defaultSettings: SystemSettings = {
     force_update_version: "v2.1.0",
@@ -49,12 +57,10 @@ const defaultSettings: SystemSettings = {
     cod_monthly: false,
     cod_maintenance: true,
     cod_contracts: false,
+    tamara_enabled: false,
     sms_on_order: true,
     push_on_assign: true,
     push_on_completed: true,
-    riyadh_enabled: true,
-    jeddah_enabled: false,
-    dammam_enabled: false,
 };
 
 type TabType = 'general' | 'payments' | 'notifications' | 'coverage';
@@ -66,6 +72,11 @@ export default function Settings() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
+    const [zones, setZones] = useState<CoverageZone[]>([]);
+    const [newZone, setNewZone] = useState(emptyZoneForm);
+    const [isAddingZone, setIsAddingZone] = useState(false);
+    const [showAddForm, setShowAddForm] = useState(false);
+    const zoneNameRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         const fetchSettings = async () => {
@@ -83,6 +94,60 @@ export default function Settings() {
         };
         fetchSettings();
     }, []);
+
+    useEffect(() => {
+        const q = query(collection(db, 'coverage_zones'), orderBy('rank'));
+        const unsub = onSnapshot(q, (snap) => {
+            setZones(snap.docs.map(d => ({ id: d.id, ...d.data() } as CoverageZone)));
+        }, (err) => console.error('coverage_zones snapshot error:', err));
+        return () => unsub();
+    }, []);
+
+    const handleAddZone = async () => {
+        const lat = parseFloat(newZone.latitude);
+        const lng = parseFloat(newZone.longitude);
+        const radius = parseFloat(newZone.radiusKm);
+        if (!newZone.name.trim() || isNaN(lat) || isNaN(lng) || isNaN(radius)) {
+            toast.error('يرجى إدخال جميع الحقول بشكل صحيح');
+            return;
+        }
+        setIsAddingZone(true);
+        try {
+            await addDoc(collection(db, 'coverage_zones'), {
+                name: newZone.name.trim(),
+                latitude: lat,
+                longitude: lng,
+                radiusKm: radius,
+                enabled: true,
+                rank: zones.length + 1,
+            });
+            setNewZone(emptyZoneForm);
+            setShowAddForm(false);
+            toast.success(`تمت إضافة ${newZone.name.trim()} بنجاح`);
+        } catch (e) {
+            console.error(e);
+            toast.error('حدث خطأ أثناء الإضافة');
+        } finally {
+            setIsAddingZone(false);
+        }
+    };
+
+    const handleToggleZone = async (zone: CoverageZone) => {
+        try {
+            await updateDoc(doc(db, 'coverage_zones', zone.id), { enabled: !zone.enabled });
+        } catch (e) {
+            toast.error('حدث خطأ أثناء التحديث');
+        }
+    };
+
+    const handleDeleteZone = async (zone: CoverageZone) => {
+        if (!await confirm(`حذف محافظة "${zone.name}" نهائياً؟`)) return;
+        try {
+            await deleteDoc(doc(db, 'coverage_zones', zone.id));
+        } catch (e) {
+            toast.error('حدث خطأ أثناء الحذف');
+        }
+    };
 
     const handleSave = async () => {
         setIsSaving(true);
@@ -493,6 +558,28 @@ export default function Settings() {
                                         </div>
                                     </div>
 
+                                    {/* Tamara Section */}
+                                    <div className="bg-slate-50/50 border border-slate-200 rounded-[2.5rem] p-8">
+                                        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                                            <div className="flex items-center gap-5">
+                                                <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100">
+                                                    <CreditCard size={28} className="text-orange-500" />
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-xl font-black text-slate-800">تمارا | Tamara</h4>
+                                                    <p className="text-slate-500 font-medium mt-1 text-sm">السماح للعملاء بتقسيم الفاتورة على 4 دفعات عبر تمارا. يظهر الخيار للعميل عند الطلبات التي تتجاوز 100 ريال.</p>
+                                                </div>
+                                            </div>
+                                            <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
+                                                <span className="px-3 font-bold text-slate-700 text-sm">{settings.tamara_enabled ? 'مفعّل' : 'معطّل'}</span>
+                                                <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input type="checkbox" aria-label="تفعيل تمارا" className="sr-only peer" checked={settings.tamara_enabled} onChange={(e) => handleChange('tamara_enabled', e.target.checked)} />
+                                                    <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all after:shadow-sm peer-checked:bg-orange-500"></div>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                 </div>
                             </div>
                         )}
@@ -544,40 +631,169 @@ export default function Settings() {
                         {activeTab === 'coverage' && (
                             <div className="flex flex-col h-full">
                                 <div className="px-10 py-8 border-b border-purple-50 bg-white/80 backdrop-blur-xl sticky top-0 z-20">
-                                    <div className="flex items-center gap-4">
-                                        <div className="p-3 bg-purple-50 text-purple-600 rounded-2xl">
-                                            <MapPin size={28} strokeWidth={2.5} />
+                                    <div className="flex items-center justify-between gap-4 flex-wrap">
+                                        <div className="flex items-center gap-4">
+                                            <div className="p-3 bg-purple-50 text-purple-600 rounded-2xl">
+                                                <MapPin size={28} strokeWidth={2.5} />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-2xl font-black text-slate-800">مناطق التغطية التشغيلية</h3>
+                                                <p className="text-sm text-slate-500 font-medium mt-1">
+                                                    {zones.filter(z => z.enabled).length} محافظة مفعّلة من أصل {zones.length} — التطبيق يقرأ هذه البيانات مباشرةً
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <h3 className="text-2xl font-black text-slate-800">مناطق التغطية التشغيلية</h3>
-                                            <p className="text-sm text-slate-500 font-medium mt-1">تحديد المدن والمناطق التي يعمل بها تطبيق زيارة حالياً.</p>
-                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => { setShowAddForm(v => !v); setTimeout(() => zoneNameRef.current?.focus(), 50); }}
+                                            className="flex items-center gap-2 px-5 py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl transition-all shadow-sm"
+                                        >
+                                            <Plus size={18} />
+                                            إضافة محافظة
+                                        </button>
                                     </div>
                                 </div>
-                                <div className="p-10">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
-                                        <CoverageCard 
-                                            city="الرياض"
-                                            region="المنطقة الوسطى"
-                                            checked={settings.riyadh_enabled}
-                                            onChange={(val) => handleChange('riyadh_enabled', val)}
-                                            bgImage="linear-gradient(to bottom right, #f8fafc, #ebf4ff)"
-                                        />
-                                        <CoverageCard 
-                                            city="جدة"
-                                            region="منطقة مكة المكرمة"
-                                            checked={settings.jeddah_enabled}
-                                            onChange={(val) => handleChange('jeddah_enabled', val)}
-                                            bgImage="linear-gradient(to bottom right, #f8fafc, #f0fdf4)"
-                                        />
-                                        <CoverageCard 
-                                            city="الدمام والخبر"
-                                            region="المنطقة الشرقية"
-                                            checked={settings.dammam_enabled}
-                                            onChange={(val) => handleChange('dammam_enabled', val)}
-                                            bgImage="linear-gradient(to bottom right, #f8fafc, #fff7ed)"
-                                        />
-                                    </div>
+
+                                <div className="p-8 space-y-6 overflow-y-auto">
+                                    {/* Add zone form */}
+                                    {showAddForm && (
+                                        <div className="bg-purple-50 border-2 border-purple-200 rounded-[2rem] p-6 space-y-4">
+                                            <h4 className="font-black text-slate-800 text-lg">بيانات المحافظة الجديدة</h4>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-600 mb-1">اسم المحافظة أو القرية</label>
+                                                    <input
+                                                        ref={zoneNameRef}
+                                                        type="text"
+                                                        value={newZone.name}
+                                                        onChange={e => setNewZone(p => ({ ...p, name: e.target.value }))}
+                                                        placeholder="مثال: الدائر، فيفاء، بني مالك..."
+                                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-800 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                                                        dir="rtl"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-600 mb-1">نطاق التغطية (كيلومتر)</label>
+                                                    <input
+                                                        type="number"
+                                                        value={newZone.radiusKm}
+                                                        onChange={e => setNewZone(p => ({ ...p, radiusKm: e.target.value }))}
+                                                        placeholder="15"
+                                                        min="1" max="100"
+                                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-800 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                                                        dir="ltr"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-600 mb-1">خط العرض (Latitude)</label>
+                                                    <input
+                                                        type="number"
+                                                        value={newZone.latitude}
+                                                        onChange={e => setNewZone(p => ({ ...p, latitude: e.target.value }))}
+                                                        placeholder="مثال: 17.3453"
+                                                        step="0.0001"
+                                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-800 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                                                        dir="ltr"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-600 mb-1">خط الطول (Longitude)</label>
+                                                    <input
+                                                        type="number"
+                                                        value={newZone.longitude}
+                                                        onChange={e => setNewZone(p => ({ ...p, longitude: e.target.value }))}
+                                                        placeholder="مثال: 43.1572"
+                                                        step="0.0001"
+                                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-800 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                                                        dir="ltr"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3 flex-wrap">
+                                                <a
+                                                    href={`https://www.google.com/maps/search/${encodeURIComponent(newZone.name || 'جازان')}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="flex items-center gap-2 text-sm font-bold text-blue-600 hover:text-blue-800 underline"
+                                                >
+                                                    <Navigation size={14} />
+                                                    ابحث في خرائط Google عن الإحداثيات
+                                                </a>
+                                                <span className="text-xs text-slate-400">(انقر على الموقع → انسخ الأرقام من شريط العنوان)</span>
+                                            </div>
+                                            <div className="flex gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={handleAddZone}
+                                                    disabled={isAddingZone}
+                                                    className="flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white font-bold rounded-xl transition-all"
+                                                >
+                                                    {isAddingZone ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                                                    حفظ المحافظة
+                                                </button>
+                                                <button type="button" onClick={() => setShowAddForm(false)} className="px-6 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all">
+                                                    إلغاء
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Zones list */}
+                                    {zones.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                                            <MapPin size={56} className="mb-4 opacity-20" />
+                                            <p className="font-black text-xl">لا توجد مناطق بعد</p>
+                                            <p className="text-sm mt-2">سيتم تحميل المناطق الافتراضية تلقائياً عند فتح التطبيق لأول مرة</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                            {zones.map(zone => (
+                                                <div
+                                                    key={zone.id}
+                                                    className={`relative group p-5 rounded-2xl border-2 transition-all ${zone.enabled ? 'bg-white border-purple-200 shadow-sm shadow-purple-500/5' : 'bg-slate-50 border-slate-200 opacity-60'}`}
+                                                >
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-black text-lg ${zone.enabled ? 'bg-purple-100 text-purple-700' : 'bg-slate-200 text-slate-500'}`}>
+                                                                {zone.name.charAt(0)}
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-black text-slate-800">{zone.name}</p>
+                                                                <p className="text-xs text-slate-500 font-mono mt-0.5">{zone.radiusKm} كم</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleToggleZone(zone)}
+                                                                className={`p-1.5 rounded-lg transition-all ${zone.enabled ? 'text-purple-600 hover:bg-purple-50' : 'text-slate-400 hover:bg-slate-100'}`}
+                                                                title={zone.enabled ? 'إيقاف' : 'تفعيل'}
+                                                            >
+                                                                {zone.enabled ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteZone(zone)}
+                                                                className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                                                                title="حذف"
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="mt-3 flex gap-2 text-xs font-mono text-slate-400">
+                                                        <span>ع: {zone.latitude?.toFixed(4)}</span>
+                                                        <span>·</span>
+                                                        <span>ط: {zone.longitude?.toFixed(4)}</span>
+                                                    </div>
+                                                    <div className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${zone.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${zone.enabled ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+                                                        {zone.enabled ? 'مفعّل' : 'موقوف'}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -622,29 +838,3 @@ function NotificationRow({ title, desc, checked, onChange, icon, colorTheme }: {
     );
 }
 
-function CoverageCard({ city, region, checked, onChange, bgImage }: { city: string, region: string, checked: boolean, onChange: (val: boolean) => void, bgImage: string }) {
-    return (
-        <div 
-            className={`relative overflow-hidden p-6 rounded-[2rem] border-2 transition-all duration-300 flex items-center justify-between group ${
-                checked ? 'border-purple-300 shadow-md shadow-purple-500/10' : 'border-slate-200 filter grayscale-[40%] hover:grayscale-0'
-            }`}
-            style={{ background: bgImage }}
-        >
-            <div className="relative z-10 flex items-center gap-4">
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl shadow-sm ${checked ? 'bg-white text-purple-600' : 'bg-slate-100 text-slate-400'}`}>
-                    {city.charAt(0)}
-                </div>
-                <div>
-                    <h4 className={`text-xl font-black mb-1 ${checked ? 'text-slate-800' : 'text-slate-600'}`}>{city}</h4>
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{region}</p>
-                </div>
-            </div>
-            <div className="relative z-10">
-                <label className="relative inline-flex items-center cursor-pointer scale-110">
-                    <input type="checkbox" aria-label={city} className="sr-only peer" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-                    <div className="w-12 h-6 bg-slate-300/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                </label>
-            </div>
-        </div>
-    );
-}

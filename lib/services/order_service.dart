@@ -155,8 +155,8 @@ class ZyiarahOrderService {
         }
       }
 
-      // تحقق من عدد مرات الاستخدام
-      if (uses >= maxUses) {
+      // تحقق من عدد مرات الاستخدام (0 تعني غير محدود)
+      if (maxUses > 0 && uses >= maxUses) {
         return null;
       }
 
@@ -404,6 +404,94 @@ class ZyiarahOrderService {
         'is_available': false,
       });
 
+      return true;
+    });
+  }
+
+  // التحقق من توفر فتحة زمنية لخدمة التنظيف بالساعة
+  // يُعيد {available, driverId, driverName}
+  Future<Map<String, dynamic>> checkHourlySlotAvailability({
+    required DateTime startDateTime,
+    required int durationHours,
+  }) async {
+    final endDateTime = startDateTime.add(Duration(hours: durationHours));
+    final dayStart = DateTime(startDateTime.year, startDateTime.month, startDateTime.day);
+    final dayEnd = dayStart.add(const Duration(days: 1));
+
+    final driversSnap = await _db
+        .collection('drivers')
+        .where('is_active', isEqualTo: true)
+        .get();
+
+    if (driversSnap.docs.isEmpty) {
+      return {'available': false, 'driverId': null, 'driverName': null};
+    }
+
+    final ordersSnap = await _db
+        .collection('orders')
+        .where('service_date', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
+        .where('service_date', isLessThan: Timestamp.fromDate(dayEnd))
+        .where('status', whereIn: ['accepted', 'in_progress'])
+        .get();
+
+    final busyDriverIds = <String>{};
+    for (final doc in ordersSnap.docs) {
+      final data = doc.data();
+      if (data['service_date'] == null) continue;
+      final orderStart = (data['service_date'] as Timestamp).toDate();
+      final orderHours = (data['hours_contracted'] as int?) ?? 4;
+      final orderEnd = orderStart.add(Duration(hours: orderHours));
+      if (startDateTime.isBefore(orderEnd) && orderStart.isBefore(endDateTime)) {
+        final driverId = data['driver_id'] as String?;
+        if (driverId != null) busyDriverIds.add(driverId);
+      }
+    }
+
+    final available = driversSnap.docs.where((d) => !busyDriverIds.contains(d.id)).toList();
+    if (available.isEmpty) {
+      return {'available': false, 'driverId': null, 'driverName': null};
+    }
+
+    return {
+      'available': true,
+      'driverId': available.first.id,
+      'driverName': available.first.data()['name'] ?? 'سائق',
+      'driverEmail': available.first.data()['email'] as String?,
+    };
+  }
+
+  // التعيين التلقائي لسائق بعد الدفع (Atomic Transaction)
+  Future<bool> autoAssignDriverForHourly({
+    required String orderId,
+    required DateTime startDateTime,
+    required int durationHours,
+  }) async {
+    final result = await checkHourlySlotAvailability(
+      startDateTime: startDateTime,
+      durationHours: durationHours,
+    );
+    if (!result['available']) return false;
+
+    final driverId = result['driverId'] as String;
+    final driverName = result['driverName'] as String;
+
+    return _db.runTransaction<bool>((transaction) async {
+      final driverRef = _db.collection('drivers').doc(driverId);
+      final orderRef = _db.collection('orders').doc(orderId);
+      final driverSnap = await transaction.get(driverRef);
+      if (driverSnap.data()?['is_active'] == false) return false;
+
+      transaction.update(orderRef, {
+        'status': 'accepted',
+        'driver_id': driverId,
+        'assigned_driver': driverName,
+        'accepted_at': FieldValue.serverTimestamp(),
+      });
+      transaction.update(driverRef, {
+        'status': 'en_route',
+        'current_order_id': orderId,
+        'is_available': false,
+      });
       return true;
     });
   }
