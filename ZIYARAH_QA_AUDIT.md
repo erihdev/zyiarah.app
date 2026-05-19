@@ -23,9 +23,10 @@
 
 ---
 
-### BUG-001 — `login_screen.dart` — `_login()` بدون `mounted` check بعد `getUserRole`
+### ~~BUG-001~~ — ✅ تم الحل — `login_screen.dart` — `_login()` بدون `mounted` check بعد `getUserRole`
 **الملف**: `lib/screens/login_screen.dart`  
-**السطر**: 46
+**السطر**: 46  
+**تاريخ الحل**: 2026-05-19 | **الـ Commit**: `9fd7050`
 
 ```dart
 // الكود الحالي ❌
@@ -48,9 +49,10 @@ if (!mounted) return;
 
 ---
 
-### BUG-002 — `support_screen.dart` — `_submitTicket()` يستخدم `context` خارج `mounted`
+### ~~BUG-002~~ — ✅ تم الحل — `support_screen.dart` — `_submitTicket()` يستخدم `context` خارج `mounted`
 **الملف**: `lib/screens/support_screen.dart`  
-**السطر**: 363-404
+**السطر**: 363-404  
+**تاريخ الحل**: 2026-05-19 | **الـ Commit**: `9fd7050`
 
 ```dart
 // الكود الحالي ❌
@@ -186,9 +188,10 @@ Future<void> _deleteAccount() async {
 
 ---
 
-### BUG-006 — `hourly_details_screen.dart` / `sofa_rug_details_screen.dart` — `_attemptAutoLocation` بدون mounted check كافٍ
+### ~~BUG-006~~ — ✅ تم الحل — `hourly_details_screen.dart` / `sofa_rug_details_screen.dart` — `_attemptAutoLocation` بدون mounted check كافٍ
 **الملف**: `lib/screens/hourly_details_screen.dart`, `lib/screens/sofa_rug_details_screen.dart`  
-**السطر**: 71 (hourly), 51 (sofa_rug)
+**السطر**: 71 (hourly), 51 (sofa_rug)  
+**تاريخ الحل**: 2026-05-19 | **الـ Commit**: `9fd7050`
 
 ```dart
 Future<void> _attemptAutoLocation() async {
@@ -508,12 +511,12 @@ onPressed: phone != null && phone.isNotEmpty
 | ✅ | ~~BUG-010~~ — دفع إلكتروني وهمي في المتجر | `store_screen.dart:429` | تم الحل 2026-05-19 |
 | ✅ | ~~BUG-004~~ — context المُغلق في CartSheet | `store_screen.dart:327` | تم الحل 2026-05-19 |
 | ✅ | ~~BUG-005~~ — حذف حساب حالة تالفة | `profile_screen.dart:209` | تم الحل 2026-05-19 |
-| 🟠 4 | BUG-002 — context مختلف في _submitTicket | `support_screen.dart:363` | crash |
-| 🟠 5 | BUG-001 — تعارض GoRouter + Navigator يدوي | `login_screen.dart:46` | double route |
-| 🟠 6 | BUG-007 — زر تتبع بدون feedback | `orders_list_screen.dart:604` | UX سيئ |
-| 🟠 7 | BUG-017 — fallback رقم سائق وهمي | `order_tracking_screen.dart:195` | UX سيئ |
-| 🟡 8 | BUG-012/013 — Navigator.pop بدون canPop | `login_screen`, `signup_screen` | شاشة سوداء نادرة |
-| 🟡 9 | BUG-006 — mounted بعد requestPermission | `hourly_details`, `sofa_rug` | crash نادر |
+| ✅ | ~~BUG-002~~ — context مختلف في _submitTicket | `support_screen.dart:363` | تم الحل 2026-05-19 |
+| ✅ | ~~BUG-001~~ — تعارض GoRouter + Navigator يدوي | `login_screen.dart:46` | تم الحل 2026-05-19 |
+| ✅ | ~~BUG-006~~ — mounted بعد requestPermission | `hourly_details`, `sofa_rug` | تم الحل 2026-05-19 |
+| 🟠 4 | BUG-007 — زر تتبع بدون feedback | `orders_list_screen.dart:604` | UX سيئ |
+| 🟠 5 | BUG-017 — fallback رقم سائق وهمي | `order_tracking_screen.dart:195` | UX سيئ |
+| 🟡 6 | BUG-012/013 — Navigator.pop بدون canPop | `login_screen`, `signup_screen` | شاشة سوداء نادرة |
 | 🟡 10 | BUG-003/011 — كتابة Firebase بدون catch | `support_screen.dart` | خطأ صامت |
 | 🟡 11 | BUG-009 — house rules بدون رسالة خطأ | `profile_screen.dart:188` | خطأ صامت |
 | 🟡 12 | BUG-018 — باقات فارغة عند error | `subscription_plans_screen.dart:47` | UX مضلل |
@@ -534,7 +537,7 @@ onPressed: phone != null && phone.isNotEmpty
 
 3. ~~**BUG-005**~~ ✅ **تم الحل** — عكس الترتيب: Auth يُحذف أولاً، عند النجاح يُحذف Firestore. `requires-recent-login` يُظهر رسالة واضحة بدون أي حذف.
 
-**جميع مشاكل Context Lifecycle (BUG-001 إلى BUG-006) آمنة في معظم الحالات لكنها قنابل موقوتة على شبكات بطيئة أو أجهزة قديمة.**
+~~**جميع مشاكل Context Lifecycle (BUG-001 إلى BUG-006) آمنة في معظم الحالات لكنها قنابل موقوتة على شبكات بطيئة أو أجهزة قديمة.**~~ ✅ **BUG-001 / BUG-002 / BUG-006 تم حلها 2026-05-19**
 
 ---
 
