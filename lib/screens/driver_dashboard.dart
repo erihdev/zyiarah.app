@@ -32,12 +32,17 @@ class _DriverDashboardState extends State<DriverDashboard> {
   String? _activeOrderId;
   String _driverName = 'السائق';
 
+  // DRIVER-001: guard against double-tap on status update
+  bool _isUpdatingStatus = false;
+  // DRIVER-002: track which order is being accepted
+  String? _acceptingOrderId;
+
   @override
   void initState() {
     super.initState();
     _currentDriverId = _auth.currentUser?.uid;
     _syncOnlineStatus();
-    // DRIVER-005/007: single stable stream with proper battery-efficient settings
+    // DRIVER-005/007: single stable stream initialized once with battery-efficient settings
     _locationStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
@@ -113,16 +118,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
         if (snapshot.hasData && snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>;
           final isActive = data['is_active'] ?? true;
-          
+
           if (!isActive) {
-            // الحظر وطرد المستخدم
             WidgetsBinding.instance.addPostFrameCallback((_) async {
-               await FirebaseAuth.instance.signOut();
-               if (!context.mounted) return;
-               ScaffoldMessenger.of(context).showSnackBar(
-                   const SnackBar(content: Text('تم تعطيل حسابك من قبل الإدارة.'), backgroundColor: Colors.red)
-                 );
-               context.go('/login');
+              await FirebaseAuth.instance.signOut();
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('تم تعطيل حسابك من قبل الإدارة.'), backgroundColor: Colors.red),
+              );
+              context.go('/login');
             });
             return const Scaffold(body: Center(child: Text("تم حظر أو تعطيل حسابك.")));
           }
@@ -131,31 +135,31 @@ class _DriverDashboardState extends State<DriverDashboard> {
         return AnnotatedRegion<SystemUiOverlayStyle>(
           value: SystemUiOverlayStyle.light,
           child: Scaffold(
-          backgroundColor: const Color(0xFFF1F5F9),
-          body: Directionality(
-            textDirection: TextDirection.rtl,
-            child: CustomScrollView(
-              slivers: [
-                _buildAppBar(),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildStatsRow(),
-                        const SizedBox(height: 25),
-                        _buildMainSection(),
-                      ],
+            backgroundColor: const Color(0xFFF1F5F9),
+            body: Directionality(
+              textDirection: TextDirection.rtl,
+              child: CustomScrollView(
+                slivers: [
+                  _buildAppBar(),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildStatsRow(),
+                          const SizedBox(height: 25),
+                          _buildMainSection(),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-          ),
         );
-      }
+      },
     );
   }
 
@@ -186,8 +190,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
           padding: const EdgeInsets.only(left: 10),
           child: Row(
             children: [
-              Text(_isOnline ? "متصل" : "أوفلاين", 
-                style: const TextStyle(fontSize: 12, color: Colors.white70)),
+              Text(
+                _isOnline ? "متصل" : "أوفلاين",
+                style: const TextStyle(fontSize: 12, color: Colors.white70),
+              ),
               Switch(
                 value: _isOnline,
                 onChanged: (val) async {
@@ -211,6 +217,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
+  // DRIVER-009: error state returns zero values instead of silent crash
   Widget _buildStatsRow() {
     if (_currentDriverId == null) return const SizedBox.shrink();
 
@@ -224,6 +231,22 @@ class _DriverDashboardState extends State<DriverDashboard> {
           .where('status', isEqualTo: 'completed')
           .snapshots(),
       builder: (context, allSnapshot) {
+        if (allSnapshot.hasError) {
+          return Column(
+            children: [
+              Row(
+                children: [
+                  _buildCompactStat("مهام اليوم", "0", Icons.today, Colors.blue),
+                  const SizedBox(width: 12),
+                  _buildCompactStat("الرتبة المهنية", "—", Icons.military_tech, Colors.grey),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _buildAchievementBadges(0),
+            ],
+          );
+        }
+
         final allOrders = allSnapshot.data?.docs ?? [];
         final totalTasks = allOrders.length;
         final todayTasks = allOrders.where((doc) {
@@ -232,7 +255,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
           return endTime != null && endTime.isAfter(todayStart);
         }).length;
 
-        // Badge Logic
         String rank = "عامل جديد";
         Color rankColor = Colors.grey;
         if (totalTasks >= 100) { rank = "عامل ماسي"; rankColor = Colors.blue; }
@@ -338,6 +360,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
               } else {
                 WidgetsBinding.instance.addPostFrameCallback((_) => _stopSync());
               }
+              // Active Order Focus: only show active card — no pending distractions
               return _buildActivePipeline(orderDoc);
             }
             WidgetsBinding.instance.addPostFrameCallback((_) => _stopSync());
@@ -392,14 +415,27 @@ class _DriverDashboardState extends State<DriverDashboard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            const Icon(Icons.flash_on, color: Colors.orange, size: 20),
-            const SizedBox(width: 8),
-            Text("المهمة الحالية", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF5D1B5E))),
-          ],
+        // High-visibility focus banner — Active Order Focus
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.orange.shade200),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.flash_on, color: Colors.orange, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                "مهمة نشطة — يُرجى التركيز",
+                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.orange.shade900),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 15),
+        const SizedBox(height: 12),
         _buildStateGuidedCard(orderId, data, status),
       ],
     );
@@ -415,85 +451,105 @@ class _DriverDashboardState extends State<DriverDashboard> {
     switch (status) {
       case 'accepted':
         stateTitle = "في الطريق للعميل";
-        actionLabel = "وصلت — بدء الخدمة الآن";
+        actionLabel = "اسحب للتأكيد — وصلت، بدء الخدمة";
         nextStatus = "in_progress";
         stateColor = Colors.blue;
         stateIcon = Icons.map;
         break;
       case 'in_progress':
         stateTitle = "الخدمة قيد التنفيذ";
-        actionLabel = "إتمام المهمة";
+        actionLabel = "اسحب للتأكيد — إتمام المهمة";
         nextStatus = "completed";
         stateColor = Colors.green;
         stateIcon = Icons.timer;
         break;
     }
 
+    final clientName = data['client_name'] ?? 'بدون اسم';
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: stateColor.withValues(alpha: 0.1), width: 2),
+        border: Border.all(color: stateColor.withValues(alpha: 0.25), width: 2.5),
+        boxShadow: [BoxShadow(color: stateColor.withValues(alpha: 0.10), blurRadius: 20, offset: const Offset(0, 6))],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Status header — large, high-contrast, fat-finger-friendly layout
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: stateColor.withValues(alpha: 0.1), shape: BoxShape.circle),
-                child: Icon(stateIcon, color: stateColor),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: stateColor.withValues(alpha: 0.12), shape: BoxShape.circle),
+                child: Icon(stateIcon, color: stateColor, size: 26),
               ),
-              const SizedBox(width: 15),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(stateTitle, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: stateColor)),
-                    Text("عميل: ${data['client_name'] ?? 'بدون اسم'}", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    Text(stateTitle, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: stateColor, fontSize: 16)),
+                    const SizedBox(height: 3),
+                    // Large client name for field readability
+                    Text(clientName, style: GoogleFonts.tajawal(fontWeight: FontWeight.w900, fontSize: 22, color: Colors.black87)),
                     if (status == 'accepted' && data['location'] is GeoPoint)
-                    _buildDistanceInfo(data['location'] as GeoPoint),
+                      _buildDistanceInfo(data['location'] as GeoPoint),
                   ],
                 ),
               ),
               TextButton.icon(
-                onPressed: () => _openMaps(data['location']), 
-                icon: const Icon(Icons.directions, color: Colors.blue, size: 28),
-                label: Text("فتح في الخرائط", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.blue)),
+                onPressed: () => _openMaps(data['location']),
+                icon: const Icon(Icons.directions, color: Colors.blue, size: 24),
+                label: Text("خرائط", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 13)),
                 style: TextButton.styleFrom(
                   backgroundColor: Colors.blue.withValues(alpha: 0.1),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             ],
           ),
-          const Divider(height: 30),
+          const Divider(height: 28),
           if (data['client_id'] != null) _buildHouseRulesAlert(data['client_id']),
-          const Divider(height: 30),
+          if (data['client_id'] != null) const Divider(height: 28),
           if (status == 'in_progress') _buildTimer(data['hours_contracted'] ?? 4),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            height: 55,
-            child: ElevatedButton(
-              onPressed: () => _updateStatus(id, nextStatus),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: stateColor,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              ),
-              child: Text(actionLabel, style: GoogleFonts.tajawal(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-            ),
+          const SizedBox(height: 8),
+          // DRIVER-001/008: swipe-to-confirm replaces tap button — prevents accidental triggers
+          _SwipeToActButton(
+            label: actionLabel,
+            color: stateColor,
+            isLoading: _isUpdatingStatus,
+            onConfirmed: () => _updateStatus(id, nextStatus),
           ),
-          const SizedBox(height: 15),
+          const SizedBox(height: 14),
+          // DRIVER-003: safe phone call — fake fallback removed
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              TextButton.icon(onPressed: () => _callClient(data['client_phone'] ?? '05xxxx'), icon: const Icon(Icons.phone, size: 16), label: const Text("اتصال بالعميل")),
+              TextButton.icon(
+                onPressed: () {
+                  final phone = data['client_phone'] as String?;
+                  if (phone != null && phone.isNotEmpty) {
+                    _callClient(phone);
+                  } else if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('رقم العميل غير متوفر')),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.phone, size: 16),
+                label: const Text("اتصال بالعميل"),
+              ),
               const SizedBox(width: 15),
-              TextButton.icon(onPressed: () => _reportIssue(id), icon: const Icon(Icons.support_agent, size: 16, color: Colors.redAccent), label: const Text("بلاغ للإدارة", style: TextStyle(color: Colors.redAccent))),
+              TextButton.icon(
+                onPressed: () => _reportIssue(id),
+                icon: const Icon(Icons.support_agent, size: 16, color: Colors.redAccent),
+                label: const Text("بلاغ للإدارة", style: TextStyle(color: Colors.redAccent)),
+              ),
             ],
           ),
         ],
@@ -512,7 +568,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
         return Container(
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.amber.shade200)),
+          decoration: BoxDecoration(
+            color: Colors.amber.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.amber.shade200),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -520,7 +580,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 children: [
                   const Icon(Icons.tips_and_updates, color: Colors.amber, size: 18),
                   const SizedBox(width: 8),
-                  Text("قوانين البيت وتفضيلات العميل:", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.orange.shade900)),
+                  Text(
+                    "قوانين البيت وتفضيلات العميل:",
+                    style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.orange.shade900),
+                  ),
                 ],
               ),
               const SizedBox(height: 6),
@@ -532,11 +595,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
-  Widget _buildDistanceInfo(GeoPoint clientLoc) { // caller already type-checks
+  Widget _buildDistanceInfo(GeoPoint clientLoc) {
     return StreamBuilder<Position>(
       stream: _locationStream,
       builder: (context, snapshot) {
-        // DRIVER-006: GPS permission revoked — show visible alert instead of silent fail
+        // DRIVER-006: GPS permission revoked — visible alert, not silent collapse
         if (snapshot.hasError) {
           return const Text(
             "⚠️ تعذّر تتبع موقعك — تحقق من إذن الموقع",
@@ -544,12 +607,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
           );
         }
         if (!snapshot.hasData) return const SizedBox.shrink();
-        
+
         final pos = snapshot.data!;
         double dist = _coreService.getDistanceInMeters(pos.latitude, pos.longitude, clientLoc.latitude, clientLoc.longitude);
         String formatted = _coreService.getFormattedDistance(dist);
 
-        // Geofencing Check (2km)
         if (dist <= 2000 && _activeOrderId != null) {
           _checkAndNotifyProximity(_activeOrderId!, clientLoc);
         }
@@ -573,9 +635,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       final data = doc.data();
 
       if (data != null && data['proximity_notified'] != true) {
-        // Mark as notified FIRST to avoid race conditions
         await docRef.update({'proximity_notified': true});
-        
         final clientId = data['client_id'] ?? '';
         if (clientId.isNotEmpty) {
           await _notificationService.triggerNotification(
@@ -596,12 +656,17 @@ class _DriverDashboardState extends State<DriverDashboard> {
     final driverLatLng = LatLng(driverPos.latitude, driverPos.longitude);
     final clientLatLng = LatLng(clientLoc.latitude, clientLoc.longitude);
     return Container(
-      height: 150, width: double.infinity,
+      height: 150,
+      width: double.infinity,
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey[200]!)),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: FlutterMap(
-          options: MapOptions(initialCenter: driverLatLng, initialZoom: 13.0, interactionOptions: const InteractionOptions(flags: InteractiveFlag.none)),
+          options: MapOptions(
+            initialCenter: driverLatLng,
+            initialZoom: 13.0,
+            interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
+          ),
           children: [
             TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.zyiarah.zyiarah'),
             MarkerLayer(markers: [
@@ -627,12 +692,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
               return _buildStatusPlaceholder(Icons.search, "لا توجد طلبات حالياً", "بانتظار وصول طلبات جديدة من العملاء");
             }
             return ListView.builder(
-              shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
               itemCount: snapshot.data!.docs.length,
               itemBuilder: (context, index) {
                 final doc = snapshot.data!.docs[index];
                 return _buildNewTaskCard(doc.id, doc.data() as Map<String, dynamic>);
-              }
+              },
             );
           },
         ),
@@ -641,29 +707,59 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   Widget _buildNewTaskCard(String id, Map<String, dynamic> data) {
+    final isAccepting = _acceptingOrderId == id;
     return Container(
-      margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey[200]!)),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
       child: Row(
         children: [
-          CircleAvatar(backgroundColor: const Color(0xFF5D1B5E).withValues(alpha: 0.1), child: const Icon(Icons.local_offer, color: Color(0xFF5D1B5E), size: 20)),
+          CircleAvatar(
+            backgroundColor: const Color(0xFF5D1B5E).withValues(alpha: 0.1),
+            child: const Icon(Icons.local_offer, color: Color(0xFF5D1B5E), size: 20),
+          ),
           const SizedBox(width: 15),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(data['service_type'] ?? "خدمة تنظيف", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-            Text("${data['hours_contracted'] ?? 4} ساعات", style: const TextStyle(fontSize: 12, color: Colors.grey)),
-          ])),
-          ElevatedButton(onPressed: () => _acceptOrder(id), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: const Text("قبول", style: TextStyle(color: Colors.white))),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(data['service_type'] ?? "خدمة تنظيف", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                Text("${data['hours_contracted'] ?? 4} ساعات", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: isAccepting ? null : () => _acceptOrder(id),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF5D1B5E),
+              disabledBackgroundColor: Colors.grey[300],
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: isAccepting
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                : const Text("قبول", style: TextStyle(color: Colors.white)),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildStatusPlaceholder(IconData icon, String title, String subtitle) {
-    return Center(child: Padding(padding: const EdgeInsets.symmetric(vertical: 50), child: Column(children: [
-      Icon(icon, size: 60, color: Colors.grey[300]), const SizedBox(height: 16),
-      Text(title, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.grey[600])),
-      Text(subtitle, style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey[400])),
-    ])));
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 50),
+        child: Column(children: [
+          Icon(icon, size: 60, color: Colors.grey[300]),
+          const SizedBox(height: 16),
+          Text(title, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.grey[600])),
+          Text(subtitle, style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey[400])),
+        ]),
+      ),
+    );
   }
 
   Widget _buildTimer(int hours) {
@@ -672,7 +768,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
       StreamBuilder<Duration>(
         stream: _coreService.taskTimerStream(hours),
         builder: (context, snapshot) {
-          String time = "--:--:--"; Color timerColor = const Color(0xFF5D1B5E);
+          String time = "--:--:--";
+          Color timerColor = const Color(0xFF5D1B5E);
           if (snapshot.hasData) {
             final d = snapshot.data!;
             time = "${d.inHours.toString().padLeft(2, '0')}:${(d.inMinutes % 60).toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}";
@@ -687,134 +784,157 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
   void _reportIssue(String orderId) async {
     final message = "بلاغ عن الطلب #$orderId: لدي مشكلة في هذا الطلب — السائق: $_currentDriverId";
-    // Read admin WhatsApp number from Firestore system config
     String adminPhone = "966500000000";
     try {
-      final configDoc = await FirebaseFirestore.instance
-          .collection('system_configs').doc('main_settings').get();
+      final configDoc = await FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get();
       adminPhone = configDoc.data()?['admin_whatsapp'] ?? adminPhone;
     } catch (_) {}
     final url = "https://wa.me/$adminPhone?text=${Uri.encodeComponent(message)}";
     if (await canLaunchUrl(Uri.parse(url))) await launchUrl(Uri.parse(url));
   }
-  
+
+  // DRIVER-002: try/catch + per-order loading state
   void _acceptOrder(String id) async {
-    bool success = await _orderService.acceptOrder(id, _currentDriverId!);
-    if (success) {
-      // جلب بيانات الطلب لإرسال إشعار للعميل
-      final doc = await FirebaseFirestore.instance.collection('orders').doc(id).get();
-      final data = doc.data();
-      if (data != null && data['client_id'] != null) {
-        await _notificationService.notifyClientOfDriverStatus(
-          clientId: data['client_id'],
-          status: 'accepted',
-          orderCode: data['code'] ?? id,
-          driverName: _driverName,
+    if (_acceptingOrderId != null) return;
+    setState(() => _acceptingOrderId = id);
+    try {
+      bool success = await _orderService.acceptOrder(id, _currentDriverId!);
+      if (success) {
+        final doc = await FirebaseFirestore.instance.collection('orders').doc(id).get();
+        final data = doc.data();
+        if (data != null && data['client_id'] != null) {
+          await _notificationService.notifyClientOfDriverStatus(
+            clientId: data['client_id'],
+            status: 'accepted',
+            orderCode: data['code'] ?? id,
+            driverName: _driverName,
+          );
+        }
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("لديك طلب نشط بالفعل!")));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('فشل قبول الطلب، تحقق من اتصالك بالإنترنت', style: GoogleFonts.tajawal()),
+            backgroundColor: Colors.red,
+          ),
         );
       }
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("لديك طلب نشط بالفعل!")));
+    } finally {
+      if (mounted) setState(() => _acceptingOrderId = null);
     }
   }
 
+  // DRIVER-001: try/catch + double-tap guard via _isUpdatingStatus
   void _updateStatus(String id, String status) async {
-    // 1. Fetch Order Data to check for COD
-    final doc = await FirebaseFirestore.instance.collection('orders').doc(id).get();
-    final data = doc.data();
-    if (data == null) return;
+    if (_isUpdatingStatus) return;
+    setState(() => _isUpdatingStatus = true);
+    try {
+      final doc = await FirebaseFirestore.instance.collection('orders').doc(id).get();
+      final data = doc.data();
+      if (data == null) return;
 
-    final paymentMethod = data['payment_method'];
-    final amount = (data['amount'] ?? 0.0).toDouble();
-    final clientName = data['client_name'] ?? 'العميل';
+      final paymentMethod = data['payment_method'];
+      final amount = (data['amount'] ?? 0.0).toDouble();
+      final clientName = data['client_name'] ?? 'العميل';
 
-    // 2. Specialized Flow for COD Completion
-    if (status == 'completed' && paymentMethod == 'cod') {
-      if (!mounted) return;
-      final confirmed = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => Directionality(
-          textDirection: TextDirection.rtl,
-          child: AlertDialog(
-            title: Text("تأكيد تحصيل النقد 💸", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.green)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text("هل قمت باستلام المبلغ نقدًا من $clientName؟", style: GoogleFonts.tajawal()),
-                const SizedBox(height: 15),
-                Container(
-                  padding: const EdgeInsets.all(15),
-                  decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(12)),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text("المبلغ المطلوب: ", style: GoogleFonts.tajawal(fontSize: 14)),
-                      Text("${amount.toStringAsFixed(2)} ر.س", style: GoogleFonts.tajawal(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.green.shade900)),
-                    ],
+      if (status == 'completed' && paymentMethod == 'cod') {
+        if (!mounted) return;
+        final confirmed = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => Directionality(
+            textDirection: TextDirection.rtl,
+            child: AlertDialog(
+              title: Text("تأكيد تحصيل النقد 💸", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.green)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text("هل قمت باستلام المبلغ نقدًا من $clientName؟", style: GoogleFonts.tajawal()),
+                  const SizedBox(height: 15),
+                  Container(
+                    padding: const EdgeInsets.all(15),
+                    decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(12)),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text("المبلغ المطلوب: ", style: GoogleFonts.tajawal(fontSize: 14)),
+                        Text("${amount.toStringAsFixed(2)} ر.س", style: GoogleFonts.tajawal(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.green.shade900)),
+                      ],
+                    ),
                   ),
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context, false), child: Text("إلغاء", style: TextStyle(color: Colors.grey[600]))),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                  child: const Text("نعم، تم استلام المبلغ"),
                 ),
               ],
             ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false), child: Text("إلغاء", style: TextStyle(color: Colors.grey[600]))),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                child: const Text("نعم، تم استلام المبلغ"),
-              ),
-            ],
           ),
-        ),
-      );
+        );
 
-      if (confirmed != true) return; // User cancelled
-      
-      // Mark as paid since cash is collected
-      await FirebaseFirestore.instance.collection('orders').doc(id).update({
-        'is_paid': true,
-        'paid_at': FieldValue.serverTimestamp(),
-        'cash_collected_by': _currentDriverId,
-      });
+        if (confirmed != true) return;
 
-      // 2.5 Notify Admin of Cash Collection
-      await _notificationService.notifyAdminOfCashCollection(
-        driverName: "السائق المتواجد", // Can be enhanced later to fetch full name
-        orderCode: data['code'] ?? id,
-        amount: amount,
-      );
-    }
+        await FirebaseFirestore.instance.collection('orders').doc(id).update({
+          'is_paid': true,
+          'paid_at': FieldValue.serverTimestamp(),
+          'cash_collected_by': _currentDriverId,
+        });
 
-    // 3. Normal Status Update
-    await _orderService.updateOrderStatus(id, status, driverId: _currentDriverId);
-    
-    // إرسال إشعار لحظي للعميل بالحالة الجديدة
-    if (data['client_id'] != null) {
-      final orderCode = data['code'] ?? id;
-
-      await _notificationService.notifyClientOfDriverStatus(
-        clientId: data['client_id'],
-        status: status,
-        orderCode: orderCode,
-        driverName: _driverName,
-      );
-
-      if (status == 'accepted' || status == 'completed') {
-        await _notificationService.notifyAdminOfDriverUpdate(
-          driverName: _driverName,
-          status: status,
-          orderCode: orderCode,
+        await _notificationService.notifyAdminOfCashCollection(
+          driverName: "السائق المتواجد",
+          orderCode: data['code'] ?? id,
+          amount: amount,
         );
       }
-    }
 
-    if (status == 'completed' && mounted) _showSuccessDialog();
+      await _orderService.updateOrderStatus(id, status, driverId: _currentDriverId);
+
+      if (data['client_id'] != null) {
+        final orderCode = data['code'] ?? id;
+        await _notificationService.notifyClientOfDriverStatus(
+          clientId: data['client_id'],
+          status: status,
+          orderCode: orderCode,
+          driverName: _driverName,
+        );
+        if (status == 'accepted' || status == 'completed') {
+          await _notificationService.notifyAdminOfDriverUpdate(
+            driverName: _driverName,
+            status: status,
+            orderCode: orderCode,
+          );
+        }
+      }
+
+      if (status == 'completed' && mounted) _showSuccessDialog();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('فشل تحديث الحالة، تحقق من اتصالك بالإنترنت', style: GoogleFonts.tajawal()),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUpdatingStatus = false);
+    }
   }
 
   void _showSuccessDialog() {
     showDialog(
-      context: context, barrierDismissible: false,
+      context: context,
+      barrierDismissible: false,
       builder: (context) => Dialog(
-        backgroundColor: Colors.transparent, elevation: 0,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Lottie.network('https://lottie.host/85cc1144-6729-4d64-88aa-3e753456c636/Hw4h8Pndr5.json', width: 200, height: 200, repeat: false),
           const SizedBox(height: 10),
@@ -822,7 +942,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
         ]),
       ),
     );
-    Future.delayed(const Duration(seconds: 3), () { if (mounted) Navigator.pop(context); });
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) Navigator.pop(context);
+    });
   }
 
   void _openMaps(dynamic loc) async {
@@ -834,5 +956,129 @@ class _DriverDashboardState extends State<DriverDashboard> {
   void _callClient(String phone) async {
     final url = 'tel:$phone';
     if (await canLaunchUrl(Uri.parse(url))) await launchUrl(Uri.parse(url));
+  }
+}
+
+/// Swipe-to-confirm button — prevents accidental taps on critical field actions.
+/// RTL layout: thumb starts at right edge, user drags left to confirm (82% threshold).
+class _SwipeToActButton extends StatefulWidget {
+  final String label;
+  final Color color;
+  final VoidCallback onConfirmed;
+  final bool isLoading;
+
+  const _SwipeToActButton({
+    required this.label,
+    required this.color,
+    required this.onConfirmed,
+    required this.isLoading,
+  });
+
+  @override
+  State<_SwipeToActButton> createState() => _SwipeToActButtonState();
+}
+
+class _SwipeToActButtonState extends State<_SwipeToActButton> {
+  double _dragX = 0;
+  bool _triggered = false;
+  static const double _thumbSize = 52.0;
+
+  @override
+  void didUpdateWidget(_SwipeToActButton old) {
+    super.didUpdateWidget(old);
+    // Reset drag state after the operation completes (success or failure)
+    if (old.isLoading && !widget.isLoading) {
+      setState(() {
+        _dragX = 0;
+        _triggered = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final trackWidth = constraints.maxWidth;
+        final maxDrag = (trackWidth - _thumbSize - 8).clamp(0.0, double.infinity);
+
+        return SizedBox(
+          height: 60,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Track background
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: widget.color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: widget.color.withValues(alpha: 0.3)),
+                  ),
+                ),
+              ),
+              // Progress fill — grows from right leftward as user drags (RTL)
+              Positioned(
+                right: 0,
+                top: 0,
+                bottom: 0,
+                child: Container(
+                  width: (_thumbSize + 8 + _dragX).clamp(0.0, trackWidth),
+                  decoration: BoxDecoration(
+                    color: widget.color.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+              // Label / spinner
+              widget.isLoading
+                  ? SizedBox(
+                      width: 26,
+                      height: 26,
+                      child: CircularProgressIndicator(color: widget.color, strokeWidth: 2.5),
+                    )
+                  : Text(
+                      widget.label,
+                      style: GoogleFonts.tajawal(color: widget.color, fontWeight: FontWeight.bold, fontSize: 14),
+                      textAlign: TextAlign.center,
+                    ),
+              // Draggable thumb (RTL: right=4 at rest, moves left as _dragX grows)
+              if (!widget.isLoading)
+                Positioned(
+                  right: (4 + maxDrag - _dragX).clamp(4.0, 4 + maxDrag),
+                  top: 4,
+                  bottom: 4,
+                  child: GestureDetector(
+                    onHorizontalDragUpdate: (d) {
+                      if (_triggered) return;
+                      setState(() {
+                        // RTL: dragging left → negative delta.dx → increase _dragX
+                        _dragX = (_dragX - d.delta.dx).clamp(0.0, maxDrag);
+                      });
+                      if (_dragX >= maxDrag * 0.82 && !_triggered) {
+                        _triggered = true;
+                        HapticFeedback.heavyImpact();
+                        widget.onConfirmed();
+                      }
+                    },
+                    onHorizontalDragEnd: (_) {
+                      if (!_triggered) setState(() => _dragX = 0);
+                    },
+                    child: Container(
+                      width: _thumbSize,
+                      decoration: BoxDecoration(
+                        color: widget.color,
+                        borderRadius: BorderRadius.circular(13),
+                        boxShadow: [BoxShadow(color: widget.color.withValues(alpha: 0.45), blurRadius: 10, offset: const Offset(0, 3))],
+                      ),
+                      child: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
