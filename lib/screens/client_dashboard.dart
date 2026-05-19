@@ -36,6 +36,8 @@ class ClientDashboard extends StatefulWidget {
 
 class _ClientDashboardState extends State<ClientDashboard> {
   int _selectedNavIndex = 0;
+  final PageController _bannerController =
+      PageController(viewportFraction: 0.95);
 
   @override
   void initState() {
@@ -44,6 +46,12 @@ class _ClientDashboardState extends State<ClientDashboard> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ZyiarahPopupService.checkAndShowPopup(context);
     });
+  }
+
+  @override
+  void dispose() {
+    _bannerController.dispose();
+    super.dispose();
   }
 
   void _onNavTap(int index) {
@@ -535,7 +543,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           margin: const EdgeInsets.only(bottom: 20),
           child: PageView.builder(
             itemCount: banners.length,
-            controller: PageController(viewportFraction: 0.95),
+            controller: _bannerController,
             itemBuilder: (context, index) {
               final data = banners[index].data() as Map<String, dynamic>;
               final imageUrl = data['imageUrl'] ?? '';

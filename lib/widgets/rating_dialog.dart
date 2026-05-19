@@ -22,6 +22,12 @@ class _ZyiarahRatingDialogState extends State<ZyiarahRatingDialog> {
   final bool _isUploading = false;
 
   @override
+  void dispose() {
+    _commentCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,

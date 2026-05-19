@@ -2,7 +2,7 @@ name: zyiarah
 description: "A new Flutter project."
 publish_to: "none"
 
-version: 1.2.2+180
+version: 1.2.2+184
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -58,12 +58,12 @@ flutter:
   assets:
     - .env
     - assets/logo.png
+    - assets/apple_pay_config.json
     - assets/images/hourly_cleaning.png
     - assets/images/monthly_cleaning.png
     - assets/images/sofa_cleaning.png
     - assets/images/company_cleaning.png
     - assets/images/store.png
-    - assets/apple_pay_config.json
 
 flutter_launcher_icons:
   android: "launcher_icon"

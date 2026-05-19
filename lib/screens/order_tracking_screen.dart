@@ -33,6 +33,12 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   ];
 
   @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,

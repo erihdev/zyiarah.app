@@ -104,7 +104,16 @@ class _ZyiarahAccountActivationScreenState extends State<ZyiarahAccountActivatio
   }
 
   void _showError(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message, style: GoogleFonts.tajawal())));
+  }
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    _otpController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   @override

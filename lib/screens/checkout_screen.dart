@@ -104,9 +104,11 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                     'activatedAt': FieldValue.serverTimestamp(),
                   });
 
-                  await FirebaseFirestore.instance.collection('users').doc(user?.uid).update({
-                    'visits_remaining': FieldValue.increment(widget.planVisits ?? 0),
-                  });
+                  if (user != null) {
+                    await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+                      'visits_remaining': FieldValue.increment(widget.planVisits ?? 0),
+                    });
+                  }
 
                   // إرسال إشعار التفعيل
                   await ZyiarahNotificationTriggerService().notifyContractActivated(

@@ -249,8 +249,10 @@ class ZyiarahFirebaseService {
         }
       }
     } catch (e) {
+      // A transient Firestore error must not log the user out — fall back to
+      // the client role so an authenticated user still reaches the app.
       debugPrint("Error fetching role: $e");
-      rethrow;
+      return 'client';
     }
     return 'client';
   }
