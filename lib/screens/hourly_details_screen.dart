@@ -82,8 +82,9 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       if (permission == LocationPermission.deniedForever) return;
 
       Position pos = await Geolocator.getCurrentPosition();
+      if (!mounted) return;
       GeoPoint loc = GeoPoint(pos.latitude, pos.longitude);
-      
+
       Map<String, dynamic>? matchedZone;
       double minDistance = double.infinity;
 

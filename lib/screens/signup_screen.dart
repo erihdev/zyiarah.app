@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:go_router/go_router.dart';
 import 'package:zyiarah/services/firebase_service.dart';
-import 'package:zyiarah/screens/client_dashboard.dart';
 import 'package:zyiarah/screens/terms_privacy_screens.dart';
 
 class ZyiarahSignupScreen extends StatefulWidget {
@@ -60,11 +60,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
       );
       
       if (!mounted) return;
-      Navigator.pushAndRemoveUntil(
-        context, 
-        MaterialPageRoute(builder: (context) => const ClientDashboard()),
-        (route) => false,
-      );
+      context.go('/client');
     } catch (e) {
       _showError('خطأ في إنشاء الحساب: $e');
     } finally {

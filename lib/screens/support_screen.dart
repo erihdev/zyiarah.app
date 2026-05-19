@@ -360,9 +360,9 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
     );
   }
 
-  void _submitTicket(BuildContext context) async {
+  void _submitTicket(BuildContext sheetContext) async {
     if (_subjectController.text.isEmpty || _messageController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى ملء جميع الحقول")));
+      ScaffoldMessenger.of(sheetContext).showSnackBar(const SnackBar(content: Text("يرجى ملء جميع الحقول")));
       return;
     }
 
@@ -388,14 +388,15 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
         'sentAt': FieldValue.serverTimestamp(),
       });
 
-      if (context.mounted) {
-        Navigator.pop(context);
-        _subjectController.clear();
-        _messageController.clear();
+      // إغلاق الـ BottomSheet بسياقه الخاص، ثم SnackBar بسياق الشاشة الأم
+      if (sheetContext.mounted) Navigator.pop(sheetContext);
+      _subjectController.clear();
+      _messageController.clear();
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم إرسال التذكرة بنجاح")));
       }
     } catch (e) {
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ في الإرسال: $e")));
       }
     } finally {
