@@ -212,7 +212,7 @@ Future<void> _attemptAutoLocation() async {
 
 ---
 
-### BUG-007 — `orders_list_screen.dart` — `ElevatedButton` تتبع السائق بدون guard
+### ~~BUG-007~~ — ✅ تم الحل — `orders_list_screen.dart` — `ElevatedButton` تتبع السائق بدون guard
 **الملف**: `lib/screens/orders_list_screen.dart`  
 **السطر**: 604-620
 
@@ -241,7 +241,7 @@ onPressed: (order['driver_id'] != null && order['location'] != null)
 
 ---
 
-### BUG-008 — `client_dashboard.dart` — `_buildPromoBanners` canLaunchUrl بدون Error Handling
+### ~~BUG-008~~ — ✅ تم الحل — `client_dashboard.dart` — `_buildPromoBanners` canLaunchUrl بدون Error Handling
 **الملف**: `lib/screens/client_dashboard.dart`  
 **السطر**: 546-555
 
@@ -272,7 +272,7 @@ if (await canLaunchUrl(uri)) {
 
 ---
 
-### BUG-009 — `profile_screen.dart` — `_showHouseRulesDialog` يبتلع الخطأ بصمت
+### ~~BUG-009~~ — ✅ تم الحل — `profile_screen.dart` — `_showHouseRulesDialog` يبتلع الخطأ بصمت
 **الملف**: `lib/screens/profile_screen.dart`  
 **السطر**: 188-198
 
@@ -325,7 +325,7 @@ onChanged: null, // تعطيل حتى تكتمل بوابة الدفع
 
 ---
 
-### BUG-011 — `support_screen.dart` — `_buildMessagesList` Firestore write بدون try/catch
+### ~~BUG-011~~ — ✅ تم الحل — `support_screen.dart` — `_buildMessagesList` Firestore write بدون try/catch
 **الملف**: `lib/screens/support_screen.dart`  
 **السطر**: 263-291
 
@@ -464,7 +464,7 @@ Widget _buildMetricsList(String? uid) {
 
 ---
 
-### BUG-017 — `order_tracking_screen.dart` — زر الاتصال بالسائق يستخدم قيمة fallback خاطئة
+### ~~BUG-017~~ — ✅ تم الحل — `order_tracking_screen.dart` — زر الاتصال بالسائق يستخدم قيمة fallback خاطئة
 **الملف**: `lib/screens/order_tracking_screen.dart`  
 **السطر**: 195
 
@@ -487,7 +487,7 @@ onPressed: phone != null && phone.isNotEmpty
 
 ---
 
-### BUG-018 — `subscription_plans_screen.dart` — خطأ صامت عند فشل `_fetchPackages`
+### ~~BUG-018~~ — ✅ تم الحل — `subscription_plans_screen.dart` — خطأ صامت عند فشل `_fetchPackages`
 **الملف**: `lib/screens/subscription_plans_screen.dart`  
 **السطر**: 46-50
 
@@ -514,16 +514,16 @@ onPressed: phone != null && phone.isNotEmpty
 | ✅ | ~~BUG-002~~ — context مختلف في _submitTicket | `support_screen.dart:363` | تم الحل 2026-05-19 |
 | ✅ | ~~BUG-001~~ — تعارض GoRouter + Navigator يدوي | `login_screen.dart:46` | تم الحل 2026-05-19 |
 | ✅ | ~~BUG-006~~ — mounted بعد requestPermission | `hourly_details`, `sofa_rug` | تم الحل 2026-05-19 |
-| 🟠 4 | BUG-007 — زر تتبع بدون feedback | `orders_list_screen.dart:604` | UX سيئ |
-| 🟠 5 | BUG-017 — fallback رقم سائق وهمي | `order_tracking_screen.dart:195` | UX سيئ |
-| 🟡 6 | BUG-012/013 — Navigator.pop بدون canPop | `login_screen`, `signup_screen` | شاشة سوداء نادرة |
-| 🟡 10 | BUG-003/011 — كتابة Firebase بدون catch | `support_screen.dart` | خطأ صامت |
-| 🟡 11 | BUG-009 — house rules بدون رسالة خطأ | `profile_screen.dart:188` | خطأ صامت |
-| 🟡 12 | BUG-018 — باقات فارغة عند error | `subscription_plans_screen.dart:47` | UX مضلل |
-| 🟡 13 | BUG-008 — WhatsApp URL بدون feedback | `client_dashboard.dart:547` | خطأ صامت |
-| 🟡 14 | BUG-016 — تقييم افتراضي قبل التحميل | `client_dashboard.dart:593` | بيانات مضللة |
-| 🔵 15 | BUG-014 — Navigator.pop في empty state | `orders_list_screen.dart:453` | نادر جداً |
-| 🔵 16 | BUG-015 — routeType غير معروف | `client_dashboard.dart:545` | صامت |
+| ✅ | ~~BUG-007~~ — زر تتبع بدون feedback | `orders_list_screen.dart:604` | تم الحل 2026-05-19 |
+| ✅ | ~~BUG-017~~ — fallback رقم سائق وهمي | `order_tracking_screen.dart:195` | تم الحل 2026-05-19 |
+| ✅ | ~~BUG-008~~ — WhatsApp URL بدون feedback | `client_dashboard.dart:547` | تم الحل 2026-05-19 |
+| ✅ | ~~BUG-009~~ — house rules بدون رسالة خطأ | `profile_screen.dart:188` | تم الحل 2026-05-19 |
+| ✅ | ~~BUG-011~~ — كتابة Firebase بدون catch | `support_screen.dart:268` | تم الحل 2026-05-19 |
+| ✅ | ~~BUG-018~~ — باقات فارغة عند error | `subscription_plans_screen.dart:47` | تم الحل 2026-05-19 |
+| 🟡 4 | BUG-012/013 — Navigator.pop بدون canPop | `login_screen`, `signup_screen` | شاشة سوداء نادرة |
+| 🟡 5 | BUG-016 — تقييم افتراضي قبل التحميل | `client_dashboard.dart:593` | بيانات مضللة |
+| 🔵 6 | BUG-014 — Navigator.pop في empty state | `orders_list_screen.dart:453` | نادر جداً |
+| 🔵 7 | BUG-015 — routeType غير معروف | `client_dashboard.dart:545` | صامت |
 
 ---
 
