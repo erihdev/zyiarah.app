@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart' as intl;
@@ -22,58 +21,56 @@ class AdminInsightsScreen extends StatefulWidget {
 }
 
 class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
-  StreamSubscription? _ordersSub;
-  StreamSubscription? _maintenanceSub;
-  StreamSubscription? _usersSub;
-
   List<DocumentSnapshot> _orders = [];
   List<DocumentSnapshot> _maintenance = [];
-  List<DocumentSnapshot> _users = [];
   List<DocumentSnapshot> _drivers = [];
   List<DocumentSnapshot> _storeOrders = [];
-  StreamSubscription? _driversSub;
-  StreamSubscription? _storeOrdersSub;
+  int _userCount = 0;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _startListeners();
+    _fetchData();
   }
 
   @override
   void dispose() {
-    _ordersSub?.cancel();
-    _maintenanceSub?.cancel();
-    _usersSub?.cancel();
-    _driversSub?.cancel();
-    _storeOrdersSub?.cancel();
     super.dispose();
   }
 
-  void _startListeners() {
+  Future<void> _fetchData() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+
     final db = FirebaseFirestore.instance;
-    
-    _ordersSub = db.collection('orders').snapshots().listen((snap) {
-      if (mounted) setState(() { _orders = snap.docs; _isLoading = false; });
-    });
+    try {
+      // Fire all 5 requests in parallel; limit keeps memory and cost bounded.
+      final ordersF     = db.collection('orders').orderBy('created_at', descending: true).limit(500).get();
+      final maintenanceF = db.collection('maintenance_requests').orderBy('createdAt', descending: true).limit(500).get();
+      final usersF      = db.collection('users').count().get();
+      final driversF    = db.collection('drivers').limit(200).get();
+      final storeF      = db.collection('store_orders').orderBy('created_at', descending: true).limit(500).get();
 
-    _maintenanceSub = db.collection('maintenance_requests').snapshots().listen((snap) {
-      if (mounted) setState(() { _maintenance = snap.docs; _isLoading = false; });
-    });
+      final ordersSnap      = await ordersF;
+      final maintenanceSnap = await maintenanceF;
+      final usersSnap       = await usersF;
+      final driversSnap     = await driversF;
+      final storeSnap       = await storeF;
 
-    _usersSub = db.collection('users').snapshots().listen((snap) {
-      if (mounted) setState(() { _users = snap.docs; _isLoading = false; });
-    });
-
-    _driversSub = db.collection('drivers').snapshots().listen((snap) {
-      if (mounted) setState(() { _drivers = snap.docs; _isLoading = false; });
-    });
-
-    _storeOrdersSub = db.collection('store_orders').snapshots().listen((snap) {
-      if (mounted) setState(() { _storeOrders = snap.docs; _isLoading = false; });
-    });
-
+      if (!mounted) return;
+      setState(() {
+        _orders      = ordersSnap.docs;
+        _maintenance = maintenanceSnap.docs;
+        _userCount   = usersSnap.count ?? 0;
+        _drivers     = driversSnap.docs;
+        _storeOrders = storeSnap.docs;
+        _isLoading   = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
   }
 
   void _exportDataToCSV() {
@@ -107,7 +104,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       return const Center(child: CircularProgressIndicator(color: Color(0xFF1E293B)));
     }
 
-    final stats = _calculateStats(_orders, _maintenance, _users, _storeOrders);
+    final stats = _calculateStats(_orders, _maintenance, _storeOrders);
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -146,7 +143,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
           ],
         ),
         body: RefreshIndicator(
-          onRefresh: () async => setState(() {}),
+          onRefresh: _fetchData,
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
             child: Column(
@@ -202,7 +199,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     );
   }
 
-  Map<String, dynamic> _calculateStats(List<DocumentSnapshot> orders, List<DocumentSnapshot> maintenance, List<DocumentSnapshot> users, List<DocumentSnapshot> storeOrders) {
+  Map<String, dynamic> _calculateStats(List<DocumentSnapshot> orders, List<DocumentSnapshot> maintenance, List<DocumentSnapshot> storeOrders) {
     double cleaningRevenue = 0;
     double maintenanceRevenue = 0;
     double storeRevenue = 0;
@@ -249,7 +246,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       'maintenance': maintenanceRevenue,
       'store': storeRevenue,
       'active': activeOrders,
-      'users': users.length,
+      'users': _userCount,
     };
   }
 
@@ -556,7 +553,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
                 borderRadius: BorderRadius.circular(10),
                 boxShadow: [BoxShadow(color: Colors.red.withValues(alpha: 0.2), blurRadius: 4)]
               ),
-              child: Text("مباشر", style: GoogleFonts.tajawal(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+              child: Text("محدث", style: GoogleFonts.tajawal(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
             ),
           ],
         ),

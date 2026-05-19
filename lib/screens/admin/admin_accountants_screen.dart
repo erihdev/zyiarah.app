@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AdminAccountantsScreen extends StatefulWidget {
@@ -16,80 +18,141 @@ class _AdminAccountantsScreenState extends State<AdminAccountantsScreen> {
     final TextEditingController nameCtrl = TextEditingController(text: currentData?['name'] ?? '');
     final TextEditingController emailCtrl = TextEditingController(text: currentData?['email'] ?? '');
     final TextEditingController passwordCtrl = TextEditingController();
+    final bool isNew = docId == null;
 
     showDialog(
       context: context,
-      builder: (ctx) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text(docId == null ? "محاسب جديد" : "تعديل بيانات المحاسب", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: "الاسم", border: OutlineInputBorder()),
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          bool isSaving = false;
+
+          Future<void> onSave() async {
+            final name = nameCtrl.text.trim();
+            final email = emailCtrl.text.trim();
+            final password = passwordCtrl.text.trim();
+
+            if (name.isEmpty || (isNew && (email.isEmpty || password.isEmpty))) return;
+
+            setDialogState(() => isSaving = true);
+            // Capture messenger before any async gap to avoid BuildContext issues.
+            final messenger = ScaffoldMessenger.of(context);
+
+            try {
+              if (isNew) {
+                // Create Firebase Auth user via a temporary secondary app so
+                // the current admin session is NOT displaced.
+                FirebaseApp? tempApp;
+                try {
+                  tempApp = await Firebase.initializeApp(
+                    name: 'accountant_tmp_${DateTime.now().millisecondsSinceEpoch}',
+                    options: Firebase.app().options,
+                  );
+                  final tempAuth = FirebaseAuth.instanceFor(app: tempApp);
+                  final cred = await tempAuth.createUserWithEmailAndPassword(
+                    email: email,
+                    password: password,
+                  );
+                  final uid = cred.user!.uid;
+                  await _db.collection('accountants').doc(uid).set({
+                    'name': name,
+                    'email': email,
+                    'role': 'accountant',
+                    'is_active': true,
+                    'created_at': FieldValue.serverTimestamp(),
+                  });
+                } finally {
+                  await tempApp?.delete();
+                }
+              } else {
+                await _db.collection('accountants').doc(docId).update({
+                  'name': name,
+                  'is_active': currentData?['is_active'] ?? true,
+                });
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+            } on FirebaseAuthException catch (e) {
+              if (ctx.mounted) setDialogState(() => isSaving = false);
+              String msg = 'خطأ في إنشاء الحساب';
+              if (e.code == 'email-already-in-use') msg = 'هذا البريد مسجّل مسبقاً';
+              if (e.code == 'weak-password') msg = 'كلمة المرور ضعيفة — 6 أحرف على الأقل';
+              if (e.code == 'invalid-email') msg = 'تنسيق البريد الإلكتروني غير صحيح';
+              messenger.showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
+            } catch (e) {
+              if (ctx.mounted) setDialogState(() => isSaving = false);
+              messenger.showSnackBar(SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red));
+            }
+          }
+
+          return Directionality(
+            textDirection: TextDirection.rtl,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text(
+                isNew ? "محاسب جديد" : "تعديل بيانات المحاسب",
+                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(labelText: "الاسم", border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 15),
+                    TextField(
+                      controller: emailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      enabled: isNew,
+                      decoration: InputDecoration(
+                        labelText: "البريد الإلكتروني",
+                        border: const OutlineInputBorder(),
+                        helperText: isNew ? null : "لا يمكن تغيير البريد بعد الإنشاء",
+                      ),
+                    ),
+                    if (isNew) ...[
+                      const SizedBox(height: 15),
+                      TextField(
+                        controller: passwordCtrl,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: "كلمة المرور",
+                          border: OutlineInputBorder(),
+                          helperText: "6 أحرف على الأقل",
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(height: 15),
-                TextField(
-                  controller: emailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: "البريد الإلكتروني", border: OutlineInputBorder()),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving ? null : () => Navigator.pop(ctx),
+                  child: const Text("إلغاء", style: TextStyle(color: Colors.grey)),
                 ),
-                const SizedBox(height: 15),
-                TextField(
-                  controller: passwordCtrl,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: "كلمة المرور", 
-                    border: OutlineInputBorder(),
-                    helperText: "اتركها فارغة لعدم التغيير (للمحاسبين الحاليين)",
+                if (!isNew)
+                  TextButton(
+                    onPressed: isSaving ? null : () async {
+                      await _db.collection('accountants').doc(docId).delete();
+                      if (context.mounted) Navigator.pop(ctx);
+                    },
+                    child: const Text("حذف", style: TextStyle(color: Colors.red)),
                   ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B)),
+                  onPressed: isSaving ? null : onSave,
+                  child: isSaving
+                      ? const SizedBox(
+                          width: 20, height: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text("حفظ", style: TextStyle(color: Colors.white)),
                 ),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text("إلغاء", style: TextStyle(color: Colors.grey)),
-            ),
-            if (docId != null) 
-              TextButton(
-                onPressed: () async {
-                  await _db.collection('accountants').doc(docId).delete();
-                  if (context.mounted) Navigator.pop(ctx);
-                },
-                child: const Text("حذف", style: TextStyle(color: Colors.red)),
-              ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B)),
-              onPressed: () async {
-                if (nameCtrl.text.isEmpty || (docId == null && passwordCtrl.text.isEmpty)) return;
-                
-                final data = {
-                  'name': nameCtrl.text.trim(),
-                  'email': emailCtrl.text.trim(),
-                  'role': 'accountant',
-                  'is_active': currentData?['is_active'] ?? true,
-                };
-                if (passwordCtrl.text.isNotEmpty) {
-                  data['password'] = passwordCtrl.text.trim(); // Storing password loosely in firestore strictly for simple auth role login. In prod Firebase Auth is better for multiple admins
-                }
-
-                if (docId == null) {
-                  await _db.collection('accountants').add(data);
-                } else {
-                  await _db.collection('accountants').doc(docId).update(data);
-                }
-                if (context.mounted) Navigator.pop(ctx);
-              },
-              child: const Text("حفظ", style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

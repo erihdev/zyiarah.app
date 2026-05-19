@@ -955,7 +955,7 @@ StreamBuilder<QuerySnapshot>(
 
 ---
 
-### ADMIN-001 — 🔴 حرجة — `admin_accountants_screen.dart` — تخزين كلمة المرور نصاً صريحاً في Firestore
+### ~~ADMIN-001~~ — ✅ تم الحل — `admin_accountants_screen.dart` — تخزين كلمة المرور نصاً صريحاً في Firestore
 
 **الملف**: `lib/screens/admin/admin_accountants_screen.dart`  
 **السطر**: 79
@@ -991,67 +991,30 @@ await FirebaseFirestore.instance.collection('accountants').doc(uid).set(data);
 
 ---
 
-### ADMIN-002 — 🔴 حرجة — `admin_insights_screen.dart` — 5 اشتراكات غير محدودة في `_startListeners()`
+### ~~ADMIN-002~~ — ✅ تم الحل — `admin_insights_screen.dart` — 5 اشتراكات غير محدودة في `_startListeners()`
 
 **الملف**: `lib/screens/admin/admin_insights_screen.dart`  
-**السطر**: 57-75 (تقريباً)
+**تاريخ الحل**: 2026-05-19
 
-```dart
-// الكود الحالي ❌
-void _startListeners() {
-  _sub1 = db.collection('orders').snapshots().listen(...);           // كل الطلبات
-  _sub2 = db.collection('maintenance_requests').snapshots().listen(...); // بلا حد
-  _sub3 = db.collection('users').snapshots().listen(...);            // كل المستخدمين
-  _sub4 = db.collection('drivers').snapshots().listen(...);          // كل السائقين
-  _sub5 = db.collection('store_orders').snapshots().listen(...);     // بلا حد
-}
-```
-
-**المشكلة**: 5 streams تستدعي قاعدة البيانات كاملة في الوقت الفعلي:
-- `orders`: قد تكون آلاف الوثائق
-- `users`: كل المستخدمين المسجلين
-- `drivers` + `maintenance_requests` + `store_orders`: بدون أي `.limit()`
-
-**التأثير**:
-- عند فتح شاشة Insights: تُحمَّل كل البيانات في ذاكرة الجهاز
-- Firestore billing يُحسب على كل قراءة وثيقة عند كل snapshot
-- كلما نما التطبيق، تتضاعف التكلفة ويتباطأ التحميل
-
-**الإصلاح المقترح**:
-```dart
-// للإحصائيات: استخدام .get() بدل .snapshots() + .limit()
-// أو: Firestore Aggregation Queries (count) بدل تحميل كل الوثائق
-db.collection('orders')
-  .where('created_at', isGreaterThan: thirtyDaysAgo)
-  .limit(500)
-  .snapshots()
-```
+**الإصلاح المطبّق**:
+- حُذفت جميع `StreamSubscription` fields (5 streams)
+- استُبدلت `_startListeners()` بـ `_fetchData()` async
+- `_users` list → `_userCount` int باستخدام `.count().get()` (Aggregation Query)
+- بقية المجموعات: `.orderBy('created_at', descending: true).limit(500).get()`
+- السائقون: `.limit(200).get()`
+- جميع الـ 5 طلبات تُطلَق بالتوازي (parallel futures) ثم تُجمع
+- `RefreshIndicator.onRefresh` يستدعي `_fetchData()` الفعلية بدلاً من `setState((){})`
 
 ---
 
-### ADMIN-003 — 🔴 حرجة — `admin_analytics_screen.dart` — جلب كل الطلبات مرتين بدون حد
+### ~~ADMIN-003~~ — ✅ تم الحل — `admin_analytics_screen.dart` — جلب كل الطلبات مرتين بدون حد
 
 **الملف**: `lib/screens/admin/admin_analytics_screen.dart`  
-**السطر**: ~45
+**تاريخ الحل**: 2026-05-19
 
-```dart
-// الكود الحالي ❌
-final snap1 = await _db.collection('orders').orderBy('created_at', descending: true).get(); // كل الطلبات
-final snap2 = await _db.collection('orders').get(); // كل الطلبات مرة ثانية!
-```
-
-**المشكلة**: جلب نفس المجموعة مرتين بدون `.limit()` = مضاعفة التكلفة والوقت. في بيئة إنتاجية مع 1000+ طلب، هذا يعني قراءة 2000+ وثيقة عند فتح الشاشة.
-
-**الإصلاح المقترح**:
-```dart
-// جلب واحد مع فلتر زمني
-final snap = await _db.collection('orders')
-  .where('created_at', isGreaterThan: startOfPeriod)
-  .orderBy('created_at', descending: true)
-  .limit(1000)
-  .get();
-// استخدام نفس snap للتحليلات المختلفة
-```
+**الإصلاح المطبّق**:
+- `_fetchAnalytics()` line 45: أُضيف `.limit(1000)` على جلب الطلبات الرئيسي
+- PDF button handler: أُضيف `.orderBy('created_at', descending: true).limit(1000)` + try/catch مع `messenger` مُحفوظ قبل await
 
 ---
 
@@ -1306,9 +1269,9 @@ class AdminOrderDetailsScreen extends StatefulWidget { // ← لا role check د
 
 | الأولوية | المشكلة | الملف | الخطورة |
 |---|---|---|---|
-| 🔴 | ADMIN-001 — كلمة مرور نصية في Firestore | `admin_accountants_screen.dart:79` | حرجة — أمني |
-| 🔴 | ADMIN-002 — 5 streams غير محدودة في Insights | `admin_insights_screen.dart:57-75` | حرجة — أداء وتكلفة |
-| 🔴 | ADMIN-003 — جلب كل الطلبات مرتين بدون حد | `admin_analytics_screen.dart:45` | حرجة — أداء وتكلفة |
+| ✅ | ~~ADMIN-001~~ — كلمة مرور نصية في Firestore | `admin_accountants_screen.dart:79` | تم الحل 2026-05-19 |
+| ✅ | ~~ADMIN-002~~ — 5 streams غير محدودة في Insights | `admin_insights_screen.dart:57-75` | تم الحل 2026-05-19 |
+| ✅ | ~~ADMIN-003~~ — جلب كل الطلبات مرتين بدون حد | `admin_analytics_screen.dart:45` | تم الحل 2026-05-19 |
 | 🟠 | ADMIN-004 — قائمة مستخدمين بلا pagination | `admin_users_screen.dart:86` | متوسطة — أداء |
 | 🟠 | ADMIN-005 — قائمة سائقين بلا `.limit()` | `admin_drivers_screen.dart:~389` | متوسطة — أداء |
 | 🟠 | ADMIN-006 — طلبات المتجر بلا `.limit()` | `admin_store_orders_screen.dart` | متوسطة — أداء |
@@ -1347,12 +1310,14 @@ class AdminOrderDetailsScreen extends StatefulWidget { // ← لا role check د
 
 | المجموعة | عدد المشاكل | الأولوية |
 |---|---|---|
-| ثغرة أمنية — كلمة مرور نصية (ADMIN-001) | 1 | 🔴 إصلاح فوري |
-| Unbounded Streams — أداء وتكلفة (ADMIN-002/003/004/005/006/007/008) | 7 | 🔴🟠 مرحلة أولى |
+| ~~ثغرة أمنية — كلمة مرور نصية (ADMIN-001)~~ | ~~1~~ | ✅ تم الحل 2026-05-19 |
+| ~~Unbounded Streams حرجة — Insights/Analytics (ADMIN-002/003)~~ | ~~2~~ | ✅ تم الحل 2026-05-19 |
+| Unbounded Streams متوسطة (ADMIN-004/005/006/007/008) | 5 | 🟠 مرحلة ثانية |
 | Audit Logging ناقص (ADMIN-009/010/011/012) | 4 | 🟠 مرحلة ثانية |
 | Destructive Actions (ADMIN-013/014) | 2 | 🟠 مرحلة ثانية |
 | منطق أعمال (ADMIN-015) | 1 | 🟠 مرحلة ثانية |
 | RBAC على مستوى Flutter (ADMIN-016) | 1 | 🟡 اختياري |
-| **الإجمالي** | **17** | — |
+| **المحلول** | **3** | ✅ |
+| **المتبقي** | **14** | — |
 
-**الأولوية القصوى**: ADMIN-001 (كلمة مرور نصية) + ADMIN-002/003 (Insights و Analytics unbounded) — هذه الثلاثة يجب إصلاحها قبل أي نشر إنتاجي إضافي.
+**المرحلة الأولى مكتملة**: ADMIN-001/002/003 محلولة. لا مزيد من تخزين كلمات المرور، ولا streams تُحمّل الـ DB كاملاً.

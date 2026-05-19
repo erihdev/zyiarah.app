@@ -41,8 +41,8 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
       final usersSnap = await _db.collection('users').count().get();
       _totalUsers = usersSnap.count ?? 0;
 
-      // 2. Fetch Orders Data
-      final ordersSnap = await _db.collection('orders').orderBy('created_at', descending: true).get();
+      // 2. Fetch Orders Data — limited to last 1000 to avoid loading entire collection
+      final ordersSnap = await _db.collection('orders').orderBy('created_at', descending: true).limit(1000).get();
       _totalOrders = ordersSnap.docs.length;
       
       double revenue = 0.0;
@@ -123,15 +123,20 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
             icon: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
             tooltip: 'تصدير تقرير PDF',
             onPressed: _isLoading ? null : () async {
-               // Fetch all orders for report
-               final snap = await _db.collection('orders').get();
-               final orders = snap.docs.map((d) => d.data()).toList();
-               
-               await _reportService.generateOrdersReport(
-                 orders: orders, 
-                 periodName: "إجمالي الفترة الحالية", 
-                 totalRevenue: _totalRevenue
-                );
+               final messenger = ScaffoldMessenger.of(context);
+               try {
+                 final snap = await _db.collection('orders').orderBy('created_at', descending: true).limit(1000).get();
+                 final orders = snap.docs.map((d) => d.data()).toList();
+                 await _reportService.generateOrdersReport(
+                   orders: orders,
+                   periodName: "إجمالي الفترة الحالية",
+                   totalRevenue: _totalRevenue,
+                 );
+               } catch (e) {
+                 messenger.showSnackBar(
+                   SnackBar(content: Text('فشل تصدير التقرير: $e'), backgroundColor: Colors.red),
+                 );
+               }
             },
           ),
           const SizedBox(width: 10),
