@@ -546,3 +546,369 @@ onPressed: phone != null && phone.isNotEmpty
 ---
 
 *هذا التقرير يوثق الأخطاء فقط — لا يُعدّل أي كود. راجع ZIYARAH_BLUEPRINT.md قبل تنفيذ أي إصلاح.*
+
+---
+
+# قسم ثاني: تطبيق السائق (Driver App) — فحص QA متخصص
+
+> **تاريخ الفحص**: 2026-05-19  
+> **النطاق**: `lib/screens/driver_dashboard.dart` + `lib/services/location_service.dart` + `lib/services/order_service.dart` + `lib/services/geofence_service.dart` + `lib/services/zyiarah_core_services.dart`  
+> **المنهجية**: فحص متخصص في 4 محاور: تسرب الذاكرة، تزامن الحالة، انقطاع الإنترنت، إدارة الصلاحيات
+
+---
+
+## ملخص تنفيذي — تطبيق السائق
+
+| الفئة | عدد المشاكل | أعلى خطورة |
+|---|---|---|
+| انقطاع الإنترنت — أوامر صامتة | **3 مشاكل** | 🔴 حرجة |
+| تسرب الذاكرة واستهلاك البطارية | **3 مشاكل** | 🟠 عالية |
+| إدارة الصلاحيات (GPS revoked) | **1 مشكلة** | 🟠 عالية |
+| تزامن الحالة — Double-tap وOptimistic UI | **2 مشاكل** | 🟡 متوسطة |
+| أخرى | **1 مشكلة** | 🟡 متوسطة |
+| **الإجمالي** | **10 مشاكل** | — |
+
+---
+
+## الفئة الأولى: انقطاع الإنترنت 🔴
+
+---
+
+### DRIVER-001 — `driver_dashboard.dart` — `_updateStatus()` بدون try/catch — الزر يُضغط مرتين
+
+**الملف**: `lib/screens/driver_dashboard.dart`  
+**السطر**: 688-779
+
+```dart
+// الكود الحالي ❌
+void _updateStatus(String id, String status) async {
+  final doc = await FirebaseFirestore.instance.collection('orders').doc(id).get(); // ← await طويل
+  // ... COD dialog ...
+  await _orderService.updateOrderStatus(id, status, driverId: _currentDriverId); // ← Transaction
+  // لا يوجد try/catch هنا
+  if (status == 'completed' && mounted) _showSuccessDialog();
+}
+```
+
+**المشكلة 1 — انقطاع الإنترنت**: إذا فقد السائق الاتصال أثناء `_orderService.updateOrderStatus()` (وهو `runTransaction` يرفض الكتابة offline)، يُلقى `FirebaseException` غير مُعالَج. التطبيق لا يعطل (Flutter يلتقط الأخطاء في async methods بصمت)، لكن:
+- `_showSuccessDialog()` لا يُستدعى → السائق لا يرى شيئاً
+- الزر يعود فاعلاً → السائق يضغط مجدداً → محاولات تراكمية
+
+**المشكلة 2 — Double-tap**: الزر ليس له loading state. الضغطة الثانية قبل انتهاء الأولى تُطلق COD dialog مرة ثانية للطلبات النقدية. Transaction guard في `updateOrderStatus` يمنع التحديث المكرر، لكن dialog الـCOD ينبثق مرتين.
+
+**الخطر المباشر**: السائق يعتقد أن المهمة لم تُغلق → يتصل بالإدارة → ارتباك تشغيلي.
+
+**الإصلاح المقترح**:
+```dart
+bool _isUpdatingStatus = false; // flag جديد
+
+void _updateStatus(String id, String status) async {
+  if (_isUpdatingStatus) return; // منع الضغطة المزدوجة
+  setState(() => _isUpdatingStatus = true);
+  try {
+    // ... منطق التحديث ...
+    await _orderService.updateOrderStatus(id, status, driverId: _currentDriverId);
+    if (status == 'completed' && mounted) _showSuccessDialog();
+  } catch (e) {
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('فشل تحديث الحالة، تحقق من الاتصال: $e'), backgroundColor: Colors.red),
+    );
+  } finally {
+    if (mounted) setState(() => _isUpdatingStatus = false);
+  }
+}
+```
+
+---
+
+### DRIVER-002 — `driver_dashboard.dart` — `_acceptOrder()` بدون try/catch
+
+**الملف**: `lib/screens/driver_dashboard.dart`  
+**السطر**: 669-686
+
+```dart
+// الكود الحالي ❌
+void _acceptOrder(String id) async {
+  bool success = await _orderService.acceptOrder(id, _currentDriverId!); // ← Transaction — يفشل offline
+  if (success) {
+    final doc = await FirebaseFirestore.instance.collection('orders').doc(id).get();
+    // ... إشعارات ...
+  } else if (mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(...); // "لديك طلب نشط"
+  }
+  // لا try/catch — إذا رمى acceptOrder exception، لا يحدث شيء
+}
+```
+
+**المشكلة**: `acceptOrder` يستخدم `_db.runTransaction(...)` الذي يرفض offline. إذا كان السائق على شبكة ضعيفة، يُلقى exception غير مُعالَج. السائق يضغط "قبول" → لا يحدث شيء → يضغط مرات عديدة → عند عودة الإنترنت، قد ينتهي بطلب مكرر أو تعارض في transaction.
+
+**الإصلاح المقترح**: نفس نمط try/catch + loading flag على زر "قبول".
+
+---
+
+### DRIVER-003 — `driver_dashboard.dart` — زر "اتصال بالعميل" يستخدم `'05xxxx'` كـ Fallback
+
+**الملف**: `lib/screens/driver_dashboard.dart`  
+**السطر**: 469
+
+```dart
+// الكود الحالي ❌
+TextButton.icon(
+  onPressed: () => _callClient(data['client_phone'] ?? '05xxxx'), // ← fallback وهمي
+  ...
+)
+```
+
+**المشكلة**: نفس BUG-017 الذي أُصلح في تطبيق العميل (`order_tracking_screen.dart`)، لكنه لا يزال موجوداً هنا. إذا كان `client_phone` غير موجود، السائق يتصل بـ `tel:05xxxx` وهو رقم غير صالح.
+
+**الإصلاح المقترح**:
+```dart
+onPressed: () {
+  final phone = data['client_phone'] as String?;
+  if (phone != null && phone.isNotEmpty) {
+    _callClient(phone);
+  } else if (mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('رقم العميل غير متوفر')),
+    );
+  }
+},
+```
+
+---
+
+## الفئة الثانية: تسرب الذاكرة واستهلاك البطارية 🟠
+
+---
+
+### DRIVER-004 — `driver_dashboard.dart` — `_syncTimer` لا يتوقف عند تغيير السائق لحالته إلى "غير متصل"
+
+**الملف**: `lib/screens/driver_dashboard.dart`  
+**السطر**: 169-181
+
+```dart
+// الكود الحالي ❌
+onChanged: (val) async {
+  setState(() => _isOnline = val);
+  if (_currentDriverId != null) {
+    await FirebaseFirestore.instance.collection('drivers').doc(_currentDriverId).update({
+      'is_available': val,
+      'status': val ? 'idle' : 'off',
+    });
+  }
+  // ← لا يوجد _stopSync() هنا عند val == false
+},
+```
+
+**المشكلة**: عندما يُبدّل السائق حالته إلى "غير متصل" (offline)، `_syncTimer` يستمر في العمل كل 15 ثانية:
+1. يستدعي `Geolocator.getCurrentPosition()` كل 15 ثانية → بطارية مستمرة
+2. يُرسل `updateDriverLocation()` إلى Firestore → بيانات موقع تُرسل حتى في وضع offline
+3. السائق أعلن توقفه لكن النظام لا يزال يتتبعه
+
+**الإصلاح المقترح**: إضافة `if (!val) _stopSync();` في الـ `onChanged`:
+```dart
+onChanged: (val) async {
+  setState(() => _isOnline = val);
+  if (!val) _stopSync(); // ← أوقف التتبع فوراً عند الخروج
+  // ...
+},
+```
+
+---
+
+### DRIVER-005 — `driver_dashboard.dart` — `Geolocator.getPositionStream()` بدون `LocationSettings`
+
+**الملف**: `lib/screens/driver_dashboard.dart`  
+**السطر**: 512
+
+```dart
+// الكود الحالي ❌
+stream: Geolocator.getPositionStream(), // ← بدون أي إعدادات
+```
+
+**المشكلة**:
+- **دقة**: الافتراضي هو `LocationAccuracy.best` → أعلى استهلاك للبطارية
+- **تكرار التحديث**: بدون `distanceFilter` → يُطلق حدثاً على أي حركة بالغة الصغر (خطوة واحدة)
+- **بدون مهلة**: لا `timeLimit` → إذا لم يستجب GPS، يظل الـ stream معلقاً إلى الأبد
+
+نتيجة: على طريق بها حركة كثيفة، قد يُطلق الـ stream عشرات الأحداث في الدقيقة، وكل حدث يُعيد بناء `_buildDistanceInfo` الذي يحتوي على `_buildMiniMap` (FlutterMap) → ثقيل جداً على المعالج.
+
+**الإصلاح المقترح**:
+```dart
+stream: Geolocator.getPositionStream(
+  locationSettings: const LocationSettings(
+    accuracy: LocationAccuracy.medium, // توازن الدقة والبطارية
+    distanceFilter: 20, // لا تحديث ما لم يتحرك السائق 20 متر
+  ),
+),
+```
+
+---
+
+### DRIVER-006 — `driver_dashboard.dart` — `getPositionStream()` يُنشأ في كل rebuild لـ StreamBuilder
+
+**الملف**: `lib/screens/driver_dashboard.dart`  
+**السطر**: 511-534
+
+```dart
+// الكود الحالي ❌
+Widget _buildDistanceInfo(GeoPoint clientLoc) {
+  return StreamBuilder<Position>(
+    stream: Geolocator.getPositionStream(), // ← يُستدعى في كل build
+    builder: (context, snapshot) { ... },
+  );
+}
+```
+
+**المشكلة**: `_buildDistanceInfo` يُستدعى داخل `_buildStateGuidedCard` الذي يُعاد بناؤه عند كل تحديث في `StreamBuilder<DocumentSnapshot>` الخارجي (يراقب وثيقة الطلب). كل تحديث Firestore → rebuild → استدعاء `getPositionStream()` → subscription جديدة لـ GPS.
+
+رغم أن `StreamBuilder` يلغي الاشتراك القديم عند تغيير الـ stream reference، فإن الـ reference تتغير دائماً (كل استدعاء ينتج instance جديد)، مما يسبب دورة:  
+`Firestore update → rebuild → cancel GPS → new GPS subscription → GPS warmup delay → يبدو بطيئاً`
+
+**الإصلاح المقترح**: تخزين `StreamController<Position>` كـ field في الـ State:
+```dart
+late final Stream<Position> _positionStream;
+
+@override
+void initState() {
+  super.initState();
+  _positionStream = Geolocator.getPositionStream(
+    locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium, distanceFilter: 20),
+  );
+}
+// ثم تمريره لـ _buildDistanceInfo كـ parameter
+```
+
+---
+
+## الفئة الثالثة: إدارة الصلاحيات 🟠
+
+---
+
+### DRIVER-007 — `driver_dashboard.dart` — سحب صلاحية GPS أثناء التنفيذ: صامت تماماً
+
+**الملف**: `lib/screens/driver_dashboard.dart`  
+**السطر**: 511-534 (getPositionStream) و 59-66 (_startSync)
+
+**المشكلة — المسار الأول (getPositionStream)**:
+```dart
+builder: (context, snapshot) {
+  if (!snapshot.hasData) return const SizedBox.shrink(); // ← يُخفي الخطأ أيضاً
+  final pos = snapshot.data!;
+  // إذا سُحبت الصلاحية: snapshot.hasError = true → SizedBox.shrink
+  // السائق لا يرى أي رسالة، المسافة تختفي فجأة
+}
+```
+
+عند سحب صلاحية GPS من الإعدادات:
+1. `getPositionStream()` يُرسل `snapshot.hasError == true` مع `PermissionException`
+2. الكود يعود لـ `SizedBox.shrink()` → المسافة تختفي بصمت
+3. لا رسالة تحذير للسائق
+
+**المشكلة — المسار الثاني (_startSync)**:
+```dart
+_syncTimer = Timer.periodic(const Duration(seconds: 15), (timer) async {
+  try {
+    Position pos = await Geolocator.getCurrentPosition(); // ← سيرمي PermissionDenied
+    await _orderService.updateDriverLocation(orderId, GeoPoint(...));
+  } catch (e) {
+    debugPrint("Location sync error: $e"); // ← صامت تماماً للمستخدم
+  }
+});
+```
+
+عند سحب الصلاحية: `getCurrentPosition()` يرمي exception → catch يطبع للـ console فقط → الموقع يتوقف عن التحديث في Firestore → الإدارة والعميل يفقدون تتبع السائق **دون أي تنبيه**.
+
+**الخطر التشغيلي**: إذا ادّعى السائق أنه وصل وطالب بالدفع، لكن النظام لا يُظهر موقعه → نزاع بين العميل والإدارة.
+
+**الإصلاح المقترح**:
+```dart
+} catch (e) {
+  debugPrint("Location sync error: $e");
+  if (e is PermissionDeniedException && mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('⚠️ صلاحية GPS مُعطَّلة. الرجاء تفعيلها من الإعدادات لاستمرار التتبع.'),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 5),
+      ),
+    );
+    _stopSync(); // أوقف الـ timer إذا لا توجد صلاحية
+  }
+}
+```
+
+---
+
+## الفئة الرابعة: تزامن الحالة الميدانية 🟡
+
+---
+
+### DRIVER-008 — `driver_dashboard.dart` — أزرار "قبول" و"تغيير الحالة" بدون Loading State
+
+**الملف**: `lib/screens/driver_dashboard.dart`  
+**السطر**: 456-463 (زر تغيير الحالة) و 623 (زر قبول)
+
+```dart
+// زر تغيير الحالة ❌
+ElevatedButton(
+  onPressed: () => _updateStatus(id, nextStatus), // ← لا loading، لا حماية من الضغط المزدوج
+  child: Text(actionLabel, ...),
+)
+
+// زر قبول الطلب ❌
+ElevatedButton(
+  onPressed: () => _acceptOrder(id), // ← نفس المشكلة
+  child: const Text("قبول", ...),
+)
+```
+
+**المشكلة**: عمليات `_updateStatus` و`_acceptOrder` تتطلب:
+1. قراءة من Firestore (`await get()`)
+2. تنفيذ Transaction
+3. إرسال إشعارات متعددة
+
+مجموع الوقت: 2-5 ثوانٍ على شبكات متوسطة. خلال هذا الوقت الزر فعّال. في البيئة الميدانية، السائقون يضغطون الأزرار بحماس. الضغط المزدوج يسبب حالات غير متوقعة.
+
+**الإصلاح المقترح**: إضافة `_isUpdatingStatus` و`_isAccepting` flags مع `setState()`.
+
+---
+
+### DRIVER-009 — `driver_dashboard.dart` — `_buildStatsRow` بدون Error Handling
+
+**الملف**: `lib/screens/driver_dashboard.dart`  
+**السطر**: 195-231
+
+```dart
+// الكود الحالي ❌
+StreamBuilder<QuerySnapshot>(
+  stream: FirebaseFirestore.instance.collection('orders')
+      .where('driver_id', isEqualTo: _currentDriverId)
+      .where('status', isEqualTo: 'completed')
+      .snapshots(),
+  builder: (context, allSnapshot) {
+    final allOrders = allSnapshot.data?.docs ?? []; // إذا hasError → [] بصمت
+    // لا hasError check، لا connectionState check
+```
+
+**المشكلة**: إذا فشل الـ stream (شبكة، Firestore rules)، الإحصائيات تظهر 0 بصمت، والسائق يعتقد أن إنجازاته لم تُسجَّل. بلاغات كاذبة للإدارة.
+
+---
+
+## جدول أولويات الإصلاح — تطبيق السائق
+
+| الأولوية | المشكلة | الملف | الخطر |
+|---|---|---|---|
+| 🔴 1 | DRIVER-001 — `_updateStatus()` بدون try/catch + Double-tap | `driver_dashboard.dart:688` | تشغيلي مباشر |
+| 🔴 2 | DRIVER-002 — `_acceptOrder()` بدون try/catch | `driver_dashboard.dart:669` | طلبات ضائعة |
+| 🔴 3 | DRIVER-003 — رقم عميل وهمي '05xxxx' | `driver_dashboard.dart:469` | اتصال خاطئ |
+| 🟠 4 | DRIVER-004 — `_syncTimer` يستمر بعد offline | `driver_dashboard.dart:169` | بطارية + تتبع زائف |
+| 🟠 5 | DRIVER-005 — `getPositionStream()` بدون إعدادات | `driver_dashboard.dart:512` | استنزاف البطارية |
+| 🟠 6 | DRIVER-006 — سحب GPS بدون تنبيه | `driver_dashboard.dart:59+512` | فقدان تتبع صامت |
+| 🟠 7 | DRIVER-007 — `getPositionStream()` يُنشأ في كل rebuild | `driver_dashboard.dart:511` | عدم كفاءة |
+| 🟡 8 | DRIVER-008 — أزرار بدون Loading State | `driver_dashboard.dart:457+623` | ضغط مزدوج |
+| 🟡 9 | DRIVER-009 — إحصائيات بدون Error Handling | `driver_dashboard.dart:195` | بيانات مضللة |
+
+---
+
+*فحص تطبيق السائق — 2026-05-19. 9 مشاكل موثّقة. جاهز للإصلاح بعد الاعتماد.*
