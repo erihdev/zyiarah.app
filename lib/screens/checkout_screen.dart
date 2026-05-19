@@ -3,7 +3,6 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:zyiarah/screens/invoice_screen.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/invoice_pdf_service.dart';
-import 'package:zyiarah/services/counter_service.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -127,37 +126,51 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                     targetId: widget.contractId,
                   );
                 } else {
-                  // Generate Alphanumeric Code for Tamara Order (Ensures consistency)
-                  final seq = await ZyiarahCounterService().getNextOrderNumber();
-                  final orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
-
-                  // إنشاء طلب خدمة جديد بهوية محددة مسبقاً
-                  await FirebaseFirestore.instance.collection('orders').doc(widget.orderId).set({
-                    'code': orderCode,
-                    'client_id': user?.uid ?? "unauthenticated_user",
-                    'client_name': clientName,
-                    'client_phone': clientPhone,
-                    'user_phone': clientPhone,
-                    'service_type': widget.serviceType,
-                    'service_name': widget.serviceType,
-                    'amount': widget.amount,
-                    'is_paid': true,
-                    'status': 'pending',
-                    'location': widget.location,
-                    'payment_method': 'tamara',
-                    'created_at': FieldValue.serverTimestamp(),
-                    'hours_contracted': widget.hours ?? 4,
-                    'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
-                    'zone_name': widget.zoneName,
-                    'worker_count': widget.workerCount,
-                    'coupon_code': widget.couponCode,
-                    'discount_amount': widget.discountAmount,
+                  // Atomic: increment counter + create Tamara order in one Transaction
+                  String tamaraOrderCode = '';
+                  final _counterRef = FirebaseFirestore.instance.collection('metadata').doc('order_counter');
+                  await FirebaseFirestore.instance.runTransaction((transaction) async {
+                    final counterSnap = await transaction.get(_counterRef);
+                    final lastId = counterSnap.exists
+                        ? ((counterSnap.data()?['last_id'] as num?)?.toInt() ?? 100)
+                        : 100;
+                    final nextId = lastId + 1;
+                    tamaraOrderCode = ZyiarahOrderUtil.formatSmartCode(nextId);
+                    if (counterSnap.exists) {
+                      transaction.update(_counterRef, {'last_id': nextId});
+                    } else {
+                      transaction.set(_counterRef, {'last_id': nextId});
+                    }
+                    transaction.set(
+                      FirebaseFirestore.instance.collection('orders').doc(widget.orderId),
+                      {
+                        'code': tamaraOrderCode,
+                        'client_id': user?.uid ?? "unauthenticated_user",
+                        'client_name': clientName,
+                        'client_phone': clientPhone,
+                        'user_phone': clientPhone,
+                        'service_type': widget.serviceType,
+                        'service_name': widget.serviceType,
+                        'amount': widget.amount,
+                        'is_paid': true,
+                        'status': 'pending',
+                        'location': widget.location,
+                        'payment_method': 'tamara',
+                        'created_at': FieldValue.serverTimestamp(),
+                        'hours_contracted': widget.hours ?? 4,
+                        'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
+                        'zone_name': widget.zoneName,
+                        'worker_count': widget.workerCount,
+                        'coupon_code': widget.couponCode,
+                        'discount_amount': widget.discountAmount,
+                      },
+                    );
                   });
 
                   // إشعار السائقين والإدارة بالطلب الجديد
                   await ZyiarahNotificationTriggerService().notifyOrderCreated(
                     clientId: user?.uid ?? '',
-                    orderCode: orderCode,
+                    orderCode: tamaraOrderCode,
                     type: 'cleaning',
                     serviceName: widget.serviceType,
                   );
