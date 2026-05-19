@@ -207,19 +207,32 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
   }
 
   Future<void> _deleteAccount() async {
-    final uid = _auth.currentUser?.uid;
+    final user = _auth.currentUser;
+    final uid = user?.uid;
     if (uid == null) return;
     try {
+      // حذف Auth أولاً — إذا فشل (requires-recent-login)، Firestore تبقى سليمة
+      await user!.delete();
+
+      // Auth حُذف بنجاح — الآن نسجّل الطلب ونحذف بيانات Firestore
       await _firestore.collection('account_deletions').doc(uid).set({
         'uid': uid,
-        'phone': _auth.currentUser?.phoneNumber,
+        'phone': user.phoneNumber,
         'requested_at': FieldValue.serverTimestamp(),
-        'status': 'pending',
+        'status': 'deleted',
       });
       await _firestore.collection('users').doc(uid).delete();
-      await _auth.currentUser?.delete();
+
       await _firebaseService.signOut();
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      final msg = e.code == 'requires-recent-login'
+          ? 'لأمان حسابك، يجب تسجيل الخروج ثم الدخول مجدداً قبل حذف الحساب.'
+          : 'خطأ في حذف الحساب: ${e.message}';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg, style: GoogleFonts.tajawal()), backgroundColor: Colors.red),
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
