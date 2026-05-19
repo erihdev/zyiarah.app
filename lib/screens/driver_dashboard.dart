@@ -37,6 +37,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
     super.initState();
     _currentDriverId = _auth.currentUser?.uid;
     _syncOnlineStatus();
+    // DRIVER-005/007: single stable stream with proper battery-efficient settings
+    _locationStream = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10,
+      ),
+    );
   }
 
   Future<void> _syncOnlineStatus() async {
@@ -51,18 +58,34 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   Timer? _syncTimer;
-  
+
+  // DRIVER-005/007: stream created once, reused across rebuilds
+  late final Stream<Position> _locationStream;
+
   void _startSync(String orderId) {
     if (_syncTimer != null && _activeOrderId == orderId) return;
     _stopSync();
     _activeOrderId = orderId;
     _syncTimer = Timer.periodic(const Duration(seconds: 15), (timer) async {
-       try {
-         Position pos = await Geolocator.getCurrentPosition();
-         await _orderService.updateDriverLocation(orderId, GeoPoint(pos.latitude, pos.longitude));
-       } catch (e) {
-         debugPrint("Location sync error: $e");
-       }
+      try {
+        Position pos = await Geolocator.getCurrentPosition();
+        await _orderService.updateDriverLocation(orderId, GeoPoint(pos.latitude, pos.longitude));
+      } on PermissionDeniedException {
+        // DRIVER-006: GPS permission revoked mid-session — stop timer and alert driver
+        timer.cancel();
+        _syncTimer = null;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ تعطّل التتبع — إذن الموقع مسحوب. يُرجى إعادة تشغيل التطبيق لاستئناف الخدمة.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 6),
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint("Location sync error: $e");
+      }
     });
   }
 
@@ -169,6 +192,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 value: _isOnline,
                 onChanged: (val) async {
                   setState(() => _isOnline = val);
+                  // DRIVER-004: cancel sync timer immediately when going offline
+                  if (!val) _stopSync();
                   if (_currentDriverId != null) {
                     await FirebaseFirestore.instance.collection('drivers').doc(_currentDriverId).update({
                       'is_available': val,
@@ -509,8 +534,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
   Widget _buildDistanceInfo(GeoPoint clientLoc) { // caller already type-checks
     return StreamBuilder<Position>(
-      stream: Geolocator.getPositionStream(),
+      stream: _locationStream,
       builder: (context, snapshot) {
+        // DRIVER-006: GPS permission revoked — show visible alert instead of silent fail
+        if (snapshot.hasError) {
+          return const Text(
+            "⚠️ تعذّر تتبع موقعك — تحقق من إذن الموقع",
+            style: TextStyle(fontSize: 11, color: Colors.redAccent, fontWeight: FontWeight.bold),
+          );
+        }
         if (!snapshot.hasData) return const SizedBox.shrink();
         
         final pos = snapshot.data!;
