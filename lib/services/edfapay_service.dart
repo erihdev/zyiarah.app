@@ -1,11 +1,14 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 class EdfaPayService {
-  // ⚠️ استبدل هذه القيم ببيانات حساب EDFAPAY الفعلية قبل الإطلاق
-  static const String mId = "12345678";
-  static const String tId = "87654321";
-  static const String pKw = "payment_key_here";
+  // تُقرأ من ملف .env — المفاتيح المطلوبة:
+  // EDFAPAY_MERCHANT_ID, EDFAPAY_TERMINAL_ID, EDFAPAY_PASSWORD_KEY
+  static String get _mId => dotenv.env['EDFAPAY_MERCHANT_ID'] ?? '';
+  static String get _tId => dotenv.env['EDFAPAY_TERMINAL_ID'] ?? '';
+  static String get _pKw => dotenv.env['EDFAPAY_PASSWORD_KEY'] ?? '';
 
   static bool get _isConfigured =>
-      mId != "12345678" && tId != "87654321" && pKw != "payment_key_here";
+      _mId.isNotEmpty && _tId.isNotEmpty && _pKw.isNotEmpty;
 
   Future<void> initialize() async {}
 
@@ -27,7 +30,7 @@ class EdfaPayService {
       // TODO: استبدل بالتكامل الحقيقي مع edfapg_sdk
       // مثال:
       // final result = await EdfaPgSdk.instance.sale(
-      //   mId: mId, tId: tId, pKw: pKw,
+      //   mId: _mId, tId: _tId, pKw: _pKw,
       //   amount: amount.toString(), orderId: orderId,
       //   email: customerEmail, phone: customerPhone, name: customerName,
       // );

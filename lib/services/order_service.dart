@@ -4,7 +4,6 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/services/audit_service.dart';
-import 'package:zyiarah/services/counter_service.dart';
 import 'package:zyiarah/services/zyiarah_comm_service.dart';
 import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/services/invoice_pdf_service.dart';
@@ -45,32 +44,51 @@ class ZyiarahOrderService {
       debugPrint('Error fetching user data: $e');
     }
 
-    // 2. Generate Smart Sequential Code
-    final seq = await ZyiarahCounterService().getNextOrderNumber();
-    final orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
+    // 2 & 3. Atomic: increment counter + create order in one Transaction
+    // Pre-generate doc ref so we can reference it both inside and outside the transaction
+    final orderRef = _db.collection('orders').doc();
+    final counterRef = _db.collection('metadata').doc('order_counter');
+    String orderCode = '';
 
-    // 3. Create the Order Document
-    DocumentReference doc = await _db.collection('orders').add({
-      'code': orderCode,
-      'client_id': clientId,
-      'client_name': clientName,
-      'client_phone': clientPhone,
-      'client_email': clientEmail,
-      'user_phone': clientPhone,
-      'service_type': serviceType,
-      'service_name': serviceType,
-      'amount': amount,
-      'status': 'pending',
-      'location': location,
-      'payment_method': paymentMethod,
-      'created_at': FieldValue.serverTimestamp(),
-      'hours_contracted': hours ?? 4,
-      'service_date': serviceDate != null ? Timestamp.fromDate(serviceDate) : null,
-      'zone_name': zoneName,
-      'worker_count': workerCount,
-      'coupon_code': couponCode,
-      'discount_amount': discountAmount,
+    await _db.runTransaction((transaction) async {
+      final counterSnap = await transaction.get(counterRef);
+      final lastId = counterSnap.exists
+          ? ((counterSnap.data()?['last_id'] as num?)?.toInt() ?? 100)
+          : 100;
+      final nextId = lastId + 1;
+      orderCode = ZyiarahOrderUtil.formatSmartCode(nextId);
+
+      if (counterSnap.exists) {
+        transaction.update(counterRef, {'last_id': nextId});
+      } else {
+        transaction.set(counterRef, {'last_id': nextId});
+      }
+
+      transaction.set(orderRef, {
+        'code': orderCode,
+        'client_id': clientId,
+        'client_name': clientName,
+        'client_phone': clientPhone,
+        'client_email': clientEmail,
+        'user_phone': clientPhone,
+        'service_type': serviceType,
+        'service_name': serviceType,
+        'amount': amount,
+        'status': 'pending',
+        'location': location,
+        'payment_method': paymentMethod,
+        'created_at': FieldValue.serverTimestamp(),
+        'hours_contracted': hours ?? 4,
+        'service_date': serviceDate != null ? Timestamp.fromDate(serviceDate) : null,
+        'zone_name': zoneName,
+        'worker_count': workerCount,
+        'coupon_code': couponCode,
+        'discount_amount': discountAmount,
+      });
     });
+
+    // Alias for backward compatibility with side-effect code below
+    final doc = orderRef;
 
     // 4. Log and Execute Side-Effects (Coupons & Alerts)
     ZyiarahAuditService().logAction(
