@@ -2,7 +2,7 @@ workflows:
   ios-release:
     name: Zyiarah iOS Release
     max_build_duration: 120
-    instance_type: mac_mini_m2
+    instance_type: mac_mini_m1
     integrations:
       app_store_connect: Zyiarah Key
     environment:
