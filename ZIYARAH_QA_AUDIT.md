@@ -160,9 +160,10 @@ if (!mounted) return;
 
 ---
 
-### BUG-005 — `profile_screen.dart` — `_deleteAccount()` بدون await check بعد كل عملية
+### ~~BUG-005~~ — ✅ تم الحل — `profile_screen.dart` — `_deleteAccount()` بدون await check بعد كل عملية
 **الملف**: `lib/screens/profile_screen.dart`  
-**السطر**: 209-232
+**السطر**: 209-232  
+**تاريخ الحل**: 2026-05-19 | **الـ Commit**: `bf29388`
 
 ```dart
 // الكود الحالي ❌
@@ -506,7 +507,7 @@ onPressed: phone != null && phone.isNotEmpty
 |---|---|---|---|
 | ✅ | ~~BUG-010~~ — دفع إلكتروني وهمي في المتجر | `store_screen.dart:429` | تم الحل 2026-05-19 |
 | ✅ | ~~BUG-004~~ — context المُغلق في CartSheet | `store_screen.dart:327` | تم الحل 2026-05-19 |
-| 🔴 3 | BUG-005 — حذف حساب حالة تالفة | `profile_screen.dart:209` | بيانات تالفة |
+| ✅ | ~~BUG-005~~ — حذف حساب حالة تالفة | `profile_screen.dart:209` | تم الحل 2026-05-19 |
 | 🟠 4 | BUG-002 — context مختلف في _submitTicket | `support_screen.dart:363` | crash |
 | 🟠 5 | BUG-001 — تعارض GoRouter + Navigator يدوي | `login_screen.dart:46` | double route |
 | 🟠 6 | BUG-007 — زر تتبع بدون feedback | `orders_list_screen.dart:604` | UX سيئ |
@@ -531,7 +532,7 @@ onPressed: phone != null && phone.isNotEmpty
 
 2. ~~**BUG-004**~~ ✅ **تم الحل** — نمط Callbacks يُمرّر التنقل للـ parent context، `setState` يُحدّث الـ badge.
 
-3. **BUG-005** — حذف الحساب بترتيب خاطئ: إذا فشل `delete()` في Auth، البيانات في Firestore تكون محذوفة مسبقاً. الحساب في حالة تالفة لا يمكن إصلاحها.
+3. ~~**BUG-005**~~ ✅ **تم الحل** — عكس الترتيب: Auth يُحذف أولاً، عند النجاح يُحذف Firestore. `requires-recent-login` يُظهر رسالة واضحة بدون أي حذف.
 
 **جميع مشاكل Context Lifecycle (BUG-001 إلى BUG-006) آمنة في معظم الحالات لكنها قنابل موقوتة على شبكات بطيئة أو أجهزة قديمة.**
 
