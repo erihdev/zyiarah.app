@@ -1,168 +1,267 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Utility functions
+
+    // ─── Helper Functions ─────────────────────────────────────────────────
+
     function isLoggedIn() {
       return request.auth != null;
     }
+
     function isOwner(userId) {
       return isLoggedIn() && request.auth.uid == userId;
     }
+
+    // Single get() — avoids 4 separate comparisons in isAdmin()
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'client');
+    }
+
+    // Any admin role
     function isAdmin() {
-      let uid = request.auth.uid;
       return isLoggedIn() && (
-        exists(/databases/$(database)/documents/admins/$(uid)) ||
-        get(/databases/$(database)/documents/users/$(uid)).data.role == 'admin' ||
-        get(/databases/$(database)/documents/users/$(uid)).data.role == 'super_admin' ||
-        get(/databases/$(database)/documents/users/$(uid)).data.role == 'orders_manager' ||
-        get(/databases/$(database)/documents/users/$(uid)).data.role == 'accountant_admin' ||
-        get(/databases/$(database)/documents/users/$(uid)).data.role == 'marketing_admin'
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        getUserRole() in ['admin', 'super_admin', 'orders_manager',
+                          'accountant_admin', 'marketing_admin']
       );
     }
 
-    // User profiles
-    match /users/{userId} {
-      allow read: if isLoggedIn() && (isOwner(userId) || isAdmin());
-      allow create: if isLoggedIn();
-      allow update: if isLoggedIn() && (isOwner(userId) || isAdmin());
-      allow delete: if isAdmin();
+    // Orders + drivers management
+    function isOrdersManager() {
+      return isLoggedIn() &&
+        getUserRole() in ['admin', 'super_admin', 'orders_manager'];
     }
 
-    // Account deletion requests
+    // Financial read access
+    function isAccountantAdmin() {
+      return isLoggedIn() &&
+        getUserRole() in ['admin', 'super_admin', 'accountant_admin'];
+    }
+
+    // Marketing content management
+    function isMarketingAdmin() {
+      return isLoggedIn() &&
+        getUserRole() in ['admin', 'super_admin', 'marketing_admin'];
+    }
+
+    // Destructive operations: delete users, change system config
+    function isSuperAdmin() {
+      return isLoggedIn() &&
+        getUserRole() in ['admin', 'super_admin'];
+    }
+
+    // ─── User Profiles ────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+
+      // SECURITY: user can only create their own profile, cannot self-assign admin roles
+      allow create: if isOwner(userId) &&
+        !(request.resource.data.get('role', 'client') in
+          ['admin', 'super_admin', 'orders_manager',
+           'accountant_admin', 'marketing_admin', 'driver']);
+
+      // User can update own non-sensitive fields; sensitive fields require admin
+      allow update: if isAdmin() ||
+        (isOwner(userId) &&
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['role', 'wallet', 'rating_avg', 'rating_count',
+                     'total_orders', 'is_blocked']));
+
+      allow delete: if isSuperAdmin();
+    }
+
+    // ─── Accountants ──────────────────────────────────────────────────────
+    match /accountants/{accountantId} {
+      allow read: if isOwner(accountantId) || isSuperAdmin();
+      allow create, delete: if isSuperAdmin();
+      allow update: if isSuperAdmin() ||
+        (isOwner(accountantId) &&
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['role', 'is_active', 'email']));
+    }
+
+    // ─── Account Deletion Requests ────────────────────────────────────────
     match /account_deletions/{deletionId} {
       allow create: if isLoggedIn();
-      allow read, update, delete: if isAdmin();
+      allow read, update, delete: if isSuperAdmin();
     }
 
-    // Support Tickets
+    // ─── Support Tickets ──────────────────────────────────────────────────
     match /support_tickets/{ticketId} {
       allow create: if isLoggedIn();
-      allow read, update: if isLoggedIn() && (request.auth.uid == resource.data.userId || isAdmin());
-      allow delete: if isAdmin();
+      allow read, update: if isLoggedIn() &&
+        (request.auth.uid == resource.data.userId || isAdmin());
+      allow delete: if isSuperAdmin();
 
       match /messages/{messageId} {
         allow read, create: if isLoggedIn() && (
-          request.auth.uid == get(/databases/$(database)/documents/support_tickets/$(ticketId)).data.userId
+          request.auth.uid ==
+            get(/databases/$(database)/documents/support_tickets/$(ticketId)).data.userId
           || isAdmin()
         );
       }
     }
 
-    // Legacy Tickets Collection
+    // Legacy tickets collection
     match /tickets/{ticketId} {
-      allow read, update: if isLoggedIn() && (request.auth.uid == resource.data.userId || isAdmin());
+      allow read, update: if isLoggedIn() &&
+        (request.auth.uid == resource.data.userId || isAdmin());
       allow create: if isLoggedIn();
-      allow delete: if isAdmin();
+      allow delete: if isSuperAdmin();
     }
 
-    // Orders & Transactions
+    // ─── Orders ───────────────────────────────────────────────────────────
     match /orders/{orderId} {
       allow read: if isLoggedIn() && (
         request.auth.uid == resource.data.client_id ||
         request.auth.uid == resource.data.driver_id ||
         isAdmin()
       );
-      allow create: if isLoggedIn();
-      // Client: can only set status to 'cancelled' on their own pending orders — nothing else
-      allow update: if isLoggedIn() && isAdmin();
+
+      // SECURITY: client_id must match caller; payment fields must be safe defaults
+      allow create: if isLoggedIn() &&
+        request.resource.data.client_id == request.auth.uid &&
+        request.resource.data.get('is_paid', false) == false &&
+        request.resource.data.get('payment_status', 'pending') in ['pending', 'unpaid'] &&
+        request.resource.data.get('status', 'pending') == 'pending';
+
+      // Orders manager: full update
+      allow update: if isOrdersManager();
+
+      // Driver: update status/location only — cannot touch financial or identity fields
       allow update: if isLoggedIn() &&
         request.auth.uid == resource.data.driver_id &&
         !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['is_paid', 'payment_status', 'amount', 'client_id', 'client_email', 'client_phone']);
+          .hasAny(['is_paid', 'payment_status', 'amount', 'final_amount',
+                   'client_id', 'client_email', 'client_phone', 'driver_id']);
+
+      // Client: cancel own pending order only
       allow update: if isLoggedIn() &&
         request.auth.uid == resource.data.client_id &&
         resource.data.status == 'pending' &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelled_at', 'cancelled_by', 'needs_refund']) &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'cancelled_at', 'cancelled_by', 'needs_refund']) &&
         request.resource.data.status == 'cancelled';
-      allow delete: if isAdmin();
+
+      allow delete: if isSuperAdmin();
     }
 
-    // Driver Data
+    // ─── Drivers ──────────────────────────────────────────────────────────
     match /drivers/{driverId} {
-      allow read: if isLoggedIn() && (request.auth.uid == driverId || isAdmin());
-      allow write: if isAdmin();
-      // Drivers can only update their own availability/status — financial & identity fields are locked
+      allow read: if isLoggedIn() &&
+        (request.auth.uid == driverId || isAdmin());
+      allow write: if isOrdersManager();
+      // Driver can update own availability/location — not financial or identity fields
       allow update: if isLoggedIn() &&
         request.auth.uid == driverId &&
         !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['name', 'phone', 'monthly_salary', 'wallet', 'rating_avg', 'rating_count', 'rides', 'email']);
+          .hasAny(['name', 'phone', 'monthly_salary', 'wallet',
+                   'rating_avg', 'rating_count', 'rides', 'email',
+                   'id_number', 'id_expiry', 'nationality']);
     }
 
-    // FCM Tokens — only owner can read/write their own token; admins can read all for broadcasts
+    // ─── FCM Tokens ───────────────────────────────────────────────────────
     match /fcm_tokens/{tokenId} {
-      allow read, write: if isLoggedIn() && (request.auth.uid == tokenId || isAdmin());
+      allow read, write: if isLoggedIn() &&
+        (request.auth.uid == tokenId || isAdmin());
     }
     match /fcm_token/{tokenId} {
-      allow read, write: if isLoggedIn() && (request.auth.uid == tokenId || isAdmin());
+      allow read, write: if isLoggedIn() &&
+        (request.auth.uid == tokenId || isAdmin());
     }
 
-    // Electronic Contracts
+    // ─── Contracts ────────────────────────────────────────────────────────
     match /contracts/{contractId} {
-      allow create: if isLoggedIn();
-      allow read, update: if isLoggedIn() && (request.auth.uid == resource.data.userId || isAdmin());
-      allow delete: if isAdmin();
+      // SECURITY: userId must match caller on create
+      allow create: if isLoggedIn() &&
+        request.resource.data.get('userId', '') == request.auth.uid;
+      allow read, update: if isLoggedIn() &&
+        (request.auth.uid == resource.data.userId || isAdmin());
+      allow delete: if isSuperAdmin();
     }
 
-    // Maintenance Requests
+    // ─── Maintenance Requests ─────────────────────────────────────────────
     match /maintenance_requests/{requestId} {
-      allow create: if isLoggedIn();
-      allow read: if isLoggedIn() && (request.auth.uid == (resource.data.userId == null ? resource.data.client_id : resource.data.userId) || isAdmin());
-      allow update: if isLoggedIn() && (request.auth.uid == (resource.data.userId == null ? resource.data.client_id : resource.data.userId) || isAdmin());
-      allow delete: if isAdmin();
+      // SECURITY: ownership validation on create
+      allow create: if isLoggedIn() && (
+        request.resource.data.get('userId', request.auth.uid) == request.auth.uid ||
+        request.resource.data.get('client_id', request.auth.uid) == request.auth.uid
+      );
+      allow read: if isLoggedIn() && (
+        request.auth.uid == resource.data.get('userId', resource.data.get('client_id', '')) ||
+        isAdmin()
+      );
+      allow update: if isLoggedIn() && (
+        request.auth.uid == resource.data.get('userId', resource.data.get('client_id', '')) ||
+        isAdmin()
+      );
+      allow delete: if isSuperAdmin();
     }
 
-    // Marketing & Content
+    // ─── Marketing & Content ──────────────────────────────────────────────
     match /subscription_packages/{packageId} {
       allow read: if isLoggedIn();
-      allow write: if isAdmin();
+      allow write: if isMarketingAdmin();
     }
     match /promo_banners/{bannerId} {
       allow read: if isLoggedIn();
-      allow write: if isAdmin();
+      allow write: if isMarketingAdmin();
     }
     match /promo_codes/{codeId} {
       allow read: if isLoggedIn();
-      // only allow incrementing `uses` by exactly 1 — prevents abuse (setting to -9999 or 999999)
+      // Users can only increment `uses` by exactly 1 — prevents abuse
       allow update: if isLoggedIn() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uses']) &&
         request.resource.data.uses == resource.data.uses + 1;
-      allow write: if isAdmin();
+      allow create, delete: if isMarketingAdmin();
     }
     match /coupons/{couponId} {
       allow read: if isLoggedIn();
-      allow write: if isAdmin();
+      allow write: if isMarketingAdmin();
     }
 
-    // System Settings
-    // System Settings
+    // ─── System Settings ──────────────────────────────────────────────────
+    // SECURITY: system_configs restricted to admins only (was readable by all)
     match /system_configs/{configId} {
-      allow read: if isLoggedIn();
-      allow write: if isAdmin();
+      allow read: if isAdmin();
+      allow write: if isSuperAdmin();
     }
+
+    // SECURITY: order_counter — read-only for users; write locked to increment-only
     match /metadata/{docId} {
-      allow get, create, update: if isLoggedIn() && docId == 'order_counter';
+      allow get: if isLoggedIn() && docId == 'order_counter';
+      allow create: if isLoggedIn() && docId == 'order_counter';
+      allow update: if isLoggedIn() && docId == 'order_counter' && (
+        isAdmin() ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['counter']) &&
+         request.resource.data.counter == resource.data.counter + 1)
+      );
     }
+
     match /admins/{adminId} {
       allow read: if isLoggedIn() && (request.auth.uid == adminId || isAdmin());
-      allow write: if isAdmin();
+      allow write: if isSuperAdmin();
     }
     match /services/{serviceId} {
       allow read: if isLoggedIn();
       allow write: if isAdmin();
     }
 
-    // Store Section
+    // ─── Store ────────────────────────────────────────────────────────────
     match /products/{productId} {
       allow read: if isLoggedIn();
-      allow write: if isAdmin();
+      allow write: if isMarketingAdmin();
     }
     match /store_orders/{orderId} {
-      allow create: if isLoggedIn();
-      allow read: if isLoggedIn() && (request.auth.uid == resource.data.client_id || isAdmin());
-      allow update, delete: if isAdmin();
+      // SECURITY: client_id must match caller on create
+      allow create: if isLoggedIn() &&
+        request.resource.data.client_id == request.auth.uid;
+      allow read: if isLoggedIn() &&
+        (request.auth.uid == resource.data.client_id || isOrdersManager());
+      allow update, delete: if isOrdersManager();
     }
 
-    // Geographic Zones
+    // ─── Geographic Zones ─────────────────────────────────────────────────
     match /regions/{regionId} {
       allow read: if isLoggedIn();
       allow write: if isAdmin();
@@ -172,29 +271,35 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Logs & Triggers
+    // ─── Logs & Triggers ──────────────────────────────────────────────────
+
+    // SECURITY: audit log entries must carry the caller's own uid
     match /audit_logs/{logId} {
-      allow create: if isLoggedIn();
-      allow read, delete: if isAdmin();
+      allow create: if isLoggedIn() &&
+        request.resource.data.get('admin_uid', request.auth.uid) == request.auth.uid;
+      allow read: if isAccountantAdmin();
+      allow delete: if isSuperAdmin();
     }
+
+    // SECURITY: removed `type == 'email'` bypass that allowed arbitrary email spam
     match /notification_triggers/{triggerId} {
-      // only authenticated users can create triggers for their own UID — prevents email spam abuse
       allow create: if isLoggedIn() && (
         !('toUid' in request.resource.data) ||
         request.resource.data.toUid == request.auth.uid ||
-        request.resource.data.toUid == 'ADMIN_BROADCAST' ||
-        request.resource.data.type == 'email'
+        (request.resource.data.toUid == 'ADMIN_BROADCAST' && isAdmin())
       );
       allow read, delete: if isAdmin();
     }
+
     match /notifications_log/{logId} {
-      allow read, write: if isAdmin();
+      allow read: if isAccountantAdmin();
+      allow write: if isAdmin();
     }
     match /marketing_campaigns/{campaignId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isMarketingAdmin();
     }
     match /config/{configId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isSuperAdmin();
     }
     match /broadcasts/{broadcastId} {
       allow read, write: if isAdmin();
@@ -203,7 +308,8 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
     match /notifications/{notifId} {
-      allow read: if isLoggedIn() && (request.auth.uid == resource.data.userId || isAdmin());
+      allow read: if isLoggedIn() &&
+        (request.auth.uid == resource.data.userId || isAdmin());
       allow write: if isAdmin();
     }
   }

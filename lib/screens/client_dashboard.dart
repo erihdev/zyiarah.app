@@ -554,13 +554,23 @@ class _ClientDashboardState extends State<ClientDashboard> {
                 onTap: () async {
                   if (routeType == 'whatsapp' && actionUrl.isNotEmpty) {
                     final uri = Uri.parse(actionUrl);
-                    if (await canLaunchUrl(uri)) await launchUrl(uri);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri);
+                    } else if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تعذّر فتح الرابط')),
+                      );
+                    }
                   } else if (routeType == '/hourly_cleaning') {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const HourlyCleaningDetailsScreen(serviceName: "نظافة بالساعة")));
                   } else if (routeType == '/store') {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahStoreScreen()));
                   } else if (routeType == '/support') {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahSupportScreen()));
+                  } else if (routeType != 'none' && routeType.isNotEmpty && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('هذا الرابط غير متاح حالياً')),
+                    );
                   }
                 },
                 child: Container(
@@ -601,8 +611,9 @@ class _ClientDashboardState extends State<ClientDashboard> {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
       builder: (context, userSnapshot) {
+        final isWaiting = userSnapshot.connectionState == ConnectionState.waiting && !userSnapshot.hasData;
         final userData = userSnapshot.data?.data() as Map<String, dynamic>?;
-        final rating = (userData?['rating'] ?? 4.9).toString();
+        final rating = isWaiting ? '--' : (userData?['rating'] ?? 4.9).toString();
         final orderProvider = Provider.of<ZyiarahOrderProvider>(context, listen: false);
         final totalBookings = orderProvider.recentOrders.length.toString();
 

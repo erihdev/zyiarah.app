@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
+import 'package:zyiarah/services/audit_service.dart';
 
 class AdminBroadcastScreen extends StatefulWidget {
   const AdminBroadcastScreen({super.key});
@@ -424,6 +425,15 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
           'type': 'admin_broadcast',
         });
       }
+
+      await ZyiarahAuditService().logAction(
+        action: 'SEND_BROADCAST',
+        details: {
+          'title': _titleCtrl.text.trim(),
+          'target': _target,
+          'scheduled': _isScheduled,
+        },
+      );
 
       if (mounted) {
         ZyiarahCoreService.triggerHapticSuccess();

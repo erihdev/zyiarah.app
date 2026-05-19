@@ -62,8 +62,9 @@ class _SofaRugCleaningDetailsScreenState extends State<SofaRugCleaningDetailsScr
       if (permission == LocationPermission.deniedForever) return;
 
       Position pos = await Geolocator.getCurrentPosition();
+      if (!mounted) return;
       GeoPoint loc = GeoPoint(pos.latitude, pos.longitude);
-      
+
       Map<String, dynamic>? matchedZone;
       double minDistance = double.infinity;
 

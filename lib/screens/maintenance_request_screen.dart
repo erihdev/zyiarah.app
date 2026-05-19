@@ -6,7 +6,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/services/audit_service.dart';
-import 'package:zyiarah/services/counter_service.dart';
 import 'package:zyiarah/services/location_service.dart';
 import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/services/zyiarah_comm_service.dart';
@@ -63,16 +62,6 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
         debugPrint("User data fetch failed: $e");
       }
 
-      // Generate Smart Sequential Code
-      String orderCode;
-      try {
-        final seq = await ZyiarahCounterService().getNextOrderNumber();
-        orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
-      } catch (e) {
-        debugPrint("Counter service failed, using fallback code: $e");
-        orderCode = "SRV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}";
-      }
-
       final scheduledDateTime = DateTime(
         _selectedDate.year, _selectedDate.month, _selectedDate.day,
         _selectedTime.hour, _selectedTime.minute,
@@ -89,19 +78,37 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
         debugPrint("Location capture failed: $e");
       }
 
-      await _firestore.collection('maintenance_requests').add({
-        'requestId': orderCode,
-        'code': orderCode,
-        'userId': user.uid,
-        'userName': userName,
-        'userPhone': userPhone,
-        'serviceType': _selectedService,
-        'quantity': _quantity,
-        'floor': _selectedFloor,
-        'location': location, // New field for mapping
-        'scheduledAt': Timestamp.fromDate(scheduledDateTime),
-        'status': 'under_review',
-        'createdAt': FieldValue.serverTimestamp(),
+      // Atomic: increment counter + create maintenance request in one Transaction
+      final reqRef = _firestore.collection('maintenance_requests').doc();
+      final counterRef = _firestore.collection('metadata').doc('order_counter');
+      String orderCode = '';
+
+      await _firestore.runTransaction((transaction) async {
+        final counterSnap = await transaction.get(counterRef);
+        final lastId = counterSnap.exists
+            ? ((counterSnap.data()?['last_id'] as num?)?.toInt() ?? 100)
+            : 100;
+        final nextId = lastId + 1;
+        orderCode = ZyiarahOrderUtil.formatSmartCode(nextId);
+        if (counterSnap.exists) {
+          transaction.update(counterRef, {'last_id': nextId});
+        } else {
+          transaction.set(counterRef, {'last_id': nextId});
+        }
+        transaction.set(reqRef, {
+          'requestId': orderCode,
+          'code': orderCode,
+          'userId': user.uid,
+          'userName': userName,
+          'userPhone': userPhone,
+          'serviceType': _selectedService,
+          'quantity': _quantity,
+          'floor': _selectedFloor,
+          'location': location,
+          'scheduledAt': Timestamp.fromDate(scheduledDateTime),
+          'status': 'under_review',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
       });
 
       // Audit Log
@@ -112,7 +119,7 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
           'user': userName,
           'service': _selectedService,
         },
-        targetId: user.uid,
+        targetId: reqRef.id,
       );
 
       if (mounted) {

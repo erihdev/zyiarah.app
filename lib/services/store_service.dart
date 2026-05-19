@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/services/audit_service.dart';
-import 'package:zyiarah/services/counter_service.dart';
 
 class StoreProduct {
   final String id;
@@ -84,20 +83,34 @@ class ZyiarahStoreService {
       // Fallback
     }
 
-    // Generate Smart Sequential Code
-    final seq = await ZyiarahCounterService().getNextOrderNumber();
-    final orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
+    // Atomic: increment counter + create store order in one Transaction
+    final docRef = _db.collection('store_orders').doc();
+    final counterRef = _db.collection('metadata').doc('order_counter');
+    String orderCode = '';
 
-    final docRef = await _db.collection('store_orders').add({
-      'code': orderCode,
-      'client_id': user.uid,
-      'client_name': clientName,
-      'client_phone': clientPhone,
-      'items': items,
-      'total_amount': totalAmount,
-      'payment_method': paymentMethod,
-      'status': 'pending',
-      'created_at': FieldValue.serverTimestamp(),
+    await _db.runTransaction((transaction) async {
+      final counterSnap = await transaction.get(counterRef);
+      final lastId = counterSnap.exists
+          ? ((counterSnap.data()?['last_id'] as num?)?.toInt() ?? 100)
+          : 100;
+      final nextId = lastId + 1;
+      orderCode = ZyiarahOrderUtil.formatSmartCode(nextId);
+      if (counterSnap.exists) {
+        transaction.update(counterRef, {'last_id': nextId});
+      } else {
+        transaction.set(counterRef, {'last_id': nextId});
+      }
+      transaction.set(docRef, {
+        'code': orderCode,
+        'client_id': user.uid,
+        'client_name': clientName,
+        'client_phone': clientPhone,
+        'items': items,
+        'total_amount': totalAmount,
+        'payment_method': paymentMethod,
+        'status': 'pending',
+        'created_at': FieldValue.serverTimestamp(),
+      });
     });
 
     // Audit Log

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:zyiarah/services/audit_service.dart';
 
 class AdminUsersScreen extends StatelessWidget {
   const AdminUsersScreen({super.key});
@@ -42,6 +43,11 @@ class AdminUsersScreen extends StatelessWidget {
     if (confirm == true) {
       try {
         await FirebaseFirestore.instance.collection('users').doc(uid).delete();
+        await ZyiarahAuditService().logAction(
+          action: 'DELETE_USER',
+          details: {'name': name},
+          targetId: uid,
+        );
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Row(
@@ -86,6 +92,7 @@ class AdminUsersScreen extends StatelessWidget {
           stream: FirebaseFirestore.instance
               .collection('users')
               .orderBy('created_at', descending: true)
+              .limit(100)
               .snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {

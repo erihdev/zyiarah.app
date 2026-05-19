@@ -198,7 +198,19 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                       width: 50,
                       height: 50,
                     ),
-                  IconButton(onPressed: () => _callDriver(data['driver_phone'] ?? '05xxxx'), icon: const CircleAvatar(backgroundColor: Colors.green, child: Icon(Icons.phone, color: Colors.white, size: 20))),
+                  IconButton(
+                    onPressed: () {
+                      final phone = data['driver_phone'] as String?;
+                      if (phone != null && phone.isNotEmpty) {
+                        _callDriver(phone);
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('عذراً، رقم اتصال السائق غير متوفر حالياً')),
+                        );
+                      }
+                    },
+                    icon: const CircleAvatar(backgroundColor: Colors.green, child: Icon(Icons.phone, color: Colors.white, size: 20)),
+                  ),
                 ],
           ),
           const SizedBox(height: 25),

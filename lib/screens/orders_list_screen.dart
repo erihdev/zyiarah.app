@@ -8,6 +8,8 @@ import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/widgets/shimmer_loading.dart';
 import 'package:zyiarah/utils/status_util.dart';
 import 'package:zyiarah/services/order_service.dart';
+import 'package:zyiarah/services/zyiarah_core_services.dart';
+import 'package:go_router/go_router.dart';
 
 class OrdersListScreen extends StatefulWidget {
   const OrdersListScreen({super.key});
@@ -451,7 +453,13 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
             ),
             const SizedBox(height: 28),
             ElevatedButton.icon(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () {
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                } else {
+                  context.go('/client');
+                }
+              },
               icon: const Icon(Icons.home_rounded),
               label: Text('العودة للرئيسية', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
@@ -604,9 +612,14 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                 ElevatedButton.icon(
                   onPressed: () {
                     if (order['driver_id'] != null && order['location'] != null) {
+                      ZyiarahCoreService.triggerHapticLight();
                       Navigator.push(context, MaterialPageRoute(builder: (context) => OrderTrackingScreen(
                         orderId: docId,
                       )));
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('لم يُعيَّن سائق بعد، يُرجى الانتظار')),
+                      );
                     }
                   },
                   icon: const Icon(Icons.map_outlined, size: 16),

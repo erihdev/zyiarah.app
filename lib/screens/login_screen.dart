@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:go_router/go_router.dart';
 import 'package:zyiarah/services/firebase_service.dart';
-import 'package:zyiarah/screens/client_dashboard.dart';
-import 'package:zyiarah/screens/driver_dashboard.dart';
 import 'package:zyiarah/screens/signup_screen.dart';
 import 'package:zyiarah/screens/account_activation_screen.dart';
 import 'package:zyiarah/screens/forgot_password_screen.dart';
-import 'package:zyiarah/screens/admin/admin_dashboard_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class ZyiarahLoginScreen extends StatefulWidget {
@@ -47,11 +45,11 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
         if (!mounted) return;
         
         if (role == 'driver') {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const DriverDashboard()));
+          context.go('/driver');
         } else if (['admin', 'super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin'].contains(role)) {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AdminDashboardScreen()));
+          context.go('/admin');
         } else {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ClientDashboard()));
+          context.go('/client');
         }
       }
     } on FirebaseAuthException catch (e) {
@@ -100,7 +98,13 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                   alignment: Alignment.centerLeft,
                   child: IconButton(
                     icon: const Icon(Icons.arrow_forward_ios, size: 20),
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () {
+                      if (Navigator.canPop(context)) {
+                        Navigator.pop(context);
+                      } else {
+                        context.go('/');
+                      }
+                    },
                   ),
                 ),
                 const SizedBox(height: 40),

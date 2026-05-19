@@ -91,10 +91,10 @@ class _ZyiarahAccountActivationScreenState extends State<ZyiarahAccountActivatio
         await _firebaseService.updatePassword(phone, password);
         
         if (!mounted) return;
-        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تم تفعيل الحساب وتعيين كلمة المرور بنجاح!')),
         );
+        Navigator.pop(context);
       }
     } catch (e) {
       _showError('خطأ في التفعيل: $e');

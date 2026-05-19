@@ -96,13 +96,27 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
 
   Future<void> _fetchDrivers() async {
     try {
-      final snapshot = await _db.collection('drivers').where('is_active', isEqualTo: true).get();
+      final snapshotF = _db.collection('drivers').where('is_active', isEqualTo: true).get();
+      final activeOrdersF = _db.collection('orders')
+          .where('status', whereIn: ['assigned', 'in_progress'])
+          .get();
+      final results = await Future.wait([snapshotF, activeOrdersF]);
+      final snapshot = results[0];
+      final activeOrders = results[1];
+
+      final busyDriverIds = activeOrders.docs
+          .map((d) => d.data()['driver_id'] as String?)
+          .whereType<String>()
+          .toSet();
+
       if (mounted) {
         setState(() {
-          _drivers = snapshot.docs.map((doc) => {
-            'id': doc.id,
-            'name': doc.data()['name'] ?? 'بدون اسم',
-          }).toList();
+          _drivers = snapshot.docs
+              .where((doc) => !busyDriverIds.contains(doc.id))
+              .map((doc) => {
+                'id': doc.id,
+                'name': doc.data()['name'] ?? 'بدون اسم',
+              }).toList();
           _isLoadingDrivers = false;
         });
       }
@@ -150,9 +164,17 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   }
   
   Future<void> _openWhatsApp(String phone) async {
-    final url = Uri.parse("https://wa.me/$phone");
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url);
+    try {
+      final url = Uri.parse("https://wa.me/$phone");
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذّر فتح واتساب: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 

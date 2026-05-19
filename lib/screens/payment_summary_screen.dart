@@ -9,7 +9,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/services/notification_trigger_service.dart';
-import 'package:zyiarah/services/counter_service.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:intl/intl.dart' as intl;
@@ -141,8 +140,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     try {
       final String orderId = widget.maintenanceId ??
           FirebaseFirestore.instance.collection('orders').doc().id;
-      final seq = await ZyiarahCounterService().getNextOrderNumber();
-      final orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
 
       await MoyasarService.processApplePayToken(
         applePayToken: result,
@@ -152,7 +149,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       );
 
       if (mounted) {
-        await _processUnifiedSuccess(orderId, orderCode, 'apple_pay');
+        await _processUnifiedSuccess(orderId, 'apple_pay');
       }
     } catch (e) {
       if (mounted) {
@@ -243,16 +240,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       }
 
       final String finalOrderId = widget.maintenanceId ?? FirebaseFirestore.instance.collection('orders').doc().id;
-      final seq = await ZyiarahCounterService().getNextOrderNumber();
-      final orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
 
       if (_selectedPaymentMethod == 'subscription') {
-        if (widget.maintenanceId != null) {
-           await _processUnifiedSuccess(finalOrderId, orderCode, 'subscription', isFree: true);
-        } else {
-          // الخصم يتم عند إكمال الطلب في order_service.dart — لا نخصم هنا
-          await _processUnifiedSuccess(finalOrderId, orderCode, 'subscription', isFree: true);
-        }
+        await _processUnifiedSuccess(finalOrderId, 'subscription', isFree: true);
 
       } else if (_selectedPaymentMethod == 'cod') {
         if (widget.maintenanceId != null) {
@@ -261,10 +251,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             'paymentMethod': 'cod',
             'paidAt': FieldValue.serverTimestamp(),
           });
-          await _finalizeOrderWithInvoice(orderId: finalOrderId, orderCode: orderCode, paymentMethod: 'cod', paidAmount: 0);
-          await _navigateToSuccess(orderCode);
+          // Use maintenanceId as the display code for the cod+maintenance invoice path
+          await _finalizeOrderWithInvoice(orderId: finalOrderId, orderCode: widget.maintenanceId!, paymentMethod: 'cod', paidAmount: 0);
+          await _navigateToSuccess(widget.maintenanceId!);
         } else {
-          await _processUnifiedSuccess(finalOrderId, orderCode, 'cod', isFree: false);
+          await _processUnifiedSuccess(finalOrderId, 'cod', isFree: false);
         }
 
       } else if (_selectedPaymentMethod == 'tamara') {
@@ -316,7 +307,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         );
 
         if (result['success'] == true && mounted) {
-          await _processUnifiedSuccess(finalOrderId, orderCode, _selectedPaymentMethod);
+          await _processUnifiedSuccess(finalOrderId, _selectedPaymentMethod);
         } else {
           throw Exception(result['error'] ?? 'فشل عملية الدفع عبر $paymentType');
         }
@@ -332,11 +323,15 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   /// Unified Success Handler
-  Future<void> _processUnifiedSuccess(String id, String code, String method, {bool isFree = false}) async {
+  Future<void> _processUnifiedSuccess(String id, String method, {bool isFree = false}) async {
     final double amountToSave = isFree ? 0.0 : totalWithVat;
+    // code is generated per-branch below; maintenance uses id, contract uses contractId,
+    // regular order generates atomically inside the transaction
+    String code = '';
 
     // 1. Update Database
     if (widget.maintenanceId != null) {
+      code = id;
       await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
         'status': 'paid',
         'paymentMethod': method,
@@ -345,6 +340,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       });
       await ZyiarahNotificationTriggerService().notifyAdminOfPayment(orderCode: code, amount: amountToSave, type: 'maintenance', clientName: _currentUser?.name);
     } else if (widget.contractId != null) {
+      code = widget.contractId!;
       await FirebaseFirestore.instance.collection('contracts').doc(widget.contractId).update({
         'status': 'active',
         'paymentMethod': method,
@@ -377,27 +373,42 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         }
       }
 
-      await FirebaseFirestore.instance.collection('orders').doc(id).set({
-        'code': code,
-        'client_id': _currentUser?.uid,
-        'client_name': _currentUser?.name ?? 'عميل زيارة',
-        'client_phone': _phoneController.text.trim(),
-        'user_phone': _phoneController.text.trim(),
-        'client_email': _currentUser?.email,
-        'service_type': widget.serviceName,
-        'service_name': widget.serviceName,
-        'amount': amountToSave,
-        'is_paid': method != 'cod',
-        'status': isHourly ? 'pending' : 'pending',
-        'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
-        'payment_method': method,
-        'created_at': FieldValue.serverTimestamp(),
-        'hours_contracted': widget.hours ?? 4,
-        'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
-        'zone_name': widget.zoneName,
-        'worker_count': widget.workerCount,
-        'coupon_code': _appliedCoupon,
-        'discount_amount': _discountAmount,
+      // Atomic: increment counter + create order in one Transaction
+      final _counterRef = FirebaseFirestore.instance.collection('metadata').doc('order_counter');
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final counterSnap = await transaction.get(_counterRef);
+        final lastId = counterSnap.exists
+            ? ((counterSnap.data()?['last_id'] as num?)?.toInt() ?? 100)
+            : 100;
+        final nextId = lastId + 1;
+        code = ZyiarahOrderUtil.formatSmartCode(nextId);
+        if (counterSnap.exists) {
+          transaction.update(_counterRef, {'last_id': nextId});
+        } else {
+          transaction.set(_counterRef, {'last_id': nextId});
+        }
+        transaction.set(FirebaseFirestore.instance.collection('orders').doc(id), {
+          'code': code,
+          'client_id': _currentUser?.uid,
+          'client_name': _currentUser?.name ?? 'عميل زيارة',
+          'client_phone': _phoneController.text.trim(),
+          'user_phone': _phoneController.text.trim(),
+          'client_email': _currentUser?.email,
+          'service_type': widget.serviceName,
+          'service_name': widget.serviceName,
+          'amount': amountToSave,
+          'is_paid': method != 'cod',
+          'status': isHourly ? 'pending' : 'pending',
+          'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
+          'payment_method': method,
+          'created_at': FieldValue.serverTimestamp(),
+          'hours_contracted': widget.hours ?? 4,
+          'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
+          'zone_name': widget.zoneName,
+          'worker_count': widget.workerCount,
+          'coupon_code': _appliedCoupon,
+          'discount_amount': _discountAmount,
+        });
       });
 
       if (isHourly) {

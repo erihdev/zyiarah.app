@@ -386,7 +386,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
           label: Text("تسجيل كادر جديد", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
         ),
         body: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('drivers').snapshots(),
+          stream: FirebaseFirestore.instance.collection('drivers').limit(100).snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return _buildShimmerLoading();
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("لا توجد سجلات"));
