@@ -562,11 +562,11 @@ onPressed: phone != null && phone.isNotEmpty
 | الفئة | عدد المشاكل | أعلى خطورة |
 |---|---|---|
 | انقطاع الإنترنت — أوامر صامتة | **3 مشاكل** | 🔴 حرجة |
-| تسرب الذاكرة واستهلاك البطارية | **3 مشاكل** | 🟠 عالية |
-| إدارة الصلاحيات (GPS revoked) | **1 مشكلة** | 🟠 عالية |
+| ~~تسرب الذاكرة واستهلاك البطارية~~ | ~~**3 مشاكل**~~ | ✅ محلولة (DRIVER-004/005/006) |
+| ~~إدارة الصلاحيات (GPS revoked)~~ | ~~**1 مشكلة**~~ | ✅ محلولة (DRIVER-007) |
 | تزامن الحالة — Double-tap وOptimistic UI | **2 مشاكل** | 🟡 متوسطة |
 | أخرى | **1 مشكلة** | 🟡 متوسطة |
-| **الإجمالي** | **10 مشاكل** | — |
+| **الإجمالي** | **10 مشاكل** (4 محلولة) | — |
 
 ---
 
@@ -681,7 +681,7 @@ onPressed: () {
 
 ---
 
-### DRIVER-004 — `driver_dashboard.dart` — `_syncTimer` لا يتوقف عند تغيير السائق لحالته إلى "غير متصل"
+### ~~DRIVER-004~~ — ✅ تم الحل — `driver_dashboard.dart` — `_syncTimer` لا يتوقف عند تغيير السائق لحالته إلى "غير متصل"
 
 **الملف**: `lib/screens/driver_dashboard.dart`  
 **السطر**: 169-181
@@ -716,7 +716,7 @@ onChanged: (val) async {
 
 ---
 
-### DRIVER-005 — `driver_dashboard.dart` — `Geolocator.getPositionStream()` بدون `LocationSettings`
+### ~~DRIVER-005~~ — ✅ تم الحل — `driver_dashboard.dart` — `Geolocator.getPositionStream()` بدون `LocationSettings`
 
 **الملف**: `lib/screens/driver_dashboard.dart`  
 **السطر**: 512
@@ -745,7 +745,7 @@ stream: Geolocator.getPositionStream(
 
 ---
 
-### DRIVER-006 — `driver_dashboard.dart` — `getPositionStream()` يُنشأ في كل rebuild لـ StreamBuilder
+### ~~DRIVER-006~~ — ✅ تم الحل — `driver_dashboard.dart` — `getPositionStream()` يُنشأ في كل rebuild لـ StreamBuilder
 
 **الملف**: `lib/screens/driver_dashboard.dart`  
 **السطر**: 511-534
@@ -785,7 +785,7 @@ void initState() {
 
 ---
 
-### DRIVER-007 — `driver_dashboard.dart` — سحب صلاحية GPS أثناء التنفيذ: صامت تماماً
+### ~~DRIVER-007~~ — ✅ تم الحل — `driver_dashboard.dart` — سحب صلاحية GPS أثناء التنفيذ: صامت تماماً
 
 **الملف**: `lib/screens/driver_dashboard.dart`  
 **السطر**: 511-534 (getPositionStream) و 59-66 (_startSync)
