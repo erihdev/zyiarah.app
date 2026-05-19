@@ -97,7 +97,13 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                   alignment: Alignment.centerLeft,
                   child: IconButton(
                     icon: const Icon(Icons.arrow_forward_ios, size: 20),
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () {
+                      if (Navigator.canPop(context)) {
+                        Navigator.pop(context);
+                      } else {
+                        context.go('/');
+                      }
+                    },
                   ),
                 ),
                 const SizedBox(height: 40),
