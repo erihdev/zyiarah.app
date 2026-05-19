@@ -116,9 +116,10 @@ onPressed: () async {
 
 ---
 
-### BUG-004 — `store_screen.dart` — `_CartSheetState._checkout()` استخدام context بعد `Navigator.pop`
+### ~~BUG-004~~ — ✅ تم الحل — `store_screen.dart` — `_CartSheetState._checkout()` استخدام context بعد `Navigator.pop`
 **الملف**: `lib/screens/store_screen.dart`  
-**السطر**: 272-349
+**السطر**: 272-349  
+**تاريخ الحل**: 2026-05-19 | **الـ Commit**: `501b3d0`
 
 ```dart
 // الكود الحالي ❌
@@ -287,9 +288,10 @@ try {
 
 ---
 
-### BUG-010 — `store_screen.dart` — خيار دفع "إلكتروني" غير مُفعَّل
+### ~~BUG-010~~ — ✅ تم الحل — `store_screen.dart` — خيار دفع "إلكتروني" غير مُفعَّل
 **الملف**: `lib/screens/store_screen.dart`  
-**السطر**: 429-440
+**السطر**: 429-440  
+**تاريخ الحل**: 2026-05-19 | **الـ Commit**: `501b3d0`
 
 ```dart
 RadioListTile(
@@ -502,8 +504,8 @@ onPressed: phone != null && phone.isNotEmpty
 
 | الأولوية | المشكلة | الملف | الخطر |
 |---|---|---|---|
-| 🔴 1 | BUG-010 — دفع إلكتروني وهمي في المتجر | `store_screen.dart:429` | مالي مباشر |
-| 🔴 2 | BUG-004 — context المُغلق في CartSheet | `store_screen.dart:327` | crash |
+| ✅ | ~~BUG-010~~ — دفع إلكتروني وهمي في المتجر | `store_screen.dart:429` | تم الحل 2026-05-19 |
+| ✅ | ~~BUG-004~~ — context المُغلق في CartSheet | `store_screen.dart:327` | تم الحل 2026-05-19 |
 | 🔴 3 | BUG-005 — حذف حساب حالة تالفة | `profile_screen.dart:209` | بيانات تالفة |
 | 🟠 4 | BUG-002 — context مختلف في _submitTicket | `support_screen.dart:363` | crash |
 | 🟠 5 | BUG-001 — تعارض GoRouter + Navigator يدوي | `login_screen.dart:46` | double route |
@@ -525,9 +527,9 @@ onPressed: phone != null && phone.isNotEmpty
 
 **أخطر 3 مشاكل تستحق الإصلاح الفوري:**
 
-1. **BUG-010** — خيار "دفع إلكتروني" في المتجر يُرسل طلبات بدون دفع حقيقي. يجب تعطيل الخيار فوراً أو ربطه ببوابة دفع.
+1. ~~**BUG-010**~~ ✅ **تم الحل** — `StoreTamaraCheckoutScreen` جديد يربط الطلب بعد تأكيد payment-success عبر Transaction ذري.
 
-2. **BUG-004** — `_CartSheetState._checkout()` يستخدم context مُغلق بعد `Navigator.pop`، ويُعدّل `widget.cart` بدون إعلام الـ parent. يُسبب exception وbadge لا يتحدث.
+2. ~~**BUG-004**~~ ✅ **تم الحل** — نمط Callbacks يُمرّر التنقل للـ parent context، `setState` يُحدّث الـ badge.
 
 3. **BUG-005** — حذف الحساب بترتيب خاطئ: إذا فشل `delete()` في Auth، البيانات في Firestore تكون محذوفة مسبقاً. الحساب في حالة تالفة لا يمكن إصلاحها.
 
