@@ -926,3 +926,433 @@ StreamBuilder<QuerySnapshot>(
 | **الإجمالي** | **9** | **✅ 9/9** |
 
 **تطبيق السائق (Driver App) جاهز للإطلاق من ناحية جودة الكود.**
+
+---
+
+# قسم ثالث: تطبيق الإدارة (Admin Dashboard) — فحص أمني وجودي
+
+> **تاريخ الفحص**: 2026-05-19  
+> **النطاق**: `lib/screens/admin/` — جميع شاشات لوحة التحكم (12 شاشة)  
+> **المنهجية**: فحص في 5 محاور: RBAC، Pagination، الإجراءات الخطيرة، Audit Logging، التكاملات الخارجية
+
+---
+
+## ملخص تنفيذي — تطبيق الإدارة
+
+| الفئة | عدد المشاكل | أعلى خطورة |
+|---|---|---|
+| ثغرات أمنية (تخزين كلمة مرور نصية) | **1 مشكلة** | 🔴 حرجة |
+| أداء — Unbounded Streams تُحمّل قاعدة البيانات كاملة | **7 مشاكل** | 🔴 حرجة |
+| Audit Logging ناقص | **4 مشاكل** | 🟠 متوسطة |
+| Destructive Actions بدون حماية | **2 مشاكل** | 🟠 متوسطة |
+| منطق أعمال — Driver Assignment بدون تحقق | **1 مشكلة** | 🟠 متوسطة |
+| أخرى (RBAC على مستوى الشاشة، fire-and-forget) | **2 مشاكل** | 🟡 منخفضة |
+| **الإجمالي** | **17 مشكلة** | — |
+
+---
+
+## الفئة الأولى: ثغرات أمنية 🔴
+
+---
+
+### ADMIN-001 — 🔴 حرجة — `admin_accountants_screen.dart` — تخزين كلمة المرور نصاً صريحاً في Firestore
+
+**الملف**: `lib/screens/admin/admin_accountants_screen.dart`  
+**السطر**: 79
+
+```dart
+// الكود الحالي ❌
+data['password'] = passwordCtrl.text.trim(); // ← نص صريح في Firestore!
+await FirebaseFirestore.instance.collection('accountants').doc(uid).set(data);
+```
+
+**المشكلة**: كلمة مرور المحاسب تُخزَّن كـ plain text في مجموعة `accountants` في Firestore. أي شخص لديه صلاحية قراءة هذه المجموعة (Admin أو عبر rules خاطئة مستقبلاً) يمكنه رؤية كلمات مرور جميع المحاسبين.
+
+**المخاطر**:
+- انتهاك صريح لمبادئ OWASP Top 10 (A02:2021 - Cryptographic Failures)
+- إذا تسربت قاعدة البيانات → كلمات مرور المحاسبين مكشوفة
+- المحاسبون قد يستخدمون نفس كلمة المرور في بريدهم وخدمات أخرى
+
+**الإصلاح المقترح**:
+```dart
+// إنشاء الحساب عبر Firebase Auth فقط — لا تخزين كلمة مرور في Firestore
+await FirebaseAuth.instance.createUserWithEmailAndPassword(
+  email: emailCtrl.text.trim(),
+  password: passwordCtrl.text.trim(),
+);
+// ثم تخزين البيانات بدون كلمة المرور
+data.remove('password'); // أبداً لا تُخزَّن كلمة المرور
+await FirebaseFirestore.instance.collection('accountants').doc(uid).set(data);
+```
+
+---
+
+## الفئة الثانية: أداء — Unbounded Firestore Streams 🔴
+
+---
+
+### ADMIN-002 — 🔴 حرجة — `admin_insights_screen.dart` — 5 اشتراكات غير محدودة في `_startListeners()`
+
+**الملف**: `lib/screens/admin/admin_insights_screen.dart`  
+**السطر**: 57-75 (تقريباً)
+
+```dart
+// الكود الحالي ❌
+void _startListeners() {
+  _sub1 = db.collection('orders').snapshots().listen(...);           // كل الطلبات
+  _sub2 = db.collection('maintenance_requests').snapshots().listen(...); // بلا حد
+  _sub3 = db.collection('users').snapshots().listen(...);            // كل المستخدمين
+  _sub4 = db.collection('drivers').snapshots().listen(...);          // كل السائقين
+  _sub5 = db.collection('store_orders').snapshots().listen(...);     // بلا حد
+}
+```
+
+**المشكلة**: 5 streams تستدعي قاعدة البيانات كاملة في الوقت الفعلي:
+- `orders`: قد تكون آلاف الوثائق
+- `users`: كل المستخدمين المسجلين
+- `drivers` + `maintenance_requests` + `store_orders`: بدون أي `.limit()`
+
+**التأثير**:
+- عند فتح شاشة Insights: تُحمَّل كل البيانات في ذاكرة الجهاز
+- Firestore billing يُحسب على كل قراءة وثيقة عند كل snapshot
+- كلما نما التطبيق، تتضاعف التكلفة ويتباطأ التحميل
+
+**الإصلاح المقترح**:
+```dart
+// للإحصائيات: استخدام .get() بدل .snapshots() + .limit()
+// أو: Firestore Aggregation Queries (count) بدل تحميل كل الوثائق
+db.collection('orders')
+  .where('created_at', isGreaterThan: thirtyDaysAgo)
+  .limit(500)
+  .snapshots()
+```
+
+---
+
+### ADMIN-003 — 🔴 حرجة — `admin_analytics_screen.dart` — جلب كل الطلبات مرتين بدون حد
+
+**الملف**: `lib/screens/admin/admin_analytics_screen.dart`  
+**السطر**: ~45
+
+```dart
+// الكود الحالي ❌
+final snap1 = await _db.collection('orders').orderBy('created_at', descending: true).get(); // كل الطلبات
+final snap2 = await _db.collection('orders').get(); // كل الطلبات مرة ثانية!
+```
+
+**المشكلة**: جلب نفس المجموعة مرتين بدون `.limit()` = مضاعفة التكلفة والوقت. في بيئة إنتاجية مع 1000+ طلب، هذا يعني قراءة 2000+ وثيقة عند فتح الشاشة.
+
+**الإصلاح المقترح**:
+```dart
+// جلب واحد مع فلتر زمني
+final snap = await _db.collection('orders')
+  .where('created_at', isGreaterThan: startOfPeriod)
+  .orderBy('created_at', descending: true)
+  .limit(1000)
+  .get();
+// استخدام نفس snap للتحليلات المختلفة
+```
+
+---
+
+### ADMIN-004 — 🟠 متوسطة — `admin_users_screen.dart` — قائمة المستخدمين بدون `.limit()`
+
+**الملف**: `lib/screens/admin/admin_users_screen.dart`  
+**السطر**: 86-89
+
+```dart
+// الكود الحالي ❌
+stream: FirebaseFirestore.instance
+    .collection('users')
+    .orderBy('created_at', descending: true)
+    .snapshots(), // ← يُحمّل كل المستخدمين دفعة واحدة
+```
+
+**المشكلة**: عند نمو قاعدة المستخدمين لآلاف الأشخاص، الشاشة ستجمّد عند الفتح. ListView.builder يُحسّن العرض لكنه لا يُحسّن الجلب من الشبكة.
+
+**الإصلاح المقترح**: إضافة `.limit(100)` مع نظام pagination (ScrollController + load more).
+
+---
+
+### ADMIN-005 — 🟠 متوسطة — `admin_drivers_screen.dart` — stream السائقين بدون `.limit()`
+
+**الملف**: `lib/screens/admin/admin_drivers_screen.dart`  
+**السطر**: ~389
+
+```dart
+stream: FirebaseFirestore.instance.collection('drivers').snapshots(), // ← بلا حد
+```
+
+**الإصلاح المقترح**: `.limit(200)` — السائقون أقل عدداً لكن يبقى الحد ضرورياً.
+
+---
+
+### ADMIN-006 — 🟠 متوسطة — `admin_store_orders_screen.dart` — stream بدون `.limit()`
+
+**الملف**: `lib/screens/admin/admin_store_orders_screen.dart`
+
+```dart
+stream: FirebaseFirestore.instance
+    .collection('store_orders')
+    .orderBy(...)
+    .snapshots(), // ← بلا حد
+```
+
+---
+
+### ADMIN-007 — 🟠 متوسطة — `admin_compliance_screen.dart` — stream السائقين بدون `.limit()`
+
+**الملف**: `lib/screens/admin/admin_compliance_screen.dart`  
+**السطر**: ~40
+
+```dart
+stream: FirebaseFirestore.instance.collection('drivers').snapshots(), // ← بلا حد
+```
+
+---
+
+### ADMIN-008 — 🟡 منخفضة — `admin_maintenance_screen.dart` + `admin_contracts_screen.dart` — streams بدون `.limit()`
+
+**الملفان**: `lib/screens/admin/admin_maintenance_screen.dart:23` | `lib/screens/admin/admin_contracts_screen.dart:33`  
+
+مجموعتا `maintenance_requests` و `contracts` قد تكونان صغيرتين حالياً، لكن بدون `.limit()` المشكلة ستظهر لاحقاً.
+
+---
+
+## الفئة الثالثة: Audit Logging ناقص 🟠
+
+---
+
+### ADMIN-009 — 🟠 متوسطة — `admin_users_screen.dart` — حذف مستخدم بدون Audit Log
+
+**الملف**: `lib/screens/admin/admin_users_screen.dart`  
+**الدالة**: `_deleteUser()`
+
+```dart
+// الكود الحالي ❌
+if (confirm == true) {
+  await FirebaseFirestore.instance.collection('users').doc(uid).delete();
+  // ← لا ZyiarahAuditService.logAction() هنا
+}
+```
+
+**المشكلة**: حذف مستخدم هو أحد أكثر الإجراءات حساسية وله تأثير قانوني في بعض الأنظمة (GDPR, PDPL السعودي). غياب Audit Log يعني:
+- لا يمكن معرفة من حذف المستخدم ومتى
+- لا سجل لدواعي الحذف
+
+**مقارنة**: `admin_drivers_screen.dart` يسجّل حذف السائق بـ `ZyiarahAuditService` ✅ — هذا التفاوت يجب إزالته.
+
+---
+
+### ADMIN-010 — 🟠 متوسطة — `admin_store_orders_screen.dart` — تغيير حالة الطلب بدون Audit Log
+
+**الملف**: `lib/screens/admin/admin_store_orders_screen.dart`  
+**الدالة**: `_updateOrderStatus()`
+
+```dart
+await FirebaseFirestore.instance
+    .collection('store_orders')
+    .doc(orderId)
+    .update({'status': newStatus});
+// ← لا ZyiarahAuditService.logAction()
+```
+
+**مقارنة**: `admin_order_details_screen.dart` يسجّل تغيير حالة الطلب العادي بـ Audit Log ✅ — طلبات المتجر يجب أن تُعامَل بنفس المعيار.
+
+---
+
+### ADMIN-011 — 🟠 متوسطة — `admin_broadcast_screen.dart` — الإشعارات الجماعية بدون Audit Log
+
+**الملف**: `lib/screens/admin/admin_broadcast_screen.dart`  
+**الدالة**: `_sendBroadcast()`
+
+```dart
+// يُسجَّل في 'broadcasts' و 'notifications_log' ✅
+// لكن لا استدعاء لـ ZyiarahAuditService ❌
+```
+
+**المشكلة**: الإشعار الجماعي هو إجراء إداري حساس (يصل لكل المستخدمين). يجب أن يظهر في سجل المراجعة الإداري (`ZyiarahAuditService`) بجانب تسجيله في `broadcasts`.
+
+---
+
+### ADMIN-012 — 🟡 منخفضة — `admin_subscriptions_screen.dart` — Audit Log غير مُنتظَر (Fire-and-Forget)
+
+**الملف**: `lib/screens/admin/admin_subscriptions_screen.dart`
+
+```dart
+// الكود الحالي ⚠️
+ZyiarahAuditService().logAction(...); // ← بدون await
+await FirebaseFirestore.instance.collection('subscriptions').doc(id).delete();
+```
+
+**المشكلة**: إذا فشلت `logAction()` (انقطاع شبكة)، الحذف يتم بدون تسجيل. والترتيب عكسي — يجب التسجيل قبل الحذف أو معه.
+
+**الإصلاح المقترح**:
+```dart
+await ZyiarahAuditService().logAction(...); // await أولاً
+await FirebaseFirestore.instance.collection('subscriptions').doc(id).delete();
+```
+
+---
+
+## الفئة الرابعة: Destructive Actions بدون حماية 🟠
+
+---
+
+### ADMIN-013 — 🟠 متوسطة — `admin_accountants_screen.dart` — حذف محاسب بدون تأكيد ولا try/catch
+
+**الملف**: `lib/screens/admin/admin_accountants_screen.dart`  
+**الدالة**: زر حذف المحاسب
+
+```dart
+// الكود الحالي ❌
+IconButton(
+  onPressed: () async {
+    await FirebaseFirestore.instance.collection('accountants').doc(uid).delete();
+    // ← لا showDialog للتأكيد
+    // ← لا try/catch
+    // ← لا ZyiarahAuditService.logAction()
+    // ← لا SnackBar للتأكيد
+  },
+)
+```
+
+**المشكلة**: حذف محاسب يحذف بياناته وصلاحيات وصوله فوراً بضغطة واحدة بدون أي تأكيد. ليس هناك نافذة تأكيد (بخلاف حذف السائق والمستخدم اللذين يملكان `showDialog`).
+
+**مقارنة**: `admin_users_screen.dart:_deleteUser()` و `admin_drivers_screen.dart` يملكان dialog تأكيد ✅
+
+---
+
+### ADMIN-014 — 🟡 منخفضة — `admin_order_details_screen.dart` — `_openWhatsApp()` بدون try/catch
+
+**الملف**: `lib/screens/admin/admin_order_details_screen.dart`
+
+```dart
+void _openWhatsApp(String phone) async {
+  final url = Uri.parse('https://wa.me/$phone');
+  await launchUrl(url, mode: LaunchMode.externalApplication);
+  // ← لا try/catch إذا فشل launchUrl
+}
+```
+
+**المشكلة**: `launchUrl` قد يرمي exception إذا لم يكن WhatsApp مثبتاً. الخطأ يُلتقط بصمت لكن لا يُعرض للمستخدم.
+
+---
+
+## الفئة الخامسة: منطق الأعمال 🟠
+
+---
+
+### ADMIN-015 — 🟠 متوسطة — `admin_order_details_screen.dart` — تعيين سائق لديه طلب نشط آخر
+
+**الملف**: `lib/screens/admin/admin_order_details_screen.dart`  
+**الدالة**: `_fetchDrivers()`
+
+```dart
+// الكود الحالي ❌
+QuerySnapshot driversSnap = await FirebaseFirestore.instance
+    .collection('drivers')
+    .where('is_active', isEqualTo: true) // ✅ يُصفي غير النشطين
+    .get();
+// ← لا تحقق: هل السائق لديه طلب بحالة 'accepted' أو 'in_progress'؟
+```
+
+**المشكلة**: `is_active == true` تعني أن السائق مسجّل ومفعّل، لكن لا تعني أنه متاح. سائق قيد تنفيذ طلب آخر يظهر في قائمة الاختيار. تعيينه لطلب ثانٍ يُسبب:
+- تعارض لوجستي: سائق يحاول تنفيذ طلبين في وقت واحد
+- تضارب في Firestore إذا كان `driver_dashboard` يعتمد على `active_order_id`
+
+**الإصلاح المقترح**:
+```dart
+// إضافة فلتر للتحقق من عدم وجود طلب نشط
+QuerySnapshot activeOrdersSnap = await FirebaseFirestore.instance
+    .collection('orders')
+    .where('driver_id', isEqualTo: driverId)
+    .where('status', whereIn: ['accepted', 'in_progress'])
+    .limit(1)
+    .get();
+bool isAvailable = activeOrdersSnap.docs.isEmpty;
+```
+
+---
+
+## الفئة السادسة: RBAC على مستوى الشاشات 🟡
+
+---
+
+### ADMIN-016 — 🟡 منخفضة — الشاشات الفرعية لا تُعيد التحقق من الدور على مستوى Flutter
+
+**الملفات**: جميع `lib/screens/admin/admin_*_screen.dart`
+
+```dart
+// admin_dashboard_screen.dart يُصفي التابات بناءً على الدور ✅
+// admin_more_screen.dart يُصفي بنود القائمة بناءً على الدور ✅
+// لكن:
+class AdminOrderDetailsScreen extends StatefulWidget { // ← لا role check داخل الشاشة
+  // أي كود يعرف مسار GoRouter يمكنه الوصول مباشرة
+}
+```
+
+**المشكلة**: التحقق من الدور يحدث في مستوى القائمة الرئيسية (ما يُعرض في TabBar)، لكن الشاشات الفرعية نفسها لا تتحقق. إذا:
+- تغير دور المستخدم في Firestore دون تسجيل خروج
+- أو استُخدم GoRouter مباشرة (deep link)
+
+يمكن الوصول للشاشة بدون صلاحية. Firestore Security Rules هي خط الدفاع الحقيقي، لكن على مستوى Flutter لا توجد طبقة ثانية.
+
+**ملاحظة**: هذا مقبول إذا كانت `firestore.rules` صارمة — لكن يُذكر كنقطة مراجعة.
+
+---
+
+## جدول أولويات الإصلاح — تطبيق الإدارة
+
+| الأولوية | المشكلة | الملف | الخطورة |
+|---|---|---|---|
+| 🔴 | ADMIN-001 — كلمة مرور نصية في Firestore | `admin_accountants_screen.dart:79` | حرجة — أمني |
+| 🔴 | ADMIN-002 — 5 streams غير محدودة في Insights | `admin_insights_screen.dart:57-75` | حرجة — أداء وتكلفة |
+| 🔴 | ADMIN-003 — جلب كل الطلبات مرتين بدون حد | `admin_analytics_screen.dart:45` | حرجة — أداء وتكلفة |
+| 🟠 | ADMIN-004 — قائمة مستخدمين بلا pagination | `admin_users_screen.dart:86` | متوسطة — أداء |
+| 🟠 | ADMIN-005 — قائمة سائقين بلا `.limit()` | `admin_drivers_screen.dart:~389` | متوسطة — أداء |
+| 🟠 | ADMIN-006 — طلبات المتجر بلا `.limit()` | `admin_store_orders_screen.dart` | متوسطة — أداء |
+| 🟠 | ADMIN-007 — شاشة الامتثال بلا `.limit()` | `admin_compliance_screen.dart:40` | متوسطة — أداء |
+| 🟠 | ADMIN-009 — حذف مستخدم بلا Audit Log | `admin_users_screen.dart:_deleteUser` | متوسطة — مساءلة |
+| 🟠 | ADMIN-010 — تغيير حالة المتجر بلا Audit Log | `admin_store_orders_screen.dart` | متوسطة — مساءلة |
+| 🟠 | ADMIN-011 — Broadcast بلا Audit Log | `admin_broadcast_screen.dart` | متوسطة — مساءلة |
+| 🟠 | ADMIN-013 — حذف محاسب بلا تأكيد أو try/catch | `admin_accountants_screen.dart` | متوسطة — UX وسلامة |
+| 🟠 | ADMIN-015 — تعيين سائق مشغول | `admin_order_details_screen.dart` | متوسطة — منطق أعمال |
+| 🟡 | ADMIN-008 — streams صغيرة بلا `.limit()` | `admin_maintenance_screen`, `admin_contracts_screen` | منخفضة |
+| 🟡 | ADMIN-012 — Audit Log fire-and-forget | `admin_subscriptions_screen.dart` | منخفضة |
+| 🟡 | ADMIN-014 — WhatsApp بلا try/catch | `admin_order_details_screen.dart` | منخفضة |
+| 🟡 | ADMIN-016 — لا role check على مستوى الشاشة | جميع شاشات Admin | منخفضة |
+
+---
+
+## ما يعمل بشكل صحيح في تطبيق الإدارة ✅
+
+| الميزة | الملف | الحالة |
+|---|---|---|
+| RBAC على مستوى التابات والقوائم | `admin_dashboard_screen.dart` + `admin_more_screen.dart` | ✅ |
+| حذف السائق: تأكيد + Audit Log | `admin_drivers_screen.dart` | ✅ |
+| تغيير حالة تفعيل السائق: Audit Log | `admin_drivers_screen.dart` | ✅ |
+| تحديث حالة الطلب: Audit Log | `admin_order_details_screen.dart` | ✅ |
+| إشعارات جماعية: try/catch + loading flag | `admin_broadcast_screen.dart` | ✅ |
+| حذف اشتراك: تأكيد + Audit Log (مع ملاحظة fire-and-forget) | `admin_subscriptions_screen.dart` | ✅ مع تحفظ |
+| حد 50 طلب في قائمة الطلبات | `admin_orders_screen.dart` | ✅ |
+| `AdminManagersScreen` + `AdminAuditLogsScreen` للـ super_admin فقط | `admin_more_screen.dart` | ✅ |
+
+---
+
+## ✅ الخلاصة التنفيذية — تطبيق الإدارة
+
+> **تاريخ الفحص: 2026-05-19**  
+> **الحالة: 0/17 محلولة — بانتظار تصريح الإصلاح**
+
+| المجموعة | عدد المشاكل | الأولوية |
+|---|---|---|
+| ثغرة أمنية — كلمة مرور نصية (ADMIN-001) | 1 | 🔴 إصلاح فوري |
+| Unbounded Streams — أداء وتكلفة (ADMIN-002/003/004/005/006/007/008) | 7 | 🔴🟠 مرحلة أولى |
+| Audit Logging ناقص (ADMIN-009/010/011/012) | 4 | 🟠 مرحلة ثانية |
+| Destructive Actions (ADMIN-013/014) | 2 | 🟠 مرحلة ثانية |
+| منطق أعمال (ADMIN-015) | 1 | 🟠 مرحلة ثانية |
+| RBAC على مستوى Flutter (ADMIN-016) | 1 | 🟡 اختياري |
+| **الإجمالي** | **17** | — |
+
+**الأولوية القصوى**: ADMIN-001 (كلمة مرور نصية) + ADMIN-002/003 (Insights و Analytics unbounded) — هذه الثلاثة يجب إصلاحها قبل أي نشر إنتاجي إضافي.
