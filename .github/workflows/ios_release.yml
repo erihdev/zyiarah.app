@@ -63,6 +63,81 @@ jobs:
           print("Done — cleared for new cert creation")
           PYEOF
 
+      - name: Ensure Apple Pay capability on App ID
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          python3 -m venv /tmp/asc_env && source /tmp/asc_env/bin/activate
+          pip install PyJWT requests cryptography --quiet
+          python3 << 'PYEOF'
+          import jwt, time, requests, os, sys
+
+          KEY_ID = os.environ["APP_STORE_CONNECT_KEY_ID"]
+          ISSUER_ID = os.environ["APP_STORE_CONNECT_ISSUER_ID"]
+          raw_key = os.environ["APP_STORE_CONNECT_PRIVATE_KEY"].replace("\\n", "\n")
+          BASE = "https://api.appstoreconnect.apple.com/v1"
+          BUNDLE_ID = "com.zyiarah.zyiarah"
+
+          def token():
+              return jwt.encode(
+                  {"iss": ISSUER_ID, "exp": int(time.time()) + 1200, "aud": "appstoreconnect-v1"},
+                  raw_key, algorithm="ES256", headers={"kid": KEY_ID}
+              )
+
+          def hdrs():
+              return {"Authorization": f"Bearer {token()}", "Content-Type": "application/json"}
+
+          # Find the bundle ID record
+          r = requests.get(f"{BASE}/bundleIds", headers=hdrs(), params={
+              "filter[identifier]": BUNDLE_ID, "filter[platform]": "IOS"
+          })
+          bundle_ids = r.json().get("data", [])
+          if not bundle_ids:
+              print(f"ERROR: Bundle ID {BUNDLE_ID} not found in App Store Connect")
+              sys.exit(1)
+          bid = bundle_ids[0]["id"]
+          print(f"Found Bundle ID record: {bid}")
+
+          # List ALL current capabilities for diagnostics
+          r2 = requests.get(f"{BASE}/bundleIds/{bid}/bundleIdCapabilities", headers=hdrs())
+          caps = r2.json().get("data", [])
+          print(f"Current App ID capabilities ({len(caps)}):")
+          for cap in caps:
+              ct = cap.get("attributes", {}).get("capabilityType", "?")
+              print(f"  - {ct} (id: {cap['id']})")
+
+          apple_pay_cap = next((c for c in caps if c["attributes"]["capabilityType"] == "APPLE_PAY"), None)
+
+          if apple_pay_cap:
+              print(f"Apple Pay capability already enabled (id: {apple_pay_cap['id']}) — no change needed")
+          else:
+              print("Apple Pay NOT found — enabling via API")
+              body = {
+                  "data": {
+                      "type": "bundleIdCapabilities",
+                      "attributes": {
+                          "capabilityType": "APPLE_PAY",
+                          "settings": []
+                      },
+                      "relationships": {
+                          "bundleId": {"data": {"type": "bundleIds", "id": bid}}
+                      }
+                  }
+              }
+              r3 = requests.post(f"{BASE}/bundleIdCapabilities", headers=hdrs(), json=body)
+              print(f"  POST => {r3.status_code}: {r3.text[:500]}")
+              if r3.status_code not in (200, 201):
+                  print("ERROR: Failed to enable Apple Pay — fix it manually in Apple Developer Portal:")
+                  print("  developer.apple.com → Identifiers → com.zyiarah.zyiarah → Capabilities → Apple Pay Payment Processing")
+                  sys.exit(1)
+              print("Apple Pay enabled — waiting 30s for propagation before profile generation")
+              time.sleep(30)
+
+          print("Done — proceeding to Fastlane")
+          PYEOF
+
       - name: Build and Upload to App Store
         env:
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
