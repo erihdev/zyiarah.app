@@ -101,3 +101,8 @@
 -dontwarn org.conscrypt.**
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
+
+# Flutter deferred components reference Play Core — not used in this app
+-dontwarn com.google.android.play.core.tasks.**
+-dontwarn com.google.android.play.core.splitcompat.**
+-dontwarn com.google.android.play.core.splitinstall.**
