@@ -44,7 +44,10 @@ final GoRouter appRouter = GoRouter(
 
     // مستخدم مسجّل: تحقق من الدور قبل السماح بالوصول المباشر للمسارات الحساسة
     if (user != null) {
-      final userProvider = Provider.maybeOf<ZyiarahUserProvider>(context, listen: false);
+      ZyiarahUserProvider? userProvider;
+      try {
+        userProvider = Provider.of<ZyiarahUserProvider>(context, listen: false);
+      } catch (_) {}
       // إذا لم يكتمل تحميل الدور بعد → AuthWrapper يتولى عرض Splash
       if (userProvider != null && !userProvider.isLoading) {
         final role = userProvider.role ?? 'client';

@@ -140,8 +140,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     try {
       final String orderId = widget.maintenanceId ??
           FirebaseFirestore.instance.collection('orders').doc().id;
-      final seq = await ZyiarahCounterService().getNextOrderNumber();
-      final orderCode = ZyiarahOrderUtil.formatSmartCode(seq);
 
       await MoyasarService.processApplePayToken(
         applePayToken: result,
@@ -151,7 +149,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       );
 
       if (mounted) {
-        await _processUnifiedSuccess(orderId, orderCode, 'apple_pay');
+        await _processUnifiedSuccess(orderId, 'apple_pay');
       }
     } catch (e) {
       if (mounted) {
