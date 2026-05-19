@@ -19,6 +19,7 @@ class _ZyiarahSubscriptionPlansScreenState
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   bool _isLoading = true;
+  bool _hasError = false;
   List<QueryDocumentSnapshot> _packages = [];
 
   @override
@@ -28,6 +29,7 @@ class _ZyiarahSubscriptionPlansScreenState
   }
 
   Future<void> _fetchPackages() async {
+    if (mounted) setState(() { _isLoading = true; _hasError = false; });
     try {
       final snapshot = await _db.collection('subscription_packages').get();
       if (mounted) {
@@ -46,7 +48,7 @@ class _ZyiarahSubscriptionPlansScreenState
       }
     } catch (e) {
       debugPrint('SUBSCRIPTION_FETCH_ERROR: $e');
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() { _isLoading = false; _hasError = true; });
     }
   }
 
@@ -99,7 +101,27 @@ class _ZyiarahSubscriptionPlansScreenState
         children: [
           _buildInfoBanner(),
           const SizedBox(height: 20),
-          if (_packages.isEmpty)
+          if (_hasError)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 60),
+                child: Column(
+                  children: [
+                    Icon(Icons.wifi_off_outlined, size: 64, color: Colors.grey[300]),
+                    const SizedBox(height: 16),
+                    Text('فشل تحميل الباقات، تحقق من اتصالك',
+                        style: GoogleFonts.tajawal(fontSize: 16, color: Colors.grey)),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: _fetchPackages,
+                      style: ElevatedButton.styleFrom(backgroundColor: _brand),
+                      child: Text('إعادة المحاولة', style: GoogleFonts.tajawal(color: Colors.white)),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (_packages.isEmpty)
             Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 60),

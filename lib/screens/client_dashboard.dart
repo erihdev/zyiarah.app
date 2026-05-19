@@ -546,7 +546,13 @@ class _ClientDashboardState extends State<ClientDashboard> {
                 onTap: () async {
                   if (routeType == 'whatsapp' && actionUrl.isNotEmpty) {
                     final uri = Uri.parse(actionUrl);
-                    if (await canLaunchUrl(uri)) await launchUrl(uri);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri);
+                    } else if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تعذّر فتح الرابط')),
+                      );
+                    }
                   } else if (routeType == '/hourly_cleaning') {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const HourlyCleaningDetailsScreen(serviceName: "نظافة بالساعة")));
                   } else if (routeType == '/store') {

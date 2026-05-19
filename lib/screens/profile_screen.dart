@@ -192,7 +192,12 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
           await _firestore.collection('users').doc(uid).update({'house_rules': controller.text.trim()});
           await _loadUserData();
         } catch (e) {
-          if (mounted) setState(() => _isLoading = false);
+          if (mounted) {
+            setState(() => _isLoading = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('فشل حفظ التفضيلات، تحقق من اتصالك', style: GoogleFonts.tajawal()), backgroundColor: Colors.red),
+            );
+          }
         }
       }
     }

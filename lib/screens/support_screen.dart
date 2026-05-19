@@ -276,7 +276,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
                                     'text': text,
                                     'sentAt': FieldValue.serverTimestamp(),
                                   });
-                              
+
                               await FirebaseFirestore.instance
                                   .collection('support_tickets')
                                   .doc(ticketId)
@@ -284,8 +284,14 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
                                     'status': 'open',
                                     'updatedAt': FieldValue.serverTimestamp(),
                                   });
-                              
+
                               _replyController.clear();
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('فشل إرسال الرسالة، حاول مجدداً')),
+                                );
+                              }
                             } finally {
                               setInternalState(() => isSendingReply = false);
                             }
