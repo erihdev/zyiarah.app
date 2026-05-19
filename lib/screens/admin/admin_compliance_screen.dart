@@ -37,7 +37,7 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
             _buildFilterTabs(),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('drivers').snapshots(),
+                stream: FirebaseFirestore.instance.collection('drivers').limit(200).snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());

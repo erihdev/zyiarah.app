@@ -38,7 +38,7 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
         await _db.collection('subscription_packages').doc(id).delete();
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الباقة بنجاح")));
         
-        ZyiarahAuditService().logAction(
+        await ZyiarahAuditService().logAction(
           action: 'DELETE_SUBSCRIPTION',
           details: {'subscription_id': id},
           targetId: id,

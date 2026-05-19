@@ -30,7 +30,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
           centerTitle: true,
         ),
         body: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('contracts').orderBy('createdAt', descending: true).snapshots(),
+          stream: FirebaseFirestore.instance.collection('contracts').orderBy('createdAt', descending: true).limit(100).snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());

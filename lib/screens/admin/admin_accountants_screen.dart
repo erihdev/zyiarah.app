@@ -134,8 +134,35 @@ class _AdminAccountantsScreenState extends State<AdminAccountantsScreen> {
                 if (!isNew)
                   TextButton(
                     onPressed: isSaving ? null : () async {
-                      await _db.collection('accountants').doc(docId).delete();
-                      if (context.mounted) Navigator.pop(ctx);
+                      final confirmed = await showDialog<bool>(
+                        context: ctx,
+                        builder: (c) => Directionality(
+                          textDirection: TextDirection.rtl,
+                          child: AlertDialog(
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            title: Row(
+                              children: [
+                                Icon(Icons.warning_amber_rounded, color: Colors.red.shade400),
+                                const SizedBox(width: 8),
+                                const Text('تأكيد الحذف', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            content: const Text('هل أنت متأكد من حذف هذا المحاسب؟ لا يمكن التراجع عن هذه العملية.'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('إلغاء', style: TextStyle(color: Colors.grey))),
+                              ElevatedButton(
+                                onPressed: () => Navigator.pop(c, true),
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                                child: const Text('حذف نهائي'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                      if (confirmed == true) {
+                        await _db.collection('accountants').doc(docId).delete();
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      }
                     },
                     child: const Text("حذف", style: TextStyle(color: Colors.red)),
                   ),

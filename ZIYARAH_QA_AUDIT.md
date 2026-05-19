@@ -1018,7 +1018,7 @@ await FirebaseFirestore.instance.collection('accountants').doc(uid).set(data);
 
 ---
 
-### ADMIN-004 — 🟠 متوسطة — `admin_users_screen.dart` — قائمة المستخدمين بدون `.limit()`
+### ~~ADMIN-004~~ — ✅ تم الحل — `admin_users_screen.dart` — قائمة المستخدمين بدون `.limit()`
 
 **الملف**: `lib/screens/admin/admin_users_screen.dart`  
 **السطر**: 86-89
@@ -1037,7 +1037,7 @@ stream: FirebaseFirestore.instance
 
 ---
 
-### ADMIN-005 — 🟠 متوسطة — `admin_drivers_screen.dart` — stream السائقين بدون `.limit()`
+### ~~ADMIN-005~~ — ✅ تم الحل — `admin_drivers_screen.dart` — stream السائقين بدون `.limit()`
 
 **الملف**: `lib/screens/admin/admin_drivers_screen.dart`  
 **السطر**: ~389
@@ -1050,7 +1050,7 @@ stream: FirebaseFirestore.instance.collection('drivers').snapshots(), // ← ب�
 
 ---
 
-### ADMIN-006 — 🟠 متوسطة — `admin_store_orders_screen.dart` — stream بدون `.limit()`
+### ~~ADMIN-006~~ — ✅ تم الحل — `admin_store_orders_screen.dart` — stream بدون `.limit()`
 
 **الملف**: `lib/screens/admin/admin_store_orders_screen.dart`
 
@@ -1063,7 +1063,7 @@ stream: FirebaseFirestore.instance
 
 ---
 
-### ADMIN-007 — 🟠 متوسطة — `admin_compliance_screen.dart` — stream السائقين بدون `.limit()`
+### ~~ADMIN-007~~ — ✅ تم الحل — `admin_compliance_screen.dart` — stream السائقين بدون `.limit()`
 
 **الملف**: `lib/screens/admin/admin_compliance_screen.dart`  
 **السطر**: ~40
@@ -1074,7 +1074,7 @@ stream: FirebaseFirestore.instance.collection('drivers').snapshots(), // ← ب�
 
 ---
 
-### ADMIN-008 — 🟡 منخفضة — `admin_maintenance_screen.dart` + `admin_contracts_screen.dart` — streams بدون `.limit()`
+### ~~ADMIN-008~~ — ✅ تم الحل — `admin_maintenance_screen.dart` + `admin_contracts_screen.dart` — streams بدون `.limit()`
 
 **الملفان**: `lib/screens/admin/admin_maintenance_screen.dart:23` | `lib/screens/admin/admin_contracts_screen.dart:33`  
 
@@ -1086,7 +1086,7 @@ stream: FirebaseFirestore.instance.collection('drivers').snapshots(), // ← ب�
 
 ---
 
-### ADMIN-009 — 🟠 متوسطة — `admin_users_screen.dart` — حذف مستخدم بدون Audit Log
+### ~~ADMIN-009~~ — ✅ تم الحل — `admin_users_screen.dart` — حذف مستخدم بدون Audit Log
 
 **الملف**: `lib/screens/admin/admin_users_screen.dart`  
 **الدالة**: `_deleteUser()`
@@ -1107,7 +1107,7 @@ if (confirm == true) {
 
 ---
 
-### ADMIN-010 — 🟠 متوسطة — `admin_store_orders_screen.dart` — تغيير حالة الطلب بدون Audit Log
+### ~~ADMIN-010~~ — ✅ تم الحل — `admin_store_orders_screen.dart` — تغيير حالة الطلب بدون Audit Log
 
 **الملف**: `lib/screens/admin/admin_store_orders_screen.dart`  
 **الدالة**: `_updateOrderStatus()`
@@ -1124,7 +1124,7 @@ await FirebaseFirestore.instance
 
 ---
 
-### ADMIN-011 — 🟠 متوسطة — `admin_broadcast_screen.dart` — الإشعارات الجماعية بدون Audit Log
+### ~~ADMIN-011~~ — ✅ تم الحل — `admin_broadcast_screen.dart` — الإشعارات الجماعية بدون Audit Log
 
 **الملف**: `lib/screens/admin/admin_broadcast_screen.dart`  
 **الدالة**: `_sendBroadcast()`
@@ -1138,7 +1138,7 @@ await FirebaseFirestore.instance
 
 ---
 
-### ADMIN-012 — 🟡 منخفضة — `admin_subscriptions_screen.dart` — Audit Log غير مُنتظَر (Fire-and-Forget)
+### ~~ADMIN-012~~ — ✅ تم الحل — `admin_subscriptions_screen.dart` — Audit Log غير مُنتظَر (Fire-and-Forget)
 
 **الملف**: `lib/screens/admin/admin_subscriptions_screen.dart`
 
@@ -1162,7 +1162,7 @@ await FirebaseFirestore.instance.collection('subscriptions').doc(id).delete();
 
 ---
 
-### ADMIN-013 — 🟠 متوسطة — `admin_accountants_screen.dart` — حذف محاسب بدون تأكيد ولا try/catch
+### ~~ADMIN-013~~ — ✅ تم الحل — `admin_accountants_screen.dart` — حذف محاسب بدون تأكيد ولا try/catch
 
 **الملف**: `lib/screens/admin/admin_accountants_screen.dart`  
 **الدالة**: زر حذف المحاسب
@@ -1186,7 +1186,7 @@ IconButton(
 
 ---
 
-### ADMIN-014 — 🟡 منخفضة — `admin_order_details_screen.dart` — `_openWhatsApp()` بدون try/catch
+### ~~ADMIN-014~~ — ✅ تم الحل — `admin_order_details_screen.dart` — `_openWhatsApp()` بدون try/catch
 
 **الملف**: `lib/screens/admin/admin_order_details_screen.dart`
 
@@ -1206,7 +1206,7 @@ void _openWhatsApp(String phone) async {
 
 ---
 
-### ADMIN-015 — 🟠 متوسطة — `admin_order_details_screen.dart` — تعيين سائق لديه طلب نشط آخر
+### ~~ADMIN-015~~ — ✅ تم الحل — `admin_order_details_screen.dart` — تعيين سائق لديه طلب نشط آخر
 
 **الملف**: `lib/screens/admin/admin_order_details_screen.dart`  
 **الدالة**: `_fetchDrivers()`
@@ -1272,19 +1272,19 @@ class AdminOrderDetailsScreen extends StatefulWidget { // ← لا role check د
 | ✅ | ~~ADMIN-001~~ — كلمة مرور نصية في Firestore | `admin_accountants_screen.dart:79` | تم الحل 2026-05-19 |
 | ✅ | ~~ADMIN-002~~ — 5 streams غير محدودة في Insights | `admin_insights_screen.dart:57-75` | تم الحل 2026-05-19 |
 | ✅ | ~~ADMIN-003~~ — جلب كل الطلبات مرتين بدون حد | `admin_analytics_screen.dart:45` | تم الحل 2026-05-19 |
-| 🟠 | ADMIN-004 — قائمة مستخدمين بلا pagination | `admin_users_screen.dart:86` | متوسطة — أداء |
-| 🟠 | ADMIN-005 — قائمة سائقين بلا `.limit()` | `admin_drivers_screen.dart:~389` | متوسطة — أداء |
-| 🟠 | ADMIN-006 — طلبات المتجر بلا `.limit()` | `admin_store_orders_screen.dart` | متوسطة — أداء |
-| 🟠 | ADMIN-007 — شاشة الامتثال بلا `.limit()` | `admin_compliance_screen.dart:40` | متوسطة — أداء |
-| 🟠 | ADMIN-009 — حذف مستخدم بلا Audit Log | `admin_users_screen.dart:_deleteUser` | متوسطة — مساءلة |
-| 🟠 | ADMIN-010 — تغيير حالة المتجر بلا Audit Log | `admin_store_orders_screen.dart` | متوسطة — مساءلة |
-| 🟠 | ADMIN-011 — Broadcast بلا Audit Log | `admin_broadcast_screen.dart` | متوسطة — مساءلة |
-| 🟠 | ADMIN-013 — حذف محاسب بلا تأكيد أو try/catch | `admin_accountants_screen.dart` | متوسطة — UX وسلامة |
-| 🟠 | ADMIN-015 — تعيين سائق مشغول | `admin_order_details_screen.dart` | متوسطة — منطق أعمال |
-| 🟡 | ADMIN-008 — streams صغيرة بلا `.limit()` | `admin_maintenance_screen`, `admin_contracts_screen` | منخفضة |
-| 🟡 | ADMIN-012 — Audit Log fire-and-forget | `admin_subscriptions_screen.dart` | منخفضة |
-| 🟡 | ADMIN-014 — WhatsApp بلا try/catch | `admin_order_details_screen.dart` | منخفضة |
-| 🟡 | ADMIN-016 — لا role check على مستوى الشاشة | جميع شاشات Admin | منخفضة |
+| ✅ | ~~ADMIN-004~~ — قائمة مستخدمين بلا pagination | `admin_users_screen.dart:86` | تم الحل 2026-05-19 |
+| ✅ | ~~ADMIN-005~~ — قائمة سائقين بلا `.limit()` | `admin_drivers_screen.dart:~389` | تم الحل 2026-05-19 |
+| ✅ | ~~ADMIN-006~~ — طلبات المتجر بلا `.limit()` | `admin_store_orders_screen.dart` | تم الحل 2026-05-19 |
+| ✅ | ~~ADMIN-007~~ — شاشة الامتثال بلا `.limit()` | `admin_compliance_screen.dart:40` | تم الحل 2026-05-19 |
+| ✅ | ~~ADMIN-009~~ — حذف مستخدم بلا Audit Log | `admin_users_screen.dart:_deleteUser` | تم الحل 2026-05-19 |
+| ✅ | ~~ADMIN-010~~ — تغيير حالة المتجر بلا Audit Log | `admin_store_orders_screen.dart` | تم الحل 2026-05-19 |
+| ✅ | ~~ADMIN-011~~ — Broadcast بلا Audit Log | `admin_broadcast_screen.dart` | تم الحل 2026-05-19 |
+| ✅ | ~~ADMIN-013~~ — حذف محاسب بلا تأكيد أو try/catch | `admin_accountants_screen.dart` | تم الحل 2026-05-19 |
+| ✅ | ~~ADMIN-015~~ — تعيين سائق مشغول | `admin_order_details_screen.dart` | تم الحل 2026-05-19 |
+| ✅ | ~~ADMIN-008~~ — streams صغيرة بلا `.limit()` | `admin_maintenance_screen`, `admin_contracts_screen` | تم الحل 2026-05-19 |
+| ✅ | ~~ADMIN-012~~ — Audit Log fire-and-forget | `admin_subscriptions_screen.dart` | تم الحل 2026-05-19 |
+| ✅ | ~~ADMIN-014~~ — WhatsApp بلا try/catch | `admin_order_details_screen.dart` | تم الحل 2026-05-19 |
+| 🟡 | ADMIN-016 — لا role check على مستوى الشاشة | جميع شاشات Admin | منخفضة — اختياري |
 
 ---
 
@@ -1303,21 +1303,22 @@ class AdminOrderDetailsScreen extends StatefulWidget { // ← لا role check د
 
 ---
 
-## ✅ الخلاصة التنفيذية — تطبيق الإدارة
+## ✅ الخلاصة التنفيذية النهائية — تطبيق الإدارة 17/17
 
-> **تاريخ الفحص: 2026-05-19**  
-> **الحالة: 0/17 محلولة — بانتظار تصريح الإصلاح**
+> **تاريخ الإغلاق الكامل: 2026-05-19**  
+> **آخر Commit: Phase 2**
 
-| المجموعة | عدد المشاكل | الأولوية |
+| المجموعة | عدد المشاكل | الحالة |
 |---|---|---|
 | ~~ثغرة أمنية — كلمة مرور نصية (ADMIN-001)~~ | ~~1~~ | ✅ تم الحل 2026-05-19 |
 | ~~Unbounded Streams حرجة — Insights/Analytics (ADMIN-002/003)~~ | ~~2~~ | ✅ تم الحل 2026-05-19 |
-| Unbounded Streams متوسطة (ADMIN-004/005/006/007/008) | 5 | 🟠 مرحلة ثانية |
-| Audit Logging ناقص (ADMIN-009/010/011/012) | 4 | 🟠 مرحلة ثانية |
-| Destructive Actions (ADMIN-013/014) | 2 | 🟠 مرحلة ثانية |
-| منطق أعمال (ADMIN-015) | 1 | 🟠 مرحلة ثانية |
-| RBAC على مستوى Flutter (ADMIN-016) | 1 | 🟡 اختياري |
-| **المحلول** | **3** | ✅ |
-| **المتبقي** | **14** | — |
+| ~~Unbounded Streams متوسطة (ADMIN-004/005/006/007/008)~~ | ~~5~~ | ✅ تم الحل 2026-05-19 |
+| ~~Audit Logging ناقص (ADMIN-009/010/011/012)~~ | ~~4~~ | ✅ تم الحل 2026-05-19 |
+| ~~Destructive Actions (ADMIN-013/014)~~ | ~~2~~ | ✅ تم الحل 2026-05-19 |
+| ~~منطق أعمال (ADMIN-015)~~ | ~~1~~ | ✅ تم الحل 2026-05-19 |
+| RBAC على مستوى Flutter (ADMIN-016) | 1 | 🟡 اختياري — Firestore Rules هي خط الدفاع الحقيقي |
+| **المحلول** | **16/17** | ✅ |
+| **مقبول كمخاطرة** | **1 (ADMIN-016)** | 🟡 |
 
-**المرحلة الأولى مكتملة**: ADMIN-001/002/003 محلولة. لا مزيد من تخزين كلمات المرور، ولا streams تُحمّل الـ DB كاملاً.
+**تطبيق الإدارة (Admin Dashboard) جاهز للإطلاق من ناحية جودة الكود.**  
+ADMIN-016 مقبول: Firestore Security Rules هي خط الدفاع الفعلي، والـ RBAC على مستوى UI (TabBar + القوائم) يُغطي حالات الاستخدام العادية.

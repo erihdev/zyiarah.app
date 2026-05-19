@@ -20,7 +20,7 @@ class AdminMaintenanceScreen extends StatelessWidget {
           foregroundColor: Colors.white,
         ),
         body: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('maintenance_requests').snapshots(),
+          stream: FirebaseFirestore.instance.collection('maintenance_requests').limit(100).snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return ZyiarahShimmer.buildListSkeleton(count: 4);

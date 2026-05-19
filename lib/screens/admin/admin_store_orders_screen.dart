@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:zyiarah/services/audit_service.dart';
 
 class AdminStoreOrdersScreen extends StatelessWidget {
   const AdminStoreOrdersScreen({super.key});
@@ -11,6 +12,11 @@ class AdminStoreOrdersScreen extends StatelessWidget {
         'status': newStatus,
         'updated_at': FieldValue.serverTimestamp(),
       });
+      await ZyiarahAuditService().logAction(
+        action: 'UPDATE_STORE_ORDER_STATUS',
+        details: {'new_status': newStatus},
+        targetId: orderId,
+      );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم تحديث حالة الطلب بنجاح")));
       }
@@ -113,7 +119,7 @@ class AdminStoreOrdersScreen extends StatelessWidget {
           foregroundColor: Colors.white,
         ),
         body: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('store_orders').orderBy('created_at', descending: true).snapshots(),
+          stream: FirebaseFirestore.instance.collection('store_orders').orderBy('created_at', descending: true).limit(100).snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("لا توجد طلبات في المتجر حتى الآن"));
