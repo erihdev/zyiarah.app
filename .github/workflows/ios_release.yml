@@ -63,6 +63,97 @@ jobs:
           print("Done — cleared for new cert creation")
           PYEOF
 
+      - name: Ensure Apple Pay capability on App ID
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          python3 -m venv /tmp/asc_env && source /tmp/asc_env/bin/activate
+          pip install PyJWT requests cryptography --quiet
+          python3 << 'PYEOF'
+          import jwt, time, requests, os, json
+
+          KEY_ID = os.environ["APP_STORE_CONNECT_KEY_ID"]
+          ISSUER_ID = os.environ["APP_STORE_CONNECT_ISSUER_ID"]
+          raw_key = os.environ["APP_STORE_CONNECT_PRIVATE_KEY"].replace("\\n", "\n")
+          BASE = "https://api.appstoreconnect.apple.com/v1"
+          BUNDLE_ID = "com.zyiarah.zyiarah"
+          MERCHANT_ID = "merchant.com.zyiarah.app"
+
+          def token():
+              return jwt.encode(
+                  {"iss": ISSUER_ID, "exp": int(time.time()) + 1200, "aud": "appstoreconnect-v1"},
+                  raw_key, algorithm="ES256", headers={"kid": KEY_ID}
+              )
+
+          def hdrs():
+              return {"Authorization": f"Bearer {token()}", "Content-Type": "application/json"}
+
+          # Find the bundle ID record
+          r = requests.get(f"{BASE}/bundleIds", headers=hdrs(), params={
+              "filter[identifier]": BUNDLE_ID, "filter[platform]": "IOS"
+          })
+          bundle_ids = r.json().get("data", [])
+          if not bundle_ids:
+              print(f"ERROR: Bundle ID {BUNDLE_ID} not found")
+              exit(1)
+          bid = bundle_ids[0]["id"]
+          print(f"Found Bundle ID record: {bid}")
+
+          # List current capabilities
+          r2 = requests.get(f"{BASE}/bundleIds/{bid}/bundleIdCapabilities", headers=hdrs())
+          caps = r2.json().get("data", [])
+          apple_pay_cap = next((c for c in caps if c["attributes"]["capabilityType"] == "APPLE_PAY"), None)
+
+          if apple_pay_cap:
+              cap_id = apple_pay_cap["id"]
+              print(f"Apple Pay capability exists: {cap_id} — updating with merchant ID")
+              # Patch to ensure merchant ID is in settings
+              body = {
+                  "data": {
+                      "type": "bundleIdCapabilities",
+                      "id": cap_id,
+                      "attributes": {
+                          "capabilityType": "APPLE_PAY",
+                          "settings": [
+                              {
+                                  "key": "APPLE_PAY_MERCHANT_IDENTIFIERS_PREFERENCE",
+                                  "options": [{"key": MERCHANT_ID, "enabled": True}]
+                              }
+                          ]
+                      }
+                  }
+              }
+              r3 = requests.patch(f"{BASE}/bundleIdCapabilities/{cap_id}", headers=hdrs(), json=body)
+              print(f"  PATCH => {r3.status_code}: {r3.text[:200]}")
+          else:
+              print("Apple Pay not yet enabled — enabling now")
+              body = {
+                  "data": {
+                      "type": "bundleIdCapabilities",
+                      "attributes": {
+                          "capabilityType": "APPLE_PAY",
+                          "settings": [
+                              {
+                                  "key": "APPLE_PAY_MERCHANT_IDENTIFIERS_PREFERENCE",
+                                  "options": [{"key": MERCHANT_ID, "enabled": True}]
+                              }
+                          ]
+                      },
+                      "relationships": {
+                          "bundleId": {"data": {"type": "bundleIds", "id": bid}}
+                      }
+                  }
+              }
+              r3 = requests.post(f"{BASE}/bundleIdCapabilities", headers=hdrs(), json=body)
+              print(f"  POST => {r3.status_code}: {r3.text[:200]}")
+
+          print("Waiting 15s for Apple API propagation...")
+          time.sleep(15)
+          print("Done — proceeding to Fastlane")
+          PYEOF
+
       - name: Build and Upload to App Store
         env:
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
