@@ -1,5 +1,5 @@
 /* eslint-disable max-len */
-const {onDocumentCreated, onDocumentUpdated} = require("firebase-functions/v2/firestore");
+const {onDocumentCreated, onDocumentUpdated, onDocumentWritten} = require("firebase-functions/v2/firestore");
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
 const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
@@ -893,4 +893,116 @@ exports.onAccountDeletionStatusChanged = onDocumentUpdated("account_deletions/{u
       return null;
     }
 );
+
+// 9. Aggregation Pattern for Orders (total_revenue, active_orders, completed_orders)
+exports.onOrderWritten = onDocumentWritten("orders/{orderId}", async (event) => {
+  const change = event.data;
+  if (!change) return null;
+
+  const beforeData = change.before ? change.before.data() : null;
+  const afterData = change.after ? change.after.data() : null;
+
+  let deltaRevenue = 0;
+  let deltaActive = 0;
+  let deltaCompleted = 0;
+
+  // Deletion
+  if (!afterData) {
+    if (beforeData) {
+      const oldStatus = beforeData.status || "pending";
+      const oldAmount = Number(beforeData.amount) || 0;
+
+      if (oldStatus !== "cancelled") {
+        deltaRevenue -= oldAmount;
+      }
+      if (oldStatus === "completed") {
+        deltaCompleted -= 1;
+      } else if (oldStatus !== "cancelled") {
+        deltaActive -= 1;
+      }
+    }
+  }
+  // Creation
+  else if (!beforeData) {
+    const newStatus = afterData.status || "pending";
+    const newAmount = Number(afterData.amount) || 0;
+
+    if (newStatus !== "cancelled") {
+      deltaRevenue += newAmount;
+    }
+    if (newStatus === "completed") {
+      deltaCompleted += 1;
+    } else if (newStatus !== "cancelled") {
+      deltaActive += 1;
+    }
+  }
+  // Update
+  else {
+    const oldStatus = beforeData.status || "pending";
+    const oldAmount = Number(beforeData.amount) || 0;
+
+    const newStatus = afterData.status || "pending";
+    const newAmount = Number(afterData.amount) || 0;
+
+    // Revenue calculation
+    const wasRevenue = oldStatus !== "cancelled";
+    const isRevenue = newStatus !== "cancelled";
+
+    if (wasRevenue && !isRevenue) {
+      deltaRevenue -= oldAmount;
+    } else if (!wasRevenue && isRevenue) {
+      deltaRevenue += newAmount;
+    } else if (wasRevenue && isRevenue) {
+      deltaRevenue += (newAmount - oldAmount);
+    }
+
+    // Active & Completed calculations
+    const wasCompleted = oldStatus === "completed";
+    const isCompleted = newStatus === "completed";
+    const wasCancelled = oldStatus === "cancelled";
+    const isCancelled = newStatus === "cancelled";
+
+    const wasActive = !wasCompleted && !wasCancelled;
+    const isActive = !isCompleted && !isCancelled;
+
+    if (wasActive && !isActive) {
+      deltaActive -= 1;
+    } else if (!wasActive && isActive) {
+      deltaActive += 1;
+    }
+
+    if (wasCompleted && !isCompleted) {
+      deltaCompleted -= 1;
+    } else if (!wasCompleted && isCompleted) {
+      deltaCompleted += 1;
+    }
+  }
+
+  // Update the analytics_summary document atomically
+  const summaryRef = admin.firestore().collection("metadata").doc("analytics_summary");
+
+  const updates = {};
+  if (deltaRevenue !== 0) updates.total_revenue = admin.firestore.FieldValue.increment(deltaRevenue);
+  if (deltaActive !== 0) updates.active_orders = admin.firestore.FieldValue.increment(deltaActive);
+  if (deltaCompleted !== 0) updates.completed_orders = admin.firestore.FieldValue.increment(deltaCompleted);
+
+  if (Object.keys(updates).length > 0) {
+    try {
+      await summaryRef.update(updates);
+    } catch (err) {
+      if (err.code === 5 || err.message.includes("NOT_FOUND") || err.message.includes("does not exist")) {
+        // Document doesn't exist yet, initialize it securely by running a set with merge
+        const initData = {
+          total_revenue: deltaRevenue > 0 ? deltaRevenue : 0,
+          active_orders: deltaActive > 0 ? deltaActive : 0,
+          completed_orders: deltaCompleted > 0 ? deltaCompleted : 0,
+        };
+        await summaryRef.set(initData, {merge: true});
+      } else {
+        throw err;
+      }
+    }
+  }
+  return null;
+});
 
