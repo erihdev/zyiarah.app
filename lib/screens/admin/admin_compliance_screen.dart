@@ -36,15 +36,14 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
           children: [
             _buildFilterTabs(),
             Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('drivers').limit(200).snapshots(),
+              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: _getComplianceStream(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
-                  final allDocs = snapshot.data?.docs ?? [];
-                  final filteredDocs = _applyFilter(allDocs);
+                  final filteredDocs = snapshot.data?.docs ?? [];
 
                   if (filteredDocs.isEmpty) {
                     return _buildEmptyState();
@@ -62,6 +61,25 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
         ),
       ),
     );
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _getComplianceStream() {
+    final now = DateTime.now();
+    final timestamp30Days = Timestamp.fromDate(now.add(const Duration(days: 30)));
+    
+    Query<Map<String, dynamic>> query = FirebaseFirestore.instance.collection('drivers');
+
+    if (_filter == 'expired') {
+      query = query.where('id_expiry', isLessThan: Timestamp.fromDate(now));
+    } else if (_filter == 'expiring_soon') {
+      query = query
+          .where('id_expiry', isGreaterThanOrEqualTo: Timestamp.fromDate(now))
+          .where('id_expiry', isLessThanOrEqualTo: timestamp30Days);
+    } else {
+      query = query.where('id_expiry', isLessThanOrEqualTo: timestamp30Days);
+    }
+
+    return query.snapshots();
   }
 
   Widget _buildFilterTabs() {
@@ -98,37 +116,24 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
     );
   }
 
-  List<DocumentSnapshot> _applyFilter(List<DocumentSnapshot> docs) {
-    final now = DateTime.now();
-    return docs.where((doc) {
-      final data = doc.data() as Map<String, dynamic>;
-      final expiryStr = data['id_expiry']?.toString() ?? '';
-      try {
-        final expiryDate = DateTime.parse(expiryStr);
-        final diff = expiryDate.difference(now).inDays;
-
-        if (_filter == 'expired') return diff < 0;
-        if (_filter == 'expiring_soon') return diff >= 0 && diff < 30;
-        return diff < 30; // 'all' showing anything of concern
-      } catch (e) {
-        return false;
-      }
-    }).toList();
-  }
-
   Widget _buildComplianceCard(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
-    final expiryStr = data['id_expiry']?.toString() ?? '';
+    final expiryVal = data['id_expiry'];
     final name = data['name'] ?? 'بدون اسم';
     final phone = data['phone'] ?? '';
     final idNumber = data['id_number'] ?? 'غير مسجل';
     
     DateTime? expiryDate;
+    if (expiryVal is Timestamp) {
+      expiryDate = expiryVal.toDate();
+    } else if (expiryVal is String) {
+      expiryDate = DateTime.tryParse(expiryVal);
+    }
+
     int diff = 0;
-    try {
-      expiryDate = DateTime.parse(expiryStr);
+    if (expiryDate != null) {
       diff = expiryDate.difference(DateTime.now()).inDays;
-    } catch (_) {}
+    }
 
     final bool isExpired = diff < 0;
 
@@ -219,29 +224,27 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
   }
 
   Future<void> _notifyAllExpiring(BuildContext context) async {
-    final docs = await FirebaseFirestore.instance.collection('drivers').get();
     final now = DateTime.now();
+    final timestamp30Days = Timestamp.fromDate(now.add(const Duration(days: 30)));
+    final docs = await FirebaseFirestore.instance
+        .collection('drivers')
+        .where('id_expiry', isLessThanOrEqualTo: timestamp30Days)
+        .get();
     int count = 0;
 
     for (var doc in docs.docs) {
       final data = doc.data();
-      final expiryStr = data['id_expiry']?.toString() ?? '';
-      try {
-        final expiryDate = DateTime.parse(expiryStr);
-        if (expiryDate.difference(now).inDays < 30) {
-          // In a real app, this would trigger an FCM push.
-          // For now, we log the "Notification Request" in broadcasts for specific target.
-          await FirebaseFirestore.instance.collection('broadcasts').add({
-            'title': 'تنبيه انتهاء وثائق رسمية',
-            'body': 'عزيزي ${data['name']}، نرجو تحديث بيانات هويتك في أقرب وقت لتجنب إيقاف الحساب.',
-            'target': 'drivers',
-            'target_uid': doc.id,
-            'timestamp': FieldValue.serverTimestamp(),
-            'type': 'compliance_alert',
-          });
-          count++;
-        }
-      } catch (_) {}
+      // In a real app, this would trigger an FCM push.
+      // For now, we log the "Notification Request" in broadcasts for specific target.
+      await FirebaseFirestore.instance.collection('broadcasts').add({
+        'title': 'تنبيه انتهاء وثائق رسمية',
+        'body': 'عزيزي ${data['name']}، نرجو تحديث بيانات هويتك في أقرب وقت لتجنب إيقاف الحساب.',
+        'target': 'drivers',
+        'target_uid': doc.id,
+        'timestamp': FieldValue.serverTimestamp(),
+        'type': 'compliance_alert',
+      });
+      count++;
     }
 
     if (!context.mounted) return;
