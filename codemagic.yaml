@@ -84,24 +84,30 @@ workflows:
           KEY_ID = "RJMPC4734X"
           APP_ID = os.environ.get("APP_STORE_APP_ID", "6760955777")
           BASE_URL = "https://api.appstoreconnect.apple.com/v1"
-          # Write key to temp file to avoid env var formatting issues
+          # Clean and format the private key to be highly resilient to formatting issues
           raw_key = os.environ.get("APP_STORE_CONNECT_PRIVATE_KEY", "").strip()
+          if raw_key.startswith('"') and raw_key.endswith('"'):
+              raw_key = raw_key[1:-1].strip()
+          elif raw_key.startswith("'") and raw_key.endswith("'"):
+              raw_key = raw_key[1:-1].strip()
           raw_key = raw_key.replace("\\n", "\n")
-          if "-----BEGIN PRIVATE KEY-----" in raw_key:
-              header = "-----BEGIN PRIVATE KEY-----"
-              footer = "-----END PRIVATE KEY-----"
-              start_idx = raw_key.find(header) + len(header)
-              end_idx = raw_key.find(footer)
-              if start_idx != -1 and end_idx != -1:
-                  body = raw_key[start_idx:end_idx].strip()
-                  body = body.replace(" ", "").replace("\n", "").replace("\r", "").replace('"', '').replace("'", "")
-                  wrapped_body = "\n".join([body[i:i+64] for i in range(0, len(body), 64)])
-                  raw_key = f"{header}\n{wrapped_body}\n{footer}\n"
-          with tempfile.NamedTemporaryFile(mode="w", suffix=".p8", delete=False) as f:
-              f.write(raw_key)
-              key_path = f.name
-          with open(key_path) as f:
-              private_key = f.read()
+          
+          header = "-----BEGIN PRIVATE KEY-----"
+          footer = "-----END PRIVATE KEY-----"
+          
+          if "-----BEGIN" in raw_key:
+              import re
+              match = re.search(r"-----BEGIN[^-]*-----(.*)-----END[^-]*-----", raw_key, re.DOTALL)
+              if match:
+                  body = match.group(1)
+              else:
+                  body = "\n".join([line for line in raw_key.splitlines() if not line.strip().startswith("-----")])
+          else:
+              body = raw_key
+              
+          body = body.replace(" ", "").replace("\n", "").replace("\r", "").replace('"', '').replace("'", "").replace("\\", "")
+          wrapped_body = "\n".join([body[i:i+64] for i in range(0, len(body), 64)])
+          private_key = f"{header}\n{wrapped_body}\n{footer}\n"
           def make_token():
               payload = {"iss": ISSUER_ID, "exp": int(time.time()) + 1200, "aud": "appstoreconnect-v1"}
               return jwt.encode(payload, private_key, algorithm="ES256", headers={"kid": KEY_ID})
