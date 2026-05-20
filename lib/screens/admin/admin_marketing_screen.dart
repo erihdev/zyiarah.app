@@ -1,10 +1,10 @@
+import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/admin/admin_coupons_screen.dart';
 import 'package:zyiarah/screens/admin/admin_banners_screen.dart';
-import 'package:zyiarah/services/notification_trigger_service.dart';
 
 class AdminMarketingScreen extends StatefulWidget {
   const AdminMarketingScreen({super.key});
@@ -56,7 +56,7 @@ class _AdminMarketingScreenState extends State<AdminMarketingScreen> {
     setState(() => _isSending = true);
     try {
       if (_isScheduled) {
-        await ZyiarahNotificationTriggerService().scheduleBroadcast(
+        await ZyiarahMessagingService().scheduleBroadcast(
           title: _titleController.text.trim(),
           body: _bodyController.text.trim(),
           target: 'all_users',

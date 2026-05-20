@@ -1,3 +1,4 @@
+import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -11,7 +12,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:async';
 import 'package:lottie/lottie.dart' hide Marker;
-import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:go_router/go_router.dart';
 
 class DriverDashboard extends StatefulWidget {
@@ -24,7 +24,7 @@ class DriverDashboard extends StatefulWidget {
 class _DriverDashboardState extends State<DriverDashboard> {
   final ZyiarahCoreService _coreService = ZyiarahCoreService();
   final ZyiarahOrderService _orderService = ZyiarahOrderService();
-  final ZyiarahNotificationTriggerService _notificationService = ZyiarahNotificationTriggerService();
+  final ZyiarahMessagingService _notificationService = ZyiarahMessagingService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   bool _isOnline = true;

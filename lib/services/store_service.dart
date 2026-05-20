@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/services/counter_service.dart';
 
 class StoreProduct {
   final String id;
@@ -85,22 +86,12 @@ class ZyiarahStoreService {
 
     // Atomic: increment counter + create store order in one Transaction
     final docRef = _db.collection('store_orders').doc();
-    final counterRef = _db.collection('metadata').doc('order_counter');
     String orderCode = '';
     double serverCalculatedTotal = 0.0;
 
     await _db.runTransaction((transaction) async {
-      final counterSnap = await transaction.get(counterRef);
-      final lastId = counterSnap.exists
-          ? ((counterSnap.data()?['last_id'] as num?)?.toInt() ?? 100)
-          : 100;
-      final nextId = lastId + 1;
+      final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
       orderCode = ZyiarahOrderUtil.formatSmartCode(nextId);
-      if (counterSnap.exists) {
-        transaction.update(counterRef, {'last_id': nextId});
-      } else {
-        transaction.set(counterRef, {'last_id': nextId});
-      }
 
       double tempTotal = 0.0;
       final List<Map<String, dynamic>> verifiedItems = [];

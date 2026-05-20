@@ -67,7 +67,7 @@ class GuestExploreScreen extends StatelessWidget {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => _LoginPromptSheet(brand: _brand),
+      builder: (_) => const _LoginPromptSheet(brand: _brand),
     );
   }
 

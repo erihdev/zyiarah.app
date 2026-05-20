@@ -1,9 +1,9 @@
+import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:url_launcher/url_launcher.dart';
-import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/utils/status_util.dart';
@@ -19,7 +19,7 @@ class AdminOrderDetailsScreen extends StatefulWidget {
 
 class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final ZyiarahNotificationTriggerService _notificationService = ZyiarahNotificationTriggerService();
+  final ZyiarahMessagingService _notificationService = ZyiarahMessagingService();
   final ZyiarahOrderService _orderService = ZyiarahOrderService();
   bool _isLoading = true;
   Map<String, dynamic>? _orderData;

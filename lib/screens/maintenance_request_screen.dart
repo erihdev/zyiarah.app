@@ -1,3 +1,4 @@
+import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,10 +8,9 @@ import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/location_service.dart';
-import 'package:zyiarah/services/notification_trigger_service.dart';
-import 'package:zyiarah/services/zyiarah_comm_service.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
+import 'package:zyiarah/services/counter_service.dart';
 
 
 class ZyiarahMaintenanceRequestScreen extends StatefulWidget {
@@ -80,21 +80,11 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
 
       // Atomic: increment counter + create maintenance request in one Transaction
       final reqRef = _firestore.collection('maintenance_requests').doc();
-      final counterRef = _firestore.collection('metadata').doc('order_counter');
       String orderCode = '';
 
       await _firestore.runTransaction((transaction) async {
-        final counterSnap = await transaction.get(counterRef);
-        final lastId = counterSnap.exists
-            ? ((counterSnap.data()?['last_id'] as num?)?.toInt() ?? 100)
-            : 100;
-        final nextId = lastId + 1;
+        final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
         orderCode = ZyiarahOrderUtil.formatSmartCode(nextId);
-        if (counterSnap.exists) {
-          transaction.update(counterRef, {'last_id': nextId});
-        } else {
-          transaction.set(counterRef, {'last_id': nextId});
-        }
         transaction.set(reqRef, {
           'requestId': orderCode,
           'code': orderCode,
@@ -124,20 +114,20 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
 
       if (mounted) {
         // Fire notifications without blocking navigation — errors are non-fatal
-        ZyiarahNotificationTriggerService().notifyOrderCreated(
+        ZyiarahMessagingService().notifyOrderCreated(
           clientId: user.uid,
           orderCode: orderCode,
           serviceName: _selectedService ?? 'صيانة',
           type: 'maintenance',
         ).catchError((_) {});
 
-        ZyiarahNotificationTriggerService().notifyAdminOfNewMaintenanceRequest(
+        ZyiarahMessagingService().notifyAdminOfNewMaintenanceRequest(
           clientName: userName,
           serviceType: _selectedService ?? 'صيانة',
           requestId: orderCode,
         ).catchError((_) {});
 
-        ZyiarahCommService().notifyNewOrder({
+        ZyiarahMessagingService().notifyNewOrder({
           'code': orderCode,
           'client_name': userName,
           'client_phone': userPhone,

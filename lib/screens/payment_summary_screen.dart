@@ -1,3 +1,4 @@
+import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,13 +9,11 @@ import 'package:zyiarah/screens/checkout_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/services/order_service.dart';
-import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:intl/intl.dart' as intl;
-import 'package:zyiarah/services/zyiarah_comm_service.dart';
 import 'package:zyiarah/services/zatca_service.dart';
-import 'package:zyiarah/services/invoice_pdf_service.dart';
+import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'dart:io';
 import 'package:pay/pay.dart';
 import 'package:zyiarah/services/moyasar_service.dart';
@@ -22,6 +21,7 @@ import 'package:zyiarah/services/moyasar_service.dart';
 import 'package:zyiarah/providers/config_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
+import 'package:zyiarah/services/counter_service.dart';
 
 
 
@@ -338,7 +338,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         'paidAt': FieldValue.serverTimestamp(),
         'totalAmount': amountToSave,
       });
-      await ZyiarahNotificationTriggerService().notifyAdminOfPayment(orderCode: code, amount: amountToSave, type: 'maintenance', clientName: _currentUser?.name);
+      await ZyiarahMessagingService().notifyAdminOfPayment(orderCode: code, amount: amountToSave, type: 'maintenance', clientName: _currentUser?.name);
     } else if (widget.contractId != null) {
       code = widget.contractId!;
       await FirebaseFirestore.instance.collection('contracts').doc(widget.contractId).update({
@@ -349,7 +349,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       await FirebaseFirestore.instance.collection('users').doc(_currentUser?.uid).update({
         'visits_remaining': FieldValue.increment(widget.planVisits ?? 0),
       });
-      await ZyiarahNotificationTriggerService().notifyContractActivated(_currentUser?.uid ?? '', widget.serviceName, widget.planVisits ?? 0);
+      await ZyiarahMessagingService().notifyContractActivated(_currentUser?.uid ?? '', widget.serviceName, widget.planVisits ?? 0);
     } else {
       final bool isHourly = widget.hours != null && widget.serviceDate != null;
 
@@ -374,19 +374,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       }
 
       // Atomic: increment counter + create order in one Transaction
-      final _counterRef = FirebaseFirestore.instance.collection('metadata').doc('order_counter');
       await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final counterSnap = await transaction.get(_counterRef);
-        final lastId = counterSnap.exists
-            ? ((counterSnap.data()?['last_id'] as num?)?.toInt() ?? 100)
-            : 100;
-        final nextId = lastId + 1;
+        final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
         code = ZyiarahOrderUtil.formatSmartCode(nextId);
-        if (counterSnap.exists) {
-          transaction.update(_counterRef, {'last_id': nextId});
-        } else {
-          transaction.set(_counterRef, {'last_id': nextId});
-        }
         transaction.set(FirebaseFirestore.instance.collection('orders').doc(id), {
           'code': code,
           'client_id': _currentUser?.uid,
@@ -420,7 +410,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         );
         if (assigned) {
           final av = availabilityResult!;
-          await ZyiarahNotificationTriggerService().notifyDriverOfAssignment(
+          await ZyiarahMessagingService().notifyDriverOfAssignment(
             av['driverId'] as String,
             code,
             driverEmail: av['driverEmail'] as String?,
@@ -430,7 +420,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 ? '${widget.serviceDate!.year}/${widget.serviceDate!.month.toString().padLeft(2,'0')}/${widget.serviceDate!.day.toString().padLeft(2,'0')} — ${widget.serviceDate!.hour.toString().padLeft(2,'0')}:00'
                 : null,
           );
-          await ZyiarahNotificationTriggerService().notifyOrderCreated(
+          await ZyiarahMessagingService().notifyOrderCreated(
             clientId: _currentUser?.uid ?? '',
             orderCode: code,
             type: 'cleaning',
@@ -450,7 +440,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           return;
         }
       } else {
-        await ZyiarahNotificationTriggerService().notifyOrderCreated(
+        await ZyiarahMessagingService().notifyOrderCreated(
           clientId: _currentUser?.uid ?? '',
           orderCode: code,
           type: 'cleaning',
@@ -462,7 +452,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     // 2. Trigger ZATCA Invoice & Notifications
     final String? invoiceUrl = await _finalizeOrderWithInvoice(orderId: id, orderCode: code, paymentMethod: method, paidAmount: amountToSave);
     
-    await ZyiarahCommService().notifyNewOrder({
+    await ZyiarahMessagingService().notifyNewOrder({
       'code': code,
       'client_name': _currentUser?.name ?? 'عميل زيارة',
       'amount': amountToSave,
@@ -503,7 +493,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       vatAmount: vatAmount,
     );
 
-    return await InvoicePdfService.generateAndUploadInvoice(
+    return await ZyiarahPdfService.generateAndUploadInvoice(
       orderId: orderId,
       orderCode: orderCode,
       amount: totalWithVat,

@@ -3,6 +3,7 @@ const {onDocumentCreated, onDocumentUpdated, onDocumentWritten} = require("fireb
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
 const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
+const geofire = require("geofire-common");
 admin.initializeApp();
 
 // Secrets — stored in Firebase Secret Manager, never in source code
@@ -836,7 +837,7 @@ exports.verifyMoyasarPayment = onCall(
         if (error instanceof HttpsError) throw error;
         throw new HttpsError("internal", error.message);
       }
-    }
+    },
 );
 
 // 8. GDPR Account Deletion Firestore Update Trigger
@@ -891,7 +892,7 @@ exports.onAccountDeletionStatusChanged = onDocumentUpdated("account_deletions/{u
         }
       }
       return null;
-    }
+    },
 );
 
 // 9. Aggregation Pattern for Orders (total_revenue, active_orders, completed_orders)
@@ -921,9 +922,8 @@ exports.onOrderWritten = onDocumentWritten("orders/{orderId}", async (event) => 
         deltaActive -= 1;
       }
     }
-  }
-  // Creation
-  else if (!beforeData) {
+  } else if (!beforeData) {
+    // Creation
     const newStatus = afterData.status || "pending";
     const newAmount = Number(afterData.amount) || 0;
 
@@ -935,9 +935,8 @@ exports.onOrderWritten = onDocumentWritten("orders/{orderId}", async (event) => 
     } else if (newStatus !== "cancelled") {
       deltaActive += 1;
     }
-  }
-  // Update
-  else {
+  } else {
+    // Update
     const oldStatus = beforeData.status || "pending";
     const oldAmount = Number(beforeData.amount) || 0;
 
@@ -1006,3 +1005,96 @@ exports.onOrderWritten = onDocumentWritten("orders/{orderId}", async (event) => 
   return null;
 });
 
+// 8. Surge Pricing Factor
+exports.getSurgePricingFactor = onCall(async (request) => {
+  // if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
+
+  const driversRef = admin.firestore().collection("users").where("role", "==", "driver");
+  const snap = await driversRef.get();
+
+  if (snap.empty) {
+    return {surgeFactor: 1.0};
+  }
+
+  let totalActive = 0;
+  let availableCount = 0;
+
+  snap.forEach((doc) => {
+    const data = doc.data();
+    // Assuming active drivers are those who are not banned or deactivated
+    if (data.isActive !== false) {
+      totalActive++;
+      if (data.status === "available" || data.status === "online") {
+        availableCount++;
+      }
+    }
+  });
+
+  if (totalActive === 0) return {surgeFactor: 1.0};
+
+  const availablePercentage = availableCount / totalActive;
+  if (availablePercentage < 0.20) {
+    return {surgeFactor: 1.15};
+  }
+
+  return {surgeFactor: 1.0};
+});
+
+// 9. Smart Dispatch Core: findNearestDrivers
+exports.findNearestDrivers = onCall(async (request) => {
+  // if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
+
+  const {lat, lng} = request.data;
+  if (lat == null || lng == null) {
+    throw new HttpsError("invalid-argument", "إحداثيات الموقع مطلوبة");
+  }
+
+  const center = [Number(lat), Number(lng)];
+  const radiusInM = 5000; // 5km
+
+  // Each bounds is an array of [start, end] geohashes
+  const bounds = geofire.geohashQueryBounds(center, radiusInM);
+  const promises = [];
+
+  for (const b of bounds) {
+    const q = admin.firestore().collection("users")
+        .where("role", "==", "driver")
+        .where("status", "in", ["available", "online"])
+        .where("geohash", ">=", b[0])
+        .where("geohash", "<=", b[1]);
+
+    promises.push(q.get());
+  }
+
+  const snapshots = await Promise.all(promises);
+  const matchingDocs = [];
+
+  for (const snap of snapshots) {
+    for (const doc of snap.docs) {
+      const data = doc.data();
+      // Ensure it has location data
+      if (data.location && data.location.latitude && data.location.longitude) {
+        // Double check exact distance using Haversine
+        const driverLoc = [data.location.latitude, data.location.longitude];
+        const distanceInKm = geofire.distanceBetween(center, driverLoc);
+        const distanceInM = distanceInKm * 1000;
+
+        if (distanceInM <= radiusInM) {
+          matchingDocs.push({
+            uid: doc.id,
+            distance: distanceInM,
+            data: data,
+          });
+        }
+      }
+    }
+  }
+
+  // Sort by distance ascending
+  matchingDocs.sort((a, b) => a.distance - b.distance);
+
+  // Return the nearest 3
+  const nearest3 = matchingDocs.slice(0, 3).map((d) => d.uid);
+
+  return {drivers: nearest3};
+});

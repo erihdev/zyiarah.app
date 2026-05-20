@@ -1,3 +1,4 @@
+import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:signature/signature.dart';
@@ -6,7 +7,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart' as intl;
 import 'dart:convert';
 import 'package:zyiarah/services/audit_service.dart';
-import 'package:zyiarah/services/notification_trigger_service.dart';
 
 class ZyiarahContractSigningScreen extends StatefulWidget {
   final String planName;
@@ -112,7 +112,7 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
       );
 
       // --- إرسال تنبيه فوري للإدارة عبر النظام المتقدم ---
-      await ZyiarahNotificationTriggerService().notifyAdminOfNewContractRequest(
+      await ZyiarahMessagingService().notifyAdminOfNewContractRequest(
         clientName: _userName,
         planName: widget.planName,
         contractId: contractId,

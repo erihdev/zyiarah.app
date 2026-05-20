@@ -1,9 +1,9 @@
+import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:zyiarah/services/zyiarah_contract_pdf_service.dart';
+import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
-import 'package:zyiarah/services/notification_trigger_service.dart';
 
 class AdminContractsScreen extends StatefulWidget {
   const AdminContractsScreen({super.key});
@@ -239,7 +239,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
       });
 
       // --- SEND NOTIFICATION TO CLIENT VIA CENTRAL SERVICE ---
-      await ZyiarahNotificationTriggerService().notifyContractApproved(
+      await ZyiarahMessagingService().notifyContractApproved(
         data['userId'],
         data['planName'] ?? 'باقة اشتراك',
       );
@@ -285,7 +285,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
                 child: OutlinedButton.icon(
                   onPressed: () async {
                     try {
-                      await ZyiarahContractPdfService.generateAndDownloadContract(
+                      await ZyiarahPdfService.generateAndDownloadContract(
                         contractId: data['contractId'] ?? 'XXXX',
                         planName: data['planName'] ?? 'باقة اشتراك',
                         userName: data['userName'] ?? data['clientName'] ?? 'عميل زيارة',

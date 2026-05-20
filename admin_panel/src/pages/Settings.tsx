@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Save, Bell, Shield, Wallet, MapPin, Search, Smartphone, Loader2, CheckCircle2, ChevronLeft, CreditCard, Activity, Globe, Database, KeyRound, ArrowRight, Plus, Navigation, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
-import { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, GeoPoint } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
 
@@ -96,10 +96,22 @@ export default function Settings() {
     }, []);
 
     useEffect(() => {
-        const q = query(collection(db, 'coverage_zones'), orderBy('rank'));
+        const q = query(collection(db, 'service_zones'), orderBy('rank'));
         const unsub = onSnapshot(q, (snap) => {
-            setZones(snap.docs.map(d => ({ id: d.id, ...d.data() } as CoverageZone)));
-        }, (err) => console.error('coverage_zones snapshot error:', err));
+            setZones(snap.docs.map(d => {
+                const data = d.data();
+                const center = data.centerLoc;
+                return {
+                    id: d.id,
+                    name: data.name || '',
+                    latitude: center ? center.latitude : 0.0,
+                    longitude: center ? center.longitude : 0.0,
+                    radiusKm: data.radiusKm || 15,
+                    enabled: data.enabled !== false,
+                    rank: data.rank || 0,
+                } as CoverageZone;
+            }));
+        }, (err) => console.error('service_zones snapshot error:', err));
         return () => unsub();
     }, []);
 
@@ -113,13 +125,22 @@ export default function Settings() {
         }
         setIsAddingZone(true);
         try {
-            await addDoc(collection(db, 'coverage_zones'), {
+            await addDoc(collection(db, 'service_zones'), {
                 name: newZone.name.trim(),
-                latitude: lat,
-                longitude: lng,
+                centerLoc: new GeoPoint(lat, lng),
                 radiusKm: radius,
                 enabled: true,
                 rank: zones.length + 1,
+                prices: {
+                    '1': 35,
+                    '4': 120,
+                    '5': 150,
+                    '6': 180,
+                    '8': 240
+                },
+                sofaPrice: 35,
+                rugPrice: 15,
+                updated_at: new Date(),
             });
             setNewZone(emptyZoneForm);
             setShowAddForm(false);
@@ -134,7 +155,7 @@ export default function Settings() {
 
     const handleToggleZone = async (zone: CoverageZone) => {
         try {
-            await updateDoc(doc(db, 'coverage_zones', zone.id), { enabled: !zone.enabled });
+            await updateDoc(doc(db, 'service_zones', zone.id), { enabled: !zone.enabled });
         } catch (e) {
             toast.error('حدث خطأ أثناء التحديث');
         }
@@ -143,7 +164,7 @@ export default function Settings() {
     const handleDeleteZone = async (zone: CoverageZone) => {
         if (!await confirm(`حذف محافظة "${zone.name}" نهائياً؟`)) return;
         try {
-            await deleteDoc(doc(db, 'coverage_zones', zone.id));
+            await deleteDoc(doc(db, 'service_zones', zone.id));
         } catch (e) {
             toast.error('حدث خطأ أثناء الحذف');
         }

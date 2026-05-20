@@ -55,7 +55,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
         }
       }
 
-      final snapshot = await FirebaseFirestore.instance.collection('hourly_zones').orderBy('rank').get();
+      final snapshot = await FirebaseFirestore.instance.collection('service_zones').orderBy('rank').get();
       if (mounted) {
         setState(() {
           _zones = snapshot.docs.map((doc) => doc.data()).toList();
