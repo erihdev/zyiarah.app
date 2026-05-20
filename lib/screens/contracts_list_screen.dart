@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/payment_summary_screen.dart';
-import 'package:zyiarah/services/zyiarah_contract_pdf_service.dart';
+import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 
 class ZyiarahContractsListScreen extends StatelessWidget {
   const ZyiarahContractsListScreen({super.key});
@@ -208,7 +208,7 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('جاري تجهيز نسخة العقد...'))
                               );
-                              ZyiarahContractPdfService.generateAndDownloadContract(
+                              ZyiarahPdfService.generateAndDownloadContract(
                                 contractId: data['contractId'] ?? contractDocId.substring(0, 8),
                                 planName: planName,
                                 userName: data['userName'] ?? data['clientName'] ?? 'عميل زيارة',

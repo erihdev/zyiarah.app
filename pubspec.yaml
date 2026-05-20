@@ -2,7 +2,7 @@ name: zyiarah
 description: "A new Flutter project."
 publish_to: "none"
 
-version: 1.2.2+184
+version: 1.2.3+189
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -46,6 +46,7 @@ dependencies:
   provider: ^6.1.5+1
   arabic_reshaper: ^0.0.1
   bidi: ^2.0.13
+  crypto: ^3.0.3
 
 dev_dependencies:
   flutter_test:

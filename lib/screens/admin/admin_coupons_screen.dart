@@ -27,7 +27,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
 
   Future<void> _fetchZones() async {
     try {
-      final snapshot = await _db.collection('hourly_zones').get();
+      final snapshot = await _db.collection('service_zones').get();
       setState(() {
         _availableZones = snapshot.docs.map((d) => d['name'] as String).toList();
       });

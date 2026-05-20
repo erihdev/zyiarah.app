@@ -36,7 +36,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
 
     if (confirm == true) {
       try {
-        await _db.collection('hourly_zones').doc(id).delete();
+        await _db.collection('service_zones').doc(id).delete();
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف المنطقة بنجاح")));
         
         ZyiarahAuditService().logAction(
@@ -178,13 +178,14 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                         'sofaPrice': double.tryParse(pSofaCtrl.text) ?? 35,
                         'rugPrice': double.tryParse(pRugCtrl.text) ?? 15,
                         'rank': rank,
+                        'enabled': data?['enabled'] ?? true,
                         'updated_at': FieldValue.serverTimestamp(),
                       };
 
                       if (doc == null) {
-                        await _db.collection('hourly_zones').add(newData);
+                        await _db.collection('service_zones').add(newData);
                       } else {
-                        await _db.collection('hourly_zones').doc(doc.id).update(newData);
+                        await _db.collection('service_zones').doc(doc.id).update(newData);
                       }
                       
                       ZyiarahAuditService().logAction(
@@ -229,7 +230,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
           child: const Icon(Icons.add_location_alt_rounded, color: Colors.white),
         ),
         body: StreamBuilder<QuerySnapshot>(
-          stream: _db.collection('hourly_zones').orderBy('rank').snapshots(),
+          stream: _db.collection('service_zones').orderBy('rank').snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
             final docs = snapshot.data?.docs ?? [];

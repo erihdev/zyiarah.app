@@ -20,8 +20,10 @@ class _AdminStaffPerformanceScreenState extends State<AdminStaffPerformanceScree
   }
 
   Future<void> _calculatePerformance() async {
-    final driversSnap = await FirebaseFirestore.instance.collection('drivers').get();
-    final ordersSnap = await FirebaseFirestore.instance.collection('orders').where('status', isEqualTo: 'completed').get();
+    final driversSnap = await FirebaseFirestore.instance
+        .collection('drivers')
+        .orderBy('rating_avg', descending: true)
+        .get();
 
     List<Map<String, dynamic>> stats = [];
 
@@ -29,21 +31,8 @@ class _AdminStaffPerformanceScreenState extends State<AdminStaffPerformanceScree
       final driverData = driverDoc.data();
       final driverId = driverDoc.id;
       final driverName = driverData['name'] ?? 'بدون اسم';
-
-      final driverOrders = ordersSnap.docs.where((doc) => doc['driver_id'] == driverId).toList();
-      final totalCompleted = driverOrders.length;
-      
-      double totalRating = 0;
-      int ratedOrders = 0;
-      for (var order in driverOrders) {
-        final orderData = order.data();
-        if (orderData['rating'] != null) {
-          totalRating += (orderData['rating'] as num).toDouble();
-          ratedOrders++;
-        }
-      }
-
-      double avgRating = ratedOrders > 0 ? totalRating / ratedOrders : 5.0;
+      final totalCompleted = driverData['completed_orders_count'] ?? 0;
+      final double avgRating = (driverData['rating_avg'] ?? 5.0).toDouble();
 
       stats.add({
         'id': driverId,

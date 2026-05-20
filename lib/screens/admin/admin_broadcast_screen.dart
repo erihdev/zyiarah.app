@@ -1,8 +1,8 @@
+import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
-import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:zyiarah/services/audit_service.dart';
 
@@ -397,7 +397,7 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
 
     try {
       if (_isScheduled) {
-        await ZyiarahNotificationTriggerService().scheduleBroadcast(
+        await ZyiarahMessagingService().scheduleBroadcast(
           title: _titleCtrl.text.trim(),
           body: _bodyCtrl.text.trim(),
           target: _target,

@@ -1,8 +1,8 @@
+import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/widgets/zyiarah_shimmer.dart';
 import 'package:zyiarah/utils/status_util.dart';
 
@@ -314,7 +314,7 @@ class AdminMaintenanceScreen extends StatelessWidget {
 
     if (status == 'waiting_payment' && userId.isNotEmpty) {
       // --- TRIGGER CENTRAL NOTIFICATION SERVICE (Push + Email) ---
-      await ZyiarahNotificationTriggerService().notifyClientOfMaintenanceQuote(
+      await ZyiarahMessagingService().notifyClientOfMaintenanceQuote(
         userId,
         docId,
         quotedAmount,

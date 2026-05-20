@@ -46,6 +46,19 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
 
     if (confirm == true) {
       try {
+        final docSnap = await _db.collection('products').doc(id).get();
+        if (docSnap.exists) {
+          final data = docSnap.data();
+          final String? imageUrl = data?['image_url'];
+          if (imageUrl != null && imageUrl.isNotEmpty) {
+            try {
+              await FirebaseStorage.instance.refFromURL(imageUrl).delete();
+            } catch (storageErr) {
+              debugPrint("Failed to delete product image from storage: $storageErr");
+            }
+          }
+        }
+
         await _db.collection('products').doc(id).delete();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف المنتج بنجاح")));

@@ -1,32 +1,21 @@
-import jwt, time, requests
+import os
+import requests
+import app_store_common as common
 
-ISSUER_ID = "6dd67287-cfcd-40fc-a3db-8bf378a1ac8f"
-KEY_ID = "RJMPC4734X"
-APP_ID = "6760955777"
-BASE_URL = "https://api.appstoreconnect.apple.com/v1"
-
-with open("AuthKey_RJMPC4734X.p8") as f:
-    private_key = f.read()
-
-def make_token():
-    payload = {"iss": ISSUER_ID, "exp": int(time.time()) + 1200, "aud": "appstoreconnect-v1"}
-    return jwt.encode(payload, private_key, algorithm="ES256", headers={"kid": KEY_ID})
-
-def hdrs():
-    return {"Authorization": f"Bearer {make_token()}", "Content-Type": "application/json"}
-
-r = requests.get(f"{BASE_URL}/apps/{APP_ID}/appStoreVersions", headers=hdrs(), params={"filter[platform]": "IOS", "limit": 1})
+r = requests.get(f"{common.BASE_URL}/apps/{common.APP_ID}/appStoreVersions", headers=common.hdrs(), params={"filter[platform]": "IOS", "limit": 1})
 ver_id = r.json()["data"][0]["id"]
-r2 = requests.get(f"{BASE_URL}/appStoreVersions/{ver_id}/appStoreVersionLocalizations", headers=hdrs())
+r2 = requests.get(f"{common.BASE_URL}/appStoreVersions/{ver_id}/appStoreVersionLocalizations", headers=common.hdrs())
 loc_id = r2.json()["data"][0]["id"]
-r3 = requests.get(f"{BASE_URL}/appStoreVersionLocalizations/{loc_id}/appScreenshotSets", headers=hdrs(), params={"include": "appScreenshots", "fields[appScreenshots]": "fileName,imageAsset,assetDeliveryState"})
+r3 = requests.get(f"{common.BASE_URL}/appStoreVersionLocalizations/{loc_id}/appScreenshotSets", headers=common.hdrs(), params={"include": "appScreenshots", "fields[appScreenshots]": "fileName,imageAsset,assetDeliveryState"})
 data = r3.json()
 sets = data.get("data", [])
 included = data.get("included", [])
 ss_map = {s["id"]: s for s in included if s.get("type") == "appScreenshots"}
 
-import os
-os.makedirs("screenshots_check", exist_ok=True)
+# Setup output dir relative to the workspace root
+base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+out_dir = os.path.join(base_dir, "screenshots_check")
+os.makedirs(out_dir, exist_ok=True)
 
 for s in sets:
     display = s["attributes"].get("screenshotDisplayType", "")
@@ -41,7 +30,7 @@ for s in sets:
             h = asset.get("height", 2796)
             url = template_url.replace("{w}", str(w)).replace("{h}", str(h)).replace("{f}", "jpg")
             safe_name = fname.replace(" ", "_").replace(":", "-")
-            out_path = f"screenshots_check/{display}_{safe_name}"
+            out_path = os.path.join(out_dir, f"{display}_{safe_name}")
             r = requests.get(url, timeout=30)
             if r.ok:
                 with open(out_path, "wb") as f2:

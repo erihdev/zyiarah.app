@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/services/counter_service.dart';
 
 class StoreProduct {
   final String id;
@@ -85,28 +86,51 @@ class ZyiarahStoreService {
 
     // Atomic: increment counter + create store order in one Transaction
     final docRef = _db.collection('store_orders').doc();
-    final counterRef = _db.collection('metadata').doc('order_counter');
     String orderCode = '';
+    double serverCalculatedTotal = 0.0;
 
     await _db.runTransaction((transaction) async {
-      final counterSnap = await transaction.get(counterRef);
-      final lastId = counterSnap.exists
-          ? ((counterSnap.data()?['last_id'] as num?)?.toInt() ?? 100)
-          : 100;
-      final nextId = lastId + 1;
+      final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
       orderCode = ZyiarahOrderUtil.formatSmartCode(nextId);
-      if (counterSnap.exists) {
-        transaction.update(counterRef, {'last_id': nextId});
-      } else {
-        transaction.set(counterRef, {'last_id': nextId});
+
+      double tempTotal = 0.0;
+      final List<Map<String, dynamic>> verifiedItems = [];
+
+      for (final item in items) {
+        final productId = item['id'] as String? ?? '';
+        final quantity = (item['quantity'] as num?)?.toInt() ?? 1;
+
+        if (productId.isEmpty) continue;
+
+        final productRef = _db.collection('products').doc(productId);
+        final productSnap = await transaction.get(productRef);
+
+        if (!productSnap.exists) {
+          throw Exception('المنتج غير موجود في قاعدة البيانات: $productId');
+        }
+
+        final productData = productSnap.data();
+        final name = productData?['name'] as String? ?? 'منتج غير معروف';
+        final price = (productData?['price'] as num?)?.toDouble() ?? 0.0;
+
+        tempTotal += price * quantity;
+        verifiedItems.add({
+          'id': productId,
+          'name': name,
+          'quantity': quantity,
+          'price': price,
+        });
       }
+
+      serverCalculatedTotal = tempTotal;
+
       transaction.set(docRef, {
         'code': orderCode,
         'client_id': user.uid,
         'client_name': clientName,
         'client_phone': clientPhone,
-        'items': items,
-        'total_amount': totalAmount,
+        'items': verifiedItems,
+        'total_amount': serverCalculatedTotal,
         'payment_method': paymentMethod,
         'status': 'pending',
         'created_at': FieldValue.serverTimestamp(),
@@ -118,7 +142,7 @@ class ZyiarahStoreService {
       action: 'CREATE_STORE_ORDER',
       details: {
         'code': orderCode,
-        'amount': totalAmount,
+        'amount': serverCalculatedTotal,
         'client': clientName,
         'item_count': items.length,
       },

@@ -1,9 +1,9 @@
+import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:url_launcher/url_launcher.dart';
-import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/utils/status_util.dart';
@@ -19,7 +19,7 @@ class AdminOrderDetailsScreen extends StatefulWidget {
 
 class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final ZyiarahNotificationTriggerService _notificationService = ZyiarahNotificationTriggerService();
+  final ZyiarahMessagingService _notificationService = ZyiarahMessagingService();
   final ZyiarahOrderService _orderService = ZyiarahOrderService();
   bool _isLoading = true;
   Map<String, dynamic>? _orderData;
@@ -128,40 +128,87 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   Future<void> _updateOrder() async {
     setState(() => _isLoading = true);
     try {
-      // Use the unified OrderService to ensure all atomic logic (like visit deduction) runs
-      await _orderService.updateOrderStatus(
-        widget.orderId, 
-        _currentStatus, 
-        driverId: _selectedDriverId
-      );
+      final bool isNewAssignment = _selectedDriverId != null &&
+          _selectedDriverId != _orderData?['driver_id'];
 
-      // Audit Log
+      // Build the atomic Firestore update payload
+      final Map<String, dynamic> updatePayload = {'status': _currentStatus};
+      if (_selectedDriverId != null) {
+        updatePayload['driver_id'] = _selectedDriverId!;
+        updatePayload['driver_name'] = _selectedDriverName ?? '';
+        updatePayload['assigned_at'] = FieldValue.serverTimestamp();
+        // Auto-promote from pending to assigned when a driver is selected
+        if (_currentStatus == 'pending') {
+          updatePayload['status'] = 'assigned';
+          setState(() => _currentStatus = 'assigned');
+        }
+      }
+
+      // 1. Write driver fields + status atomically
+      await _db.collection('orders').doc(widget.orderId).update(updatePayload);
+
+      // 2. Invoke unified order service for side-effects
+      //    (wallet refund, Qatrat, etc.) only for terminal statuses
+      if (_currentStatus == 'completed' || _currentStatus == 'cancelled') {
+        await _orderService.updateOrderStatus(
+          widget.orderId,
+          _currentStatus,
+          driverId: _selectedDriverId,
+        );
+      }
+
+      // 3. Audit: dedicated assignment entry when driver changes
+      if (isNewAssignment) {
+        await ZyiarahAuditService().logAction(
+          action: ZyiarahAuditService.actionAssignDriver,
+          targetId: widget.orderId,
+          details: {
+            'order_code': _orderData?['code'] ?? widget.orderId.substring(0, 8),
+            'driver_id': _selectedDriverId!,
+            'driver_name': _selectedDriverName ?? '',
+          },
+        );
+        // 4. Immediate push alert to the assigned driver
+        await _notificationService.notifyDriverOfAssignment(
+          _selectedDriverId!,
+          widget.orderId,
+        );
+      }
+
+      // 5. Always log the status update
       await ZyiarahAuditService().logAction(
         action: ZyiarahAuditService.actionUpdateOrderStatus,
         targetId: widget.orderId,
         details: {
-          'order_code': _orderData?['code'] ?? widget.orderId.substring(0,8),
+          'order_code': _orderData?['code'] ?? widget.orderId.substring(0, 8),
           'new_status': _currentStatus,
           'old_status': _orderData?['status'] ?? 'pending',
           'assigned_driver': _selectedDriverName ?? 'None',
         },
       );
-        if (mounted) {
-          if (_selectedDriverId != null && _currentStatus == 'assigned') {
-            await _notificationService.notifyDriverOfAssignment(_selectedDriverId!, widget.orderId);
-          }
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ التعديلات وحفظ بيانات السائق بنجاح'), backgroundColor: Colors.green));
-          }
-        }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+            isNewAssignment
+                ? 'تم تعيين ${_selectedDriverName ?? "السائق"} وإرسال إشعار فوري ✅'
+                : 'تم حفظ تعديلات الطلب بنجاح ✅',
+          ),
+          backgroundColor: Colors.green,
+        ));
+      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('فشل تحديث الطلب'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('فشل تحديث الطلب — تحقق من اتصالك بالإنترنت'),
+          backgroundColor: Colors.red,
+        ));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
   
   Future<void> _openWhatsApp(String phone) async {
     try {

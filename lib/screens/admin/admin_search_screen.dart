@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -13,6 +14,7 @@ class AdminSearchScreen extends StatefulWidget {
 class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTickerProviderStateMixin {
   final TextEditingController _searchCtrl = TextEditingController();
   late TabController _tabController;
+  Timer? _debounceTimer;
   
   List<DocumentSnapshot> _orderResults = [];
   List<DocumentSnapshot> _storeResults = [];
@@ -30,9 +32,17 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _tabController.dispose();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
+    if (_debounceTimer?.isActive ?? false) _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      _performSearch(query);
+    });
   }
 
   Future<void> _performSearch(String query) async {
@@ -98,7 +108,7 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
               controller: _searchCtrl,
               autofocus: true,
               style: const TextStyle(color: Colors.white, fontSize: 14),
-              onChanged: _performSearch,
+              onChanged: _onSearchChanged,
               decoration: const InputDecoration(
                 hintText: "ابحث عن أي شيء في المنصة...",
                 hintStyle: TextStyle(color: Colors.white54, fontSize: 12),

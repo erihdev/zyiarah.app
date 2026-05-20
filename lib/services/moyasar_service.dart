@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 /// Moyasar payment gateway service.
 /// API key is loaded from MOYASAR_PUBLISHABLE_KEY in .env.
@@ -67,19 +68,15 @@ class MoyasarService {
     throw Exception(message);
   }
 
-  /// Verifies a payment by ID — useful for server-side double-check.
-  static Future<bool> verifyPayment(String paymentId) async {
+  /// Verifies a payment by ID via secure Cloud Function.
+  static Future<bool> verifyPayment(String paymentId, String orderId) async {
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/payments/$paymentId'),
-        headers: {'Authorization': _authHeader},
-      ).timeout(const Duration(seconds: 15));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        return data['status'] == 'paid';
-      }
-      return false;
+      final callable = FirebaseFunctions.instance.httpsCallable('verifyMoyasarPayment');
+      final result = await callable.call({
+        'paymentId': paymentId,
+        'orderId': orderId,
+      });
+      return result.data['success'] == true;
     } catch (e, stack) {
       debugPrint('MoyasarService.verifyPayment error: $e');
       FirebaseCrashlytics.instance.recordError(e, stack, fatal: false);

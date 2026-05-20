@@ -1,7 +1,7 @@
+import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:zyiarah/services/notification_trigger_service.dart';
 
 class AdminTicketDetailsScreen extends StatefulWidget {
   final String ticketId;
@@ -14,7 +14,7 @@ class AdminTicketDetailsScreen extends StatefulWidget {
 
 class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final ZyiarahNotificationTriggerService _notificationService = ZyiarahNotificationTriggerService();
+  final ZyiarahMessagingService _notificationService = ZyiarahMessagingService();
   final TextEditingController _replyCtrl = TextEditingController();
   bool _isSending = false;
 

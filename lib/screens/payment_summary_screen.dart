@@ -1,3 +1,4 @@
+import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,20 +9,20 @@ import 'package:zyiarah/screens/checkout_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/services/order_service.dart';
-import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:intl/intl.dart' as intl;
-import 'package:zyiarah/services/zyiarah_comm_service.dart';
 import 'package:zyiarah/services/zatca_service.dart';
-import 'package:zyiarah/services/invoice_pdf_service.dart';
+import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'dart:io';
 import 'package:pay/pay.dart';
 import 'package:zyiarah/services/moyasar_service.dart';
+import 'package:zyiarah/services/zyiarah_wallet_service.dart';
 
 import 'package:zyiarah/providers/config_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
+import 'package:zyiarah/services/counter_service.dart';
 
 
 
@@ -60,11 +61,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   final EdfaPayService _edfaPayService = EdfaPayService();
   final ZyiarahOrderService _orderService = ZyiarahOrderService();
   
-  String _selectedPaymentMethod = 'card'; // 'card', 'tamara', 'subscription' or 'cod'
+  String _selectedPaymentMethod = 'card'; // 'card', 'tamara', 'wallet', 'subscription' or 'cod'
   bool _isLoading = false;
   ZyiarahUser? _currentUser;
   bool _agreeToTerms = false;
   bool _tamaraEnabled = false;
+  double _walletBalance = 0.0;
 
   final TextEditingController _couponController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
@@ -117,6 +119,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
           _tamaraEnabled = configDoc.data()?['tamara_enabled'] as bool? ?? false;
         });
+
+        // Fetch wallet balance separately
+        try {
+          final wallet = await ZyiarahWalletService().getOrCreateWallet(user.uid);
+          if (mounted) setState(() => _walletBalance = wallet.balance);
+        } catch (e) {
+          debugPrint('Error fetching wallet balance: $e');
+        }
       }
     }
   }
@@ -244,6 +254,45 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       if (_selectedPaymentMethod == 'subscription') {
         await _processUnifiedSuccess(finalOrderId, 'subscription', isFree: true);
 
+      } else if (_selectedPaymentMethod == 'wallet') {
+        // --- Wallet Payment: Atomic balance deduction ---
+        if (_walletBalance < totalWithVat) {
+          setState(() => _isLoading = false);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+              'رصيد محفظتك غير كافٍ. رصيدك الحالي: ${_walletBalance.toStringAsFixed(2)} ر.س',
+              style: GoogleFonts.tajawal(),
+            ),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ));
+          return;
+        }
+        // Atomically deduct from wallet then create order
+        final walletRef = FirebaseFirestore.instance
+            .collection('wallets')
+            .doc(_currentUser?.uid);
+        final txRef = walletRef.collection('transactions').doc();
+        await FirebaseFirestore.instance.runTransaction((tx) async {
+          final snap = await tx.get(walletRef);
+          final current = (snap.data()?['balance'] ?? 0.0).toDouble();
+          if (current < totalWithVat) throw Exception('insufficient_balance');
+          tx.update(walletRef, {
+            'balance': current - totalWithVat,
+            'last_updated': FieldValue.serverTimestamp(),
+          });
+          tx.set(txRef, {
+            'amount': -totalWithVat,
+            'points': 0,
+            'type': 'payment',
+            'description': 'دفع خدمة: ${widget.serviceName}',
+            'created_at': FieldValue.serverTimestamp(),
+          });
+        });
+        if (mounted) setState(() => _walletBalance -= totalWithVat);
+        await _processUnifiedSuccess(finalOrderId, 'wallet', isFree: false);
+
       } else if (_selectedPaymentMethod == 'cod') {
         if (widget.maintenanceId != null) {
           await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
@@ -338,7 +387,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         'paidAt': FieldValue.serverTimestamp(),
         'totalAmount': amountToSave,
       });
-      await ZyiarahNotificationTriggerService().notifyAdminOfPayment(orderCode: code, amount: amountToSave, type: 'maintenance', clientName: _currentUser?.name);
+      await ZyiarahMessagingService().notifyAdminOfPayment(orderCode: code, amount: amountToSave, type: 'maintenance', clientName: _currentUser?.name);
     } else if (widget.contractId != null) {
       code = widget.contractId!;
       await FirebaseFirestore.instance.collection('contracts').doc(widget.contractId).update({
@@ -349,7 +398,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       await FirebaseFirestore.instance.collection('users').doc(_currentUser?.uid).update({
         'visits_remaining': FieldValue.increment(widget.planVisits ?? 0),
       });
-      await ZyiarahNotificationTriggerService().notifyContractActivated(_currentUser?.uid ?? '', widget.serviceName, widget.planVisits ?? 0);
+      await ZyiarahMessagingService().notifyContractActivated(_currentUser?.uid ?? '', widget.serviceName, widget.planVisits ?? 0);
     } else {
       final bool isHourly = widget.hours != null && widget.serviceDate != null;
 
@@ -374,19 +423,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       }
 
       // Atomic: increment counter + create order in one Transaction
-      final _counterRef = FirebaseFirestore.instance.collection('metadata').doc('order_counter');
       await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final counterSnap = await transaction.get(_counterRef);
-        final lastId = counterSnap.exists
-            ? ((counterSnap.data()?['last_id'] as num?)?.toInt() ?? 100)
-            : 100;
-        final nextId = lastId + 1;
+        final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
         code = ZyiarahOrderUtil.formatSmartCode(nextId);
-        if (counterSnap.exists) {
-          transaction.update(_counterRef, {'last_id': nextId});
-        } else {
-          transaction.set(_counterRef, {'last_id': nextId});
-        }
         transaction.set(FirebaseFirestore.instance.collection('orders').doc(id), {
           'code': code,
           'client_id': _currentUser?.uid,
@@ -408,6 +447,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           'worker_count': widget.workerCount,
           'coupon_code': _appliedCoupon,
           'discount_amount': _discountAmount,
+          // Capacity index fields — queried by ZyiarahCapacityService
+          if (isHourly && widget.serviceDate != null) ...{
+            'booking_date': '${widget.serviceDate!.year}-'
+                '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
+                '${widget.serviceDate!.day.toString().padLeft(2, '0')}',
+            'booking_time_slot':
+                '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00',
+          },
         });
       });
 
@@ -420,7 +467,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         );
         if (assigned) {
           final av = availabilityResult!;
-          await ZyiarahNotificationTriggerService().notifyDriverOfAssignment(
+          await ZyiarahMessagingService().notifyDriverOfAssignment(
             av['driverId'] as String,
             code,
             driverEmail: av['driverEmail'] as String?,
@@ -430,7 +477,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 ? '${widget.serviceDate!.year}/${widget.serviceDate!.month.toString().padLeft(2,'0')}/${widget.serviceDate!.day.toString().padLeft(2,'0')} — ${widget.serviceDate!.hour.toString().padLeft(2,'0')}:00'
                 : null,
           );
-          await ZyiarahNotificationTriggerService().notifyOrderCreated(
+          await ZyiarahMessagingService().notifyOrderCreated(
             clientId: _currentUser?.uid ?? '',
             orderCode: code,
             type: 'cleaning',
@@ -450,7 +497,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           return;
         }
       } else {
-        await ZyiarahNotificationTriggerService().notifyOrderCreated(
+        await ZyiarahMessagingService().notifyOrderCreated(
           clientId: _currentUser?.uid ?? '',
           orderCode: code,
           type: 'cleaning',
@@ -462,7 +509,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     // 2. Trigger ZATCA Invoice & Notifications
     final String? invoiceUrl = await _finalizeOrderWithInvoice(orderId: id, orderCode: code, paymentMethod: method, paidAmount: amountToSave);
     
-    await ZyiarahCommService().notifyNewOrder({
+    await ZyiarahMessagingService().notifyNewOrder({
       'code': code,
       'client_name': _currentUser?.name ?? 'عميل زيارة',
       'amount': amountToSave,
@@ -503,7 +550,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       vatAmount: vatAmount,
     );
 
-    return await InvoicePdfService.generateAndUploadInvoice(
+    return await ZyiarahPdfService.generateAndUploadInvoice(
       orderId: orderId,
       orderCode: orderCode,
       amount: totalWithVat,
@@ -839,7 +886,73 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             color: Colors.green,
           ),
         ],
+        // --- Zyiarah Wallet Payment Option ---
+        const SizedBox(height: 12),
+        _buildWalletPaymentOption(),
       ],
+    );
+  }
+
+  Widget _buildWalletPaymentOption() {
+    final bool isSelected = _selectedPaymentMethod == 'wallet';
+    final bool hasSufficientBalance = _walletBalance >= totalWithVat;
+    return InkWell(
+      onTap: () => setState(() => _selectedPaymentMethod = 'wallet'),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFF3E8F4) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF5D1B5E) : Colors.grey.shade200,
+            width: 2,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? const Color(0xFF5D1B5E).withValues(alpha: 0.1)
+                    : Colors.grey.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.account_balance_wallet_rounded, color: Color(0xFF5D1B5E)),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('محفظة زيارة', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 14)),
+                  Row(
+                    children: [
+                      Text(
+                        'الرصيد: ${_walletBalance.toStringAsFixed(2)} ر.س',
+                        style: GoogleFonts.tajawal(
+                          fontSize: 11,
+                          color: hasSufficientBalance ? Colors.green.shade700 : Colors.red.shade600,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (!hasSufficientBalance)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Text(
+                            '(رصيد غير كافٍ)',
+                            style: GoogleFonts.tajawal(fontSize: 10, color: Colors.red.shade400),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected) const Icon(Icons.check_circle, color: Color(0xFF5D1B5E)),
+          ],
+        ),
+      ),
     );
   }
 
