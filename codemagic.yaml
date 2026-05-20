@@ -33,13 +33,24 @@ workflows:
           print(f"DEBUG: raw_key length: {len(raw_key)}")
           if len(raw_key) > 0:
               print(f"DEBUG: raw_key starts with: {repr(raw_key[:40])}")
-              
-          if os.path.exists(raw_key):
-              print(f"DEBUG: raw_key is a file path. Reading key from: {raw_key}")
+          
+          # Codemagic stores file-backed env vars as @file:/path/to/key.p8
+          # We must strip the @file: prefix before reading the file
+          if raw_key.startswith("@file:"):
+              file_path = raw_key[len("@file:"):].strip()
+              print(f"DEBUG: Detected @file: prefix. Reading key from: {file_path}")
+              try:
+                  with open(file_path, "r") as f:
+                      raw_key = f.read().strip()
+                  print(f"DEBUG: Successfully read key from @file: path. Length: {len(raw_key)}")
+              except Exception as e:
+                  print(f"DEBUG: Failed to read key from @file: path: {e}")
+          elif os.path.exists(raw_key):
+              print(f"DEBUG: raw_key is a plain file path. Reading key from: {raw_key}")
               try:
                   with open(raw_key, "r") as f:
                       raw_key = f.read().strip()
-                  print(f"DEBUG: Successfully read key from path. Length: {len(raw_key)}")
+                  print(f"DEBUG: Successfully read key from plain path. Length: {len(raw_key)}")
               except Exception as e:
                   print(f"DEBUG: Failed to read key from path: {e}")
                   
