@@ -133,3 +133,37 @@ workflows:
         auth: integration
         submit_to_testflight: true
         submit_to_app_store: false
+
+  android-release:
+    name: Zyiarah Android Release
+    max_build_duration: 120
+    instance_type: mac_mini_m1
+    environment:
+      groups:
+        - android_credentials
+      vars:
+        PACKAGE_NAME: "com.zyiarah.zyiarah"
+      flutter: stable
+    scripts:
+      - name: Create .env file
+        script: |
+          echo "MAPBOX_TOKEN=$MAPBOX_TOKEN" > .env
+      - name: Set up key.properties
+        script: |
+          echo "storePassword=$ANDROID_KEYSTORE_PASSWORD" > android/key.properties
+          echo "keyPassword=$ANDROID_KEY_PASSWORD" >> android/key.properties
+          echo "keyAlias=$ANDROID_KEY_ALIAS" >> android/key.properties
+          echo "storeFile=upload-keystore.jks" >> android/key.properties
+      - name: Set up keystore file
+        script: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+      - name: Get Flutter dependencies
+        script: flutter pub get
+      - name: Build Android App Bundle (AAB)
+        script: flutter build appbundle --release
+    artifacts:
+      - build/app/outputs/bundle/release/*.aab
+    publishing:
+      google_play:
+        credentials: $GP_CREDENTIALS
+        track: internal
