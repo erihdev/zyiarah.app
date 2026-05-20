@@ -1,10 +1,9 @@
+import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/utils/order_util.dart';
-import 'package:zyiarah/services/notification_trigger_service.dart';
-import 'package:zyiarah/services/zyiarah_comm_service.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 
 /// شاشة WebView لإتمام دفع تمارا الخاص بطلبات المتجر.
@@ -83,14 +82,14 @@ class _StoreTamaraCheckoutScreenState extends State<StoreTamaraCheckoutScreen> {
               });
 
               // إشعارات non-fatal — الإخفاق لا يوقف تجربة المستخدم
-              ZyiarahNotificationTriggerService().notifyOrderCreated(
+              ZyiarahMessagingService().notifyOrderCreated(
                 clientId: user?.uid ?? '',
                 orderCode: orderCode,
                 serviceName: 'طلب منتجات من المتجر',
                 type: 'store',
               ).catchError((_) {});
 
-              ZyiarahCommService().notifyNewOrder({
+              ZyiarahMessagingService().notifyNewOrder({
                 'code': orderCode,
                 'client_name': widget.customerName,
                 'client_phone': widget.customerPhone,

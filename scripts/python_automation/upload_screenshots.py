@@ -2,39 +2,29 @@
 Upload fixed iOS screenshots to App Store Connect via API.
 Replaces existing iPhone 6.7" screenshots with the corrected iOS versions.
 """
-import jwt, time, requests, os, json, hashlib, base64
-
-ISSUER_ID = "6dd67287-cfcd-40fc-a3db-8bf378a1ac8f"
-KEY_ID = "RJMPC4734X"
-APP_ID = "6760955777"
-BASE_URL = "https://api.appstoreconnect.apple.com/v1"
-
-with open("AuthKey_RJMPC4734X.p8") as f:
-    private_key = f.read()
-
-def make_token():
-    payload = {"iss": ISSUER_ID, "exp": int(time.time()) + 1200, "aud": "appstoreconnect-v1"}
-    return jwt.encode(payload, private_key, algorithm="ES256", headers={"kid": KEY_ID})
-
-def hdrs():
-    return {"Authorization": f"Bearer {make_token()}", "Content-Type": "application/json"}
+import time
+import requests
+import os
+import hashlib
+import base64
+import app_store_common as common
 
 # === 1. Get version ID ===
-r = requests.get(f"{BASE_URL}/apps/{APP_ID}/appStoreVersions", headers=hdrs(),
+r = requests.get(f"{common.BASE_URL}/apps/{common.APP_ID}/appStoreVersions", headers=common.hdrs(),
                  params={"filter[platform]": "IOS", "limit": 1})
 ver = r.json()["data"][0]
 ver_id = ver["id"]
 print(f"Version: {ver['attributes']['versionString']} ({ver_id})")
 
 # === 2. Get localization ID ===
-r2 = requests.get(f"{BASE_URL}/appStoreVersions/{ver_id}/appStoreVersionLocalizations", headers=hdrs())
+r2 = requests.get(f"{common.BASE_URL}/appStoreVersions/{ver_id}/appStoreVersionLocalizations", headers=common.hdrs())
 loc = r2.json()["data"][0]
 loc_id = loc["id"]
 print(f"Locale: {loc['attributes']['locale']} ({loc_id})")
 
 # === 3. Get the iPhone 6.7" screenshot set ===
-r3 = requests.get(f"{BASE_URL}/appStoreVersionLocalizations/{loc_id}/appScreenshotSets",
-                  headers=hdrs(), params={"include": "appScreenshots"})
+r3 = requests.get(f"{common.BASE_URL}/appStoreVersions/{loc_id}/appScreenshotSets",
+                  headers=common.hdrs(), params={"include": "appScreenshots"})
 data = r3.json()
 sets = data.get("data", [])
 included = data.get("included", [])
@@ -57,12 +47,17 @@ print(f"iPhone 6.7 set: {set_id}")
 existing_ids = [ss["id"] for ss in iphone_set.get("relationships", {}).get("appScreenshots", {}).get("data", [])]
 print(f"Deleting {len(existing_ids)} existing screenshots...")
 for ss_id in existing_ids:
-    r = requests.delete(f"{BASE_URL}/appScreenshots/{ss_id}", headers=hdrs())
+    r = requests.delete(f"{common.BASE_URL}/appScreenshots/{ss_id}", headers=common.hdrs())
     print(f"  Deleted {ss_id}: {r.status_code}")
     time.sleep(0.5)
 
 # === 5. Upload new screenshots ===
-screenshots_dir = "screenshots_ios"
+base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+screenshots_dir = os.path.join(base_dir, "screenshots_ios")
+if not os.path.exists(screenshots_dir):
+    print(f"ERROR: Directory {screenshots_dir} does not exist!")
+    exit(1)
+
 files = sorted([f for f in os.listdir(screenshots_dir) if f.startswith("APP_IPHONE_67")])
 print(f"\nUploading {len(files)} new screenshots...")
 
@@ -89,7 +84,7 @@ for i, fname in enumerate(files):
             }
         }
     }
-    r = requests.post(f"{BASE_URL}/appScreenshots", headers=hdrs(), json=payload)
+    r = requests.post(f"{common.BASE_URL}/appScreenshots", headers=common.hdrs(), json=payload)
     if not r.ok:
         print(f"  ERROR creating screenshot {fname}: {r.status_code} {r.text[:200]}")
         continue
@@ -125,7 +120,7 @@ for i, fname in enumerate(files):
             }
         }
     }
-    r = requests.patch(f"{BASE_URL}/appScreenshots/{ss_id}", headers=hdrs(), json=commit_payload)
+    r = requests.patch(f"{common.BASE_URL}/appScreenshots/{ss_id}", headers=common.hdrs(), json=commit_payload)
     if r.ok:
         print(f"    Committed: OK")
     else:

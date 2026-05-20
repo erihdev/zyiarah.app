@@ -210,11 +210,16 @@ Firestore
 │       ├── admin_email (string)
 │       └── timestamp
 │
-├── coverage_zones/          ← مناطق التغطية الجغرافية
+├── service_zones/           ← مناطق التغطية الجغرافية والأسعار الموحدة
 │   └── {zoneId}/
 │       ├── name (string)
-│       ├── center (GeoPoint)
-│       └── radiusKm (double)
+│       ├── centerLoc (GeoPoint)
+│       ├── radiusKm (double)
+│       ├── enabled (bool)
+│       ├── rank (int)
+│       ├── prices (Map<String, double>)
+│       ├── sofaPrice (double)
+│       └── rugPrice (double)
 │
 ├── config/
 │   └── ux_experiments/      ← إعدادات A/B Testing

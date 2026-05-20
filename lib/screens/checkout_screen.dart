@@ -1,15 +1,15 @@
+import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:zyiarah/screens/invoice_screen.dart';
 import 'package:zyiarah/services/zatca_service.dart';
-import 'package:zyiarah/services/invoice_pdf_service.dart';
+import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/audit_service.dart';
-import 'package:zyiarah/services/notification_trigger_service.dart';
-import 'package:zyiarah/services/zyiarah_comm_service.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:zyiarah/services/counter_service.dart';
 
 class TamaraCheckoutScreen extends StatefulWidget {
   final String checkoutUrl;
@@ -111,7 +111,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                   }
 
                   // إرسال إشعار التفعيل
-                  await ZyiarahNotificationTriggerService().notifyContractActivated(
+                  await ZyiarahMessagingService().notifyContractActivated(
                     user?.uid ?? '',
                     widget.serviceType,
                     widget.planVisits ?? 0,
@@ -130,19 +130,9 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                 } else {
                   // Atomic: increment counter + create Tamara order in one Transaction
                   String tamaraOrderCode = '';
-                  final _counterRef = FirebaseFirestore.instance.collection('metadata').doc('order_counter');
                   await FirebaseFirestore.instance.runTransaction((transaction) async {
-                    final counterSnap = await transaction.get(_counterRef);
-                    final lastId = counterSnap.exists
-                        ? ((counterSnap.data()?['last_id'] as num?)?.toInt() ?? 100)
-                        : 100;
-                    final nextId = lastId + 1;
+                    final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
                     tamaraOrderCode = ZyiarahOrderUtil.formatSmartCode(nextId);
-                    if (counterSnap.exists) {
-                      transaction.update(_counterRef, {'last_id': nextId});
-                    } else {
-                      transaction.set(_counterRef, {'last_id': nextId});
-                    }
                     transaction.set(
                       FirebaseFirestore.instance.collection('orders').doc(widget.orderId),
                       {
@@ -170,7 +160,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                   });
 
                   // إشعار السائقين والإدارة بالطلب الجديد
-                  await ZyiarahNotificationTriggerService().notifyOrderCreated(
+                  await ZyiarahMessagingService().notifyOrderCreated(
                     clientId: user?.uid ?? '',
                     orderCode: tamaraOrderCode,
                     type: 'cleaning',
@@ -217,7 +207,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
               final orderDoc = await FirebaseFirestore.instance.collection('orders').doc(newOrderId).get();
               final String orderCode = orderDoc.data()?['code'] ?? newOrderId.substring(0, 8).toUpperCase();
 
-              InvoicePdfService.generateAndUploadInvoice(
+              ZyiarahPdfService.generateAndUploadInvoice(
                 orderId: newOrderId,
                 orderCode: orderCode,
                 amount: widget.amount,
@@ -241,7 +231,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
               if (widget.maintenanceId != null) finalCommCode = widget.maintenanceId!;
               if (widget.contractId != null) finalCommCode = widget.contractId!;
 
-              await ZyiarahCommService().notifyNewOrder({
+              await ZyiarahMessagingService().notifyNewOrder({
                 'code': finalCommCode,
                 'client_name': widget.customerName ?? user?.displayName ?? 'عميل زيارة',
                 'client_phone': widget.customerPhone ?? user?.phoneNumber ?? 'غير متوفر',

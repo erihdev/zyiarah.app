@@ -1,3 +1,4 @@
+import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
@@ -5,7 +6,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:zyiarah/firebase_options.dart';
 import 'dart:math';
-import 'package:zyiarah/services/zyiarah_comm_service.dart';
 
 /// خدمة إدارة Firebase لتطبيق زيارة
 class ZyiarahFirebaseService {
@@ -16,7 +16,7 @@ class ZyiarahFirebaseService {
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final ZyiarahCommService _commService = ZyiarahCommService();
+  final ZyiarahMessagingService _commService = ZyiarahMessagingService();
 
   // --- التحقق بالبريد الإلكتروني وكلمة المرور (Email & Password) ---
 

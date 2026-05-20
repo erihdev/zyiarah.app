@@ -76,4 +76,5 @@ testers.txt
 
 # Secrets & private keys
 AuthKey_*.p8
+*.b64
 .claude/

@@ -1,3 +1,4 @@
+import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:zyiarah/services/store_service.dart';
@@ -7,11 +8,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:lottie/lottie.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:zyiarah/screens/store_checkout_screen.dart';
-import 'package:zyiarah/services/notification_trigger_service.dart';
 import 'package:zyiarah/services/tamara_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:zyiarah/services/zyiarah_comm_service.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
 
 
@@ -451,14 +450,14 @@ class _CartSheetState extends State<_CartSheet> {
       }
 
       final user = FirebaseAuth.instance.currentUser;
-      ZyiarahNotificationTriggerService().notifyOrderCreated(
+      ZyiarahMessagingService().notifyOrderCreated(
         clientId: user?.uid ?? '',
         orderCode: orderCode,
         serviceName: 'طلب منتجات من المتجر',
         type: 'store',
       ).catchError((_) {});
 
-      ZyiarahCommService().notifyNewOrder({
+      ZyiarahMessagingService().notifyNewOrder({
         'code': orderCode,
         'client_name': user?.displayName ?? 'عميل زيارة',
         'client_phone': user?.phoneNumber ?? 'غير متوفر',

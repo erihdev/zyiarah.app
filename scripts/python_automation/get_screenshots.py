@@ -1,30 +1,16 @@
-import jwt, time, requests
-
-ISSUER_ID = "6dd67287-cfcd-40fc-a3db-8bf378a1ac8f"
-KEY_ID = "RJMPC4734X"
-APP_ID = "6760955777"
-BASE_URL = "https://api.appstoreconnect.apple.com/v1"
-
-with open("AuthKey_RJMPC4734X.p8") as f:
-    private_key = f.read()
-
-def make_token():
-    payload = {"iss": ISSUER_ID, "exp": int(time.time()) + 1200, "aud": "appstoreconnect-v1"}
-    return jwt.encode(payload, private_key, algorithm="ES256", headers={"kid": KEY_ID})
-
-def hdrs():
-    return {"Authorization": f"Bearer {make_token()}", "Content-Type": "application/json"}
+import requests
+import app_store_common as common
 
 # Get version ID
-r = requests.get(f"{BASE_URL}/apps/{APP_ID}/appStoreVersions", headers=hdrs(), params={"filter[platform]": "IOS", "limit": 1})
+r = requests.get(f"{common.BASE_URL}/apps/{common.APP_ID}/appStoreVersions", headers=common.hdrs(), params={"filter[platform]": "IOS", "limit": 1})
 ver_id = r.json()["data"][0]["id"]
 
 # Get localizations
-r2 = requests.get(f"{BASE_URL}/appStoreVersions/{ver_id}/appStoreVersionLocalizations", headers=hdrs())
+r2 = requests.get(f"{common.BASE_URL}/appStoreVersions/{ver_id}/appStoreVersionLocalizations", headers=common.hdrs())
 loc_id = r2.json()["data"][0]["id"]
 
 # Get screenshot sets with screenshots included
-r3 = requests.get(f"{BASE_URL}/appStoreVersionLocalizations/{loc_id}/appScreenshotSets", headers=hdrs(), params={"include": "appScreenshots", "fields[appScreenshots]": "sourceFileChecksum,uploadOperations,fileName,imageAsset,assetToken,assetDeliveryState"})
+r3 = requests.get(f"{common.BASE_URL}/appStoreVersionLocalizations/{loc_id}/appScreenshotSets", headers=common.hdrs(), params={"include": "appScreenshots", "fields[appScreenshots]": "sourceFileChecksum,uploadOperations,fileName,imageAsset,assetToken,assetDeliveryState"})
 data = r3.json()
 
 sets = data.get("data", [])

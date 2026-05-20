@@ -1,13 +1,15 @@
+import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/services/audit_service.dart';
-import 'package:zyiarah/services/zyiarah_comm_service.dart';
-import 'package:zyiarah/services/notification_trigger_service.dart';
-import 'package:zyiarah/services/invoice_pdf_service.dart';
+import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:zyiarah/services/zatca_service.dart';
+import 'package:zyiarah/services/zyiarah_wallet_service.dart';
+import 'package:zyiarah/services/zyiarah_referral_service.dart';
 
 /// خدمة إدارة دورة حياة الطلب - تطبيق زيارة
 class ZyiarahOrderService {
@@ -44,6 +46,20 @@ class ZyiarahOrderService {
       debugPrint('Error fetching user data: $e');
     }
 
+    // --- Component 4: Dynamic Surge Pricing Calculation ---
+    double finalAmount = amount;
+    try {
+      final surgeResult = await FirebaseFunctions.instance.httpsCallable('getSurgePricingFactor').call();
+      final double surgeFactor = (surgeResult.data['surgeFactor'] as num).toDouble();
+      finalAmount = amount * surgeFactor;
+      if (surgeFactor > 1.0) {
+        debugPrint('Surge pricing active! Factor: $surgeFactor, Old: $amount, New: $finalAmount');
+      }
+    } catch (e) {
+      debugPrint('Error fetching surge factor: $e');
+    }
+    // -----------------------------------------------------
+
     // 2 & 3. Atomic: increment counter + create order in one Transaction
     // Pre-generate doc ref so we can reference it both inside and outside the transaction
     final orderRef = _db.collection('orders').doc();
@@ -73,7 +89,7 @@ class ZyiarahOrderService {
         'user_phone': clientPhone,
         'service_type': serviceType,
         'service_name': serviceType,
-        'amount': amount,
+        'amount': finalAmount,
         'status': 'pending',
         'location': location,
         'payment_method': paymentMethod,
@@ -93,7 +109,7 @@ class ZyiarahOrderService {
     // 4. Log and Execute Side-Effects (Coupons & Alerts)
     ZyiarahAuditService().logAction(
       action: 'CREATE_CLEANING_ORDER',
-      details: {'code': orderCode, 'amount': amount, 'client': clientName},
+      details: {'code': orderCode, 'amount': finalAmount, 'client': clientName},
       targetId: doc.id,
     );
 
@@ -106,32 +122,32 @@ class ZyiarahOrderService {
       'client_name': clientName,
       'client_phone': clientPhone,
       'service_type': serviceType,
-      'amount': amount,
+      'amount': finalAmount,
       'location': location,
     };
     
     // 5. Generate ZATCA QR and Invoice PDF (Professional Touch)
     final String qrData = ZatcaService.generateZatcaQrCode(
       timestamp: DateTime.now(),
-      totalAmount: amount,
-      vatAmount: amount - (amount / 1.15),
+      totalAmount: finalAmount,
+      vatAmount: finalAmount - (finalAmount / 1.15),
     );
 
-    final String? invoiceUrl = await InvoicePdfService.generateAndUploadInvoice(
+    final String? invoiceUrl = await ZyiarahPdfService.generateAndUploadInvoice(
       orderId: doc.id,
       orderCode: orderCode,
-      amount: amount,
+      amount: finalAmount,
       qrData: qrData,
       serviceName: serviceType,
       discountAmount: discountAmount,
       couponCode: couponCode,
     );
     
-    final comm = ZyiarahCommService();
+    final comm = ZyiarahMessagingService();
     await comm.notifyNewOrder(orderMap, customerEmail: clientEmail, invoiceUrl: invoiceUrl);
     
     // --- ارسل تنبيه لحظي للإدارة وللعميل عبر النظام الجديد ---
-    await ZyiarahNotificationTriggerService().notifyOrderCreated(
+    await ZyiarahMessagingService().notifyOrderCreated(
       clientId: clientId,
       orderCode: orderCode,
       type: serviceType,
@@ -211,11 +227,6 @@ class ZyiarahOrderService {
     }
   }
 
-  // منح كاش باك 5% (معطّل حالياً)
-  Future<void> _applyCashback(String userId, double orderAmount) async {
-    // Cashback feature is disabled — no-op to avoid empty Firestore write
-  }
-
   // إلغاء الطلب — يسمح فقط للطلبات في حالة pending أو accepted
   Future<void> cancelOrder(String orderId, {String cancelledBy = 'client'}) async {
     String? orderCode;
@@ -274,9 +285,32 @@ class ZyiarahOrderService {
       targetId: orderId,
     );
 
+    // --- إعادة المبلغ للمحفظة الرقمية إذا كان الطلب مدفوعاً (ليس اشتراكاً) ---
+    if (needsRefund) {
+      try {
+        final orderSnap = await _db.collection('orders').doc(orderId).get();
+        final orderData = orderSnap.data();
+        final String? clientId = orderData?['client_id'];
+        final double refundAmount = (orderData?['amount'] ?? 0.0).toDouble();
+        final String? paymentMethod = orderData?['payment_method'];
+        // لا تُعيد رصيد للاشتراك — فقط للدفع النقدي أو البطاقة أو المحفظة
+        if (clientId != null && refundAmount > 0 && paymentMethod != 'subscription') {
+          await ZyiarahWalletService().processRefund(
+            userId: clientId,
+            amount: refundAmount,
+            orderId: orderId,
+            orderCode: orderCode ?? orderId,
+          );
+        }
+      } catch (e) {
+        debugPrint('Error processing wallet refund: $e');
+      }
+    }
+    // -------------------------------------------------------------------------
+
     // إشعار السائق إذا كان مُسنَّداً
     if (cancelledDriverId != null) {
-      ZyiarahNotificationTriggerService().triggerNotification(
+      ZyiarahMessagingService().triggerNotification(
         toUid: cancelledDriverId!,
         title: "تم إلغاء الطلب",
         body: "تم إلغاء الطلب #${orderCode ?? orderId} بواسطة ${cancelledBy == 'client' ? 'العميل' : 'الإدارة'}.",
@@ -286,7 +320,7 @@ class ZyiarahOrderService {
     }
 
     // إشعار الإدارة
-    await ZyiarahNotificationTriggerService().triggerNotification(
+    await ZyiarahMessagingService().triggerNotification(
       toUid: 'ADMIN_BROADCAST',
       title: "تم إلغاء طلب ⚠️",
       body: "تم إلغاء الطلب #${orderCode ?? orderId} بواسطة ${cancelledBy == 'client' ? 'العميل' : 'الإدارة'}.",
@@ -374,10 +408,25 @@ class ZyiarahOrderService {
       try {
         final doc = await _db.collection('orders').doc(orderId).get();
         final data = doc.data();
-        if (data != null && data['payment_method'] != 'subscription') {
-          final clientId = data['client_id'];
+        if (data != null) {
+          final clientId = data['client_id'] as String?;
           final amount = (data['amount'] ?? 0.0).toDouble();
-          if (clientId != null) await _applyCashback(clientId, amount);
+          final code = data['code'] as String? ?? orderId;
+          // منح نقاط قطرات للعميل عند إتمام الطلب (1 ريال = 1 نقطة)
+          if (clientId != null && amount > 0) {
+            await ZyiarahWalletService().grantQatratReward(
+              userId: clientId,
+              orderId: orderId,
+              orderCode: code,
+              orderValue: amount,
+            );
+            // تحقق من مكافأة الإحالة — يُكمّل المحرك الفيروسي دورته عند أول طلب مكتمل
+            await ZyiarahReferralService().processReferralReward(
+              refereeUserId: clientId,
+              refereeOrderId: orderId,
+              refereeOrderCode: code,
+            );
+          }
         }
       } catch (e) {
         debugPrint("Non-critical post-processing error: $e");
@@ -478,40 +527,46 @@ class ZyiarahOrderService {
     };
   }
 
-  // التعيين التلقائي لسائق بعد الدفع (Atomic Transaction)
+  // التوزيع الذكي للطلبات للسائقين الأقرب (Smart Dispatch)
   Future<bool> autoAssignDriverForHourly({
     required String orderId,
     required DateTime startDateTime,
     required int durationHours,
   }) async {
-    final result = await checkHourlySlotAvailability(
-      startDateTime: startDateTime,
-      durationHours: durationHours,
-    );
-    if (!result['available']) return false;
+    try {
+      // 1. Fetch order details
+      final orderDoc = await _db.collection('orders').doc(orderId).get();
+      if (!orderDoc.exists) return false;
+      
+      final location = orderDoc.data()?['location'] as GeoPoint?;
+      final serviceType = orderDoc.data()?['service_type'] as String?;
+      final serviceDate = orderDoc.data()?['service_date'] as Timestamp?;
+      
+      if (location == null) return false;
 
-    final driverId = result['driverId'] as String;
-    final driverName = result['driverName'] as String;
-
-    return _db.runTransaction<bool>((transaction) async {
-      final driverRef = _db.collection('drivers').doc(driverId);
-      final orderRef = _db.collection('orders').doc(orderId);
-      final driverSnap = await transaction.get(driverRef);
-      if (driverSnap.data()?['is_active'] == false) return false;
-
-      transaction.update(orderRef, {
-        'status': 'accepted',
-        'driver_id': driverId,
-        'assigned_driver': driverName,
-        'accepted_at': FieldValue.serverTimestamp(),
+      // 2. Call Cloud Function to find top 3 nearest drivers
+      final result = await FirebaseFunctions.instance.httpsCallable('findNearestDrivers').call({
+        'lat': location.latitude,
+        'lng': location.longitude,
       });
-      transaction.update(driverRef, {
-        'status': 'en_route',
-        'current_order_id': orderId,
-        'is_available': false,
-      });
+      
+      final List<dynamic> drivers = result.data['drivers'] ?? [];
+      if (drivers.isEmpty) return false;
+
+      // 3. Broadcast to the top 3 drivers
+      for (var driverId in drivers) {
+        await ZyiarahMessagingService().notifyDriverOfAssignment(
+          driverId.toString(),
+          orderId,
+          serviceType: serviceType,
+          serviceDate: serviceDate != null ? serviceDate.toDate().toString() : startDateTime.toString(),
+        );
+      }
       return true;
-    });
+    } catch (e) {
+      debugPrint('Error in Smart Dispatch: $e');
+      return false;
+    }
   }
 
   // التحقق مما إذا كان السائق لديه طلب نشط حالياً
@@ -587,7 +642,7 @@ class ZyiarahOrderService {
 
     // 2. إطلاق رادار حماية السمعة الفاخر إذا كان التقييم منخفضاً
     if (rating <= 2.0) {
-      ZyiarahCommService().alertReputationRisk(
+      ZyiarahMessagingService().alertReputationRisk(
         orderCode: data['code'] ?? 'N/A',
         rating: rating,
         reason: reason,
@@ -597,7 +652,7 @@ class ZyiarahOrderService {
       );
 
       // تنبيه الإدارة اللحظي على الجوال
-      ZyiarahNotificationTriggerService().notifyAdminOfLowRating(
+      ZyiarahMessagingService().notifyAdminOfLowRating(
         orderCode: data['code'] ?? orderId,
         rating: rating,
         clientName: data['client_name'] ?? 'عميل',

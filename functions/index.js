@@ -1,13 +1,15 @@
 /* eslint-disable max-len */
-const {onDocumentCreated, onDocumentUpdated} = require("firebase-functions/v2/firestore");
+const {onDocumentCreated, onDocumentUpdated, onDocumentWritten} = require("firebase-functions/v2/firestore");
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
 const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
+const geofire = require("geofire-common");
 admin.initializeApp();
 
 // Secrets — stored in Firebase Secret Manager, never in source code
 const tamaraApiToken = defineSecret("TAMARA_API_TOKEN");
 const resendApiKeySecret = defineSecret("RESEND_API_KEY");
+const moyasarSecretKey = defineSecret("MOYASAR_SECRET_KEY");
 
 // 1. Notify user when admin replies to a support ticket
 exports.sendNotificationOnTicketReply = onDocumentCreated("support_tickets/{ticketId}/messages/{messageId}",
@@ -472,15 +474,32 @@ exports.createTamaraCheckout = onCall(
         throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً");
       }
 
-      const {orderId, amount, customerPhone, customerName} = request.data;
+      const {orderId, customerPhone, customerName} = request.data;
 
-      if (!orderId || !amount || !customerPhone || !customerName) {
+      if (!orderId || !customerPhone || !customerName) {
         throw new HttpsError("invalid-argument", "بيانات الطلب ناقصة");
       }
-      if (typeof amount !== "number" || amount <= 0) {
-        throw new HttpsError("invalid-argument", "المبلغ غير صالح");
+
+      // Fetch the true price from Firestore to prevent client-side tampering
+      let trueAmount = null;
+
+      const orderDoc = await admin.firestore().collection("orders").doc(orderId).get();
+      if (orderDoc.exists) {
+        const orderData = orderDoc.data();
+        trueAmount = Number(orderData.amount);
+      } else {
+        const storeOrderDoc = await admin.firestore().collection("store_orders").doc(orderId).get();
+        if (storeOrderDoc.exists) {
+          const storeOrderData = storeOrderDoc.data();
+          trueAmount = Number(storeOrderData.total_amount);
+        }
       }
 
+      if (trueAmount === null || isNaN(trueAmount) || trueAmount <= 0) {
+        throw new HttpsError("not-found", "لم يتم العثور على الطلب أو أن قيمة المبلغ غير صالحة في السيرفر");
+      }
+
+      const amount = trueAmount;
       const token = tamaraApiToken.value();
       const phone = customerPhone.startsWith("+") ?
         customerPhone : `+966${customerPhone}`;
@@ -719,3 +738,363 @@ exports.processNotificationTriggers = onDocumentCreated(
         });
       }
     });
+
+// 7. Secure Moyasar payment verification on Call function
+exports.verifyMoyasarPayment = onCall(
+    {secrets: ["MOYASAR_SECRET_KEY"]},
+    async (request) => {
+      if (!request.auth) {
+        throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً");
+      }
+
+      const {paymentId, orderId} = request.data;
+      if (!paymentId || !orderId) {
+        throw new HttpsError("invalid-argument", "بيانات التحقق غير مكتملة");
+      }
+
+      // Fetch the true amount from Firestore (orders, store_orders, maintenance_requests, or contracts) to prevent tampering
+      let trueAmount = null;
+      let orderRef = admin.firestore().collection("orders").doc(orderId);
+
+      let orderDoc = await orderRef.get();
+      if (orderDoc.exists) {
+        trueAmount = Number(orderDoc.data().amount);
+      } else {
+        orderRef = admin.firestore().collection("store_orders").doc(orderId);
+        orderDoc = await orderRef.get();
+        if (orderDoc.exists) {
+          trueAmount = Number(orderDoc.data().total_amount);
+        } else {
+          orderRef = admin.firestore().collection("maintenance_requests").doc(orderId);
+          orderDoc = await orderRef.get();
+          if (orderDoc.exists) {
+            trueAmount = Number(orderDoc.data().amount);
+          } else {
+            orderRef = admin.firestore().collection("contracts").doc(orderId);
+            orderDoc = await orderRef.get();
+            if (orderDoc.exists) {
+              trueAmount = Number(orderDoc.data().planPrice);
+            }
+          }
+        }
+      }
+
+      if (trueAmount === null || isNaN(trueAmount) || trueAmount <= 0) {
+        throw new HttpsError("not-found", "لم يتم العثور على الطلب في السيرفر أو أن المبلغ غير صالح");
+      }
+
+      const trueAmountHalalas = Math.round(trueAmount * 100);
+
+      // Verify payment details with Moyasar API
+      const secret = moyasarSecretKey.value();
+      if (!secret) {
+        throw new HttpsError("failed-precondition", "مفتاح Moyasar السري غير مهيأ في الخادم");
+      }
+
+      const authHeader = `Basic ${Buffer.from(secret + ":").toString("base64")}`;
+
+      try {
+        const response = await fetch(`https://api.moyasar.com/v1/payments/${paymentId}`, {
+          method: "GET",
+          headers: {
+            "Authorization": authHeader,
+          },
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          console.error(`Moyasar API response error ${response.status}: ${errText}`);
+          throw new HttpsError("internal", "فشل التحقق من الدفع مع بوابة Moyasar");
+        }
+
+        const paymentData = await response.json();
+
+        // Perform validations:
+        // 1. Paid amount matches order amount (in Halalas)
+        // 2. Status is 'paid'
+        if (paymentData.status !== "paid") {
+          throw new HttpsError("failed-precondition", `حالة عملية الدفع ليست مدفوعة: ${paymentData.status}`);
+        }
+
+        const paidAmountHalalas = Number(paymentData.amount);
+        if (paidAmountHalalas !== trueAmountHalalas) {
+          console.error(`Amount mismatch. Paid: ${paidAmountHalalas}, expected: ${trueAmountHalalas}`);
+          throw new HttpsError("failed-precondition", "مبلغ الدفع لا يتطابق مع مبلغ الطلب");
+        }
+
+        // Atomically update payment status in Firestore
+        await orderRef.update({
+          payment_status: "paid",
+          is_paid: true,
+          moyasar_payment_id: paymentId,
+          moyasar_status: paymentData.status,
+          updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        console.log(`Order ${orderId} successfully verified and marked as PAID via Moyasar.`);
+        return {success: true};
+      } catch (error) {
+        if (error instanceof HttpsError) throw error;
+        throw new HttpsError("internal", error.message);
+      }
+    },
+);
+
+// 8. GDPR Account Deletion Firestore Update Trigger
+exports.onAccountDeletionStatusChanged = onDocumentUpdated("account_deletions/{uid}",
+    async (event) => {
+      const change = event.data;
+      if (!change) return null;
+
+      const beforeData = change.before.data();
+      const afterData = change.after.data();
+
+      // Check if status changed to 'deleted'
+      if (afterData && afterData.status === "deleted" && (!beforeData || beforeData.status !== "deleted")) {
+        const uid = event.params.uid;
+        console.log(`Processing legal account deletion for user: ${uid}`);
+
+        try {
+          // 1. Delete user from Firebase Auth
+          try {
+            await admin.auth().deleteUser(uid);
+            console.log(`Successfully deleted auth user: ${uid}`);
+          } catch (authErr) {
+            if (authErr.code === "auth/user-not-found") {
+              console.warn(`User ${uid} not found in Firebase Auth`);
+            } else {
+              throw authErr;
+            }
+          }
+
+          // 2. Delete user's document from users collection
+          await admin.firestore().collection("users").doc(uid).delete();
+          console.log(`Successfully deleted users/${uid} document`);
+
+          // 3. Clean up associated FCM tokens
+          await admin.firestore().collection("fcm_tokens").doc(uid).delete();
+          console.log(`Successfully deleted fcm_tokens/${uid} document`);
+
+          // 4. Update the account_deletions request status to fully completed
+          await admin.firestore().collection("account_deletions").doc(uid).update({
+            completed_at: admin.firestore.FieldValue.serverTimestamp(),
+            status: "deleted_fully_processed",
+          });
+          console.log(`Successfully completed deletion workflow for ${uid}`);
+        } catch (error) {
+          console.error(`Error processing account deletion for user ${uid}:`, error);
+          // Update status with error info so it can be retried or inspected by admin
+          await admin.firestore().collection("account_deletions").doc(uid).update({
+            error: error.message || "Unknown error",
+            status: "failed_deletion",
+            failed_at: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+      }
+      return null;
+    },
+);
+
+// 9. Aggregation Pattern for Orders (total_revenue, active_orders, completed_orders)
+exports.onOrderWritten = onDocumentWritten("orders/{orderId}", async (event) => {
+  const change = event.data;
+  if (!change) return null;
+
+  const beforeData = change.before ? change.before.data() : null;
+  const afterData = change.after ? change.after.data() : null;
+
+  let deltaRevenue = 0;
+  let deltaActive = 0;
+  let deltaCompleted = 0;
+
+  // Deletion
+  if (!afterData) {
+    if (beforeData) {
+      const oldStatus = beforeData.status || "pending";
+      const oldAmount = Number(beforeData.amount) || 0;
+
+      if (oldStatus !== "cancelled") {
+        deltaRevenue -= oldAmount;
+      }
+      if (oldStatus === "completed") {
+        deltaCompleted -= 1;
+      } else if (oldStatus !== "cancelled") {
+        deltaActive -= 1;
+      }
+    }
+  } else if (!beforeData) {
+    // Creation
+    const newStatus = afterData.status || "pending";
+    const newAmount = Number(afterData.amount) || 0;
+
+    if (newStatus !== "cancelled") {
+      deltaRevenue += newAmount;
+    }
+    if (newStatus === "completed") {
+      deltaCompleted += 1;
+    } else if (newStatus !== "cancelled") {
+      deltaActive += 1;
+    }
+  } else {
+    // Update
+    const oldStatus = beforeData.status || "pending";
+    const oldAmount = Number(beforeData.amount) || 0;
+
+    const newStatus = afterData.status || "pending";
+    const newAmount = Number(afterData.amount) || 0;
+
+    // Revenue calculation
+    const wasRevenue = oldStatus !== "cancelled";
+    const isRevenue = newStatus !== "cancelled";
+
+    if (wasRevenue && !isRevenue) {
+      deltaRevenue -= oldAmount;
+    } else if (!wasRevenue && isRevenue) {
+      deltaRevenue += newAmount;
+    } else if (wasRevenue && isRevenue) {
+      deltaRevenue += (newAmount - oldAmount);
+    }
+
+    // Active & Completed calculations
+    const wasCompleted = oldStatus === "completed";
+    const isCompleted = newStatus === "completed";
+    const wasCancelled = oldStatus === "cancelled";
+    const isCancelled = newStatus === "cancelled";
+
+    const wasActive = !wasCompleted && !wasCancelled;
+    const isActive = !isCompleted && !isCancelled;
+
+    if (wasActive && !isActive) {
+      deltaActive -= 1;
+    } else if (!wasActive && isActive) {
+      deltaActive += 1;
+    }
+
+    if (wasCompleted && !isCompleted) {
+      deltaCompleted -= 1;
+    } else if (!wasCompleted && isCompleted) {
+      deltaCompleted += 1;
+    }
+  }
+
+  // Update the analytics_summary document atomically
+  const summaryRef = admin.firestore().collection("metadata").doc("analytics_summary");
+
+  const updates = {};
+  if (deltaRevenue !== 0) updates.total_revenue = admin.firestore.FieldValue.increment(deltaRevenue);
+  if (deltaActive !== 0) updates.active_orders = admin.firestore.FieldValue.increment(deltaActive);
+  if (deltaCompleted !== 0) updates.completed_orders = admin.firestore.FieldValue.increment(deltaCompleted);
+
+  if (Object.keys(updates).length > 0) {
+    try {
+      await summaryRef.update(updates);
+    } catch (err) {
+      if (err.code === 5 || err.message.includes("NOT_FOUND") || err.message.includes("does not exist")) {
+        // Document doesn't exist yet, initialize it securely by running a set with merge
+        const initData = {
+          total_revenue: deltaRevenue > 0 ? deltaRevenue : 0,
+          active_orders: deltaActive > 0 ? deltaActive : 0,
+          completed_orders: deltaCompleted > 0 ? deltaCompleted : 0,
+        };
+        await summaryRef.set(initData, {merge: true});
+      } else {
+        throw err;
+      }
+    }
+  }
+  return null;
+});
+
+// 8. Surge Pricing Factor
+exports.getSurgePricingFactor = onCall(async (request) => {
+  // if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
+
+  const driversRef = admin.firestore().collection("users").where("role", "==", "driver");
+  const snap = await driversRef.get();
+
+  if (snap.empty) {
+    return {surgeFactor: 1.0};
+  }
+
+  let totalActive = 0;
+  let availableCount = 0;
+
+  snap.forEach((doc) => {
+    const data = doc.data();
+    // Assuming active drivers are those who are not banned or deactivated
+    if (data.isActive !== false) {
+      totalActive++;
+      if (data.status === "available" || data.status === "online") {
+        availableCount++;
+      }
+    }
+  });
+
+  if (totalActive === 0) return {surgeFactor: 1.0};
+
+  const availablePercentage = availableCount / totalActive;
+  if (availablePercentage < 0.20) {
+    return {surgeFactor: 1.15};
+  }
+
+  return {surgeFactor: 1.0};
+});
+
+// 9. Smart Dispatch Core: findNearestDrivers
+exports.findNearestDrivers = onCall(async (request) => {
+  // if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
+
+  const {lat, lng} = request.data;
+  if (lat == null || lng == null) {
+    throw new HttpsError("invalid-argument", "إحداثيات الموقع مطلوبة");
+  }
+
+  const center = [Number(lat), Number(lng)];
+  const radiusInM = 5000; // 5km
+
+  // Each bounds is an array of [start, end] geohashes
+  const bounds = geofire.geohashQueryBounds(center, radiusInM);
+  const promises = [];
+
+  for (const b of bounds) {
+    const q = admin.firestore().collection("users")
+        .where("role", "==", "driver")
+        .where("status", "in", ["available", "online"])
+        .where("geohash", ">=", b[0])
+        .where("geohash", "<=", b[1]);
+
+    promises.push(q.get());
+  }
+
+  const snapshots = await Promise.all(promises);
+  const matchingDocs = [];
+
+  for (const snap of snapshots) {
+    for (const doc of snap.docs) {
+      const data = doc.data();
+      // Ensure it has location data
+      if (data.location && data.location.latitude && data.location.longitude) {
+        // Double check exact distance using Haversine
+        const driverLoc = [data.location.latitude, data.location.longitude];
+        const distanceInKm = geofire.distanceBetween(center, driverLoc);
+        const distanceInM = distanceInKm * 1000;
+
+        if (distanceInM <= radiusInM) {
+          matchingDocs.push({
+            uid: doc.id,
+            distance: distanceInM,
+            data: data,
+          });
+        }
+      }
+    }
+  }
+
+  // Sort by distance ascending
+  matchingDocs.sort((a, b) => a.distance - b.distance);
+
+  // Return the nearest 3
+  const nearest3 = matchingDocs.slice(0, 3).map((d) => d.uid);
+
+  return {drivers: nearest3};
+});

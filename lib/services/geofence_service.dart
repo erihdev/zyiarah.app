@@ -45,17 +45,18 @@ class GeofenceService {
     try {
       final db = FirebaseFirestore.instance;
       final snapshot = await db
-          .collection('coverage_zones')
+          .collection('service_zones')
           .where('enabled', isEqualTo: true)
           .get();
 
       if (snapshot.docs.isNotEmpty) {
         _cachedZones = snapshot.docs.map((doc) {
           final d = doc.data();
+          final center = d['centerLoc'] as GeoPoint?;
           return ZyiarahZone(
             name: d['name'] as String? ?? '',
-            latitude: (d['latitude'] as num?)?.toDouble() ?? 0.0,
-            longitude: (d['longitude'] as num?)?.toDouble() ?? 0.0,
+            latitude: center?.latitude ?? 0.0,
+            longitude: center?.longitude ?? 0.0,
             radiusInMeters: ((d['radiusKm'] as num?)?.toDouble() ?? 15.0) * 1000,
           );
         }).where((z) => z.name.isNotEmpty).toList();
@@ -72,14 +73,23 @@ class GeofenceService {
     final batch = db.batch();
     for (int i = 0; i < _fallbackZones.length; i++) {
       final z = _fallbackZones[i];
-      final ref = db.collection('coverage_zones').doc();
+      final ref = db.collection('service_zones').doc();
       batch.set(ref, {
         'name': z.name,
-        'latitude': z.latitude,
-        'longitude': z.longitude,
+        'centerLoc': GeoPoint(z.latitude, z.longitude),
         'radiusKm': z.radiusInMeters / 1000,
         'enabled': true,
         'rank': i + 1,
+        'prices': {
+          '1': 35.0,
+          '4': 120.0,
+          '5': 150.0,
+          '6': 180.0,
+          '8': 240.0,
+        },
+        'sofaPrice': 35.0,
+        'rugPrice': 15.0,
+        'updated_at': FieldValue.serverTimestamp(),
       });
     }
     await batch.commit();
