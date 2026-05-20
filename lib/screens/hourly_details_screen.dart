@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
-import 'package:zyiarah/services/order_service.dart';
+import 'package:zyiarah/services/zyiarah_capacity_service.dart';
 
 
 class HourlyCleaningDetailsScreen extends StatefulWidget {
@@ -23,7 +23,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   bool _checkingSlots = false;
   int _workerCount = 1;
   bool _isLoading = true;
-  final ZyiarahOrderService _orderService = ZyiarahOrderService();
+  final ZyiarahCapacityService _capacityService = ZyiarahCapacityService();
 
   double _hourlyBasePrice = 0.0;
   String? _selectedZoneName;
@@ -192,13 +192,28 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
 
   Future<void> _loadSlotAvailability() async {
     if (!mounted) return;
-    setState(() { _checkingSlots = true; _slotAvailability = {}; _selectedStartHour = null; });
+    // Invalidate cache so capacity reads latest config
+    _capacityService.invalidateCache();
+    setState(() {
+      _checkingSlots = true;
+      _slotAvailability = {};
+      _selectedStartHour = null;
+    });
+
     final slots = _getStartHours();
+    final String zoneId = _selectedZoneName ?? '';
     final Map<int, bool> result = {};
+
     for (final h in slots) {
-      final dt = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, h);
-      final res = await _orderService.checkHourlySlotAvailability(startDateTime: dt, durationHours: _selectedHours);
-      result[h] = res['available'] as bool;
+      // Format the time slot key as "HH:00" to match the capacity service schema
+      final String timeSlot = '${h.toString().padLeft(2, '0')}:00';
+      final bool available = await _capacityService.checkSlotAvailability(
+        date: _selectedDate,
+        timeSlot: timeSlot,
+        zoneId: zoneId,
+      );
+      result[h] = available;
+      // Update UI progressively as each slot resolves
       if (mounted) setState(() => _slotAvailability = Map.from(result));
     }
     if (mounted) setState(() => _checkingSlots = false);

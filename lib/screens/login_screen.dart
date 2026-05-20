@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/screens/signup_screen.dart';
-import 'package:zyiarah/screens/account_activation_screen.dart';
 import 'package:zyiarah/screens/forgot_password_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -165,22 +164,6 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                     ),
                     Text("تذكرني", style: GoogleFonts.tajawal(color: Colors.grey[700])),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text("مستخدم سابق؟ ", style: GoogleFonts.tajawal(color: Colors.grey[600])),
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahAccountActivationScreen()));
-                      },
-                      child: Text(
-                        "قم بتفعيل حسابك هنا",
-                        style: GoogleFonts.tajawal(color: Colors.amber, fontWeight: FontWeight.bold),
-                      ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 30),

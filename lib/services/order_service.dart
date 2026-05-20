@@ -8,6 +8,8 @@ import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:zyiarah/services/zatca_service.dart';
+import 'package:zyiarah/services/zyiarah_wallet_service.dart';
+import 'package:zyiarah/services/zyiarah_referral_service.dart';
 
 /// خدمة إدارة دورة حياة الطلب - تطبيق زيارة
 class ZyiarahOrderService {
@@ -225,11 +227,6 @@ class ZyiarahOrderService {
     }
   }
 
-  // منح كاش باك 5% (معطّل حالياً)
-  Future<void> _applyCashback(String userId, double orderAmount) async {
-    // Cashback feature is disabled — no-op to avoid empty Firestore write
-  }
-
   // إلغاء الطلب — يسمح فقط للطلبات في حالة pending أو accepted
   Future<void> cancelOrder(String orderId, {String cancelledBy = 'client'}) async {
     String? orderCode;
@@ -287,6 +284,29 @@ class ZyiarahOrderService {
       details: {'code': orderCode, 'by': cancelledBy, 'needs_refund': needsRefund},
       targetId: orderId,
     );
+
+    // --- إعادة المبلغ للمحفظة الرقمية إذا كان الطلب مدفوعاً (ليس اشتراكاً) ---
+    if (needsRefund) {
+      try {
+        final orderSnap = await _db.collection('orders').doc(orderId).get();
+        final orderData = orderSnap.data();
+        final String? clientId = orderData?['client_id'];
+        final double refundAmount = (orderData?['amount'] ?? 0.0).toDouble();
+        final String? paymentMethod = orderData?['payment_method'];
+        // لا تُعيد رصيد للاشتراك — فقط للدفع النقدي أو البطاقة أو المحفظة
+        if (clientId != null && refundAmount > 0 && paymentMethod != 'subscription') {
+          await ZyiarahWalletService().processRefund(
+            userId: clientId,
+            amount: refundAmount,
+            orderId: orderId,
+            orderCode: orderCode ?? orderId,
+          );
+        }
+      } catch (e) {
+        debugPrint('Error processing wallet refund: $e');
+      }
+    }
+    // -------------------------------------------------------------------------
 
     // إشعار السائق إذا كان مُسنَّداً
     if (cancelledDriverId != null) {
@@ -388,10 +408,25 @@ class ZyiarahOrderService {
       try {
         final doc = await _db.collection('orders').doc(orderId).get();
         final data = doc.data();
-        if (data != null && data['payment_method'] != 'subscription') {
-          final clientId = data['client_id'];
+        if (data != null) {
+          final clientId = data['client_id'] as String?;
           final amount = (data['amount'] ?? 0.0).toDouble();
-          if (clientId != null) await _applyCashback(clientId, amount);
+          final code = data['code'] as String? ?? orderId;
+          // منح نقاط قطرات للعميل عند إتمام الطلب (1 ريال = 1 نقطة)
+          if (clientId != null && amount > 0) {
+            await ZyiarahWalletService().grantQatratReward(
+              userId: clientId,
+              orderId: orderId,
+              orderCode: code,
+              orderValue: amount,
+            );
+            // تحقق من مكافأة الإحالة — يُكمّل المحرك الفيروسي دورته عند أول طلب مكتمل
+            await ZyiarahReferralService().processReferralReward(
+              refereeUserId: clientId,
+              refereeOrderId: orderId,
+              refereeOrderCode: code,
+            );
+          }
         }
       } catch (e) {
         debugPrint("Non-critical post-processing error: $e");

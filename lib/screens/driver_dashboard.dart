@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:zyiarah/services/order_service.dart';
 import 'package:geolocator/geolocator.dart';
@@ -482,15 +483,18 @@ class _DriverDashboardState extends State<DriverDashboard> {
     if (!_isOnline) {
       return Column(
         children: [
-          _buildStatusPlaceholder(Icons.cloud_off, "أنت حالياً غير متصل", "قم بتغيير حالتك للأعلى لبدء استقبال الطلبات"),
+          _buildDailyManifest(),
           const SizedBox(height: 20),
-          _buildCustomerLove(),
+          _buildStatusPlaceholder(Icons.cloud_off, "أنت حالياً غير متصل", "قم بتغيير حالتك للأعلى لبدء استقبال الطلبات"),
         ],
       );
     }
 
     return Column(
       children: [
+        // --- Daily Route Sheet always visible at the top ---
+        _buildDailyManifest(),
+        const SizedBox(height: 20),
         StreamBuilder<QuerySnapshot>(
           stream: _orderService.streamDriverActiveOrders(_currentDriverId!),
           builder: (context, snapshot) {
@@ -502,46 +506,261 @@ class _DriverDashboardState extends State<DriverDashboard> {
               } else {
                 WidgetsBinding.instance.addPostFrameCallback((_) => _stopSync());
               }
-              // Active Order Focus: only show active card — no pending distractions
               return _buildActivePipeline(orderDoc);
             }
             WidgetsBinding.instance.addPostFrameCallback((_) => _stopSync());
             return _buildAvailableTasksSection();
           },
         ),
-        const SizedBox(height: 20),
-        _buildCustomerLove(),
       ],
     );
   }
 
-  Widget _buildCustomerLove() {
+  // ─────────────────────────────────────────────
+  // DAILY ROUTE MANIFEST (جدول الرحلات اليومي)
+  // ─────────────────────────────────────────────
+  Widget _buildDailyManifest() {
+    final todayKey = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('orders')
+          .where('driver_id', isEqualTo: _currentDriverId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox.shrink();
+
+        // Filter for today — support both booking_date string and service_date Timestamp
+        final docs = snapshot.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          if (data['status'] == 'cancelled') return false;
+
+          // Check booking_date string field (hourly orders)
+          final bookingDate = data['booking_date'] as String?;
+          if (bookingDate == todayKey) return true;
+
+          // Fallback: check service_date Timestamp
+          final serviceDate = (data['service_date'] as Timestamp?)?.toDate();
+          if (serviceDate != null) {
+            return serviceDate.year == DateTime.now().year &&
+                serviceDate.month == DateTime.now().month &&
+                serviceDate.day == DateTime.now().day;
+          }
+          return false;
+        }).toList();
+
+        // Sort chronologically by booking_time_slot or service_date hour
+        docs.sort((a, b) {
+          final aData = a.data() as Map<String, dynamic>;
+          final bData = b.data() as Map<String, dynamic>;
+          final aSlot = aData['booking_time_slot'] as String? ??
+              (aData['service_date'] as Timestamp?)?.toDate()
+                  .toIso8601String() ?? '';
+          final bSlot = bData['booking_time_slot'] as String? ??
+              (bData['service_date'] as Timestamp?)?.toDate()
+                  .toIso8601String() ?? '';
+          return aSlot.compareTo(bSlot);
+        });
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.route_rounded, color: Color(0xFF5D1B5E), size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'جدول الرحلات اليومي',
+                  style: GoogleFonts.tajawal(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: const Color(0xFF1E293B),
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF5D1B5E).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${docs.length} رحلة',
+                    style: GoogleFonts.tajawal(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF5D1B5E),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (docs.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade100),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.event_available, color: Colors.grey.shade300, size: 28),
+                    const SizedBox(width: 12),
+                    Text(
+                      'لا توجد رحلات مجدولة لهذا اليوم',
+                      style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 13),
+                    ),
+                  ],
+                ),
+              )
+            else
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: docs.length,
+                itemBuilder: (context, i) =>
+                    _buildManifestOrderCard(docs[i].id, docs[i].data() as Map<String, dynamic>),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildManifestOrderCard(String orderId, Map<String, dynamic> data) {
+    // Resolve time slot display
+    String timeSlot = data['booking_time_slot'] as String? ?? '';
+    if (timeSlot.isEmpty) {
+      final sd = (data['service_date'] as Timestamp?)?.toDate();
+      if (sd != null) {
+        timeSlot = DateFormat('HH:mm').format(sd);
+      }
+    }
+
+    final String serviceName =
+        data['service_name'] ?? data['service_type'] ?? 'خدمة زيارة';
+    final String clientPhone = data['client_phone'] ?? data['user_phone'] ?? '';
+    final String clientName = data['client_name'] ?? 'العميل';
+    final String status = data['status'] ?? 'pending';
+    final GeoPoint? location = data['location'] as GeoPoint?;
+
+    // Status badge color
+    final Color statusColor = status == 'completed'
+        ? Colors.green
+        : status == 'in_progress'
+            ? Colors.blue
+            : status == 'accepted'
+                ? Colors.orange
+                : const Color(0xFF5D1B5E);
+
     return Container(
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF0F172A), Color(0xFF1E293B)]),
-        borderRadius: BorderRadius.circular(24),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: statusColor.withValues(alpha: 0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              const Icon(Icons.favorite, color: Colors.pinkAccent, size: 20),
-              const SizedBox(width: 8),
-              Text("حب العملاء لك", style: GoogleFonts.tajawal(color: Colors.white, fontWeight: FontWeight.bold)),
-            ],
+          // Time slot badge
+          Container(
+            width: 56,
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.schedule, color: statusColor, size: 16),
+                const SizedBox(height: 4),
+                Text(
+                  timeSlot.isNotEmpty ? timeSlot : '--:--',
+                  style: GoogleFonts.tajawal(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                    color: statusColor,
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 15),
-          Text(
-            "\"سائق محترم جداً، وصل في الموعد وكان العمل متقناً للغاية. شكراً جزيلاً زيارة.\"",
-            style: GoogleFonts.tajawal(color: Colors.white70, fontSize: 13, fontStyle: FontStyle.italic),
+          const SizedBox(width: 12),
+          // Order details
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  serviceName,
+                  style: GoogleFonts.tajawal(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: const Color(0xFF1E293B),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  clientName,
+                  style: GoogleFonts.tajawal(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                if (data['zone_name'] != null)
+                  Text(
+                    data['zone_name'] as String,
+                    style: GoogleFonts.tajawal(
+                      fontSize: 10,
+                      color: Colors.grey.shade400,
+                    ),
+                  ),
+              ],
+            ),
           ),
-          const SizedBox(height: 10),
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          // Action buttons: call + map
+          Column(
             children: [
-              Text("- سارة العتيبي (صبيا)", style: TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.bold)),
+              if (clientPhone.isNotEmpty)
+                InkWell(
+                  onTap: () => _callClient(clientPhone),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.phone, color: Colors.green.shade700, size: 18),
+                  ),
+                ),
+              if (location != null) ...[
+                const SizedBox(height: 6),
+                InkWell(
+                  onTap: () => _openMaps(location),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.map_outlined, color: Colors.blue.shade700, size: 18),
+                  ),
+                ),
+              ],
             ],
           ),
         ],
