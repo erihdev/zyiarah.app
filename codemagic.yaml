@@ -163,7 +163,3 @@ workflows:
         script: flutter build appbundle --release
     artifacts:
       - build/app/outputs/bundle/release/*.aab
-    publishing:
-      google_play:
-        credentials: $GP_CREDENTIALS
-        track: internal
