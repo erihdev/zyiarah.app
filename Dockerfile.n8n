@@ -1,4 +1,0 @@
-FROM n8nio/n8n:latest
-
-# We skip global installs to avoid breaking n8n's internal task runner.
-# Dependencies are managed locally within the /home/node/scripts directory.

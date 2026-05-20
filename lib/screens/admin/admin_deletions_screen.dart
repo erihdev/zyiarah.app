@@ -25,20 +25,70 @@ class AdminDeletionsScreen extends StatelessWidget {
               padding: const EdgeInsets.all(12),
               itemCount: snapshot.data!.docs.length,
               itemBuilder: (context, index) {
-                final req = snapshot.data!.docs[index].data() as Map<String, dynamic>;
+                final doc = snapshot.data!.docs[index];
+                final req = doc.data() as Map<String, dynamic>;
+                final status = req['status'] as String? ?? 'pending';
+                final isProcessing = status == 'deleted' || status == 'deleted_fully_processed';
+
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   child: ListTile(
                     leading: const CircleAvatar(backgroundColor: Colors.redAccent, child: Icon(Icons.no_accounts, color: Colors.white)),
                     title: Text(req['email'] ?? req['phone'] ?? 'حساب مجهول', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text("السبب: ${req['reason'] ?? 'غير محدد'}\nتاريخ الطلب: ${req['requested_at'] != null ? (req['requested_at'] as Timestamp).toDate().toString().split(' ')[0] : ''}"),
+                    subtitle: Text("السبب: ${req['reason'] ?? 'غير محدد'}\nتاريخ الطلب: ${req['requested_at'] != null ? (req['requested_at'] as Timestamp).toDate().toString().split(' ')[0] : ''}\nالحالة: ${status == 'deleted_fully_processed' ? 'تم مسح البيانات نهائياً' : status == 'deleted' ? 'جاري المسح...' : 'قيد الانتظار'}"),
                     isThreeLine: true,
-                    trailing: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-                      onPressed: () {},
-                      child: const Text("حذف"),
-                    ),
+                    trailing: isProcessing
+                        ? Text(
+                            status == 'deleted_fully_processed' ? "تم الحذف" : "جاري الحذف...",
+                            style: TextStyle(
+                              color: status == 'deleted_fully_processed' ? Colors.green : Colors.orange,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        : ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+                            onPressed: () async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => Directionality(
+                                  textDirection: TextDirection.rtl,
+                                  child: AlertDialog(
+                                    title: Text("تأكيد الحذف النهائي", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                                    content: const Text("هل أنت متأكد من حذف هذا الحساب نهائياً؟ ستتم إزالة بيانات المستخدم والملف الشخصي FCM والرمز المميز وكلمة المرور فوراً عبر خادم آمن تماشياً مع معايير حماية البيانات GDPR."),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("إلغاء")),
+                                      ElevatedButton(
+                                        onPressed: () => Navigator.pop(ctx, true),
+                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                        child: const Text("حذف الآن", style: TextStyle(color: Colors.white)),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+
+                              if (confirm == true) {
+                                try {
+                                  await FirebaseFirestore.instance.collection('account_deletions').doc(doc.id).update({
+                                    'status': 'deleted',
+                                  });
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text("تم بدء عملية الحذف بنجاح. سيتم مسح البيانات خلال ثوانٍ.")),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text("فشل الحذف: $e")),
+                                    );
+                                  }
+                                }
+                              }
+                            },
+                            child: const Text("حذف"),
+                          ),
                   ),
                 );
               },

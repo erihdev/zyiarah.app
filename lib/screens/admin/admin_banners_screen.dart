@@ -41,6 +41,19 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
 
     if (confirm == true) {
       try {
+        final docSnap = await _db.collection('promo_banners').doc(id).get();
+        if (docSnap.exists) {
+          final data = docSnap.data();
+          final String? imageUrl = data?['imageUrl'];
+          if (imageUrl != null && imageUrl.isNotEmpty) {
+            try {
+              await FirebaseStorage.instance.refFromURL(imageUrl).delete();
+            } catch (storageErr) {
+              debugPrint("Failed to delete banner image from storage: $storageErr");
+            }
+          }
+        }
+
         await _db.collection('promo_banners').doc(id).delete();
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف البنر بنجاح")));
         

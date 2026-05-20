@@ -87,6 +87,7 @@ class ZyiarahStoreService {
     final docRef = _db.collection('store_orders').doc();
     final counterRef = _db.collection('metadata').doc('order_counter');
     String orderCode = '';
+    double serverCalculatedTotal = 0.0;
 
     await _db.runTransaction((transaction) async {
       final counterSnap = await transaction.get(counterRef);
@@ -100,13 +101,45 @@ class ZyiarahStoreService {
       } else {
         transaction.set(counterRef, {'last_id': nextId});
       }
+
+      double tempTotal = 0.0;
+      final List<Map<String, dynamic>> verifiedItems = [];
+
+      for (final item in items) {
+        final productId = item['id'] as String? ?? '';
+        final quantity = (item['quantity'] as num?)?.toInt() ?? 1;
+
+        if (productId.isEmpty) continue;
+
+        final productRef = _db.collection('products').doc(productId);
+        final productSnap = await transaction.get(productRef);
+
+        if (!productSnap.exists) {
+          throw Exception('المنتج غير موجود في قاعدة البيانات: $productId');
+        }
+
+        final productData = productSnap.data();
+        final name = productData?['name'] as String? ?? 'منتج غير معروف';
+        final price = (productData?['price'] as num?)?.toDouble() ?? 0.0;
+
+        tempTotal += price * quantity;
+        verifiedItems.add({
+          'id': productId,
+          'name': name,
+          'quantity': quantity,
+          'price': price,
+        });
+      }
+
+      serverCalculatedTotal = tempTotal;
+
       transaction.set(docRef, {
         'code': orderCode,
         'client_id': user.uid,
         'client_name': clientName,
         'client_phone': clientPhone,
-        'items': items,
-        'total_amount': totalAmount,
+        'items': verifiedItems,
+        'total_amount': serverCalculatedTotal,
         'payment_method': paymentMethod,
         'status': 'pending',
         'created_at': FieldValue.serverTimestamp(),
@@ -118,7 +151,7 @@ class ZyiarahStoreService {
       action: 'CREATE_STORE_ORDER',
       details: {
         'code': orderCode,
-        'amount': totalAmount,
+        'amount': serverCalculatedTotal,
         'client': clientName,
         'item_count': items.length,
       },

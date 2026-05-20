@@ -22,8 +22,8 @@ workflows:
         script: |
           python3 << 'PYEOF'
           import jwt, time, requests, os, json, tempfile, subprocess
-          ISSUER_ID = "6dd67287-cfcd-40fc-a3db-8bf378a1ac8f"
-          KEY_ID = "RJMPC4734X"
+          ISSUER_ID = os.environ.get("APP_STORE_CONNECT_ISSUER_ID", "6dd67287-cfcd-40fc-a3db-8bf378a1ac8f")
+          KEY_ID = os.environ.get("APP_STORE_CONNECT_KEY_ID", "RJMPC4734X")
           APP_ID = os.environ.get("APP_STORE_APP_ID", "6760955777")
           BASE_URL = "https://api.appstoreconnect.apple.com/v1"
           
