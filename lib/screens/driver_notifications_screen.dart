@@ -29,7 +29,6 @@ class DriverNotificationsScreen extends StatelessWidget {
                 stream: FirebaseFirestore.instance
                     .collection('notifications')
                     .where('userId', isEqualTo: uid)
-                    .orderBy('created_at', descending: true)
                     .limit(50)
                     .snapshots(),
                 builder: (context, snapshot) {
@@ -39,7 +38,28 @@ class DriverNotificationsScreen extends StatelessWidget {
                             color: Color(0xFF5D1B5E)));
                   }
 
-                  final docs = snapshot.data?.docs ?? [];
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.wifi_off_rounded, size: 48, color: Colors.grey[300]),
+                          const SizedBox(height: 12),
+                          Text('تعذّر تحميل الإشعارات', style: GoogleFonts.tajawal(color: Colors.grey)),
+                        ],
+                      ),
+                    );
+                  }
+
+                  final docs = (snapshot.data?.docs ?? [])
+                    ..sort((a, b) {
+                      final aT = (a.data() as Map)['created_at'] as Timestamp?;
+                      final bT = (b.data() as Map)['created_at'] as Timestamp?;
+                      if (aT == null && bT == null) return 0;
+                      if (aT == null) return 1;
+                      if (bT == null) return -1;
+                      return bT.compareTo(aT);
+                    });
 
                   if (docs.isEmpty) {
                     return Center(
