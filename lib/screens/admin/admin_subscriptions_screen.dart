@@ -53,7 +53,8 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
     final Map<String, dynamic>? data = doc?.data() as Map<String, dynamic>?;
     final titleCtrl = TextEditingController(text: data?['title'] ?? '');
     final subtitleCtrl = TextEditingController(text: data?['subtitle'] ?? '');
-    final priceCtrl = TextEditingController(text: data?['price'] ?? '');
+    final priceCtrl = TextEditingController(text: data?['price']?.toString() ?? '');
+    final visitsCtrl = TextEditingController(text: data?['visits']?.toString() ?? '');
     final featuresCtrl = TextEditingController(text: (data?['features'] as List<dynamic>?)?.join('\n') ?? '');
     bool isPremium = data?['isPremium'] ?? false;
     int rank = data?['rank'] ?? 0;
@@ -81,9 +82,11 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                     const SizedBox(height: 15),
                     TextField(controller: priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'السعر الإجمالي (ر.س)', border: OutlineInputBorder())),
                     const SizedBox(height: 15),
+                    TextField(controller: visitsCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'عدد الزيارات المشمولة في الباقة', border: OutlineInputBorder())),
+                    const SizedBox(height: 15),
                     TextField(
-                      controller: featuresCtrl, 
-                      maxLines: 4, 
+                      controller: featuresCtrl,
+                      maxLines: 4,
                       decoration: const InputDecoration(labelText: 'الميزات (كل ميزة في سطر منفصل)', hintText: "مثال:\nزيارة أسبوعية\nتوفير 20%\nدعم فني", border: OutlineInputBorder()),
                     ),
                     const SizedBox(height: 10),
@@ -109,7 +112,8 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                       final newData = {
                         'title': titleCtrl.text.trim(),
                         'subtitle': subtitleCtrl.text.trim(),
-                        'price': priceCtrl.text.trim(),
+                        'price': double.tryParse(priceCtrl.text.trim()) ?? 0.0,
+                        'visits': int.tryParse(visitsCtrl.text.trim()) ?? 0,
                         'features': featuresCtrl.text.trim().split('\n').where((s) => s.isNotEmpty).toList(),
                         'isPremium': isPremium,
                         'rank': rank,

@@ -40,6 +40,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   }
 
   Future<void> _fetchConfigAndZones() async {
+    // system_configs is admin-only — separate try-catch so a permission error
+    // doesn't prevent service_zones from loading for regular clients.
     try {
       final configDoc = await FirebaseFirestore.instance.collection('system_configs').doc('hourly_settings').get();
       if (configDoc.exists) {
@@ -54,7 +56,11 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           _maxAllowedWorkers = configDoc.data()?['max_workers'] ?? 5;
         }
       }
+    } catch (_) {
+      // Clients lack read access to system_configs — defaults are already set.
+    }
 
+    try {
       final snapshot = await FirebaseFirestore.instance.collection('service_zones').orderBy('rank').get();
       if (mounted) {
         setState(() {
