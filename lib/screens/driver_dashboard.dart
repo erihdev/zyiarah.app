@@ -214,6 +214,52 @@ class _DriverDashboardState extends State<DriverDashboard> {
             ],
           ),
         ),
+        if (_currentDriverId != null)
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('notifications')
+                .where('userId', isEqualTo: _currentDriverId)
+                .where('isRead', isEqualTo: false)
+                .snapshots(),
+            builder: (context, snapshot) {
+              final unreadCount = snapshot.hasData ? snapshot.data!.docs.length : 0;
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_rounded, color: Colors.white, size: 26),
+                    tooltip: 'الإشعارات',
+                    onPressed: _showNotificationsSheet,
+                  ),
+                  if (unreadCount > 0)
+                    Positioned(
+                      top: 12,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(
+                          color: Colors.redAccent,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          '$unreadCount',
+                          style: GoogleFonts.tajawal(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
         IconButton(
           icon: const Icon(Icons.account_circle, color: Colors.white, size: 28),
           tooltip: 'الملف الشخصي',
@@ -221,6 +267,345 @@ class _DriverDashboardState extends State<DriverDashboard> {
         ),
         const SizedBox(width: 6),
       ],
+    );
+  }
+
+  void _showNotificationsSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: DraggableScrollableSheet(
+          initialChildSize: 0.75,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 50,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.notifications_active_rounded, color: Color(0xFF5D1B5E), size: 24),
+                            const SizedBox(width: 8),
+                            Text(
+                              "مركز التنبيهات والإشعارات",
+                              style: GoogleFonts.tajawal(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: const Color(0xFF1E293B),
+                              ),
+                            ),
+                          ],
+                        ),
+                        StreamBuilder<QuerySnapshot>(
+                          stream: FirebaseFirestore.instance
+                              .collection('notifications')
+                              .where('userId', isEqualTo: _currentDriverId)
+                              .where('isRead', isEqualTo: false)
+                              .snapshots(),
+                          builder: (context, snapshot) {
+                            final hasUnread = snapshot.hasData && snapshot.data!.docs.isNotEmpty;
+                            return TextButton.icon(
+                              onPressed: hasUnread ? () => _markAllAsRead(snapshot.data!.docs) : null,
+                              icon: Icon(
+                                Icons.done_all_rounded,
+                                size: 16,
+                                color: hasUnread ? const Color(0xFF5D1B5E) : Colors.grey,
+                              ),
+                              label: Text(
+                                "مقروء الكل",
+                                style: GoogleFonts.tajawal(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: hasUnread ? const Color(0xFF5D1B5E) : Colors.grey,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 20),
+                  Expanded(
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('notifications')
+                          .where('userId', isEqualTo: _currentDriverId)
+                          .orderBy('sentAt', descending: true)
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(
+                              color: Color(0xFF5D1B5E),
+                            ),
+                          );
+                        }
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.error_outline_rounded, color: Colors.red[300], size: 48),
+                                const SizedBox(height: 12),
+                                Text(
+                                  "عذراً، حدث خطأ أثناء تحميل الإشعارات",
+                                  style: GoogleFonts.tajawal(color: Colors.grey[600], fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        
+                        final docs = snapshot.data?.docs ?? [];
+                        if (docs.isEmpty) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.notifications_off_outlined, color: Colors.grey[350], size: 64),
+                                const SizedBox(height: 16),
+                                Text(
+                                  "صندوق الوارد فارغ",
+                                  style: GoogleFonts.tajawal(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  "تنبيهات المهام والأخبار ستظهر هنا لاحقاً",
+                                  style: GoogleFonts.tajawal(
+                                    fontSize: 12,
+                                    color: Colors.grey[400],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        
+                        return ListView.builder(
+                          controller: scrollController,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          itemCount: docs.length,
+                          itemBuilder: (context, index) {
+                            final doc = docs[index];
+                            final data = doc.data() as Map<String, dynamic>;
+                            return _buildNotificationCard(doc.id, data, sheetContext);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _markAllAsRead(List<QueryDocumentSnapshot> unreadDocs) async {
+    if (unreadDocs.isEmpty) return;
+    ZyiarahCoreService.triggerHapticSuccess();
+    
+    final batch = FirebaseFirestore.instance.batch();
+    for (var doc in unreadDocs) {
+      batch.update(doc.reference, {'isRead': true});
+    }
+    
+    try {
+      await batch.commit();
+    } catch (e) {
+      debugPrint("Error marking notifications as read: $e");
+    }
+  }
+
+  Widget _buildNotificationCard(String id, Map<String, dynamic> data, BuildContext sheetContext) {
+    final bool isRead = data['isRead'] ?? false;
+    final String title = data['title'] ?? 'إشعار جديد';
+    final String body = data['body'] ?? '';
+    final String type = data['type'] ?? 'general';
+    final String? relatedId = data['relatedId']?.toString();
+    
+    final Timestamp? ts = data['sentAt'] as Timestamp?;
+    String timeStr = 'منذ قليل';
+    if (ts != null) {
+      timeStr = DateFormat('yyyy/MM/dd | HH:mm').format(ts.toDate());
+    }
+    
+    IconData icon;
+    Color iconColor;
+    Color iconBg;
+    
+    switch (type) {
+      case 'order_assignment':
+        icon = Icons.assignment_turned_in_rounded;
+        iconColor = const Color(0xFF5D1B5E);
+        iconBg = const Color(0xFF5D1B5E).withValues(alpha: 0.1);
+        break;
+      case 'global_broadcast':
+      case 'admin_broadcast':
+        icon = Icons.campaign_rounded;
+        iconColor = Colors.orange.shade800;
+        iconBg = Colors.orange.shade50;
+        break;
+      case 'support_reply':
+        icon = Icons.support_agent_rounded;
+        iconColor = Colors.green.shade800;
+        iconBg = Colors.green.shade50;
+        break;
+      default:
+        icon = Icons.notifications_active_rounded;
+        iconColor = Colors.blue.shade800;
+        iconBg = Colors.blue.shade50;
+    }
+    
+    return InkWell(
+      onTap: () async {
+        if (!isRead) {
+          try {
+            await FirebaseFirestore.instance.collection('notifications').doc(id).update({'isRead': true});
+          } catch (e) {
+            debugPrint("Error marking single notification as read: $e");
+          }
+        }
+        
+        if (!mounted) return;
+        
+        if (relatedId != null && relatedId.isNotEmpty) {
+          if (sheetContext.mounted) {
+            Navigator.pop(sheetContext);
+          }
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '🔎 جاري استعراض المهمة رقم #$relatedId في جدول رحلاتك',
+                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold),
+              ),
+              backgroundColor: const Color(0xFF5D1B5E),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isRead ? Colors.grey.shade50 : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isRead ? Colors.grey.shade100 : const Color(0xFF5D1B5E).withValues(alpha: 0.1),
+            width: isRead ? 1.0 : 1.5,
+          ),
+          boxShadow: isRead 
+              ? [] 
+              : [
+                  BoxShadow(
+                    color: const Color(0xFF5D1B5E).withValues(alpha: 0.03),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: iconBg,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: iconColor, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: GoogleFonts.tajawal(
+                            fontWeight: isRead ? FontWeight.w600 : FontWeight.bold,
+                            fontSize: 14,
+                            color: isRead ? Colors.grey.shade700 : const Color(0xFF1E293B),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (!isRead)
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF5D1B5E),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    body,
+                    style: GoogleFonts.tajawal(
+                      fontSize: 12,
+                      color: isRead ? Colors.grey.shade500 : Colors.grey.shade700,
+                      height: 1.4,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    timeStr,
+                    style: GoogleFonts.tajawal(
+                      fontSize: 10,
+                      color: Colors.grey.shade400,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
