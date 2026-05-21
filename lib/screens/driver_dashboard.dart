@@ -967,18 +967,19 @@ class _DriverDashboardState extends State<DriverDashboard> {
       children: [
         Text("الطلبات المتاحة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
         const SizedBox(height: 15),
-        StreamBuilder<QuerySnapshot>(
+        StreamBuilder<List<QueryDocumentSnapshot>>(
           stream: _orderService.streamAvailableOrders(),
           builder: (context, snapshot) {
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            if (!snapshot.hasData || snapshot.data!.isEmpty) {
               return _buildStatusPlaceholder(Icons.search, "لا توجد طلبات حالياً", "بانتظار وصول طلبات جديدة من العملاء");
             }
+            final docs = snapshot.data!;
             return ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: snapshot.data!.docs.length,
+              itemCount: docs.length,
               itemBuilder: (context, index) {
-                final doc = snapshot.data!.docs[index];
+                final doc = docs[index];
                 return _buildNewTaskCard(doc.id, doc.data() as Map<String, dynamic>);
               },
             );

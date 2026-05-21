@@ -581,11 +581,19 @@ class ZyiarahOrderService {
   }
 
   // الاستماع للطلبات المتاحة (التي لم يقبلها أحد بعد)
-  Stream<QuerySnapshot> streamAvailableOrders() {
+  Stream<List<QueryDocumentSnapshot>> streamAvailableOrders() {
     return _db.collection('orders')
         .where('status', isEqualTo: 'pending')
-        .orderBy('created_at', descending: true)
-        .snapshots();
+        .snapshots()
+        .map((snap) => snap.docs.toList()
+          ..sort((a, b) {
+            final aT = (a.data() as Map)['created_at'] as Timestamp?;
+            final bT = (b.data() as Map)['created_at'] as Timestamp?;
+            if (aT == null && bT == null) return 0;
+            if (aT == null) return 1;
+            if (bT == null) return -1;
+            return bT.compareTo(aT);
+          }));
   }
 
   // الاستماع للطلبات الخاصة بسائق معين (نشطة)
