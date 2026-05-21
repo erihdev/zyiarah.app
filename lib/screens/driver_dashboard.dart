@@ -17,6 +17,7 @@ import 'package:go_router/go_router.dart';
 import 'package:zyiarah/screens/driver_tasks_screen.dart';
 import 'package:zyiarah/screens/driver_notifications_screen.dart';
 import 'package:zyiarah/screens/driver_profile_screen.dart';
+import 'package:zyiarah/screens/driver_earnings_screen.dart';
 
 class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
@@ -172,6 +173,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 const DriverNotificationsScreen(),
                 // Tab 3: Profile
                 DriverProfileScreen(onLogout: _performLogout),
+                // Tab 4: Earnings
+                const DriverEarningsScreen(),
               ],
             ),
             bottomNavigationBar: _buildBottomNav(),
@@ -282,6 +285,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
             activeIcon: Icon(Icons.person),
             label: 'حسابي',
           ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.account_balance_wallet_outlined),
+            activeIcon: Icon(Icons.account_balance_wallet),
+            label: 'المالية',
+          ),
         ],
       ),
     );
@@ -323,6 +331,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
+    final weekStart = now.subtract(Duration(days: now.weekday - 1));
+    final monthStart = DateTime(now.year, now.month, 1);
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -334,32 +344,34 @@ class _DriverDashboardState extends State<DriverDashboard> {
         if (allSnapshot.hasError) {
           return Row(
             children: [
-              _buildCompactStat("مهام اليوم", "0", Icons.today, Colors.blue),
-              const SizedBox(width: 12),
-              _buildCompactStat("الرتبة المهنية", "—", Icons.military_tech, Colors.grey),
+              _buildCompactStat("اليوم", "0", Icons.today_outlined, Colors.blue),
+              const SizedBox(width: 10),
+              _buildCompactStat("الأسبوع", "0", Icons.date_range_outlined, Colors.green),
+              const SizedBox(width: 10),
+              _buildCompactStat("الشهر", "0", Icons.calendar_month_outlined, Colors.orange),
             ],
           );
         }
 
         final allOrders = allSnapshot.data?.docs ?? [];
-        final totalTasks = allOrders.length;
-        final todayTasks = allOrders.where((doc) {
+
+        int todayTasks = 0, weeklyTasks = 0, monthlyTasks = 0;
+        for (final doc in allOrders) {
           final data = doc.data() as Map<String, dynamic>;
           final endTime = (data['end_time'] as Timestamp?)?.toDate();
-          return endTime != null && endTime.isAfter(todayStart);
-        }).length;
-
-        String rank = "عامل جديد";
-        Color rankColor = Colors.grey;
-        if (totalTasks >= 100) { rank = "عامل ماسي"; rankColor = Colors.blue; }
-        else if (totalTasks >= 50) { rank = "عامل ذهبي"; rankColor = Colors.amber; }
-        else if (totalTasks >= 10) { rank = "عامل فضي"; rankColor = Colors.blueGrey; }
+          if (endTime == null) continue;
+          if (endTime.isAfter(todayStart)) todayTasks++;
+          if (endTime.isAfter(weekStart)) weeklyTasks++;
+          if (endTime.isAfter(monthStart)) monthlyTasks++;
+        }
 
         return Row(
           children: [
-            _buildCompactStat("مهام اليوم", "$todayTasks", Icons.today, Colors.blue),
-            const SizedBox(width: 12),
-            _buildCompactStat("الرتبة المهنية", rank, Icons.military_tech, rankColor),
+            _buildCompactStat("اليوم", "$todayTasks", Icons.today_outlined, Colors.blue),
+            const SizedBox(width: 10),
+            _buildCompactStat("الأسبوع", "$weeklyTasks", Icons.date_range_outlined, Colors.green),
+            const SizedBox(width: 10),
+            _buildCompactStat("الشهر", "$monthlyTasks", Icons.calendar_month_outlined, Colors.orange),
           ],
         );
       },
