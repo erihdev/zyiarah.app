@@ -57,7 +57,9 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
     
     String type = data?['type'] ?? 'percentage';
     String status = data?['status'] ?? 'active';
-    DateTime expiryDate = data?['expiry'] != null ? DateTime.tryParse(data!['expiry']) ?? DateTime.now().add(const Duration(days: 30)) : DateTime.now().add(const Duration(days: 30));
+    DateTime expiryDate = data?['expiry'] is Timestamp
+        ? (data!['expiry'] as Timestamp).toDate()
+        : (data?['expiry'] != null ? DateTime.tryParse(data!['expiry'].toString()) ?? DateTime.now().add(const Duration(days: 30)) : DateTime.now().add(const Duration(days: 30)));
     bool isSaving = false;
     List<String> restrictedZones = List<String>.from(data?['restricted_zones'] ?? []);
     bool codeEmpty = false;
@@ -294,7 +296,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                           'value': num.tryParse(valueCtrl.text) ?? 0,
                           'maxUses': int.tryParse(maxUsesCtrl.text) ?? 0,
                           'uses': data?['uses'] ?? 0,
-                          'expiry': expiryDate.toIso8601String(),
+                          'expiry': Timestamp.fromDate(expiryDate),
                           'status': status,
                           'restricted_zones': restrictedZones,
                           'updatedAt': FieldValue.serverTimestamp(),
@@ -406,7 +408,10 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                   final doc = _coupons[index];
                   final data = doc.data() as Map<String, dynamic>;
                   final bool isActive = data['status'] == 'active';
-                  final expiry = DateTime.tryParse(data['expiry'] ?? '') ?? DateTime.now();
+                  final expiryRaw = data['expiry'];
+                  final expiry = expiryRaw is Timestamp
+                      ? expiryRaw.toDate()
+                      : DateTime.tryParse(expiryRaw?.toString() ?? '') ?? DateTime.now();
                   final isExpired = expiry.isBefore(DateTime.now());
 
                   return Card(
