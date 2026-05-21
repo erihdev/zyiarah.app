@@ -1,0 +1,98 @@
+<h2>نظرة عامة — الواجهات الحالية</h2>
+<p class="subtitle">اضغط على الواجهة التي تريد التركيز عليها أولاً</p>
+
+<div class="cards">
+
+  <!-- CLIENT -->
+  <div class="card" data-choice="client" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#f3e8ff;padding:20px;direction:rtl">
+      <div style="font-size:13px;font-weight:700;color:#5D1B5E;margin-bottom:10px">📱 تطبيق العميل</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px">
+        <div style="background:white;border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:16px">🏠</div>
+          <div style="color:#5D1B5E;font-weight:600">الرئيسية</div>
+          <div style="color:#888;font-size:10px">بانرات + خدمات + حجوزات</div>
+        </div>
+        <div style="background:white;border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:16px">📅</div>
+          <div style="color:#5D1B5E;font-weight:600">طلباتي</div>
+          <div style="color:#888;font-size:10px">قائمة الطلبات</div>
+        </div>
+        <div style="background:white;border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:16px">🛒</div>
+          <div style="color:#5D1B5E;font-weight:600">المتجر</div>
+          <div style="color:#888;font-size:10px">منتجات</div>
+        </div>
+        <div style="background:white;border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:16px">👤</div>
+          <div style="color:#5D1B5E;font-weight:600">حسابي</div>
+          <div style="color:#888;font-size:10px">الملف الشخصي</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;background:#fff3cd;border-radius:8px;padding:8px;font-size:11px;color:#856404">
+        ⚠️ قد يكون ناقص: شاشة الإشعارات، المحفظة، الدعم في التنقل
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>واجهة العميل</h3>
+      <p>4 تبويبات • 4 خدمات رئيسية</p>
+    </div>
+  </div>
+
+  <!-- DRIVER -->
+  <div class="card" data-choice="driver" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#e8f5e9;padding:20px;direction:rtl">
+      <div style="font-size:13px;font-weight:700;color:#2e7d32;margin-bottom:10px">🚗 تطبيق السائق</div>
+      <div style="background:white;border-radius:8px;padding:10px;font-size:11px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <span>مهام اليوم: <b>0</b></span>
+          <span>الرتبة: <b>مبتدئ</b></span>
+        </div>
+        <div style="display:flex;gap:4px;margin-bottom:6px">
+          <span style="background:#e8f5e9;border-radius:20px;padding:2px 8px">🏅 مبتدئ</span>
+          <span style="background:#f5f5f5;border-radius:20px;padding:2px 8px;color:#999">🥇 نشط</span>
+          <span style="background:#f5f5f5;border-radius:20px;padding:2px 8px;color:#999">💎 نخبة</span>
+        </div>
+        <div style="background:#f5f5f5;border-radius:8px;padding:8px;text-align:center;color:#888">
+          قائمة الطلبات المسندة
+        </div>
+      </div>
+      <div style="background:#fff3cd;border-radius:8px;padding:8px;font-size:11px;color:#856404">
+        ⚠️ بدون تنقل سفلي • لا يوجد تاريخ مهام • لا يوجد إيرادات
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>واجهة السائق</h3>
+      <p>شاشة واحدة طويلة • بدون tabs</p>
+    </div>
+  </div>
+
+  <!-- ADMIN -->
+  <div class="card" data-choice="admin" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#e3f2fd;padding:20px;direction:rtl">
+      <div style="font-size:13px;font-weight:700;color:#1565c0;margin-bottom:10px">⚙️ لوحة الإدارة</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;font-size:11px;margin-bottom:8px">
+        <span style="background:white;border-radius:20px;padding:4px 10px;color:#1565c0">📊 الرؤى</span>
+        <span style="background:white;border-radius:20px;padding:4px 10px;color:#1565c0">🛠 الخدمات</span>
+        <span style="background:white;border-radius:20px;padding:4px 10px;color:#1565c0">📋 الطلبات</span>
+        <span style="background:white;border-radius:20px;padding:4px 10px;color:#1565c0">🛒 المتجر</span>
+        <span style="background:white;border-radius:20px;padding:4px 10px;color:#1565c0">⋯ المزيد</span>
+      </div>
+      <div style="background:#f5f5f5;border-radius:8px;padding:8px;font-size:10px;color:#555">
+        المزيد يحتوي: السائقون • المستخدمون • المناطق • الإعدادات • الكوبونات • البانرات • الباقات • الحسابات...
+      </div>
+      <div style="margin-top:8px;background:#fff3cd;border-radius:8px;padding:8px;font-size:11px;color:#856404">
+        ⚠️ كثير من الأقسام مخبأة في "المزيد"
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>لوحة الإدارة</h3>
+      <p>5 تبويبات • super_admin يرى الكل</p>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top:24px;padding:16px;background:#f8f9fa;border-radius:12px;direction:rtl;font-size:13px;color:#555">
+  💡 يمكنك اختيار أكثر من واجهة — أو أخبرني في النص ما الذي تراه ناقصاً تحديداً
+</div>

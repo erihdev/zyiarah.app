@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تحليل الفجوات</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f5f5f5; padding: 20px; direction: rtl; }
+  h2 { font-size: 20px; margin-bottom: 6px; color: #1a1a1a; }
+  .subtitle { color: #888; font-size: 13px; margin-bottom: 24px; }
+  .section { background: white; border-radius: 16px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .section-title { font-size: 16px; font-weight: 700; }
+  .badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .badge-red { background: #fef2f2; color: #dc2626; }
+  .badge-yellow { background: #fffbeb; color: #d97706; }
+  .badge-green { background: #f0fdf4; color: #16a34a; }
+  .items { display: flex; flex-direction: column; gap: 10px; }
+  .item { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border-radius: 10px; }
+  .item-missing { background: #fef2f2; border: 1px solid #fecaca; }
+  .item-weak { background: #fffbeb; border: 1px solid #fde68a; }
+  .item-ok { background: #f0fdf4; border: 1px solid #bbf7d0; }
+  .item-icon { font-size: 18px; width: 28px; text-align: center; flex-shrink: 0; margin-top: 1px; }
+  .item-body { flex: 1; }
+  .item-title { font-size: 13px; font-weight: 700; color: #1a1a1a; margin-bottom: 2px; }
+  .item-desc { font-size: 11px; color: #666; line-height: 1.5; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: #555; margin-bottom: 20px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-left: 4px; }
+  .priority-row { display: flex; gap: 8px; margin-top: 20px; }
+  .priority-card { flex: 1; padding: 14px; border-radius: 12px; text-align: center; }
+  .p-high { background: #fef2f2; border: 2px solid #dc2626; }
+  .p-med { background: #fffbeb; border: 2px solid #d97706; }
+  .p-low { background: #f0fdf4; border: 2px solid #16a34a; }
+  .p-num { font-size: 28px; font-weight: 900; }
+  .p-label { font-size: 11px; font-weight: 600; margin-top: 4px; color: #555; }
+  .p-high .p-num { color: #dc2626; }
+  .p-med .p-num { color: #d97706; }
+  .p-low .p-num { color: #16a34a; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  .tab { padding: 8px 16px; border-radius: 20px; font-size: 13px; cursor: pointer; font-weight: 600; border: none; }
+  .tab-active { background: #5D1B5E; color: white; }
+  .tab-inactive { background: #f0e8f0; color: #5D1B5E; }
+</style>
+</head>
+<body>
+<h2>تحليل الفجوات — الواجهات الثلاث</h2>
+<p class="subtitle">بناءً على الصور الفعلية للتطبيق</p>
+
+<div class="legend">
+  <span><span class="legend-dot" style="background:#dc2626"></span> مفقود كلياً</span>
+  <span><span class="legend-dot" style="background:#d97706"></span> موجود لكن ضعيف</span>
+  <span><span class="legend-dot" style="background:#16a34a"></span> جيد</span>
+</div>
+
+<!-- DRIVER -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">🚗 واجهة السائق</div>
+    <span class="badge badge-red">5 فجوات حرجة</span>
+  </div>
+  <div class="items">
+    <div class="item item-missing">
+      <div class="item-icon">🗂️</div>
+      <div class="item-body">
+        <div class="item-title">لا يوجد تنقل سفلي (Bottom Navigation)</div>
+        <div class="item-desc">التطبيق كله شاشة واحدة طولية — السائق لا يستطيع التنقل بين الأقسام</div>
+      </div>
+    </div>
+    <div class="item item-missing">
+      <div class="item-icon">💰</div>
+      <div class="item-body">
+        <div class="item-title">لا توجد شاشة الإيرادات والمحفظة</div>
+        <div class="item-desc">السائق لا يرى راتبه أو مدفوعاته أو سجل العمليات المالية</div>
+      </div>
+    </div>
+    <div class="item item-missing">
+      <div class="item-icon">📋</div>
+      <div class="item-body">
+        <div class="item-title">لا يوجد سجل المهام</div>
+        <div class="item-desc">لا توجد قائمة بالطلبات المنجزة أو الملغاة سابقاً</div>
+      </div>
+    </div>
+    <div class="item item-missing">
+      <div class="item-icon">👤</div>
+      <div class="item-body">
+        <div class="item-title">لا يوجد ملف شخصي حقيقي</div>
+        <div class="item-desc">فقط bottom sheet بزر خروج — لا توجد شاشة إعدادات أو تعديل البيانات</div>
+      </div>
+    </div>
+    <div class="item item-missing">
+      <div class="item-icon">🔔</div>
+      <div class="item-body">
+        <div class="item-title">لا توجد الإشعارات</div>
+        <div class="item-desc">لا يوجد مكان لعرض الإشعارات المستلمة (طلبات جديدة، تحديثات، إلخ)</div>
+      </div>
+    </div>
+    <div class="item item-weak">
+      <div class="item-icon">📊</div>
+      <div class="item-body">
+        <div class="item-title">إحصائيات الشاشة الرئيسية محدودة</div>
+        <div class="item-desc">يظهر "0 مهام اليوم" فقط — لا يوجد تفصيل أسبوعي أو شهري</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CLIENT -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">📱 واجهة العميل</div>
+    <span class="badge badge-yellow">2 فجوات + تحسينات</span>
+  </div>
+  <div class="items">
+    <div class="item item-ok">
+      <div class="item-icon">✅</div>
+      <div class="item-body">
+        <div class="item-title">الشاشة الرئيسية + الخدمات + المتجر + الطلبات</div>
+        <div class="item-desc">موجودة وتعمل بشكل جيد</div>
+      </div>
+    </div>
+    <div class="item item-ok">
+      <div class="item-icon">✅</div>
+      <div class="item-body">
+        <div class="item-title">الملف الشخصي + المحفظة + الإحالة</div>
+        <div class="item-desc">موجودة بتصميم جميل</div>
+      </div>
+    </div>
+    <div class="item item-missing">
+      <div class="item-icon">🔔</div>
+      <div class="item-body">
+        <div class="item-title">لا توجد شاشة الإشعارات</div>
+        <div class="item-desc">لا يوجد تاب أو أيقونة للإشعارات — العميل يتلقى إشعارات لكن لا يستطيع مراجعتها</div>
+      </div>
+    </div>
+    <div class="item item-weak">
+      <div class="item-icon">🔍</div>
+      <div class="item-body">
+        <div class="item-title">لا يوجد بحث في الخدمات أو المتجر</div>
+        <div class="item-desc">إذا كبر عدد المنتجات/الخدمات يصعب الوصول إليها</div>
+      </div>
+    </div>
+    <div class="item item-weak">
+      <div class="item-icon">🖼️</div>
+      <div class="item-body">
+        <div class="item-title">البانرات الترويجية غير ظاهرة في الرئيسية</div>
+        <div class="item-desc">لوحة الإدارة تملك قسم للبانرات لكنها لا تظهر في رئيسية العميل</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">⚙️ لوحة الإدارة</div>
+    <span class="badge badge-yellow">مشكلة تنقل رئيسية</span>
+  </div>
+  <div class="items">
+    <div class="item item-ok">
+      <div class="item-icon">✅</div>
+      <div class="item-body">
+        <div class="item-title">الرئيسية: رادار الطلبات + الإحصائيات + المخططات</div>
+        <div class="item-desc">متكاملة وغنية بالمعلومات</div>
+      </div>
+    </div>
+    <div class="item item-ok">
+      <div class="item-icon">✅</div>
+      <div class="item-body">
+        <div class="item-title">الخدمات + الطلبات + المتجر</div>
+        <div class="item-desc">تبويبات واضحة في الشريط السفلي</div>
+      </div>
+    </div>
+    <div class="item item-weak">
+      <div class="item-icon">⚠️</div>
+      <div class="item-body">
+        <div class="item-title">تبويب "إعدادات النظام" مثقل جداً</div>
+        <div class="item-desc">يحتوي على 12+ قسماً مختلفاً: سائقين، مستخدمين، مناطق، باقات، كوبونات، إشعارات، عقود، دعم فني، إحصائيات — كلها في تبويب واحد</div>
+      </div>
+    </div>
+    <div class="item item-weak">
+      <div class="item-icon">⚠️</div>
+      <div class="item-body">
+        <div class="item-title">الكوبونات والبانرات مخبأة في "الإعدادات"</div>
+        <div class="item-desc">التسويق والعروض لا تستحق الاختباء داخل الإعدادات</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Priority summary -->
+<div class="section">
+  <div class="section-title" style="margin-bottom:14px">الأولوية الموصى بها</div>
+  <div class="priority-row">
+    <div class="priority-card p-high">
+      <div class="p-num">1</div>
+      <div class="p-label">السائق<br>5 ميزات مفقودة</div>
+    </div>
+    <div class="priority-card p-med">
+      <div class="p-num">2</div>
+      <div class="p-label">العميل<br>إشعارات + بحث</div>
+    </div>
+    <div class="priority-card p-low">
+      <div class="p-num">3</div>
+      <div class="p-label">الإدارة<br>إعادة ترتيب التنقل</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
