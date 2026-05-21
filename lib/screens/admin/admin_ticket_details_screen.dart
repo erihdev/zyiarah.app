@@ -18,6 +18,12 @@ class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
   final TextEditingController _replyCtrl = TextEditingController();
   bool _isSending = false;
 
+  @override
+  void dispose() {
+    _replyCtrl.dispose();
+    super.dispose();
+  }
+
   void _sendMessage() async {
     final text = _replyCtrl.text.trim();
     if (text.isEmpty) return;
