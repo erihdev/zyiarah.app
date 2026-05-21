@@ -134,7 +134,7 @@ class ZyiarahWalletService {
         'amount': 0.0,
         'points': pointsEarned,
         'type': 'qatrat_reward',
-        'description': 'نقاط قطرات مكتسبة من الطلب المكتمل #$orderCode',
+        'description': 'نقاط زيارة مكتسبة من الطلب المكتمل #$orderCode',
         'order_id': orderId,
         'created_at': FieldValue.serverTimestamp(),
       });
@@ -142,8 +142,8 @@ class ZyiarahWalletService {
 
     await _messaging.triggerNotification(
       toUid: userId,
-      title: "حصلت على نقاط قطرات جديدة! ✨🎈",
-      body: "تهانينا! أضيفت $pointsEarned نقطة قطرات لرصيدك مكافأة على الطلب #$orderCode.",
+      title: "حصلت على نقاط زيارة جديدة! ✨🎈",
+      body: "تهانينا! أضيفت $pointsEarned نقطة زيارة لرصيدك مكافأة على الطلب #$orderCode.",
       type: 'qatrat_credit',
       data: {'orderId': orderId},
     );
@@ -181,7 +181,7 @@ class ZyiarahWalletService {
         'amount': financialCredit,
         'points': -pointsToRedeem,
         'type': 'qatrat_redeem',
-        'description': 'استبدال $pointsToRedeem نقطة قطرات برصيد مالي',
+        'description': 'استبدال $pointsToRedeem نقطة زيارة برصيد مالي',
         'created_at': FieldValue.serverTimestamp(),
       });
       

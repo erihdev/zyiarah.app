@@ -412,7 +412,7 @@ class ZyiarahOrderService {
           final clientId = data['client_id'] as String?;
           final amount = (data['amount'] ?? 0.0).toDouble();
           final code = data['code'] as String? ?? orderId;
-          // منح نقاط قطرات للعميل عند إتمام الطلب (1 ريال = 1 نقطة)
+          // منح نقاط زيارة للعميل عند إتمام الطلب (1 ريال = 1 نقطة)
           if (clientId != null && amount > 0) {
             await ZyiarahWalletService().grantQatratReward(
               userId: clientId,
