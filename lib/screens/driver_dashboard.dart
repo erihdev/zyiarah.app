@@ -14,6 +14,9 @@ import 'package:latlong2/latlong.dart';
 import 'dart:async';
 import 'package:lottie/lottie.dart' hide Marker;
 import 'package:go_router/go_router.dart';
+import 'package:zyiarah/screens/driver_tasks_screen.dart';
+import 'package:zyiarah/screens/driver_notifications_screen.dart';
+import 'package:zyiarah/screens/driver_profile_screen.dart';
 
 class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
@@ -28,6 +31,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
   final ZyiarahMessagingService _notificationService = ZyiarahMessagingService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  int _currentIndex = 0;
   bool _isOnline = true;
   String? _currentDriverId;
   String? _activeOrderId;
@@ -137,27 +141,40 @@ class _DriverDashboardState extends State<DriverDashboard> {
           value: SystemUiOverlayStyle.light,
           child: Scaffold(
             backgroundColor: const Color(0xFFF1F5F9),
-            body: Directionality(
-              textDirection: TextDirection.rtl,
-              child: CustomScrollView(
-                slivers: [
-                  _buildAppBar(),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildStatsRow(),
-                          const SizedBox(height: 25),
-                          _buildMainSection(),
-                        ],
+            body: IndexedStack(
+              index: _currentIndex,
+              children: [
+                // Tab 0: Home dashboard
+                Directionality(
+                  textDirection: TextDirection.rtl,
+                  child: CustomScrollView(
+                    slivers: [
+                      _buildAppBar(),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildStatsRow(),
+                              const SizedBox(height: 25),
+                              _buildMainSection(),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                // Tab 1: Tasks history
+                const DriverTasksScreen(),
+                // Tab 2: Notifications
+                const DriverNotificationsScreen(),
+                // Tab 3: Profile
+                DriverProfileScreen(onLogout: _performLogout),
+              ],
             ),
+            bottomNavigationBar: _buildBottomNav(),
           ),
         );
       },
@@ -188,7 +205,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       ),
       actions: [
         Padding(
-          padding: const EdgeInsets.only(left: 10),
+          padding: const EdgeInsets.only(left: 16),
           child: Row(
             children: [
               Text(
@@ -214,116 +231,56 @@ class _DriverDashboardState extends State<DriverDashboard> {
             ],
           ),
         ),
-        IconButton(
-          icon: const Icon(Icons.account_circle, color: Colors.white, size: 28),
-          tooltip: 'الملف الشخصي',
-          onPressed: _showProfileSheet,
-        ),
-        const SizedBox(width: 6),
       ],
     );
   }
 
-  void _showProfileSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (sheetContext) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+  Widget _buildBottomNav() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
           ),
-          padding: const EdgeInsets.fromLTRB(24, 14, 24, 28),
-          child: FutureBuilder<DocumentSnapshot>(
-            future: FirebaseFirestore.instance
-                .collection('drivers')
-                .doc(_currentDriverId)
-                .get(),
-            builder: (context, snapshot) {
-              final data = snapshot.data?.data() as Map<String, dynamic>? ?? {};
-              final name = data['name'] ?? 'سائق زيارة';
-              final phone = data['phone'] ??
-                  _auth.currentUser?.phoneNumber ??
-                  'غير محدد';
-              final email = _auth.currentUser?.email ?? 'غير محدد';
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 50,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  const SizedBox(height: 22),
-                  const CircleAvatar(
-                    radius: 40,
-                    backgroundColor: Color(0xFF5D1B5E),
-                    child: Icon(Icons.person, color: Colors.white, size: 44),
-                  ),
-                  const SizedBox(height: 14),
-                  Text(name,
-                      style: GoogleFonts.tajawal(
-                          fontWeight: FontWeight.bold, fontSize: 20)),
-                  const SizedBox(height: 4),
-                  Text('سائق معتمد لدى زيارة',
-                      style: GoogleFonts.tajawal(
-                          color: Colors.grey, fontSize: 13)),
-                  const SizedBox(height: 24),
-                  _buildProfileRow(Icons.phone_rounded, 'رقم الجوال', phone),
-                  _buildProfileRow(
-                      Icons.email_rounded, 'البريد الإلكتروني', email),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(sheetContext);
-                        _performLogout();
-                      },
-                      icon: const Icon(Icons.logout, color: Colors.white),
-                      label: Text('تسجيل الخروج',
-                          style: GoogleFonts.tajawal(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red.shade700,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
+        ],
       ),
-    );
-  }
-
-  Widget _buildProfileRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Icon(icon, color: const Color(0xFF5D1B5E), size: 22),
-          const SizedBox(width: 14),
-          Text('$label: ',
-              style:
-                  GoogleFonts.tajawal(color: Colors.grey[600], fontSize: 13)),
-          Expanded(
-            child: Text(value,
-                style: GoogleFonts.tajawal(
-                    fontWeight: FontWeight.w600, fontSize: 13),
-                textAlign: TextAlign.left),
+      child: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (i) {
+          HapticFeedback.selectionClick();
+          setState(() => _currentIndex = i);
+        },
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: const Color(0xFF5D1B5E),
+        unselectedItemColor: Colors.grey,
+        selectedLabelStyle:
+            GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 11),
+        unselectedLabelStyle: GoogleFonts.tajawal(fontSize: 11),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard_outlined),
+            activeIcon: Icon(Icons.dashboard),
+            label: 'الرئيسية',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.task_outlined),
+            activeIcon: Icon(Icons.task),
+            label: 'مهامي',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.notifications_outlined),
+            activeIcon: Icon(Icons.notifications),
+            label: 'الإشعارات',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            activeIcon: Icon(Icons.person),
+            label: 'حسابي',
           ),
         ],
       ),
@@ -375,17 +332,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
           .snapshots(),
       builder: (context, allSnapshot) {
         if (allSnapshot.hasError) {
-          return Column(
+          return Row(
             children: [
-              Row(
-                children: [
-                  _buildCompactStat("مهام اليوم", "0", Icons.today, Colors.blue),
-                  const SizedBox(width: 12),
-                  _buildCompactStat("الرتبة المهنية", "—", Icons.military_tech, Colors.grey),
-                ],
-              ),
-              const SizedBox(height: 12),
-              _buildAchievementBadges(0),
+              _buildCompactStat("مهام اليوم", "0", Icons.today, Colors.blue),
+              const SizedBox(width: 12),
+              _buildCompactStat("الرتبة المهنية", "—", Icons.military_tech, Colors.grey),
             ],
           );
         }
@@ -404,57 +355,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
         else if (totalTasks >= 50) { rank = "عامل ذهبي"; rankColor = Colors.amber; }
         else if (totalTasks >= 10) { rank = "عامل فضي"; rankColor = Colors.blueGrey; }
 
-        return Column(
+        return Row(
           children: [
-            Row(
-              children: [
-                _buildCompactStat("مهام اليوم", "$todayTasks", Icons.today, Colors.blue),
-                const SizedBox(width: 12),
-                _buildCompactStat("الرتبة المهنية", rank, Icons.military_tech, rankColor),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _buildAchievementBadges(totalTasks),
+            _buildCompactStat("مهام اليوم", "$todayTasks", Icons.today, Colors.blue),
+            const SizedBox(width: 12),
+            _buildCompactStat("الرتبة المهنية", rank, Icons.military_tech, rankColor),
           ],
         );
       },
-    );
-  }
-
-  Widget _buildAchievementBadges(int totalTasks) {
-    return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10)],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text("أوسمة التميز", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13)),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildBadgeIcon(Icons.verified, "مبتدئ", totalTasks >= 1),
-              _buildBadgeIcon(Icons.workspace_premium, "نشط", totalTasks >= 10),
-              _buildBadgeIcon(Icons.auto_awesome, "محترف", totalTasks >= 50),
-              _buildBadgeIcon(Icons.diamond, "نخبة", totalTasks >= 100),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBadgeIcon(IconData icon, String label, bool earned) {
-    return Column(
-      children: [
-        Icon(icon, color: earned ? const Color(0xFF5D1B5E) : Colors.grey[200], size: 30),
-        const SizedBox(height: 4),
-        Text(label, style: GoogleFonts.tajawal(fontSize: 10, color: earned ? Colors.black87 : Colors.grey[300])),
-      ],
     );
   }
 
