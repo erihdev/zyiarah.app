@@ -1098,3 +1098,60 @@ exports.findNearestDrivers = onCall(async (request) => {
 
   return {drivers: nearest3};
 });
+
+// Notify driver when they are assigned to an order
+exports.notifyDriverOnAssignment = onDocumentUpdated("orders/{orderId}",
+    async (event) => {
+      const change = event.data;
+      if (!change) return null;
+
+      const beforeData = change.before.data();
+      const afterData = change.after.data();
+      const orderId = event.params.orderId;
+
+      // Check if driver_id was changed and is not null
+      if (afterData.driver_id && beforeData.driver_id !== afterData.driver_id) {
+        const driverId = afterData.driver_id;
+        const displayCode = afterData.code || orderId.substring(0, 6).toUpperCase();
+        const title = "تم تعيين طلب جديد لك! 🚚";
+        const body = `تم تعيينك للطلب #${displayCode}. يرجى التحقق من تفاصيل الرحلة في لوحة التحكم.`;
+
+        // 1. Save to in-app notifications inbox
+        await admin.firestore().collection("notifications").add({
+          userId: driverId,
+          title: title,
+          body: body,
+          type: "order_assignment",
+          relatedId: orderId,
+          isRead: false,
+          sentAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // 2. Fetch driver's FCM token
+        const tokenDoc = await admin.firestore().collection("fcm_tokens").doc(driverId).get();
+        if (tokenDoc.exists) {
+          const fcmToken = tokenDoc.data()?.fcmToken || tokenDoc.data()?.token;
+          if (fcmToken) {
+            const payload = {
+              notification: {
+                title: title,
+                body: body,
+              },
+              data: {
+                click_action: "FLUTTER_NOTIFICATION_CLICK",
+                type: "order_assignment",
+                orderId: orderId,
+              },
+              token: fcmToken,
+            };
+            try {
+              await admin.messaging().send(payload);
+              console.log(`Assignment notification sent to driver ${driverId} for order ${orderId}`);
+            } catch (error) {
+              console.error("Error sending assignment FCM to driver:", error);
+            }
+          }
+        }
+      }
+      return null;
+    });

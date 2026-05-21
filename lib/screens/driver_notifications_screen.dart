@@ -53,8 +53,10 @@ class DriverNotificationsScreen extends StatelessWidget {
 
                   final docs = (snapshot.data?.docs ?? [])
                     ..sort((a, b) {
-                      final aT = (a.data() as Map)['created_at'] as Timestamp?;
-                      final bT = (b.data() as Map)['created_at'] as Timestamp?;
+                      final aData = a.data() as Map<String, dynamic>;
+                      final bData = b.data() as Map<String, dynamic>;
+                      final aT = (aData['created_at'] ?? aData['sentAt'] ?? aData['sent_at']) as Timestamp?;
+                      final bT = (bData['created_at'] ?? bData['sentAt'] ?? bData['sent_at']) as Timestamp?;
                       if (aT == null && bT == null) return 0;
                       if (aT == null) return 1;
                       if (bT == null) return -1;
@@ -82,9 +84,24 @@ class DriverNotificationsScreen extends StatelessWidget {
                     itemCount: docs.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (context, i) {
-                      final data =
-                          docs[i].data() as Map<String, dynamic>;
-                      return _NotifCard(data: data);
+                      final doc = docs[i];
+                      final data = doc.data() as Map<String, dynamic>;
+                      return GestureDetector(
+                        onTap: () async {
+                          final isRead = (data['is_read'] ?? data['isRead'] as bool?) ?? false;
+                          if (!isRead) {
+                            try {
+                              await FirebaseFirestore.instance
+                                  .collection('notifications')
+                                  .doc(doc.id)
+                                  .update({'isRead': true});
+                            } catch (e) {
+                              debugPrint("Error marking notification as read: $e");
+                            }
+                          }
+                        },
+                        child: _NotifCard(data: data),
+                      );
                     },
                   );
                 },
@@ -104,9 +121,9 @@ class _NotifCard extends StatelessWidget {
     final body = data['body'] as String? ?? '';
     final type = data['type'] as String? ?? '';
     final createdAt =
-        (data['created_at'] as Timestamp?)?.toDate() ?? DateTime.now();
+        (data['created_at'] ?? data['sentAt'] ?? data['sent_at'] as Timestamp?)?.toDate() ?? DateTime.now();
     final timeAgo = _formatTimeAgo(createdAt);
-    final isRead = data['is_read'] as bool? ?? false;
+    final isRead = (data['is_read'] ?? data['isRead'] as bool?) ?? false;
 
     IconData icon;
     Color iconColor;

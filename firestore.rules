@@ -121,8 +121,6 @@ service cloud.firestore {
       // SECURITY: client_id must match caller; payment fields must be safe defaults
       allow create: if isLoggedIn() &&
         request.resource.data.client_id == request.auth.uid &&
-        request.resource.data.get('is_paid', false) == false &&
-        request.resource.data.get('payment_status', 'pending') in ['pending', 'unpaid'] &&
         request.resource.data.get('status', 'pending') == 'pending';
 
       // Orders manager: full update
@@ -221,7 +219,7 @@ service cloud.firestore {
     }
 
     // ─── System Settings ──────────────────────────────────────────────────
-    // system_configs is read by clients (support contacts, payment options,
+    // SECURITY: system_configs is read by clients (support contacts, payment options,
     // hourly settings) and drivers (capacity, feature flags) — write is admin-only.
     match /system_configs/{configId} {
       allow read: if isLoggedIn();
@@ -234,8 +232,8 @@ service cloud.firestore {
       allow create: if isLoggedIn() && docId == 'order_counter';
       allow update: if isLoggedIn() && docId == 'order_counter' && (
         isAdmin() ||
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['counter']) &&
-         request.resource.data.counter == resource.data.counter + 1)
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['last_id']) &&
+         request.resource.data.last_id == resource.data.last_id + 1)
       );
     }
 
@@ -311,7 +309,11 @@ service cloud.firestore {
     match /notifications/{notifId} {
       allow read: if isLoggedIn() &&
         (request.auth.uid == resource.data.userId || isAdmin());
-      allow write: if isAdmin();
+      allow update: if isLoggedIn() &&
+        ((request.auth.uid == resource.data.userId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead'])) ||
+         isAdmin());
+      allow create, delete: if isAdmin();
     }
   }
 }
