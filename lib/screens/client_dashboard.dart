@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:zyiarah/screens/profile_screen.dart';
 import 'package:zyiarah/models/user_model.dart';
@@ -22,6 +23,7 @@ import 'package:zyiarah/screens/maintenance_request_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/maintenance_listener_service.dart';
 import 'package:zyiarah/widgets/support_fab.dart';
+import 'package:zyiarah/screens/client_notifications_screen.dart';
 
 import 'package:provider/provider.dart';
 import 'package:zyiarah/providers/user_provider.dart';
@@ -442,6 +444,15 @@ class _ClientDashboardState extends State<ClientDashboard> {
           ),
         ],
       ),
+      actions: [
+        _NotifBell(
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ClientNotificationsScreen()),
+          ),
+        ),
+        const SizedBox(width: 4),
+      ],
     );
   }
 
@@ -529,7 +540,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
       stream: FirebaseFirestore.instance
           .collection('promo_banners')
           .where('isActive', isEqualTo: true)
-          .orderBy('rank')
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -981,6 +991,54 @@ class _ClientDashboardState extends State<ClientDashboard> {
         );
       },
       child: child,
+    );
+  }
+}
+
+class _NotifBell extends StatelessWidget {
+  final VoidCallback onTap;
+  const _NotifBell({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      return IconButton(
+        onPressed: onTap,
+        icon: const Icon(Icons.notifications_outlined, color: Color(0xFF0F172A)),
+      );
+    }
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('notifications')
+          .where('userId', isEqualTo: uid)
+          .where('is_read', isEqualTo: false)
+          .limit(1)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final hasUnread = (snapshot.data?.docs.isNotEmpty) ?? false;
+        return Stack(
+          children: [
+            IconButton(
+              onPressed: onTap,
+              icon: const Icon(Icons.notifications_outlined, color: Color(0xFF0F172A)),
+            ),
+            if (hasUnread)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF5D1B5E),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }
