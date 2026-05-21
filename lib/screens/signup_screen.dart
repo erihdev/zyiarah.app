@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zyiarah/services/firebase_service.dart';
+import 'package:zyiarah/services/zyiarah_referral_service.dart';
 import 'package:zyiarah/screens/terms_privacy_screens.dart';
 
 class ZyiarahSignupScreen extends StatefulWidget {
@@ -17,6 +18,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _referralCodeController = TextEditingController();
   
   final ZyiarahFirebaseService _firebaseService = ZyiarahFirebaseService();
   bool _isLoading = false;
@@ -52,13 +54,21 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _firebaseService.signUpWithRealEmailAndPassword(
+      final credential = await _firebaseService.signUpWithRealEmailAndPassword(
         phone: phone,
         password: password,
         name: name,
         email: email,
       );
-      
+
+      final referralCode = _referralCodeController.text.trim();
+      if (referralCode.isNotEmpty && credential.user != null) {
+        await ZyiarahReferralService().applyReferralCode(
+          newUserId: credential.user!.uid,
+          referralCode: referralCode,
+        );
+      }
+
       if (!mounted) return;
       context.go('/client');
     } catch (e) {
@@ -80,6 +90,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _referralCodeController.dispose();
     super.dispose();
   }
 
@@ -160,6 +171,14 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
                   onToggle: () => setState(() => _isConfirmVisible = !_isConfirmVisible),
                 ),
                 
+                const SizedBox(height: 15),
+                _buildFieldLabel("كود الإحالة (اختياري)"),
+                _buildTextField(
+                  _referralCodeController,
+                  "أدخل كود الإحالة إن وجد",
+                  textCapitalization: TextCapitalization.characters,
+                ),
+
                 const SizedBox(height: 25),
                 _buildLegalCheckbox(
                   "أوافق على الشروط والأحكام", 
@@ -209,12 +228,13 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
   }
 
   Widget _buildTextField(
-    TextEditingController controller, 
+    TextEditingController controller,
     String hint, {
     TextInputType keyboardType = TextInputType.text,
     bool isPassword = false,
     bool isVisible = false,
     VoidCallback? onToggle,
+    TextCapitalization textCapitalization = TextCapitalization.none,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -225,6 +245,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
         controller: controller,
         keyboardType: keyboardType,
         obscureText: isPassword && !isVisible,
+        textCapitalization: textCapitalization,
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: GoogleFonts.tajawal(color: Colors.grey[400]),
