@@ -87,16 +87,20 @@ class ZyiarahMessagingService {
 
     // إذا وجد إيميل — أرسل trigger منفصل للإيميل بـ HTML كامل
     if (driverEmail != null) {
-      await _db.collection('notification_triggers').add({
-        'toUid': driverId,
-        'title': 'مهمة جديدة مسندة إليك 🚀 — طلب #$orderId',
-        'body': emailHtml,
-        'type': 'email',
-        'recipientEmail': driverEmail,
-        'data': {'orderId': orderId},
-        'createdAt': FieldValue.serverTimestamp(),
-        'processed': false,
-      });
+      try {
+        await _db.collection('notification_triggers').add({
+          'toUid': driverId,
+          'title': 'مهمة جديدة مسندة إليك 🚀 — طلب #$orderId',
+          'body': emailHtml,
+          'type': 'email',
+          'recipientEmail': driverEmail,
+          'data': {'orderId': orderId},
+          'createdAt': FieldValue.serverTimestamp(),
+          'processed': false,
+        });
+      } catch (e) {
+        debugPrint("Defensive: Error queueing driver assignment email: $e");
+      }
     }
   }
 

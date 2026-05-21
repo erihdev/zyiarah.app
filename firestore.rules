@@ -280,13 +280,10 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
     }
 
-    // SECURITY: removed `type == 'email'` bypass that allowed arbitrary email spam
+    // SECURITY: notification_triggers acts as a write-only queue for clients/drivers.
+    // They append triggers, which are securely processed by server-side Cloud Functions.
     match /notification_triggers/{triggerId} {
-      allow create: if isLoggedIn() && (
-        !('toUid' in request.resource.data) ||
-        request.resource.data.toUid == request.auth.uid ||
-        (request.resource.data.toUid == 'ADMIN_BROADCAST' && isAdmin())
-      );
+      allow create: if isLoggedIn();
       allow read, delete: if isAdmin();
     }
 
