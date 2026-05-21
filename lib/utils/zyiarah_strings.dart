@@ -49,7 +49,7 @@ class ZyiarahStrings {
   static String get driversStaff => isArabic ? "الكوادر والسائقين" : "Staff & Drivers";
   static String get unifiedStaffManagement => isArabic ? "إدارة منسوبي النظام" : "Unified Staff Management";
   static String get analyticsReports => isArabic ? "التحليلات والتقارير" : "Analytics & Reports";
-  static String get systemSettings => isArabic ? "إعدادات النظام" : "System Settings";
+  static String get systemSettings => isArabic ? "المزيد" : "More";
   static String get accessDenied => isArabic ? "عذراً.. غير مصرح لك" : "Sorry.. Access Denied";
   static String get contactAdmin => isArabic ? "لا تملك صلاحيات كافية للوصول للوحة التحكم. يرجى التواصل مع المسؤول." : "You do not have sufficient permissions. Contact admin.";
   static String get logout => isArabic ? "تسجيل الخروج" : "Logout";

@@ -114,11 +114,6 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
         
         final code = data['code'] ?? docs[index].id.substring(0, 8).toUpperCase();
         
-        if (data['created_at'] != null) {
-          // ignore: unused_local_variable
-          final date = (data['created_at'] as Timestamp).toDate();
-        }
-
         return Card(
           elevation: 0,
           margin: const EdgeInsets.only(bottom: 12),

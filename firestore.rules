@@ -221,9 +221,10 @@ service cloud.firestore {
     }
 
     // ─── System Settings ──────────────────────────────────────────────────
-    // SECURITY: system_configs restricted to admins only (was readable by all)
+    // system_configs is read by clients (support contacts, payment options,
+    // hourly settings) and drivers (capacity, feature flags) — write is admin-only.
     match /system_configs/{configId} {
-      allow read: if isAdmin();
+      allow read: if isLoggedIn();
       allow write: if isSuperAdmin();
     }
 

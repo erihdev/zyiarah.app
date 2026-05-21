@@ -35,10 +35,15 @@ class _SofaRugCleaningDetailsScreenState extends State<SofaRugCleaningDetailsScr
 
   Future<void> _fetchZones() async {
     try {
-      final snapshot = await FirebaseFirestore.instance.collection('service_zones').orderBy('rank').get();
+      final snapshot = await FirebaseFirestore.instance
+          .collection('service_zones')
+          .where('enabled', isEqualTo: true)
+          .get();
       if (mounted) {
+        final sorted = snapshot.docs.map((doc) => doc.data()).toList()
+          ..sort((a, b) => (a['rank'] as int? ?? 0).compareTo(b['rank'] as int? ?? 0));
         setState(() {
-          _zones = snapshot.docs.map((doc) => doc.data()).toList();
+          _zones = sorted;
           _isLoading = false;
         });
         _attemptAutoLocation();

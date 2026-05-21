@@ -148,15 +148,17 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                               // Wait for upload to complete
                               final snapshot = await uploadTask;
                               final url = await snapshot.ref.getDownloadURL();
-                              
-                              setDialogState(() {
-                                imageUrl = url;
-                                isUploading = false;
-                              });
-                            } catch (e) {
-                              setDialogState(() => isUploading = false);
+
                               if (ctx.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل رفع الصورة: $e")));
+                                setDialogState(() {
+                                  imageUrl = url;
+                                  isUploading = false;
+                                });
+                              }
+                            } catch (e) {
+                              if (ctx.mounted) {
+                                setDialogState(() => isUploading = false);
+                                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text("فشل رفع الصورة: $e")));
                               }
                             }
                           }

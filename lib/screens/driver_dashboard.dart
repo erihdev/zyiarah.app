@@ -12,8 +12,13 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:async';
+import 'dart:math';
 import 'package:lottie/lottie.dart' hide Marker;
 import 'package:go_router/go_router.dart';
+import 'package:zyiarah/screens/driver_tasks_screen.dart';
+import 'package:zyiarah/screens/driver_notifications_screen.dart';
+import 'package:zyiarah/screens/driver_profile_screen.dart';
+import 'package:zyiarah/screens/driver_earnings_screen.dart';
 
 class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
@@ -28,6 +33,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
   final ZyiarahMessagingService _notificationService = ZyiarahMessagingService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  int _currentIndex = 0;
   bool _isOnline = true;
   String? _currentDriverId;
   String? _activeOrderId;
@@ -116,6 +122,20 @@ class _DriverDashboardState extends State<DriverDashboard> {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('drivers').doc(_currentDriverId).snapshots(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.wifi_off_rounded, size: 64, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  Text('تعذّر الاتصال، تحقق من الإنترنت', style: GoogleFonts.tajawal(color: Colors.grey)),
+                ],
+              ),
+            ),
+          );
+        }
         if (snapshot.hasData && snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>;
           final isActive = data['is_active'] ?? true;
@@ -137,27 +157,42 @@ class _DriverDashboardState extends State<DriverDashboard> {
           value: SystemUiOverlayStyle.light,
           child: Scaffold(
             backgroundColor: const Color(0xFFF1F5F9),
-            body: Directionality(
-              textDirection: TextDirection.rtl,
-              child: CustomScrollView(
-                slivers: [
-                  _buildAppBar(),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildStatsRow(),
-                          const SizedBox(height: 25),
-                          _buildMainSection(),
-                        ],
+            body: IndexedStack(
+              index: _currentIndex,
+              children: [
+                // Tab 0: Home dashboard
+                Directionality(
+                  textDirection: TextDirection.rtl,
+                  child: CustomScrollView(
+                    slivers: [
+                      _buildAppBar(),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildStatsRow(),
+                              const SizedBox(height: 25),
+                              _buildMainSection(),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                // Tab 1: Tasks history
+                const DriverTasksScreen(),
+                // Tab 2: Notifications
+                const DriverNotificationsScreen(),
+                // Tab 3: Profile
+                DriverProfileScreen(onLogout: _performLogout),
+                // Tab 4: Earnings
+                const DriverEarningsScreen(),
+              ],
             ),
+            bottomNavigationBar: _buildBottomNav(),
           ),
         );
       },
@@ -188,7 +223,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       ),
       actions: [
         Padding(
-          padding: const EdgeInsets.only(left: 10),
+          padding: const EdgeInsets.only(left: 16),
           child: Row(
             children: [
               Text(
@@ -214,116 +249,61 @@ class _DriverDashboardState extends State<DriverDashboard> {
             ],
           ),
         ),
-        IconButton(
-          icon: const Icon(Icons.account_circle, color: Colors.white, size: 28),
-          tooltip: 'الملف الشخصي',
-          onPressed: _showProfileSheet,
-        ),
-        const SizedBox(width: 6),
       ],
     );
   }
 
-  void _showProfileSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (sheetContext) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+  Widget _buildBottomNav() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
           ),
-          padding: const EdgeInsets.fromLTRB(24, 14, 24, 28),
-          child: FutureBuilder<DocumentSnapshot>(
-            future: FirebaseFirestore.instance
-                .collection('drivers')
-                .doc(_currentDriverId)
-                .get(),
-            builder: (context, snapshot) {
-              final data = snapshot.data?.data() as Map<String, dynamic>? ?? {};
-              final name = data['name'] ?? 'سائق زيارة';
-              final phone = data['phone'] ??
-                  _auth.currentUser?.phoneNumber ??
-                  'غير محدد';
-              final email = _auth.currentUser?.email ?? 'غير محدد';
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 50,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  const SizedBox(height: 22),
-                  const CircleAvatar(
-                    radius: 40,
-                    backgroundColor: Color(0xFF5D1B5E),
-                    child: Icon(Icons.person, color: Colors.white, size: 44),
-                  ),
-                  const SizedBox(height: 14),
-                  Text(name,
-                      style: GoogleFonts.tajawal(
-                          fontWeight: FontWeight.bold, fontSize: 20)),
-                  const SizedBox(height: 4),
-                  Text('سائق معتمد لدى زيارة',
-                      style: GoogleFonts.tajawal(
-                          color: Colors.grey, fontSize: 13)),
-                  const SizedBox(height: 24),
-                  _buildProfileRow(Icons.phone_rounded, 'رقم الجوال', phone),
-                  _buildProfileRow(
-                      Icons.email_rounded, 'البريد الإلكتروني', email),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(sheetContext);
-                        _performLogout();
-                      },
-                      icon: const Icon(Icons.logout, color: Colors.white),
-                      label: Text('تسجيل الخروج',
-                          style: GoogleFonts.tajawal(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red.shade700,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
+        ],
       ),
-    );
-  }
-
-  Widget _buildProfileRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Icon(icon, color: const Color(0xFF5D1B5E), size: 22),
-          const SizedBox(width: 14),
-          Text('$label: ',
-              style:
-                  GoogleFonts.tajawal(color: Colors.grey[600], fontSize: 13)),
-          Expanded(
-            child: Text(value,
-                style: GoogleFonts.tajawal(
-                    fontWeight: FontWeight.w600, fontSize: 13),
-                textAlign: TextAlign.left),
+      child: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (i) {
+          HapticFeedback.selectionClick();
+          setState(() => _currentIndex = i);
+        },
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: const Color(0xFF5D1B5E),
+        unselectedItemColor: Colors.grey,
+        selectedLabelStyle:
+            GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 11),
+        unselectedLabelStyle: GoogleFonts.tajawal(fontSize: 11),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard_outlined),
+            activeIcon: Icon(Icons.dashboard),
+            label: 'الرئيسية',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.task_outlined),
+            activeIcon: Icon(Icons.task),
+            label: 'مهامي',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.notifications_outlined),
+            activeIcon: Icon(Icons.notifications),
+            label: 'الإشعارات',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            activeIcon: Icon(Icons.person),
+            label: 'حسابي',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.account_balance_wallet_outlined),
+            activeIcon: Icon(Icons.account_balance_wallet),
+            label: 'المالية',
           ),
         ],
       ),
@@ -366,6 +346,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
+    final weekStart = now.subtract(Duration(days: now.weekday - 1));
+    final monthStart = DateTime(now.year, now.month, 1);
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -375,86 +357,39 @@ class _DriverDashboardState extends State<DriverDashboard> {
           .snapshots(),
       builder: (context, allSnapshot) {
         if (allSnapshot.hasError) {
-          return Column(
+          return Row(
             children: [
-              Row(
-                children: [
-                  _buildCompactStat("مهام اليوم", "0", Icons.today, Colors.blue),
-                  const SizedBox(width: 12),
-                  _buildCompactStat("الرتبة المهنية", "—", Icons.military_tech, Colors.grey),
-                ],
-              ),
-              const SizedBox(height: 12),
-              _buildAchievementBadges(0),
+              _buildCompactStat("اليوم", "0", Icons.today_outlined, Colors.blue),
+              const SizedBox(width: 10),
+              _buildCompactStat("الأسبوع", "0", Icons.date_range_outlined, Colors.green),
+              const SizedBox(width: 10),
+              _buildCompactStat("الشهر", "0", Icons.calendar_month_outlined, Colors.orange),
             ],
           );
         }
 
         final allOrders = allSnapshot.data?.docs ?? [];
-        final totalTasks = allOrders.length;
-        final todayTasks = allOrders.where((doc) {
+
+        int todayTasks = 0, weeklyTasks = 0, monthlyTasks = 0;
+        for (final doc in allOrders) {
           final data = doc.data() as Map<String, dynamic>;
           final endTime = (data['end_time'] as Timestamp?)?.toDate();
-          return endTime != null && endTime.isAfter(todayStart);
-        }).length;
+          if (endTime == null) continue;
+          if (endTime.isAfter(todayStart)) todayTasks++;
+          if (endTime.isAfter(weekStart)) weeklyTasks++;
+          if (endTime.isAfter(monthStart)) monthlyTasks++;
+        }
 
-        String rank = "عامل جديد";
-        Color rankColor = Colors.grey;
-        if (totalTasks >= 100) { rank = "عامل ماسي"; rankColor = Colors.blue; }
-        else if (totalTasks >= 50) { rank = "عامل ذهبي"; rankColor = Colors.amber; }
-        else if (totalTasks >= 10) { rank = "عامل فضي"; rankColor = Colors.blueGrey; }
-
-        return Column(
+        return Row(
           children: [
-            Row(
-              children: [
-                _buildCompactStat("مهام اليوم", "$todayTasks", Icons.today, Colors.blue),
-                const SizedBox(width: 12),
-                _buildCompactStat("الرتبة المهنية", rank, Icons.military_tech, rankColor),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _buildAchievementBadges(totalTasks),
+            _buildCompactStat("اليوم", "$todayTasks", Icons.today_outlined, Colors.blue),
+            const SizedBox(width: 10),
+            _buildCompactStat("الأسبوع", "$weeklyTasks", Icons.date_range_outlined, Colors.green),
+            const SizedBox(width: 10),
+            _buildCompactStat("الشهر", "$monthlyTasks", Icons.calendar_month_outlined, Colors.orange),
           ],
         );
       },
-    );
-  }
-
-  Widget _buildAchievementBadges(int totalTasks) {
-    return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10)],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text("أوسمة التميز", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13)),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildBadgeIcon(Icons.verified, "مبتدئ", totalTasks >= 1),
-              _buildBadgeIcon(Icons.workspace_premium, "نشط", totalTasks >= 10),
-              _buildBadgeIcon(Icons.auto_awesome, "محترف", totalTasks >= 50),
-              _buildBadgeIcon(Icons.diamond, "نخبة", totalTasks >= 100),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBadgeIcon(IconData icon, String label, bool earned) {
-    return Column(
-      children: [
-        Icon(icon, color: earned ? const Color(0xFF5D1B5E) : Colors.grey[200], size: 30),
-        const SizedBox(height: 4),
-        Text(label, style: GoogleFonts.tajawal(fontSize: 10, color: earned ? Colors.black87 : Colors.grey[300])),
-      ],
     );
   }
 
@@ -1046,18 +981,19 @@ class _DriverDashboardState extends State<DriverDashboard> {
       children: [
         Text("الطلبات المتاحة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
         const SizedBox(height: 15),
-        StreamBuilder<QuerySnapshot>(
+        StreamBuilder<List<QueryDocumentSnapshot>>(
           stream: _orderService.streamAvailableOrders(),
           builder: (context, snapshot) {
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            if (!snapshot.hasData || snapshot.data!.isEmpty) {
               return _buildStatusPlaceholder(Icons.search, "لا توجد طلبات حالياً", "بانتظار وصول طلبات جديدة من العملاء");
             }
+            final docs = snapshot.data!;
             return ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: snapshot.data!.docs.length,
+              itemCount: docs.length,
               itemBuilder: (context, index) {
-                final doc = snapshot.data!.docs[index];
+                final doc = docs[index];
                 return _buildNewTaskCard(doc.id, doc.data() as Map<String, dynamic>);
               },
             );
@@ -1203,53 +1139,131 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
       if (status == 'completed' && paymentMethod == 'cod') {
         if (!mounted) return;
-        final confirmed = await showDialog<bool>(
+
+        // Generate 4-digit PIN and write to Firestore so client can see it immediately
+        final pin = (Random().nextInt(9000) + 1000).toString();
+        await FirebaseFirestore.instance.collection('orders').doc(id).update({
+          'payment_pin': pin,
+          'payment_pin_generated_at': FieldValue.serverTimestamp(),
+        });
+
+        // Show PIN entry dialog for driver — client will show the same PIN from their app
+        if (!mounted) return;
+        final pinController = TextEditingController();
+        String? pinError;
+        bool confirmed = false;
+        try {
+        final dialogResult = await showDialog<bool>(
           context: context,
           barrierDismissible: false,
-          builder: (context) => Directionality(
-            textDirection: TextDirection.rtl,
-            child: AlertDialog(
-              title: Text("تأكيد تحصيل النقد 💸", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.green)),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text("هل قمت باستلام المبلغ نقدًا من $clientName؟", style: GoogleFonts.tajawal()),
-                  const SizedBox(height: 15),
-                  Container(
-                    padding: const EdgeInsets.all(15),
-                    decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(12)),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text("المبلغ المطلوب: ", style: GoogleFonts.tajawal(fontSize: 14)),
-                        Text("${amount.toStringAsFixed(2)} ر.س", style: GoogleFonts.tajawal(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.green.shade900)),
-                      ],
+          builder: (dialogCtx) => StatefulBuilder(
+            builder: (dialogCtx, setDialogState) => Directionality(
+              textDirection: TextDirection.rtl,
+              child: AlertDialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                title: Row(
+                  children: [
+                    const Icon(Icons.lock_outline, color: Color(0xFF5D1B5E)),
+                    const SizedBox(width: 8),
+                    Text("رمز الدفع", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text("المبلغ: ", style: GoogleFonts.tajawal(fontSize: 13)),
+                          Text("${amount.toStringAsFixed(2)} ر.س",
+                              style: GoogleFonts.tajawal(fontWeight: FontWeight.w900, fontSize: 17, color: Colors.green.shade800)),
+                        ],
+                      ),
                     ),
+                    const SizedBox(height: 16),
+                    Text(
+                      "اطلب من $clientName رمز الدفع المعروض في تطبيقه وأدخله هنا",
+                      style: GoogleFonts.tajawal(fontSize: 13, color: Colors.grey[600], height: 1.5),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: pinController,
+                      keyboardType: TextInputType.number,
+                      maxLength: 4,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.tajawal(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: 10),
+                      decoration: InputDecoration(
+                        counterText: '',
+                        hintText: '0000',
+                        hintStyle: TextStyle(color: Colors.grey[300], letterSpacing: 10),
+                        errorText: pinError,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF5D1B5E), width: 2),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () async {
+                      // Cancel: remove the PIN from Firestore and abort
+                      await FirebaseFirestore.instance.collection('orders').doc(id).update({
+                        'payment_pin': FieldValue.delete(),
+                        'payment_pin_generated_at': FieldValue.delete(),
+                      });
+                      if (dialogCtx.mounted) Navigator.pop(dialogCtx, false);
+                    },
+                    child: Text("إلغاء", style: GoogleFonts.tajawal(color: Colors.grey[600])),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      if (pinController.text == pin) {
+                        Navigator.pop(dialogCtx, true);
+                      } else {
+                        setDialogState(() => pinError = "الرمز غير صحيح، حاول مجدداً");
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF5D1B5E),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: Text("تأكيد", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(context, false), child: Text("إلغاء", style: TextStyle(color: Colors.grey[600]))),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                  child: const Text("نعم، تم استلام المبلغ"),
-                ),
-              ],
             ),
           ),
         );
+        confirmed = dialogResult == true;
+        } finally {
+          pinController.dispose();
+        }
 
-        if (confirmed != true) return;
+        if (!confirmed) return;
 
         await FirebaseFirestore.instance.collection('orders').doc(id).update({
           'is_paid': true,
           'paid_at': FieldValue.serverTimestamp(),
           'cash_collected_by': _currentDriverId,
+          'cash_confirmed': true,
+          'cash_confirmed_at': FieldValue.serverTimestamp(),
+          'payment_pin': FieldValue.delete(),
+          'payment_pin_generated_at': FieldValue.delete(),
         });
 
         await _notificationService.notifyAdminOfCashCollection(
-          driverName: "السائق المتواجد",
+          driverName: _driverName,
           orderCode: data['code'] ?? id,
           amount: amount,
         );

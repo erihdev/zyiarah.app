@@ -24,6 +24,14 @@ class ZyiarahStoreScreen extends StatefulWidget {
 class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
   final ZyiarahStoreService _storeService = ZyiarahStoreService();
   final Map<String, int> _cart = {};
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   void _addToCart(StoreProduct product) {
     setState(() {
@@ -141,6 +149,42 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
                 ),
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: TextField(
+                controller: _searchController,
+                onChanged: (v) => setState(() => _searchQuery = v.trim()),
+                decoration: InputDecoration(
+                  hintText: 'ابحث عن منتج...',
+                  hintStyle: GoogleFonts.tajawal(color: Colors.grey[400]),
+                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: Color(0xFF5D1B5E)),
+                  ),
+                ),
+              ),
+            ),
             Expanded(
               child: StreamBuilder<List<StoreProduct>>(
                 stream: _storeService.streamProducts(),
@@ -162,7 +206,29 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
                     return _buildEmptyState();
                   }
 
-                  final products = snapshot.data!;
+                  final allProducts = snapshot.data!;
+                  final products = _searchQuery.isEmpty
+                      ? allProducts
+                      : allProducts
+                          .where((p) =>
+                              p.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                              p.description.toLowerCase().contains(_searchQuery.toLowerCase()))
+                          .toList();
+
+                  if (products.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.search_off_rounded, size: 56, color: Colors.grey[300]),
+                          const SizedBox(height: 12),
+                          Text('لا توجد نتائج لـ "$_searchQuery"',
+                              style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 14)),
+                        ],
+                      ),
+                    );
+                  }
+
                   return GridView.builder(
                     padding: const EdgeInsets.all(16),
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(

@@ -154,7 +154,7 @@ class _ZyiarahSubscriptionPlansScreenState
                 price: '${data['price']} ر.س',
                 features: features,
                 isPremium: isPremium,
-                priceValue: (data['price'] ?? 0).toDouble(),
+                priceValue: double.tryParse(data['price']?.toString() ?? '0') ?? 0.0,
                 visits: (data['visits'] ?? 0).toInt(),
               ),
             );

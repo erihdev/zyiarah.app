@@ -14,6 +14,19 @@ class AdminHourlyZonesScreen extends StatefulWidget {
 class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  Future<void> _toggleZoneEnabled(String id, bool currentValue) async {
+    try {
+      await _db.collection('service_zones').doc(id).update({'enabled': !currentValue});
+      ZyiarahAuditService().logAction(
+        action: currentValue ? 'DISABLE_ZONE' : 'ENABLE_ZONE',
+        details: {'zone_id': id},
+        targetId: id,
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ: $e")));
+    }
+  }
+
   Future<void> _deleteZone(String id) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -233,6 +246,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
           stream: _db.collection('service_zones').orderBy('rank').snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+            if (snapshot.hasError) return const Center(child: Text("تعذّر تحميل المناطق", style: TextStyle(color: Colors.grey)));
             final docs = snapshot.data?.docs ?? [];
             if (docs.isEmpty) return const Center(child: Text("لا توجد مناطق تغطية حالياً"));
 
@@ -243,17 +257,44 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                 final doc = docs[index];
                 final data = doc.data() as Map<String, dynamic>;
 
+                final isEnabled = data['enabled'] as bool? ?? true;
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                   child: ListTile(
-                    contentPadding: const EdgeInsets.all(12),
-                    leading: CircleAvatar(backgroundColor: Colors.blue.shade50, child: const Icon(Icons.location_on, color: Colors.blue)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    leading: CircleAvatar(
+                      backgroundColor: isEnabled ? Colors.green.shade50 : Colors.grey.shade100,
+                      child: Icon(Icons.location_on, color: isEnabled ? Colors.green : Colors.grey),
+                    ),
                     title: Text(data['name'] ?? '', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-                    subtitle: Text("نطاق التغطية: ${data['radiusKm']} كم", style: const TextStyle(fontSize: 12)),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("نطاق التغطية: ${data['radiusKm']} كم", style: const TextStyle(fontSize: 12)),
+                        const SizedBox(height: 2),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: isEnabled ? Colors.green.shade50 : Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            isEnabled ? "مفعّلة" : "معطّلة",
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isEnabled ? Colors.green.shade700 : Colors.grey.shade600),
+                          ),
+                        ),
+                      ],
+                    ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        Switch(
+                          value: isEnabled,
+                          onChanged: (_) => _toggleZoneEnabled(doc.id, isEnabled),
+                          activeThumbColor: Colors.green,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
                         IconButton(icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20), onPressed: () => _showZoneDialog(doc: doc)),
                         IconButton(icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20), onPressed: () => _deleteZone(doc.id)),
                       ],

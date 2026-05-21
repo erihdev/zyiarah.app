@@ -530,11 +530,16 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('scheduled_notifications')
           .where('isProcessed', isEqualTo: false)
-          .orderBy('scheduled_at', descending: false)
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox.shrink();
-        final docs = snapshot.data!.docs;
+        final docs = (snapshot.data!.docs.toList())
+          ..sort((a, b) {
+            final aT = (a.data() as Map)['scheduled_at'] as Timestamp?;
+            final bT = (b.data() as Map)['scheduled_at'] as Timestamp?;
+            if (aT == null || bT == null) return 0;
+            return aT.compareTo(bT);
+          });
         if (docs.isEmpty) {
           return Container(
             width: double.infinity,

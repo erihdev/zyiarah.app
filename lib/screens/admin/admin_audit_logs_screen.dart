@@ -46,7 +46,7 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
                     return const Center(child: CircularProgressIndicator(color: Color(0xFF1E293B)));
                   }
 
-                  final logs = snapshot.data?.docs ?? [];
+                  final logs = _applyFilter(snapshot.data?.docs ?? []);
                   if (logs.isEmpty) {
                     return Center(
                       child: Column(
@@ -139,13 +139,24 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
   }
 
   Stream<QuerySnapshot> _getFilteredStream() {
-    var query = _db.collection('audit_logs').orderBy('timestamp', descending: true);
-    if (_selectedFilter != 'ALL') {
-      query = query
-          .where('action', isGreaterThanOrEqualTo: _selectedFilter)
-          .where('action', isLessThan: '${_selectedFilter}z');
-    }
-    return query.limit(100).snapshots();
+    // Fetch all ordered by timestamp; client-side filter by action prefix to avoid
+    // composite index on (action, timestamp).
+    return _db
+        .collection('audit_logs')
+        .orderBy('timestamp', descending: true)
+        .limit(200)
+        .snapshots();
+  }
+
+  List<QueryDocumentSnapshot> _applyFilter(List<QueryDocumentSnapshot> docs) {
+    if (_selectedFilter == 'ALL') return docs.take(100).toList();
+    return docs
+        .where((d) =>
+            ((d.data() as Map)['action'] as String? ?? '')
+                .toUpperCase()
+                .startsWith(_selectedFilter))
+        .take(100)
+        .toList();
   }
 
   Widget _buildLogCard(Map<String, dynamic> log) {

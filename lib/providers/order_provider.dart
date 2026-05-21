@@ -34,11 +34,18 @@ class ZyiarahOrderProvider extends ChangeNotifier {
     _ordersSub = FirebaseFirestore.instance
         .collection('orders')
         .where('client_id', isEqualTo: uid)
-        .orderBy('created_at', descending: true)
         .limit(20)
         .snapshots()
         .listen((snapshot) {
-      recentOrders = snapshot.docs;
+      recentOrders = snapshot.docs.toList()
+        ..sort((a, b) {
+          final aT = (a.data() as Map)['created_at'] as Timestamp?;
+          final bT = (b.data() as Map)['created_at'] as Timestamp?;
+          if (aT == null && bT == null) return 0;
+          if (aT == null) return 1;
+          if (bT == null) return -1;
+          return bT.compareTo(aT);
+        });
       isLoading = false;
       notifyListeners();
     }, onError: (e) {

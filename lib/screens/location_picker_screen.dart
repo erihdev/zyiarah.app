@@ -138,6 +138,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   void dispose() {
     _searchController.dispose();
     _debounce?.cancel();
+    _mapController.dispose();
     super.dispose();
   }
 

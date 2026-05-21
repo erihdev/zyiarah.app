@@ -10,7 +10,6 @@ import 'package:zyiarah/services/firebase_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/screens/support_screen.dart';
-import 'package:zyiarah/screens/orders_list_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
 import 'package:zyiarah/services/maintenance_listener_service.dart';
 import 'package:zyiarah/services/zyiarah_wallet_service.dart';
@@ -713,7 +712,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                   ),
                   const SizedBox(width: 5),
                   Text(
-                    'نقاط قطرات',
+                    'نقاط زيارة',
                     style: GoogleFonts.tajawal(
                         color: Colors.white70,
                         fontSize: 10,
@@ -771,7 +770,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                             ),
                           )
                         : Text(
-                            canRedeem ? 'استبدال' : 'قريباً',
+                            canRedeem ? 'استبدال' : '${50 - _qatratPoints} نقطة',
                             key: ValueKey(canRedeem),
                             style: GoogleFonts.tajawal(
                               fontSize: 11,
@@ -1022,12 +1021,6 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
         children: [
           _menuRow(Icons.home_work_outlined, 'تفضيلات الخدمة / قوانين المنزل',
               _brand, _showHouseRulesDialog),
-          _divider(),
-          _menuRow(Icons.history_rounded, 'سجل الطلبات', _brand, () {
-            HapticFeedback.lightImpact();
-            Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const OrdersListScreen()));
-          }),
           _divider(),
           _menuRow(Icons.description_outlined, 'عقودي الإلكترونية', _brand,
               () {

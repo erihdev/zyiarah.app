@@ -59,6 +59,9 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
+            if (snapshot.hasError) {
+              return const Center(child: Text("تعذّر تحميل بيانات الطلب", style: TextStyle(color: Colors.grey)));
+            }
             if (!snapshot.hasData || !snapshot.data!.exists) {
               return const Center(child: Text("الطلب غير موجود"));
             }
@@ -214,6 +217,11 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                 ],
           ),
           const SizedBox(height: 25),
+          if (data['payment_pin'] != null && data['cash_confirmed'] != true)
+            _buildPaymentPinCard(
+              data['payment_pin'] as String,
+              (data['amount'] ?? 0.0).toDouble(),
+            ),
           _buildStepper(status),
           const Divider(height: 40),
           _buildDriverInfo(data),
@@ -297,6 +305,90 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentPinCard(String pin, double amount) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.green.withValues(alpha: 0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.lock_open_outlined, color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('رمز الدفع',
+                        style: GoogleFonts.tajawal(
+                            color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                    Text('أظهر هذا الرمز للسائق عند تسليم المبلغ',
+                        style: GoogleFonts.tajawal(color: Colors.white70, fontSize: 11)),
+                  ],
+                ),
+              ),
+              Text('${amount.toStringAsFixed(0)} ر.س',
+                  style: GoogleFonts.tajawal(
+                      color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: pin.split('').map((digit) {
+                return Container(
+                  width: 52,
+                  height: 52,
+                  margin: const EdgeInsets.symmetric(horizontal: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: Text(digit,
+                        style: GoogleFonts.tajawal(
+                            fontSize: 28, fontWeight: FontWeight.w900, color: const Color(0xFF1B5E20))),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text('يختفي الرمز تلقائياً بعد تأكيد الاستلام',
+              style: GoogleFonts.tajawal(color: Colors.white54, fontSize: 10)),
         ],
       ),
     );
