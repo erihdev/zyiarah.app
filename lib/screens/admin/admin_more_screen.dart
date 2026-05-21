@@ -7,6 +7,8 @@ import 'package:zyiarah/screens/admin/admin_users_screen.dart';
 import 'package:zyiarah/screens/admin/admin_drivers_screen.dart';
 import 'package:zyiarah/screens/admin/admin_support_screen.dart';
 import 'package:zyiarah/screens/admin/admin_marketing_screen.dart';
+import 'package:zyiarah/screens/admin/admin_banners_screen.dart';
+import 'package:zyiarah/screens/admin/admin_coupons_screen.dart';
 import 'package:zyiarah/screens/admin/admin_contracts_screen.dart';
 import 'package:zyiarah/screens/admin/admin_maintenance_screen.dart';
 import 'package:zyiarah/screens/admin/admin_managers_screen.dart';
@@ -131,11 +133,18 @@ class AdminMoreScreen extends StatelessWidget {
         'color': Colors.redAccent,
         'items': [
           {
-            'title': 'الإشعارات والتسويق',
-            'icon': Icons.campaign_outlined,
+            'title': 'الكوبونات',
+            'icon': Icons.discount_outlined,
             'color': Colors.redAccent,
-            'page': const AdminMarketingScreen(),
-            'roles': ['super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin'],
+            'page': const AdminCouponsScreen(),
+            'roles': ['super_admin', 'marketing_admin'],
+          },
+          {
+            'title': 'البانرات الترويجية',
+            'icon': Icons.image_outlined,
+            'color': Colors.orange,
+            'page': const AdminBannersScreen(),
+            'roles': ['super_admin', 'marketing_admin'],
           },
           {
             'title': 'باقات الاشتراك',
@@ -143,6 +152,13 @@ class AdminMoreScreen extends StatelessWidget {
             'color': Colors.deepPurple,
             'page': const AdminSubscriptionsScreen(),
             'roles': ['super_admin', 'accountant_admin'],
+          },
+          {
+            'title': 'الإشعارات والحملات',
+            'icon': Icons.campaign_outlined,
+            'color': Colors.pink,
+            'page': const AdminMarketingScreen(),
+            'roles': ['super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin'],
           },
         ],
       },
