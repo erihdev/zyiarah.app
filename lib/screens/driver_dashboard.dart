@@ -1136,7 +1136,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
         if (!mounted) return;
         final pinController = TextEditingController();
         String? pinError;
-        final confirmed = await showDialog<bool>(
+        bool confirmed = false;
+        try {
+        final dialogResult = await showDialog<bool>(
           context: context,
           barrierDismissible: false,
           builder: (dialogCtx) => StatefulBuilder(
@@ -1228,11 +1230,12 @@ class _DriverDashboardState extends State<DriverDashboard> {
             ),
           ),
         );
-
-        if (confirmed != true) {
-          setState(() => _isUpdatingStatus = false);
-          return;
+        confirmed = dialogResult == true;
+        } finally {
+          pinController.dispose();
         }
+
+        if (!confirmed) return;
 
         await FirebaseFirestore.instance.collection('orders').doc(id).update({
           'is_paid': true,
