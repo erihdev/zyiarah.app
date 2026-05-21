@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/utils/status_util.dart';
+import 'package:zyiarah/screens/map_screen.dart';
 
 class AdminOrderDetailsScreen extends StatefulWidget {
   final String orderId;
@@ -300,13 +301,35 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                     ),
                     if (data['location'] != null)
                       ListTile(
-                        title: const Text("الموقع"),
-                        subtitle: const Text("اضغط لفتح الخريطة"),
-                        trailing: const Icon(Icons.map, color: Colors.blue),
+                        title: Text("الموقع الجغرافي",
+                            style: GoogleFonts.tajawal(fontWeight: FontWeight.w600)),
+                        subtitle: Text(
+                          data['driver_location'] != null
+                              ? "اضغط لتتبع السائق مباشرة على الخريطة"
+                              : "اضغط لعرض موقع العميل",
+                          style: GoogleFonts.tajawal(fontSize: 12),
+                        ),
+                        trailing: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF5D1B5E).withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            data['driver_location'] != null
+                                ? Icons.gps_fixed
+                                : Icons.map_outlined,
+                            color: const Color(0xFF5D1B5E),
+                            size: 20,
+                          ),
+                        ),
                         onTap: () {
-                           final GeoPoint pt = data['location'];
-                           final url = Uri.parse("https://www.google.com/maps/search/?api=1&query=${pt.latitude},${pt.longitude}");
-                           launchUrl(url);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ZyiarahMapTracking(orderId: widget.orderId),
+                            ),
+                          );
                         },
                       ),
                   ],
