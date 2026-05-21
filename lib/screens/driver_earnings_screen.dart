@@ -148,6 +148,7 @@ class _DriverEarningsBody extends StatelessWidget {
           .where('status', isEqualTo: 'completed')
           .snapshots(),
       builder: (context, snap) {
+        if (snap.hasError) return const SizedBox.shrink();
         final all = snap.data?.docs ?? [];
 
         final monthlyTasks = all.where((doc) {
@@ -214,11 +215,17 @@ class _DriverEarningsBody extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection('driver_payments')
           .where('driver_id', isEqualTo: uid)
-          .orderBy('paid_at', descending: true)
           .limit(20)
           .snapshots(),
       builder: (context, snap) {
-        final docs = snap.data?.docs ?? [];
+        if (snap.hasError) return const SizedBox.shrink();
+        final docs = (snap.data?.docs ?? [])
+          ..sort((a, b) {
+            final aT = (a.data() as Map)['paid_at'] as Timestamp?;
+            final bT = (b.data() as Map)['paid_at'] as Timestamp?;
+            if (aT == null || bT == null) return 0;
+            return bT.compareTo(aT);
+          });
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,

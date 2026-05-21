@@ -246,6 +246,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
           stream: _db.collection('service_zones').orderBy('rank').snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+            if (snapshot.hasError) return const Center(child: Text("تعذّر تحميل المناطق", style: TextStyle(color: Colors.grey)));
             final docs = snapshot.data?.docs ?? [];
             if (docs.isEmpty) return const Center(child: Text("لا توجد مناطق تغطية حالياً"));
 

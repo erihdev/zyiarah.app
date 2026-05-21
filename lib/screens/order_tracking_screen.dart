@@ -59,6 +59,9 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
+            if (snapshot.hasError) {
+              return const Center(child: Text("تعذّر تحميل بيانات الطلب", style: TextStyle(color: Colors.grey)));
+            }
             if (!snapshot.hasData || !snapshot.data!.exists) {
               return const Center(child: Text("الطلب غير موجود"));
             }

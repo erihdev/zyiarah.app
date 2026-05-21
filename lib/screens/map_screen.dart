@@ -36,6 +36,9 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
         body: StreamBuilder<DocumentSnapshot>(
           stream: _orderService.streamOrderTracking(widget.orderId),
           builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return const Center(child: Text("تعذّر تحميل بيانات التتبع", style: TextStyle(color: Colors.grey)));
+            }
             if (!snapshot.hasData || !snapshot.data!.exists) {
               return const Center(child: CircularProgressIndicator(color: Color(0xFF5D1B5E)));
             }
