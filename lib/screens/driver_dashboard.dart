@@ -122,6 +122,20 @@ class _DriverDashboardState extends State<DriverDashboard> {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('drivers').doc(_currentDriverId).snapshots(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.wifi_off_rounded, size: 64, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  Text('تعذّر الاتصال، تحقق من الإنترنت', style: GoogleFonts.tajawal(color: Colors.grey)),
+                ],
+              ),
+            ),
+          );
+        }
         if (snapshot.hasData && snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>;
           final isActive = data['is_active'] ?? true;
