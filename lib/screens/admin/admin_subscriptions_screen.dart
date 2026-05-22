@@ -55,6 +55,7 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
     final subtitleCtrl = TextEditingController(text: data?['subtitle'] ?? '');
     final priceCtrl = TextEditingController(text: data?['price']?.toString() ?? '');
     final visitsCtrl = TextEditingController(text: data?['visits']?.toString() ?? '');
+    final hoursCtrl = TextEditingController(text: data?['hours']?.toString() ?? '4');
     final featuresCtrl = TextEditingController(text: (data?['features'] as List<dynamic>?)?.join('\n') ?? '');
     bool isPremium = data?['isPremium'] ?? false;
     int rank = data?['rank'] ?? 0;
@@ -83,6 +84,8 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                     TextField(controller: priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'السعر الإجمالي (ر.س)', border: OutlineInputBorder())),
                     const SizedBox(height: 15),
                     TextField(controller: visitsCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'عدد الزيارات المشمولة في الباقة', border: OutlineInputBorder())),
+                    const SizedBox(height: 15),
+                    TextField(controller: hoursCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'عدد الساعات لكل زيارة', border: OutlineInputBorder())),
                     const SizedBox(height: 15),
                     TextField(
                       controller: featuresCtrl,
@@ -114,6 +117,7 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                         'subtitle': subtitleCtrl.text.trim(),
                         'price': double.tryParse(priceCtrl.text.trim()) ?? 0.0,
                         'visits': int.tryParse(visitsCtrl.text.trim()) ?? 0,
+                        'hours': int.tryParse(hoursCtrl.text.trim()) ?? 4,
                         'features': featuresCtrl.text.trim().split('\n').where((s) => s.isNotEmpty).toList(),
                         'isPremium': isPremium,
                         'rank': rank,
@@ -208,7 +212,27 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                         ),
                         Text(data['subtitle'] ?? '', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
                         const SizedBox(height: 8),
-                        Text("${data['price']} ر.س", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text("${data['price']} ر.س", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF5D1B5E).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                "عدد الساعات: ${data['hours'] ?? 4} ساعات",
+                                style: GoogleFonts.tajawal(
+                                  color: const Color(0xFF5D1B5E),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                         const Divider(height: 24),
                         ...features.map((f) => Padding(
                           padding: const EdgeInsets.only(bottom: 6),

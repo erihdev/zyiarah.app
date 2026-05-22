@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/zyiarah_capacity_service.dart';
@@ -25,6 +27,14 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   bool _isLoading = true;
   final ZyiarahCapacityService _capacityService = ZyiarahCapacityService();
 
+  int _maxOrdersPerDay = 10;
+  Map<String, int> _dailyOrderCounts = {};
+  bool _loadingDailyCounts = true;
+
+  StreamSubscription<DocumentSnapshot>? _configSubscription;
+  StreamSubscription<DocumentSnapshot>? _mainConfigSubscription;
+  StreamSubscription<QuerySnapshot>? _ordersSubscription;
+
   double _hourlyBasePrice = 0.0;
   String? _selectedZoneName;
   GeoPoint? _selectedLocation;
@@ -37,6 +47,106 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   void initState() {
     super.initState();
     _fetchConfigAndZones();
+    _fetchDailyCapacityAndOrders();
+  }
+
+  void _fetchDailyCapacityAndOrders() {
+    if (!mounted) return;
+    setState(() => _loadingDailyCounts = true);
+
+    // 1. Listen to admin config changes in real-time (hourly_settings)
+    _configSubscription = FirebaseFirestore.instance
+        .collection('system_configs')
+        .doc('hourly_settings')
+        .snapshots()
+        .listen((configDoc) {
+      if (configDoc.exists && mounted) {
+        setState(() {
+          _maxOrdersPerDay = configDoc.data()?['max_orders_per_day'] ?? 10;
+        });
+        if (_selectedLocation != null) {
+          _loadSlotAvailability();
+        }
+      }
+    }, onError: (e) {
+      debugPrint("Error listening to config: $e");
+    });
+
+    // 2. Listen to admin config changes in real-time (main_settings)
+    _mainConfigSubscription = FirebaseFirestore.instance
+        .collection('system_configs')
+        .doc('main_settings')
+        .snapshots()
+        .listen((mainConfigDoc) {
+      if (mainConfigDoc.exists && mounted) {
+        _capacityService.invalidateCache();
+        if (_selectedLocation != null) {
+          _loadSlotAvailability();
+        }
+      }
+    }, onError: (e) {
+      debugPrint("Error listening to main settings config: $e");
+    });
+
+    // 3. Listen to active orders for the next 30 days in real-time
+    try {
+      final now = DateTime.now();
+      final todayStr = intl.DateFormat('yyyy-MM-dd').format(now);
+      final endDateStr = intl.DateFormat('yyyy-MM-dd').format(now.add(const Duration(days: 31)));
+
+      _ordersSubscription = FirebaseFirestore.instance
+          .collection('orders')
+          .where('booking_date', isGreaterThanOrEqualTo: todayStr)
+          .where('booking_date', isLessThanOrEqualTo: endDateStr)
+          .snapshots()
+          .listen((snapshot) {
+        final Map<String, int> counts = {};
+        for (var doc in snapshot.docs) {
+          final data = doc.data();
+          if (data['status'] != 'cancelled') {
+            final String? bDate = data['booking_date'];
+            if (bDate != null) {
+              counts[bDate] = (counts[bDate] ?? 0) + 1;
+            }
+          }
+        }
+
+        if (mounted) {
+          setState(() {
+            _dailyOrderCounts = counts;
+            _loadingDailyCounts = false;
+
+            // Auto-select the first available date in the next 30 days if current selection is booked
+            final String currentSelectedStr = intl.DateFormat('yyyy-MM-dd').format(_selectedDate);
+            final int currentCount = counts[currentSelectedStr] ?? 0;
+            if (currentCount >= _maxOrdersPerDay) {
+              for (int i = 0; i < 30; i++) {
+                final checkDate = now.add(Duration(days: i + 1));
+                final checkDateStr = intl.DateFormat('yyyy-MM-dd').format(checkDate);
+                final checkCount = counts[checkDateStr] ?? 0;
+                if (checkCount < _maxOrdersPerDay) {
+                  _selectedDate = checkDate;
+                  break;
+                }
+              }
+            }
+          });
+          if (_selectedLocation != null) {
+            _loadSlotAvailability();
+          }
+        }
+      }, onError: (e) {
+        debugPrint("Error listening to orders: $e");
+        if (mounted) {
+          setState(() => _loadingDailyCounts = false);
+        }
+      });
+    } catch (e) {
+      debugPrint("Error setting up stream listeners: $e");
+      if (mounted) {
+        setState(() => _loadingDailyCounts = false);
+      }
+    }
   }
 
   Future<void> _fetchConfigAndZones() async {
@@ -54,6 +164,9 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
         }
         if (configDoc.data()!.containsKey('max_workers')) {
           _maxAllowedWorkers = configDoc.data()?['max_workers'] ?? 5;
+        }
+        if (configDoc.data()!.containsKey('max_orders_per_day')) {
+          _maxOrdersPerDay = configDoc.data()?['max_orders_per_day'] ?? 10;
         }
       }
     } catch (_) {
@@ -117,6 +230,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           _selectedZoneName = matchedZone!['name'];
         });
         _updatePriceForZone(matchedZone);
+        _loadSlotAvailability();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text("تم تحديد موقعك تلقائياً: $_selectedZoneName"),
@@ -274,6 +388,14 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   }
 
   @override
+  void dispose() {
+    _configSubscription?.cancel();
+    _mainConfigSubscription?.cancel();
+    _ordersSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -333,6 +455,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                       const Text("تاريخ الخدمة:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
                       const SizedBox(height: 15),
                       _buildDateSelector(),
+                      const SizedBox(height: 10),
+                      _buildDateLegend(),
                       const SizedBox(height: 30),
 
                       const Text("وقت البدء:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
@@ -463,6 +587,14 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   }
 
   Widget _buildDateSelector() {
+    if (_loadingDailyCounts) {
+      return const SizedBox(
+        height: 82,
+        child: Center(
+          child: CircularProgressIndicator(color: Color(0xFF5D1B5E)),
+        ),
+      );
+    }
     const dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
     final now = DateTime.now();
     return SizedBox(
@@ -473,8 +605,19 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
         itemBuilder: (context, index) {
           final date = now.add(Duration(days: index + 1));
           final isSelected = _isSameDay(_selectedDate, date);
+          
+          final dateStr = intl.DateFormat('yyyy-MM-dd').format(date);
+          final activeOrders = _dailyOrderCounts[dateStr] ?? 0;
+          final isFullyBooked = activeOrders >= _maxOrdersPerDay;
+
           return GestureDetector(
-            onTap: () {
+            onTap: isFullyBooked ? () {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text("هذا اليوم محجوز بالكامل، يرجى اختيار تاريخ آخر.", style: TextStyle(fontWeight: FontWeight.bold)),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 2),
+              ));
+            } : () {
               HapticFeedback.lightImpact();
               setState(() => _selectedDate = date);
               _loadSlotAvailability();
@@ -484,10 +627,19 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
               margin: const EdgeInsets.symmetric(horizontal: 5),
               width: 58,
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF5D1B5E) : Colors.white,
+                color: isSelected
+                    ? const Color(0xFF5D1B5E)
+                    : isFullyBooked
+                        ? const Color(0xFFFEF2F2)
+                        : const Color(0xFFECFDF5),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: isSelected ? const Color(0xFF5D1B5E) : Colors.grey.shade200,
+                  color: isSelected
+                      ? const Color(0xFF5D1B5E)
+                      : isFullyBooked
+                          ? const Color(0xFFFECACA)
+                          : const Color(0xFFA7F3D0),
+                  width: 1.5,
                 ),
                 boxShadow: isSelected
                     ? [BoxShadow(color: const Color(0xFF5D1B5E).withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))]
@@ -498,7 +650,15 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                 children: [
                   Text(
                     dayNames[date.weekday % 7],
-                    style: TextStyle(fontSize: 9, color: isSelected ? Colors.white70 : Colors.grey[500]),
+                    style: TextStyle(
+                      fontSize: 9, 
+                      color: isSelected 
+                          ? Colors.white70 
+                          : isFullyBooked 
+                              ? const Color(0xFFFCA5A5) 
+                              : const Color(0xFF34D399),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -506,12 +666,24 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: isSelected ? Colors.white : const Color(0xFF1E293B),
+                      color: isSelected 
+                          ? Colors.white 
+                          : isFullyBooked 
+                              ? const Color(0xFFEF4444) 
+                              : const Color(0xFF10B981),
                     ),
                   ),
                   Text(
                     '/${date.month}',
-                    style: TextStyle(fontSize: 10, color: isSelected ? Colors.white60 : Colors.grey[400]),
+                    style: TextStyle(
+                      fontSize: 10, 
+                      color: isSelected 
+                          ? Colors.white60 
+                          : isFullyBooked 
+                              ? const Color(0xFFFCA5A5) 
+                              : const Color(0xFF34D399),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
@@ -519,6 +691,20 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           );
         },
       ),
+    );
+  }
+
+  Widget _buildDateLegend() {
+    return Row(
+      children: [
+        _legendDot(const Color(0xFF10B981)),
+        const SizedBox(width: 6),
+        const Text("متاح للحجز", style: TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+        const SizedBox(width: 20),
+        _legendDot(const Color(0xFFEF4444)),
+        const SizedBox(width: 6),
+        const Text("محجوز بالكامل", style: TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+      ],
     );
   }
 
