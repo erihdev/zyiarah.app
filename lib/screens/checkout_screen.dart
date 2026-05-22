@@ -10,6 +10,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/services/counter_service.dart';
+import 'package:zyiarah/services/order_service.dart';
 
 class TamaraCheckoutScreen extends StatefulWidget {
   final String checkoutUrl;
@@ -128,6 +129,8 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                     targetId: widget.contractId,
                   );
                 } else {
+                  final bool isHourly = widget.hours != null && widget.serviceDate != null;
+
                   // Atomic: increment counter + create Tamara order in one Transaction
                   String tamaraOrderCode = '';
                   await FirebaseFirestore.instance.runTransaction((transaction) async {
@@ -155,17 +158,48 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                         'worker_count': widget.workerCount,
                         'coupon_code': widget.couponCode,
                         'discount_amount': widget.discountAmount,
+                        if (isHourly && widget.serviceDate != null) ...{
+                          'booking_date': '${widget.serviceDate!.year}-'
+                              '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
+                              '${widget.serviceDate!.day.toString().padLeft(2, '0')}',
+                          'booking_time_slot':
+                              '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00',
+                        },
                       },
                     );
                   });
 
-                  // إشعار السائقين والإدارة بالطلب الجديد
-                  await ZyiarahMessagingService().notifyOrderCreated(
-                    clientId: user?.uid ?? '',
-                    orderCode: tamaraOrderCode,
-                    type: 'cleaning',
-                    serviceName: widget.serviceType,
-                  );
+                  if (isHourly) {
+                    // تعيين سائق تلقائياً وتحديث الطلب إلى accepted
+                    final assigned = await ZyiarahOrderService().autoAssignDriverForHourly(
+                      orderId: widget.orderId,
+                      startDateTime: widget.serviceDate!,
+                      durationHours: widget.hours!,
+                    );
+                    if (assigned) {
+                      await ZyiarahMessagingService().notifyOrderCreated(
+                        clientId: user?.uid ?? '',
+                        orderCode: tamaraOrderCode,
+                        type: 'cleaning',
+                        serviceName: widget.serviceType,
+                      );
+                    } else {
+                      // في حالة تعذر التعيين المباشر، لا نلغي الطلب المدفوع بتمارا! بل يبقى pending للتوزيع اليدوي ونرسل الإشعار الافتراضي
+                      await ZyiarahMessagingService().notifyOrderCreated(
+                        clientId: user?.uid ?? '',
+                        orderCode: tamaraOrderCode,
+                        type: 'cleaning',
+                        serviceName: widget.serviceType,
+                      );
+                    }
+                  } else {
+                    await ZyiarahMessagingService().notifyOrderCreated(
+                      clientId: user?.uid ?? '',
+                      orderCode: tamaraOrderCode,
+                      type: 'cleaning',
+                      serviceName: widget.serviceType,
+                    );
+                  }
 
                   if (widget.couponCode != null) {
                     try {

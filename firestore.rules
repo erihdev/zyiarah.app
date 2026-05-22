@@ -180,6 +180,16 @@ service cloud.firestore {
         (request.auth.uid == tokenId || isAdmin());
     }
 
+    // ─── Wallets & Transactions ───────────────────────────────────────────
+    match /wallets/{walletId} {
+      allow read: if isLoggedIn() && (request.auth.uid == walletId || isAdmin());
+      allow write: if isLoggedIn() && (request.auth.uid == walletId || isAdmin());
+
+      match /transactions/{txId} {
+        allow read, write: if isLoggedIn() && (request.auth.uid == walletId || isAdmin());
+      }
+    }
+
     // ─── Contracts ────────────────────────────────────────────────────────
     match /contracts/{contractId} {
       // SECURITY: userId must match caller on create
