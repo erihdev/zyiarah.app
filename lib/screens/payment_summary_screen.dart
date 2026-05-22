@@ -466,19 +466,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           durationHours: widget.hours!,
         );
         if (assigned) {
-          final av = availabilityResult!;
-          if (av['driverId'] != 'auto_dispatch' && av['driverId'] != null) {
-            await ZyiarahMessagingService().notifyDriverOfAssignment(
-              av['driverId'] as String,
-              code,
-              driverEmail: av['driverEmail'] as String?,
-              driverName: av['driverName'] as String?,
-              serviceType: widget.serviceName,
-              serviceDate: widget.serviceDate != null
-                  ? '${widget.serviceDate!.year}/${widget.serviceDate!.month.toString().padLeft(2,'0')}/${widget.serviceDate!.day.toString().padLeft(2,'0')} — ${widget.serviceDate!.hour.toString().padLeft(2,'0')}:00'
-                  : null,
-            );
-          }
           await ZyiarahMessagingService().notifyOrderCreated(
             clientId: _currentUser?.uid ?? '',
             orderCode: code,
