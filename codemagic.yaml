@@ -147,7 +147,6 @@ workflows:
             --certificate-key @file:/tmp/private.key \
             --create \
             --platform IOS
-          echo "✓ Signing files fetched"
 
       # ─────────────────────────────────────────────
       # 6. إضافة الشهادات للـ Keychain وضبط Xcode
