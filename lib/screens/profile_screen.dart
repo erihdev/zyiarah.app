@@ -326,12 +326,11 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
     }
   }
 
-  Future<void> _performLogout() async {
+  void _performLogout() {
     HapticFeedback.lightImpact();
     MaintenanceListenerService().stopListening();
-    await _firebaseService.signOut();
-    if (!mounted) return;
     context.go('/');
+    _firebaseService.signOut();
   }
 
   Future<void> _deleteAccount() async {
