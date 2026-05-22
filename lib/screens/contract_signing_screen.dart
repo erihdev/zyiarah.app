@@ -12,7 +12,16 @@ class ZyiarahContractSigningScreen extends StatefulWidget {
   final String planName;
   final double planPrice;
   final int planVisits;
-  const ZyiarahContractSigningScreen({super.key, required this.planName, this.planPrice = 0.0, this.planVisits = 0});
+  final DateTime? bookingDate;
+  final String? bookingTimeSlot;
+  const ZyiarahContractSigningScreen({
+    super.key,
+    required this.planName,
+    this.planPrice = 0.0,
+    this.planVisits = 0,
+    this.bookingDate,
+    this.bookingTimeSlot,
+  });
 
   @override
   State<ZyiarahContractSigningScreen> createState() => _ZyiarahContractSigningScreenState();
@@ -30,6 +39,9 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
   String _userName = "...";
   String _userPhone = "...";
   final DateTime _contractDate = DateTime.now();
+  String _contractTerms = '1. يتم تفعيل العقد تلقائياً فور سداد القيمة واعتماد الإدارة.\n'
+      '2. يحق للعميل طلب الخدمة عبر التطبيق ضمن نطاق الباقة.\n'
+      '3. يتعهد الطرف الأول بتقديم الخدمة بجودة مهنية معتمدة.';
 
   @override
   void initState() {
@@ -47,6 +59,20 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
           _userPhone = doc.data()?['phone'] ?? user.phoneNumber ?? 'غير مسجل';
         });
       }
+    }
+
+    try {
+      final configDoc = await FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get();
+      if (configDoc.exists && mounted) {
+        final terms = configDoc.data()?['contract_terms'] as String?;
+        if (terms != null && terms.trim().isNotEmpty) {
+          setState(() {
+            _contractTerms = terms;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching contract terms: $e');
     }
   }
 
@@ -93,6 +119,10 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
         'planName': widget.planName,
         'planPrice': widget.planPrice,
         'planVisits': widget.planVisits,
+        'booking_date': widget.bookingDate != null
+            ? intl.DateFormat('yyyy-MM-dd').format(widget.bookingDate!)
+            : null,
+        'booking_time_slot': widget.bookingTimeSlot,
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
         'signedAt': FieldValue.serverTimestamp(),
@@ -239,10 +269,7 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
           _buildContractSection('موضوع الاتفاقية:', 
             'وافق الطرف الثاني على الاشتراك في "${widget.planName}" المقدمة من الطرف الأول مقابل مبلغ إجمالي قدره (${widget.planPrice} ر.س) تشمل ضريبة القيمة المضافة، وتتضمن الباقة عدد (${widget.planVisits}) زيارة.'),
           const SizedBox(height: 20),
-          _buildContractSection('أهم البنود:', 
-            '1. يتم تفعيل العقد تلقائياً فور سداد القيمة واعتماد الإدارة.\n'
-            '2. يحق للعميل طلب الخدمة عبر التطبيق ضمن نطاق الباقة.\n'
-            '3. يتعهد الطرف الأول بتقديم الخدمة بجودة مهنية معتمدة.'),
+          _buildContractSection('أهم البنود والشروط:', _contractTerms),
           const SizedBox(height: 30),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

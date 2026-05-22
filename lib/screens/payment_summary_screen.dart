@@ -148,6 +148,81 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     setState(() => _isLoading = true);
 
     try {
+      final bool isHourly = widget.hours != null && widget.serviceDate != null;
+      if (isHourly) {
+        // Double check daily capacity limits
+        int maxOrdersPerDay = 10;
+        try {
+          final configDoc = await FirebaseFirestore.instance
+              .collection('system_configs')
+              .doc('hourly_settings')
+              .get();
+          if (configDoc.exists) {
+            maxOrdersPerDay = configDoc.data()?['max_orders_per_day'] ?? 10;
+          }
+        } catch (_) {}
+
+        final String bookingDate = '${widget.serviceDate!.year}-'
+            '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
+            '${widget.serviceDate!.day.toString().padLeft(2, '0')}';
+
+        final dailySnapshot = await FirebaseFirestore.instance
+            .collection('orders')
+            .where('booking_date', isEqualTo: bookingDate)
+            .get();
+
+        final activeDailyCount = dailySnapshot.docs
+            .where((doc) => doc.data()['status'] != 'cancelled')
+            .length;
+
+        if (activeDailyCount >= maxOrdersPerDay) {
+          setState(() => _isLoading = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 4),
+            ));
+          }
+          return;
+        }
+
+        // Double check time slot simultaneous limit (max_teams_per_slot)
+        int maxTeamsPerSlot = 5;
+        try {
+          final mainConfigDoc = await FirebaseFirestore.instance
+              .collection('system_configs')
+              .doc('main_settings')
+              .get();
+          if (mainConfigDoc.exists) {
+            maxTeamsPerSlot = mainConfigDoc.data()?['max_teams_per_slot'] ?? 5;
+          }
+        } catch (_) {}
+
+        final String timeSlotStr = '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00';
+        final slotSnapshot = await FirebaseFirestore.instance
+            .collection('orders')
+            .where('booking_date', isEqualTo: bookingDate)
+            .where('booking_time_slot', isEqualTo: timeSlotStr)
+            .get();
+
+        final activeSlotCount = slotSnapshot.docs
+            .where((doc) => doc.data()['status'] != 'cancelled')
+            .length;
+
+        if (activeSlotCount >= maxTeamsPerSlot) {
+          setState(() => _isLoading = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('نعتذر، هذا الوقت محجوز بالكامل حالياً. يرجى اختيار وقت بدء آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 4),
+            ));
+          }
+          return;
+        }
+      }
+
       final String orderId = widget.maintenanceId ??
           FirebaseFirestore.instance.collection('orders').doc().id;
 
@@ -242,6 +317,81 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     setState(() => _isLoading = true);
 
     try {
+      final bool isHourly = widget.hours != null && widget.serviceDate != null;
+      if (isHourly) {
+        // Double check daily capacity limits
+        int maxOrdersPerDay = 10;
+        try {
+          final configDoc = await FirebaseFirestore.instance
+              .collection('system_configs')
+              .doc('hourly_settings')
+              .get();
+          if (configDoc.exists) {
+            maxOrdersPerDay = configDoc.data()?['max_orders_per_day'] ?? 10;
+          }
+        } catch (_) {}
+
+        final String bookingDate = '${widget.serviceDate!.year}-'
+            '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
+            '${widget.serviceDate!.day.toString().padLeft(2, '0')}';
+
+        final dailySnapshot = await FirebaseFirestore.instance
+            .collection('orders')
+            .where('booking_date', isEqualTo: bookingDate)
+            .get();
+
+        final activeDailyCount = dailySnapshot.docs
+            .where((doc) => doc.data()['status'] != 'cancelled')
+            .length;
+
+        if (activeDailyCount >= maxOrdersPerDay) {
+          setState(() => _isLoading = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 4),
+            ));
+          }
+          return;
+        }
+
+        // Double check time slot simultaneous limit (max_teams_per_slot)
+        int maxTeamsPerSlot = 5;
+        try {
+          final mainConfigDoc = await FirebaseFirestore.instance
+              .collection('system_configs')
+              .doc('main_settings')
+              .get();
+          if (mainConfigDoc.exists) {
+            maxTeamsPerSlot = mainConfigDoc.data()?['max_teams_per_slot'] ?? 5;
+          }
+        } catch (_) {}
+
+        final String timeSlotStr = '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00';
+        final slotSnapshot = await FirebaseFirestore.instance
+            .collection('orders')
+            .where('booking_date', isEqualTo: bookingDate)
+            .where('booking_time_slot', isEqualTo: timeSlotStr)
+            .get();
+
+        final activeSlotCount = slotSnapshot.docs
+            .where((doc) => doc.data()['status'] != 'cancelled')
+            .length;
+
+        if (activeSlotCount >= maxTeamsPerSlot) {
+          setState(() => _isLoading = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('نعتذر، هذا الوقت محجوز بالكامل حالياً. يرجى اختيار وقت بدء آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 4),
+            ));
+          }
+          return;
+        }
+      }
+
       // 1. Update user phone if changed
       if (_needsPhoneUpdate) {
         await FirebaseFirestore.instance.collection('users').doc(_currentUser?.uid).update({
@@ -402,9 +552,79 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     } else {
       final bool isHourly = widget.hours != null && widget.serviceDate != null;
 
-      // للخدمة بالساعة: تحقق من توفر سائق قبل إنشاء الطلب
+      // للخدمة بالساعة: تحقق من توفر سائق وسعة كافية قبل إنشاء الطلب
       Map<String, dynamic>? availabilityResult;
       if (isHourly) {
+        int maxOrdersPerDay = 10;
+        try {
+          final configDoc = await FirebaseFirestore.instance
+              .collection('system_configs')
+              .doc('hourly_settings')
+              .get();
+          if (configDoc.exists) {
+            maxOrdersPerDay = configDoc.data()?['max_orders_per_day'] ?? 10;
+          }
+        } catch (_) {}
+
+        final String bookingDate = '${widget.serviceDate!.year}-'
+            '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
+            '${widget.serviceDate!.day.toString().padLeft(2, '0')}';
+
+        final dailySnapshot = await FirebaseFirestore.instance
+            .collection('orders')
+            .where('booking_date', isEqualTo: bookingDate)
+            .get();
+
+        final activeDailyCount = dailySnapshot.docs
+            .where((doc) => doc.data()['status'] != 'cancelled')
+            .length;
+
+        if (activeDailyCount >= maxOrdersPerDay) {
+          if (mounted) {
+            setState(() => _isLoading = false);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 4),
+            ));
+          }
+          return;
+        }
+
+        int maxTeamsPerSlot = 5;
+        try {
+          final mainConfigDoc = await FirebaseFirestore.instance
+              .collection('system_configs')
+              .doc('main_settings')
+              .get();
+          if (mainConfigDoc.exists) {
+            maxTeamsPerSlot = mainConfigDoc.data()?['max_teams_per_slot'] ?? 5;
+          }
+        } catch (_) {}
+
+        final String timeSlotStr = '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00';
+        final slotSnapshot = await FirebaseFirestore.instance
+            .collection('orders')
+            .where('booking_date', isEqualTo: bookingDate)
+            .where('booking_time_slot', isEqualTo: timeSlotStr)
+            .get();
+
+        final activeSlotCount = slotSnapshot.docs
+            .where((doc) => doc.data()['status'] != 'cancelled')
+            .length;
+
+        if (activeSlotCount >= maxTeamsPerSlot) {
+          if (mounted) {
+            setState(() => _isLoading = false);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('نعتذر، هذا الوقت محجوز بالكامل حالياً. يرجى اختيار وقت بدء آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 4),
+            ));
+          }
+          return;
+        }
+
         availabilityResult = await _orderService.checkHourlySlotAvailability(
           startDateTime: widget.serviceDate!,
           durationHours: widget.hours!,

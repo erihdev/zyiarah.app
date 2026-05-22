@@ -18,12 +18,15 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   late AnimationController _fadeController;
 
   final TextEditingController _maxWorkerCtrl = TextEditingController();
+  final TextEditingController _maxOrdersPerDayCtrl = TextEditingController();
+  final TextEditingController _maxTeamsPerSlotCtrl = TextEditingController();
   final TextEditingController _merchantNameCtrl = TextEditingController();
   final TextEditingController _vatNumberCtrl = TextEditingController();
   final TextEditingController _whatsappSupportCtrl = TextEditingController();
   final TextEditingController _phoneSupportCtrl = TextEditingController();
   final TextEditingController _webhookUrlCtrl = TextEditingController();
   final TextEditingController _adminEmailCtrl = TextEditingController();
+  final TextEditingController _contractTermsCtrl = TextEditingController();
   List<int> _selectedHours = [4, 5, 6, 8];
   bool _codEnabled = false;
 
@@ -48,6 +51,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
             _phoneSupportCtrl.text = data['support_phone'] ?? "920000000";
             _webhookUrlCtrl.text = data['webhook_url'] ?? "https://n8n.zyiarah.com/webhook/zyiarah-comm";
             _adminEmailCtrl.text = data['admin_email'] ?? "admin@zyiarah.com";
+            _maxTeamsPerSlotCtrl.text = (data['max_teams_per_slot'] ?? 5).toString();
+            _contractTermsCtrl.text = data['contract_terms'] ??
+                "1. يتم تفعيل العقد تلقائياً فور سداد القيمة واعتماد الإدارة.\n"
+                "2. يحق للعميل طلب الخدمة عبر التطبيق ضمن نطاق الباقة.\n"
+                "3. يتعهد الطرف الأول بتقديم الخدمة بجودة مهنية معتمدة وفقاً للمعايير والأنظمة.\n"
+                "4. يلتزم الطرف الثاني بتوفير بيئة عمل مناسبة وآمنة لمقدم الخدمة.";
             _isLoading = false;
           });
           
@@ -62,12 +71,14 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
             if (mounted) {
               setState(() {
                 _maxWorkerCtrl.text = (hourlyDoc.data()?['max_workers'] ?? 5).toString();
+                _maxOrdersPerDayCtrl.text = (hourlyDoc.data()?['max_orders_per_day'] ?? 10).toString();
               });
             }
           }
           else {
              _selectedHours = [4, 5, 6, 8];
              _maxWorkerCtrl.text = '5';
+             _maxOrdersPerDayCtrl.text = '10';
           }
           _fadeController.forward();
         }
@@ -96,6 +107,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         'support_phone': _phoneSupportCtrl.text.trim(),
         'webhook_url': _webhookUrlCtrl.text.trim(),
         'admin_email': _adminEmailCtrl.text.trim(),
+        'max_teams_per_slot': int.tryParse(_maxTeamsPerSlotCtrl.text) ?? 5,
+        'contract_terms': _contractTermsCtrl.text.trim(),
       }, SetOptions(merge: true));
 
       List<int> validHours = List<int>.from(_selectedHours)..sort();
@@ -104,6 +117,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
       await _db.collection('system_configs').doc('hourly_settings').set({
         'allowed_hours': validHours,
         'max_workers': int.tryParse(_maxWorkerCtrl.text) ?? 5,
+        'max_orders_per_day': int.tryParse(_maxOrdersPerDayCtrl.text) ?? 10,
       }, SetOptions(merge: true));
       
       if (mounted) {
@@ -136,12 +150,15 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   void dispose() {
     _fadeController.dispose();
     _maxWorkerCtrl.dispose();
+    _maxOrdersPerDayCtrl.dispose();
+    _maxTeamsPerSlotCtrl.dispose();
     _merchantNameCtrl.dispose();
     _vatNumberCtrl.dispose();
     _whatsappSupportCtrl.dispose();
     _phoneSupportCtrl.dispose();
     _webhookUrlCtrl.dispose();
     _adminEmailCtrl.dispose();
+    _contractTermsCtrl.dispose();
     super.dispose();
   }
 
@@ -283,16 +300,37 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                       ),
                       
                       const SizedBox(height: 24),
+
+                      // Contract Terms Card
+                      _buildSectionCard(
+                        title: "شروط وأحكام العقد الإلكتروني الموحد",
+                        icon: Icons.gavel_rounded,
+                        color: Colors.amber.shade800,
+                        children: [
+                          const Text(
+                            "اكتب بنود وشروط وأحكام العقد الإلكتروني التي ستظهر للعميل في شاشة التوقيع الإلكتروني مباشرة وتنعكس لحظياً.",
+                            style: TextStyle(fontSize: 12, color: Colors.grey, height: 1.5),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildPremiumMultilineField("بنود العقد الإلكتروني", "اكتب البنود والشروط...", _contractTermsCtrl, Icons.edit_note_rounded),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 24),
                       
                       // Packages Pricing Card
                       _buildSectionCard(
-                        title: "إعدادات باقات النظام",
+                        title: "إعدادات باقات النظام والسعة الاستيعابية",
                         icon: Icons.timelapse_rounded,
                         color: const Color(0xFFEC4899),
                         children: [
                           _buildHoursToggles(),
                           const SizedBox(height: 24),
                           _buildPremiumField("الحد الأقصى لعدد العاملات في الطلب الواحد", "عاملات", _maxWorkerCtrl, Icons.group_add_rounded),
+                          const SizedBox(height: 16),
+                          _buildPremiumField("الحد الأقصى للطلبات اليومية الاستيعابية", "طلبات/يوم", _maxOrdersPerDayCtrl, Icons.calendar_month_rounded),
+                          const SizedBox(height: 16),
+                          _buildPremiumField("الحد الأقصى للطلبات المتزامنة (الفتحة الزمنية)", "حجوزات/ساعة", _maxTeamsPerSlotCtrl, Icons.hourglass_bottom_rounded),
                         ],
                       ),
 
@@ -578,6 +616,47 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
               borderSide: BorderSide(color: Colors.red.shade300, width: 2),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPremiumMultilineField(String label, String hint, TextEditingController controller, IconData icon) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(right: 4, bottom: 8),
+          child: Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF475569))),
+        ),
+        TextFormField(
+          controller: controller,
+          maxLines: 12,
+          minLines: 5,
+          keyboardType: TextInputType.multiline,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+          decoration: InputDecoration(
+            prefixIcon: Padding(
+              padding: const EdgeInsets.only(bottom: 80.0), // align icon to the top
+              child: Icon(icon, color: const Color(0xFF94A3B8), size: 20),
+            ),
+            hintText: hint,
+            filled: true,
+            fillColor: const Color(0xFFF1F5F9).withValues(alpha: 0.7),
+            contentPadding: const EdgeInsets.all(16),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: Colors.transparent),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: Color(0xFF6366F1), width: 2),
             ),
           ),
         ),
