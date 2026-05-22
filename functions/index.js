@@ -1099,6 +1099,178 @@ exports.findNearestDrivers = onCall(async (request) => {
   return {drivers: nearest3};
 });
 
+// 10. Auto Assign Driver Directly (No acceptance required)
+exports.autoAssignDriverDirectly = onCall(async (request) => {
+  const {orderId, durationHours} = request.data;
+  if (!orderId) {
+    throw new HttpsError("invalid-argument", "معرف الطلب مطلوب");
+  }
+
+  const db = admin.firestore();
+
+  // 1. Fetch order details
+  const orderDoc = await db.collection("orders").doc(orderId).get();
+  if (!orderDoc.exists) {
+    throw new HttpsError("not-found", "الطلب غير موجود");
+  }
+
+  const orderData = orderDoc.data();
+  const serviceDateTimestamp = orderData.service_date;
+  if (!serviceDateTimestamp) {
+    throw new HttpsError("failed-precondition", "تاريخ الخدمة غير محدد");
+  }
+
+  const startDateTime = serviceDateTimestamp.toDate();
+  const hours = Number(durationHours || orderData.hours_contracted || 4);
+  const endDateTime = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
+
+  const dayStart = new Date(startDateTime.getFullYear(), startDateTime.getMonth(), startDateTime.getDate());
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+
+  // 2. Fetch active drivers
+  const driversSnap = await db.collection("drivers")
+      .where("is_active", "==", true)
+      .get();
+
+  if (driversSnap.empty) {
+    return {assigned: false, error: "no_active_drivers"};
+  }
+
+  // 3. Fetch orders for that day
+  const ordersSnap = await db.collection("orders")
+      .where("service_date", ">=", admin.firestore.Timestamp.fromDate(dayStart))
+      .where("service_date", "<", admin.firestore.Timestamp.fromDate(dayEnd))
+      .where("status", "in", ["accepted", "in_progress"])
+      .get();
+
+  const busyDriverIds = new Set();
+  for (const doc of ordersSnap.docs) {
+    const data = doc.data();
+    if (!data.service_date) continue;
+    const orderStart = data.service_date.toDate();
+    const orderHours = Number(data.hours_contracted || 4);
+    const orderEnd = new Date(orderStart.getTime() + orderHours * 60 * 60 * 1000);
+
+    if (startDateTime < orderEnd && orderStart < endDateTime) {
+      if (data.driver_id) {
+        busyDriverIds.add(data.driver_id);
+      }
+    }
+  }
+
+  // Find first available driver
+  let availableDriverDoc = null;
+  for (const doc of driversSnap.docs) {
+    if (!busyDriverIds.has(doc.id)) {
+      availableDriverDoc = doc;
+      break;
+    }
+  }
+
+  if (!availableDriverDoc) {
+    return {assigned: false, error: "no_available_drivers"};
+  }
+
+  const driverId = availableDriverDoc.id;
+  const driverData = availableDriverDoc.data();
+
+  // 4. Assign driver directly using a transaction
+  await db.runTransaction(async (transaction) => {
+    const orderRef = db.collection("orders").doc(orderId);
+    const driverRef = db.collection("drivers").doc(driverId);
+
+    transaction.update(orderRef, {
+      status: "accepted",
+      driver_id: driverId,
+      driver_phone: driverData.phone || "000000000",
+      assigned_driver: driverData.name || "سائق",
+      accepted_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    transaction.update(driverRef, {
+      status: "en_route",
+      current_order_id: orderId,
+      is_available: false,
+    });
+  });
+
+  return {
+    assigned: true,
+    driverId: driverId,
+    driverName: driverData.name || "سائق",
+    driverEmail: driverData.email || null,
+  };
+});
+
+// 11. Check hourly slot availability securely (server-side)
+exports.checkHourlySlotAvailability = onCall(async (request) => {
+  const {startDateTimeIso, durationHours} = request.data;
+  if (!startDateTimeIso) {
+    throw new HttpsError("invalid-argument", "تاريخ البداية مطلوب");
+  }
+
+  const startDateTime = new Date(startDateTimeIso);
+  const hours = Number(durationHours || 4);
+  const endDateTime = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
+
+  const dayStart = new Date(startDateTime.getFullYear(), startDateTime.getMonth(), startDateTime.getDate());
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+
+  const db = admin.firestore();
+
+  // 1. Fetch active drivers
+  const driversSnap = await db.collection("drivers")
+      .where("is_active", "==", true)
+      .get();
+
+  if (driversSnap.empty) {
+    return {available: false, driverId: null, driverName: null};
+  }
+
+  // 2. Fetch orders for that day
+  const ordersSnap = await db.collection("orders")
+      .where("service_date", ">=", admin.firestore.Timestamp.fromDate(dayStart))
+      .where("service_date", "<", admin.firestore.Timestamp.fromDate(dayEnd))
+      .where("status", "in", ["accepted", "in_progress"])
+      .get();
+
+  const busyDriverIds = new Set();
+  for (const doc of ordersSnap.docs) {
+    const data = doc.data();
+    if (!data.service_date) continue;
+    const orderStart = data.service_date.toDate();
+    const orderHours = Number(data.hours_contracted || 4);
+    const orderEnd = new Date(orderStart.getTime() + orderHours * 60 * 60 * 1000);
+
+    if (startDateTime < orderEnd && orderStart < endDateTime) {
+      if (data.driver_id) {
+        busyDriverIds.add(data.driver_id);
+      }
+    }
+  }
+
+  // Find first available driver
+  let availableDriverDoc = null;
+  for (const doc of driversSnap.docs) {
+    if (!busyDriverIds.has(doc.id)) {
+      availableDriverDoc = doc;
+      break;
+    }
+  }
+
+  if (!availableDriverDoc) {
+    return {available: false, driverId: null, driverName: null};
+  }
+
+  const driverData = availableDriverDoc.data();
+  return {
+    available: true,
+    driverId: availableDriverDoc.id,
+    driverName: driverData.name || "سائق",
+    driverEmail: driverData.email || null,
+  };
+});
+
 // Notify driver when they are assigned to an order
 exports.notifyDriverOnAssignment = onDocumentUpdated("orders/{orderId}",
     async (event) => {

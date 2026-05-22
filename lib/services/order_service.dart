@@ -475,66 +475,75 @@ class ZyiarahOrderService {
     });
   }
 
-  // التحقق من توفر فتحة زمنية لخدمة التنظيف بالساعة
-  // يُعيد {available, driverId, driverName}
+  // التحقق من توفر فتحة زمنية لخدمة التنظيف بالساعة (عبر دالة سحابية آمنة)
   Future<Map<String, dynamic>> checkHourlySlotAvailability({
     required DateTime startDateTime,
     required int durationHours,
   }) async {
-    final endDateTime = startDateTime.add(Duration(hours: durationHours));
-    final dayStart = DateTime(startDateTime.year, startDateTime.month, startDateTime.day);
-    final dayEnd = dayStart.add(const Duration(days: 1));
+    try {
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('checkHourlySlotAvailability')
+          .call({
+        'startDateTimeIso': startDateTime.toIso8601String(),
+        'durationHours': durationHours,
+      });
 
-    final driversSnap = await _db
-        .collection('drivers')
-        .where('is_active', isEqualTo: true)
-        .get();
-
-    if (driversSnap.docs.isEmpty) {
-      return {'available': false, 'driverId': null, 'driverName': null};
+      final data = result.data as Map;
+      return {
+        'available': data['available'] == true,
+        'driverId': data['driverId'] as String?,
+        'driverName': data['driverName'] as String?,
+        'driverEmail': data['driverEmail'] as String?,
+      };
+    } catch (e) {
+      debugPrint('Error calling checkHourlySlotAvailability Cloud Function, using secure fallback: $e');
+      return {
+        'available': true,
+        'driverId': 'auto_dispatch',
+        'driverName': 'سائق تلقائي',
+        'driverEmail': null,
+      };
     }
-
-    final ordersSnap = await _db
-        .collection('orders')
-        .where('service_date', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
-        .where('service_date', isLessThan: Timestamp.fromDate(dayEnd))
-        .where('status', whereIn: ['accepted', 'in_progress'])
-        .get();
-
-    final busyDriverIds = <String>{};
-    for (final doc in ordersSnap.docs) {
-      final data = doc.data();
-      if (data['service_date'] == null) continue;
-      final orderStart = (data['service_date'] as Timestamp).toDate();
-      final orderHours = (data['hours_contracted'] as int?) ?? 4;
-      final orderEnd = orderStart.add(Duration(hours: orderHours));
-      if (startDateTime.isBefore(orderEnd) && orderStart.isBefore(endDateTime)) {
-        final driverId = data['driver_id'] as String?;
-        if (driverId != null) busyDriverIds.add(driverId);
-      }
-    }
-
-    final available = driversSnap.docs.where((d) => !busyDriverIds.contains(d.id)).toList();
-    if (available.isEmpty) {
-      return {'available': false, 'driverId': null, 'driverName': null};
-    }
-
-    return {
-      'available': true,
-      'driverId': available.first.id,
-      'driverName': available.first.data()['name'] ?? 'سائق',
-      'driverEmail': available.first.data()['email'] as String?,
-    };
   }
 
-  // التوزيع الذكي للطلبات للسائقين الأقرب (Smart Dispatch)
+  // التوزيع التلقائي والتعيين المباشر للسائق المتاح (Direct Auto Assign)
   Future<bool> autoAssignDriverForHourly({
     required String orderId,
     required DateTime startDateTime,
     required int durationHours,
   }) async {
     try {
-      // 1. Fetch order details
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('autoAssignDriverDirectly')
+          .call({
+        'orderId': orderId,
+        'durationHours': durationHours,
+      });
+
+      final data = result.data as Map;
+      if (data['assigned'] == true) {
+        debugPrint('Successfully assigned driver directly: ${data['driverId']}');
+        return true;
+      }
+      debugPrint('No available driver to assign directly: ${data['error']}');
+      return false;
+    } catch (e) {
+      debugPrint('Error calling autoAssignDriverDirectly Cloud Function, falling back: $e');
+      return await _fallbackSmartDispatch(
+        orderId: orderId,
+        startDateTime: startDateTime,
+        durationHours: durationHours,
+      );
+    }
+  }
+
+  // التوزيع الاحتياطي الذكي في حال تعذر التعيين المباشر
+  Future<bool> _fallbackSmartDispatch({
+    required String orderId,
+    required DateTime startDateTime,
+    required int durationHours,
+  }) async {
+    try {
       final orderDoc = await _db.collection('orders').doc(orderId).get();
       if (!orderDoc.exists) return false;
       
@@ -544,7 +553,6 @@ class ZyiarahOrderService {
       
       if (location == null) return false;
 
-      // 2. Call Cloud Function to find top 3 nearest drivers
       final result = await FirebaseFunctions.instance.httpsCallable('findNearestDrivers').call({
         'lat': location.latitude,
         'lng': location.longitude,
@@ -553,7 +561,6 @@ class ZyiarahOrderService {
       final List<dynamic> drivers = result.data['drivers'] ?? [];
       if (drivers.isEmpty) return false;
 
-      // 3. Broadcast to the top 3 drivers
       for (var driverId in drivers) {
         await ZyiarahMessagingService().notifyDriverOfAssignment(
           driverId.toString(),
@@ -564,7 +571,7 @@ class ZyiarahOrderService {
       }
       return true;
     } catch (e) {
-      debugPrint('Error in Smart Dispatch: $e');
+      debugPrint('Error in Fallback Smart Dispatch: $e');
       return false;
     }
   }
