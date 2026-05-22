@@ -133,13 +133,25 @@ service cloud.firestore {
           .hasAny(['is_paid', 'payment_status', 'amount', 'final_amount',
                    'client_id', 'client_email', 'client_phone', 'driver_id']);
 
-      // Client: cancel own pending order only
+      // Client: cancel own pending order, update invoice URL, or submit rating
       allow update: if isLoggedIn() &&
         request.auth.uid == resource.data.client_id &&
-        resource.data.status == 'pending' &&
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['status', 'cancelled_at', 'cancelled_by', 'needs_refund']) &&
-        request.resource.data.status == 'cancelled';
+        (
+          // 1. Cancellation flow
+          (resource.data.status == 'pending' &&
+           request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['status', 'cancelled_at', 'cancelled_by', 'needs_refund']) &&
+           request.resource.data.status == 'cancelled')
+          ||
+          // 2. Invoice PDF URL update flow
+          (request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['invoice_pdf_url']))
+          ||
+          // 3. Rating flow (only allowed once rating is not already set)
+          (resource.data.get('rating', null) == null &&
+           request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['rating', 'rating_comment', 'rating_reason', 'rating_evidence_url', 'rated_at']))
+        );
 
       allow delete: if isSuperAdmin();
     }
