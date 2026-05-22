@@ -261,14 +261,8 @@ class ZyiarahOrderService {
         'needs_refund': needsRefund,
       });
 
-      if (driverId != null) {
-        final driverRef = _db.collection('drivers').doc(driverId);
-        transaction.update(driverRef, {
-          'status': 'available',
-          'current_order_id': null,
-          'is_available': true,
-        });
-      }
+      // تحديث حالة السائق يتم من Cloud Function عند تغيير حالة الطلب
+      // (العميل لا يملك صلاحية تعديل مستند السائق مباشرة)
 
       // إعادة الزيارة إذا كان الدفع باشتراك — الخصم يتم عند الإنشاء فقط
       final isSubscription = orderData['payment_method'] == 'subscription';
