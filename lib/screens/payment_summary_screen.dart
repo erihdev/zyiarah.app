@@ -314,6 +314,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       return;
     }
 
+    if (_currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("جارٍ تحميل بيانات الحساب، يرجى المحاولة مجدداً")));
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -693,8 +698,19 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             serviceName: widget.serviceName,
           );
         } else {
-          // حالة نادرة: سُبق الوقت بين الفحص والتعيين — أبلغ العميل
-          await FirebaseFirestore.instance.collection('orders').doc(id).update({'status': 'cancelled'});
+          // حالة نادرة: سُبق الوقت بين الفحص والتعيين — حاول الإلغاء وأبلغ العميل
+          try {
+            await FirebaseFirestore.instance.collection('orders').doc(id).update({'status': 'cancelled'});
+          } catch (_) {
+            // الطلب قُبل من السائق بالتزامن — تعامل معه كنجاح
+            await ZyiarahMessagingService().notifyOrderCreated(
+              clientId: _currentUser?.uid ?? '',
+              orderCode: code,
+              type: 'cleaning',
+              serviceName: widget.serviceName,
+            );
+            return;
+          }
           if (mounted) {
             setState(() => _isLoading = false);
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
