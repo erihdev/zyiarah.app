@@ -12,7 +12,7 @@ const resendApiKeySecret = defineSecret("RESEND_API_KEY");
 const moyasarSecretKey = defineSecret("MOYASAR_SECRET_KEY");
 
 // 1. Notify user when admin replies to a support ticket
-exports.sendNotificationOnTicketReply = onDocumentCreated("support_tickets/{ticketId}/messages/{messageId}",
+exports.sendNotificationOnTicketReply = onDocumentCreated({document: "support_tickets/{ticketId}/messages/{messageId}", cpu: 0.083},
     async (event) => {
       const snap = event.data;
       if (!snap) return null;
@@ -70,7 +70,7 @@ exports.sendNotificationOnTicketReply = onDocumentCreated("support_tickets/{tick
     });
 
 // 1.5 Notify Admins on New Order (Services)
-exports.sendNotificationToAdminsOnNewOrder = onDocumentCreated("orders/{orderId}",
+exports.sendNotificationToAdminsOnNewOrder = onDocumentCreated({document: "orders/{orderId}", cpu: 0.083},
     async (event) => {
       const snap = event.data;
       if (!snap) return null;
@@ -101,7 +101,7 @@ exports.sendNotificationToAdminsOnNewOrder = onDocumentCreated("orders/{orderId}
     });
 
 // 1.6 Notify Admins on New Store Order
-exports.sendNotificationToAdminsOnNewStoreOrder = onDocumentCreated("store_orders/{orderId}",
+exports.sendNotificationToAdminsOnNewStoreOrder = onDocumentCreated({document: "store_orders/{orderId}", cpu: 0.083},
     async (event) => {
       const snap = event.data;
       if (!snap) return null;
@@ -130,7 +130,7 @@ exports.sendNotificationToAdminsOnNewStoreOrder = onDocumentCreated("store_order
     });
 
 // 1.7 Notify Admins on New Maintenance Request
-exports.sendNotificationToAdminsOnNewMaintenance = onDocumentCreated("maintenance_requests/{requestId}",
+exports.sendNotificationToAdminsOnNewMaintenance = onDocumentCreated({document: "maintenance_requests/{requestId}", cpu: 0.083},
     async (event) => {
       const snap = event.data;
       if (!snap) return null;
@@ -156,7 +156,7 @@ exports.sendNotificationToAdminsOnNewMaintenance = onDocumentCreated("maintenanc
     });
 
 // 1.8 Notify Admins on New Contract (Pending Approval)
-exports.sendNotificationToAdminsOnNewContract = onDocumentCreated("contracts/{contractId}",
+exports.sendNotificationToAdminsOnNewContract = onDocumentCreated({document: "contracts/{contractId}", cpu: 0.083},
     async (event) => {
       const snap = event.data;
       if (!snap) return null;
@@ -186,7 +186,7 @@ exports.sendNotificationToAdminsOnNewContract = onDocumentCreated("contracts/{co
     });
 
 // 2. Notify driver/client when order status changes
-exports.sendNotificationOnOrderStatusChange = onDocumentUpdated("orders/{orderId}",
+exports.sendNotificationOnOrderStatusChange = onDocumentUpdated({document: "orders/{orderId}", cpu: 0.083},
     async (event) => {
       const change = event.data;
       if (!change) return null;
@@ -266,7 +266,7 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated("orders/{orderId
     });
 
 // 2.5 Notify all available drivers when a new pending order is created
-exports.notifyAvailableDriversOnNewOrder = onDocumentCreated("orders/{orderId}",
+exports.notifyAvailableDriversOnNewOrder = onDocumentCreated({document: "orders/{orderId}", cpu: 0.083},
     async (event) => {
       const snap = event.data;
       if (!snap) return null;
@@ -301,7 +301,7 @@ exports.notifyAvailableDriversOnNewOrder = onDocumentCreated("orders/{orderId}",
     });
 
 // 2.6 Notify client when their order is cancelled by admin
-exports.notifyClientOnOrderCancellation = onDocumentUpdated("orders/{orderId}",
+exports.notifyClientOnOrderCancellation = onDocumentUpdated({document: "orders/{orderId}", cpu: 0.083},
     async (event) => {
       const change = event.data;
       if (!change) return null;
@@ -344,7 +344,7 @@ exports.notifyClientOnOrderCancellation = onDocumentUpdated("orders/{orderId}",
     });
 
 // 3. Unified Global Notification Trigger
-exports.onNotificationCreated = onDocumentCreated("notifications_log/{id}",
+exports.onNotificationCreated = onDocumentCreated({document: "notifications_log/{id}", cpu: 0.083},
     async (event) => {
       const snap = event.data;
       if (!snap) return;
@@ -423,7 +423,7 @@ exports.onNotificationCreated = onDocumentCreated("notifications_log/{id}",
     });
 
 // 4. Callable function for direct sending (admin only, validated)
-exports.manualSendNotification = onCall(async (request) => {
+exports.manualSendNotification = onCall({cpu: 0.083}, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً");
   }
@@ -468,7 +468,7 @@ exports.manualSendNotification = onCall(async (request) => {
 
 // 4.5 Create Tamara checkout session (server-side — token never exposed to client)
 exports.createTamaraCheckout = onCall(
-    {secrets: ["TAMARA_API_TOKEN"]},
+    {secrets: ["TAMARA_API_TOKEN"], cpu: 0.25},
     async (request) => {
       if (!request.auth) {
         throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً");
@@ -541,7 +541,7 @@ exports.createTamaraCheckout = onCall(
 
 // 5. Tamara Webhook Handler
 exports.tamaraWebhook = onRequest(
-    {secrets: ["TAMARA_API_TOKEN"]},
+    {secrets: ["TAMARA_API_TOKEN"], cpu: 0.083},
     async (req, res) => {
       // Verify Tamara signature to prevent spoofed payment events
       const signature = req.headers["tamara-signature"] || req.headers["x-tamara-signature"];
@@ -599,7 +599,7 @@ const {Resend} = require("resend");
 
 // 6. Unified Notification Trigger Processor
 exports.processNotificationTriggers = onDocumentCreated(
-    {document: "notification_triggers/{id}", secrets: ["RESEND_API_KEY"]},
+    {document: "notification_triggers/{id}", secrets: ["RESEND_API_KEY"], cpu: 0.25},
     async (event) => {
       const snap = event.data;
       if (!snap) return;
@@ -741,7 +741,7 @@ exports.processNotificationTriggers = onDocumentCreated(
 
 // 7. Secure Moyasar payment verification on Call function
 exports.verifyMoyasarPayment = onCall(
-    {secrets: ["MOYASAR_SECRET_KEY"]},
+    {secrets: ["MOYASAR_SECRET_KEY"], cpu: 0.25},
     async (request) => {
       if (!request.auth) {
         throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً");
@@ -841,7 +841,7 @@ exports.verifyMoyasarPayment = onCall(
 );
 
 // 8. GDPR Account Deletion Firestore Update Trigger
-exports.onAccountDeletionStatusChanged = onDocumentUpdated("account_deletions/{uid}",
+exports.onAccountDeletionStatusChanged = onDocumentUpdated({document: "account_deletions/{uid}", cpu: 0.083},
     async (event) => {
       const change = event.data;
       if (!change) return null;
@@ -896,7 +896,7 @@ exports.onAccountDeletionStatusChanged = onDocumentUpdated("account_deletions/{u
 );
 
 // 9. Aggregation Pattern for Orders (total_revenue, active_orders, completed_orders)
-exports.onOrderWritten = onDocumentWritten("orders/{orderId}", async (event) => {
+exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0.083}, async (event) => {
   const change = event.data;
   if (!change) return null;
 
@@ -1006,7 +1006,7 @@ exports.onOrderWritten = onDocumentWritten("orders/{orderId}", async (event) => 
 });
 
 // 8. Surge Pricing Factor
-exports.getSurgePricingFactor = onCall(async (request) => {
+exports.getSurgePricingFactor = onCall({cpu: 0.083}, async (request) => {
   // if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
 
   const driversRef = admin.firestore().collection("users").where("role", "==", "driver");
@@ -1041,7 +1041,7 @@ exports.getSurgePricingFactor = onCall(async (request) => {
 });
 
 // 9. Smart Dispatch Core: findNearestDrivers
-exports.findNearestDrivers = onCall(async (request) => {
+exports.findNearestDrivers = onCall({cpu: 0.25}, async (request) => {
   // if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
 
   const {lat, lng} = request.data;
@@ -1100,7 +1100,7 @@ exports.findNearestDrivers = onCall(async (request) => {
 });
 
 // 10. Auto Assign Driver Directly (No acceptance required)
-exports.autoAssignDriverDirectly = onCall(async (request) => {
+exports.autoAssignDriverDirectly = onCall({cpu: 0.25}, async (request) => {
   const {orderId, durationHours} = request.data;
   if (!orderId) {
     throw new HttpsError("invalid-argument", "معرف الطلب مطلوب");
@@ -1208,7 +1208,7 @@ exports.autoAssignDriverDirectly = onCall(async (request) => {
 });
 
 // 11. Check hourly slot availability securely (server-side)
-exports.checkHourlySlotAvailability = onCall(async (request) => {
+exports.checkHourlySlotAvailability = onCall({cpu: 0.25}, async (request) => {
   const {startDateTimeIso, durationHours} = request.data;
   if (!startDateTimeIso) {
     throw new HttpsError("invalid-argument", "تاريخ البداية مطلوب");
@@ -1284,7 +1284,7 @@ exports.checkHourlySlotAvailability = onCall(async (request) => {
 // Returns daily order counts + per-slot counts for the requested date range.
 // The client app uses these to colour date cells and slot buttons without
 // needing read access to other users' orders.
-exports.getHourlyAvailability = onCall(async (request) => {
+exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
   }
@@ -1344,7 +1344,7 @@ exports.getHourlyAvailability = onCall(async (request) => {
 });
 
 // Notify driver when they are assigned to an order
-exports.notifyDriverOnAssignment = onDocumentUpdated("orders/{orderId}",
+exports.notifyDriverOnAssignment = onDocumentUpdated({document: "orders/{orderId}", cpu: 0.083},
     async (event) => {
       const change = event.data;
       if (!change) return null;
