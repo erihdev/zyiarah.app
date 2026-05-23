@@ -1127,16 +1127,21 @@ exports.autoAssignDriverDirectly = onCall(async (request) => {
   const dayStart = new Date(startDateTime.getFullYear(), startDateTime.getMonth(), startDateTime.getDate());
   const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
 
-  // 2. Fetch active drivers
-  const driversSnap = await db.collection("drivers")
-      .where("is_active", "==", true)
-      .get();
+  // 2. Fetch all drivers; filter in JS to handle missing/unset fields gracefully.
+  // A driver is eligible if:
+  //   - is_active is not explicitly false (new drivers may not have the field set)
+  //   - is_available is not explicitly false (not currently mid-service)
+  const driversSnap = await db.collection("drivers").get();
+  const eligibleDrivers = driversSnap.docs.filter((doc) => {
+    const d = doc.data();
+    return d.is_active !== false && d.is_available !== false;
+  });
 
-  if (driversSnap.empty) {
+  if (eligibleDrivers.length === 0) {
     return {assigned: false, error: "no_active_drivers"};
   }
 
-  // 3. Fetch orders for that day
+  // 3. Fetch orders for that day that overlap with the requested slot
   const ordersSnap = await db.collection("orders")
       .where("service_date", ">=", admin.firestore.Timestamp.fromDate(dayStart))
       .where("service_date", "<", admin.firestore.Timestamp.fromDate(dayEnd))
@@ -1158,9 +1163,9 @@ exports.autoAssignDriverDirectly = onCall(async (request) => {
     }
   }
 
-  // Find first available driver
+  // Find first eligible driver not busy during the requested slot
   let availableDriverDoc = null;
-  for (const doc of driversSnap.docs) {
+  for (const doc of eligibleDrivers) {
     if (!busyDriverIds.has(doc.id)) {
       availableDriverDoc = doc;
       break;
@@ -1218,16 +1223,20 @@ exports.checkHourlySlotAvailability = onCall(async (request) => {
 
   const db = admin.firestore();
 
-  // 1. Fetch active drivers
-  const driversSnap = await db.collection("drivers")
-      .where("is_active", "==", true)
-      .get();
+  // 1. Fetch all drivers; filter in JS — same logic as autoAssignDriverDirectly.
+  // is_active !== false: handles new drivers without the field set
+  // is_available !== false: excludes drivers currently mid-service
+  const driversSnap = await db.collection("drivers").get();
+  const eligibleDrivers = driversSnap.docs.filter((doc) => {
+    const d = doc.data();
+    return d.is_active !== false && d.is_available !== false;
+  });
 
-  if (driversSnap.empty) {
+  if (eligibleDrivers.length === 0) {
     return {available: false, driverId: null, driverName: null};
   }
 
-  // 2. Fetch orders for that day
+  // 2. Fetch orders for that day to detect time-overlap conflicts
   const ordersSnap = await db.collection("orders")
       .where("service_date", ">=", admin.firestore.Timestamp.fromDate(dayStart))
       .where("service_date", "<", admin.firestore.Timestamp.fromDate(dayEnd))
@@ -1249,9 +1258,9 @@ exports.checkHourlySlotAvailability = onCall(async (request) => {
     }
   }
 
-  // Find first available driver
+  // Find first eligible driver with no overlapping order
   let availableDriverDoc = null;
-  for (const doc of driversSnap.docs) {
+  for (const doc of eligibleDrivers) {
     if (!busyDriverIds.has(doc.id)) {
       availableDriverDoc = doc;
       break;

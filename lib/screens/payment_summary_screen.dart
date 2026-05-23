@@ -1,4 +1,3 @@
-import 'dart:async' show unawaited;
 import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -688,16 +687,18 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       });
 
       if (isHourly) {
-        // تعيين سائق تلقائياً — النتيجة للمعلومية فقط، الطلب مؤكد بغض النظر
-        // الإدارة تعيّن السائق يدوياً إذا لزم (السائقون براتب شهري)
-        unawaited(_orderService.autoAssignDriverForHourly(
-          orderId: id,
-          startDateTime: widget.serviceDate!,
-          durationHours: widget.hours!,
-        ).catchError((e) {
-          debugPrint('[AutoAssign] $e');
-          return false;
-        }));
+        // تعيين سائق تلقائياً فور إنشاء الطلب — يُعيَّن فوراً ويظهر في لوحة السائق
+        // إذا فشل التعيين (لا يوجد سائق فارغ الآن) يبقى pending وتعيّنه الإدارة
+        try {
+          await _orderService.autoAssignDriverForHourly(
+            orderId: id,
+            startDateTime: widget.serviceDate!,
+            durationHours: widget.hours!,
+          );
+        } catch (e) {
+          debugPrint('[AutoAssign] error (non-fatal): $e');
+          // الطلب محجوز ومؤكد — الإخفاق هنا لا يلغي الحجز
+        }
         await ZyiarahMessagingService().notifyOrderCreated(
           clientId: _currentUser?.uid ?? '',
           orderCode: code,
