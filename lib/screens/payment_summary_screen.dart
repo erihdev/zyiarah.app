@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -340,25 +341,31 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
             '${widget.serviceDate!.day.toString().padLeft(2, '0')}';
 
-        final dailySnapshot = await FirebaseFirestore.instance
-            .collection('orders')
-            .where('booking_date', isEqualTo: bookingDate)
-            .get();
+        // الـ queries على orders قد تفشل بـ permission-denied إذا كان هناك طلبات
+        // لعملاء آخرين — نعالج بمرونة ونسمح بالمتابعة
+        try {
+          final dailySnapshot = await FirebaseFirestore.instance
+              .collection('orders')
+              .where('booking_date', isEqualTo: bookingDate)
+              .get();
 
-        final activeDailyCount = dailySnapshot.docs
-            .where((doc) => doc.data()['status'] != 'cancelled')
-            .length;
+          final activeDailyCount = dailySnapshot.docs
+              .where((doc) => doc.data()['status'] != 'cancelled')
+              .length;
 
-        if (activeDailyCount >= maxOrdersPerDay) {
-          setState(() => _isLoading = false);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 4),
-            ));
+          if (activeDailyCount >= maxOrdersPerDay) {
+            setState(() => _isLoading = false);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 4),
+              ));
+            }
+            return;
           }
-          return;
+        } catch (_) {
+          // permission-denied أو خطأ شبكة — نكمل ونترك التحقق للـ Cloud Function
         }
 
         // Double check time slot simultaneous limit (max_teams_per_slot)
@@ -373,27 +380,31 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           }
         } catch (_) {}
 
-        final String timeSlotStr = '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00';
-        final slotSnapshot = await FirebaseFirestore.instance
-            .collection('orders')
-            .where('booking_date', isEqualTo: bookingDate)
-            .where('booking_time_slot', isEqualTo: timeSlotStr)
-            .get();
+        try {
+          final String timeSlotStr = '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00';
+          final slotSnapshot = await FirebaseFirestore.instance
+              .collection('orders')
+              .where('booking_date', isEqualTo: bookingDate)
+              .where('booking_time_slot', isEqualTo: timeSlotStr)
+              .get();
 
-        final activeSlotCount = slotSnapshot.docs
-            .where((doc) => doc.data()['status'] != 'cancelled')
-            .length;
+          final activeSlotCount = slotSnapshot.docs
+              .where((doc) => doc.data()['status'] != 'cancelled')
+              .length;
 
-        if (activeSlotCount >= maxTeamsPerSlot) {
-          setState(() => _isLoading = false);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('نعتذر، هذا الوقت محجوز بالكامل حالياً. يرجى اختيار وقت بدء آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 4),
-            ));
+          if (activeSlotCount >= maxTeamsPerSlot) {
+            setState(() => _isLoading = false);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('نعتذر، هذا الوقت محجوز بالكامل حالياً. يرجى اختيار وقت بدء آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 4),
+              ));
+            }
+            return;
           }
-          return;
+        } catch (_) {
+          // permission-denied أو خطأ شبكة — نكمل ونترك التحقق للـ Cloud Function
         }
       }
 
@@ -557,8 +568,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     } else {
       final bool isHourly = widget.hours != null && widget.serviceDate != null;
 
-      // للخدمة بالساعة: تحقق من توفر سائق وسعة كافية قبل إنشاء الطلب
-      Map<String, dynamic>? availabilityResult;
+      // للخدمة بالساعة: تحقق من سعة اليوم والوقت قبل إنشاء الطلب
       if (isHourly) {
         int maxOrdersPerDay = 10;
         try {
@@ -575,25 +585,30 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
             '${widget.serviceDate!.day.toString().padLeft(2, '0')}';
 
-        final dailySnapshot = await FirebaseFirestore.instance
-            .collection('orders')
-            .where('booking_date', isEqualTo: bookingDate)
-            .get();
+        // الـ queries على orders قد تفشل بـ permission-denied — نتجاوز ونكمل
+        try {
+          final dailySnapshot = await FirebaseFirestore.instance
+              .collection('orders')
+              .where('booking_date', isEqualTo: bookingDate)
+              .get();
 
-        final activeDailyCount = dailySnapshot.docs
-            .where((doc) => doc.data()['status'] != 'cancelled')
-            .length;
+          final activeDailyCount = dailySnapshot.docs
+              .where((doc) => doc.data()['status'] != 'cancelled')
+              .length;
 
-        if (activeDailyCount >= maxOrdersPerDay) {
-          if (mounted) {
-            setState(() => _isLoading = false);
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 4),
-            ));
+          if (activeDailyCount >= maxOrdersPerDay) {
+            if (mounted) {
+              setState(() => _isLoading = false);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 4),
+              ));
+            }
+            return;
           }
-          return;
+        } catch (_) {
+          // permission-denied أو خطأ شبكة — نكمل
         }
 
         int maxTeamsPerSlot = 5;
@@ -607,44 +622,33 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           }
         } catch (_) {}
 
-        final String timeSlotStr = '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00';
-        final slotSnapshot = await FirebaseFirestore.instance
-            .collection('orders')
-            .where('booking_date', isEqualTo: bookingDate)
-            .where('booking_time_slot', isEqualTo: timeSlotStr)
-            .get();
+        try {
+          final String timeSlotStr = '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00';
+          final slotSnapshot = await FirebaseFirestore.instance
+              .collection('orders')
+              .where('booking_date', isEqualTo: bookingDate)
+              .where('booking_time_slot', isEqualTo: timeSlotStr)
+              .get();
 
-        final activeSlotCount = slotSnapshot.docs
-            .where((doc) => doc.data()['status'] != 'cancelled')
-            .length;
+          final activeSlotCount = slotSnapshot.docs
+              .where((doc) => doc.data()['status'] != 'cancelled')
+              .length;
 
-        if (activeSlotCount >= maxTeamsPerSlot) {
-          if (mounted) {
-            setState(() => _isLoading = false);
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('نعتذر، هذا الوقت محجوز بالكامل حالياً. يرجى اختيار وقت بدء آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 4),
-            ));
+          if (activeSlotCount >= maxTeamsPerSlot) {
+            if (mounted) {
+              setState(() => _isLoading = false);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('نعتذر، هذا الوقت محجوز بالكامل حالياً. يرجى اختيار وقت بدء آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 4),
+              ));
+            }
+            return;
           }
-          return;
+        } catch (_) {
+          // permission-denied أو خطأ شبكة — نكمل
         }
 
-        availabilityResult = await _orderService.checkHourlySlotAvailability(
-          startDateTime: widget.serviceDate!,
-          durationHours: widget.hours!,
-        );
-        if (availabilityResult['available'] != true) {
-          if (mounted) {
-            setState(() => _isLoading = false);
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('نعتذر، لا يوجد سائق متاح في الوقت المحدد. يرجى اختيار وقت آخر.'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 4),
-            ));
-          }
-          return;
-        }
       }
 
       // Atomic: increment counter + create order in one Transaction
@@ -684,43 +688,22 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       });
 
       if (isHourly) {
-        // تعيين سائق تلقائياً وتحديث الطلب إلى accepted
-        final assigned = await _orderService.autoAssignDriverForHourly(
+        // تعيين سائق تلقائياً — النتيجة للمعلومية فقط، الطلب مؤكد بغض النظر
+        // الإدارة تعيّن السائق يدوياً إذا لزم (السائقون براتب شهري)
+        unawaited(_orderService.autoAssignDriverForHourly(
           orderId: id,
           startDateTime: widget.serviceDate!,
           durationHours: widget.hours!,
+        ).catchError((e) {
+          debugPrint('[AutoAssign] $e');
+          return false;
+        }));
+        await ZyiarahMessagingService().notifyOrderCreated(
+          clientId: _currentUser?.uid ?? '',
+          orderCode: code,
+          type: 'cleaning',
+          serviceName: widget.serviceName,
         );
-        if (assigned) {
-          await ZyiarahMessagingService().notifyOrderCreated(
-            clientId: _currentUser?.uid ?? '',
-            orderCode: code,
-            type: 'cleaning',
-            serviceName: widget.serviceName,
-          );
-        } else {
-          // حالة نادرة: سُبق الوقت بين الفحص والتعيين — حاول الإلغاء وأبلغ العميل
-          try {
-            await FirebaseFirestore.instance.collection('orders').doc(id).update({'status': 'cancelled'});
-          } catch (_) {
-            // الطلب قُبل من السائق بالتزامن — تعامل معه كنجاح
-            await ZyiarahMessagingService().notifyOrderCreated(
-              clientId: _currentUser?.uid ?? '',
-              orderCode: code,
-              type: 'cleaning',
-              serviceName: widget.serviceName,
-            );
-            return;
-          }
-          if (mounted) {
-            setState(() => _isLoading = false);
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('نعتذر، تم حجز الوقت للتو من عميل آخر. يرجى اختيار وقت آخر.'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 4),
-            ));
-          }
-          return;
-        }
       } else {
         await ZyiarahMessagingService().notifyOrderCreated(
           clientId: _currentUser?.uid ?? '',
