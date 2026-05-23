@@ -1280,6 +1280,69 @@ exports.checkHourlySlotAvailability = onCall(async (request) => {
   };
 });
 
+// 12. Hourly slot availability for client UI — server-side to bypass Firestore rules.
+// Returns daily order counts + per-slot counts for the requested date range.
+// The client app uses these to colour date cells and slot buttons without
+// needing read access to other users' orders.
+exports.getHourlyAvailability = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
+  }
+
+  const {startDate, endDate} = request.data;
+  if (!startDate || !endDate) {
+    throw new HttpsError("invalid-argument", "startDate و endDate مطلوبان");
+  }
+
+  const db = admin.firestore();
+
+  // 1. Fetch config (max capacities)
+  let maxOrdersPerDay = 10;
+  let maxTeamsPerSlot = 5;
+  try {
+    const [hourlySnap, mainSnap] = await Promise.all([
+      db.collection("system_configs").doc("hourly_settings").get(),
+      db.collection("system_configs").doc("main_settings").get(),
+    ]);
+    if (hourlySnap.exists) {
+      maxOrdersPerDay = hourlySnap.data().max_orders_per_day ?? 10;
+    }
+    if (mainSnap.exists) {
+      maxTeamsPerSlot = mainSnap.data().max_teams_per_slot ?? 5;
+    }
+  } catch (_) {}
+
+  // 2. Fetch all active hourly orders in the date range
+  const snap = await db.collection("orders")
+      .where("booking_date", ">=", startDate)
+      .where("booking_date", "<=", endDate)
+      .get();
+
+  // 3. Build aggregates
+  const dailyCounts = {};  // "yyyy-MM-dd" -> count
+  const slotCounts = {};   // "yyyy-MM-dd_HH:00" -> count
+
+  for (const doc of snap.docs) {
+    const d = doc.data();
+    if (d.status === "cancelled") continue;
+
+    const bDate = d.booking_date;
+    if (!bDate) continue;
+
+    // Daily total
+    dailyCounts[bDate] = (dailyCounts[bDate] || 0) + 1;
+
+    // Per-slot total (global across zones — capacity is fleet-wide)
+    const ts = d.booking_time_slot;
+    if (ts) {
+      const key = `${bDate}_${ts}`;
+      slotCounts[key] = (slotCounts[key] || 0) + 1;
+    }
+  }
+
+  return {dailyCounts, slotCounts, maxOrdersPerDay, maxTeamsPerSlot};
+});
+
 // Notify driver when they are assigned to an order
 exports.notifyDriverOnAssignment = onDocumentUpdated("orders/{orderId}",
     async (event) => {

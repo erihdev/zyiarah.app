@@ -1,12 +1,11 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
-import 'package:zyiarah/services/zyiarah_capacity_service.dart';
 
 
 class HourlyCleaningDetailsScreen extends StatefulWidget {
@@ -25,15 +24,12 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   bool _checkingSlots = false;
   int _workerCount = 1;
   bool _isLoading = true;
-  final ZyiarahCapacityService _capacityService = ZyiarahCapacityService();
 
   int _maxOrdersPerDay = 10;
-  Map<String, int> _dailyOrderCounts = {};
+  int _maxTeamsPerSlot = 5;
+  Map<String, int> _dailyOrderCounts = {};   // "yyyy-MM-dd" → total orders
+  Map<String, int> _slotCounts = {};          // "yyyy-MM-dd_HH:00" → orders in slot
   bool _loadingDailyCounts = true;
-
-  StreamSubscription<DocumentSnapshot>? _configSubscription;
-  StreamSubscription<DocumentSnapshot>? _mainConfigSubscription;
-  StreamSubscription<QuerySnapshot>? _ordersSubscription;
 
   double _hourlyBasePrice = 0.0;
   String? _selectedZoneName;
@@ -47,105 +43,67 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   void initState() {
     super.initState();
     _fetchConfigAndZones();
-    _fetchDailyCapacityAndOrders();
+    _loadAvailabilityFromServer();
   }
 
-  void _fetchDailyCapacityAndOrders() {
+  /// جلب بيانات الإتاحة عبر Cloud Function (Admin SDK — لا قيود صلاحيات).
+  /// تُعيد الأعداد الحقيقية للطلبات لكل تاريخ وكل خانة زمنية.
+  Future<void> _loadAvailabilityFromServer() async {
     if (!mounted) return;
     setState(() => _loadingDailyCounts = true);
-
-    // 1. Listen to admin config changes in real-time (hourly_settings)
-    _configSubscription = FirebaseFirestore.instance
-        .collection('system_configs')
-        .doc('hourly_settings')
-        .snapshots()
-        .listen((configDoc) {
-      if (configDoc.exists && mounted) {
-        setState(() {
-          _maxOrdersPerDay = configDoc.data()?['max_orders_per_day'] ?? 10;
-        });
-        if (_selectedLocation != null) {
-          _loadSlotAvailability();
-        }
-      }
-    }, onError: (e) {
-      debugPrint("Error listening to config: $e");
-    });
-
-    // 2. Listen to admin config changes in real-time (main_settings)
-    _mainConfigSubscription = FirebaseFirestore.instance
-        .collection('system_configs')
-        .doc('main_settings')
-        .snapshots()
-        .listen((mainConfigDoc) {
-      if (mainConfigDoc.exists && mounted) {
-        _capacityService.invalidateCache();
-        if (_selectedLocation != null) {
-          _loadSlotAvailability();
-        }
-      }
-    }, onError: (e) {
-      debugPrint("Error listening to main settings config: $e");
-    });
-
-    // 3. Listen to active orders for the next 30 days in real-time
     try {
       final now = DateTime.now();
-      final todayStr = intl.DateFormat('yyyy-MM-dd').format(now);
-      final endDateStr = intl.DateFormat('yyyy-MM-dd').format(now.add(const Duration(days: 31)));
+      final startDate = intl.DateFormat('yyyy-MM-dd').format(now);
+      final endDate = intl.DateFormat('yyyy-MM-dd').format(now.add(const Duration(days: 31)));
 
-      _ordersSubscription = FirebaseFirestore.instance
-          .collection('orders')
-          .where('booking_date', isGreaterThanOrEqualTo: todayStr)
-          .where('booking_date', isLessThanOrEqualTo: endDateStr)
-          .snapshots()
-          .listen((snapshot) {
-        final Map<String, int> counts = {};
-        for (var doc in snapshot.docs) {
-          final data = doc.data();
-          if (data['status'] != 'cancelled') {
-            final String? bDate = data['booking_date'];
-            if (bDate != null) {
-              counts[bDate] = (counts[bDate] ?? 0) + 1;
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('getHourlyAvailability')
+          .call({'startDate': startDate, 'endDate': endDate});
+
+      final data = result.data as Map;
+
+      final rawDaily = data['dailyCounts'] as Map? ?? {};
+      final rawSlots = data['slotCounts'] as Map? ?? {};
+
+      final Map<String, int> daily = rawDaily.map(
+        (k, v) => MapEntry(k.toString(), (v as num).toInt()),
+      );
+      final Map<String, int> slots = rawSlots.map(
+        (k, v) => MapEntry(k.toString(), (v as num).toInt()),
+      );
+
+      final int maxPerDay = ((data['maxOrdersPerDay'] as num?)?.toInt()) ?? 10;
+      final int maxPerSlot = ((data['maxTeamsPerSlot'] as num?)?.toInt()) ?? 5;
+
+      if (!mounted) return;
+      setState(() {
+        _dailyOrderCounts = daily;
+        _slotCounts = slots;
+        _maxOrdersPerDay = maxPerDay;
+        _maxTeamsPerSlot = maxPerSlot;
+        _loadingDailyCounts = false;
+
+        // انتقل تلقائياً لأول تاريخ متاح إذا كان المحدد ممتلئاً
+        final String selStr = intl.DateFormat('yyyy-MM-dd').format(_selectedDate);
+        if ((daily[selStr] ?? 0) >= maxPerDay) {
+          for (int i = 0; i < 30; i++) {
+            final candidate = now.add(Duration(days: i + 1));
+            final candStr = intl.DateFormat('yyyy-MM-dd').format(candidate);
+            if ((daily[candStr] ?? 0) < maxPerDay) {
+              _selectedDate = candidate;
+              break;
             }
           }
-        }
-
-        if (mounted) {
-          setState(() {
-            _dailyOrderCounts = counts;
-            _loadingDailyCounts = false;
-
-            // Auto-select the first available date in the next 30 days if current selection is booked
-            final String currentSelectedStr = intl.DateFormat('yyyy-MM-dd').format(_selectedDate);
-            final int currentCount = counts[currentSelectedStr] ?? 0;
-            if (currentCount >= _maxOrdersPerDay) {
-              for (int i = 0; i < 30; i++) {
-                final checkDate = now.add(Duration(days: i + 1));
-                final checkDateStr = intl.DateFormat('yyyy-MM-dd').format(checkDate);
-                final checkCount = counts[checkDateStr] ?? 0;
-                if (checkCount < _maxOrdersPerDay) {
-                  _selectedDate = checkDate;
-                  break;
-                }
-              }
-            }
-          });
-          if (_selectedLocation != null) {
-            _loadSlotAvailability();
-          }
-        }
-      }, onError: (e) {
-        debugPrint("Error listening to orders: $e");
-        if (mounted) {
-          setState(() => _loadingDailyCounts = false);
         }
       });
-    } catch (e) {
-      debugPrint("Error setting up stream listeners: $e");
-      if (mounted) {
-        setState(() => _loadingDailyCounts = false);
+
+      // بعد تحميل البيانات: احسب إتاحة الخانات من الـ cache مباشرة
+      if (_selectedLocation != null) {
+        _buildSlotAvailabilityFromCache();
       }
+    } catch (e) {
+      debugPrint('[getHourlyAvailability] error: $e');
+      if (mounted) setState(() => _loadingDailyCounts = false);
     }
   }
 
@@ -230,7 +188,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           _selectedZoneName = matchedZone!['name'];
         });
         _updatePriceForZone(matchedZone);
-        _loadSlotAvailability();
+        // إعادة تحميل البيانات من السيرفر عند تغيير الموقع (قد تتغير المنطقة)
+        await _loadAvailabilityFromServer();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text("تم تحديد موقعك تلقائياً: $_selectedZoneName"),
@@ -281,6 +240,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           _selectedZoneName = matchedZone!['name'];
         });
         _updatePriceForZone(matchedZone);
+        // حمّل بيانات الإتاحة من الـ CF ثم احسب الخانات من الـ cache
+        await _loadAvailabilityFromServer();
       }
     } else {
       if (mounted) {
@@ -315,33 +276,22 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     return List.generate(last - 8 + 1, (i) => 8 + i);
   }
 
-  Future<void> _loadSlotAvailability() async {
+  /// يحسب إتاحة الخانات الزمنية من الـ cache المحلي (لا يصدر أي طلب شبكة).
+  void _buildSlotAvailabilityFromCache() {
     if (!mounted) return;
-    // Invalidate cache so capacity reads latest config
-    _capacityService.invalidateCache();
-    setState(() {
-      _checkingSlots = true;
-      _slotAvailability = {};
-      _selectedStartHour = null;
-    });
-
+    final dateKey = intl.DateFormat('yyyy-MM-dd').format(_selectedDate);
     final slots = _getStartHours();
-    final String zoneId = _selectedZoneName ?? '';
     final Map<int, bool> result = {};
-
     for (final h in slots) {
-      // Format the time slot key as "HH:00" to match the capacity service schema
-      final String timeSlot = '${h.toString().padLeft(2, '0')}:00';
-      final bool available = await _capacityService.checkSlotAvailability(
-        date: _selectedDate,
-        timeSlot: timeSlot,
-        zoneId: zoneId,
-      );
-      result[h] = available;
-      // Update UI progressively as each slot resolves
-      if (mounted) setState(() => _slotAvailability = Map.from(result));
+      final slotKey = '${dateKey}_${h.toString().padLeft(2, '0')}:00';
+      final count = _slotCounts[slotKey] ?? 0;
+      result[h] = count < _maxTeamsPerSlot;
     }
-    if (mounted) setState(() => _checkingSlots = false);
+    setState(() {
+      _slotAvailability = result;
+      _selectedStartHour = null;
+      _checkingSlots = false;
+    });
   }
 
   double get totalAmount => _hourlyBasePrice * _workerCount;
@@ -379,6 +329,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
             hours: _selectedHours,
             serviceDate: serviceDateTime,
             workerCount: _workerCount,
+            zoneName: _selectedZoneName,
           ),
         ),
       ).then((success) {
@@ -389,9 +340,6 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
 
   @override
   void dispose() {
-    _configSubscription?.cancel();
-    _mainConfigSubscription?.cancel();
-    _ordersSubscription?.cancel();
     super.dispose();
   }
 
@@ -561,7 +509,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
               final matchedZone = _zones.firstWhere((z) => z['name'] == _selectedZoneName, orElse: () => {});
               if (matchedZone.isNotEmpty) _updatePriceForZone(matchedZone);
             });
-            if (_selectedLocation != null) _loadSlotAvailability();
+            if (_selectedLocation != null) _buildSlotAvailabilityFromCache();
           },
           child: Container(
             width: 70,
@@ -620,7 +568,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
             } : () {
               HapticFeedback.lightImpact();
               setState(() => _selectedDate = date);
-              _loadSlotAvailability();
+              _buildSlotAvailabilityFromCache();
             },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
