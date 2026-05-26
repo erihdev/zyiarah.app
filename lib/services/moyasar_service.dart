@@ -6,8 +6,9 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 /// Moyasar payment gateway service.
-/// API key is loaded from MOYASAR_PUBLISHABLE_KEY in .env.
-/// Add this key once you receive your Moyasar credentials.
+/// - Credit Card / Apple Pay / STC Pay → handled by Moyasar Flutter SDK (no code here)
+/// - Google Pay → processGooglePayToken() sends token to Moyasar REST API
+/// - Payment verification → verifyPayment() via Firebase Cloud Function
 class MoyasarService {
   static String get _publishableKey =>
       dotenv.env['MOYASAR_PUBLISHABLE_KEY'] ?? '';
@@ -17,14 +18,21 @@ class MoyasarService {
   static String get _authHeader =>
       'Basic ${base64Encode(utf8.encode('$_publishableKey:'))}';
 
-  /// Sends the Apple Pay token received from the native sheet to Moyasar
-  /// to complete the payment. Returns the Moyasar payment ID on success.
-  static Future<String> processApplePayToken({
-    required Map<String, dynamic> applePayToken,
+  static bool get isConfigured => _publishableKey.isNotEmpty;
+
+  /// Sends a Google Pay token (from the `pay` package) to Moyasar REST API.
+  /// Returns the Moyasar payment ID on success.
+  /// Throws Exception with Arabic message on failure.
+  static Future<String> processGooglePayToken({
+    required Map<String, dynamic> googlePayToken,
     required double amountSAR,
     required String description,
     required String orderId,
   }) async {
+    if (!isConfigured) {
+      throw Exception('خدمة الدفع غير مُهيأة — يرجى التواصل مع الدعم');
+    }
+
     final amountHalala = (amountSAR * 100).round();
 
     final response = await http.post(
@@ -37,10 +45,11 @@ class MoyasarService {
         'amount': amountHalala,
         'currency': 'SAR',
         'description': description,
+        'given_id': orderId, // idempotency — prevents duplicate charges on retry
         'metadata': {'order_id': orderId},
         'source': {
-          'type': 'applepay',
-          'token': applePayToken,
+          'type': 'googlepay',
+          'token': googlePayToken,
           'company': 'zyiarah',
           'name': 'زيارة',
         },
@@ -58,20 +67,26 @@ class MoyasarService {
           'حالة الدفع: $status — ${data['message'] ?? 'خطأ غير متوقع'}');
     }
 
-    String message = 'فشل معالجة الدفع عبر Apple Pay';
+    String message = 'فشل معالجة الدفع عبر Google Pay';
     try {
       final error = jsonDecode(response.body) as Map<String, dynamic>;
-      message = error['message']?.toString() ?? message;
-    } catch (_) {
-      // Non-JSON error body (e.g. gateway HTML page) — keep generic message.
-    }
+      final type = error['type']?.toString() ?? '';
+      message = switch (type) {
+        'account_inactive_error' => 'حساب الدفع قيد التفعيل — يرجى المحاولة لاحقاً',
+        'authentication_error' => 'خطأ في مفاتيح بوابة الدفع — تواصل مع الدعم',
+        'rate_limit_error' => 'كثرة الطلبات — يرجى الانتظار قليلاً والمحاولة مجدداً',
+        'invalid_request_error' => error['message']?.toString() ?? 'بيانات الطلب غير صحيحة',
+        _ => error['message']?.toString() ?? message,
+      };
+    } catch (_) {}
     throw Exception(message);
   }
 
   /// Verifies a payment by ID via secure Cloud Function.
   static Future<bool> verifyPayment(String paymentId, String orderId) async {
     try {
-      final callable = FirebaseFunctions.instance.httpsCallable('verifyMoyasarPayment');
+      final callable =
+          FirebaseFunctions.instance.httpsCallable('verifyMoyasarPayment');
       final result = await callable.call({
         'paymentId': paymentId,
         'orderId': orderId,
@@ -79,7 +94,8 @@ class MoyasarService {
       return result.data['success'] == true;
     } catch (e, stack) {
       debugPrint('MoyasarService.verifyPayment error: $e');
-      FirebaseCrashlytics.instance.recordError(e, stack, fatal: false);
+      await FirebaseCrashlytics.instance
+          .recordError(e, stack, fatal: false);
       return false;
     }
   }

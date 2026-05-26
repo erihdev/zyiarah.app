@@ -1,0 +1,33 @@
+{
+  "provider": "google_pay",
+  "data": {
+    "environment": "TEST",
+    "apiVersion": 2,
+    "apiVersionMinor": 0,
+    "allowedPaymentMethods": [
+      {
+        "type": "CARD",
+        "parameters": {
+          "allowedAuthMethods": ["CRYPTOGRAM_3DS"],
+          "allowedCardNetworks": ["MASTERCARD", "VISA", "MADA"]
+        },
+        "tokenizationSpecification": {
+          "type": "PAYMENT_GATEWAY",
+          "parameters": {
+            "gateway": "moyasar",
+            "gatewayMerchantId": "pk_test_f5iq1FWaMMhuGSQwwDEDab293A1MErQocpF87gAQ"
+          }
+        }
+      }
+    ],
+    "merchantInfo": {
+      "merchantName": "Zyiarah - زيارة",
+      "merchantId": "REPLACE_WITH_GOOGLE_MERCHANT_ID"
+    },
+    "transactionInfo": {
+      "totalPriceStatus": "NOT_CURRENTLY_KNOWN",
+      "currencyCode": "SAR",
+      "countryCode": "SA"
+    }
+  }
+}

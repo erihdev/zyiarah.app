@@ -47,6 +47,8 @@ dependencies:
   arabic_reshaper: ^0.0.1
   bidi: ^2.0.13
   crypto: ^3.0.3
+  moyasar: ^3.0.3
+  tabby_flutter_inapp_sdk: ^1.11.0
 
 dev_dependencies:
   flutter_test:
@@ -60,6 +62,7 @@ flutter:
     - .env
     - assets/logo.png
     - assets/apple_pay_config.json
+    - assets/google_pay_config.json
     - assets/images/hourly_cleaning.png
     - assets/images/monthly_cleaning.png
     - assets/images/sofa_cleaning.png
