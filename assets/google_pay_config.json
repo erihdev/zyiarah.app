@@ -15,7 +15,7 @@
           "type": "PAYMENT_GATEWAY",
           "parameters": {
             "gateway": "moyasar",
-            "gatewayMerchantId": "REPLACE_WITH_MOYASAR_PUBLISHABLE_KEY"
+            "gatewayMerchantId": "pk_test_f5iq1FWaMMhuGSQwwDEDab293A1MErQocpF87gAQ"
           }
         }
       }
