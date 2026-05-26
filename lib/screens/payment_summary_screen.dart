@@ -177,6 +177,32 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     }
   }
 
+  /// Samsung Pay via Moyasar SDK — يُستدعى من SamsungPay widget callback
+  Future<void> _onSamsungPayResult(dynamic result) async {
+    if (!mounted) return;
+
+    if (result is PaymentResponse &&
+        (result.status == PaymentStatus.paid ||
+         result.status == PaymentStatus.authorized)) {
+      setState(() => _isLoading = true);
+      await _processUnifiedSuccess(_pendingOrderId, 'samsung_pay');
+    } else {
+      String msg = 'فشل الدفع عبر Samsung Pay';
+      if (result is ApiError) msg = result.message;
+      if (result is ValidationError) msg = result.message;
+      if (result is NetworkError) msg = 'تعذّر الاتصال — يرجى المحاولة مجدداً';
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(msg, style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.red.shade800,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.all(15),
+        ));
+      }
+    }
+  }
+
   Future<void> _validateCoupon() async {
     if (_couponController.text.isEmpty) return;
     setState(() => _isValidatingCoupon = true);
@@ -1098,6 +1124,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               publishableApiKey: publishableKey,
               amount: (totalWithVat * 100).round(),
               description: 'زيارة - ${widget.serviceName}',
+              givenID: _pendingOrderId, // idempotency — prevents duplicate charges on retry
               metadata: {'order_id': _pendingOrderId},
               applePay: ApplePayConfig(
                 merchantId: 'merchant.com.zyiarah.app',
@@ -1168,6 +1195,51 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               );
             },
           ),
+        ],
+
+        // --- Samsung Pay (Android — Moyasar SDK, auto-hides if unavailable) ---
+        if (!Platform.isIOS) ...[
+          Builder(builder: (context) {
+            final samsungServiceId =
+                dotenv.env['SAMSUNG_PAY_SERVICE_ID'] ?? '';
+            if (samsungServiceId.isEmpty ||
+                samsungServiceId.startsWith('REPLACE')) {
+              return const SizedBox.shrink();
+            }
+            return Column(
+              children: [
+                const SizedBox(height: 16),
+                Row(children: [
+                  const Expanded(child: Divider()),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Text('أو ادفع بـ',
+                        style:
+                            GoogleFonts.tajawal(color: Colors.grey, fontSize: 13)),
+                  ),
+                  const Expanded(child: Divider()),
+                ]),
+                const SizedBox(height: 12),
+                SamsungPay(
+                  config: PaymentConfig(
+                    publishableApiKey: publishableKey,
+                    amount: (totalWithVat * 100).round(),
+                    description: 'زيارة - ${widget.serviceName}',
+                    givenID: _pendingOrderId, // idempotency — prevents duplicate charges
+                    metadata: {'order_id': _pendingOrderId},
+                    samsungPay: SamsungPayConfig(
+                      serviceId: samsungServiceId,
+                      merchantName: 'زيارة',
+                      orderNumber: _pendingOrderId.length > 36
+                          ? _pendingOrderId.substring(0, 36)
+                          : _pendingOrderId,
+                    ),
+                  ),
+                  onPaymentResult: _onSamsungPayResult,
+                ),
+              ],
+            );
+          }),
         ],
 
         // --- Tamara (unchanged) ---
