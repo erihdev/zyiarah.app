@@ -79,5 +79,7 @@
 	<string>نحتاج للوصول للمكتبة للسماح لك بحفظ صور الفواتير الضريبية أو تحديث ملفك الشخصي.</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>تابي يحتاج إلى الميكروفون للتحقق من هوية المستخدم</string>
 </dict>
 </plist>
