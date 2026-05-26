@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/services/tamara_service.dart';
-import 'package:zyiarah/services/edfapay_service.dart';
 import 'package:zyiarah/screens/checkout_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/models/user_model.dart';
@@ -17,7 +16,12 @@ import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'dart:io';
 import 'package:pay/pay.dart';
 import 'package:zyiarah/services/moyasar_service.dart';
+import 'package:zyiarah/services/tabby_service.dart';
+import 'package:zyiarah/screens/moyasar_card_screen.dart';
+import 'package:zyiarah/screens/moyasar_stc_screen.dart';
+import 'package:moyasar/moyasar.dart';
 import 'package:zyiarah/services/zyiarah_wallet_service.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'package:zyiarah/providers/config_provider.dart';
 import 'package:provider/provider.dart';
@@ -58,10 +62,9 @@ class PaymentSummaryScreen extends StatefulWidget {
 
 class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   final TamaraService _tamaraService = TamaraService();
-  final EdfaPayService _edfaPayService = EdfaPayService();
   final ZyiarahOrderService _orderService = ZyiarahOrderService();
-  
-  String _selectedPaymentMethod = 'card'; // 'card', 'tamara', 'wallet', 'subscription' or 'cod'
+
+  String _selectedPaymentMethod = 'card'; // 'card', 'apple_pay', 'google_pay', 'tamara', 'tabby', 'stc_pay', 'wallet', 'subscription', 'cod'
   bool _isLoading = false;
   ZyiarahUser? _currentUser;
   bool _agreeToTerms = false;
@@ -75,14 +78,21 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   bool _isValidatingCoupon = false;
   bool _needsPhoneUpdate = false;
 
-  late final Future<PaymentConfiguration> _applePayConfigFuture;
+  late String _pendingOrderId;
+  late final Future<PaymentConfiguration>? _googlePayConfigFuture;
 
   @override
   void initState() {
     super.initState();
+    _pendingOrderId = widget.maintenanceId ??
+        FirebaseFirestore.instance.collection('orders').doc().id;
+    if (!Platform.isIOS) {
+      _googlePayConfigFuture =
+          PaymentConfiguration.fromAsset('assets/google_pay_config.json');
+    } else {
+      _googlePayConfigFuture = null;
+    }
     _loadUserData();
-    _applePayConfigFuture =
-        PaymentConfiguration.fromAsset('assets/apple_pay_config.json');
   }
 
   @override
@@ -141,116 +151,28 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   double get subtotal => totalWithVat / 1.15;
   double get vatAmount => totalWithVat - subtotal;
 
-  /// Called when the user authorises payment via the native Apple Pay sheet.
-  /// Sends the token to Moyasar, then creates the order on success.
-  Future<void> _handleApplePayResult(Map<String, dynamic> result) async {
+  /// Apple Pay via Moyasar SDK — يُستدعى من ApplePay widget callback
+  Future<void> _onApplePayResult(dynamic result) async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
 
-    try {
-      final bool isHourly = widget.hours != null && widget.serviceDate != null;
-      if (isHourly) {
-        // Double check daily capacity limits
-        int maxOrdersPerDay = 10;
-        try {
-          final configDoc = await FirebaseFirestore.instance
-              .collection('system_configs')
-              .doc('hourly_settings')
-              .get();
-          if (configDoc.exists) {
-            maxOrdersPerDay = configDoc.data()?['max_orders_per_day'] ?? 10;
-          }
-        } catch (_) {}
-
-        final String bookingDate = '${widget.serviceDate!.year}-'
-            '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
-            '${widget.serviceDate!.day.toString().padLeft(2, '0')}';
-
-        final dailySnapshot = await FirebaseFirestore.instance
-            .collection('orders')
-            .where('booking_date', isEqualTo: bookingDate)
-            .get();
-
-        final activeDailyCount = dailySnapshot.docs
-            .where((doc) => doc.data()['status'] != 'cancelled')
-            .length;
-
-        if (activeDailyCount >= maxOrdersPerDay) {
-          setState(() => _isLoading = false);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 4),
-            ));
-          }
-          return;
-        }
-
-        // Double check time slot simultaneous limit (max_teams_per_slot)
-        int maxTeamsPerSlot = 5;
-        try {
-          final mainConfigDoc = await FirebaseFirestore.instance
-              .collection('system_configs')
-              .doc('main_settings')
-              .get();
-          if (mainConfigDoc.exists) {
-            maxTeamsPerSlot = mainConfigDoc.data()?['max_teams_per_slot'] ?? 5;
-          }
-        } catch (_) {}
-
-        final String timeSlotStr = '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00';
-        final slotSnapshot = await FirebaseFirestore.instance
-            .collection('orders')
-            .where('booking_date', isEqualTo: bookingDate)
-            .where('booking_time_slot', isEqualTo: timeSlotStr)
-            .get();
-
-        final activeSlotCount = slotSnapshot.docs
-            .where((doc) => doc.data()['status'] != 'cancelled')
-            .length;
-
-        if (activeSlotCount >= maxTeamsPerSlot) {
-          setState(() => _isLoading = false);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('نعتذر، هذا الوقت محجوز بالكامل حالياً. يرجى اختيار وقت بدء آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 4),
-            ));
-          }
-          return;
-        }
-      }
-
-      final String orderId = widget.maintenanceId ??
-          FirebaseFirestore.instance.collection('orders').doc().id;
-
-      await MoyasarService.processApplePayToken(
-        applePayToken: result,
-        amountSAR: totalWithVat,
-        description: 'خدمة زيارة - ${widget.serviceName}',
-        orderId: orderId,
-      );
-
+    // PaymentResponse when paid/authorized, error types otherwise
+    if (result is PaymentResponse &&
+        (result.status == PaymentStatus.paid ||
+         result.status == PaymentStatus.authorized)) {
+      setState(() => _isLoading = true);
+      await _processUnifiedSuccess(_pendingOrderId, 'apple_pay');
+    } else {
+      String msg = 'فشل الدفع عبر Apple Pay';
+      if (result is ApiError) msg = result.message;
+      if (result is ValidationError) msg = result.message;
       if (mounted) {
-        await _processUnifiedSuccess(orderId, 'apple_pay');
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'فشل الدفع: ${e.toString().replaceAll('Exception: ', '')}',
-              style: GoogleFonts.tajawal(),
-            ),
-            backgroundColor: Colors.red.shade800,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            margin: const EdgeInsets.all(15),
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(msg, style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.red.shade800,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.all(15),
+        ));
       }
     }
   }
@@ -404,7 +326,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         });
       }
 
-      final String finalOrderId = widget.maintenanceId ?? FirebaseFirestore.instance.collection('orders').doc().id;
+      final String finalOrderId = _pendingOrderId;
 
       if (_selectedPaymentMethod == 'subscription') {
         await _processUnifiedSuccess(finalOrderId, 'subscription', isFree: true);
@@ -500,21 +422,110 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         }
 
       } else if (_selectedPaymentMethod == 'card') {
-        // EDFA PAY (Card)
-        const String paymentType = 'Card';
-        final result = await _edfaPayService.processPayment(
-          amount: totalWithVat,
+        // Moyasar SDK — Credit Card
+        setState(() => _isLoading = false);
+        if (!mounted) return;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MoyasarCardScreen(
+              amountSAR: totalWithVat,
+              description: 'خدمة زيارة - ${widget.serviceName}',
+              orderId: finalOrderId,
+              onSuccess: (paymentId) async {
+                setState(() => _isLoading = true);
+                await _processUnifiedSuccess(finalOrderId, 'card');
+              },
+              onFailure: (error) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(error, style: GoogleFonts.tajawal()),
+                    backgroundColor: Colors.red.shade800,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    margin: const EdgeInsets.all(15),
+                  ));
+                }
+              },
+            ),
+          ),
+        );
+        return;
+
+      } else if (_selectedPaymentMethod == 'tabby') {
+        // Tabby BNPL
+        final webUrl = await TabbyService.createCheckoutUrl(
+          amountSAR: totalWithVat,
+          customerPhone: _phoneController.text.trim().isNotEmpty
+              ? _phoneController.text.trim()
+              : (_currentUser?.phone ?? '0500000000'),
+          customerName: _currentUser?.name ?? 'عميل زيارة',
+          customerEmail: _currentUser?.email ?? 'customer@zyiarah.com',
           orderId: finalOrderId,
-          customerEmail: _currentUser?.email ?? "customer@zyiarah.com",
-          customerPhone: _currentUser?.phone ?? "500000000",
-          customerName: _currentUser?.name ?? "عميل زيارة",
         );
 
-        if (result['success'] == true && mounted) {
-          await _processUnifiedSuccess(finalOrderId, _selectedPaymentMethod);
-        } else {
-          throw Exception(result['error'] ?? 'فشل عملية الدفع عبر $paymentType');
+        if (webUrl == null) {
+          setState(() => _isLoading = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('تابي غير متاح لهذا الطلب حالياً'),
+              backgroundColor: Colors.red,
+            ));
+          }
+          return;
         }
+
+        setState(() => _isLoading = false);
+        if (!mounted) return;
+
+        TabbyService.showCheckout(
+          context: context,
+          webUrl: webUrl,
+          onSuccess: () async {
+            setState(() => _isLoading = true);
+            await _processUnifiedSuccess(finalOrderId, 'tabby');
+          },
+          onFailure: () {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('تم إلغاء الدفع عبر تابي'),
+                backgroundColor: Colors.orange,
+              ));
+            }
+          },
+        );
+        return;
+
+      } else if (_selectedPaymentMethod == 'stc_pay') {
+        // Moyasar STC Pay
+        setState(() => _isLoading = false);
+        if (!mounted) return;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MoyasarStcScreen(
+              amountSAR: totalWithVat,
+              description: 'خدمة زيارة - ${widget.serviceName}',
+              orderId: finalOrderId,
+              onSuccess: (paymentId) async {
+                setState(() => _isLoading = true);
+                await _processUnifiedSuccess(finalOrderId, 'stc_pay');
+              },
+              onFailure: (error) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(error, style: GoogleFonts.tajawal()),
+                    backgroundColor: Colors.red.shade800,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    margin: const EdgeInsets.all(15),
+                  ));
+                }
+              },
+            ),
+          ),
+        );
+        return;
       }
 
     } catch (e) {
@@ -1036,12 +1047,20 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
   Widget _buildPaymentMethods() {
     final int remainingVisits = _currentUser?.visitsRemaining ?? 0;
+    final String publishableKey =
+        dotenv.env['MOYASAR_PUBLISHABLE_KEY'] ?? '';
+    final bool moyasarReady = publishableKey.isNotEmpty;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('اختر طريقة الدفع', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),
+        Text('اختر طريقة الدفع',
+            style: GoogleFonts.tajawal(
+                fontWeight: FontWeight.bold, fontSize: 16)),
         const SizedBox(height: 15),
-        if (remainingVisits > 0 && widget.contractId == null)
+
+        // --- باقة جولد ---
+        if (remainingVisits > 0 && widget.contractId == null) ...[
           _buildPaymentOption(
             id: 'subscription',
             title: 'باقة زيارة جولد',
@@ -1049,31 +1068,66 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             icon: Icons.workspace_premium,
             color: Colors.amber.shade700,
           ),
-        const SizedBox(height: 12),
-        _buildPaymentOption(
-          id: 'card',
-          title: 'بطاقة فيزا / مدى',
-          subtitle: 'دفع آمن وسريع عبر EdfaPay',
-          icon: Icons.credit_card,
-        ),
-        if (Platform.isIOS) ...[
+          const SizedBox(height: 12),
+        ],
+
+        // --- بطاقة ائتمانية (Moyasar) ---
+        if (moyasarReady)
+          _buildPaymentOption(
+            id: 'card',
+            title: 'بطاقة فيزا / مدى',
+            subtitle: 'دفع آمن عبر ميسر',
+            icon: Icons.credit_card,
+          ),
+
+        // --- Apple Pay (iOS only — Moyasar SDK) ---
+        if (Platform.isIOS && moyasarReady) ...[
           const SizedBox(height: 16),
           Row(children: [
             const Expanded(child: Divider()),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Text('أو ادفع بـ', style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 13)),
+              child: Text('أو ادفع بـ',
+                  style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 13)),
+            ),
+            const Expanded(child: Divider()),
+          ]),
+          const SizedBox(height: 12),
+          ApplePay(
+            config: PaymentConfig(
+              publishableApiKey: publishableKey,
+              amount: (totalWithVat * 100).round(),
+              description: 'زيارة - ${widget.serviceName}',
+              metadata: {'order_id': _pendingOrderId},
+              applePay: ApplePayConfig(
+                merchantId: 'merchant.com.zyiarah.app',
+                label: 'زيارة',
+                manual: false,
+                saveCard: false,
+              ),
+            ),
+            onPaymentResult: _onApplePayResult,
+          ),
+        ],
+
+        // --- Google Pay (Android only) ---
+        if (!Platform.isIOS && _googlePayConfigFuture != null) ...[
+          const SizedBox(height: 16),
+          Row(children: [
+            const Expanded(child: Divider()),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Text('أو ادفع بـ',
+                  style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 13)),
             ),
             const Expanded(child: Divider()),
           ]),
           const SizedBox(height: 12),
           FutureBuilder<PaymentConfiguration>(
-            future: _applePayConfigFuture,
+            future: _googlePayConfigFuture,
             builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                return const SizedBox.shrink();
-              }
-              return ApplePayButton(
+              if (!snapshot.hasData) return const SizedBox.shrink();
+              return GooglePayButton(
                 paymentConfiguration: snapshot.data!,
                 paymentItems: [
                   PaymentItem(
@@ -1082,15 +1136,41 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                     status: PaymentItemStatus.final_price,
                   ),
                 ],
-                style: ApplePayButtonStyle.black,
-                type: ApplePayButtonType.buy,
+                type: GooglePayButtonType.pay,
                 margin: EdgeInsets.zero,
-                onPaymentResult: _handleApplePayResult,
-                loadingIndicator: const Center(child: CircularProgressIndicator()),
+                onPaymentResult: (result) async {
+                  setState(() => _isLoading = true);
+                  final messenger = ScaffoldMessenger.of(context);
+                  try {
+                    await MoyasarService.processGooglePayToken(
+                      googlePayToken: result,
+                      amountSAR: totalWithVat,
+                      description: 'خدمة زيارة - ${widget.serviceName}',
+                      orderId: _pendingOrderId,
+                    );
+                    if (mounted) {
+                      await _processUnifiedSuccess(_pendingOrderId, 'google_pay');
+                    }
+                  } catch (e) {
+                    setState(() => _isLoading = false);
+                    messenger.showSnackBar(SnackBar(
+                      content: Text(
+                        e.toString().replaceAll('Exception: ', ''),
+                        style: GoogleFonts.tajawal(),
+                      ),
+                      backgroundColor: Colors.red.shade800,
+                    ));
+                  }
+                },
+                loadingIndicator: const Center(
+                  child: CircularProgressIndicator(),
+                ),
               );
             },
           ),
         ],
+
+        // --- Tamara (unchanged) ---
         if (_tamaraEnabled && totalWithVat >= 100) ...[
           const SizedBox(height: 12),
           _buildPaymentOption(
@@ -1101,6 +1181,32 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             color: const Color(0xFFE5A170),
           ),
         ],
+
+        // --- Tabby ---
+        if (TabbyService.isAvailable && totalWithVat >= 100) ...[
+          const SizedBox(height: 12),
+          _buildPaymentOption(
+            id: 'tabby',
+            title: 'تابي | Tabby',
+            subtitle: 'اشتري الآن وادفع لاحقاً',
+            icon: Icons.calendar_month_outlined,
+            color: const Color(0xFF3DBEA3),
+          ),
+        ],
+
+        // --- STC Pay ---
+        if (moyasarReady) ...[
+          const SizedBox(height: 12),
+          _buildPaymentOption(
+            id: 'stc_pay',
+            title: 'STC Pay',
+            subtitle: 'الدفع عبر محفظة STC',
+            icon: Icons.phone_android_rounded,
+            color: const Color(0xFF6A1B9A),
+          ),
+        ],
+
+        // --- COD ---
         if (_isCodAvailableForService()) ...[
           const SizedBox(height: 12),
           _buildPaymentOption(
@@ -1111,7 +1217,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             color: Colors.green,
           ),
         ],
-        // --- Zyiarah Wallet Payment Option ---
+
+        // --- Wallet ---
         const SizedBox(height: 12),
         _buildWalletPaymentOption(),
       ],
