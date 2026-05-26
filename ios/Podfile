@@ -19,6 +19,10 @@ platform :ios, '15.0'
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = '1'
 
+# Disable Flutter's Swift Package Manager integration to avoid
+# cloud_firestore FLTPipelineParser.m compilation bug (6.4.x)
+ENV['FLUTTER_USE_SWIFT_PACKAGE_MANAGER'] = 'false'
+
 project 'Runner', {
   'Debug' => :debug,
   'Release' => :release,
