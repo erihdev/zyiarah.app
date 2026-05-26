@@ -2,7 +2,7 @@ name: zyiarah
 description: "A new Flutter project."
 publish_to: "none"
 
-version: 1.2.7+200
+version: 1.2.7+201
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -17,7 +17,7 @@ dependencies:
   google_fonts: ^6.2.1
   firebase_core: ^4.9.0
   firebase_auth: ^6.5.1
-  cloud_firestore: ^6.4.1
+  cloud_firestore: ^6.3.1
   flutter_map: ^7.0.2
   firebase_messaging: ^16.2.2
   flutter_local_notifications: ^18.0.1
