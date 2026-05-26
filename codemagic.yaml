@@ -175,6 +175,8 @@ workflows:
       - name: Build Flutter IPA
         script: |
           set -e
+          # Disable SPM to avoid cloud_firestore FLTPipelineParser.m bug
+          flutter config --no-enable-swift-package-manager
           flutter build ipa --release \
             --export-options-plist=$HOME/export_options.plist
           echo "✓ IPA built successfully"
