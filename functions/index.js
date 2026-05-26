@@ -1446,3 +1446,190 @@ exports.moyasarWebhook = onRequest(
       }
     },
 );
+
+// ── Moyasar Payment Operations (admin-only callable functions) ─────────────────
+// These use the SECRET key and are only callable by authenticated admin users.
+// Firestore rule: caller must have role == 'super_admin' or 'orders_manager'.
+
+/** Helper: build Moyasar auth header from secret */
+function _moyasarAuthHeader(secret) {
+  return `Basic ${Buffer.from(secret + ":").toString("base64")}`;
+}
+
+/** Helper: verify caller is admin (super_admin or orders_manager) */
+async function _assertAdmin(request) {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً");
+  }
+  const uid = request.auth.uid;
+  const userDoc = await admin.firestore().collection("users").doc(uid).get();
+  if (!userDoc.exists) {
+    throw new HttpsError("permission-denied", "المستخدم غير موجود");
+  }
+  const role = userDoc.data().role;
+  const allowedRoles = ["super_admin", "orders_manager"];
+  if (!allowedRoles.includes(role)) {
+    throw new HttpsError("permission-denied", "صلاحيات إدارية مطلوبة لهذه العملية");
+  }
+}
+
+/** Helper: find order across all collections, return {ref, col, data} or null */
+async function _findOrder(orderId) {
+  const collections = ["orders", "store_orders", "maintenance_requests", "contracts"];
+  for (const col of collections) {
+    const ref = admin.firestore().collection(col).doc(orderId);
+    const doc = await ref.get();
+    if (doc.exists) return {ref, col, data: doc.data()};
+  }
+  return null;
+}
+
+// ── Refund ─────────────────────────────────────────────────────────────────────
+// Refunds a paid or captured Moyasar payment. Supports full and partial refund.
+// Required: paymentId (string), orderId (string)
+// Optional: amountHalalas (int) — omit for full refund
+exports.moyasarRefundPayment = onCall(
+    {secrets: ["MOYASAR_SECRET_KEY"]},
+    async (request) => {
+      await _assertAdmin(request);
+
+      const {paymentId, orderId, amountHalalas} = request.data;
+      if (!paymentId || !orderId) {
+        throw new HttpsError("invalid-argument", "paymentId و orderId مطلوبان");
+      }
+
+      const secret = moyasarSecretKey.value();
+      if (!secret) {
+        throw new HttpsError("failed-precondition", "مفتاح Moyasar السري غير مهيأ");
+      }
+
+      const body = amountHalalas ? JSON.stringify({amount: amountHalalas}) : undefined;
+
+      const response = await fetch(`https://api.moyasar.com/v1/payments/${paymentId}/refund`, {
+        method: "POST",
+        headers: {
+          "Authorization": _moyasarAuthHeader(secret),
+          ...(body ? {"Content-Type": "application/json"} : {}),
+        },
+        ...(body ? {body} : {}),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        console.error(`moyasarRefund failed ${response.status}:`, result);
+        throw new HttpsError("internal", result.message ?? "فشل استرداد المبلغ من Moyasar");
+      }
+
+      // Update Firestore
+      const order = await _findOrder(orderId);
+      if (order) {
+        await order.ref.update({
+          payment_status: "refunded",
+          moyasar_status: result.status,
+          refunded_at: admin.firestore.FieldValue.serverTimestamp(),
+          refunded_amount: amountHalalas ? amountHalalas / 100 : (order.data.amount ?? 0),
+        });
+      }
+
+      console.log(`moyasarRefund: payment ${paymentId} refunded — status: ${result.status}`);
+      return {success: true, status: result.status, refundedAmount: result.amount};
+    },
+);
+
+// ── Void ───────────────────────────────────────────────────────────────────────
+// Voids an authorized, paid, or captured payment (within the void window).
+// Required: paymentId (string), orderId (string)
+exports.moyasarVoidPayment = onCall(
+    {secrets: ["MOYASAR_SECRET_KEY"]},
+    async (request) => {
+      await _assertAdmin(request);
+
+      const {paymentId, orderId} = request.data;
+      if (!paymentId || !orderId) {
+        throw new HttpsError("invalid-argument", "paymentId و orderId مطلوبان");
+      }
+
+      const secret = moyasarSecretKey.value();
+      if (!secret) {
+        throw new HttpsError("failed-precondition", "مفتاح Moyasar السري غير مهيأ");
+      }
+
+      const response = await fetch(`https://api.moyasar.com/v1/payments/${paymentId}/void`, {
+        method: "POST",
+        headers: {"Authorization": _moyasarAuthHeader(secret)},
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        console.error(`moyasarVoid failed ${response.status}:`, result);
+        throw new HttpsError("internal", result.message ?? "فشل إلغاء عملية الدفع من Moyasar");
+      }
+
+      const order = await _findOrder(orderId);
+      if (order) {
+        await order.ref.update({
+          payment_status: "voided",
+          moyasar_status: result.status,
+          voided_at: admin.firestore.FieldValue.serverTimestamp(),
+          is_paid: false,
+        });
+      }
+
+      console.log(`moyasarVoid: payment ${paymentId} voided — status: ${result.status}`);
+      return {success: true, status: result.status};
+    },
+);
+
+// ── Capture ────────────────────────────────────────────────────────────────────
+// Captures an authorized (manual: true) Moyasar payment.
+// Required: paymentId (string), orderId (string)
+// Optional: amountHalalas (int) — omit for full capture
+exports.moyasarCapturePayment = onCall(
+    {secrets: ["MOYASAR_SECRET_KEY"]},
+    async (request) => {
+      await _assertAdmin(request);
+
+      const {paymentId, orderId, amountHalalas} = request.data;
+      if (!paymentId || !orderId) {
+        throw new HttpsError("invalid-argument", "paymentId و orderId مطلوبان");
+      }
+
+      const secret = moyasarSecretKey.value();
+      if (!secret) {
+        throw new HttpsError("failed-precondition", "مفتاح Moyasar السري غير مهيأ");
+      }
+
+      const body = amountHalalas ? JSON.stringify({amount: amountHalalas}) : undefined;
+
+      const response = await fetch(`https://api.moyasar.com/v1/payments/${paymentId}/capture`, {
+        method: "POST",
+        headers: {
+          "Authorization": _moyasarAuthHeader(secret),
+          ...(body ? {"Content-Type": "application/json"} : {}),
+        },
+        ...(body ? {body} : {}),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        console.error(`moyasarCapture failed ${response.status}:`, result);
+        throw new HttpsError("internal", result.message ?? "فشل تحصيل المبلغ المحجوز من Moyasar");
+      }
+
+      const order = await _findOrder(orderId);
+      if (order) {
+        await order.ref.update({
+          payment_status: "captured",
+          is_paid: true,
+          moyasar_status: result.status,
+          captured_at: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+
+      console.log(`moyasarCapture: payment ${paymentId} captured — status: ${result.status}`);
+      return {success: true, status: result.status, capturedAmount: result.amount};
+    },
+);

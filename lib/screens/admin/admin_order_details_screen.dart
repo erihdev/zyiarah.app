@@ -1,6 +1,7 @@
 import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:url_launcher/url_launcher.dart';
@@ -211,6 +212,73 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   }
 
   
+  /// Calls a Moyasar admin Cloud Function (refund / void / capture).
+  Future<void> _moyasarOperation({
+    required String functionName,
+    required String label,
+    required String paymentId,
+    int? amountHalalas,
+  }) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(label, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+        content: Text(
+          amountHalalas != null
+              ? 'هل تريد تنفيذ "$label" بمبلغ ${(amountHalalas / 100).toStringAsFixed(2)} ر.س؟'
+              : 'هل أنت متأكد من تنفيذ "$label"؟ لا يمكن التراجع.',
+          style: GoogleFonts.tajawal(),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('إلغاء', style: GoogleFonts.tajawal())),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('تأكيد', style: GoogleFonts.tajawal(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable(functionName);
+      await callable.call({
+        'paymentId': paymentId,
+        'orderId': widget.orderId,
+        if (amountHalalas != null) 'amountHalalas': amountHalalas,
+      });
+
+      // Refresh order data
+      await _fetchOrder();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('تم تنفيذ "$label" بنجاح ✅', style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.green,
+        ));
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.message ?? 'فشل تنفيذ العملية', style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.red.shade700,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('خطأ غير متوقع: $e', style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.red.shade700,
+        ));
+      }
+    }
+  }
+
   Future<void> _openWhatsApp(String phone) async {
     try {
       final url = Uri.parse("https://wa.me/$phone");
@@ -224,6 +292,208 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
         );
       }
     }
+  }
+
+  Widget _buildMoyasarOperationsCard(Map<String, dynamic> data) {
+    final String paymentId = data['moyasar_payment_id'] as String;
+    final String moyasarStatus = data['moyasar_status'] as String? ?? data['payment_status'] as String? ?? '';
+    final double amount = ((data['final_amount'] ?? data['amount'] ?? 0) as num).toDouble();
+
+    // Determine available operations per Moyasar docs
+    final bool canVoid = moyasarStatus == 'authorized' ||
+        moyasarStatus == 'paid' ||
+        moyasarStatus == 'captured';
+    final bool canRefund = moyasarStatus == 'paid' || moyasarStatus == 'captured';
+    final bool canCapture = moyasarStatus == 'authorized';
+    final bool alreadyFinal = moyasarStatus == 'refunded' || moyasarStatus == 'voided';
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      color: const Color(0xFFF0FDF4),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.payment_rounded, color: Color(0xFF16A34A), size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'عمليات الدفع — Moyasar',
+                  style: GoogleFonts.tajawal(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: const Color(0xFF15803D),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(),
+            // Payment ID chip
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.tag, size: 14, color: Colors.grey),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      paymentId,
+                      style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey.shade700),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  // Status badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _moyasarStatusColor(moyasarStatus).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _moyasarStatusLabel(moyasarStatus),
+                      style: GoogleFonts.tajawal(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: _moyasarStatusColor(moyasarStatus),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            if (alreadyFinal)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'تمت المعالجة النهائية لهذه العملية (${_moyasarStatusLabel(moyasarStatus)})',
+                  style: GoogleFonts.tajawal(color: Colors.grey.shade600, fontSize: 13),
+                ),
+              )
+            else
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  // Capture button (for authorized/manual payments)
+                  if (canCapture)
+                    _operationButton(
+                      label: 'تحصيل المبلغ',
+                      icon: Icons.check_circle_outline,
+                      color: const Color(0xFF2563EB),
+                      onTap: () => _moyasarOperation(
+                        functionName: 'moyasarCapturePayment',
+                        label: 'تحصيل المبلغ',
+                        paymentId: paymentId,
+                      ),
+                    ),
+
+                  // Void button
+                  if (canVoid)
+                    _operationButton(
+                      label: 'إلغاء العملية',
+                      icon: Icons.cancel_outlined,
+                      color: const Color(0xFFD97706),
+                      onTap: () => _moyasarOperation(
+                        functionName: 'moyasarVoidPayment',
+                        label: 'إلغاء العملية',
+                        paymentId: paymentId,
+                      ),
+                    ),
+
+                  // Full Refund button
+                  if (canRefund)
+                    _operationButton(
+                      label: 'استرداد كامل',
+                      icon: Icons.undo_rounded,
+                      color: const Color(0xFFDC2626),
+                      onTap: () => _moyasarOperation(
+                        functionName: 'moyasarRefundPayment',
+                        label: 'استرداد كامل',
+                        paymentId: paymentId,
+                      ),
+                    ),
+
+                  // Partial Refund (50%)
+                  if (canRefund && amount > 0)
+                    _operationButton(
+                      label: 'استرداد جزئي (50%)',
+                      icon: Icons.remove_circle_outline,
+                      color: const Color(0xFF7C3AED),
+                      onTap: () => _moyasarOperation(
+                        functionName: 'moyasarRefundPayment',
+                        label: 'استرداد جزئي (50%)',
+                        paymentId: paymentId,
+                        amountHalalas: (amount * 0.5 * 100).round(),
+                      ),
+                    ),
+                ],
+              ),
+
+            // Tip from Moyasar docs
+            if (canVoid && !alreadyFinal)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '💡 يُفضّل الإلغاء على الاسترداد متى أمكن — الإلغاء أسرع ولا يتضمن رسوماً',
+                  style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey.shade600),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _operationButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 16, color: color),
+      label: Text(label, style: GoogleFonts.tajawal(fontSize: 13, color: color, fontWeight: FontWeight.w600)),
+      style: OutlinedButton.styleFrom(
+        side: BorderSide(color: color.withValues(alpha: 0.5)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+    );
+  }
+
+  Color _moyasarStatusColor(String status) {
+    return switch (status) {
+      'paid' || 'captured' => const Color(0xFF16A34A),
+      'authorized' => const Color(0xFF2563EB),
+      'refunded' => const Color(0xFF7C3AED),
+      'voided' => const Color(0xFF6B7280),
+      'failed' || 'abandoned' => const Color(0xFFDC2626),
+      _ => const Color(0xFF6B7280),
+    };
+  }
+
+  String _moyasarStatusLabel(String status) {
+    return switch (status) {
+      'paid' => 'مدفوع',
+      'captured' => 'محصّل',
+      'authorized' => 'محجوز',
+      'refunded' => 'مُسترجع',
+      'voided' => 'ملغي',
+      'failed' => 'فاشل',
+      'abandoned' => 'متروك',
+      'initiated' => 'قيد الإجراء',
+      _ => status,
+    };
   }
 
   @override
@@ -336,6 +606,11 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                 ),
               ),
             ),
+            // ── Moyasar Payment Operations ──────────────────────────────────────
+            if (data['moyasar_payment_id'] != null) ...[
+              const SizedBox(height: 15),
+              _buildMoyasarOperationsCard(data),
+            ],
             const SizedBox(height: 15),
             Card(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
