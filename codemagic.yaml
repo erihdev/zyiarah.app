@@ -103,42 +103,45 @@ workflows:
         script: cd ios && pod install
 
       # ─────────────────────────────────────────────
-      # 4. إعداد Keychain وتوليد مفتاح الشهادة
-      #    ─ ROOT CAUSE FIX #1 ─
-      #    الخطوة القديمة كانت تحذف كل الشهادات
-      #    (بما فيها شهادات صالحة) مما يُسبب فشل
-      #    fetch-signing-files لأن Apple تحتاج وقتاً
-      #    لمعالجة الحذف (أحياناً أكثر من 30 ثانية).
-      #    الحل: نتركها للـ CLI يديرها بـ --create.
+      # 4. إعداد Keychain وكتابة مفتاح الشهادة الثابت
+      #
+      #    السبب الجذري للفشل السابق:
+      #    كان يُولَّد مفتاح RSA جديد في كل build →
+      #    Apple لا تجد شهادة مطابقة له → تحاول
+      #    إنشاء شهادة جديدة → ترفض لأن الـ slots
+      #    الـ 2 المسموح بها ممتلئة → 409 Error.
+      #
+      #    الحل الدائم:
+      #    ✅ CERTIFICATE_PRIVATE_KEY مخزَّن في
+      #       Codemagic → appstore_credentials group.
+      #    ✅ يُكتب مرة واحدة لملف مؤقت في كل build.
+      #    ✅ Apple تجد الشهادة المطابقة وتُعيد
+      #       استخدامها بدلاً من إنشاء جديدة.
       # ─────────────────────────────────────────────
       - name: Initialize keychain
         script: keychain initialize
 
-      - name: Generate fresh certificate private key
+      - name: Write certificate private key
         script: |
-          openssl genrsa 2048 > /tmp/private.key
-          # تصدير المفتاح كمتغير بيئة لاستخدامه لاحقاً إذا لزم
-          echo "CERTIFICATE_PRIVATE_KEY<<EOF" >> $CM_ENV
-          cat /tmp/private.key >> $CM_ENV
-          echo "EOF" >> $CM_ENV
-          echo "✓ Private key generated at /tmp/private.key"
+          # CERTIFICATE_PRIVATE_KEY مخزَّن في appstore_credentials group في Codemagic
+          # (أضفه من Dashboard → Environment variables → appstore_credentials)
+          echo "$CERTIFICATE_PRIVATE_KEY" > /tmp/private.key
+          chmod 600 /tmp/private.key
+          echo "✓ Certificate private key written to /tmp/private.key"
 
       # ─────────────────────────────────────────────
       # 5. جلب ملفات التوقيع (certificate + profile)
-      #    ─ ROOT CAUSE FIX #1 (continued) ─
-      #    أضفنا --platform IOS لتجنب الغموض.
-      #    --create يُنشئ certificate و profile جديد
-      #    إذا لم يوجد صالح، بدلاً من الفشل.
       #
-      #    ─ ROOT CAUSE FIX #2 (Push Notifications) ─
-      #    لا يحتاج الـ YAML خطوة منفصلة للـ Push
-      #    Notifications. المتطلب الوحيد:
+      #    مع المفتاح الثابت:
+      #    • إذا وُجدت شهادة مطابقة → تُعاد استخدامها ✅
+      #    • إذا لم توجد + --create → تُنشأ شهادة جديدة ✅
+      #    • لا يحدث 409 لأنه لا يُنشئ شهادة جديدة
+      #      في كل مرة.
+      #
+      #    ملاحظة Push Notifications:
       #    ✅ تأكد أن App ID يملك "Push Notifications"
       #       مُفعَّلاً في Apple Developer Portal →
-      #       Certificates, Identifiers & Profiles →
       #       Identifiers → com.zyiarah.zyiarah
-      #    عند ذلك، fetch-signing-files ستجلب
-      #    provisioning profile يتضمن الـ capability.
       # ─────────────────────────────────────────────
       - name: Fetch signing files (App Store distribution)
         script: |
