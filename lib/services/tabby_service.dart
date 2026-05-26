@@ -8,7 +8,7 @@ import 'package:tabby_flutter_inapp_sdk/tabby_flutter_inapp_sdk.dart';
 class TabbyService {
   static bool _initialized = false;
 
-  static void initialize() {
+  static Future<void> initialize() async {
     final apiKey = dotenv.env['TABBY_PUBLIC_KEY'] ?? '';
     if (apiKey.isEmpty) {
       debugPrint('[TabbyService] TABBY_PUBLIC_KEY not set — skipping init');
