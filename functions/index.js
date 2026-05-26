@@ -10,6 +10,7 @@ admin.initializeApp();
 const tamaraApiToken = defineSecret("TAMARA_API_TOKEN");
 const resendApiKeySecret = defineSecret("RESEND_API_KEY");
 const moyasarSecretKey = defineSecret("MOYASAR_SECRET_KEY");
+const moyasarWebhookSecret = defineSecret("MOYASAR_WEBHOOK_SECRET");
 
 // 1. Notify user when admin replies to a support ticket
 exports.sendNotificationOnTicketReply = onDocumentCreated("support_tickets/{ticketId}/messages/{messageId}",
@@ -1327,3 +1328,121 @@ exports.notifyDriverOnAssignment = onDocumentUpdated("orders/{orderId}",
       }
       return null;
     });
+
+// ── Moyasar Webhook ────────────────────────────────────────────────────────────
+// Receives real-time payment events from Moyasar (payment_paid, payment_failed, etc.)
+// Must return 2xx quickly. Moyasar retries up to 5 times over 2 hours on failure.
+// Register this URL in Moyasar Dashboard → Webhooks → Add Webhook.
+// Set events: payment_paid, payment_failed, payment_refunded
+// Set shared_secret in Secret Manager as MOYASAR_WEBHOOK_SECRET.
+exports.moyasarWebhook = onRequest(
+    {secrets: ["MOYASAR_SECRET_KEY", "MOYASAR_WEBHOOK_SECRET"]},
+    async (req, res) => {
+      if (req.method !== "POST") {
+        return res.status(405).json({error: "Method not allowed"});
+      }
+
+      const event = req.body;
+
+      // 1. Verify shared secret (set in Moyasar Dashboard → Webhooks)
+      const webhookSecret = moyasarWebhookSecret.value();
+      if (webhookSecret && event.secret_token !== webhookSecret) {
+        console.error("moyasarWebhook: invalid secret_token — possible spoofed request");
+        return res.status(401).json({error: "Invalid secret"});
+      }
+
+      // 2. Acknowledge immediately (Moyasar requires fast 2xx)
+      res.status(200).json({received: true});
+
+      // 3. Process event asynchronously (function stays alive until promise resolves)
+      try {
+        const eventType = event.type;
+        const payment = event.data;
+
+        if (!payment || !payment.id) {
+          console.warn("moyasarWebhook: missing payment data in event", eventType);
+          return;
+        }
+
+        const orderId = payment.metadata?.order_id;
+        if (!orderId) {
+          console.warn(`moyasarWebhook: no order_id in metadata for payment ${payment.id}`);
+          return;
+        }
+
+        if (eventType === "payment_paid" || eventType === "payment_captured") {
+          // Double-verify with Moyasar API using secret key (never trust webhook payload alone)
+          const secret = moyasarSecretKey.value();
+          const authHeader = `Basic ${Buffer.from(secret + ":").toString("base64")}`;
+
+          const verifyResponse = await fetch(`https://api.moyasar.com/v1/payments/${payment.id}`, {
+            headers: {"Authorization": authHeader},
+          });
+
+          if (!verifyResponse.ok) {
+            console.error(`moyasarWebhook: Moyasar API verify failed ${verifyResponse.status} for payment ${payment.id}`);
+            return;
+          }
+
+          const verifiedPayment = await verifyResponse.json();
+          if (verifiedPayment.status !== "paid" && verifiedPayment.status !== "captured") {
+            console.warn(`moyasarWebhook: payment ${payment.id} status is ${verifiedPayment.status} — skipping`);
+            return;
+          }
+
+          // Find the order across all collections (idempotent update)
+          const collections = [
+            {col: "orders", amountField: "amount"},
+            {col: "store_orders", amountField: "total_amount"},
+            {col: "maintenance_requests", amountField: "amount"},
+            {col: "contracts", amountField: "planPrice"},
+          ];
+
+          for (const {col} of collections) {
+            const ref = admin.firestore().collection(col).doc(orderId);
+            const doc = await ref.get();
+            if (doc.exists) {
+              const data = doc.data();
+              if (data.is_paid) {
+                console.log(`moyasarWebhook: Order ${orderId} already paid — skipping (idempotent)`);
+              } else {
+                await ref.update({
+                  payment_status: "paid",
+                  is_paid: true,
+                  moyasar_payment_id: payment.id,
+                  moyasar_status: verifiedPayment.status,
+                  updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                console.log(`moyasarWebhook: Order ${orderId} in '${col}' marked PAID via webhook`);
+              }
+              break;
+            }
+          }
+        } else if (eventType === "payment_failed" || eventType === "payment_abandoned") {
+          console.log(`moyasarWebhook: payment ${payment.id} for order ${orderId} — status: ${eventType}`);
+          // No Firestore update needed; app already handles failures via SDK callback
+        } else if (eventType === "payment_refunded") {
+          // Find and mark the order as refunded
+          const collections = ["orders", "store_orders", "maintenance_requests", "contracts"];
+          for (const col of collections) {
+            const ref = admin.firestore().collection(col).doc(orderId);
+            const doc = await ref.get();
+            if (doc.exists) {
+              await ref.update({
+                payment_status: "refunded",
+                moyasar_status: "refunded",
+                updated_at: admin.firestore.FieldValue.serverTimestamp(),
+              });
+              console.log(`moyasarWebhook: Order ${orderId} marked REFUNDED via webhook`);
+              break;
+            }
+          }
+        } else {
+          console.log(`moyasarWebhook: unhandled event type '${eventType}' — ignoring`);
+        }
+      } catch (error) {
+        console.error("moyasarWebhook processing error:", error);
+        // Do NOT re-throw — response already sent 200, Moyasar won't retry
+      }
+    },
+);
