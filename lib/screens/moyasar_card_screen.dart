@@ -26,6 +26,7 @@ class MoyasarCardScreen extends StatelessWidget {
         publishableApiKey: dotenv.env['MOYASAR_PUBLISHABLE_KEY'] ?? '',
         amount: (amountSAR * 100).round(), // Halala
         description: description,
+        givenID: orderId, // idempotency — prevents duplicate charges on retry
         metadata: {'order_id': orderId},
         creditCard: CreditCardConfig(saveCard: false, manual: false),
       );

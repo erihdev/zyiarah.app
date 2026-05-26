@@ -45,6 +45,7 @@ class MoyasarService {
         'amount': amountHalala,
         'currency': 'SAR',
         'description': description,
+        'given_id': orderId, // idempotency — prevents duplicate charges on retry
         'metadata': {'order_id': orderId},
         'source': {
           'type': 'googlepay',

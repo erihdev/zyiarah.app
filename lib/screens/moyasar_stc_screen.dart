@@ -152,6 +152,7 @@ class _MoyasarStcScreenState extends State<MoyasarStcScreen> {
       amount: (widget.amountSAR * 100).round(),
       currency: 'SAR',
       description: widget.description,
+      givenID: widget.orderId, // idempotency — prevents duplicate charges on retry
       metadata: {'order_id': widget.orderId},
     );
 

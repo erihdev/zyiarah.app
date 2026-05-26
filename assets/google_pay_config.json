@@ -8,8 +8,8 @@
       {
         "type": "CARD",
         "parameters": {
-          "allowedAuthMethods": ["PAN_ONLY", "CRYPTOGRAM_3DS"],
-          "allowedCardNetworks": ["MASTERCARD", "VISA"]
+          "allowedAuthMethods": ["CRYPTOGRAM_3DS"],
+          "allowedCardNetworks": ["MASTERCARD", "VISA", "MADA"]
         },
         "tokenizationSpecification": {
           "type": "PAYMENT_GATEWAY",
