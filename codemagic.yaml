@@ -23,7 +23,11 @@ workflows:
       # ─────────────────────────────────────────────
       - name: Create .env file
         script: |
-          echo "MAPBOX_TOKEN=$MAPBOX_TOKEN" > .env
+          echo "MAPBOX_TOKEN=$MAPBOX_TOKEN"                         > .env
+          echo "MOYASAR_PUBLISHABLE_KEY=$MOYASAR_PUBLISHABLE_KEY"  >> .env
+          echo "MOYASAR_SECRET_KEY=$MOYASAR_SECRET_KEY"            >> .env
+          echo "TABBY_PUBLIC_KEY=$TABBY_PUBLIC_KEY"                >> .env
+          echo "SAMSUNG_PAY_SERVICE_ID=$SAMSUNG_PAY_SERVICE_ID"    >> .env
           echo "✓ .env created"
 
       # ─────────────────────────────────────────────
@@ -222,7 +226,11 @@ workflows:
     scripts:
       - name: Create .env file
         script: |
-          echo "MAPBOX_TOKEN=$MAPBOX_TOKEN" > .env
+          echo "MAPBOX_TOKEN=$MAPBOX_TOKEN"                         > .env
+          echo "MOYASAR_PUBLISHABLE_KEY=$MOYASAR_PUBLISHABLE_KEY"  >> .env
+          echo "MOYASAR_SECRET_KEY=$MOYASAR_SECRET_KEY"            >> .env
+          echo "TABBY_PUBLIC_KEY=$TABBY_PUBLIC_KEY"                >> .env
+          echo "SAMSUNG_PAY_SERVICE_ID=$SAMSUNG_PAY_SERVICE_ID"    >> .env
 
       - name: Set up key.properties
         script: |
