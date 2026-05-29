@@ -609,7 +609,8 @@ exports.processNotificationTriggers = onDocumentCreated(
       const trigger = snap.data();
       if (!trigger || trigger.processed === true) return;
 
-      const {toUid, title, body, type, template, data = {}, attachmentUrls = []} = trigger;
+      const {toUid, title, body, type, template, data = {}} = trigger;
+      const attachmentUrls = Array.isArray(trigger.attachmentUrls) ? trigger.attachmentUrls : [];
       const recipientEmail =
         trigger.recipientEmail || data.customerEmail || "admin@zyiarah.com";
 
