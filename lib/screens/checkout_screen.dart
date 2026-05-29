@@ -1,7 +1,7 @@
 import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:zyiarah/screens/invoice_screen.dart';
+import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:zyiarah/utils/order_util.dart';
@@ -29,6 +29,9 @@ class TamaraCheckoutScreen extends StatefulWidget {
   final int? planVisits;
   final String? customerName;
   final String? customerPhone;
+  /// Callback يُستدعى بعد نجاح الدفع وإنشاء الطلب — يمرر كود الطلب للمتصل.
+  /// إذا كان null يتم التوجيه لـ ZyiarahOrderSuccessScreen مباشرة.
+  final Future<void> Function(String orderCode)? onOrderCreated;
 
   const TamaraCheckoutScreen({
     super.key,
@@ -48,6 +51,7 @@ class TamaraCheckoutScreen extends StatefulWidget {
     this.planVisits,
     this.customerName,
     this.customerPhone,
+    this.onOrderCreated,
   });
 
 
@@ -279,22 +283,18 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
 
 
 
-              // توجيه المستخدم لصفحة النجاح (الفاتورة) داخل التطبيق
+              // توجيه المستخدم لشاشة النجاح الموحدة
               if (!mounted) return;
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ZyiarahInvoiceScreen(
-                    amount: widget.amount,
-                    orderId: newOrderId,
-                    hours: widget.hours,
-                    serviceDate: widget.serviceDate,
-                    workerCount: widget.workerCount,
-                    couponCode: widget.couponCode,
-                    discountAmount: widget.discountAmount,
+              if (widget.onOrderCreated != null) {
+                await widget.onOrderCreated!(finalCommCode);
+              } else {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(
+                    builder: (_) => ZyiarahOrderSuccessScreen(orderCode: finalCommCode),
                   ),
-                ),
-              );
+                  (route) => route.isFirst,
+                );
+              }
             }
           },
         ),

@@ -4,159 +4,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/services/audit_service.dart';
-import 'package:zyiarah/services/zyiarah_pdf_service.dart';
-import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/zyiarah_wallet_service.dart';
 import 'package:zyiarah/services/zyiarah_referral_service.dart';
 
 /// خدمة إدارة دورة حياة الطلب - تطبيق زيارة
 class ZyiarahOrderService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-
-  // إنشاء طلب جديد
-  Future<String> createOrder({
-    required String clientId,
-    required String serviceType,
-    required double amount,
-    required GeoPoint location,
-    String paymentMethod = 'card',
-    int? hours,
-    DateTime? serviceDate,
-    String? zoneName,
-    int workerCount = 1,
-    String? couponCode,
-    double discountAmount = 0.0,
-  }) async {
-    // 1. Fetch Client Details once for efficiency (Name, Phone, Email)
-    String clientName = 'عميل زيارة';
-    String clientPhone = '000000000';
-    String? clientEmail;
-    
-    try {
-      final userDoc = await _db.collection('users').doc(clientId).get();
-      if (userDoc.exists) {
-        final userData = userDoc.data();
-        clientName = userData?['name'] ?? 'عميل زيارة';
-        clientPhone = userData?['phone'] ?? '000000000';
-        clientEmail = userData?['email'];
-      }
-    } catch (e) {
-      debugPrint('Error fetching user data: $e');
-    }
-
-    // --- Component 4: Dynamic Surge Pricing Calculation ---
-    double finalAmount = amount;
-    try {
-      final surgeResult = await FirebaseFunctions.instance.httpsCallable('getSurgePricingFactor').call();
-      final double surgeFactor = (surgeResult.data['surgeFactor'] as num).toDouble();
-      finalAmount = amount * surgeFactor;
-      if (surgeFactor > 1.0) {
-        debugPrint('Surge pricing active! Factor: $surgeFactor, Old: $amount, New: $finalAmount');
-      }
-    } catch (e) {
-      debugPrint('Error fetching surge factor: $e');
-    }
-    // -----------------------------------------------------
-
-    // 2 & 3. Atomic: increment counter + create order in one Transaction
-    // Pre-generate doc ref so we can reference it both inside and outside the transaction
-    final orderRef = _db.collection('orders').doc();
-    final counterRef = _db.collection('metadata').doc('order_counter');
-    String orderCode = '';
-
-    await _db.runTransaction((transaction) async {
-      final counterSnap = await transaction.get(counterRef);
-      final lastId = counterSnap.exists
-          ? ((counterSnap.data()?['last_id'] as num?)?.toInt() ?? 100)
-          : 100;
-      final nextId = lastId + 1;
-      orderCode = ZyiarahOrderUtil.formatSmartCode(nextId);
-
-      if (counterSnap.exists) {
-        transaction.update(counterRef, {'last_id': nextId});
-      } else {
-        transaction.set(counterRef, {'last_id': nextId});
-      }
-
-      transaction.set(orderRef, {
-        'code': orderCode,
-        'client_id': clientId,
-        'client_name': clientName,
-        'client_phone': clientPhone,
-        'client_email': clientEmail,
-        'user_phone': clientPhone,
-        'service_type': serviceType,
-        'service_name': serviceType,
-        'amount': finalAmount,
-        'status': 'pending',
-        'location': location,
-        'payment_method': paymentMethod,
-        'created_at': FieldValue.serverTimestamp(),
-        'hours_contracted': hours ?? 4,
-        'service_date': serviceDate != null ? Timestamp.fromDate(serviceDate) : null,
-        'zone_name': zoneName,
-        'worker_count': workerCount,
-        'coupon_code': couponCode,
-        'discount_amount': discountAmount,
-      });
-    });
-
-    // Alias for backward compatibility with side-effect code below
-    final doc = orderRef;
-
-    // 4. Log and Execute Side-Effects (Coupons & Alerts)
-    ZyiarahAuditService().logAction(
-      action: 'CREATE_CLEANING_ORDER',
-      details: {'code': orderCode, 'amount': finalAmount, 'client': clientName},
-      targetId: doc.id,
-    );
-
-    if (couponCode != null) {
-      await _incrementCouponUsage(couponCode);
-    }
-
-    final orderMap = {
-      'code': orderCode,
-      'client_name': clientName,
-      'client_phone': clientPhone,
-      'service_type': serviceType,
-      'amount': finalAmount,
-      'location': location,
-    };
-    
-    // 5. Generate ZATCA QR and Invoice PDF (Professional Touch)
-    final String qrData = ZatcaService.generateZatcaQrCode(
-      timestamp: DateTime.now(),
-      totalAmount: finalAmount,
-      vatAmount: finalAmount - (finalAmount / 1.15),
-    );
-
-    final String? invoiceUrl = await ZyiarahPdfService.generateAndUploadInvoice(
-      orderId: doc.id,
-      orderCode: orderCode,
-      amount: finalAmount,
-      qrData: qrData,
-      serviceName: serviceType,
-      discountAmount: discountAmount,
-      couponCode: couponCode,
-    );
-    
-    final comm = ZyiarahMessagingService();
-    await comm.notifyNewOrder(orderMap, customerEmail: clientEmail, invoiceUrl: invoiceUrl);
-    
-    // --- ارسل تنبيه لحظي للإدارة وللعميل عبر النظام الجديد ---
-    await ZyiarahMessagingService().notifyOrderCreated(
-      clientId: clientId,
-      orderCode: orderCode,
-      type: serviceType,
-      serviceName: serviceType,
-    );
-    // -----------------------------------------------------
-
-    return orderCode;
-  }
 
   // التحقق من كود الخصم
   Future<Map<String, dynamic>?> validateCoupon(String code, {String? currentUserZone}) async {
@@ -205,25 +59,6 @@ class ZyiarahOrderService {
     } catch (e) {
       debugPrint('Error validating coupon: $e');
       return null;
-    }
-  }
-
-  // زيادة عداد استخدام الكود
-  Future<void> _incrementCouponUsage(String code) async {
-    try {
-      final snapshot = await _db
-          .collection('promo_codes')
-          .where('code', isEqualTo: code.toUpperCase())
-          .limit(1)
-          .get();
-
-      if (snapshot.docs.isNotEmpty) {
-        await snapshot.docs.first.reference.update({
-          'uses': FieldValue.increment(1),
-        });
-      }
-    } catch (e) {
-      debugPrint('Error incrementing coupon usage: $e');
     }
   }
 
@@ -319,7 +154,7 @@ class ZyiarahOrderService {
       title: "تم إلغاء طلب ⚠️",
       body: "تم إلغاء الطلب #${orderCode ?? orderId} بواسطة ${cancelledBy == 'client' ? 'العميل' : 'الإدارة'}.",
       type: 'admin_order_alert',
-      data: {'orderId': orderId, 'code': orderCode ?? orderId, 'needs_refund': needsRefund},
+      data: {'orderId': orderId, 'code': orderCode ?? orderId, 'needs_refund': needsRefund.toString()},
     );
   }
 

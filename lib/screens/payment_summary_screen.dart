@@ -27,6 +27,7 @@ import 'package:zyiarah/providers/config_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
 import 'package:zyiarah/services/counter_service.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 
 
@@ -70,6 +71,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   bool _agreeToTerms = false;
   bool _tamaraEnabled = false;
   double _walletBalance = 0.0;
+  double _surgeFactor = 1.0;
 
   final TextEditingController _couponController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
@@ -137,6 +139,18 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         } catch (e) {
           debugPrint('Error fetching wallet balance: $e');
         }
+
+        // Fetch surge pricing factor — يُطبَّق على المبلغ قبل عرضه للعميل
+        try {
+          final surgeResult = await FirebaseFunctions.instance
+              .httpsCallable('getSurgePricingFactor').call();
+          final factor = (surgeResult.data['surgeFactor'] as num? ?? 1.0).toDouble();
+          if (mounted && factor != _surgeFactor) {
+            setState(() => _surgeFactor = factor);
+          }
+        } catch (e) {
+          debugPrint('Surge pricing fetch failed, using 1.0: $e');
+        }
       }
     }
   }
@@ -146,8 +160,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     return true;
   }
 
-  // الحسابات المالية الصحيحة (بافتراض أن المبلغ شامل للضريبة)
-  double get totalWithVat => widget.amount - _discountAmount;
+  // الحسابات المالية الصحيحة (بافتراض أن المبلغ شامل للضريبة، مع تطبيق Surge)
+  double get totalWithVat => (widget.amount * _surgeFactor) - _discountAmount;
   double get subtotal => totalWithVat / 1.15;
   double get vatAmount => totalWithVat - subtotal;
 
@@ -239,14 +253,61 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
   Future<void> _navigateToSuccess(String code) async {
     if (!mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ZyiarahOrderSuccessScreen(
-          orderCode: code,
-        ),
-      ),
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => ZyiarahOrderSuccessScreen(orderCode: code)),
+      (route) => route.isFirst,
     );
+  }
+
+  /// يتحقق من توفر سعة الحجز للخدمة بالساعة.
+  /// يعيد رسالة خطأ إذا كانت السعة ممتلئة، أو null إذا كان الحجز متاحاً.
+  Future<String?> _checkHourlyCapacity() async {
+    if (widget.hours == null || widget.serviceDate == null) return null;
+
+    int maxOrdersPerDay = 10;
+    int maxTeamsPerSlot = 5;
+    try {
+      final results = await Future.wait([
+        FirebaseFirestore.instance.collection('system_configs').doc('hourly_settings').get(),
+        FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get(),
+      ]);
+      maxOrdersPerDay = (results[0].data()?['max_orders_per_day'] as num?)?.toInt() ?? 10;
+      maxTeamsPerSlot = (results[1].data()?['max_teams_per_slot'] as num?)?.toInt() ?? 5;
+    } catch (_) {}
+
+    final String bookingDate = '${widget.serviceDate!.year}-'
+        '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
+        '${widget.serviceDate!.day.toString().padLeft(2, '0')}';
+
+    try {
+      final dailySnap = await FirebaseFirestore.instance
+          .collection('orders')
+          .where('booking_date', isEqualTo: bookingDate)
+          .get();
+      final count = dailySnap.docs
+          .where((d) => (d.data())['status'] != 'cancelled')
+          .length;
+      if (count >= maxOrdersPerDay) {
+        return 'نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.';
+      }
+    } catch (_) {}
+
+    try {
+      final timeSlot = '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00';
+      final slotSnap = await FirebaseFirestore.instance
+          .collection('orders')
+          .where('booking_date', isEqualTo: bookingDate)
+          .where('booking_time_slot', isEqualTo: timeSlot)
+          .get();
+      final count = slotSnap.docs
+          .where((d) => (d.data())['status'] != 'cancelled')
+          .length;
+      if (count >= maxTeamsPerSlot) {
+        return 'نعتذر، هذا الوقت محجوز بالكامل حالياً. يرجى اختيار وقت بدء آخر.';
+      }
+    } catch (_) {}
+
+    return null;
   }
 
   Future<void> _handlePayment() async {
@@ -272,86 +333,17 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     try {
       final bool isHourly = widget.hours != null && widget.serviceDate != null;
       if (isHourly) {
-        // Double check daily capacity limits
-        int maxOrdersPerDay = 10;
-        try {
-          final configDoc = await FirebaseFirestore.instance
-              .collection('system_configs')
-              .doc('hourly_settings')
-              .get();
-          if (configDoc.exists) {
-            maxOrdersPerDay = configDoc.data()?['max_orders_per_day'] ?? 10;
+        final capacityError = await _checkHourlyCapacity();
+        if (capacityError != null) {
+          setState(() => _isLoading = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(capacityError, style: const TextStyle(fontWeight: FontWeight.bold)),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+            ));
           }
-        } catch (_) {}
-
-        final String bookingDate = '${widget.serviceDate!.year}-'
-            '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
-            '${widget.serviceDate!.day.toString().padLeft(2, '0')}';
-
-        // الـ queries على orders قد تفشل بـ permission-denied إذا كان هناك طلبات
-        // لعملاء آخرين — نعالج بمرونة ونسمح بالمتابعة
-        try {
-          final dailySnapshot = await FirebaseFirestore.instance
-              .collection('orders')
-              .where('booking_date', isEqualTo: bookingDate)
-              .get();
-
-          final activeDailyCount = dailySnapshot.docs
-              .where((doc) => doc.data()['status'] != 'cancelled')
-              .length;
-
-          if (activeDailyCount >= maxOrdersPerDay) {
-            setState(() => _isLoading = false);
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 4),
-              ));
-            }
-            return;
-          }
-        } catch (_) {
-          // permission-denied أو خطأ شبكة — نكمل ونترك التحقق للـ Cloud Function
-        }
-
-        // Double check time slot simultaneous limit (max_teams_per_slot)
-        int maxTeamsPerSlot = 5;
-        try {
-          final mainConfigDoc = await FirebaseFirestore.instance
-              .collection('system_configs')
-              .doc('main_settings')
-              .get();
-          if (mainConfigDoc.exists) {
-            maxTeamsPerSlot = mainConfigDoc.data()?['max_teams_per_slot'] ?? 5;
-          }
-        } catch (_) {}
-
-        try {
-          final String timeSlotStr = '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00';
-          final slotSnapshot = await FirebaseFirestore.instance
-              .collection('orders')
-              .where('booking_date', isEqualTo: bookingDate)
-              .where('booking_time_slot', isEqualTo: timeSlotStr)
-              .get();
-
-          final activeSlotCount = slotSnapshot.docs
-              .where((doc) => doc.data()['status'] != 'cancelled')
-              .length;
-
-          if (activeSlotCount >= maxTeamsPerSlot) {
-            setState(() => _isLoading = false);
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('نعتذر، هذا الوقت محجوز بالكامل حالياً. يرجى اختيار وقت بدء آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 4),
-              ));
-            }
-            return;
-          }
-        } catch (_) {
-          // permission-denied أو خطأ شبكة — نكمل ونترك التحقق للـ Cloud Function
+          return;
         }
       }
 
@@ -450,6 +442,27 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 maintenanceId: widget.maintenanceId,
                 contractId: widget.contractId,
                 planVisits: widget.planVisits,
+                onOrderCreated: (code) async {
+                  if (!mounted) return;
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(
+                      builder: (_) => ZyiarahOrderSuccessScreen(
+                        orderCode: code,
+                        title: widget.contractId != null
+                            ? 'تم تفعيل الباقة بنجاح! 🎉'
+                            : widget.maintenanceId != null
+                                ? 'تم تأكيد دفع الصيانة!'
+                                : 'تم استلام طلبك بنجاح!',
+                        subtitle: widget.contractId != null
+                            ? 'تم تفعيل باقتك وإضافة الزيارات لحسابك.'
+                            : widget.maintenanceId != null
+                                ? 'تمت معالجة الدفع بنجاح. سنتواصل معك لتأكيد الموعد.'
+                                : 'شكراً لثقتك بزيارة، طلبك الآن قيد المعالجة.',
+                      ),
+                    ),
+                    (route) => route.isFirst,
+                  );
+                },
               ),
             ),
           );
@@ -604,89 +617,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     } else {
       final bool isHourly = widget.hours != null && widget.serviceDate != null;
 
-      // للخدمة بالساعة: تحقق من سعة اليوم والوقت قبل إنشاء الطلب
-      if (isHourly) {
-        int maxOrdersPerDay = 10;
-        try {
-          final configDoc = await FirebaseFirestore.instance
-              .collection('system_configs')
-              .doc('hourly_settings')
-              .get();
-          if (configDoc.exists) {
-            maxOrdersPerDay = configDoc.data()?['max_orders_per_day'] ?? 10;
-          }
-        } catch (_) {}
-
-        final String bookingDate = '${widget.serviceDate!.year}-'
-            '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
-            '${widget.serviceDate!.day.toString().padLeft(2, '0')}';
-
-        // الـ queries على orders قد تفشل بـ permission-denied — نتجاوز ونكمل
-        try {
-          final dailySnapshot = await FirebaseFirestore.instance
-              .collection('orders')
-              .where('booking_date', isEqualTo: bookingDate)
-              .get();
-
-          final activeDailyCount = dailySnapshot.docs
-              .where((doc) => doc.data()['status'] != 'cancelled')
-              .length;
-
-          if (activeDailyCount >= maxOrdersPerDay) {
-            if (mounted) {
-              setState(() => _isLoading = false);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 4),
-              ));
-            }
-            return;
-          }
-        } catch (_) {
-          // permission-denied أو خطأ شبكة — نكمل
-        }
-
-        int maxTeamsPerSlot = 5;
-        try {
-          final mainConfigDoc = await FirebaseFirestore.instance
-              .collection('system_configs')
-              .doc('main_settings')
-              .get();
-          if (mainConfigDoc.exists) {
-            maxTeamsPerSlot = mainConfigDoc.data()?['max_teams_per_slot'] ?? 5;
-          }
-        } catch (_) {}
-
-        try {
-          final String timeSlotStr = '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00';
-          final slotSnapshot = await FirebaseFirestore.instance
-              .collection('orders')
-              .where('booking_date', isEqualTo: bookingDate)
-              .where('booking_time_slot', isEqualTo: timeSlotStr)
-              .get();
-
-          final activeSlotCount = slotSnapshot.docs
-              .where((doc) => doc.data()['status'] != 'cancelled')
-              .length;
-
-          if (activeSlotCount >= maxTeamsPerSlot) {
-            if (mounted) {
-              setState(() => _isLoading = false);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('نعتذر، هذا الوقت محجوز بالكامل حالياً. يرجى اختيار وقت بدء آخر.', style: TextStyle(fontWeight: FontWeight.bold)),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 4),
-              ));
-            }
-            return;
-          }
-        } catch (_) {
-          // permission-denied أو خطأ شبكة — نكمل
-        }
-
-      }
-
       // Atomic: increment counter + create order in one Transaction
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
@@ -767,15 +697,27 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       'coupon': _appliedCoupon,
     }, customerEmail: _currentUser?.email, invoiceUrl: invoiceUrl);
 
-    // 3. Final Step
+    // 3. Final Step — شاشة نجاح موحدة لجميع المسارات
     if (mounted) {
       setState(() => _isLoading = false);
-      if (widget.maintenanceId == null && widget.contractId == null) {
-        await _navigateToSuccess(code);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تمت العملية بنجاح"), backgroundColor: Colors.green));
-        Navigator.pop(context, true);
-      }
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => ZyiarahOrderSuccessScreen(
+            orderCode: code,
+            title: widget.contractId != null
+                ? 'تم تفعيل الباقة بنجاح! 🎉'
+                : widget.maintenanceId != null
+                    ? 'تم تأكيد دفع الصيانة!'
+                    : 'تم استلام طلبك بنجاح!',
+            subtitle: widget.contractId != null
+                ? 'تم تفعيل باقتك وإضافة الزيارات لحسابك. يمكنك الآن حجز زياراتك.'
+                : widget.maintenanceId != null
+                    ? 'تمت معالجة الدفع بنجاح. سنتواصل معك لتأكيد موعد الصيانة.'
+                    : 'شكراً لثقتك بزيارة، طلبك الآن قيد المعالجة وسنقوم بإخطارك بكل جديد.',
+          ),
+        ),
+        (route) => route.isFirst,
+      );
     }
   }
 
@@ -962,7 +904,13 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           if (widget.zoneName != null) _buildRowDetail('المنطقة', widget.zoneName!),
           const Divider(height: 30),
           _buildRowDetail('المبلغ الأساسي', '${subtotal.toStringAsFixed(2)} ر.س'),
-          if (_discountAmount > 0) 
+          if (_surgeFactor > 1.0)
+            _buildRowDetail(
+              '🔥 تسعيرة ذروة (+${((_surgeFactor - 1) * 100).toStringAsFixed(0)}%)',
+              '+${(widget.amount * (_surgeFactor - 1)).toStringAsFixed(2)} ر.س',
+              isSurge: true,
+            ),
+          if (_discountAmount > 0)
             _buildRowDetail('الخصم ($_appliedCoupon)', '-${_discountAmount.toStringAsFixed(2)} ر.س', isDiscount: true),
           _buildRowDetail('الضريبة (15%)', '${vatAmount.toStringAsFixed(2)} ر.س'),
           const SizedBox(height: 10),
@@ -979,7 +927,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     );
   }
 
-  Widget _buildRowDetail(String label, String value, {bool isDiscount = false}) {
+  Widget _buildRowDetail(String label, String value, {bool isDiscount = false, bool isSurge = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -987,9 +935,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         children: [
           Text(label, style: GoogleFonts.tajawal(color: Colors.grey[600], fontSize: 14)),
           Text(value, style: GoogleFonts.tajawal(
-            fontWeight: FontWeight.w600, 
-            fontSize: 14, 
-            color: isDiscount ? Colors.red : Colors.black
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: isSurge ? Colors.orange.shade700 : isDiscount ? Colors.red : Colors.black,
           )),
         ],
       ),

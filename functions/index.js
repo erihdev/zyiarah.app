@@ -11,6 +11,7 @@ const tamaraApiToken = defineSecret("TAMARA_API_TOKEN");
 const resendApiKeySecret = defineSecret("RESEND_API_KEY");
 const moyasarSecretKey = defineSecret("MOYASAR_SECRET_KEY");
 const moyasarWebhookSecret = defineSecret("MOYASAR_WEBHOOK_SECRET");
+const tabbyWebhookSecret = defineSecret("TABBY_WEBHOOK_SECRET");
 
 // 1. Notify user when admin replies to a support ticket
 exports.sendNotificationOnTicketReply = onDocumentCreated({document: "support_tickets/{ticketId}/messages/{messageId}", cpu: 0.083},
@@ -608,7 +609,8 @@ exports.processNotificationTriggers = onDocumentCreated(
       const trigger = snap.data();
       if (!trigger || trigger.processed === true) return;
 
-      const {toUid, title, body, type, template, data = {}, attachmentUrls = []} = trigger;
+      const {toUid, title, body, type, template, data = {}} = trigger;
+      const attachmentUrls = Array.isArray(trigger.attachmentUrls) ? trigger.attachmentUrls : [];
       const recipientEmail =
         trigger.recipientEmail || data.customerEmail || "admin@zyiarah.com";
 
@@ -1703,5 +1705,132 @@ exports.moyasarCapturePayment = onCall(
 
       console.log(`moyasarCapture: payment ${paymentId} captured — status: ${result.status}`);
       return {success: true, status: result.status, capturedAmount: result.amount};
+    },
+);
+
+// ── Tabby Webhook ──────────────────────────────────────────────────────────────
+// Receives real-time payment events from Tabby (payment.authorized, payment.captured, etc.)
+// Closes the Single Point of Failure where SDK callback could be lost due to:
+//   - Network drop after payment and before app receives 'authorized' result
+//   - User closing the app from Task Manager while WebView is still open
+//   - OS killing the app in the background (screen lock / low memory)
+//
+// Register this URL in Tabby Merchant Dashboard → Webhooks → Add Webhook.
+// Set events: payment.authorized, payment.captured, payment.rejected, payment.expired
+// Set the Webhook Secret in Firebase Secret Manager as TABBY_WEBHOOK_SECRET.
+//
+// Idempotency: if both the SDK callback AND this webhook fire for the same payment,
+// the Firestore Transaction (is_paid check) ensures the order is only created once.
+exports.tabbyWebhook = onRequest(
+    {secrets: ["TABBY_WEBHOOK_SECRET"], cpu: 0.083},
+    async (req, res) => {
+      if (req.method !== "POST") {
+        return res.status(405).json({error: "Method not allowed"});
+      }
+
+      // 1. Verify HMAC-SHA256 signature from x-tabby-signature header
+      const crypto = require("crypto");
+      const signature = req.headers["x-tabby-signature"] || req.headers["tabby-signature"];
+      const secret = tabbyWebhookSecret.value();
+
+      if (!signature) {
+        console.warn("tabbyWebhook: rejected — missing signature header");
+        return res.status(401).json({error: "Missing signature"});
+      }
+
+      const rawBody = JSON.stringify(req.body);
+      const expectedSig = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+
+      if (signature !== expectedSig && !signature.includes(expectedSig)) {
+        console.warn("tabbyWebhook: rejected — invalid HMAC signature");
+        return res.status(401).json({error: "Invalid signature"});
+      }
+
+      // 2. Acknowledge immediately (Tabby expects fast 2xx)
+      res.status(200).json({received: true});
+
+      // 3. Process event asynchronously
+      try {
+        const event = req.body;
+        const eventType = event.type; // e.g. "payment.authorized", "payment.captured"
+        const payment = event.data?.payment || event.payment || event.data;
+
+        if (!payment || !payment.id) {
+          console.warn("tabbyWebhook: missing payment object in event", JSON.stringify(event));
+          return;
+        }
+
+        const paymentId = payment.id;
+        // Tabby stores our reference in order.reference_id
+        const orderId = payment.order?.reference_id || payment.reference_id;
+
+        console.log(`tabbyWebhook: event=${eventType} paymentId=${paymentId} orderId=${orderId}`);
+
+        if (!orderId) {
+          console.warn(`tabbyWebhook: no reference_id found for payment ${paymentId}`);
+          return;
+        }
+
+        if (eventType === "payment.authorized" || eventType === "payment.captured") {
+          // Idempotent update — check is_paid first inside a Transaction to prevent
+          // duplicate order creation if SDK callback and webhook arrive simultaneously
+          const db = admin.firestore();
+          const collections = [
+            "orders",
+            "maintenance_requests",
+            "contracts",
+          ];
+
+          for (const col of collections) {
+            const ref = db.collection(col).doc(orderId);
+            const doc = await ref.get();
+
+            if (doc.exists) {
+              const data = doc.data();
+
+              if (data.is_paid) {
+                // SDK callback already processed this payment — safe to skip
+                console.log(`tabbyWebhook: ${col}/${orderId} already paid — skipping (idempotent)`);
+              } else {
+                await db.runTransaction(async (tx) => {
+                  const snap = await tx.get(ref);
+                  if (snap.data()?.is_paid) {
+                    // Another write beat us to it (race between webhook + SDK callback)
+                    console.log(`tabbyWebhook: ${col}/${orderId} was paid mid-transaction — aborting (idempotent)`);
+                    return;
+                  }
+                  tx.update(ref, {
+                    payment_status: "paid",
+                    is_paid: true,
+                    tabby_payment_id: paymentId,
+                    tabby_status: eventType,
+                    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                  });
+                });
+                console.log(`tabbyWebhook: ${col}/${orderId} marked PAID via webhook (${eventType})`);
+              }
+              break; // Found the document — stop searching collections
+            }
+          }
+        } else if (eventType === "payment.rejected" || eventType === "payment.expired" || eventType === "payment.cancelled") {
+          // Mark as failed — no refund needed (payment was never captured)
+          const db = admin.firestore();
+          const ref = db.collection("orders").doc(orderId);
+          const doc = await ref.get();
+          if (doc.exists && !doc.data().is_paid) {
+            await ref.update({
+              payment_status: "failed",
+              tabby_status: eventType,
+              updated_at: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            console.log(`tabbyWebhook: order ${orderId} marked FAILED (${eventType})`);
+          }
+        } else {
+          console.log(`tabbyWebhook: unhandled event type '${eventType}' — ignoring`);
+        }
+      } catch (error) {
+        console.error("tabbyWebhook processing error:", error);
+        // Do NOT re-throw — response already sent 200, Tabby won't retry on our fault
+      }
     },
 );
