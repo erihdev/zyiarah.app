@@ -154,7 +154,7 @@ class ZyiarahOrderService {
       title: "تم إلغاء طلب ⚠️",
       body: "تم إلغاء الطلب #${orderCode ?? orderId} بواسطة ${cancelledBy == 'client' ? 'العميل' : 'الإدارة'}.",
       type: 'admin_order_alert',
-      data: {'orderId': orderId, 'code': orderCode ?? orderId, 'needs_refund': needsRefund},
+      data: {'orderId': orderId, 'code': orderCode ?? orderId, 'needs_refund': needsRefund.toString()},
     );
   }
 
