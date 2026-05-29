@@ -10,9 +10,10 @@ workflows:
       xcode: latest
       cocoapods: default
       groups:
-        - appstore_credentials         # يجب أن تحتوي على: APP_STORE_CONNECT_ISSUER_ID,
-                                        # APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_PRIVATE_KEY,
-                                        # MAPBOX_TOKEN
+        - appstore_credentials         # APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_ID,
+                                        # APP_STORE_CONNECT_PRIVATE_KEY, MAPBOX_TOKEN
+        - payment_keys                 # MOYASAR_PUBLISHABLE_KEY, MOYASAR_SECRET_KEY,
+                                        # TABBY_PUBLIC_KEY, SAMSUNG_PAY_SERVICE_ID
       vars:
         BUNDLE_ID: "com.zyiarah.zyiarah"
         APP_STORE_APP_ID: "6760955777"
@@ -218,9 +219,10 @@ workflows:
     environment:
       flutter: stable
       groups:
-        - android_credentials  # يجب أن تحتوي على: ANDROID_KEYSTORE_PASSWORD,
-                                # ANDROID_KEY_PASSWORD, ANDROID_KEY_ALIAS,
-                                # ANDROID_KEYSTORE_BASE64, MAPBOX_TOKEN
+        - android_credentials  # ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_PASSWORD,
+                                # ANDROID_KEY_ALIAS, ANDROID_KEYSTORE_BASE64, MAPBOX_TOKEN
+        - payment_keys         # MOYASAR_PUBLISHABLE_KEY, MOYASAR_SECRET_KEY,
+                                # TABBY_PUBLIC_KEY, SAMSUNG_PAY_SERVICE_ID
       vars:
         PACKAGE_NAME: "com.zyiarah.zyiarah"
     scripts:
