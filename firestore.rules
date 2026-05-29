@@ -248,11 +248,11 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
-    // SECURITY: order_counter — read-only for users; write locked to increment-only
+    // SECURITY: order/maintenance counters — read-only for users; write locked to increment-only
     match /metadata/{docId} {
-      allow get: if isLoggedIn() && docId == 'order_counter';
-      allow create: if isLoggedIn() && docId == 'order_counter';
-      allow update: if isLoggedIn() && docId == 'order_counter' && (
+      allow get: if isLoggedIn() && docId in ['order_counter', 'maintenance_counter'];
+      allow create: if isLoggedIn() && docId in ['order_counter', 'maintenance_counter'];
+      allow update: if isLoggedIn() && docId in ['order_counter', 'maintenance_counter'] && (
         isAdmin() ||
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['last_id']) &&
          request.resource.data.last_id == resource.data.last_id + 1)

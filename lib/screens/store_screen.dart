@@ -632,7 +632,7 @@ class _CartSheetState extends State<_CartSheet> {
                     // ignore: deprecated_member_use
                     onChanged: (val) => setState(() => _selectedPaymentMethod = val.toString()),
                     title: const Text('دفع إلكتروني (تمارا / بطاقة)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    subtitle: const Text('دفع آمن عبر بوابة EdfaPay أو Tamara', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    subtitle: const Text('دفع آمن عبر تمارا — أقساط مريحة', style: TextStyle(fontSize: 11, color: Colors.grey)),
                     secondary: const Icon(Icons.payment, color: Colors.blue),
                     fillColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? const Color(0xFF5D1B5E) : null),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 10),
