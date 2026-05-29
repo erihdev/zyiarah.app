@@ -83,8 +83,8 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
       String orderCode = '';
 
       await _firestore.runTransaction((transaction) async {
-        final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
-        orderCode = ZyiarahOrderUtil.formatSmartCode(nextId);
+        final nextId = await ZyiarahCounterService().getNextMaintenanceNumber(transaction);
+        orderCode = 'MT-${ZyiarahOrderUtil.formatSmartCode(nextId)}';
         transaction.set(reqRef, {
           'requestId': orderCode,
           'code': orderCode,
