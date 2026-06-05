@@ -34,7 +34,6 @@ class _ZyiarahSubscriptionPlansScreenState
 
   // (2c) مواعيد الزيارات المتعددة المختارة — تُحفظ في scheduled_visits على العقد
   final List<Map<String, String>> _scheduledVisits = [];
-  bool _addingVisit = false;
 
   String? _userZoneName;
   GeoPoint? _userLocation; // (2c) موقع العميل لإسناد الزيارات جغرافياً
@@ -195,16 +194,10 @@ class _ZyiarahSubscriptionPlansScreenState
     return List.generate(last - startHour + 1, (i) => startHour + i);
   }
 
-  int _visitHours() {
-    if (_selectedPackageIndex != null && _selectedPackageIndex! < _packages.length) {
-      final data = _packages[_selectedPackageIndex!].data() as Map<String, dynamic>;
-      return (data['hours'] ?? 4).toInt();
-    }
-    return 4;
-  }
-
-  /// (2c) إضافة زيارة للجدول بعد التحقق الحقيقي من توفّر سائق في الفترة المختارة.
-  Future<void> _addVisit(int planVisits) async {
+  /// (2c) إضافة الزيارة المختارة (تاريخ + وقت) للجدول.
+  /// التقويم نفسه يحجب الخانات الحمراء (غير المتاحة)؛ وزيارات الاشتراك المستقبلية
+  /// يُسنَد لها السائق لاحقاً عند التوليد/الاعتماد، فلا حاجة لفحص شبكي إضافي هنا.
+  void _addVisit(int planVisits) {
     if (_selectedStartHour == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('اختر وقتاً للزيارة أولاً')));
@@ -220,35 +213,9 @@ class _ZyiarahSubscriptionPlansScreenState
       return;
     }
 
-    setState(() => _addingVisit = true);
-    // شرط حاسم: لا تُضاف الزيارة إلا إذا وُجد سائق متاح فعلاً في تلك الفترة
-    bool available = true;
-    try {
-      final res = await FirebaseFunctions.instance
-          .httpsCallable('checkHourlySlotAvailability')
-          .call({
-        'startDateTimeIso': DateTime(_selectedDate.year, _selectedDate.month,
-                _selectedDate.day, _selectedStartHour!)
-            .toIso8601String(),
-        'durationHours': _visitHours(),
-        if (_userZoneName != null) 'zoneName': _userZoneName,
-      });
-      available = (res.data as Map)['available'] == true;
-    } catch (_) {
-      available = true; // خطأ عابر لا يمنع الإضافة
-    }
-    if (!mounted) return;
-    if (!available) {
-      setState(() => _addingVisit = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('لا يوجد سائق متاح في هذه الفترة — اختر فترة أخرى'),
-        backgroundColor: Colors.red));
-      return;
-    }
     setState(() {
       _scheduledVisits.add({'date': dateKey, 'slot': slot});
       _selectedStartHour = null;
-      _addingVisit = false;
     });
   }
 
@@ -261,7 +228,8 @@ class _ZyiarahSubscriptionPlansScreenState
     for (final h in slots) {
       final slotKey = '${dateKey}_${h.toString().padLeft(2, '0')}:00';
       final count = _slotCounts[slotKey] ?? 0;
-      result[h] = count < _maxTeamsPerSlot;
+      // عند غياب بيانات السعة/السائقين (<=0) لا نحجب كل الخانات — وإلا نحجب الممتلئة.
+      result[h] = _maxTeamsPerSlot <= 0 ? true : count < _maxTeamsPerSlot;
     }
     setState(() {
       _slotAvailability = result;
@@ -592,13 +560,10 @@ class _ZyiarahSubscriptionPlansScreenState
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: (_selectedStartHour == null ||
-                      _addingVisit ||
                       _scheduledVisits.length >= visits)
                   ? null
                   : () => _addVisit(visits),
-              icon: _addingVisit
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.add_circle_outline),
+              icon: const Icon(Icons.add_circle_outline),
               label: Text(
                 'إضافة الزيارة (${_scheduledVisits.length}/$visits)',
                 style: GoogleFonts.tajawal(fontWeight: FontWeight.bold),
