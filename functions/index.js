@@ -1231,6 +1231,36 @@ async function _findFreeDriverForSlot(db, {zoneName, startDateTime, endDateTime}
 }
 
 /**
+ * يتحقق هل سائق محدد حرّ في فترة زمنية (لا يتقاطع مع مهمة أخرى له).
+ * يستخدم نفس فهرس مُحدِّد التوفّر (service_date + status) ويصفّي السائق في JS.
+ * @param {admin.firestore.Firestore} db
+ * @param {string} driverId
+ * @param {Date} startDateTime
+ * @param {Date} endDateTime
+ * @return {Promise<boolean>}
+ */
+async function _isDriverFreeForSlot(db, driverId, startDateTime, endDateTime) {
+  const dayStart = new Date(
+      startDateTime.getFullYear(), startDateTime.getMonth(), startDateTime.getDate());
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+
+  const ordersSnap = await db.collection("orders")
+      .where("service_date", ">=", admin.firestore.Timestamp.fromDate(dayStart))
+      .where("service_date", "<", admin.firestore.Timestamp.fromDate(dayEnd))
+      .where("status", "in", ["scheduled", "on_the_way", "in_progress", "accepted"])
+      .get();
+
+  for (const doc of ordersSnap.docs) {
+    const data = doc.data();
+    if (data.driver_id !== driverId || !data.service_date) continue;
+    const oStart = data.service_date.toDate();
+    const oEnd = new Date(oStart.getTime() + Number(data.hours_contracted || 4) * 60 * 60 * 1000);
+    if (startDateTime < oEnd && oStart < endDateTime) return false; // مشغول
+  }
+  return true;
+}
+
+/**
  * يُسنِد طلباً لسائق بحالة scheduled (التوجيه المباشر).
  * لا يُعدّ السائق مشغولاً الآن — يصبح مشغولاً فقط عند انتقاله إلى on_the_way.
  * @param {admin.firestore.Firestore} db
@@ -1381,21 +1411,104 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   if (!orderId || !driverId || !scheduledIso) {
     throw new HttpsError("invalid-argument", "البيانات ناقصة (الطلب/السائق/الموعد)");
   }
-  const db = admin.firestore();
-  const orderSnap = await db.collection("orders").doc(orderId).get();
-  if (!orderSnap.exists) throw new HttpsError("not-found", "الطلب غير موجود");
-
-  const cur = orderSnap.data().status;
-  if (cur !== "pending_admin_approval" && cur !== "pending") {
-    throw new HttpsError("failed-precondition", "لا يمكن اعتماد الطلب بحالته الحالية");
+  const startDateTime = new Date(scheduledIso);
+  if (isNaN(startDateTime.getTime())) {
+    throw new HttpsError("invalid-argument", "موعد غير صالح");
   }
-  const driverSnap = await db.collection("drivers").doc(driverId).get();
+  const db = admin.firestore();
+  const orderRef = db.collection("orders").doc(orderId);
+
+  const [orderSnap, driverSnap] = await Promise.all([
+    orderRef.get(),
+    db.collection("drivers").doc(driverId).get(),
+  ]);
+  if (!orderSnap.exists) throw new HttpsError("not-found", "الطلب غير موجود");
   if (!driverSnap.exists) throw new HttpsError("not-found", "السائق غير موجود");
 
-  const startDateTime = new Date(scheduledIso);
-  const r = await _assignDriverScheduled(db, orderId, driverSnap, startDateTime);
-  return {assigned: true, driverId: r.driverId, driverName: r.driverName};
+  const orderData = orderSnap.data();
+  if (orderData.status !== "pending_admin_approval" && orderData.status !== "pending") {
+    throw new HttpsError("failed-precondition", "لا يمكن اعتماد الطلب بحالته الحالية");
+  }
+  if (driverSnap.data().is_active === false) {
+    throw new HttpsError("failed-precondition", "السائق غير نشط");
+  }
+
+  // (الثغرة #2) تأكّد أن السائق المختار حرّ فعلاً في الفترة المطلوبة
+  const hours = Number(orderData.hours_contracted || 4);
+  const endDateTime = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
+  const free = await _isDriverFreeForSlot(db, driverId, startDateTime, endDateTime);
+  if (!free) {
+    throw new HttpsError(
+        "failed-precondition",
+        "السائق مشغول بمهمة أخرى في هذا الوقت — اختر سائقاً أو موعداً آخر");
+  }
+
+  // (الثغرة #2) Transaction ذرّي: يُعيد فحص حالة الطلب قبل الإسناد لمنع التعيين
+  // المزدوج عند موافقة مديرَين على نفس الطلب معاً.
+  const d = driverSnap.data();
+  const bookingDate = `${startDateTime.getFullYear()}-` +
+    `${String(startDateTime.getMonth() + 1).padStart(2, "0")}-` +
+    `${String(startDateTime.getDate()).padStart(2, "0")}`;
+  const timeSlot = `${String(startDateTime.getHours()).padStart(2, "0")}:00`;
+
+  await db.runTransaction(async (tx) => {
+    const fresh = await tx.get(orderRef);
+    const st = fresh.data()?.status;
+    if (st !== "pending_admin_approval" && st !== "pending") {
+      throw new HttpsError("failed-precondition", "تم اعتماد الطلب بالفعل من مدير آخر");
+    }
+    tx.update(orderRef, {
+      status: "scheduled",
+      driver_id: driverId,
+      driver_name: d.name || "سائق",
+      driver_phone: d.phone || "000000000",
+      assigned_at: admin.firestore.FieldValue.serverTimestamp(),
+      scheduled_at: admin.firestore.Timestamp.fromDate(startDateTime),
+      service_date: admin.firestore.Timestamp.fromDate(startDateTime),
+      booking_date: bookingDate,
+      booking_time_slot: timeSlot,
+    });
+  });
+
+  return {assigned: true, driverId: driverId, driverName: d.name || "سائق"};
 });
+
+// ════════════════════════════════════════════════════════════════════════
+// (الثغرة #1) تحرير السائق آلياً عند إلغاء الطلب — يمنع بقاء السائق "عالقاً"
+// ════════════════════════════════════════════════════════════════════════
+exports.freeDriverOnOrderCancel = onDocumentUpdated(
+    {document: "orders/{orderId}", cpu: 0.083},
+    async (event) => {
+      const before = event.data.before.data();
+      const after = event.data.after.data();
+      if (!before || !after) return;
+      // فقط عند الانتقال الفعلي إلى cancelled
+      if (before.status === "cancelled" || after.status !== "cancelled") return;
+
+      const driverId = after.driver_id || before.driver_id;
+      if (!driverId) return; // لم يكن الطلب مُسنَداً لأي سائق
+
+      const db = admin.firestore();
+      const driverRef = db.collection("drivers").doc(driverId);
+
+      await db.runTransaction(async (tx) => {
+        const ds = await tx.get(driverRef);
+        if (!ds.exists) return;
+        // حرّر السائق فقط إن كان منشغلاً بهذا الطلب الملغى تحديداً،
+        // حتى لا نلمس مهمة أخرى يكون قد بدأها بالفعل.
+        if (ds.data().current_order_id !== event.params.orderId) return;
+        tx.update(driverRef, {
+          status: "available",
+          current_order_id: null,
+          is_available: true,
+        });
+      });
+
+      console.log(
+          `freeDriverOnOrderCancel: freed driver ${driverId} ` +
+          `(order ${event.params.orderId} cancelled)`);
+    },
+);
 
 /**
  * (2c) إرسال Push لمستخدم عبر توكنه في fcm_tokens.
