@@ -2,9 +2,42 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 
 class AdminStoreOrdersScreen extends StatelessWidget {
   const AdminStoreOrdersScreen({super.key});
+
+  /// الموافقة على الطلب: تنتقل حالته إلى approved/بانتظار الدفع، ويُشعَر العميل
+  /// لإتمام الدفع عبر شاشة طلباته.
+  void _approveOrder(BuildContext context, String orderId, Map<String, dynamic> order) async {
+    try {
+      await FirebaseFirestore.instance.collection('store_orders').doc(orderId).update({
+        'status': 'approved',
+        'payment_status': 'awaiting_payment',
+        'updated_at': FieldValue.serverTimestamp(),
+      });
+      await ZyiarahAuditService().logAction(
+        action: 'APPROVE_STORE_ORDER',
+        details: {'code': order['code']},
+        targetId: orderId,
+      );
+      ZyiarahMessagingService().notifyClientStoreOrderApproved(
+        order['client_id'] ?? '',
+        order['code'] ?? orderId.substring(0, 6).toUpperCase(),
+        (order['total_amount'] as num?)?.toDouble() ?? 0,
+        clientName: order['client_name'],
+      ).catchError((_) {});
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("تمت الموافقة وإشعار العميل لإتمام الدفع")),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("حدث خطأ أثناء الموافقة")));
+      }
+    }
+  }
 
   void _updateOrderStatus(BuildContext context, String orderId, String newStatus) async {
     try {
@@ -85,13 +118,33 @@ class AdminStoreOrdersScreen extends StatelessWidget {
     );
   }
 
+  String _paymentLabel(Map<String, dynamic> order) {
+    final method = order['payment_method'] ?? 'pending';
+    final paid = order['is_paid'] == true;
+    switch (method) {
+      case 'cash_on_delivery':
+        return 'عند الاستلام';
+      case 'tamara':
+        return paid ? 'تمارا (مدفوع)' : 'تمارا';
+      case 'card':
+        return paid ? 'بطاقة (مدفوع)' : 'بطاقة';
+      case 'pending':
+        return 'بانتظار الدفع';
+      default:
+        return paid ? 'مدفوع' : 'غير محدد';
+    }
+  }
+
   String _translateStatus(String status) {
     switch (status) {
       case 'pending': return 'جديد (بانتظار الموافقة)';
-      case 'approved': return 'تمت الموافقة (جاري التجهيز)';
+      case 'approved': return 'تمت الموافقة (بانتظار دفع العميل)';
+      case 'processing': return 'مدفوع (جاري التجهيز)';
       case 'shipped': return 'تم التسليم للمندوب / الشحن';
+      case 'delivered':
       case 'completed': return 'مكتمل ومُسلم';
-      case 'rejected': return 'مرفوض / ملغي';
+      case 'rejected':
+      case 'cancelled': return 'مرفوض / ملغي';
       default: return 'تحت المعالجة';
     }
   }
@@ -100,9 +153,12 @@ class AdminStoreOrdersScreen extends StatelessWidget {
     switch (status) {
       case 'pending': return Colors.orange;
       case 'approved': return Colors.blue;
+      case 'processing': return Colors.teal;
       case 'shipped': return Colors.purple;
+      case 'delivered':
       case 'completed': return Colors.green;
-      case 'rejected': return Colors.red;
+      case 'rejected':
+      case 'cancelled': return Colors.red;
       default: return Colors.grey;
     }
   }
@@ -173,7 +229,7 @@ class AdminStoreOrdersScreen extends StatelessWidget {
                           children: [
                             const Icon(Icons.payment, size: 20, color: Colors.grey),
                             const SizedBox(width: 8),
-                            Text("الدفع: ${order['payment_method'] == 'cash_on_delivery' ? 'عند الاستلام' : 'غير محدد'}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                            Text("الدفع: ${_paymentLabel(order)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
                           ],
                         ),
                         const SizedBox(height: 15),
@@ -191,14 +247,14 @@ class AdminStoreOrdersScreen extends StatelessWidget {
                                 icon: const Icon(Icons.check_circle_outline, size: 18),
                                 label: const Text('الموافقة على الطلب'),
                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                                onPressed: () => _updateOrderStatus(context, orderDoc.id, 'approved'),
+                                onPressed: () => _approveOrder(context, orderDoc.id, order),
                               ),
-                             if (status == 'approved')
+                             if (status == 'processing' || status == 'shipped')
                               ElevatedButton.icon(
                                 icon: const Icon(Icons.local_shipping, size: 18),
                                 label: const Text('تم الشحن / اكتمل'),
                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-                                onPressed: () => _updateOrderStatus(context, orderDoc.id, 'completed'),
+                                onPressed: () => _updateOrderStatus(context, orderDoc.id, 'delivered'),
                               ),
                           ],
                         ),

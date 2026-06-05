@@ -7,10 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:lottie/lottie.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
-import 'package:zyiarah/screens/store_checkout_screen.dart';
-import 'package:zyiarah/services/tamara_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
 
 
@@ -49,38 +46,16 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
       builder: (ctx) => _CartSheet(
         cart: _cart,
         storeService: _storeService,
-        onCodSuccess: (orderCode) {
+        onSubmitted: (orderCode) {
           setState(() => _cart.clear());
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
               builder: (_) => ZyiarahOrderSuccessScreen(
                 orderCode: orderCode,
-                title: 'تم استلام طلب المتجر!',
-                subtitle: 'لقد وصل طلبك للإدارة، سنقوم بتجهيز منتجاتك والتواصل معك فوراً.',
-              ),
-            ),
-          );
-        },
-        onTamaraPayment: ({
-          required String checkoutUrl,
-          required String orderId,
-          required List<Map<String, dynamic>> items,
-          required double total,
-          required String customerName,
-          required String customerPhone,
-        }) {
-          setState(() => _cart.clear());
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => StoreTamaraCheckoutScreen(
-                checkoutUrl: checkoutUrl,
-                orderId: orderId,
-                items: items,
-                total: total,
-                customerName: customerName,
-                customerPhone: customerPhone,
+                title: 'تم إرسال طلبك للإدارة!',
+                subtitle:
+                    'طلبك الآن بانتظار موافقة الإدارة. سنُشعرك فور اعتماده لإتمام الدفع وتجهيز منتجاتك.',
               ),
             ),
           );
@@ -364,21 +339,12 @@ class _ProductCard extends StatelessWidget {
 class _CartSheet extends StatefulWidget {
   final Map<String, int> cart;
   final ZyiarahStoreService storeService;
-  final void Function(String orderCode) onCodSuccess;
-  final void Function({
-    required String checkoutUrl,
-    required String orderId,
-    required List<Map<String, dynamic>> items,
-    required double total,
-    required String customerName,
-    required String customerPhone,
-  }) onTamaraPayment;
+  final void Function(String orderCode) onSubmitted;
 
   const _CartSheet({
     required this.cart,
     required this.storeService,
-    required this.onCodSuccess,
-    required this.onTamaraPayment,
+    required this.onSubmitted,
   });
 
   @override
@@ -387,7 +353,6 @@ class _CartSheet extends StatefulWidget {
 
 class _CartSheetState extends State<_CartSheet> {
   bool _isSubmitting = false;
-  String _selectedPaymentMethod = 'cash_on_delivery';
   bool _agreeToTerms = false;
 
 
@@ -431,95 +396,12 @@ class _CartSheetState extends State<_CartSheet> {
         0.0, (acc, item) => acc + (item['price'] as double) * (item['quantity'] as int));
 
       // ─────────────────────────────────────────────────────────
-      // مسار الدفع الإلكتروني عبر تمارا (إصلاح BUG-010)
-      // الطلب لا يُنشأ إلا بعد تأكيد الدفع في StoreTamaraCheckoutScreen
-      // ─────────────────────────────────────────────────────────
-      if (_selectedPaymentMethod == 'online') {
-        final user = FirebaseAuth.instance.currentUser;
-        if (user == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('يجب تسجيل الدخول أولاً')),
-          );
-          setState(() => _isSubmitting = false);
-          return;
-        }
-
-        // جلب بيانات المستخدم لتمارا
-        String customerName = 'عميل زيارة';
-        String customerPhone = user.phoneNumber ?? '';
-        try {
-          final userDoc = await FirebaseFirestore.instance
-              .collection('users').doc(user.uid).get();
-          if (userDoc.exists) {
-            customerName = userDoc.data()?['name'] ?? customerName;
-            customerPhone = userDoc.data()?['phone'] ?? customerPhone;
-          }
-        } catch (_) {}
-
-        if (!mounted) return;
-
-        if (customerPhone.isEmpty || customerPhone.length < 9) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('يرجى تحديث رقم جوالك في الملف الشخصي أولاً')),
-          );
-          setState(() => _isSubmitting = false);
-          return;
-        }
-
-        final pendingOrderId = FirebaseFirestore.instance
-            .collection('store_orders').doc().id;
-
-        String? checkoutUrl;
-        try {
-          checkoutUrl = await TamaraService().createCheckoutSession(
-            orderId: pendingOrderId,
-            amount: total,
-            customerPhone: customerPhone,
-            customerName: customerName,
-          );
-        } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('خطأ في بوابة تمارا: $e')),
-            );
-            setState(() => _isSubmitting = false);
-          }
-          return;
-        }
-
-        if (checkoutUrl == null) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('تعذّر بدء جلسة الدفع، حاول مجدداً')),
-            );
-            setState(() => _isSubmitting = false);
-          }
-          return;
-        }
-
-        if (!mounted) return;
-        setState(() => _isSubmitting = false);
-
-        // أغلق الـ Sheet ثم نقّل عبر callback الـ parent (إصلاح BUG-004)
-        Navigator.pop(context);
-        widget.onTamaraPayment(
-          checkoutUrl: checkoutUrl,
-          orderId: pendingOrderId,
-          items: items,
-          total: total,
-          customerName: customerName,
-          customerPhone: customerPhone,
-        );
-        return;
-      }
-
-      // ─────────────────────────────────────────────────────────
-      // مسار الدفع عند الاستلام (COD)
+      // المتجر: إرسال الطلب لموافقة الإدارة أولاً (بدون دفع).
+      // بعد الاعتماد، يُتمّ العميل الدفع عبر StorePaymentScreen.
       // ─────────────────────────────────────────────────────────
       final orderCode = await widget.storeService.createStoreOrder(
         items: items,
         totalAmount: total,
-        paymentMethod: _selectedPaymentMethod,
       );
 
       if (!mounted) return;
@@ -532,18 +414,12 @@ class _CartSheetState extends State<_CartSheet> {
       }
 
       final user = FirebaseAuth.instance.currentUser;
-      ZyiarahMessagingService().notifyOrderCreated(
-        clientId: user?.uid ?? '',
-        orderCode: orderCode,
-        serviceName: 'طلب منتجات من المتجر',
-        type: 'store',
-      ).catchError((_) {});
-
+      // إشعار الإدارة بطلب جديد بانتظار الموافقة — non-fatal
       ZyiarahMessagingService().notifyNewOrder({
         'code': orderCode,
         'client_name': user?.displayName ?? 'عميل زيارة',
         'client_phone': user?.phoneNumber ?? 'غير متوفر',
-        'service_type': 'طلب منتجات نظافة من المتجر',
+        'service_type': 'طلب متجر (بانتظار الموافقة)',
         'amount': total,
         'zone': 'طلب عبر المتجر',
         'date_time': DateTime.now().toString().split('.')[0],
@@ -552,9 +428,9 @@ class _CartSheetState extends State<_CartSheet> {
       }, customerEmail: user?.email).catchError((_) {});
 
       if (!mounted) return;
-      // أغلق الـ Sheet ثم نقّل عبر callback الـ parent (إصلاح BUG-004)
+      // أغلق الـ Sheet ثم نقّل عبر callback الـ parent
       Navigator.pop(context);
-      widget.onCodSuccess(orderCode);
+      widget.onSubmitted(orderCode);
 
     } catch (e) {
       GlobalErrorHandler.handleError(e);
@@ -613,45 +489,24 @@ class _CartSheetState extends State<_CartSheet> {
                   ),
                 ),
                 const Divider(),
-                const Text('طريقة الدفع', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 10),
                 Container(
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: _selectedPaymentMethod == 'cash_on_delivery' ? const Color(0xFF5D1B5E) : Colors.grey.shade200),
+                    color: const Color(0xFFF3E8F4),
                     borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF5D1B5E).withValues(alpha: 0.2)),
                   ),
-                  child: RadioListTile(
-                    value: 'cash_on_delivery',
-                    // ignore: deprecated_member_use
-                    groupValue: _selectedPaymentMethod,
-                    // ignore: deprecated_member_use
-                    onChanged: (val) => setState(() => _selectedPaymentMethod = val.toString()),
-                    title: const Text('الدفع عند الاستلام', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    subtitle: const Text('الدفع كاش أو عبر الشبكة عند استلام المنتجات', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    secondary: const Icon(Icons.money, color: Colors.green),
-                    fillColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? const Color(0xFF5D1B5E) : null),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: _selectedPaymentMethod == 'online' ? const Color(0xFF5D1B5E) : Colors.grey.shade200),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: RadioListTile(
-                    value: 'online',
-                    // ignore: deprecated_member_use
-                    groupValue: _selectedPaymentMethod,
-                    // ignore: deprecated_member_use
-                    onChanged: (val) => setState(() => _selectedPaymentMethod = val.toString()),
-                    title: const Text('دفع إلكتروني (تمارا / بطاقة)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    subtitle: const Text('دفع آمن عبر تمارا — أقساط مريحة', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    secondary: const Icon(Icons.payment, color: Colors.blue),
-                    fillColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? const Color(0xFF5D1B5E) : null),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, color: Color(0xFF5D1B5E), size: 22),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'سيُراجع طلبك من قِبل الإدارة، وفور الموافقة سنُشعرك لإتمام الدفع بالطريقة التي تناسبك (تمارا / بطاقة / عند الاستلام).',
+                          style: GoogleFonts.tajawal(fontSize: 12, height: 1.5, color: const Color(0xFF5D1B5E), fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 15),

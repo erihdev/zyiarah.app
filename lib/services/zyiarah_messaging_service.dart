@@ -186,6 +186,24 @@ class ZyiarahMessagingService {
     );
   }
 
+  /// تنبيه العميل بموافقة الإدارة على طلب المتجر ودعوته لإتمام الدفع
+  Future<void> notifyClientStoreOrderApproved(String clientId, String orderCode,
+      double amount, {String? customerEmail, String? clientName}) async {
+    await triggerNotification(
+      toUid: clientId,
+      title: "تمت الموافقة على طلب المتجر! ✅",
+      body:
+          "وافقت الإدارة على طلبك #$orderCode بمبلغ ${amount.toStringAsFixed(2)} ر.س. يرجى إتمام الدفع لتجهيز منتجاتك.",
+      type: 'store_approved',
+      data: {
+        'code': orderCode,
+        'amount': amount,
+        'customerEmail': customerEmail,
+        'deepLink': 'zyiarah://app/orders'
+      },
+    );
+  }
+
   /// يرسل تنبيه مزدوج (للعميل وللإدارة) عند إنشاء طلب جديد
   Future<void> notifyOrderCreated({
     required String clientId,

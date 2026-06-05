@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/order_tracking_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
+import 'package:zyiarah/screens/store_payment_screen.dart';
 import 'package:zyiarah/widgets/shimmer_loading.dart';
 import 'package:zyiarah/utils/status_util.dart';
 import 'package:zyiarah/services/order_service.dart';
@@ -254,8 +255,8 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           return Center(child: Text('خطأ: ${snapshot.error}'));
         }
         
-        final List<String> activeStatuses = ['pending', 'processing', 'shipped'];
-        final List<String> historyStatuses = ['delivered', 'cancelled'];
+        final List<String> activeStatuses = ['pending', 'approved', 'processing', 'shipped'];
+        final List<String> historyStatuses = ['delivered', 'completed', 'cancelled', 'rejected'];
         
         final allDocs = snapshot.data!.docs;
         final storeOrders = allDocs.where((doc) {
@@ -281,26 +282,28 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           itemCount: storeOrders.length,
           itemBuilder: (context, index) {
             final data = storeOrders[index].data() as Map<String, dynamic>;
-            return _buildStoreOrderCard(context, data);
+            return _buildStoreOrderCard(context, storeOrders[index].id, data);
           },
         );
       },
     );
   }
 
-  Widget _buildStoreOrderCard(BuildContext context, Map<String, dynamic> data) {
+  Widget _buildStoreOrderCard(BuildContext context, String docId, Map<String, dynamic> data) {
     final status = data['status'] ?? 'pending';
     final code = data['code'] ?? 'ORD-000';
     final total = data['total_amount'] ?? 0;
-    
+    final bool awaitingPayment = status == 'approved';
+
     Color statusColor = Colors.orange;
     String statusText = "قيد المعالجة";
-    
-    if (status == 'pending') { statusColor = Colors.orange; statusText = "بانتظار التأكيد"; }
+
+    if (status == 'pending') { statusColor = Colors.orange; statusText = "بانتظار موافقة الإدارة"; }
+    else if (status == 'approved') { statusColor = Colors.deepOrange; statusText = "بانتظار الدفع"; }
     else if (status == 'processing') { statusColor = Colors.blue; statusText = "قيد التجهيز"; }
     else if (status == 'shipped') { statusColor = Colors.indigo; statusText = "تم الشحن"; }
-    else if (status == 'delivered') { statusColor = Colors.green; statusText = "تم التوصيل"; }
-    else if (status == 'cancelled') { statusColor = Colors.red; statusText = "ملغي"; }
+    else if (status == 'delivered' || status == 'completed') { statusColor = Colors.green; statusText = "تم التوصيل"; }
+    else if (status == 'cancelled' || status == 'rejected') { statusColor = Colors.red; statusText = "ملغي"; }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -341,6 +344,40 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                 Text("${(data['items'] as List?)?.length ?? 0} منتجات", style: const TextStyle(fontSize: 12, color: Colors.grey)),
               ],
             ),
+            if (awaitingPayment) ...[
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.payment, size: 18),
+                  label: Text("ادفع الآن", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF5D1B5E),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () {
+                    final items = ((data['items'] as List?) ?? [])
+                        .map((e) => Map<String, dynamic>.from(e as Map))
+                        .toList();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => StorePaymentScreen(
+                          storeOrderId: docId,
+                          orderCode: code,
+                          items: items,
+                          total: (total as num).toDouble(),
+                          customerName: data['client_name'] ?? 'عميل زيارة',
+                          customerPhone: data['client_phone'] ?? '',
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ],
         ),
       ),
