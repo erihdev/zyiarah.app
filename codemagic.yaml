@@ -3,6 +3,13 @@ workflows:
     name: Zyiarah iOS Release
     max_build_duration: 120
     instance_type: mac_mini_m1
+    # بناء ورفع تلقائي إلى TestFlight عند كل دمج إلى main (النشر للجمهور يبقى يدوياً).
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: 'main'
+          include: true
     integrations:
       app_store_connect: Zyiarah Key  # يجب أن يتطابق اسم الـ integration في Codemagic Dashboard
     environment:
@@ -182,9 +189,18 @@ workflows:
           set -e
           # Disable SPM to avoid cloud_firestore FLTPipelineParser.m bug
           flutter config --no-enable-swift-package-manager
+          # رقم بناء تلقائي = آخر رقم منشور (+1) — يمنع خطأ "الرقم مستخدم مسبقاً"
+          # ويُغني عن تعديل pubspec يدوياً كل إصدار.
+          LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APP_ID" 2>/dev/null || echo "")
+          if [ -z "$LATEST" ]; then
+            LATEST=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APP_ID" 2>/dev/null || echo "208")
+          fi
+          NEW_BUILD=$((LATEST + 1))
+          echo "Auto build number: $NEW_BUILD (latest published: $LATEST)"
           flutter build ipa --release \
+            --build-number=$NEW_BUILD \
             --export-options-plist=$HOME/export_options.plist
-          echo "✓ IPA built successfully"
+          echo "✓ IPA built successfully (build $NEW_BUILD)"
 
       # ─────────────────────────────────────────────
       # 8. رفع رموز dSYMs تلقائياً إلى Firebase Crashlytics
