@@ -1015,11 +1015,14 @@ class _NotifBell extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection('notifications')
           .where('userId', isEqualTo: uid)
-          .where('is_read', isEqualTo: false)
-          .limit(1)
+          .limit(50)
           .snapshots(),
       builder: (context, snapshot) {
-        final hasUnread = (snapshot.data?.docs.isNotEmpty) ?? false;
+        // غير المقروء = لا isRead ولا is_read = true (يوحّد مع شاشة الإشعارات)
+        final hasUnread = (snapshot.data?.docs ?? []).any((d) {
+          final m = d.data() as Map<String, dynamic>;
+          return m['isRead'] != true && m['is_read'] != true;
+        });
         return Stack(
           children: [
             IconButton(
