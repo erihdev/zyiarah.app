@@ -542,6 +542,57 @@ exports.createTamaraCheckout = onCall(
     });
 
 // 5. Tamara Webhook Handler
+/**
+ * (F2) إشعار العميل بنتيجة الدفع (نجاح/فشل) لأي بوابة.
+ * يكتب إشعاراً داخل التطبيق ويرسل Push. آمن — يُستدعى بعد فحص is_paid (idempotent).
+ * @param {string} col اسم المجموعة التي يوجد بها الطلب
+ * @param {string} orderId معرّف مستند الطلب
+ * @param {object} data بيانات مستند الطلب (لاستخراج العميل والكود)
+ * @param {boolean} success نجاح الدفع أم فشله
+ */
+async function notifyClientPaymentResult(col, orderId, data, success) {
+  try {
+    const clientUid = data?.client_id || data?.userId;
+    if (!clientUid) return;
+
+    const code = data?.code || orderId;
+    const title = success ? "تم تأكيد الدفع ✅" : "تعذّر إتمام الدفع ⚠️";
+    const body = success ?
+      `تم استلام دفعتك للطلب #${code} بنجاح، وسنبدأ بتجهيزه فوراً.` :
+      `لم تكتمل عملية الدفع للطلب #${code}. يمكنك إعادة المحاولة من التطبيق.`;
+
+    // 1) إشعار داخل التطبيق (سجل)
+    await admin.firestore().collection("notifications").add({
+      userId: clientUid,
+      title: title,
+      body: body,
+      type: "payment_update",
+      relatedId: orderId,
+      sentAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // 2) Push عبر FCM
+    const tokenDoc = await admin.firestore().collection("fcm_tokens")
+        .doc(clientUid).get();
+    if (!tokenDoc.exists) return;
+    const fcmToken = tokenDoc.data()?.fcmToken || tokenDoc.data()?.token;
+    if (!fcmToken) return;
+
+    await admin.messaging().send({
+      notification: {title: title, body: body},
+      data: {
+        click_action: "FLUTTER_NOTIFICATION_CLICK",
+        type: "payment_update",
+        orderId: orderId,
+      },
+      token: fcmToken,
+    });
+    console.log(`notifyClientPaymentResult: ${success ? "PAID" : "FAILED"} -> ${clientUid} (${col}/${orderId})`);
+  } catch (e) {
+    console.error("notifyClientPaymentResult error:", e);
+  }
+}
+
 exports.tamaraWebhook = onRequest(
     {secrets: ["TAMARA_API_TOKEN"], cpu: 0.083},
     async (req, res) => {
@@ -558,7 +609,9 @@ exports.tamaraWebhook = onRequest(
       const rawBody = JSON.stringify(req.body);
       const expectedSig = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
 
-      if (signature !== expectedSig && !signature.includes(expectedSig)) {
+      const sigBuf = Buffer.from(String(signature));
+      const expBuf = Buffer.from(expectedSig);
+      if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
         console.warn("Tamara webhook rejected: invalid signature");
         res.status(401).send("Invalid signature");
         return;
@@ -571,25 +624,42 @@ exports.tamaraWebhook = onRequest(
 
       if (status === "authorised" || status === "captured") {
         try {
-          // FIX: only update payment fields — do NOT set status to 'accepted'
-          // The order stays 'pending' until a driver accepts it manually
-          await admin.firestore().collection("orders").doc(orderId).update({
-            payment_status: "paid",
-            is_paid: true,
-            tamara_status: status,
-            updated_at: admin.firestore.FieldValue.serverTimestamp(),
+          // فحص + تحديث داخل Transaction (idempotent) لمنع تكرار المعالجة/الإشعار
+          const ref = admin.firestore().collection("orders").doc(orderId);
+          let orderData = null;
+          const flipped = await admin.firestore().runTransaction(async (tx) => {
+            const snap = await tx.get(ref);
+            if (!snap.exists) return false;
+            orderData = snap.data();
+            if (orderData.is_paid) return false; // سبق معالجته
+            // FIX: تحديث حقول الدفع فقط — الطلب يبقى 'pending' حتى يقبله سائق
+            tx.update(ref, {
+              payment_status: "paid",
+              is_paid: true,
+              tamara_status: status,
+              updated_at: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return true;
           });
-          console.log(`Order ${orderId} marked as PAID via Tamara Webhook`);
+          if (flipped) {
+            console.log(`Order ${orderId} marked as PAID via Tamara Webhook`);
+            await notifyClientPaymentResult("orders", orderId, orderData, true); // (F2)
+          }
         } catch (error) {
           console.error("Error updating order from Tamara webhook:", error);
         }
       } else if (status === "declined" || status === "expired") {
         try {
-          await admin.firestore().collection("orders").doc(orderId).update({
-            payment_status: "failed",
-            tamara_status: status,
-            updated_at: admin.firestore.FieldValue.serverTimestamp(),
-          });
+          const ref = admin.firestore().collection("orders").doc(orderId);
+          const doc = await ref.get();
+          if (doc.exists && !doc.data().is_paid) {
+            await ref.update({
+              payment_status: "failed",
+              tamara_status: status,
+              updated_at: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            await notifyClientPaymentResult("orders", orderId, doc.data(), false); // (F2)
+          }
         } catch (error) {
           console.error("Error updating failed Tamara order:", error);
         }
@@ -1480,21 +1550,36 @@ exports.moyasarWebhook = onRequest(
               if (data.is_paid) {
                 console.log(`moyasarWebhook: Order ${orderId} already paid — skipping (idempotent)`);
               } else {
-                await ref.update({
-                  payment_status: "paid",
-                  is_paid: true,
-                  moyasar_payment_id: payment.id,
-                  moyasar_status: verifiedPayment.status,
-                  updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                // (سباق) فحص + تحديث داخل Transaction لمنع معالجة الدفعة مرتين
+                const flipped = await admin.firestore().runTransaction(async (tx) => {
+                  const snap = await tx.get(ref);
+                  if (snap.data()?.is_paid) return false;
+                  tx.update(ref, {
+                    payment_status: "paid",
+                    is_paid: true,
+                    moyasar_payment_id: payment.id,
+                    moyasar_status: verifiedPayment.status,
+                    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                  });
+                  return true;
                 });
-                console.log(`moyasarWebhook: Order ${orderId} in '${col}' marked PAID via webhook`);
+                if (flipped) {
+                  console.log(`moyasarWebhook: Order ${orderId} in '${col}' marked PAID via webhook`);
+                  await notifyClientPaymentResult(col, orderId, data, true); // (F2)
+                }
               }
               break;
             }
           }
         } else if (eventType === "payment_failed" || eventType === "payment_abandoned") {
           console.log(`moyasarWebhook: payment ${payment.id} for order ${orderId} — status: ${eventType}`);
-          // No Firestore update needed; app already handles failures via SDK callback
+          // (F2) أبلغ العميل بالفشل الفعلي فقط (لا عند مجرد المغادرة abandoned)
+          if (eventType === "payment_failed") {
+            const found = await _findOrder(orderId);
+            if (found && !found.data.is_paid) {
+              await notifyClientPaymentResult(found.col, orderId, found.data, false);
+            }
+          }
         } else if (eventType === "payment_refunded") {
           // Find and mark the order as refunded
           const collections = ["orders", "store_orders", "maintenance_requests", "contracts"];
@@ -1741,7 +1826,9 @@ exports.tabbyWebhook = onRequest(
       const rawBody = JSON.stringify(req.body);
       const expectedSig = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
 
-      if (signature !== expectedSig && !signature.includes(expectedSig)) {
+      const sigBuf = Buffer.from(String(signature));
+      const expBuf = Buffer.from(expectedSig);
+      if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
         console.warn("tabbyWebhook: rejected — invalid HMAC signature");
         return res.status(401).json({error: "Invalid signature"});
       }
@@ -1808,6 +1895,7 @@ exports.tabbyWebhook = onRequest(
                   });
                 });
                 console.log(`tabbyWebhook: ${col}/${orderId} marked PAID via webhook (${eventType})`);
+                await notifyClientPaymentResult(col, orderId, data, true); // (F2)
               }
               break; // Found the document — stop searching collections
             }
@@ -1824,6 +1912,7 @@ exports.tabbyWebhook = onRequest(
               updated_at: admin.firestore.FieldValue.serverTimestamp(),
             });
             console.log(`tabbyWebhook: order ${orderId} marked FAILED (${eventType})`);
+            await notifyClientPaymentResult("orders", orderId, doc.data(), false); // (F2)
           }
         } else {
           console.log(`tabbyWebhook: unhandled event type '${eventType}' — ignoring`);
