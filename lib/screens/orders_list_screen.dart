@@ -294,6 +294,9 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     final code = data['code'] ?? 'ORD-000';
     final total = data['total_amount'] ?? 0;
     final bool awaitingPayment = status == 'approved';
+    // المبلغ الذي يدفعه العميل = السعر المعتمد من الإدارة إن وُجد، وإلا مجموع السلة
+    final double payAmount =
+        (data['final_amount'] as num?)?.toDouble() ?? (total as num).toDouble();
 
     Color statusColor = Colors.orange;
     String statusText = "قيد المعالجة";
@@ -345,7 +348,22 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
               ],
             ),
             if (awaitingPayment) ...[
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF3E8F4),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  "المبلغ المعتمد للدفع: ${payAmount.toStringAsFixed(2)} ر.س",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.tajawal(
+                      fontWeight: FontWeight.bold, color: const Color(0xFF5D1B5E)),
+                ),
+              ),
+              const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -368,7 +386,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                           storeOrderId: docId,
                           orderCode: code,
                           items: items,
-                          total: (total as num).toDouble(),
+                          total: payAmount,
                           customerName: data['client_name'] ?? 'عميل زيارة',
                           customerPhone: data['client_phone'] ?? '',
                         ),
