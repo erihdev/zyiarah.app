@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/firebase_service.dart';
+import 'package:zyiarah/services/app_update_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:zyiarah/services/zyiarah_core_services.dart';
@@ -48,6 +49,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
     super.initState();
     _currentDriverId = _auth.currentUser?.uid;
     _syncOnlineStatus();
+    // إشعار توفّر تحديث — حرج للسائقين لإغلاق فجوة الإصدار (حالة scheduled لا تظهر بالنسخة القديمة)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ZyiarahAppUpdateService.checkAndPrompt(context);
+    });
     // DRIVER-005/007: single stable stream initialized once with battery-efficient settings
     _locationStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
