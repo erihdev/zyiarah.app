@@ -159,7 +159,8 @@ class ZyiarahOrderService {
   }
 
   // تحديث حالة الطلب باستخدام Transaction لضمان سلامة البيانات ومنع التعارض
-  Future<void> updateOrderStatus(String orderId, String status, {String? driverId}) async {
+  Future<void> updateOrderStatus(String orderId, String status,
+      {String? driverId, Map<String, dynamic>? extraOrderUpdates}) async {
     await _db.runTransaction((transaction) async {
       final orderRef = _db.collection('orders').doc(orderId);
       final orderSnap = await transaction.get(orderRef);
@@ -182,6 +183,8 @@ class ZyiarahOrderService {
         if (status == 'in_progress') 'arrived_at': FieldValue.serverTimestamp(),
         if (status == 'in_progress') 'start_time': FieldValue.serverTimestamp(),
         if (status == 'completed') 'end_time': FieldValue.serverTimestamp(),
+        // (C) حقول إضافية (مثل تأكيد دفع COD) تُدمج ذرّياً داخل نفس الـ Transaction
+        if (extraOrderUpdates != null) ...extraOrderUpdates,
       };
 
       transaction.update(orderRef, updates);
@@ -420,11 +423,13 @@ class ZyiarahOrderService {
   Stream<List<QueryDocumentSnapshot>> streamAvailableOrders() {
     return _db.collection('orders')
         .where('status', isEqualTo: 'pending')
+        // (D) تقييد الحجم لمنع استنزاف الذاكرة عند تضخّم الطلبات المعلّقة
+        .limit(50)
         .snapshots()
         .map((snap) => snap.docs.toList()
           ..sort((a, b) {
-            final aT = (a.data() as Map)['created_at'] as Timestamp?;
-            final bT = (b.data() as Map)['created_at'] as Timestamp?;
+            final aT = (a.data() as Map?)?['created_at'] as Timestamp?;
+            final bT = (b.data() as Map?)?['created_at'] as Timestamp?;
             if (aT == null && bT == null) return 0;
             if (aT == null) return 1;
             if (bT == null) return -1;

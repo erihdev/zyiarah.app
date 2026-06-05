@@ -1140,6 +1140,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
       final amount = (data['amount'] ?? 0.0).toDouble();
       final clientName = data['client_name'] ?? 'العميل';
 
+      // (C) حقول دفع COD — تُدمج لاحقاً ذرّياً داخل Transaction الإكمال
+      Map<String, dynamic>? codPaymentUpdates;
+
       if (status == 'completed' && paymentMethod == 'cod') {
         if (!mounted) return;
 
@@ -1255,7 +1258,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
         if (!confirmed) return;
 
-        await FirebaseFirestore.instance.collection('orders').doc(id).update({
+        // (C) بدل تحديث is_paid منفصلاً (يُكتب محلياً حتى دون اتصال ويسبب تضارباً)،
+        // نُمرّره ليُدمج داخل نفس Transaction الإكمال أدناه — فإمّا أن ينجح الكل أو يفشل الكل.
+        codPaymentUpdates = {
           'is_paid': true,
           'paid_at': FieldValue.serverTimestamp(),
           'cash_collected_by': _currentDriverId,
@@ -1263,16 +1268,22 @@ class _DriverDashboardState extends State<DriverDashboard> {
           'cash_confirmed_at': FieldValue.serverTimestamp(),
           'payment_pin': FieldValue.delete(),
           'payment_pin_generated_at': FieldValue.delete(),
-        });
+        };
+      }
 
+      // (C) Transaction واحد ذرّي: الحالة + دفع COD معاً. يفشل بالكامل دون اتصال،
+      // فلا يبقى الطلب "مدفوعاً وغير مكتمل" ولا العكس.
+      await _orderService.updateOrderStatus(id, status,
+          driverId: _currentDriverId, extraOrderUpdates: codPaymentUpdates);
+
+      // إشعار الإدارة بتحصيل النقد — بعد نجاح الإكمال فقط
+      if (codPaymentUpdates != null) {
         await _notificationService.notifyAdminOfCashCollection(
           driverName: _driverName,
           orderCode: data['code'] ?? id,
           amount: amount,
         );
       }
-
-      await _orderService.updateOrderStatus(id, status, driverId: _currentDriverId);
 
       if (data['client_id'] != null) {
         final orderCode = data['code'] ?? id;
@@ -1291,6 +1302,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
         }
       }
 
+      // (C) Optimistic UI: لا تُعرض Lottie إلا بعد نجاح Transaction الإكمال فعلياً.
+      // الـ Transaction يفشل دون اتصال (يرمي استثناءً) فينتقل للـ catch بلا نجاح كاذب.
       if (status == 'completed' && mounted) _showSuccessDialog();
     } catch (e) {
       if (mounted) {

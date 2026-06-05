@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:zyiarah/services/deep_link_service.dart';
 
 /// خدمة إدارة الإشعارات - تطبيق زيارة
 @pragma('vm:entry-point')
@@ -97,6 +100,8 @@ class ZyiarahNotificationService {
 
       await _localNotifications.initialize(
         const InitializationSettings(android: androidSettings, iOS: iosSettings),
+        // (F1) نقر الإشعار المحلي (المعروض أثناء المقدمة) → توجيه عميق
+        onDidReceiveNotificationResponse: _onLocalNotificationTap,
       );
 
       _foregroundMessageSub = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
@@ -119,11 +124,46 @@ class ZyiarahNotificationService {
               ),
               iOS: const DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true),
             ),
+            // (F1) تمرير بيانات الإشعار كي يفتح النقر تفاصيل الطلب
+            payload: jsonEncode(message.data),
           );
         }
       });
+
+      // (F1) نقر الإشعار والتطبيق في الخلفية → فتح تفاصيل الطلب
+      FirebaseMessaging.onMessageOpenedApp.listen(_handleRemoteMessageTap);
+
+      // (F1) نقر الإشعار والتطبيق مغلق تماماً (cold start)
+      final RemoteMessage? initialMessage = await _fcm.getInitialMessage();
+      if (initialMessage != null) {
+        _handleRemoteMessageTap(initialMessage);
+      }
     } catch (e) {
       debugPrint("Error initializing notifications: $e");
+    }
+  }
+
+  /// (F1) معالجة نقر إشعار FCM (خلفية / cold start) عبر التوجيه العميق.
+  /// يُؤجَّل لما بعد أول إطار لضمان جاهزية الـ Navigator.
+  void _handleRemoteMessageTap(RemoteMessage message) {
+    if (message.data.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ZyiarahDeepLinkService()
+          .handleNotificationTap(Map<String, dynamic>.from(message.data));
+    });
+  }
+
+  /// (F1) معالجة نقر الإشعار المحلي المعروض أثناء المقدمة.
+  void _onLocalNotificationTap(NotificationResponse response) {
+    final payload = response.payload;
+    if (payload == null || payload.isEmpty) return;
+    try {
+      final data = Map<String, dynamic>.from(jsonDecode(payload) as Map);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ZyiarahDeepLinkService().handleNotificationTap(data);
+      });
+    } catch (e) {
+      debugPrint("⚠️ Failed to parse local notification payload: $e");
     }
   }
 
