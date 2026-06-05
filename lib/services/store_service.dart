@@ -3,8 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/counter_service.dart';
-import 'package:zyiarah/services/zatca_service.dart';
-import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 
 class StoreProduct {
   final String id;
@@ -66,10 +64,12 @@ class ZyiarahStoreService {
             .toList());
   }
 
+  /// إنشاء طلب متجر بانتظار موافقة الإدارة (بدون دفع).
+  /// الدفع وتوليد طلب التوصيل والفاتورة تتم لاحقاً عبر [StorePaymentScreen]
+  /// بعد اعتماد الإدارة للطلب.
   Future<String?> createStoreOrder({
     required List<Map<String, dynamic>> items,
     required double totalAmount,
-    String paymentMethod = 'cash_on_delivery',
   }) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
@@ -133,7 +133,9 @@ class ZyiarahStoreService {
         'client_phone': clientPhone,
         'items': verifiedItems,
         'total_amount': serverCalculatedTotal,
-        'payment_method': paymentMethod,
+        'payment_method': 'pending',
+        'is_paid': false,
+        'payment_status': 'awaiting_approval',
         'status': 'pending',
         'created_at': FieldValue.serverTimestamp(),
       });
@@ -151,46 +153,8 @@ class ZyiarahStoreService {
       targetId: docRef.id,
     );
 
-    // (Direct Dispatch) توليد Order توصيل مرتبط بحالة pending_admin_approval —
-    // يتدفق عبر شاشة الاعتماد الموحّدة ثم جدول السائق. non-fatal.
-    try {
-      await _db.collection('orders').doc().set({
-        'code': orderCode,
-        'client_id': user.uid,
-        'client_name': clientName,
-        'client_phone': clientPhone,
-        'service_type': 'توصيل طلب متجر',
-        'service_name': 'توصيل منتجات المتجر',
-        'amount': serverCalculatedTotal,
-        'is_paid': paymentMethod != 'cash_on_delivery',
-        'payment_method': paymentMethod,
-        'status': 'pending_admin_approval',
-        'source_collection': 'store_orders',
-        'store_order_id': docRef.id,
-        'location': const GeoPoint(24.7136, 46.6753),
-        'created_at': FieldValue.serverTimestamp(),
-      });
-    } catch (_) {}
-
-    // (E) فاتورة ضريبية ZATCA لطلب المتجر (الدفع عند الاستلام) — non-fatal،
-    // فلا يفشل الطلب إن تعذّر رفع الفاتورة. المبلغ شامل الضريبة.
-    try {
-      final double vatAmount =
-          serverCalculatedTotal - (serverCalculatedTotal / 1.15);
-      final String qrData = ZatcaService.generateZatcaQrCode(
-        timestamp: DateTime.now(),
-        totalAmount: serverCalculatedTotal,
-        vatAmount: vatAmount,
-      );
-      await ZyiarahPdfService.generateAndUploadInvoice(
-        orderId: docRef.id,
-        orderCode: orderCode,
-        amount: serverCalculatedTotal,
-        qrData: qrData,
-        serviceName: 'طلب منتجات من المتجر',
-        collectionPath: 'store_orders',
-      );
-    } catch (_) {}
+    // ملاحظة: لا يُولَّد طلب التوصيل ولا الفاتورة الضريبية في هذه المرحلة.
+    // يتمّ ذلك بعد موافقة الإدارة وإتمام العميل للدفع عبر StorePaymentScreen.
 
     return orderCode;
   }
