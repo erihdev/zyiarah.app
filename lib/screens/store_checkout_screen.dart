@@ -5,6 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
+import 'package:zyiarah/services/zatca_service.dart';
+import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 
 /// شاشة WebView لإتمام دفع تمارا الخاص بطلبات المتجر.
 /// لا تُنشئ الطلب في Firestore إلا بعد تأكيد نجاح الدفع (payment-success URL).
@@ -80,6 +82,22 @@ class _StoreTamaraCheckoutScreenState extends State<StoreTamaraCheckoutScreen> {
                   'created_at': FieldValue.serverTimestamp(),
                 });
               });
+
+              // (E) فاتورة ضريبية ZATCA لطلب المتجر (تمارا) — non-fatal، المبلغ شامل الضريبة
+              final double storeVat = widget.total - (widget.total / 1.15);
+              final String storeQr = ZatcaService.generateZatcaQrCode(
+                timestamp: DateTime.now(),
+                totalAmount: widget.total,
+                vatAmount: storeVat,
+              );
+              ZyiarahPdfService.generateAndUploadInvoice(
+                orderId: widget.orderId,
+                orderCode: orderCode,
+                amount: widget.total,
+                qrData: storeQr,
+                serviceName: 'طلب منتجات من المتجر',
+                collectionPath: 'store_orders',
+              ).catchError((_) => null);
 
               // إشعارات non-fatal — الإخفاق لا يوقف تجربة المستخدم
               ZyiarahMessagingService().notifyOrderCreated(

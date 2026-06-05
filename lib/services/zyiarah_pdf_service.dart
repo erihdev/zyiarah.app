@@ -30,6 +30,9 @@ class ZyiarahPdfService {
     String? couponCode,
     String collectionPath = 'orders',
   }) async {
+    // (E) تحميل بيانات المنشأة من إعدادات النظام قبل بناء الفاتورة
+    await ZatcaService.ensureConfigLoaded();
+
     final pdf = pw.Document();
     final arabicFont = await PdfGoogleFonts.tajawalRegular();
     final arabicFontBold = await PdfGoogleFonts.tajawalBold();

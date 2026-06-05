@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/counter_service.dart';
+import 'package:zyiarah/services/zatca_service.dart';
+import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 
 class StoreProduct {
   final String id;
@@ -148,6 +150,26 @@ class ZyiarahStoreService {
       },
       targetId: docRef.id,
     );
+
+    // (E) فاتورة ضريبية ZATCA لطلب المتجر (الدفع عند الاستلام) — non-fatal،
+    // فلا يفشل الطلب إن تعذّر رفع الفاتورة. المبلغ شامل الضريبة.
+    try {
+      final double vatAmount =
+          serverCalculatedTotal - (serverCalculatedTotal / 1.15);
+      final String qrData = ZatcaService.generateZatcaQrCode(
+        timestamp: DateTime.now(),
+        totalAmount: serverCalculatedTotal,
+        vatAmount: vatAmount,
+      );
+      await ZyiarahPdfService.generateAndUploadInvoice(
+        orderId: docRef.id,
+        orderCode: orderCode,
+        amount: serverCalculatedTotal,
+        qrData: qrData,
+        serviceName: 'طلب منتجات من المتجر',
+        collectionPath: 'store_orders',
+      );
+    } catch (_) {}
 
     return orderCode;
   }
