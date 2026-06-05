@@ -151,6 +151,27 @@ class ZyiarahStoreService {
       targetId: docRef.id,
     );
 
+    // (Direct Dispatch) توليد Order توصيل مرتبط بحالة pending_admin_approval —
+    // يتدفق عبر شاشة الاعتماد الموحّدة ثم جدول السائق. non-fatal.
+    try {
+      await _db.collection('orders').doc().set({
+        'code': orderCode,
+        'client_id': user.uid,
+        'client_name': clientName,
+        'client_phone': clientPhone,
+        'service_type': 'توصيل طلب متجر',
+        'service_name': 'توصيل منتجات المتجر',
+        'amount': serverCalculatedTotal,
+        'is_paid': paymentMethod != 'cash_on_delivery',
+        'payment_method': paymentMethod,
+        'status': 'pending_admin_approval',
+        'source_collection': 'store_orders',
+        'store_order_id': docRef.id,
+        'location': const GeoPoint(24.7136, 46.6753),
+        'created_at': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {}
+
     // (E) فاتورة ضريبية ZATCA لطلب المتجر (الدفع عند الاستلام) — non-fatal،
     // فلا يفشل الطلب إن تعذّر رفع الفاتورة. المبلغ شامل الضريبة.
     try {

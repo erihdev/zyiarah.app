@@ -83,6 +83,24 @@ class _StoreTamaraCheckoutScreenState extends State<StoreTamaraCheckoutScreen> {
                 });
               });
 
+              // (Direct Dispatch) توليد Order توصيل مرتبط بحالة pending_admin_approval — non-fatal
+              FirebaseFirestore.instance.collection('orders').doc().set({
+                'code': orderCode,
+                'client_id': user?.uid,
+                'client_name': widget.customerName,
+                'client_phone': widget.customerPhone,
+                'service_type': 'توصيل طلب متجر',
+                'service_name': 'توصيل منتجات المتجر',
+                'amount': widget.total,
+                'is_paid': true,
+                'payment_method': 'tamara',
+                'status': 'pending_admin_approval',
+                'source_collection': 'store_orders',
+                'store_order_id': widget.orderId,
+                'location': const GeoPoint(24.7136, 46.6753),
+                'created_at': FieldValue.serverTimestamp(),
+              }).catchError((_) {});
+
               // (E) فاتورة ضريبية ZATCA لطلب المتجر (تمارا) — non-fatal، المبلغ شامل الضريبة
               final double storeVat = widget.total - (widget.total / 1.15);
               final String storeQr = ZatcaService.generateZatcaQrCode(
