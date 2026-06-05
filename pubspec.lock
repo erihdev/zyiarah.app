@@ -281,14 +281,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
-  ffi_leak_tracker:
-    dependency: transitive
-    description:
-      name: ffi_leak_tracker
-      sha256: "4093d4ef9ca06ffe2786e73bfb25e22aa92112b9bb4ec941f11e3e6b61489a97"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.1.2"
   file:
     dependency: transitive
     description:
@@ -681,10 +673,10 @@ packages:
     dependency: transitive
     description:
       name: geolocator_linux
-      sha256: b02993d59b753bf1967ed28862002841aec5cdd5090c1f495213b32ce488aced
+      sha256: c4e966f0a7a87e70049eac7a2617f9e16fd4c585a26e4330bdfc3a71e6a721f3
       url: "https://pub.dev"
     source: hosted
-    version: "0.2.5"
+    version: "0.2.3"
   geolocator_platform_interface:
     dependency: transitive
     description:
@@ -937,10 +929,10 @@ packages:
     dependency: transitive
     description:
       name: matcher
-      sha256: dc0b7dc7651697ea4ff3e69ef44b0407ea32c487a39fff6a4004fa585e901861
+      sha256: "12956d0ad8390bbcc63ca2e1469c0619946ccb52809807067a7020d57e647aa6"
       url: "https://pub.dev"
     source: hosted
-    version: "0.12.19"
+    version: "0.12.18"
   material_color_utilities:
     dependency: transitive
     description:
@@ -953,10 +945,10 @@ packages:
     dependency: transitive
     description:
       name: meta
-      sha256: "1741988757a65eb6b36abe716829688cf01910bbf91c34354ff7ec1c3de2b349"
+      sha256: "23f08335362185a5ea2ad3a4e597f1375e78bce8a040df5c600c8d3552ef2394"
       url: "https://pub.dev"
     source: hosted
-    version: "1.18.0"
+    version: "1.17.0"
   mgrs_dart:
     dependency: transitive
     description:
@@ -1014,21 +1006,21 @@ packages:
     source: hosted
     version: "2.1.0"
   package_info_plus:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: package_info_plus
-      sha256: "4bf625947f6c7713ee242296a682e23e44823c09cf9d79e4f1238923c92db852"
+      sha256: "16eee997588c60225bda0488b6dcfac69280a6b7a3cf02c741895dd370a02968"
       url: "https://pub.dev"
     source: hosted
-    version: "10.1.0"
+    version: "8.3.1"
   package_info_plus_platform_interface:
     dependency: transitive
     description:
       name: package_info_plus_platform_interface
-      sha256: db762cb2f4f25ee60fb6359773861b0f199e00b90d237bd85a76a1e806b46ef4
+      sha256: "202a487f08836a592a6bd4f901ac69b3a8f146af552bbd14407b6b41e1c3f086"
       url: "https://pub.dev"
     source: hosted
-    version: "4.1.0"
+    version: "3.2.1"
   path:
     dependency: transitive
     description:
@@ -1422,10 +1414,10 @@ packages:
     dependency: transitive
     description:
       name: test_api
-      sha256: "949a932224383300f01be9221c39180316445ecb8e7547f70a41a35bf421fb9e"
+      sha256: "93167629bfc610f71560ab9312acdda4959de4df6fac7492c89ff0d3886f6636"
       url: "https://pub.dev"
     source: hosted
-    version: "0.7.11"
+    version: "0.7.9"
   timezone:
     dependency: transitive
     description:
@@ -1606,10 +1598,10 @@ packages:
     dependency: transitive
     description:
       name: win32
-      sha256: ba6f4bba816c8d7e3c1580e170f3786d216951cc6b94babc3b814c08d2cb2738
+      sha256: d7cb55e04cd34096cd3a79b3330245f54cb96a370a1c27adb3c84b917de8b08e
       url: "https://pub.dev"
     source: hosted
-    version: "6.3.0"
+    version: "5.15.0"
   wkt_parser:
     dependency: transitive
     description:

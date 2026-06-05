@@ -147,12 +147,14 @@ class _SofaRugCleaningDetailsScreenState extends State<SofaRugCleaningDetailsScr
     }
   }
 
-  double get subTotal {
+  // (E) موحّد مع باقي الخدمات و ZATCA: السعر المُدخل شامل ضريبة القيمة المضافة.
+  // الإجمالي = ما يدفعه العميل فعلاً، والضريبة تُحتسب قسمةً (مُتضمَّنة) لا إضافةً.
+  double get totalAmount {
     return (_sofaMeters * _sofaPrice) + (_rugMeters * _rugPrice);
   }
 
-  double get vat => subTotal * 0.15;
-  double get totalAmount => subTotal + vat;
+  double get subTotal => totalAmount / 1.15; // الصافي قبل الضريبة
+  double get vat => totalAmount - subTotal;   // ضريبة 15% المتضمَّنة في السعر
 
   void _handleNext() async {
     if (_selectedLocation == null) {

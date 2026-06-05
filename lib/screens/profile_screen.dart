@@ -11,7 +11,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/screens/support_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
-import 'package:zyiarah/services/maintenance_listener_service.dart';
 import 'package:zyiarah/services/zyiarah_wallet_service.dart';
 import 'package:zyiarah/services/zyiarah_referral_service.dart';
 
@@ -326,11 +325,11 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
     }
   }
 
-  void _performLogout() {
+  Future<void> _performLogout() async {
     HapticFeedback.lightImpact();
-    MaintenanceListenerService().stopListening();
-    context.go('/');
-    _firebaseService.signOut();
+    // الخروج المركزي يتولى إيقاف مستمع الصيانة وتنظيف الإشعارات قبل تسجيل الخروج
+    await _firebaseService.signOut();
+    if (mounted) context.go('/');
   }
 
   Future<void> _deleteAccount() async {

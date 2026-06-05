@@ -32,7 +32,12 @@ class _ZyiarahSubscriptionPlansScreenState
   Map<int, bool> _slotAvailability = {};
   bool _checkingSlots = false;
 
+  // (2c) مواعيد الزيارات المتعددة المختارة — تُحفظ في scheduled_visits على العقد
+  final List<Map<String, String>> _scheduledVisits = [];
+  bool _addingVisit = false;
+
   String? _userZoneName;
+  GeoPoint? _userLocation; // (2c) موقع العميل لإسناد الزيارات جغرافياً
   bool _loadingZone = true;
 
   int _maxOrdersPerDay = 10;
@@ -72,6 +77,7 @@ class _ZyiarahSubscriptionPlansScreenState
             if (mounted) {
               setState(() {
                 _userZoneName = zone;
+                _userLocation = orderData['location'] as GeoPoint?;
                 _loadingZone = false;
               });
             }
@@ -93,6 +99,7 @@ class _ZyiarahSubscriptionPlansScreenState
         if (mounted) {
           setState(() {
             _userZoneName = zonesSnap.docs.first.data()['name'] as String?;
+            _userLocation = zonesSnap.docs.first.data()['centerLoc'] as GeoPoint?;
             _loadingZone = false;
           });
         }
@@ -186,6 +193,63 @@ class _ZyiarahSubscriptionPlansScreenState
     final last = endHour - visitHours;
     if (last < startHour) return [];
     return List.generate(last - startHour + 1, (i) => startHour + i);
+  }
+
+  int _visitHours() {
+    if (_selectedPackageIndex != null && _selectedPackageIndex! < _packages.length) {
+      final data = _packages[_selectedPackageIndex!].data() as Map<String, dynamic>;
+      return (data['hours'] ?? 4).toInt();
+    }
+    return 4;
+  }
+
+  /// (2c) إضافة زيارة للجدول بعد التحقق الحقيقي من توفّر سائق في الفترة المختارة.
+  Future<void> _addVisit(int planVisits) async {
+    if (_selectedStartHour == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('اختر وقتاً للزيارة أولاً')));
+      return;
+    }
+    if (_scheduledVisits.length >= planVisits) return;
+
+    final dateKey = intl.DateFormat('yyyy-MM-dd').format(_selectedDate);
+    final slot = '${_selectedStartHour!.toString().padLeft(2, '0')}:00';
+    if (_scheduledVisits.any((v) => v['date'] == dateKey && v['slot'] == slot)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('هذه الفترة مضافة مسبقاً')));
+      return;
+    }
+
+    setState(() => _addingVisit = true);
+    // شرط حاسم: لا تُضاف الزيارة إلا إذا وُجد سائق متاح فعلاً في تلك الفترة
+    bool available = true;
+    try {
+      final res = await FirebaseFunctions.instance
+          .httpsCallable('checkHourlySlotAvailability')
+          .call({
+        'startDateTimeIso': DateTime(_selectedDate.year, _selectedDate.month,
+                _selectedDate.day, _selectedStartHour!)
+            .toIso8601String(),
+        'durationHours': _visitHours(),
+        if (_userZoneName != null) 'zoneName': _userZoneName,
+      });
+      available = (res.data as Map)['available'] == true;
+    } catch (_) {
+      available = true; // خطأ عابر لا يمنع الإضافة
+    }
+    if (!mounted) return;
+    if (!available) {
+      setState(() => _addingVisit = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('لا يوجد سائق متاح في هذه الفترة — اختر فترة أخرى'),
+        backgroundColor: Colors.red));
+      return;
+    }
+    setState(() {
+      _scheduledVisits.add({'date': dateKey, 'slot': slot});
+      _selectedStartHour = null;
+      _addingVisit = false;
+    });
   }
 
   /// يحسب إتاحة الخانات الزمنية من الـ cache المحلي (لا يصدر أي طلب شبكة).
@@ -510,7 +574,7 @@ class _ZyiarahSubscriptionPlansScreenState
 
           // 4. Time Slot Header
           Text(
-            'وقت بدء الزيارة الأولى:',
+            'اختر موعد كل زيارة ($visits زيارات):',
             style: GoogleFonts.tajawal(
               fontSize: 15,
               fontWeight: FontWeight.bold,
@@ -521,24 +585,70 @@ class _ZyiarahSubscriptionPlansScreenState
 
           // 5. Time Slot Selector Widget
           _buildSubscriptionTimeSlotSelector(),
-          const SizedBox(height: 32),
+          const SizedBox(height: 16),
 
-          // 6. Action Button to proceed to signing
+          // (2c) إضافة الزيارة المختارة (تاريخ + وقت) للجدول — بعد التحقق من سائق متاح
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: (_selectedStartHour == null ||
+                      _addingVisit ||
+                      _scheduledVisits.length >= visits)
+                  ? null
+                  : () => _addVisit(visits),
+              icon: _addingVisit
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.add_circle_outline),
+              label: Text(
+                'إضافة الزيارة (${_scheduledVisits.length}/$visits)',
+                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _brand,
+                side: const BorderSide(color: _brand),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          ),
+
+          // (2c) قائمة الزيارات المختارة
+          if (_scheduledVisits.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text('زياراتك المجدولة:',
+                style: GoogleFonts.tajawal(
+                    fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF1E293B))),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: List.generate(_scheduledVisits.length, (i) {
+                final v = _scheduledVisits[i];
+                return Chip(
+                  backgroundColor: const Color(0xFFF1E9FE),
+                  label: Text('زيارة ${i + 1}: ${v['date']} • ${v['slot']}',
+                      style: GoogleFonts.tajawal(fontSize: 12, color: _brand)),
+                  deleteIcon: const Icon(Icons.close, size: 16),
+                  onDeleted: () => setState(() => _scheduledVisits.removeAt(i)),
+                );
+              }),
+            ),
+          ],
+          const SizedBox(height: 28),
+
+          // 6. المتابعة — مفعّلة فقط عند اكتمال اختيار كل الزيارات
           SizedBox(
             width: double.infinity,
             height: 56,
             child: ElevatedButton(
-              onPressed: (_selectedStartHour == null || _checkingSlots)
+              onPressed: (_scheduledVisits.length != visits)
                   ? null
                   : () {
                       HapticFeedback.lightImpact();
-                      final DateTime serviceDate = DateTime(
-                        _selectedDate.year,
-                        _selectedDate.month,
-                        _selectedDate.day,
-                        _selectedStartHour!,
-                      );
-                      final String timeSlotStr = '${_selectedStartHour!.toString().padLeft(2, '0')}:00';
+                      final first = _scheduledVisits.first;
+                      final fp = first['date']!.split('-').map(int.parse).toList();
+                      final fh = int.parse(first['slot']!.split(':')[0]);
+                      final DateTime firstDate = DateTime(fp[0], fp[1], fp[2], fh);
 
                       Navigator.push(
                         context,
@@ -547,8 +657,12 @@ class _ZyiarahSubscriptionPlansScreenState
                             planName: title,
                             planPrice: priceValue,
                             planVisits: visits,
-                            bookingDate: serviceDate,
-                            bookingTimeSlot: timeSlotStr,
+                            bookingDate: firstDate,
+                            bookingTimeSlot: first['slot']!,
+                            scheduledVisits:
+                                List<Map<String, String>>.from(_scheduledVisits),
+                            zoneName: _userZoneName,
+                            location: _userLocation,
                           ),
                         ),
                       );
@@ -564,7 +678,9 @@ class _ZyiarahSubscriptionPlansScreenState
                 elevation: 0,
               ),
               child: Text(
-                'المتابعة لتوقيع العقد الإلكتروني',
+                _scheduledVisits.length == visits
+                    ? 'المتابعة لتوقيع العقد الإلكتروني'
+                    : 'اختر ${visits - _scheduledVisits.length} زيارة متبقية',
                 style: GoogleFonts.tajawal(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,

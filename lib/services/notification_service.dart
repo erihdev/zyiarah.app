@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:zyiarah/services/deep_link_service.dart';
 
 /// خدمة إدارة الإشعارات - تطبيق زيارة
 @pragma('vm:entry-point')
@@ -12,6 +15,11 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 class ZyiarahNotificationService {
+  // Singleton — ضروري حتى يطبّق cleanupOnSignOut/dispose على نفس النسخة العاملة المُهيّأة في main.dart
+  static final ZyiarahNotificationService _instance = ZyiarahNotificationService._internal();
+  factory ZyiarahNotificationService() => _instance;
+  ZyiarahNotificationService._internal();
+
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
@@ -92,6 +100,8 @@ class ZyiarahNotificationService {
 
       await _localNotifications.initialize(
         const InitializationSettings(android: androidSettings, iOS: iosSettings),
+        // (F1) نقر الإشعار المحلي (المعروض أثناء المقدمة) → توجيه عميق
+        onDidReceiveNotificationResponse: _onLocalNotificationTap,
       );
 
       _foregroundMessageSub = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
@@ -114,11 +124,46 @@ class ZyiarahNotificationService {
               ),
               iOS: const DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true),
             ),
+            // (F1) تمرير بيانات الإشعار كي يفتح النقر تفاصيل الطلب
+            payload: jsonEncode(message.data),
           );
         }
       });
+
+      // (F1) نقر الإشعار والتطبيق في الخلفية → فتح تفاصيل الطلب
+      FirebaseMessaging.onMessageOpenedApp.listen(_handleRemoteMessageTap);
+
+      // (F1) نقر الإشعار والتطبيق مغلق تماماً (cold start)
+      final RemoteMessage? initialMessage = await _fcm.getInitialMessage();
+      if (initialMessage != null) {
+        _handleRemoteMessageTap(initialMessage);
+      }
     } catch (e) {
       debugPrint("Error initializing notifications: $e");
+    }
+  }
+
+  /// (F1) معالجة نقر إشعار FCM (خلفية / cold start) عبر التوجيه العميق.
+  /// يُؤجَّل لما بعد أول إطار لضمان جاهزية الـ Navigator.
+  void _handleRemoteMessageTap(RemoteMessage message) {
+    if (message.data.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ZyiarahDeepLinkService()
+          .handleNotificationTap(Map<String, dynamic>.from(message.data));
+    });
+  }
+
+  /// (F1) معالجة نقر الإشعار المحلي المعروض أثناء المقدمة.
+  void _onLocalNotificationTap(NotificationResponse response) {
+    final payload = response.payload;
+    if (payload == null || payload.isEmpty) return;
+    try {
+      final data = Map<String, dynamic>.from(jsonDecode(payload) as Map);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ZyiarahDeepLinkService().handleNotificationTap(data);
+      });
+    } catch (e) {
+      debugPrint("⚠️ Failed to parse local notification payload: $e");
     }
   }
 
@@ -154,8 +199,20 @@ class ZyiarahNotificationService {
     }
   }
 
-  /// Unsubscribe from all FCM topics and cancel stream listeners on sign-out.
+  /// تنظيف الإشعارات عند تسجيل الخروج.
+  /// يجب استدعاؤها *قبل* FirebaseAuth.signOut() لأنها تحتاج uid الحالي.
+  /// تمنع وصول إشعارات الحساب السابق إلى هذا الجهاز بعد تبديل الحساب.
   Future<void> cleanupOnSignOut() async {
+    // 1) حذف توكن FCM المرتبط بالمستخدم الحالي حتى لا يستقبل الجهاز إشعاراته بعد الخروج
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        await FirebaseFirestore.instance.collection('fcm_tokens').doc(uid).delete();
+      }
+    } catch (e) {
+      debugPrint("⚠️ Error deleting FCM token doc on sign-out: $e");
+    }
+    // 2) إلغاء الاشتراك من جميع الـ Topics (سيُعاد الاشتراك حسب دور المستخدم الجديد عند الدخول)
     try {
       await _fcm.unsubscribeFromTopic('all_users');
       await _fcm.unsubscribeFromTopic('clients');

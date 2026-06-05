@@ -15,6 +15,7 @@ import 'package:zyiarah/utils/zyiarah_strings.dart';
 import 'package:lottie/lottie.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/popup_service.dart';
+import 'package:zyiarah/services/app_update_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:zyiarah/screens/store_screen.dart';
 import 'package:zyiarah/screens/sofa_rug_details_screen.dart';
@@ -47,6 +48,8 @@ class _ClientDashboardState extends State<ClientDashboard> {
     MaintenanceListenerService().startListening();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ZyiarahPopupService.checkAndShowPopup(context);
+      // إشعار توفّر تحديث للتطبيق (متحكَّم به من الإدارة، يظهر للنسخ القديمة فقط)
+      ZyiarahAppUpdateService.checkAndPrompt(context);
     });
   }
 

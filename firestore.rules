@@ -118,27 +118,35 @@ service cloud.firestore {
         isAdmin()
       );
 
-      // SECURITY: client_id must match caller; payment fields must be safe defaults
+      // SECURITY: client_id must match caller; initial status limited to safe entry states.
+      // المسار الأول (تلقائي): pending/awaiting_payment — المسار الثاني (موافقة الإدارة): pending_admin_approval
       allow create: if isLoggedIn() &&
         request.resource.data.client_id == request.auth.uid &&
-        request.resource.data.get('status', 'pending') == 'pending';
+        request.resource.data.get('status', 'pending') in
+          ['pending', 'awaiting_payment', 'pending_admin_approval'];
 
-      // Orders manager: full update
+      // Orders manager: full update (approve, assign driver -> scheduled, override status)
       allow update: if isOrdersManager();
 
-      // Driver: update status/location only — cannot touch financial or identity fields
+      // Driver (Direct Dispatch): may ONLY advance an assigned task forward + sync location
+      // + confirm COD. No accept/reject, no self-reassignment, no identity/amount tampering.
       allow update: if isLoggedIn() &&
         request.auth.uid == resource.data.driver_id &&
-        !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['is_paid', 'payment_status', 'amount', 'final_amount',
-                   'client_id', 'client_email', 'client_phone', 'driver_id']);
+        resource.data.status in ['scheduled', 'on_the_way', 'in_progress', 'accepted'] &&
+        request.resource.data.status in ['on_the_way', 'in_progress', 'completed'] &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'on_the_way_at', 'arrived_at', 'start_time', 'end_time',
+          'driver_location', 'last_location_update', 'updated_at',
+          'is_paid', 'paid_at', 'cash_collected_by', 'cash_confirmed',
+          'cash_confirmed_at', 'payment_pin', 'payment_pin_generated_at'
+        ]);
 
       // Client: cancel own pending order, update invoice URL, or submit rating
       allow update: if isLoggedIn() &&
         request.auth.uid == resource.data.client_id &&
         (
-          // 1. Cancellation flow
-          (resource.data.status == 'pending' &&
+          // 1. Cancellation flow — only before the task is dispatched to a driver
+          (resource.data.status in ['pending', 'awaiting_payment', 'pending_admin_approval'] &&
            request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['status', 'cancelled_at', 'cancelled_by', 'needs_refund']) &&
            request.resource.data.status == 'cancelled')

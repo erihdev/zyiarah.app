@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zyiarah/services/firebase_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -386,7 +387,8 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     if (widget.onLogout != null) {
       widget.onLogout!();
     } else {
-      await _auth.signOut();
+      // الخروج المركزي (B3): تنظيف كامل للذاكرة بدل _auth.signOut() المباشرة
+      await ZyiarahFirebaseService().signOut();
       if (!mounted) return;
       context.go('/login');
     }

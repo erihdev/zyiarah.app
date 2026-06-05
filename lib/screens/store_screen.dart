@@ -402,15 +402,31 @@ class _CartSheetState extends State<_CartSheet> {
     setState(() => _isSubmitting = true);
 
     try {
-      final items = widget.cart.entries.map((entry) {
-        final product = products.firstWhere((p) => p.id == entry.key);
-        return {
-          'id': entry.key,
-          'name': product.name,
-          'quantity': entry.value,
-          'price': product.price,
-        };
-      }).toList();
+      final items = widget.cart.entries
+          .map((entry) {
+            // (A3) تجنّب StateError: تخطّى أي منتج في السلة لم يعد موجوداً/مخفياً بدل الانهيار
+            final matches = products.where((p) => p.id == entry.key);
+            if (matches.isEmpty) return null;
+            final product = matches.first;
+            return {
+              'id': entry.key,
+              'name': product.name,
+              'quantity': entry.value,
+              'price': product.price,
+            };
+          })
+          .whereType<Map<String, dynamic>>()
+          .toList();
+
+      if (items.isEmpty) {
+        if (mounted) {
+          setState(() => _isSubmitting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('بعض المنتجات لم تعد متاحة، يرجى تحديث السلة')),
+          );
+        }
+        return;
+      }
       final double total = items.fold(
         0.0, (acc, item) => acc + (item['price'] as double) * (item['quantity'] as int));
 

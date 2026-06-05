@@ -231,7 +231,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         _isValidatingCoupon = false;
         if (couponData != null) {
           _appliedCoupon = _couponController.text.toUpperCase();
-          double value = (couponData['value'] as num).toDouble();
+          double value = ((couponData['value'] as num?) ?? 0).toDouble();
           if (couponData['type'] == 'percentage') {
             _discountAmount = widget.amount * (value / 100);
           } else {
@@ -596,12 +596,38 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     // 1. Update Database
     if (widget.maintenanceId != null) {
       code = id;
-      await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
+      final maintRef = FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId);
+      final maintSnap = await maintRef.get();
+      final m = maintSnap.data() ?? {};
+      await maintRef.update({
         'status': 'paid',
         'paymentMethod': method,
         'paidAt': FieldValue.serverTimestamp(),
         'totalAmount': amountToSave,
       });
+      // (Direct Dispatch) توليد Order مرتبط بحالة pending_admin_approval ليتدفق عبر
+      // شاشة الاعتماد الموحّدة ثم جدول السائق. إكماله يُكمل طلب الصيانة آلياً (maintenance_id).
+      try {
+        await FirebaseFirestore.instance.collection('orders').doc().set({
+          'code': code,
+          'client_id': _currentUser?.uid,
+          'client_name': _currentUser?.name ?? 'عميل',
+          'client_phone': _phoneController.text.trim(),
+          'service_type': 'صيانة وغسيل مكيفات',
+          'service_name': m['serviceType'] ?? widget.serviceName,
+          'amount': amountToSave,
+          'is_paid': method != 'cod',
+          'payment_method': method,
+          'status': 'pending_admin_approval',
+          'source_collection': 'maintenance_requests',
+          'maintenance_id': widget.maintenanceId,
+          'location': m['location'] ?? const GeoPoint(24.7136, 46.6753),
+          'zone_name': m['zone_name'] ?? m['zoneName'],
+          'created_at': FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        debugPrint('[maintenance order job] error (non-fatal): $e');
+      }
       await ZyiarahMessagingService().notifyAdminOfPayment(orderCode: code, amount: amountToSave, type: 'maintenance', clientName: _currentUser?.name);
     } else if (widget.contractId != null) {
       code = widget.contractId!;
@@ -613,6 +639,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       await FirebaseFirestore.instance.collection('users').doc(_currentUser?.uid).update({
         'visits_remaining': FieldValue.increment(widget.planVisits ?? 0),
       });
+      // (Direct Dispatch) توليد جميع زيارات العقد مسبقاً وإسنادها للسائقين — non-fatal
+      try {
+        await FirebaseFunctions.instance
+            .httpsCallable('generateSubscriptionVisits')
+            .call({'contractId': widget.contractId});
+      } catch (e) {
+        debugPrint('[generateSubscriptionVisits] error (non-fatal): $e');
+      }
       await ZyiarahMessagingService().notifyContractActivated(_currentUser?.uid ?? '', widget.serviceName, widget.planVisits ?? 0);
     } else {
       final bool isHourly = widget.hours != null && widget.serviceDate != null;
@@ -632,7 +666,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           'service_name': widget.serviceName,
           'amount': amountToSave,
           'is_paid': method != 'cod',
-          'status': isHourly ? 'pending' : 'pending',
+          // (Direct Dispatch) الساعة: تلقائي (pending ثم يُعيَّن scheduled). الكنب/الزل:
+          // مسار موافقة الإدارة أولاً.
+          'status': isHourly ? 'pending' : 'pending_admin_approval',
           'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
           'payment_method': method,
           'created_at': FieldValue.serverTimestamp(),

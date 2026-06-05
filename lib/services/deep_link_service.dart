@@ -31,6 +31,34 @@ class ZyiarahDeepLinkService {
     });
   }
 
+  /// (F1) معالجة النقر على إشعار FCM: تحوّل بيانات الإشعار (orderId/ticketId/requestId)
+  /// إلى توجيه عميق فعلي بإعادة استخدام منطق _handleUri نفسه.
+  Future<void> handleNotificationTap(Map<String, dynamic> data) async {
+    if (data.isEmpty) return;
+
+    final String? orderId = data['orderId']?.toString();
+    final String? ticketId = data['ticketId']?.toString();
+    final String? requestId = data['requestId']?.toString();
+
+    String? resource;
+    String? id;
+    if (orderId != null && orderId.isNotEmpty) {
+      resource = 'order';
+      id = orderId;
+    } else if (ticketId != null && ticketId.isNotEmpty) {
+      resource = 'ticket';
+      id = ticketId;
+    } else if (requestId != null && requestId.isNotEmpty) {
+      resource = 'maintenance';
+      id = requestId;
+    } else {
+      // بثّ عام (global_broadcast) أو بلا معرّف وجهة → يبقى على الشاشة الحالية
+      return;
+    }
+
+    await _handleUri(Uri.parse('zyiarah://app/$resource/$id'));
+  }
+
   Future<void> _handleUri(Uri uri) async {
     if (uri.scheme != 'zyiarah' || uri.host != 'app') return;
 

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zyiarah/services/firebase_service.dart';
+import 'package:zyiarah/services/app_update_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:zyiarah/services/zyiarah_core_services.dart';
@@ -41,14 +43,16 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
   // DRIVER-001: guard against double-tap on status update
   bool _isUpdatingStatus = false;
-  // DRIVER-002: track which order is being accepted
-  String? _acceptingOrderId;
 
   @override
   void initState() {
     super.initState();
     _currentDriverId = _auth.currentUser?.uid;
     _syncOnlineStatus();
+    // إشعار توفّر تحديث — حرج للسائقين لإغلاق فجوة الإصدار (حالة scheduled لا تظهر بالنسخة القديمة)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ZyiarahAppUpdateService.checkAndPrompt(context);
+    });
     // DRIVER-005/007: single stable stream initialized once with battery-efficient settings
     _locationStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
@@ -142,7 +146,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
           if (!isActive) {
             WidgetsBinding.instance.addPostFrameCallback((_) async {
-              await FirebaseAuth.instance.signOut();
+              // الخروج المركزي (B3): حتى عند التعطيل القسري يتم تنظيف الذاكرة بالكامل
+              await ZyiarahFirebaseService().signOut();
               if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('تم تعطيل حسابك من قبل الإدارة.'), backgroundColor: Colors.red),
@@ -336,7 +341,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
     if (confirm != true) return;
     HapticFeedback.lightImpact();
     _stopSync();
-    await FirebaseAuth.instance.signOut();
+    // الخروج المركزي (B3): تنظيف كامل للذاكرة بدل FirebaseAuth.signOut() المباشرة
+    await ZyiarahFirebaseService().signOut();
     if (mounted) context.go('/login');
   }
 
@@ -418,44 +424,62 @@ class _DriverDashboardState extends State<DriverDashboard> {
     if (!_isOnline) {
       return Column(
         children: [
-          _buildDailyManifest(),
+          _buildUpcomingSchedule(),
           const SizedBox(height: 20),
-          _buildStatusPlaceholder(Icons.cloud_off, "أنت حالياً غير متصل", "قم بتغيير حالتك للأعلى لبدء استقبال الطلبات"),
+          _buildStatusPlaceholder(Icons.cloud_off, "أنت حالياً غير متصل", "قم بتغيير حالتك للأعلى لاستقبال المهام"),
         ],
       );
     }
 
     return Column(
       children: [
-        // --- Daily Route Sheet always visible at the top ---
-        _buildDailyManifest(),
+        // جدول المهام القادمة مقسّماً حسب الأيام (يظهر دائماً بالأعلى)
+        _buildUpcomingSchedule(),
         const SizedBox(height: 20),
+        // بطاقة المهمة محل التركيز — تحديث الحالة فقط (لا قبول/رفض)
         StreamBuilder<QuerySnapshot>(
           stream: _orderService.streamDriverActiveOrders(_currentDriverId!),
           builder: (context, snapshot) {
-            if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-              final orderDoc = snapshot.data!.docs.first;
-              final status = orderDoc.get('status');
-              if (status == 'accepted' || status == 'in_progress') {
-                WidgetsBinding.instance.addPostFrameCallback((_) => _startSync(orderDoc.id));
-              } else {
-                WidgetsBinding.instance.addPostFrameCallback((_) => _stopSync());
-              }
-              return _buildActivePipeline(orderDoc);
+            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) => _stopSync());
+              return _buildStatusPlaceholder(
+                Icons.event_available,
+                "لا توجد مهمة نشطة الآن",
+                "ستظهر مهامك فور إسنادها إليك في الجدول أعلاه",
+              );
             }
-            WidgetsBinding.instance.addPostFrameCallback((_) => _stopSync());
-            return _buildAvailableTasksSection();
+            // المهمة محل التركيز: الأكثر تقدّماً (قيد التنفيذ ← في الطريق ← مجدولة)
+            final docs = [...snapshot.data!.docs];
+            docs.sort((a, b) => _focusRank(a).compareTo(_focusRank(b)));
+            final orderDoc = docs.first;
+            final status = orderDoc.get('status') as String? ?? '';
+            if (status == 'on_the_way' || status == 'in_progress' || status == 'accepted') {
+              WidgetsBinding.instance.addPostFrameCallback((_) => _startSync(orderDoc.id));
+            } else {
+              WidgetsBinding.instance.addPostFrameCallback((_) => _stopSync());
+            }
+            return _buildActivePipeline(orderDoc);
           },
         ),
       ],
     );
   }
 
+  // ترتيب أولوية التركيز بين مهام السائق غير المكتملة
+  int _focusRank(QueryDocumentSnapshot doc) {
+    final status = (doc.data() as Map<String, dynamic>)['status'] as String? ?? '';
+    const order = {'in_progress': 0, 'on_the_way': 1, 'accepted': 1, 'scheduled': 2};
+    return order[status] ?? 3;
+  }
+
   // ─────────────────────────────────────────────
   // DAILY ROUTE MANIFEST (جدول الرحلات اليومي)
   // ─────────────────────────────────────────────
-  Widget _buildDailyManifest() {
-    final todayKey = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  // جدول المهام القادمة للسائق مقسّماً حسب الأيام (Upcoming Tasks)
+  Widget _buildUpcomingSchedule() {
+    final now = DateTime.now();
+    final todayKey = DateFormat('yyyy-MM-dd').format(now);
+    final tomorrowKey = DateFormat('yyyy-MM-dd').format(now.add(const Duration(days: 1)));
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -465,53 +489,71 @@ class _DriverDashboardState extends State<DriverDashboard> {
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox.shrink();
 
-        // Filter for today — support both booking_date string and service_date Timestamp
-        final docs = snapshot.data!.docs.where((doc) {
+        // المهام غير المنتهية فقط، مع استخراج مفتاح اليوم لكل مهمة
+        final tasks = <Map<String, dynamic>>[];
+        for (final doc in snapshot.data!.docs) {
           final data = doc.data() as Map<String, dynamic>;
-          if (data['status'] == 'cancelled') return false;
-
-          // Check booking_date string field (hourly orders)
-          final bookingDate = data['booking_date'] as String?;
-          if (bookingDate == todayKey) return true;
-
-          // Fallback: check service_date Timestamp
-          final serviceDate = (data['service_date'] as Timestamp?)?.toDate();
-          if (serviceDate != null) {
-            return serviceDate.year == DateTime.now().year &&
-                serviceDate.month == DateTime.now().month &&
-                serviceDate.day == DateTime.now().day;
+          final status = data['status'] as String? ?? '';
+          if (status == 'completed' || status == 'cancelled' || status == 'rejected') {
+            continue;
           }
-          return false;
-        }).toList();
+          String dayKey = data['booking_date'] as String? ?? '';
+          if (dayKey.isEmpty) {
+            final sd = (data['service_date'] as Timestamp?)?.toDate();
+            if (sd != null) dayKey = DateFormat('yyyy-MM-dd').format(sd);
+          }
+          if (dayKey.isEmpty) dayKey = todayKey; // افتراضي عند غياب التاريخ
+          tasks.add({'id': doc.id, 'data': data, 'dayKey': dayKey});
+        }
 
-        // Sort chronologically by booking_time_slot or service_date hour
-        docs.sort((a, b) {
-          final aData = a.data() as Map<String, dynamic>;
-          final bData = b.data() as Map<String, dynamic>;
-          final aSlot = aData['booking_time_slot'] as String? ??
-              (aData['service_date'] as Timestamp?)?.toDate()
-                  .toIso8601String() ?? '';
-          final bSlot = bData['booking_time_slot'] as String? ??
-              (bData['service_date'] as Timestamp?)?.toDate()
-                  .toIso8601String() ?? '';
-          return aSlot.compareTo(bSlot);
-        });
+        if (tasks.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade100),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.event_available, color: Colors.grey.shade300, size: 28),
+                const SizedBox(width: 12),
+                Text('لا توجد مهام مجدولة حالياً',
+                    style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 13)),
+              ],
+            ),
+          );
+        }
+
+        // التجميع حسب اليوم وترتيب الأيام تصاعدياً
+        final Map<String, List<Map<String, dynamic>>> byDay = {};
+        for (final t in tasks) {
+          byDay.putIfAbsent(t['dayKey'] as String, () => []).add(t);
+        }
+        final sortedDays = byDay.keys.toList()..sort();
+
+        String slotOf(Map<String, dynamic> d) =>
+            d['booking_time_slot'] as String? ??
+            (d['service_date'] as Timestamp?)?.toDate().toIso8601String() ??
+            '';
+        String dayLabel(String key) {
+          if (key == todayKey) return 'اليوم';
+          if (key == tomorrowKey) return 'غداً';
+          return key;
+        }
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                const Icon(Icons.route_rounded, color: Color(0xFF5D1B5E), size: 20),
+                const Icon(Icons.calendar_month_rounded, color: Color(0xFF5D1B5E), size: 20),
                 const SizedBox(width: 8),
-                Text(
-                  'جدول الرحلات اليومي',
-                  style: GoogleFonts.tajawal(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: const Color(0xFF1E293B),
-                  ),
-                ),
+                Text('جدول مهامي',
+                    style: GoogleFonts.tajawal(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: const Color(0xFF1E293B))),
                 const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -519,49 +561,53 @@ class _DriverDashboardState extends State<DriverDashboard> {
                     color: const Color(0xFF5D1B5E).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Text(
-                    '${docs.length} رحلة',
-                    style: GoogleFonts.tajawal(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF5D1B5E),
-                    ),
-                  ),
+                  child: Text('${tasks.length} مهمة',
+                      style: GoogleFonts.tajawal(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF5D1B5E))),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            if (docs.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade100),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.event_available, color: Colors.grey.shade300, size: 28),
-                    const SizedBox(width: 12),
-                    Text(
-                      'لا توجد رحلات مجدولة لهذا اليوم',
-                      style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 13),
-                    ),
-                  ],
-                ),
-              )
-            else
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: docs.length,
-                itemBuilder: (context, i) =>
-                    _buildManifestOrderCard(docs[i].id, docs[i].data() as Map<String, dynamic>),
+            for (final day in sortedDays) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8, top: 4),
+                child: Text(dayLabel(day),
+                    style: GoogleFonts.tajawal(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: const Color(0xFF5D1B5E))),
               ),
+              ...(byDay[day]!
+                    ..sort((a, b) => slotOf(a['data'] as Map<String, dynamic>)
+                        .compareTo(slotOf(b['data'] as Map<String, dynamic>))))
+                  .map((t) => _buildManifestOrderCard(
+                      t['id'] as String, t['data'] as Map<String, dynamic>)),
+            ],
           ],
         );
       },
     );
+  }
+
+  // تسمية عربية لحالة المهمة (نموذج التوزيع المباشر)
+  String _statusLabelAr(String status) {
+    switch (status) {
+      case 'scheduled':
+        return 'مجدولة';
+      case 'on_the_way':
+      case 'accepted':
+        return 'في الطريق';
+      case 'in_progress':
+        return 'قيد التنفيذ';
+      case 'completed':
+        return 'مكتملة';
+      case 'pending_admin_approval':
+        return 'بانتظار الإدارة';
+      default:
+        return status;
+    }
   }
 
   Widget _buildManifestOrderCard(String orderId, Map<String, dynamic> data) {
@@ -581,14 +627,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
     final String status = data['status'] ?? 'pending';
     final GeoPoint? location = data['location'] as GeoPoint?;
 
-    // Status badge color
-    final Color statusColor = status == 'completed'
+    // لون شارة الحالة (نموذج التوزيع المباشر)
+    final Color statusColor = status == 'in_progress'
         ? Colors.green
-        : status == 'in_progress'
+        : (status == 'on_the_way' || status == 'accepted')
             ? Colors.blue
-            : status == 'accepted'
-                ? Colors.orange
-                : const Color(0xFF5D1B5E);
+            : status == 'scheduled'
+                ? const Color(0xFF5D1B5E)
+                : Colors.grey;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -662,6 +708,22 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       color: Colors.grey.shade400,
                     ),
                   ),
+                const SizedBox(height: 5),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _statusLabelAr(status),
+                    style: GoogleFonts.tajawal(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -725,7 +787,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
               const Icon(Icons.flash_on, color: Colors.orange, size: 22),
               const SizedBox(width: 8),
               Text(
-                "مهمة نشطة — يُرجى التركيز",
+                status == 'scheduled' ? "مهمتك القادمة — استعد للانطلاق" : "مهمة نشطة — يُرجى التركيز",
                 style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.orange.shade900),
               ),
             ],
@@ -745,7 +807,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
     IconData stateIcon = Icons.directions_car;
 
     switch (status) {
-      case 'accepted':
+      case 'scheduled':
+        stateTitle = "مهمة مجدولة — جاهز للانطلاق";
+        actionLabel = "اسحب للتأكيد — أنا في الطريق";
+        nextStatus = "on_the_way";
+        stateColor = const Color(0xFF5D1B5E);
+        stateIcon = Icons.event_available;
+        break;
+      case 'on_the_way':
+      case 'accepted': // توافق مع الطلبات الجارية أثناء الانتقال
         stateTitle = "في الطريق للعميل";
         actionLabel = "اسحب للتأكيد — وصلت، بدء الخدمة";
         nextStatus = "in_progress";
@@ -792,7 +862,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                     const SizedBox(height: 3),
                     // Large client name for field readability
                     Text(clientName, style: GoogleFonts.tajawal(fontWeight: FontWeight.w900, fontSize: 22, color: Colors.black87)),
-                    if (status == 'accepted' && data['location'] is GeoPoint)
+                    if ((status == 'accepted' || status == 'on_the_way' || status == 'scheduled') && data['location'] is GeoPoint)
                       _buildDistanceInfo(data['location'] as GeoPoint),
                   ],
                 ),
@@ -975,76 +1045,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
-  Widget _buildAvailableTasksSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text("الطلبات المتاحة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
-        const SizedBox(height: 15),
-        StreamBuilder<List<QueryDocumentSnapshot>>(
-          stream: _orderService.streamAvailableOrders(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return _buildStatusPlaceholder(Icons.search, "لا توجد طلبات حالياً", "بانتظار وصول طلبات جديدة من العملاء");
-            }
-            final docs = snapshot.data!;
-            return ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: docs.length,
-              itemBuilder: (context, index) {
-                final doc = docs[index];
-                return _buildNewTaskCard(doc.id, doc.data() as Map<String, dynamic>);
-              },
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNewTaskCard(String id, Map<String, dynamic> data) {
-    final isAccepting = _acceptingOrderId == id;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey[200]!),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: const Color(0xFF5D1B5E).withValues(alpha: 0.1),
-            child: const Icon(Icons.local_offer, color: Color(0xFF5D1B5E), size: 20),
-          ),
-          const SizedBox(width: 15),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(data['service_type'] ?? "خدمة تنظيف", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-                Text("${data['hours_contracted'] ?? 4} ساعات", style: const TextStyle(fontSize: 12, color: Colors.grey)),
-              ],
-            ),
-          ),
-          ElevatedButton(
-            onPressed: isAccepting ? null : () => _acceptOrder(id),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF5D1B5E),
-              disabledBackgroundColor: Colors.grey[300],
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: isAccepting
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : const Text("قبول", style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildStatusPlaceholder(IconData icon, String title, String subtitle) {
     return Center(
       child: Padding(
@@ -1090,40 +1090,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
     if (await canLaunchUrl(Uri.parse(url))) await launchUrl(Uri.parse(url));
   }
 
-  // DRIVER-002: try/catch + per-order loading state
-  void _acceptOrder(String id) async {
-    if (_acceptingOrderId != null) return;
-    setState(() => _acceptingOrderId = id);
-    try {
-      bool success = await _orderService.acceptOrder(id, _currentDriverId!);
-      if (success) {
-        final doc = await FirebaseFirestore.instance.collection('orders').doc(id).get();
-        final data = doc.data();
-        if (data != null && data['client_id'] != null) {
-          await _notificationService.notifyClientOfDriverStatus(
-            clientId: data['client_id'],
-            status: 'accepted',
-            orderCode: data['code'] ?? id,
-            driverName: _driverName,
-          );
-        }
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("لديك طلب نشط بالفعل!")));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('فشل قبول الطلب، تحقق من اتصالك بالإنترنت', style: GoogleFonts.tajawal()),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _acceptingOrderId = null);
-    }
-  }
-
   // DRIVER-001: try/catch + double-tap guard via _isUpdatingStatus
   void _updateStatus(String id, String status) async {
     if (_isUpdatingStatus) return;
@@ -1136,6 +1102,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
       final paymentMethod = data['payment_method'];
       final amount = (data['amount'] ?? 0.0).toDouble();
       final clientName = data['client_name'] ?? 'العميل';
+
+      // (C) حقول دفع COD — تُدمج لاحقاً ذرّياً داخل Transaction الإكمال
+      Map<String, dynamic>? codPaymentUpdates;
 
       if (status == 'completed' && paymentMethod == 'cod') {
         if (!mounted) return;
@@ -1252,7 +1221,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
         if (!confirmed) return;
 
-        await FirebaseFirestore.instance.collection('orders').doc(id).update({
+        // (C) بدل تحديث is_paid منفصلاً (يُكتب محلياً حتى دون اتصال ويسبب تضارباً)،
+        // نُمرّره ليُدمج داخل نفس Transaction الإكمال أدناه — فإمّا أن ينجح الكل أو يفشل الكل.
+        codPaymentUpdates = {
           'is_paid': true,
           'paid_at': FieldValue.serverTimestamp(),
           'cash_collected_by': _currentDriverId,
@@ -1260,16 +1231,22 @@ class _DriverDashboardState extends State<DriverDashboard> {
           'cash_confirmed_at': FieldValue.serverTimestamp(),
           'payment_pin': FieldValue.delete(),
           'payment_pin_generated_at': FieldValue.delete(),
-        });
+        };
+      }
 
+      // (C) Transaction واحد ذرّي: الحالة + دفع COD معاً. يفشل بالكامل دون اتصال،
+      // فلا يبقى الطلب "مدفوعاً وغير مكتمل" ولا العكس.
+      await _orderService.updateOrderStatus(id, status,
+          driverId: _currentDriverId, extraOrderUpdates: codPaymentUpdates);
+
+      // إشعار الإدارة بتحصيل النقد — بعد نجاح الإكمال فقط
+      if (codPaymentUpdates != null) {
         await _notificationService.notifyAdminOfCashCollection(
           driverName: _driverName,
           orderCode: data['code'] ?? id,
           amount: amount,
         );
       }
-
-      await _orderService.updateOrderStatus(id, status, driverId: _currentDriverId);
 
       if (data['client_id'] != null) {
         final orderCode = data['code'] ?? id;
@@ -1288,6 +1265,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
         }
       }
 
+      // (C) Optimistic UI: لا تُعرض Lottie إلا بعد نجاح Transaction الإكمال فعلياً.
+      // الـ Transaction يفشل دون اتصال (يرمي استثناءً) فينتقل للـ catch بلا نجاح كاذب.
       if (status == 'completed' && mounted) _showSuccessDialog();
     } catch (e) {
       if (mounted) {

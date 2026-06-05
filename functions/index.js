@@ -1,6 +1,7 @@
 /* eslint-disable max-len */
 const {onDocumentCreated, onDocumentUpdated, onDocumentWritten} = require("firebase-functions/v2/firestore");
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
+const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const geofire = require("geofire-common");
@@ -542,6 +543,57 @@ exports.createTamaraCheckout = onCall(
     });
 
 // 5. Tamara Webhook Handler
+/**
+ * (F2) إشعار العميل بنتيجة الدفع (نجاح/فشل) لأي بوابة.
+ * يكتب إشعاراً داخل التطبيق ويرسل Push. آمن — يُستدعى بعد فحص is_paid (idempotent).
+ * @param {string} col اسم المجموعة التي يوجد بها الطلب
+ * @param {string} orderId معرّف مستند الطلب
+ * @param {object} data بيانات مستند الطلب (لاستخراج العميل والكود)
+ * @param {boolean} success نجاح الدفع أم فشله
+ */
+async function notifyClientPaymentResult(col, orderId, data, success) {
+  try {
+    const clientUid = data?.client_id || data?.userId;
+    if (!clientUid) return;
+
+    const code = data?.code || orderId;
+    const title = success ? "تم تأكيد الدفع ✅" : "تعذّر إتمام الدفع ⚠️";
+    const body = success ?
+      `تم استلام دفعتك للطلب #${code} بنجاح، وسنبدأ بتجهيزه فوراً.` :
+      `لم تكتمل عملية الدفع للطلب #${code}. يمكنك إعادة المحاولة من التطبيق.`;
+
+    // 1) إشعار داخل التطبيق (سجل)
+    await admin.firestore().collection("notifications").add({
+      userId: clientUid,
+      title: title,
+      body: body,
+      type: "payment_update",
+      relatedId: orderId,
+      sentAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // 2) Push عبر FCM
+    const tokenDoc = await admin.firestore().collection("fcm_tokens")
+        .doc(clientUid).get();
+    if (!tokenDoc.exists) return;
+    const fcmToken = tokenDoc.data()?.fcmToken || tokenDoc.data()?.token;
+    if (!fcmToken) return;
+
+    await admin.messaging().send({
+      notification: {title: title, body: body},
+      data: {
+        click_action: "FLUTTER_NOTIFICATION_CLICK",
+        type: "payment_update",
+        orderId: orderId,
+      },
+      token: fcmToken,
+    });
+    console.log(`notifyClientPaymentResult: ${success ? "PAID" : "FAILED"} -> ${clientUid} (${col}/${orderId})`);
+  } catch (e) {
+    console.error("notifyClientPaymentResult error:", e);
+  }
+}
+
 exports.tamaraWebhook = onRequest(
     {secrets: ["TAMARA_API_TOKEN"], cpu: 0.083},
     async (req, res) => {
@@ -558,7 +610,9 @@ exports.tamaraWebhook = onRequest(
       const rawBody = JSON.stringify(req.body);
       const expectedSig = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
 
-      if (signature !== expectedSig && !signature.includes(expectedSig)) {
+      const sigBuf = Buffer.from(String(signature));
+      const expBuf = Buffer.from(expectedSig);
+      if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
         console.warn("Tamara webhook rejected: invalid signature");
         res.status(401).send("Invalid signature");
         return;
@@ -571,25 +625,42 @@ exports.tamaraWebhook = onRequest(
 
       if (status === "authorised" || status === "captured") {
         try {
-          // FIX: only update payment fields — do NOT set status to 'accepted'
-          // The order stays 'pending' until a driver accepts it manually
-          await admin.firestore().collection("orders").doc(orderId).update({
-            payment_status: "paid",
-            is_paid: true,
-            tamara_status: status,
-            updated_at: admin.firestore.FieldValue.serverTimestamp(),
+          // فحص + تحديث داخل Transaction (idempotent) لمنع تكرار المعالجة/الإشعار
+          const ref = admin.firestore().collection("orders").doc(orderId);
+          let orderData = null;
+          const flipped = await admin.firestore().runTransaction(async (tx) => {
+            const snap = await tx.get(ref);
+            if (!snap.exists) return false;
+            orderData = snap.data();
+            if (orderData.is_paid) return false; // سبق معالجته
+            // FIX: تحديث حقول الدفع فقط — الطلب يبقى 'pending' حتى يقبله سائق
+            tx.update(ref, {
+              payment_status: "paid",
+              is_paid: true,
+              tamara_status: status,
+              updated_at: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return true;
           });
-          console.log(`Order ${orderId} marked as PAID via Tamara Webhook`);
+          if (flipped) {
+            console.log(`Order ${orderId} marked as PAID via Tamara Webhook`);
+            await notifyClientPaymentResult("orders", orderId, orderData, true); // (F2)
+          }
         } catch (error) {
           console.error("Error updating order from Tamara webhook:", error);
         }
       } else if (status === "declined" || status === "expired") {
         try {
-          await admin.firestore().collection("orders").doc(orderId).update({
-            payment_status: "failed",
-            tamara_status: status,
-            updated_at: admin.firestore.FieldValue.serverTimestamp(),
-          });
+          const ref = admin.firestore().collection("orders").doc(orderId);
+          const doc = await ref.get();
+          if (doc.exists && !doc.data().is_paid) {
+            await ref.update({
+              payment_status: "failed",
+              tamara_status: status,
+              updated_at: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            await notifyClientPaymentResult("orders", orderId, doc.data(), false); // (F2)
+          }
         } catch (error) {
           console.error("Error updating failed Tamara order:", error);
         }
@@ -1102,6 +1173,311 @@ exports.findNearestDrivers = onCall({cpu: 0.25}, async (request) => {
   return {drivers: nearest3};
 });
 
+// ════════════════════════════════════════════════════════════════════════
+// Direct Dispatch Engine — shared helpers
+// ════════════════════════════════════════════════════════════════════════
+
+/**
+ * يجد سائقاً مؤهلاً وحرّاً لفترة زمنية في منطقة محددة.
+ * - المنطقة: يُفضَّل السائق الذي zone_name == منطقة الطلب أو assigned_zones تحتويها.
+ *   السائق بلا منطقة مُسجَّلة يُعامَل مؤقتاً كمن يخدم كل المناطق (fallback أثناء الإطلاق
+ *   حتى تُسنِد الإدارة المناطق للسائقين).
+ * - الانشغال: السائق مشغول إن كان لديه طلب يتقاطع زمنياً بحالة
+ *   scheduled/on_the_way/in_progress/accepted (لا يُحسب الانشغال "الآني" بل تقاطع الفترة).
+ * @param {admin.firestore.Firestore} db
+ * @param {object} opts {zoneName, startDateTime, endDateTime}
+ * @return {Promise<FirebaseFirestore.QueryDocumentSnapshot|null>}
+ */
+async function _findFreeDriverForSlot(db, {zoneName, startDateTime, endDateTime}) {
+  const dayStart = new Date(
+      startDateTime.getFullYear(), startDateTime.getMonth(), startDateTime.getDate());
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+
+  const driversSnap = await db.collection("drivers").get();
+  let eligible = driversSnap.docs.filter((doc) => doc.data().is_active !== false);
+
+  if (zoneName) {
+    eligible = eligible.filter((doc) => {
+      const d = doc.data();
+      const dz = d.zone_name;
+      const zones = Array.isArray(d.assigned_zones) ? d.assigned_zones : [];
+      const unzoned = (!dz || dz === "") && zones.length === 0;
+      return unzoned || dz === zoneName || zones.includes(zoneName);
+    });
+  }
+  if (eligible.length === 0) return null;
+
+  // بناء مجموعة السائقين المشغولين بطلبات متقاطعة في نفس اليوم
+  const ordersSnap = await db.collection("orders")
+      .where("service_date", ">=", admin.firestore.Timestamp.fromDate(dayStart))
+      .where("service_date", "<", admin.firestore.Timestamp.fromDate(dayEnd))
+      .where("status", "in", ["scheduled", "on_the_way", "in_progress", "accepted"])
+      .get();
+
+  const busy = new Set();
+  for (const doc of ordersSnap.docs) {
+    const data = doc.data();
+    if (!data.service_date || !data.driver_id) continue;
+    const oStart = data.service_date.toDate();
+    const oHours = Number(data.hours_contracted || 4);
+    const oEnd = new Date(oStart.getTime() + oHours * 60 * 60 * 1000);
+    if (startDateTime < oEnd && oStart < endDateTime) busy.add(data.driver_id);
+  }
+
+  for (const doc of eligible) {
+    if (!busy.has(doc.id)) return doc;
+  }
+  return null;
+}
+
+/**
+ * يُسنِد طلباً لسائق بحالة scheduled (التوجيه المباشر).
+ * لا يُعدّ السائق مشغولاً الآن — يصبح مشغولاً فقط عند انتقاله إلى on_the_way.
+ * @param {admin.firestore.Firestore} db
+ * @param {string} orderId
+ * @param {FirebaseFirestore.DocumentSnapshot} driverDoc
+ * @param {Date} startDateTime
+ * @return {Promise<{driverId:string, driverName:string}>}
+ */
+async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
+  const d = driverDoc.data();
+  const bookingDate = `${startDateTime.getFullYear()}-` +
+    `${String(startDateTime.getMonth() + 1).padStart(2, "0")}-` +
+    `${String(startDateTime.getDate()).padStart(2, "0")}`;
+  const timeSlot = `${String(startDateTime.getHours()).padStart(2, "0")}:00`;
+
+  await db.collection("orders").doc(orderId).update({
+    status: "scheduled",
+    driver_id: driverDoc.id,
+    driver_name: d.name || "سائق",
+    driver_phone: d.phone || "000000000",
+    assigned_at: admin.firestore.FieldValue.serverTimestamp(),
+    scheduled_at: admin.firestore.Timestamp.fromDate(startDateTime),
+    // service_date مطلوب حتى يحتسب مُحدِّد التوفّر هذه المهمة ضمن انشغال السائق
+    service_date: admin.firestore.Timestamp.fromDate(startDateTime),
+    booking_date: bookingDate,
+    booking_time_slot: timeSlot,
+  });
+  return {driverId: driverDoc.id, driverName: d.name || "سائق"};
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Subscription Visit Generator — pre-generate & auto-assign all contract visits
+// ════════════════════════════════════════════════════════════════════════
+exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
+  const {contractId} = request.data;
+  if (!contractId) throw new HttpsError("invalid-argument", "معرف العقد مطلوب");
+  const db = admin.firestore();
+
+  // العثور على العقد (قد يكون contractId هو معرّف المستند أو حقل contractId)
+  let contractRef = db.collection("contracts").doc(contractId);
+  let contractSnap = await contractRef.get();
+  if (!contractSnap.exists) {
+    const q = await db.collection("contracts")
+        .where("contractId", "==", contractId).limit(1).get();
+    if (q.empty) throw new HttpsError("not-found", "العقد غير موجود");
+    contractRef = q.docs[0].ref;
+    contractSnap = q.docs[0];
+  }
+
+  // مطالبة ذرّية بالتوليد (idempotent) لمنع التكرار عند تكرار نداء الدفع
+  const claimed = await db.runTransaction(async (tx) => {
+    const s = await tx.get(contractRef);
+    const data = s.data();
+    if (data.visits_generated === true) return false;
+    if (data.status !== "active") {
+      throw new HttpsError("failed-precondition", "لا تُولَّد الزيارات إلا بعد تفعيل العقد");
+    }
+    tx.update(contractRef, {
+      visits_generated: true,
+      visits_generated_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return true;
+  });
+  if (!claimed) return {generated: 0, skipped: true, reason: "already_generated"};
+
+  const c = contractSnap.data();
+  const totalVisits = Number(c.planVisits || 0);
+  if (totalVisits <= 0) return {generated: 0, skipped: true, reason: "no_visits"};
+
+  // جدول الزيارات: مصفوفة scheduled_visits الصريحة (من واجهة الحجز) أو
+  // افتراضياً تواتر أسبوعي ابتداءً من booking_date/booking_time_slot.
+  let schedule = [];
+  if (Array.isArray(c.scheduled_visits) && c.scheduled_visits.length > 0) {
+    schedule = c.scheduled_visits.slice(0, totalVisits).map((v) => ({
+      date: v.date, slot: v.slot || c.booking_time_slot || "10:00",
+    }));
+  } else if (c.booking_date) {
+    const parts = String(c.booking_date).split("-").map(Number);
+    const slot = c.booking_time_slot || "10:00";
+    for (let i = 0; i < totalVisits; i++) {
+      const dt = new Date(parts[0], parts[1] - 1, parts[2] + i * 7); // أسبوعي
+      const ds = `${dt.getFullYear()}-` +
+        `${String(dt.getMonth() + 1).padStart(2, "0")}-` +
+        `${String(dt.getDate()).padStart(2, "0")}`;
+      schedule.push({date: ds, slot});
+    }
+  } else {
+    throw new HttpsError("failed-precondition", "لا توجد مواعيد للزيارات في العقد");
+  }
+
+  const zoneName = c.zone_name || null;
+  const location = c.location || new admin.firestore.GeoPoint(24.7136, 46.6753);
+  const hours = Number(c.hours || 4);
+  const planName = c.planName || "باقة اشتراك";
+  const results = [];
+
+  for (let i = 0; i < schedule.length; i++) {
+    const v = schedule[i];
+    const dp = String(v.date).split("-").map(Number);
+    const hr = Number(String(v.slot).split(":")[0] || 10);
+    const startDateTime = new Date(dp[0], dp[1] - 1, dp[2], hr, 0, 0);
+    const endDateTime = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
+
+    const orderRef = db.collection("orders").doc();
+    await orderRef.set({
+      code: `SUB-${String(contractRef.id).slice(-5)}-${i + 1}`,
+      contract_id: contractRef.id,
+      visit_index: i + 1,
+      total_visits: totalVisits,
+      client_id: c.userId,
+      client_name: c.userName || c.clientName || "عميل",
+      client_phone: c.userPhone || "",
+      service_type: planName,
+      service_name: `${planName} — زيارة ${i + 1}/${totalVisits}`,
+      amount: 0, // مدفوعة ضمن العقد
+      is_paid: true,
+      payment_method: "subscription",
+      status: "pending_admin_approval", // تُرفَع إلى scheduled عند توفّر سائق
+      location: location,
+      zone_name: zoneName,
+      hours_contracted: hours,
+      service_date: admin.firestore.Timestamp.fromDate(startDateTime),
+      booking_date: v.date,
+      booking_time_slot: v.slot,
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      reminder_sent: false,
+    });
+
+    // محاولة الإسناد التلقائي (منطقة + فترة) → scheduled، وإلا تبقى للإدارة
+    const driver = await _findFreeDriverForSlot(db, {zoneName, startDateTime, endDateTime});
+    if (driver) {
+      const r = await _assignDriverScheduled(db, orderRef.id, driver, startDateTime);
+      results.push({visit: i + 1, assigned: true, driverId: r.driverId});
+    } else {
+      results.push({visit: i + 1, assigned: false});
+    }
+  }
+
+  return {generated: schedule.length, results};
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// Admin approve + assign (المسار الثاني: الكنب/المكيفات/المتجر)
+// ════════════════════════════════════════════════════════════════════════
+exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
+  await _assertAdmin(request); // super_admin أو orders_manager
+  const {orderId, driverId, scheduledIso} = request.data;
+  if (!orderId || !driverId || !scheduledIso) {
+    throw new HttpsError("invalid-argument", "البيانات ناقصة (الطلب/السائق/الموعد)");
+  }
+  const db = admin.firestore();
+  const orderSnap = await db.collection("orders").doc(orderId).get();
+  if (!orderSnap.exists) throw new HttpsError("not-found", "الطلب غير موجود");
+
+  const cur = orderSnap.data().status;
+  if (cur !== "pending_admin_approval" && cur !== "pending") {
+    throw new HttpsError("failed-precondition", "لا يمكن اعتماد الطلب بحالته الحالية");
+  }
+  const driverSnap = await db.collection("drivers").doc(driverId).get();
+  if (!driverSnap.exists) throw new HttpsError("not-found", "السائق غير موجود");
+
+  const startDateTime = new Date(scheduledIso);
+  const r = await _assignDriverScheduled(db, orderId, driverSnap, startDateTime);
+  return {assigned: true, driverId: r.driverId, driverName: r.driverName};
+});
+
+/**
+ * (2c) إرسال Push لمستخدم عبر توكنه في fcm_tokens.
+ * @param {string} uid
+ * @param {string} title
+ * @param {string} body
+ * @param {object} data
+ */
+async function _pushToUid(uid, title, body, data) {
+  if (!uid) return;
+  try {
+    const tokenDoc = await admin.firestore().collection("fcm_tokens").doc(uid).get();
+    if (!tokenDoc.exists) return;
+    const token = tokenDoc.data()?.fcmToken || tokenDoc.data()?.token;
+    if (!token) return;
+    await admin.messaging().send({
+      notification: {title, body},
+      data: {click_action: "FLUTTER_NOTIFICATION_CLICK", ...data},
+      token,
+    });
+  } catch (e) {
+    console.error("_pushToUid error:", e);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// (2c) تذكير السائق — Cron كل 15 دقيقة بالمهام التي تبدأ بعد ساعة تقريباً
+// ════════════════════════════════════════════════════════════════════════
+exports.remindDriversUpcomingTasks = onSchedule(
+    {schedule: "every 15 minutes", timeZone: "Asia/Riyadh"},
+    async () => {
+      const db = admin.firestore();
+      const now = Date.now();
+      const windowStart = new Date(now + 60 * 60 * 1000); // +1h
+      const windowEnd = new Date(now + 75 * 60 * 1000); // +1h15m
+
+      const snap = await db.collection("orders")
+          .where("status", "==", "scheduled")
+          .where("scheduled_at", ">=", admin.firestore.Timestamp.fromDate(windowStart))
+          .where("scheduled_at", "<", admin.firestore.Timestamp.fromDate(windowEnd))
+          .get();
+
+      let sent = 0;
+      for (const doc of snap.docs) {
+        const d = doc.data();
+        if (d.reminder_sent === true || !d.driver_id) continue;
+        const code = d.code || doc.id;
+        await _pushToUid(
+            d.driver_id,
+            "تذكير: مهمتك بعد ساعة ⏰",
+            `لديك مهمة (#${code}) تبدأ خلال ساعة تقريباً — استعد للانطلاق.`,
+            {type: "task_reminder", orderId: doc.id},
+        );
+        await doc.ref.update({reminder_sent: true});
+        sent++;
+      }
+      console.log(`remindDriversUpcomingTasks: sent ${sent} reminder(s)`);
+    },
+);
+
+// ════════════════════════════════════════════════════════════════════════
+// (2c) تذكير العميل عند انطلاق السائق (on_the_way) — Event-driven
+// ════════════════════════════════════════════════════════════════════════
+exports.notifyClientOnDriverDeparture = onDocumentUpdated(
+    {document: "orders/{orderId}", cpu: 0.083},
+    async (event) => {
+      const before = event.data.before.data();
+      const after = event.data.after.data();
+      if (!before || !after) return;
+      // فقط عند الانتقال الفعلي إلى on_the_way
+      if (before.status === "on_the_way" || after.status !== "on_the_way") return;
+
+      const code = after.code || event.params.orderId;
+      await _pushToUid(
+          after.client_id,
+          "سائقك في الطريق إليك 🚗",
+          `انطلق السائق لتنفيذ طلبك (#${code}) — يرجى الاستعداد لاستقباله.`,
+          {type: "order_update", orderId: event.params.orderId},
+      );
+    },
+);
+
 // 10. Auto Assign Driver Directly (No acceptance required)
 exports.autoAssignDriverDirectly = onCall({cpu: 0.25}, async (request) => {
   const {orderId, durationHours} = request.data;
@@ -1118,95 +1494,30 @@ exports.autoAssignDriverDirectly = onCall({cpu: 0.25}, async (request) => {
   }
 
   const orderData = orderDoc.data();
-  const serviceDateTimestamp = orderData.service_date;
-  if (!serviceDateTimestamp) {
+  if (!orderData.service_date) {
     throw new HttpsError("failed-precondition", "تاريخ الخدمة غير محدد");
   }
 
-  const startDateTime = serviceDateTimestamp.toDate();
+  const startDateTime = orderData.service_date.toDate();
   const hours = Number(durationHours || orderData.hours_contracted || 4);
   const endDateTime = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
 
-  const dayStart = new Date(startDateTime.getFullYear(), startDateTime.getMonth(), startDateTime.getDate());
-  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
-
-  // 2. Fetch all drivers; filter in JS to handle missing/unset fields gracefully.
-  // A driver is eligible if:
-  //   - is_active is not explicitly false (new drivers may not have the field set)
-  //   - is_available is not explicitly false (not currently mid-service)
-  const driversSnap = await db.collection("drivers").get();
-  const eligibleDrivers = driversSnap.docs.filter((doc) => {
-    const d = doc.data();
-    return d.is_active !== false && d.is_available !== false;
+  // (Direct Dispatch) اختيار سائق متاح في نفس المنطقة والفترة ثم إسناده بحالة scheduled
+  const driver = await _findFreeDriverForSlot(db, {
+    zoneName: orderData.zone_name || null,
+    startDateTime,
+    endDateTime,
   });
-
-  if (eligibleDrivers.length === 0) {
-    return {assigned: false, error: "no_active_drivers"};
-  }
-
-  // 3. Fetch orders for that day that overlap with the requested slot
-  const ordersSnap = await db.collection("orders")
-      .where("service_date", ">=", admin.firestore.Timestamp.fromDate(dayStart))
-      .where("service_date", "<", admin.firestore.Timestamp.fromDate(dayEnd))
-      .where("status", "in", ["accepted", "in_progress"])
-      .get();
-
-  const busyDriverIds = new Set();
-  for (const doc of ordersSnap.docs) {
-    const data = doc.data();
-    if (!data.service_date) continue;
-    const orderStart = data.service_date.toDate();
-    const orderHours = Number(data.hours_contracted || 4);
-    const orderEnd = new Date(orderStart.getTime() + orderHours * 60 * 60 * 1000);
-
-    if (startDateTime < orderEnd && orderStart < endDateTime) {
-      if (data.driver_id) {
-        busyDriverIds.add(data.driver_id);
-      }
-    }
-  }
-
-  // Find first eligible driver not busy during the requested slot
-  let availableDriverDoc = null;
-  for (const doc of eligibleDrivers) {
-    if (!busyDriverIds.has(doc.id)) {
-      availableDriverDoc = doc;
-      break;
-    }
-  }
-
-  if (!availableDriverDoc) {
+  if (!driver) {
     return {assigned: false, error: "no_available_drivers"};
   }
 
-  const driverId = availableDriverDoc.id;
-  const driverData = availableDriverDoc.data();
-
-  // 4. Assign driver directly using a transaction
-  await db.runTransaction(async (transaction) => {
-    const orderRef = db.collection("orders").doc(orderId);
-    const driverRef = db.collection("drivers").doc(driverId);
-
-    transaction.update(orderRef, {
-      status: "accepted",
-      driver_id: driverId,
-      driver_phone: driverData.phone || "000000000",
-      assigned_driver: driverData.name || "سائق",
-      accepted_at: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    transaction.update(driverRef, {
-      status: "en_route",
-      current_order_id: orderId,
-      is_available: false,
-    });
-  });
-
+  const r = await _assignDriverScheduled(db, orderId, driver, startDateTime);
   return {
     assigned: true,
-    driverId: driverId,
-    driverName: driverData.name || "سائق",
-    driverEmail: driverData.email || null,
+    driverId: r.driverId,
+    driverName: r.driverName,
+    driverEmail: driver.data().email || null,
   };
 });
 
@@ -1220,64 +1531,21 @@ exports.checkHourlySlotAvailability = onCall({cpu: 0.25}, async (request) => {
   const startDateTime = new Date(startDateTimeIso);
   const hours = Number(durationHours || 4);
   const endDateTime = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
-
-  const dayStart = new Date(startDateTime.getFullYear(), startDateTime.getMonth(), startDateTime.getDate());
-  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
-
   const db = admin.firestore();
 
-  // 1. Fetch all drivers; filter in JS — same logic as autoAssignDriverDirectly.
-  // is_active !== false: handles new drivers without the field set
-  // is_available !== false: excludes drivers currently mid-service
-  const driversSnap = await db.collection("drivers").get();
-  const eligibleDrivers = driversSnap.docs.filter((doc) => {
-    const d = doc.data();
-    return d.is_active !== false && d.is_available !== false;
+  // (Direct Dispatch) التوفّر = وجود سائق حرّ في نفس المنطقة والفترة عبر نفس مُحدِّد الإسناد
+  const driver = await _findFreeDriverForSlot(db, {
+    zoneName: request.data.zoneName || null,
+    startDateTime,
+    endDateTime,
   });
-
-  if (eligibleDrivers.length === 0) {
+  if (!driver) {
     return {available: false, driverId: null, driverName: null};
   }
-
-  // 2. Fetch orders for that day to detect time-overlap conflicts
-  const ordersSnap = await db.collection("orders")
-      .where("service_date", ">=", admin.firestore.Timestamp.fromDate(dayStart))
-      .where("service_date", "<", admin.firestore.Timestamp.fromDate(dayEnd))
-      .where("status", "in", ["accepted", "in_progress"])
-      .get();
-
-  const busyDriverIds = new Set();
-  for (const doc of ordersSnap.docs) {
-    const data = doc.data();
-    if (!data.service_date) continue;
-    const orderStart = data.service_date.toDate();
-    const orderHours = Number(data.hours_contracted || 4);
-    const orderEnd = new Date(orderStart.getTime() + orderHours * 60 * 60 * 1000);
-
-    if (startDateTime < orderEnd && orderStart < endDateTime) {
-      if (data.driver_id) {
-        busyDriverIds.add(data.driver_id);
-      }
-    }
-  }
-
-  // Find first eligible driver with no overlapping order
-  let availableDriverDoc = null;
-  for (const doc of eligibleDrivers) {
-    if (!busyDriverIds.has(doc.id)) {
-      availableDriverDoc = doc;
-      break;
-    }
-  }
-
-  if (!availableDriverDoc) {
-    return {available: false, driverId: null, driverName: null};
-  }
-
-  const driverData = availableDriverDoc.data();
+  const driverData = driver.data();
   return {
     available: true,
-    driverId: availableDriverDoc.id,
+    driverId: driver.id,
     driverName: driverData.name || "سائق",
     driverEmail: driverData.email || null,
   };
@@ -1292,50 +1560,51 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
     throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
   }
 
-  const {startDate, endDate} = request.data;
+  const {startDate, endDate, zoneName} = request.data;
   if (!startDate || !endDate) {
     throw new HttpsError("invalid-argument", "startDate و endDate مطلوبان");
   }
 
   const db = admin.firestore();
 
-  // 1. Fetch config (max capacities)
+  // 1. السعة الحقيقية للفترة = عدد السائقين الحرّين القابلين للإسناد في المنطقة.
+  // (Direct Dispatch / قرار 4) — الفترة حمراء إذا بلغ عدد الطلبات عدد السائقين.
+  const driversSnap = await db.collection("drivers").get();
+  let eligible = driversSnap.docs.filter((doc) => doc.data().is_active !== false);
+  if (zoneName) {
+    eligible = eligible.filter((doc) => {
+      const d = doc.data();
+      const zones = Array.isArray(d.assigned_zones) ? d.assigned_zones : [];
+      const unzoned = (!d.zone_name) && zones.length === 0;
+      return unzoned || d.zone_name === zoneName || zones.includes(zoneName);
+    });
+  }
+  const driverCount = eligible.length;
+
+  // 2. السعة اليومية تبقى من الإعدادات (سقف إضافي)
   let maxOrdersPerDay = 10;
-  let maxTeamsPerSlot = 5;
   try {
-    const [hourlySnap, mainSnap] = await Promise.all([
-      db.collection("system_configs").doc("hourly_settings").get(),
-      db.collection("system_configs").doc("main_settings").get(),
-    ]);
+    const hourlySnap = await db.collection("system_configs")
+        .doc("hourly_settings").get();
     if (hourlySnap.exists) {
       maxOrdersPerDay = hourlySnap.data().max_orders_per_day ?? 10;
     }
-    if (mainSnap.exists) {
-      maxTeamsPerSlot = mainSnap.data().max_teams_per_slot ?? 5;
-    }
   } catch (_) {}
 
-  // 2. Fetch all active hourly orders in the date range
+  // 3. عدّ الطلبات التي تستهلك سائقاً في كل فترة (غير الملغاة)
   const snap = await db.collection("orders")
       .where("booking_date", ">=", startDate)
       .where("booking_date", "<=", endDate)
       .get();
 
-  // 3. Build aggregates
-  const dailyCounts = {};  // "yyyy-MM-dd" -> count
-  const slotCounts = {};   // "yyyy-MM-dd_HH:00" -> count
-
+  const dailyCounts = {};
+  const slotCounts = {};
   for (const doc of snap.docs) {
     const d = doc.data();
-    if (d.status === "cancelled") continue;
-
+    if (d.status === "cancelled" || d.status === "rejected") continue;
     const bDate = d.booking_date;
     if (!bDate) continue;
-
-    // Daily total
     dailyCounts[bDate] = (dailyCounts[bDate] || 0) + 1;
-
-    // Per-slot total (global across zones — capacity is fleet-wide)
     const ts = d.booking_time_slot;
     if (ts) {
       const key = `${bDate}_${ts}`;
@@ -1343,7 +1612,8 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
     }
   }
 
-  return {dailyCounts, slotCounts, maxOrdersPerDay, maxTeamsPerSlot};
+  // maxTeamsPerSlot يعكس الآن عدد السائقين الحقيقي (لا قيمة ثابتة من الإعدادات)
+  return {dailyCounts, slotCounts, maxOrdersPerDay, maxTeamsPerSlot: driverCount};
 });
 
 // Notify driver when they are assigned to an order
@@ -1480,21 +1750,36 @@ exports.moyasarWebhook = onRequest(
               if (data.is_paid) {
                 console.log(`moyasarWebhook: Order ${orderId} already paid — skipping (idempotent)`);
               } else {
-                await ref.update({
-                  payment_status: "paid",
-                  is_paid: true,
-                  moyasar_payment_id: payment.id,
-                  moyasar_status: verifiedPayment.status,
-                  updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                // (سباق) فحص + تحديث داخل Transaction لمنع معالجة الدفعة مرتين
+                const flipped = await admin.firestore().runTransaction(async (tx) => {
+                  const snap = await tx.get(ref);
+                  if (snap.data()?.is_paid) return false;
+                  tx.update(ref, {
+                    payment_status: "paid",
+                    is_paid: true,
+                    moyasar_payment_id: payment.id,
+                    moyasar_status: verifiedPayment.status,
+                    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                  });
+                  return true;
                 });
-                console.log(`moyasarWebhook: Order ${orderId} in '${col}' marked PAID via webhook`);
+                if (flipped) {
+                  console.log(`moyasarWebhook: Order ${orderId} in '${col}' marked PAID via webhook`);
+                  await notifyClientPaymentResult(col, orderId, data, true); // (F2)
+                }
               }
               break;
             }
           }
         } else if (eventType === "payment_failed" || eventType === "payment_abandoned") {
           console.log(`moyasarWebhook: payment ${payment.id} for order ${orderId} — status: ${eventType}`);
-          // No Firestore update needed; app already handles failures via SDK callback
+          // (F2) أبلغ العميل بالفشل الفعلي فقط (لا عند مجرد المغادرة abandoned)
+          if (eventType === "payment_failed") {
+            const found = await _findOrder(orderId);
+            if (found && !found.data.is_paid) {
+              await notifyClientPaymentResult(found.col, orderId, found.data, false);
+            }
+          }
         } else if (eventType === "payment_refunded") {
           // Find and mark the order as refunded
           const collections = ["orders", "store_orders", "maintenance_requests", "contracts"];
@@ -1741,7 +2026,9 @@ exports.tabbyWebhook = onRequest(
       const rawBody = JSON.stringify(req.body);
       const expectedSig = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
 
-      if (signature !== expectedSig && !signature.includes(expectedSig)) {
+      const sigBuf = Buffer.from(String(signature));
+      const expBuf = Buffer.from(expectedSig);
+      if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
         console.warn("tabbyWebhook: rejected — invalid HMAC signature");
         return res.status(401).json({error: "Invalid signature"});
       }
@@ -1808,6 +2095,7 @@ exports.tabbyWebhook = onRequest(
                   });
                 });
                 console.log(`tabbyWebhook: ${col}/${orderId} marked PAID via webhook (${eventType})`);
+                await notifyClientPaymentResult(col, orderId, data, true); // (F2)
               }
               break; // Found the document — stop searching collections
             }
@@ -1824,6 +2112,7 @@ exports.tabbyWebhook = onRequest(
               updated_at: admin.firestore.FieldValue.serverTimestamp(),
             });
             console.log(`tabbyWebhook: order ${orderId} marked FAILED (${eventType})`);
+            await notifyClientPaymentResult("orders", orderId, doc.data(), false); // (F2)
           }
         } else {
           console.log(`tabbyWebhook: unhandled event type '${eventType}' — ignoring`);
