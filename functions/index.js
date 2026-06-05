@@ -1,6 +1,7 @@
 /* eslint-disable max-len */
 const {onDocumentCreated, onDocumentUpdated, onDocumentWritten} = require("firebase-functions/v2/firestore");
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
+const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const geofire = require("geofire-common");
@@ -1395,6 +1396,87 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   const r = await _assignDriverScheduled(db, orderId, driverSnap, startDateTime);
   return {assigned: true, driverId: r.driverId, driverName: r.driverName};
 });
+
+/**
+ * (2c) إرسال Push لمستخدم عبر توكنه في fcm_tokens.
+ * @param {string} uid
+ * @param {string} title
+ * @param {string} body
+ * @param {object} data
+ */
+async function _pushToUid(uid, title, body, data) {
+  if (!uid) return;
+  try {
+    const tokenDoc = await admin.firestore().collection("fcm_tokens").doc(uid).get();
+    if (!tokenDoc.exists) return;
+    const token = tokenDoc.data()?.fcmToken || tokenDoc.data()?.token;
+    if (!token) return;
+    await admin.messaging().send({
+      notification: {title, body},
+      data: {click_action: "FLUTTER_NOTIFICATION_CLICK", ...data},
+      token,
+    });
+  } catch (e) {
+    console.error("_pushToUid error:", e);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// (2c) تذكير السائق — Cron كل 15 دقيقة بالمهام التي تبدأ بعد ساعة تقريباً
+// ════════════════════════════════════════════════════════════════════════
+exports.remindDriversUpcomingTasks = onSchedule(
+    {schedule: "every 15 minutes", timeZone: "Asia/Riyadh"},
+    async () => {
+      const db = admin.firestore();
+      const now = Date.now();
+      const windowStart = new Date(now + 60 * 60 * 1000); // +1h
+      const windowEnd = new Date(now + 75 * 60 * 1000); // +1h15m
+
+      const snap = await db.collection("orders")
+          .where("status", "==", "scheduled")
+          .where("scheduled_at", ">=", admin.firestore.Timestamp.fromDate(windowStart))
+          .where("scheduled_at", "<", admin.firestore.Timestamp.fromDate(windowEnd))
+          .get();
+
+      let sent = 0;
+      for (const doc of snap.docs) {
+        const d = doc.data();
+        if (d.reminder_sent === true || !d.driver_id) continue;
+        const code = d.code || doc.id;
+        await _pushToUid(
+            d.driver_id,
+            "تذكير: مهمتك بعد ساعة ⏰",
+            `لديك مهمة (#${code}) تبدأ خلال ساعة تقريباً — استعد للانطلاق.`,
+            {type: "task_reminder", orderId: doc.id},
+        );
+        await doc.ref.update({reminder_sent: true});
+        sent++;
+      }
+      console.log(`remindDriversUpcomingTasks: sent ${sent} reminder(s)`);
+    },
+);
+
+// ════════════════════════════════════════════════════════════════════════
+// (2c) تذكير العميل عند انطلاق السائق (on_the_way) — Event-driven
+// ════════════════════════════════════════════════════════════════════════
+exports.notifyClientOnDriverDeparture = onDocumentUpdated(
+    {document: "orders/{orderId}", cpu: 0.083},
+    async (event) => {
+      const before = event.data.before.data();
+      const after = event.data.after.data();
+      if (!before || !after) return;
+      // فقط عند الانتقال الفعلي إلى on_the_way
+      if (before.status === "on_the_way" || after.status !== "on_the_way") return;
+
+      const code = after.code || event.params.orderId;
+      await _pushToUid(
+          after.client_id,
+          "سائقك في الطريق إليك 🚗",
+          `انطلق السائق لتنفيذ طلبك (#${code}) — يرجى الاستعداد لاستقباله.`,
+          {type: "order_update", orderId: event.params.orderId},
+      );
+    },
+);
 
 // 10. Auto Assign Driver Directly (No acceptance required)
 exports.autoAssignDriverDirectly = onCall({cpu: 0.25}, async (request) => {

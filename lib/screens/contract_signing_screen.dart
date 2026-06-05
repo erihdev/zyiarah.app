@@ -14,6 +14,10 @@ class ZyiarahContractSigningScreen extends StatefulWidget {
   final int planVisits;
   final DateTime? bookingDate;
   final String? bookingTimeSlot;
+  // (2c) مواعيد الزيارات المتعددة + المنطقة + الموقع — لتوليد وإسناد الزيارات جغرافياً
+  final List<Map<String, String>>? scheduledVisits;
+  final String? zoneName;
+  final GeoPoint? location;
   const ZyiarahContractSigningScreen({
     super.key,
     required this.planName,
@@ -21,6 +25,9 @@ class ZyiarahContractSigningScreen extends StatefulWidget {
     this.planVisits = 0,
     this.bookingDate,
     this.bookingTimeSlot,
+    this.scheduledVisits,
+    this.zoneName,
+    this.location,
   });
 
   @override
@@ -123,6 +130,10 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
             ? intl.DateFormat('yyyy-MM-dd').format(widget.bookingDate!)
             : null,
         'booking_time_slot': widget.bookingTimeSlot,
+        // (2c) مواعيد الزيارات المتعددة + المنطقة + الموقع — تقرؤها generateSubscriptionVisits
+        'scheduled_visits': widget.scheduledVisits,
+        'zone_name': widget.zoneName,
+        'location': widget.location,
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
         'signedAt': FieldValue.serverTimestamp(),
