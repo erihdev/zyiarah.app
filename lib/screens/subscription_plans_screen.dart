@@ -428,7 +428,21 @@ class _ZyiarahSubscriptionPlansScreenState
     final selectedData = selectedDoc.data() as Map<String, dynamic>;
     final String title = selectedData['title'] ?? 'باقة اشتراك';
     final double priceValue = double.tryParse(selectedData['price']?.toString() ?? '0') ?? 0.0;
-    final int visits = (selectedData['visits'] ?? 0).toInt();
+    int visits = ((selectedData['visits'] as num?) ?? 0).toInt();
+    // احتياطي: إن لم يُضبط حقل visits رقمياً، استخرج العدد المجاور لكلمة "زيار"
+    // من العنوان/العنوان الفرعي/المزايا (الباقات تُسوَّق بـ "4 زيارات"، "8 زيارات").
+    if (visits <= 0) {
+      final featuresText = (selectedData['features'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .join(' ') ??
+          '';
+      final searchText =
+          '$title ${selectedData['subtitle'] ?? ''} $featuresText';
+      final match = RegExp(r'(\d+)\s*زيار').firstMatch(searchText);
+      if (match != null) {
+        visits = int.tryParse(match.group(1) ?? '') ?? 0;
+      }
+    }
 
     return Container(
       padding: const EdgeInsets.all(24),
