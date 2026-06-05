@@ -14,7 +14,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   geolocator: ^13.0.2
   latlong2: ^0.9.1
-  google_fonts: ^6.2.1
+  google_fonts: ^8.1.0
   firebase_core: ^4.9.0
   firebase_auth: ^6.5.1
   cloud_firestore: 6.4.0
