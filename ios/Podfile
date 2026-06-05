@@ -16,6 +16,13 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 
 platform :ios, '15.0'
 
+# (إصلاح بناء iOS) تثبيت Firebase iOS SDK على 12.13.0.
+# cloud_functions 6.3.2 يفرض firebase_core 4.10.0 الذي يرفع Firebase SDK إلى 12.14.0،
+# لكن selector الـ Pipeline في cloud_firestore 6.4.x
+# (FIRCollectionSourceStageBridge initWithRef:firestore:) غير متوافق مع 12.14.0.
+# الـ podspecs تعطي الأولوية لهذا المتغيّر العام على الافتراضي.
+$FirebaseSDKVersion = '12.13.0'
+
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = '1'
 
