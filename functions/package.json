@@ -18,7 +18,7 @@
     "firebase-functions": "^7.2.5",
     "geofire-common": "^6.0.0",
     "handlebars": "^4.7.9",
-    "nodemailer": "^8.0.8",
+    "nodemailer": "^8.0.10",
     "resend": "^6.12.4"
   },
   "devDependencies": {
