@@ -51,7 +51,7 @@ class ClientNotificationsScreen extends StatelessWidget {
                     );
                   }
 
-                  final docs = (snapshot.data?.docs ?? [])
+                  final allDocs = (snapshot.data?.docs ?? [])
                     ..sort((a, b) {
                       final aData = a.data() as Map<String, dynamic>;
                       final bData = b.data() as Map<String, dynamic>;
@@ -62,6 +62,11 @@ class ClientNotificationsScreen extends StatelessWidget {
                       if (bT == null) return -1;
                       return bT.compareTo(aT);
                     });
+                  // تُعرض غير المقروءة فقط — النقر يُعلّم الإشعار كمقروء فيختفي مباشرةً
+                  final docs = allDocs.where((d) {
+                    final m = d.data() as Map<String, dynamic>;
+                    return m['isRead'] != true && m['is_read'] != true;
+                  }).toList();
 
                   if (docs.isEmpty) {
                     return Center(
@@ -88,16 +93,14 @@ class ClientNotificationsScreen extends StatelessWidget {
                       final data = doc.data() as Map<String, dynamic>;
                       return GestureDetector(
                         onTap: () async {
-                          final isRead = (data['is_read'] ?? data['isRead'] as bool?) ?? false;
-                          if (!isRead) {
-                            try {
-                              await FirebaseFirestore.instance
-                                  .collection('notifications')
-                                  .doc(doc.id)
-                                  .update({'isRead': true});
-                            } catch (e) {
-                              debugPrint("Error marking notification as read: $e");
-                            }
+                          // تعليم كمقروء بالحقلين معاً (توحيد مع عدّاد الجرس) → يختفي
+                          try {
+                            await FirebaseFirestore.instance
+                                .collection('notifications')
+                                .doc(doc.id)
+                                .update({'isRead': true, 'is_read': true});
+                          } catch (e) {
+                            debugPrint("Error marking notification as read: $e");
                           }
                         },
                         child: _ClientNotifCard(data: data),
