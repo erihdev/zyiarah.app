@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart' as intl;
 import 'dart:convert';
 import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/screens/payment_summary_screen.dart';
 
 class ZyiarahContractSigningScreen extends StatefulWidget {
   final String planName;
@@ -117,7 +118,8 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
       final String finalName = userDoc.data()?['name'] ?? user?.displayName ?? 'عميل زيارة';
       final String finalPhone = userDoc.data()?['phone'] ?? user?.phoneNumber ?? 'غير مسجل';
 
-      await firestore.collection('contracts').add({
+      final docRef = firestore.collection('contracts').doc();
+      await docRef.set({
         'contractId': contractId,
         'userId': user?.uid,
         'userPhone': finalPhone,
@@ -160,56 +162,24 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
       );
       // ----------------------------------------------
       
-      if (mounted) {
-        _showSuccessDialog();
-      }
+      if (!mounted) return;
+      // توقيع → صفحة الدفع مباشرة. تفعيل العقد وتوليد زيارات الاشتراك يتمّان عند نجاح الدفع.
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PaymentSummaryScreen(
+            serviceName: widget.planName,
+            amount: widget.planPrice,
+            contractId: docRef.id,
+            planVisits: widget.planVisits,
+          ),
+        ),
+      );
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
-  }
-
-  void _showSuccessDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: Column(
-            children: [
-              const Icon(Icons.check_circle_outline, color: Colors.green, size: 60),
-              const SizedBox(height: 16),
-              Text('تم توثيق العقد بنجاح', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: Text(
-            'تم إرسال طلبك للإدارة. ستتلقى إشعاراً فور اعتماد العقد وتوفره للدفع.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.tajawal(),
-          ),
-          actions: [
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  Navigator.pop(context);
-                  Navigator.pop(context);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: brandPurple,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: Text('حسناً', style: GoogleFonts.tajawal(color: Colors.white)),
-              ),
-            )
-          ],
-        ),
-      ),
-    );
   }
 
   @override
