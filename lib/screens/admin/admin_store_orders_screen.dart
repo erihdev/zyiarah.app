@@ -7,24 +7,86 @@ import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 class AdminStoreOrdersScreen extends StatelessWidget {
   const AdminStoreOrdersScreen({super.key});
 
-  /// الموافقة على الطلب: تنتقل حالته إلى approved/بانتظار الدفع، ويُشعَر العميل
-  /// لإتمام الدفع عبر شاشة طلباته.
-  void _approveOrder(BuildContext context, String orderId, Map<String, dynamic> order) async {
+  /// نافذة اعتماد الطلب مع تحديد السعر النهائي (يشمل أي رسوم توصيل/تعديلات).
+  /// السعر مبدئياً = مجموع السلة، وقابل للتعديل من الإدارة.
+  void _showApprovalDialog(BuildContext context, String orderId, Map<String, dynamic> order) {
+    final double cartTotal = (order['total_amount'] as num?)?.toDouble() ?? 0;
+    final controller = TextEditingController(text: cartTotal.toStringAsFixed(2));
+    showDialog(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('اعتماد الطلب وتحديد السعر',
+              style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('سعر المنتجات في السلة: ${cartTotal.toStringAsFixed(2)} ر.س',
+                  style: GoogleFonts.tajawal(fontSize: 13, color: Colors.grey[700])),
+              const SizedBox(height: 14),
+              TextField(
+                controller: controller,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold),
+                decoration: InputDecoration(
+                  labelText: 'المبلغ النهائي المعتمد (ر.س)',
+                  helperText: 'يُضاف إليه التوصيل أو أي تعديلات — هذا ما سيدفعه العميل',
+                  helperMaxLines: 2,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green, foregroundColor: Colors.white),
+              onPressed: () {
+                final val = double.tryParse(controller.text.trim());
+                if (val == null || val <= 0) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('يرجى إدخال مبلغ صحيح')),
+                  );
+                  return;
+                }
+                Navigator.pop(ctx);
+                _approveOrder(context, orderId, order, val);
+              },
+              child: const Text('اعتماد وإشعار العميل'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// الموافقة على الطلب بالسعر النهائي [finalAmount]: تنتقل حالته إلى
+  /// approved/بانتظار الدفع، ويُشعَر العميل لإتمام الدفع عبر شاشة طلباته.
+  void _approveOrder(BuildContext context, String orderId, Map<String, dynamic> order,
+      double finalAmount) async {
     try {
       await FirebaseFirestore.instance.collection('store_orders').doc(orderId).update({
         'status': 'approved',
         'payment_status': 'awaiting_payment',
+        'final_amount': finalAmount,
         'updated_at': FieldValue.serverTimestamp(),
       });
       await ZyiarahAuditService().logAction(
         action: 'APPROVE_STORE_ORDER',
-        details: {'code': order['code']},
+        details: {'code': order['code'], 'final_amount': finalAmount},
         targetId: orderId,
       );
       ZyiarahMessagingService().notifyClientStoreOrderApproved(
         order['client_id'] ?? '',
         order['code'] ?? orderId.substring(0, 6).toUpperCase(),
-        (order['total_amount'] as num?)?.toDouble() ?? 0,
+        finalAmount,
         clientName: order['client_name'],
       ).catchError((_) {});
       if (context.mounted) {
@@ -221,7 +283,11 @@ class AdminStoreOrdersScreen extends StatelessWidget {
                           children: [
                             const Icon(Icons.attach_money, size: 20, color: Colors.grey),
                             const SizedBox(width: 8),
-                            Text("الإجمالي: ${order['total_amount'] ?? 0} ر.س", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                            Text(
+                              order['final_amount'] != null
+                                  ? "المعتمد: ${order['final_amount']} ر.س (السلة: ${order['total_amount'] ?? 0})"
+                                  : "الإجمالي: ${order['total_amount'] ?? 0} ر.س",
+                              style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -247,7 +313,7 @@ class AdminStoreOrdersScreen extends StatelessWidget {
                                 icon: const Icon(Icons.check_circle_outline, size: 18),
                                 label: const Text('الموافقة على الطلب'),
                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                                onPressed: () => _approveOrder(context, orderDoc.id, order),
+                                onPressed: () => _showApprovalDialog(context, orderDoc.id, order),
                               ),
                              if (status == 'processing' || status == 'shipped')
                               ElevatedButton.icon(
