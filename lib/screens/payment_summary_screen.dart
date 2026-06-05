@@ -231,7 +231,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         _isValidatingCoupon = false;
         if (couponData != null) {
           _appliedCoupon = _couponController.text.toUpperCase();
-          double value = (couponData['value'] as num).toDouble();
+          double value = ((couponData['value'] as num?) ?? 0).toDouble();
           if (couponData['type'] == 'percentage') {
             _discountAmount = widget.amount * (value / 100);
           } else {

@@ -31,12 +31,15 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  
+
   // Enable Firestore Persistence for Enterprise Resilience
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
+
+  // (A1) تفعيل جمع تقارير الانهيار صراحةً — بدونه لا تصل انهيارات TestFlight/الإنتاج إلى Firebase
+  await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
 
   // System-wide crash reporting (silent — no user-facing snackbar)
   FlutterError.onError = (details) {
@@ -47,9 +50,11 @@ void main() async {
     return true;
   };
 
-  ZyiarahNotificationService().initialize();
+  // (A2) انتظار اكتمال التهيئة قبل تشغيل الواجهة لمنع سباق نسخة الإصدار (Release race)
+  // كل تهيئة محميّة داخلياً بـ try/catch فلن تُسقط الإقلاع.
+  await ZyiarahNotificationService().initialize();
   ZyiarahDeepLinkService().initialize(navigatorKey);
-  GeofenceService.initialize(); // تحميل مناطق التغطية من Firestore
+  await GeofenceService.initialize(); // تحميل مناطق التغطية من Firestore
   await TabbyService.initialize(); // تهيئة Tabby BNPL
 
   runApp(

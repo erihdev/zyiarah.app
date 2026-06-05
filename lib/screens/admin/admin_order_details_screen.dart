@@ -643,7 +643,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                           if (val != null) {
                             setState(() {
                               _selectedDriverId = val;
-                              _selectedDriverName = _drivers.firstWhere((d) => d['id'] == val)['name'];
+                              _selectedDriverName = _drivers.firstWhere((d) => d['id'] == val, orElse: () => {'name': ''})['name'];
                             });
                           }
                         },

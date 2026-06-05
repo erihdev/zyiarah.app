@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zyiarah/services/firebase_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:zyiarah/services/zyiarah_core_services.dart';
@@ -142,7 +143,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
           if (!isActive) {
             WidgetsBinding.instance.addPostFrameCallback((_) async {
-              await FirebaseAuth.instance.signOut();
+              // الخروج المركزي (B3): حتى عند التعطيل القسري يتم تنظيف الذاكرة بالكامل
+              await ZyiarahFirebaseService().signOut();
               if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('تم تعطيل حسابك من قبل الإدارة.'), backgroundColor: Colors.red),
@@ -336,7 +338,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
     if (confirm != true) return;
     HapticFeedback.lightImpact();
     _stopSync();
-    await FirebaseAuth.instance.signOut();
+    // الخروج المركزي (B3): تنظيف كامل للذاكرة بدل FirebaseAuth.signOut() المباشرة
+    await ZyiarahFirebaseService().signOut();
     if (mounted) context.go('/login');
   }
 

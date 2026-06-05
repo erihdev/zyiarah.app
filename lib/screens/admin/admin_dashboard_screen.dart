@@ -89,7 +89,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
 
     if (confirm == true && mounted) {
-      await FirebaseAuth.instance.signOut();
+      // الخروج المركزي (B3): تنظيف كامل للذاكرة بدل FirebaseAuth.signOut() المباشرة
+      await ZyiarahFirebaseService().signOut();
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => const OnboardingScreen()),

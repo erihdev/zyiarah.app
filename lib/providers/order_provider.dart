@@ -39,8 +39,8 @@ class ZyiarahOrderProvider extends ChangeNotifier {
         .listen((snapshot) {
       recentOrders = snapshot.docs.toList()
         ..sort((a, b) {
-          final aT = (a.data() as Map)['created_at'] as Timestamp?;
-          final bT = (b.data() as Map)['created_at'] as Timestamp?;
+          final aT = (a.data() as Map?)?['created_at'] as Timestamp?;
+          final bT = (b.data() as Map?)?['created_at'] as Timestamp?;
           if (aT == null && bT == null) return 0;
           if (aT == null) return 1;
           if (bT == null) return -1;

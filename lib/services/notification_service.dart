@@ -12,6 +12,11 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 class ZyiarahNotificationService {
+  // Singleton — ضروري حتى يطبّق cleanupOnSignOut/dispose على نفس النسخة العاملة المُهيّأة في main.dart
+  static final ZyiarahNotificationService _instance = ZyiarahNotificationService._internal();
+  factory ZyiarahNotificationService() => _instance;
+  ZyiarahNotificationService._internal();
+
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
@@ -154,8 +159,20 @@ class ZyiarahNotificationService {
     }
   }
 
-  /// Unsubscribe from all FCM topics and cancel stream listeners on sign-out.
+  /// تنظيف الإشعارات عند تسجيل الخروج.
+  /// يجب استدعاؤها *قبل* FirebaseAuth.signOut() لأنها تحتاج uid الحالي.
+  /// تمنع وصول إشعارات الحساب السابق إلى هذا الجهاز بعد تبديل الحساب.
   Future<void> cleanupOnSignOut() async {
+    // 1) حذف توكن FCM المرتبط بالمستخدم الحالي حتى لا يستقبل الجهاز إشعاراته بعد الخروج
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        await FirebaseFirestore.instance.collection('fcm_tokens').doc(uid).delete();
+      }
+    } catch (e) {
+      debugPrint("⚠️ Error deleting FCM token doc on sign-out: $e");
+    }
+    // 2) إلغاء الاشتراك من جميع الـ Topics (سيُعاد الاشتراك حسب دور المستخدم الجديد عند الدخول)
     try {
       await _fcm.unsubscribeFromTopic('all_users');
       await _fcm.unsubscribeFromTopic('clients');

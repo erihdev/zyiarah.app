@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:zyiarah/firebase_options.dart';
+import 'package:zyiarah/services/notification_service.dart';
+import 'package:zyiarah/services/maintenance_listener_service.dart';
 import 'dart:math';
 
 /// خدمة إدارة Firebase لتطبيق زيارة
@@ -170,8 +172,28 @@ class ZyiarahFirebaseService {
     return await _auth.signInWithCredential(credential);
   }
 
-  // --- تسجيل الخروج ---
+  // --- تسجيل الخروج المركزي (B1) ---
+  /// نقطة الخروج الموحّدة الوحيدة لكل الأدوار (عميل/سائق/إدارة).
+  /// تضمن تنظيف الذاكرة بالكامل قبل تبديل الحساب لمنع تسرب بيانات/Streams الحساب السابق.
+  /// تستدعيها جميع الشاشات بدل FirebaseAuth.signOut() المباشرة.
   Future<void> signOut() async {
+    // (B5) إيقاف مستمع الصيانة (Singleton يبقى عبر الجلسات) — يجب إيقافه يدوياً
+    try {
+      MaintenanceListenerService().stopListening();
+    } catch (e) {
+      debugPrint("⚠️ stopListening (maintenance) failed on signOut: $e");
+    }
+
+    // (B2) تنظيف الإشعارات: حذف توكن FCM للمستخدم الحالي + إلغاء الاشتراك في الـ Topics
+    // يُنفّذ قبل _auth.signOut() لأنه يحتاج uid الحالي
+    try {
+      await ZyiarahNotificationService().cleanupOnSignOut();
+    } catch (e) {
+      debugPrint("⚠️ cleanupOnSignOut (notifications) failed: $e");
+    }
+
+    // (B4) تسجيل الخروج فعلياً — يُطلق authStateChanges(null) فتُلغي
+    // ZyiarahUserProvider و ZyiarahOrderProvider اشتراكاتهما الخاصة بالمستخدم تلقائياً.
     await _auth.signOut();
   }
 
