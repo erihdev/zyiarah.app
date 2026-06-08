@@ -16,7 +16,7 @@ dependencies:
   latlong2: ^0.9.1
   google_fonts: ^8.1.0
   firebase_core: ^4.9.0
-  firebase_auth: ^6.5.1
+  firebase_auth: ^6.5.2
   cloud_firestore: 6.4.0
   flutter_map: ^7.0.2
   firebase_messaging: ^16.2.2
