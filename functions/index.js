@@ -914,56 +914,78 @@ exports.verifyMoyasarPayment = onCall(
     },
 );
 
-// 8. GDPR Account Deletion Firestore Update Trigger
+// 8. GDPR Account Deletion — shared server-side cleanup
+// Clients cannot delete their own users/{uid} doc (rule = isSuperAdmin), so the
+// app records an account_deletions/{uid} request and this runs the real cleanup.
+/**
+ * Performs the full server-side cleanup for a GDPR account deletion.
+ * @param {string} uid UID of the user whose data must be erased.
+ * @return {Promise<void>}
+ */
+async function processAccountDeletion(uid) {
+  console.log(`Processing legal account deletion for user: ${uid}`);
+  try {
+    // 1. Delete user from Firebase Auth
+    try {
+      await admin.auth().deleteUser(uid);
+      console.log(`Successfully deleted auth user: ${uid}`);
+    } catch (authErr) {
+      if (authErr.code === "auth/user-not-found") {
+        console.warn(`User ${uid} not found in Firebase Auth`);
+      } else {
+        throw authErr;
+      }
+    }
+
+    // 2. Delete user's document from users collection
+    await admin.firestore().collection("users").doc(uid).delete();
+    console.log(`Successfully deleted users/${uid} document`);
+
+    // 3. Clean up associated FCM tokens (both legacy collection names)
+    await admin.firestore().collection("fcm_tokens").doc(uid).delete().catch(() => {});
+    await admin.firestore().collection("fcm_token").doc(uid).delete().catch(() => {});
+
+    // 4. Mark the request fully processed
+    await admin.firestore().collection("account_deletions").doc(uid).update({
+      completed_at: admin.firestore.FieldValue.serverTimestamp(),
+      status: "deleted_fully_processed",
+    });
+    console.log(`Successfully completed deletion workflow for ${uid}`);
+  } catch (error) {
+    console.error(`Error processing account deletion for user ${uid}:`, error);
+    // Record the failure so it can be retried/inspected by an admin
+    await admin.firestore().collection("account_deletions").doc(uid).update({
+      error: error.message || "Unknown error",
+      status: "failed_deletion",
+      failed_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+}
+
+// 8a. Self-service deletion: client creates the request doc with status 'deleted'
+exports.onAccountDeletionRequested = onDocumentCreated({document: "account_deletions/{uid}", cpu: 0.083},
+    async (event) => {
+      const snap = event.data;
+      if (!snap) return null;
+      const data = snap.data();
+      if (data && data.status === "deleted") {
+        await processAccountDeletion(event.params.uid);
+      }
+      return null;
+    },
+);
+
+// 8b. Admin-approved deletion: a pending request is updated to status 'deleted'
 exports.onAccountDeletionStatusChanged = onDocumentUpdated({document: "account_deletions/{uid}", cpu: 0.083},
     async (event) => {
       const change = event.data;
       if (!change) return null;
-
       const beforeData = change.before.data();
       const afterData = change.after.data();
-
-      // Check if status changed to 'deleted'
+      // Only when status transitions INTO 'deleted' (avoids re-firing on the
+      // helper's own update to 'deleted_fully_processed')
       if (afterData && afterData.status === "deleted" && (!beforeData || beforeData.status !== "deleted")) {
-        const uid = event.params.uid;
-        console.log(`Processing legal account deletion for user: ${uid}`);
-
-        try {
-          // 1. Delete user from Firebase Auth
-          try {
-            await admin.auth().deleteUser(uid);
-            console.log(`Successfully deleted auth user: ${uid}`);
-          } catch (authErr) {
-            if (authErr.code === "auth/user-not-found") {
-              console.warn(`User ${uid} not found in Firebase Auth`);
-            } else {
-              throw authErr;
-            }
-          }
-
-          // 2. Delete user's document from users collection
-          await admin.firestore().collection("users").doc(uid).delete();
-          console.log(`Successfully deleted users/${uid} document`);
-
-          // 3. Clean up associated FCM tokens
-          await admin.firestore().collection("fcm_tokens").doc(uid).delete();
-          console.log(`Successfully deleted fcm_tokens/${uid} document`);
-
-          // 4. Update the account_deletions request status to fully completed
-          await admin.firestore().collection("account_deletions").doc(uid).update({
-            completed_at: admin.firestore.FieldValue.serverTimestamp(),
-            status: "deleted_fully_processed",
-          });
-          console.log(`Successfully completed deletion workflow for ${uid}`);
-        } catch (error) {
-          console.error(`Error processing account deletion for user ${uid}:`, error);
-          // Update status with error info so it can be retried or inspected by admin
-          await admin.firestore().collection("account_deletions").doc(uid).update({
-            error: error.message || "Unknown error",
-            status: "failed_deletion",
-            failed_at: admin.firestore.FieldValue.serverTimestamp(),
-          });
-        }
+        await processAccountDeletion(event.params.uid);
       }
       return null;
     },
