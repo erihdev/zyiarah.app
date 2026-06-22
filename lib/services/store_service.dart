@@ -92,9 +92,10 @@ class ZyiarahStoreService {
     double serverCalculatedTotal = 0.0;
 
     await _db.runTransaction((transaction) async {
-      final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
-      orderCode = ZyiarahOrderUtil.formatSmartCode(nextId);
-
+      // ─── 1) جميع القراءات أولاً ───
+      // متطلّب Firestore: يجب تنفيذ كل القراءات قبل أي كتابة داخل المعاملة.
+      // كان العدّاد (قراءة + كتابة) يُستدعى قبل قراءة المنتجات، ما يجعل
+      // transaction.get للمنتجات يأتي بعد كتابة العدّاد → استثناء وفشل كل طلب متجر.
       double tempTotal = 0.0;
       final List<Map<String, dynamic>> verifiedItems = [];
 
@@ -126,6 +127,11 @@ class ZyiarahStoreService {
 
       serverCalculatedTotal = tempTotal;
 
+      // ─── 2) العدّاد (قراءة ثم كتابة) — بعد كل قراءات المنتجات ───
+      final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
+      orderCode = ZyiarahOrderUtil.formatSmartCode(nextId);
+
+      // ─── 3) الكتابة النهائية ───
       transaction.set(docRef, {
         'code': orderCode,
         'client_id': user.uid,

@@ -500,8 +500,7 @@ class _StoreTamaraWebViewState extends State<_StoreTamaraWebView> {
       ..setNavigationDelegate(NavigationDelegate(
         onPageStarted: (url) {
           if (_done) return;
-          if (url.contains('payment-success') ||
-              url.contains('payment-success-mock')) {
+          if (url.contains('payment-success')) {
             _done = true;
             if (mounted) Navigator.pop(context, true);
           } else if (url.contains('payment-failure') ||

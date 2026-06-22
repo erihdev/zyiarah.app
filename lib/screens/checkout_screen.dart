@@ -73,7 +73,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
         NavigationDelegate(
           onPageStarted: (url) async {
             if (_paymentProcessed) return;
-            if (url.contains('payment-success') || url.contains('payment-success-mock')) {
+            if (url.contains('payment-success')) {
                 _paymentProcessed = true;
                 String newOrderId = widget.orderId;
                 final user = FirebaseAuth.instance.currentUser;
