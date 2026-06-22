@@ -848,6 +848,49 @@ exports.processNotificationTriggers = onDocumentCreated(
       }
     });
 
+// 6b. Secure wallet — redeem Qatrat points for balance (server-authoritative).
+// The wallet is (currently) client-writable, so this onCall is the trusted path:
+// it validates the points server-side and performs the conversion atomically.
+// Pairs with the deferred lockdown of the wallets write rule.
+exports.redeemQatratPoints = onCall({cpu: 0.083}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً");
+  }
+  const uid = request.auth.uid;
+  const pointsToRedeem = Number(request.data && request.data.pointsToRedeem);
+  if (!Number.isInteger(pointsToRedeem) || pointsToRedeem < 50) {
+    throw new HttpsError("invalid-argument", "الحد الأدنى للاستبدال 50 نقطة");
+  }
+
+  const walletRef = admin.firestore().collection("wallets").doc(uid);
+  const txRef = walletRef.collection("transactions").doc();
+
+  const result = await admin.firestore().runTransaction(async (t) => {
+    const snap = await t.get(walletRef);
+    const currentPoints = snap.exists ? Number(snap.data().qatrat_points || 0) : 0;
+    const currentBalance = snap.exists ? Number(snap.data().balance || 0) : 0;
+    if (currentPoints < pointsToRedeem) {
+      throw new HttpsError("failed-precondition", "نقاطك غير كافية");
+    }
+    const financialCredit = pointsToRedeem / 50.0; // 50 points = 1 SAR
+    t.set(walletRef, {
+      qatrat_points: currentPoints - pointsToRedeem,
+      balance: currentBalance + financialCredit,
+      last_updated: admin.firestore.FieldValue.serverTimestamp(),
+    }, {merge: true});
+    t.set(txRef, {
+      amount: financialCredit,
+      points: -pointsToRedeem,
+      type: "qatrat_redeem",
+      description: `استبدال ${pointsToRedeem} نقطة زيارة برصيد مالي`,
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return {newBalance: currentBalance + financialCredit, newPoints: currentPoints - pointsToRedeem};
+  });
+
+  return {success: true, ...result};
+});
+
 // 7. Secure Moyasar payment verification on Call function
 exports.verifyMoyasarPayment = onCall(
     {secrets: ["MOYASAR_SECRET_KEY"], cpu: 0.25},

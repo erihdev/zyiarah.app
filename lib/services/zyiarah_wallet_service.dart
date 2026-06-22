@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import 'package:zyiarah/models/wallet_model.dart';
 import 'package:zyiarah/services/audit_service.dart';
@@ -149,53 +150,30 @@ class ZyiarahWalletService {
     );
   }
 
-  /// استبدال نقاط قطرات وتحويلها لرصيد مالي حقيقي (كل 50 نقطة = 1 ريال)
+  /// استبدال نقاط قطرات وتحويلها لرصيد مالي حقيقي (كل 50 نقطة = 1 ريال).
+  /// تحوّل المنطق إلى Cloud Function (redeemQatratPoints) ليكون التحقق والتحويل
+  /// خادميَّيْن — لا يمكن للعميل تزوير النقاط/الرصيد عبر هذا المسار. الخادم يستخدم
+  /// هوية المصادقة (auth.uid) ويتجاهل [userId] الممرَّر، فلا يمكن الاستبدال لحساب آخر.
   Future<bool> redeemQatratPoints({required String userId, required int pointsToRedeem}) async {
     if (pointsToRedeem < 50) return false; // الحد الأدنى للاستبدال 50 نقطة
-
-    final walletRef = _db.collection('wallets').doc(userId);
-    final txRef = walletRef.collection('transactions').doc();
-    
-    bool success = false;
-
-    await _db.runTransaction((transaction) async {
-      final walletSnap = await transaction.get(walletRef);
-      if (!walletSnap.exists) return;
-
-      final int currentPoints = (walletSnap.data()?['qatrat_points'] ?? 0).toInt();
-      final double currentBalance = (walletSnap.data()?['balance'] ?? 0.0).toDouble();
-
-      // حظر الاستبدال الذكي إذا لم يكن لدى العميل نقاط كافية
-      if (currentPoints < pointsToRedeem) return;
-
-      // احتساب الرصيد المالي المقابل للخصم النقطي (50 نقطة = 1 ريال)
-      final double financialCredit = pointsToRedeem / 50.0;
-
-      transaction.update(walletRef, {
-        'qatrat_points': currentPoints - pointsToRedeem,
-        'balance': currentBalance + financialCredit,
-        'last_updated': FieldValue.serverTimestamp(),
-      });
-
-      transaction.set(txRef, {
-        'amount': financialCredit,
-        'points': -pointsToRedeem,
-        'type': 'qatrat_redeem',
-        'description': 'استبدال $pointsToRedeem نقطة زيارة برصيد مالي',
-        'created_at': FieldValue.serverTimestamp(),
-      });
-      
-      success = true;
-    });
-
-    if (success) {
-      await _audit.logAction(
-        action: 'W_QATRAT_REDEEM_SUCCESS',
-        targetId: userId,
-        details: {'points_redeemed': pointsToRedeem},
+    try {
+      final callable =
+          FirebaseFunctions.instance.httpsCallable('redeemQatratPoints');
+      final res = await callable.call<Map<String, dynamic>>(
+        {'pointsToRedeem': pointsToRedeem},
       );
+      final bool success = res.data['success'] == true;
+      if (success) {
+        await _audit.logAction(
+          action: 'W_QATRAT_REDEEM_SUCCESS',
+          targetId: userId,
+          details: {'points_redeemed': pointsToRedeem},
+        );
+      }
+      return success;
+    } catch (e) {
+      return false;
     }
-    return success;
   }
 
   /// بث تيار لحظي لسجل المعاملات والتحصيلات الخاصة بمحفظة المستخدم (Real-time Stream)
