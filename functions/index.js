@@ -671,6 +671,33 @@ exports.tamaraWebhook = onRequest(
 const {Resend} = require("resend");
 
 // 6. Unified Notification Trigger Processor
+/**
+ * Anti-relay guard for the client-writable notification_triggers queue.
+ * An email may only be delivered to an address that belongs to a registered
+ * user or driver, or to the configured admin address — never an arbitrary
+ * external recipient supplied by a client.
+ * @param {string} email Candidate recipient address.
+ * @return {Promise<boolean>} True if the address is an allowed recipient.
+ */
+async function isAllowedEmailRecipient(email) {
+  if (!email || typeof email !== "string") return false;
+  const lower = email.trim().toLowerCase();
+  if (!lower) return false;
+  // Configured admin address + system fallbacks
+  try {
+    const cfg = await admin.firestore().collection("system_configs").doc("main_settings").get();
+    const adminEmail = (cfg.exists && cfg.data()?.admin_email ? String(cfg.data().admin_email) : "").toLowerCase();
+    if (lower === adminEmail || lower === "admin@zyiarah.com" || lower === "no-reply@zyiarah.com") return true;
+  } catch (e) {
+    // fall through to user/driver lookups
+  }
+  const u = await admin.firestore().collection("users").where("email", "==", email).limit(1).get();
+  if (!u.empty) return true;
+  const d = await admin.firestore().collection("drivers").where("email", "==", email).limit(1).get();
+  if (!d.empty) return true;
+  return false;
+}
+
 exports.processNotificationTriggers = onDocumentCreated(
     {document: "notification_triggers/{id}", secrets: ["RESEND_API_KEY"], cpu: 0.25},
     async (event) => {
@@ -702,7 +729,15 @@ exports.processNotificationTriggers = onDocumentCreated(
         }
 
         // 2. Email via Resend (key from Secret Manager)
-        if (type === "email" || type === "hybrid" || type === "admin_order_alert") {
+        const wantsEmail = (type === "email" || type === "hybrid" || type === "admin_order_alert");
+        // SECURITY: notification_triggers is client-writable; refuse to relay
+        // email to any address that isn't a registered user/driver/admin.
+        const emailAllowed = wantsEmail ? await isAllowedEmailRecipient(recipientEmail) : false;
+        if (wantsEmail && !emailAllowed) {
+          console.warn(`[EMAIL] Refused relay to unregistered recipient: ${recipientEmail}`);
+          await snap.ref.update({emailStatus: "refused_unregistered_recipient"});
+        }
+        if (wantsEmail && emailAllowed) {
           const resendKey = resendApiKeySecret.value();
           if (!resendKey) {
             console.error("[EMAIL] RESEND_API_KEY secret is not set");

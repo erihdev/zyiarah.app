@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 class ZyiarahMessagingService {
@@ -9,6 +10,9 @@ class ZyiarahMessagingService {
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   static const String _fallbackAdminEmail = 'admin@zyiarah.com';
+
+  // يختم كل بلاغ بهوية منشئه ليتمكّن الخادم/القواعد من التحقق من الصلاحية لاحقاً.
+  String? get _uid => FirebaseAuth.instance.currentUser?.uid;
 
   // ==========================================
   // NOTIFICATION TRIGGER METHODS (FROM ZyiarahNotificationTriggerService)
@@ -31,6 +35,7 @@ class ZyiarahMessagingService {
         'type': type,
         'data': data ?? {},
         if (template != null) 'template': template,
+        'createdBy': _uid,
         'createdAt': FieldValue.serverTimestamp(),
         'processed': false,
       });
@@ -95,6 +100,7 @@ class ZyiarahMessagingService {
           'type': 'email',
           'recipientEmail': driverEmail,
           'data': {'orderId': orderId},
+          'createdBy': _uid,
           'createdAt': FieldValue.serverTimestamp(),
           'processed': false,
         });
@@ -612,6 +618,7 @@ class ZyiarahMessagingService {
         'type': 'email', // Cloud Function will detect this and use Resend/SMTP
         'action': action,
         'app': 'ZYIARAH_LUXE',
+        'createdBy': _uid,
         'createdAt': FieldValue.serverTimestamp(),
         'processed': false,
         'data': {
