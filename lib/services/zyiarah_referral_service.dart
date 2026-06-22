@@ -2,8 +2,6 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:zyiarah/services/audit_service.dart';
-import 'package:zyiarah/services/zyiarah_messaging_service.dart';
-import 'package:zyiarah/services/zyiarah_wallet_service.dart';
 
 /// ZyiarahReferralService — Viral referral engine.
 ///
@@ -20,9 +18,7 @@ class ZyiarahReferralService {
   ZyiarahReferralService._internal();
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final ZyiarahWalletService _wallet = ZyiarahWalletService();
   final ZyiarahAuditService _audit = ZyiarahAuditService();
-  final ZyiarahMessagingService _messaging = ZyiarahMessagingService();
 
   /// Referrer reward: 50 SAR wallet credit.
   static const double referrerRewardSar = 50.0;
@@ -117,8 +113,9 @@ class ZyiarahReferralService {
         return;
       }
 
-      // 4. Log the referral link in 'referrals' collection
-      await _db.collection('referrals').add({
+      // 4. Log the referral link with a DETERMINISTIC id (= referee uid) so the
+      // server trigger (onOrderRewards) can claim it by id; each user is referred once.
+      await _db.collection('referrals').doc(newUserId).set({
         'referrer_id': referrerId,
         'referrer_name': referrerDoc.data()['name'] ?? '',
         'referee_id': newUserId,
@@ -148,115 +145,7 @@ class ZyiarahReferralService {
     }
   }
 
-  // ─────────────────────────────────────────────────────────
-  // Process Referral Reward (hook into first completed order)
-  // ─────────────────────────────────────────────────────────
-
-  /// Call this after an order transitions to `'completed'`.
-  /// Idempotent — silently exits if already rewarded or not a referred user.
-  Future<void> processReferralReward({
-    required String refereeUserId,
-    required String refereeOrderId,
-    required String refereeOrderCode,
-  }) async {
-    try {
-      // 1. Find a pending referral for this referee
-      final referralSnap = await _db
-          .collection('referrals')
-          .where('referee_id', isEqualTo: refereeUserId)
-          .where('status', isEqualTo: 'pending')
-          .limit(1)
-          .get();
-
-      if (referralSnap.docs.isEmpty) return; // not referred or already rewarded
-
-      final referralDoc = referralSnap.docs.first;
-      final referralId = referralDoc.id;
-      final referrerId = referralDoc.data()['referrer_id'] as String;
-
-      // 2. Confirm this is truly their first completed order
-      final completedOrders = await _db
-          .collection('orders')
-          .where('client_id', isEqualTo: refereeUserId)
-          .where('status', isEqualTo: 'completed')
-          .get();
-
-      if (completedOrders.docs.length > 1) {
-        // They have prior completions — reward already missed its window
-        debugPrint(
-            '[ZyiarahReferralService] Not first order for $refereeUserId; skipping');
-        return;
-      }
-
-      // 3. Atomically mark the referral as rewarded
-      await _db.collection('referrals').doc(referralId).update({
-        'status': 'rewarded',
-        'rewarded_at': FieldValue.serverTimestamp(),
-        'rewarded_on_order': refereeOrderId,
-      });
-
-      // 4a. Reward referrer: +50 SAR wallet credit (re-uses processRefund)
-      await _wallet.processRefund(
-        userId: referrerId,
-        amount: referrerRewardSar,
-        orderId: refereeOrderId,
-        orderCode: refereeOrderCode,
-      );
-
-      // 4b. Reward referee: 10% discount coupon valid for 30 days
-      final couponCode =
-          'REF${refereeUserId.substring(0, 6).toUpperCase()}10';
-      await _db.collection('promo_codes').doc(couponCode).set({
-        'code': couponCode,
-        'discount_type': 'percentage',
-        'discount_value': refereeDiscountPercent,
-        'description': 'خصم الإحالة 10% — مكافأة الانضمام',
-        'max_uses': 1,
-        'uses': 0,
-        'target_user_id': refereeUserId,
-        'is_active': true,
-        'created_at': FieldValue.serverTimestamp(),
-        'expires_at': Timestamp.fromDate(
-            DateTime.now().add(const Duration(days: 30))),
-      }, SetOptions(merge: true));
-
-      // 5. Push notifications to both parties
-      await _messaging.triggerNotification(
-        toUid: referrerId,
-        title: '🎁 مكافأة إحالتك وصلت!',
-        body:
-            'أُضيفت ${referrerRewardSar.toStringAsFixed(0)} ر.س لمحفظتك '
-            'مكافأة لإحالة صديق أتمّ أول طلب.',
-        type: 'referral_reward',
-        data: {'orderId': refereeOrderId},
-      );
-
-      await _messaging.triggerNotification(
-        toUid: refereeUserId,
-        title: '🎉 كوبون الإحالة جاهز!',
-        body:
-            'حصلت على كوبون خصم ${refereeDiscountPercent.toStringAsFixed(0)}% '
-            'على طلبك القادم. الكود: $couponCode',
-        type: 'referral_coupon',
-        data: {'coupon_code': couponCode},
-      );
-
-      // 6. Audit trail
-      await _audit.logAction(
-        action: 'REFERRAL_REWARD_GRANTED',
-        targetId: refereeUserId,
-        details: {
-          'referrer_id': referrerId,
-          'referrer_reward_sar': referrerRewardSar,
-          'referee_coupon_code': couponCode,
-          'on_order_id': refereeOrderId,
-        },
-      );
-
-      debugPrint(
-          '[ZyiarahReferralService] Rewards granted: referrer=$referrerId referee=$refereeUserId');
-    } catch (e) {
-      debugPrint('[ZyiarahReferralService] processReferralReward error: $e');
-    }
-  }
+  // processReferralReward أُزيلت: مكافأة الإحالة (50 ر.س للمُحيل + كوبون 10% للمُحال)
+  // تُمنح الآن خادمياً وآمنةً من سباقات التزامن عبر onOrderRewards (Cloud Function)
+  // التي تطالب وثيقة الإحالة (pending -> rewarded) ذرياً بمعرّف حتمي.
 }

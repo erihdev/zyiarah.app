@@ -3,7 +3,6 @@ import 'package:cloud_functions/cloud_functions.dart';
 
 import 'package:zyiarah/models/wallet_model.dart';
 import 'package:zyiarah/services/audit_service.dart';
-import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 
 class ZyiarahWalletService {
   // Singleton Pattern
@@ -13,7 +12,6 @@ class ZyiarahWalletService {
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final ZyiarahAuditService _audit = ZyiarahAuditService();
-  final ZyiarahMessagingService _messaging = ZyiarahMessagingService();
 
   /// جلب محفظة المستخدم أو إنشائها تلقائياً إذا لم تكن موجودة (Safe Guard)
   Future<ZyiarahWallet> getOrCreateWallet(String userId) async {
@@ -23,13 +21,7 @@ class ZyiarahWalletService {
     if (doc.exists) {
       return ZyiarahWallet.fromFirestore(doc);
     } else {
-      // إنشاء محفظة افتتاحية صفرية جديدة للعميل الجديد
-      final newWallet = {
-        'balance': 0.0,
-        'qatrat_points': 0,
-        'last_updated': FieldValue.serverTimestamp(),
-      };
-      await walletRef.set(newWallet);
+      // المحفظة تُنشأ خادمياً عند أول إيداع (كتابة العميل للمحفظة محظورة بعد قفل القاعدة).
       return ZyiarahWallet(
         userId: userId,
         balance: 0.0,
@@ -39,116 +31,8 @@ class ZyiarahWalletService {
     }
   }
 
-  /// معالجة المرتجعات محلياً محصورة داخل المحفظة (In-App Secure Refund)
-  Future<void> processRefund({
-    required String userId,
-    required double amount,
-    required String orderId,
-    required String orderCode,
-  }) async {
-    if (amount <= 0) return;
-
-    final walletRef = _db.collection('wallets').doc(userId);
-    final txRef = walletRef.collection('transactions').doc();
-
-    await _db.runTransaction((transaction) async {
-      final walletSnap = await transaction.get(walletRef);
-      
-      double currentBalance = 0.0;
-      int currentPoints = 0;
-      
-      if (walletSnap.exists) {
-        currentBalance = (walletSnap.data()?['balance'] ?? 0.0).toDouble();
-        currentPoints = (walletSnap.data()?['qatrat_points'] ?? 0).toInt();
-      }
-
-      final newBalance = currentBalance + amount;
-
-      // تحديث محفظة العميل ذرياً
-      transaction.set(walletRef, {
-        'balance': newBalance,
-        'qatrat_points': currentPoints,
-        'last_updated': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      // تسجيل وثيقة المعاملة المالية في طابور المحفظة
-      transaction.set(txRef, {
-        'amount': amount,
-        'points': 0,
-        'type': 'refund',
-        'description': 'إعادة رصيد للطلب الملغي رقم #$orderCode',
-        'order_id': orderId,
-        'created_at': FieldValue.serverTimestamp(),
-      });
-    });
-
-    // سياق أتمتة الإجراءات الجانبية (Side Effects خارج الـ Transaction لسرعة الاستجابة)
-    await _audit.logAction(
-      action: 'WALLET_REFUND_CREDIT',
-      targetId: userId,
-      details: {'order_code': orderCode, 'refund_amount': amount},
-    );
-
-    // تنبيه العميل لحظياً عبر خدمة الرسائل الموحدة بنجاح شحن المحفظة
-    await _messaging.triggerNotification(
-      toUid: userId,
-      title: "تم إعادة رصيد لمحفظتك 💰",
-      body: "تم إيداع مبلغ $amount ر.س في محفظتك بنجاح للطلب رقم #$orderCode.",
-      type: 'wallet_credit',
-      data: {'orderId': orderId},
-    );
-  }
-
-  /// منح مكافآت نقاط قطرات عند اكتمال الطلب (1 ريال = 1 نقطة قطرات)
-  Future<void> grantQatratReward({
-    required String userId,
-    required String orderId,
-    required String orderCode,
-    required double orderValue,
-  }) async {
-    if (orderValue <= 0) return;
-    
-    // احتساب النقاط بناءً على الريالات (1 ريال يمنح 1 نقطة كاملة)
-    final int pointsEarned = orderValue.round();
-
-    final walletRef = _db.collection('wallets').doc(userId);
-    final txRef = walletRef.collection('transactions').doc();
-
-    await _db.runTransaction((transaction) async {
-      final walletSnap = await transaction.get(walletRef);
-      
-      double currentBalance = 0.0;
-      int currentPoints = 0;
-      
-      if (walletSnap.exists) {
-        currentBalance = (walletSnap.data()?['balance'] ?? 0.0).toDouble();
-        currentPoints = (walletSnap.data()?['qatrat_points'] ?? 0).toInt();
-      }
-
-      transaction.set(walletRef, {
-        'balance': currentBalance,
-        'qatrat_points': currentPoints + pointsEarned,
-        'last_updated': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      transaction.set(txRef, {
-        'amount': 0.0,
-        'points': pointsEarned,
-        'type': 'qatrat_reward',
-        'description': 'نقاط زيارة مكتسبة من الطلب المكتمل #$orderCode',
-        'order_id': orderId,
-        'created_at': FieldValue.serverTimestamp(),
-      });
-    });
-
-    await _messaging.triggerNotification(
-      toUid: userId,
-      title: "حصلت على نقاط زيارة جديدة! ✨🎈",
-      body: "تهانينا! أضيفت $pointsEarned نقطة زيارة لرصيدك مكافأة على الطلب #$orderCode.",
-      type: 'qatrat_credit',
-      data: {'orderId': orderId},
-    );
-  }
+  // processRefund و grantQatratReward أُزيلتا: المرتجع ونقاط زيارة تُمنح الآن
+  // خادمياً عبر onOrderRewards (Cloud Function) فلا يمكن تزويرها من العميل.
 
   /// استبدال نقاط قطرات وتحويلها لرصيد مالي حقيقي (كل 50 نقطة = 1 ريال).
   /// تحوّل المنطق إلى Cloud Function (redeemQatratPoints) ليكون التحقق والتحويل

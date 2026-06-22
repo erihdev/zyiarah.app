@@ -5,8 +5,6 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:zyiarah/services/audit_service.dart';
-import 'package:zyiarah/services/zyiarah_wallet_service.dart';
-import 'package:zyiarah/services/zyiarah_referral_service.dart';
 
 /// خدمة إدارة دورة حياة الطلب - تطبيق زيارة
 class ZyiarahOrderService {
@@ -94,6 +92,8 @@ class ZyiarahOrderService {
         'cancelled_at': FieldValue.serverTimestamp(),
         'cancelled_by': cancelledBy,
         'needs_refund': needsRefund,
+        // المرتجع للمحفظة يعالجه الخادم (onOrderRewards) لهذا الطلب — منعاً لتزوير الرصيد.
+        'rewards_handled_by': 'server',
       });
 
       // تحديث حالة السائق يتم من Cloud Function عند تغيير حالة الطلب
@@ -114,27 +114,8 @@ class ZyiarahOrderService {
       targetId: orderId,
     );
 
-    // --- إعادة المبلغ للمحفظة الرقمية إذا كان الطلب مدفوعاً (ليس اشتراكاً) ---
-    if (needsRefund) {
-      try {
-        final orderSnap = await _db.collection('orders').doc(orderId).get();
-        final orderData = orderSnap.data();
-        final String? clientId = orderData?['client_id'];
-        final double refundAmount = (orderData?['amount'] ?? 0.0).toDouble();
-        final String? paymentMethod = orderData?['payment_method'];
-        // لا تُعيد رصيد للاشتراك — فقط للدفع النقدي أو البطاقة أو المحفظة
-        if (clientId != null && refundAmount > 0 && paymentMethod != 'subscription') {
-          await ZyiarahWalletService().processRefund(
-            userId: clientId,
-            amount: refundAmount,
-            orderId: orderId,
-            orderCode: orderCode ?? orderId,
-          );
-        }
-      } catch (e) {
-        debugPrint('Error processing wallet refund: $e');
-      }
-    }
+    // إعادة الرصيد للطلب الملغي المدفوع تُعالَج الآن خادمياً عبر onOrderRewards
+    // (يقرأ needs_refund + is_paid + amount من مستند الطلب) — منعاً لتزوير الرصيد.
     // -------------------------------------------------------------------------
 
     // إشعار السائق إذا كان مُسنَّداً
@@ -185,6 +166,9 @@ class ZyiarahOrderService {
         if (status == 'in_progress') 'arrived_at': FieldValue.serverTimestamp(),
         if (status == 'in_progress') 'start_time': FieldValue.serverTimestamp(),
         if (status == 'completed') 'end_time': FieldValue.serverTimestamp(),
+        // (Server rewards) علّم الطلب بأن الجوائز/المرتجع يعالجها الخادم (onOrderRewards)
+        // فلا يمنحها العميل. النسخة القديمة لا تكتب هذا الحقل فتبقى تمنح محلياً.
+        if (status == 'completed' || status == 'cancelled') 'rewards_handled_by': 'server',
         // (C) حقول إضافية (مثل تأكيد دفع COD) تُدمج ذرّياً داخل نفس الـ Transaction
         if (extraOrderUpdates != null) ...extraOrderUpdates,
       };
@@ -239,35 +223,8 @@ class ZyiarahOrderService {
       }
     });
 
-    // العمليات غير الحرجة (خارج الـ Transaction)
-    if (status == 'completed') {
-      try {
-        final doc = await _db.collection('orders').doc(orderId).get();
-        final data = doc.data();
-        if (data != null) {
-          final clientId = data['client_id'] as String?;
-          final amount = (data['amount'] ?? 0.0).toDouble();
-          final code = data['code'] as String? ?? orderId;
-          // منح نقاط زيارة للعميل عند إتمام الطلب (1 ريال = 1 نقطة)
-          if (clientId != null && amount > 0) {
-            await ZyiarahWalletService().grantQatratReward(
-              userId: clientId,
-              orderId: orderId,
-              orderCode: code,
-              orderValue: amount,
-            );
-            // تحقق من مكافأة الإحالة — يُكمّل المحرك الفيروسي دورته عند أول طلب مكتمل
-            await ZyiarahReferralService().processReferralReward(
-              refereeUserId: clientId,
-              refereeOrderId: orderId,
-              refereeOrderCode: code,
-            );
-          }
-        }
-      } catch (e) {
-        debugPrint("Non-critical post-processing error: $e");
-      }
-    }
+    // الجوائز (نقاط زيارة + مكافأة الإحالة) تُمنح الآن خادمياً عبر onOrderRewards
+    // فور تعليم الطلب rewards_handled_by:'server' أعلاه — منعاً للتزوير والازدواج.
   }
 
   // قبول الطلب باستخدام Transaction لمنع التعارض المزدوج (Race Condition)

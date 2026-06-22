@@ -891,6 +891,266 @@ exports.redeemQatratPoints = onCall({cpu: 0.083}, async (request) => {
   return {success: true, ...result};
 });
 
+// 6c. Server-authoritative wallet rewards / refund on order status change.
+// Mirrors sendNotificationOnOrderStatusChange. Gated on rewards_handled_by==='server'
+// (written ONLY by the new app at order creation), so during rollout it never
+// double-grants with the old app (which still grants client-side for its own,
+// discriminator-less orders). Every effect is idempotent: an order flag checked+set
+// inside the same wallet transaction PLUS a deterministic ledger doc id created with
+// tx.create() — so at-least-once redelivery is a provable no-op.
+
+/**
+ * Enqueue an in-app + push notification via the existing trigger pipeline.
+ * Server-originated (Admin SDK); type is never 'email' so no relay path is used.
+ * @param {string} toUid Recipient uid (or "ADMIN_BROADCAST").
+ * @param {string} title Notification title.
+ * @param {string} body Notification body.
+ * @param {string} type Notification type tag.
+ * @param {object} data Extra data payload.
+ * @return {Promise<void>}
+ */
+async function queuePush(toUid, title, body, type, data) {
+  await admin.firestore().collection("notification_triggers").add({
+    toUid: toUid,
+    title: title,
+    body: body,
+    type: type,
+    data: data || {},
+    createdBy: "server",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    processed: false,
+  });
+}
+
+/**
+ * Race-safe first-completed-order referral payout. The referral doc's
+ * pending->rewarded flip inside the transaction is the single-winner mutex;
+ * the referrer credit, ledger row and coupon are all written in the SAME
+ * transaction so a crash cannot leave a half-paid referral, and deterministic
+ * ids make a redelivery a no-op.
+ * @param {string} refereeUid The referee (new user) uid.
+ * @param {string} orderId The completed order id.
+ * @param {string} orderCode Human order code for messages.
+ * @return {Promise<void>}
+ */
+async function processReferralRewardServer(refereeUid, orderId, orderCode) {
+  const db = admin.firestore();
+  const orderRef = db.collection("orders").doc(orderId);
+
+  // Resolve the referral: deterministic id first, query fallback for legacy
+  // random-id docs created before applyReferralCode switched to a fixed id.
+  let referralRef = db.collection("referrals").doc(refereeUid);
+  if (!(await referralRef.get()).exists) {
+    const q = await db.collection("referrals")
+        .where("referee_id", "==", refereeUid)
+        .where("status", "==", "pending").limit(1).get();
+    if (q.empty) return;
+    referralRef = q.docs[0].ref;
+  }
+
+  const REFERRER_REWARD = 50;
+  let payout = null;
+  try {
+    payout = await db.runTransaction(async (t) => {
+      const rSnap = await t.get(referralRef);
+      if (!rSnap.exists || rSnap.get("status") !== "pending") return null;
+      const referrerId = rSnap.get("referrer_id");
+      if (!referrerId) return null;
+      const referralId = referralRef.id;
+      const referrerWallet = db.collection("wallets").doc(referrerId);
+      const bonusTx = referrerWallet.collection("transactions").doc(`refbonus_${referralId}`);
+      const couponCode = `REF${refereeUid.substring(0, 6).toUpperCase()}10`;
+      const couponRef = db.collection("promo_codes").doc(couponCode);
+
+      t.update(referralRef, {
+        status: "rewarded",
+        rewarded_on_order: orderId,
+        rewarded_at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      t.update(orderRef, {referral_processed: true});
+      t.set(referrerWallet, {
+        balance: admin.firestore.FieldValue.increment(REFERRER_REWARD),
+        last_updated: admin.firestore.FieldValue.serverTimestamp(),
+      }, {merge: true});
+      t.create(bonusTx, {
+        amount: REFERRER_REWARD, points: 0, type: "referral_reward",
+        description: "مكافأة إحالة صديق أتمّ أول طلب",
+        order_id: orderId,
+        created_at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      t.set(couponRef, {
+        code: couponCode,
+        discount_type: "percentage",
+        discount_value: 10,
+        description: "خصم الإحالة 10% — مكافأة الانضمام",
+        max_uses: 1,
+        uses: 0,
+        target_user_id: refereeUid,
+        is_active: true,
+        created_at: admin.firestore.FieldValue.serverTimestamp(),
+        expires_at: admin.firestore.Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      }, {merge: true});
+
+      return {referrerId, couponCode};
+    });
+  } catch (e) {
+    console.error(`[referral] payout txn failed for ${refereeUid}:`, e.message);
+    return;
+  }
+  if (!payout) return;
+
+  await queuePush(payout.referrerId, "🎁 مكافأة إحالتك وصلت!",
+      `أُضيفت ${REFERRER_REWARD} ر.س لمحفظتك مكافأة لإحالة صديق أتمّ أول طلب.`,
+      "referral_reward", {orderId: orderId});
+  await queuePush(refereeUid, "🎉 كوبون الإحالة جاهز!",
+      `حصلت على كوبون خصم 10% على طلبك القادم. الكود: ${payout.couponCode}`,
+      "referral_coupon", {coupon_code: payout.couponCode});
+}
+
+exports.onOrderRewards = onDocumentUpdated({document: "orders/{orderId}", cpu: 0.083},
+    async (event) => {
+      const change = event.data;
+      if (!change) return null;
+      const before = change.before.data() || {};
+      const after = change.after.data() || {};
+      const orderId = event.params.orderId;
+
+      const completed = before.status !== "completed" && after.status === "completed";
+      const cancelled = before.status !== "cancelled" && after.status === "cancelled";
+      if (!completed && !cancelled) return null;
+
+      // Rollout gate: act ONLY on orders the new app created. Legacy/old-app
+      // orders (no discriminator) keep being granted client-side by the old app.
+      if (after.rewards_handled_by !== "server") {
+        console.log(`[rewards] skip order ${orderId} reaching terminal status without server discriminator`);
+        return null;
+      }
+
+      const db = admin.firestore();
+      const orderRef = db.collection("orders").doc(orderId);
+      const clientId = after.client_id;
+      const amount = Number(after.amount || 0);
+      const code = after.code || orderId;
+
+      // ── COMPLETION: Qatrat points (+ referral) ──
+      if (completed) {
+        if (clientId && amount > 0) {
+          const points = Math.round(amount);
+          const walletRef = db.collection("wallets").doc(clientId);
+          const txRef = walletRef.collection("transactions").doc(`qatrat_${orderId}`);
+          let didFlip = false;
+          try {
+            await db.runTransaction(async (t) => {
+              const oSnap = await t.get(orderRef);
+              if (oSnap.get("qatrat_granted") === true) return;
+              t.set(walletRef, {
+                qatrat_points: admin.firestore.FieldValue.increment(points),
+                last_updated: admin.firestore.FieldValue.serverTimestamp(),
+              }, {merge: true});
+              t.create(txRef, {
+                amount: 0, points: points, type: "qatrat_reward",
+                description: `نقاط زيارة مكتسبة من الطلب المكتمل #${code}`,
+                order_id: orderId,
+                created_at: admin.firestore.FieldValue.serverTimestamp(),
+              });
+              t.update(orderRef, {
+                qatrat_granted: true,
+                qatrat_granted_at: admin.firestore.FieldValue.serverTimestamp(),
+              });
+              didFlip = true;
+            });
+          } catch (e) {
+            console.error(`[rewards] qatrat txn failed for ${orderId}:`, e.message);
+          }
+          if (didFlip) {
+            await queuePush(clientId, "حصلت على نقاط زيارة جديدة! ✨🎈",
+                `أضيفت ${points} نقطة زيارة لرصيدك مكافأة على الطلب #${code}.`,
+                "qatrat_credit", {orderId: orderId});
+          }
+        }
+        if (clientId) {
+          await processReferralRewardServer(clientId, orderId, code);
+        }
+      }
+
+      // ── CANCELLATION: refund a paid (non-subscription) order to the wallet ──
+      if (cancelled) {
+        if (clientId && after.is_paid === true && after.needs_refund === true &&
+            after.payment_method !== "subscription" && amount > 0) {
+          const walletRef = db.collection("wallets").doc(clientId);
+          const txRef = walletRef.collection("transactions").doc(`refund_${orderId}`);
+          let didFlip = false;
+          try {
+            await db.runTransaction(async (t) => {
+              const oSnap = await t.get(orderRef);
+              if (oSnap.get("refund_credited") === true) return;
+              t.set(walletRef, {
+                balance: admin.firestore.FieldValue.increment(amount),
+                last_updated: admin.firestore.FieldValue.serverTimestamp(),
+              }, {merge: true});
+              t.create(txRef, {
+                amount: amount, points: 0, type: "refund",
+                description: `إعادة رصيد للطلب الملغي رقم #${code}`,
+                order_id: orderId,
+                created_at: admin.firestore.FieldValue.serverTimestamp(),
+              });
+              t.update(orderRef, {refund_credited: true});
+              didFlip = true;
+            });
+          } catch (e) {
+            console.error(`[rewards] refund txn failed for ${orderId}:`, e.message);
+          }
+          if (didFlip) {
+            await queuePush(clientId, "تم إعادة رصيد لمحفظتك 💰",
+                `تم إيداع مبلغ ${amount} ر.س في محفظتك للطلب الملغي #${code}.`,
+                "wallet_credit", {orderId: orderId});
+          }
+        }
+      }
+      return null;
+    });
+
+// 6d. Server-authoritative wallet-as-payment deduction. Replaces the client-side
+// wallet balance write in payment_summary_screen (the LAST direct client wallet
+// write), so the wallets write rule can be locked down later. Takes the amount
+// because in the wallet-checkout flow the order doc is created AFTER payment.
+// Atomic + server-side balance check so a client can never overdraw or forge it.
+exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً");
+  }
+  const uid = request.auth.uid;
+  const amount = Number(request.data && request.data.amount);
+  const note = (request.data && request.data.description) || "دفع خدمة من المحفظة";
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new HttpsError("invalid-argument", "المبلغ غير صالح");
+  }
+
+  const db = admin.firestore();
+  const walletRef = db.collection("wallets").doc(uid);
+  const txRef = walletRef.collection("transactions").doc();
+
+  const result = await db.runTransaction(async (t) => {
+    const wSnap = await t.get(walletRef);
+    const balance = wSnap.exists ? Number(wSnap.data().balance || 0) : 0;
+    if (balance < amount) {
+      throw new HttpsError("failed-precondition", "الرصيد غير كافٍ");
+    }
+    t.set(walletRef, {
+      balance: balance - amount,
+      last_updated: admin.firestore.FieldValue.serverTimestamp(),
+    }, {merge: true});
+    t.set(txRef, {
+      amount: -amount, points: 0, type: "payment",
+      description: note,
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return {success: true, newBalance: balance - amount};
+  });
+
+  return result;
+});
+
 // 7. Secure Moyasar payment verification on Call function
 exports.verifyMoyasarPayment = onCall(
     {secrets: ["MOYASAR_SECRET_KEY"], cpu: 0.25},
