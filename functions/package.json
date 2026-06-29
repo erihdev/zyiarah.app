@@ -19,7 +19,7 @@
     "geofire-common": "^6.0.0",
     "handlebars": "^4.7.9",
     "nodemailer": "^8.0.10",
-    "resend": "^6.12.4"
+    "resend": "^6.16.0"
   },
   "devDependencies": {
     "eslint": "^10.4.1",
