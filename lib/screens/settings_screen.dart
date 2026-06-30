@@ -246,12 +246,24 @@ class ZyiarahSettingsScreen extends StatelessWidget {
                 final user = FirebaseAuth.instance.currentUser;
                 if (user != null) {
                   try {
-                    await FirebaseFirestore.instance.collection('users').doc(user.uid).delete();
-                    await user.delete();
+                    // تسجيل طلب الحذف بحالة "deleted"؛ تتولى Cloud Function الحذف
+                    // الكامل خادمياً (المستخدم لا يملك صلاحية حذف وثيقته/بياناته بنفسه).
+                    await FirebaseFirestore.instance
+                        .collection('account_deletions')
+                        .doc(user.uid)
+                        .set({
+                      'uid': user.uid,
+                      'phone': user.phoneNumber,
+                      'email': user.email,
+                      'requested_at': FieldValue.serverTimestamp(),
+                      'status': 'deleted',
+                      'source': 'client_app',
+                    });
+                    await FirebaseAuth.instance.signOut();
                     if (ctx.mounted) {
                       Navigator.pop(ctx);
                       ScaffoldMessenger.of(ctx).showSnackBar(
-                        SnackBar(content: Text('تم حذف الحساب بالكامل من أنظمتنا', style: GoogleFonts.tajawal())),
+                        SnackBar(content: Text('تم استلام طلب حذف الحساب وستتم معالجته بالكامل', style: GoogleFonts.tajawal())),
                       );
                       Navigator.of(ctx).popUntil((route) => route.isFirst);
                     }
@@ -259,7 +271,7 @@ class ZyiarahSettingsScreen extends StatelessWidget {
                     if (ctx.mounted) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
                         SnackBar(
-                          content: Text('يرجى تسجيل الخروج ثم الدخول مرة أخرى قبل الحذف', style: GoogleFonts.tajawal()),
+                          content: Text('تعذّر إرسال طلب حذف الحساب، حاول مجدداً', style: GoogleFonts.tajawal()),
                         ),
                       );
                       Navigator.pop(ctx);

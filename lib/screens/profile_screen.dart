@@ -337,27 +337,19 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
     final uid = user?.uid;
     if (uid == null) return;
     try {
-      await user!.delete();
+      // المستخدم لا يملك صلاحية حذف وثيقته بنفسه (قاعدة users = isSuperAdmin).
+      // نُسجّل الطلب بحالة "deleted"، وتتولى Cloud Function (onAccountDeletionRequested)
+      // حذف حساب المصادقة + وثيقة المستخدم + رموز الإشعارات خادمياً، فلا تبقى بيانات يتيمة.
       await _firestore.collection('account_deletions').doc(uid).set({
         'uid': uid,
-        'phone': user.phoneNumber,
+        'phone': user?.phoneNumber,
+        'email': user?.email,
         'requested_at': FieldValue.serverTimestamp(),
         'status': 'deleted',
+        'source': 'client_app',
       });
-      await _firestore.collection('users').doc(uid).delete();
       await _firebaseService.signOut();
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
-    } on FirebaseAuthException catch (e) {
-      if (!mounted) return;
-      final msg = e.code == 'requires-recent-login'
-          ? 'لأمان حسابك، يجب تسجيل الخروج ثم الدخول مجدداً قبل حذف الحساب.'
-          : 'خطأ في حذف الحساب: ${e.message}';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(msg, style: GoogleFonts.tajawal()),
-          backgroundColor: Colors.red,
-        ),
-      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

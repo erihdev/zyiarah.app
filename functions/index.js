@@ -671,6 +671,33 @@ exports.tamaraWebhook = onRequest(
 const {Resend} = require("resend");
 
 // 6. Unified Notification Trigger Processor
+/**
+ * Anti-relay guard for the client-writable notification_triggers queue.
+ * An email may only be delivered to an address that belongs to a registered
+ * user or driver, or to the configured admin address — never an arbitrary
+ * external recipient supplied by a client.
+ * @param {string} email Candidate recipient address.
+ * @return {Promise<boolean>} True if the address is an allowed recipient.
+ */
+async function isAllowedEmailRecipient(email) {
+  if (!email || typeof email !== "string") return false;
+  const lower = email.trim().toLowerCase();
+  if (!lower) return false;
+  // Configured admin address + system fallbacks
+  try {
+    const cfg = await admin.firestore().collection("system_configs").doc("main_settings").get();
+    const adminEmail = (cfg.exists && cfg.data()?.admin_email ? String(cfg.data().admin_email) : "").toLowerCase();
+    if (lower === adminEmail || lower === "admin@zyiarah.com" || lower === "no-reply@zyiarah.com") return true;
+  } catch (e) {
+    // fall through to user/driver lookups
+  }
+  const u = await admin.firestore().collection("users").where("email", "==", email).limit(1).get();
+  if (!u.empty) return true;
+  const d = await admin.firestore().collection("drivers").where("email", "==", email).limit(1).get();
+  if (!d.empty) return true;
+  return false;
+}
+
 exports.processNotificationTriggers = onDocumentCreated(
     {document: "notification_triggers/{id}", secrets: ["RESEND_API_KEY"], cpu: 0.25},
     async (event) => {
@@ -702,7 +729,15 @@ exports.processNotificationTriggers = onDocumentCreated(
         }
 
         // 2. Email via Resend (key from Secret Manager)
-        if (type === "email" || type === "hybrid" || type === "admin_order_alert") {
+        const wantsEmail = (type === "email" || type === "hybrid" || type === "admin_order_alert");
+        // SECURITY: notification_triggers is client-writable; refuse to relay
+        // email to any address that isn't a registered user/driver/admin.
+        const emailAllowed = wantsEmail ? await isAllowedEmailRecipient(recipientEmail) : false;
+        if (wantsEmail && !emailAllowed) {
+          console.warn(`[EMAIL] Refused relay to unregistered recipient: ${recipientEmail}`);
+          await snap.ref.update({emailStatus: "refused_unregistered_recipient"});
+        }
+        if (wantsEmail && emailAllowed) {
           const resendKey = resendApiKeySecret.value();
           if (!resendKey) {
             console.error("[EMAIL] RESEND_API_KEY secret is not set");
@@ -813,6 +848,309 @@ exports.processNotificationTriggers = onDocumentCreated(
       }
     });
 
+// 6b. Secure wallet — redeem Qatrat points for balance (server-authoritative).
+// The wallet is (currently) client-writable, so this onCall is the trusted path:
+// it validates the points server-side and performs the conversion atomically.
+// Pairs with the deferred lockdown of the wallets write rule.
+exports.redeemQatratPoints = onCall({cpu: 0.083}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً");
+  }
+  const uid = request.auth.uid;
+  const pointsToRedeem = Number(request.data && request.data.pointsToRedeem);
+  if (!Number.isInteger(pointsToRedeem) || pointsToRedeem < 50) {
+    throw new HttpsError("invalid-argument", "الحد الأدنى للاستبدال 50 نقطة");
+  }
+
+  const walletRef = admin.firestore().collection("wallets").doc(uid);
+  const txRef = walletRef.collection("transactions").doc();
+
+  const result = await admin.firestore().runTransaction(async (t) => {
+    const snap = await t.get(walletRef);
+    const currentPoints = snap.exists ? Number(snap.data().qatrat_points || 0) : 0;
+    const currentBalance = snap.exists ? Number(snap.data().balance || 0) : 0;
+    if (currentPoints < pointsToRedeem) {
+      throw new HttpsError("failed-precondition", "نقاطك غير كافية");
+    }
+    const financialCredit = pointsToRedeem / 50.0; // 50 points = 1 SAR
+    t.set(walletRef, {
+      qatrat_points: currentPoints - pointsToRedeem,
+      balance: currentBalance + financialCredit,
+      last_updated: admin.firestore.FieldValue.serverTimestamp(),
+    }, {merge: true});
+    t.set(txRef, {
+      amount: financialCredit,
+      points: -pointsToRedeem,
+      type: "qatrat_redeem",
+      description: `استبدال ${pointsToRedeem} نقطة زيارة برصيد مالي`,
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return {newBalance: currentBalance + financialCredit, newPoints: currentPoints - pointsToRedeem};
+  });
+
+  return {success: true, ...result};
+});
+
+// 6c. Server-authoritative wallet rewards / refund on order status change.
+// Mirrors sendNotificationOnOrderStatusChange. Gated on rewards_handled_by==='server'
+// (written ONLY by the new app at order creation), so during rollout it never
+// double-grants with the old app (which still grants client-side for its own,
+// discriminator-less orders). Every effect is idempotent: an order flag checked+set
+// inside the same wallet transaction PLUS a deterministic ledger doc id created with
+// tx.create() — so at-least-once redelivery is a provable no-op.
+
+/**
+ * Enqueue an in-app + push notification via the existing trigger pipeline.
+ * Server-originated (Admin SDK); type is never 'email' so no relay path is used.
+ * @param {string} toUid Recipient uid (or "ADMIN_BROADCAST").
+ * @param {string} title Notification title.
+ * @param {string} body Notification body.
+ * @param {string} type Notification type tag.
+ * @param {object} data Extra data payload.
+ * @return {Promise<void>}
+ */
+async function queuePush(toUid, title, body, type, data) {
+  await admin.firestore().collection("notification_triggers").add({
+    toUid: toUid,
+    title: title,
+    body: body,
+    type: type,
+    data: data || {},
+    createdBy: "server",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    processed: false,
+  });
+}
+
+/**
+ * Race-safe first-completed-order referral payout. The referral doc's
+ * pending->rewarded flip inside the transaction is the single-winner mutex;
+ * the referrer credit, ledger row and coupon are all written in the SAME
+ * transaction so a crash cannot leave a half-paid referral, and deterministic
+ * ids make a redelivery a no-op.
+ * @param {string} refereeUid The referee (new user) uid.
+ * @param {string} orderId The completed order id.
+ * @param {string} orderCode Human order code for messages.
+ * @return {Promise<void>}
+ */
+async function processReferralRewardServer(refereeUid, orderId, orderCode) {
+  const db = admin.firestore();
+  const orderRef = db.collection("orders").doc(orderId);
+
+  // Resolve the referral: deterministic id first, query fallback for legacy
+  // random-id docs created before applyReferralCode switched to a fixed id.
+  let referralRef = db.collection("referrals").doc(refereeUid);
+  if (!(await referralRef.get()).exists) {
+    const q = await db.collection("referrals")
+        .where("referee_id", "==", refereeUid)
+        .where("status", "==", "pending").limit(1).get();
+    if (q.empty) return;
+    referralRef = q.docs[0].ref;
+  }
+
+  const REFERRER_REWARD = 50;
+  let payout = null;
+  try {
+    payout = await db.runTransaction(async (t) => {
+      const rSnap = await t.get(referralRef);
+      if (!rSnap.exists || rSnap.get("status") !== "pending") return null;
+      const referrerId = rSnap.get("referrer_id");
+      if (!referrerId) return null;
+      const referralId = referralRef.id;
+      const referrerWallet = db.collection("wallets").doc(referrerId);
+      const bonusTx = referrerWallet.collection("transactions").doc(`refbonus_${referralId}`);
+      const couponCode = `REF${refereeUid.substring(0, 6).toUpperCase()}10`;
+      const couponRef = db.collection("promo_codes").doc(couponCode);
+
+      t.update(referralRef, {
+        status: "rewarded",
+        rewarded_on_order: orderId,
+        rewarded_at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      t.update(orderRef, {referral_processed: true});
+      t.set(referrerWallet, {
+        balance: admin.firestore.FieldValue.increment(REFERRER_REWARD),
+        last_updated: admin.firestore.FieldValue.serverTimestamp(),
+      }, {merge: true});
+      t.create(bonusTx, {
+        amount: REFERRER_REWARD, points: 0, type: "referral_reward",
+        description: "مكافأة إحالة صديق أتمّ أول طلب",
+        order_id: orderId,
+        created_at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      t.set(couponRef, {
+        code: couponCode,
+        discount_type: "percentage",
+        discount_value: 10,
+        description: "خصم الإحالة 10% — مكافأة الانضمام",
+        max_uses: 1,
+        uses: 0,
+        target_user_id: refereeUid,
+        is_active: true,
+        created_at: admin.firestore.FieldValue.serverTimestamp(),
+        expires_at: admin.firestore.Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      }, {merge: true});
+
+      return {referrerId, couponCode};
+    });
+  } catch (e) {
+    console.error(`[referral] payout txn failed for ${refereeUid}:`, e.message);
+    return;
+  }
+  if (!payout) return;
+
+  await queuePush(payout.referrerId, "🎁 مكافأة إحالتك وصلت!",
+      `أُضيفت ${REFERRER_REWARD} ر.س لمحفظتك مكافأة لإحالة صديق أتمّ أول طلب.`,
+      "referral_reward", {orderId: orderId});
+  await queuePush(refereeUid, "🎉 كوبون الإحالة جاهز!",
+      `حصلت على كوبون خصم 10% على طلبك القادم. الكود: ${payout.couponCode}`,
+      "referral_coupon", {coupon_code: payout.couponCode});
+}
+
+exports.onOrderRewards = onDocumentUpdated({document: "orders/{orderId}", cpu: 0.083},
+    async (event) => {
+      const change = event.data;
+      if (!change) return null;
+      const before = change.before.data() || {};
+      const after = change.after.data() || {};
+      const orderId = event.params.orderId;
+
+      const completed = before.status !== "completed" && after.status === "completed";
+      const cancelled = before.status !== "cancelled" && after.status === "cancelled";
+      if (!completed && !cancelled) return null;
+
+      // Rollout gate: act ONLY on orders the new app created. Legacy/old-app
+      // orders (no discriminator) keep being granted client-side by the old app.
+      if (after.rewards_handled_by !== "server") {
+        console.log(`[rewards] skip order ${orderId} reaching terminal status without server discriminator`);
+        return null;
+      }
+
+      const db = admin.firestore();
+      const orderRef = db.collection("orders").doc(orderId);
+      const clientId = after.client_id;
+      const amount = Number(after.amount || 0);
+      const code = after.code || orderId;
+
+      // ── COMPLETION: Qatrat points (+ referral) ──
+      if (completed) {
+        if (clientId && amount > 0) {
+          const points = Math.round(amount);
+          const walletRef = db.collection("wallets").doc(clientId);
+          const txRef = walletRef.collection("transactions").doc(`qatrat_${orderId}`);
+          let didFlip = false;
+          try {
+            await db.runTransaction(async (t) => {
+              const oSnap = await t.get(orderRef);
+              if (oSnap.get("qatrat_granted") === true) return;
+              t.set(walletRef, {
+                qatrat_points: admin.firestore.FieldValue.increment(points),
+                last_updated: admin.firestore.FieldValue.serverTimestamp(),
+              }, {merge: true});
+              t.create(txRef, {
+                amount: 0, points: points, type: "qatrat_reward",
+                description: `نقاط زيارة مكتسبة من الطلب المكتمل #${code}`,
+                order_id: orderId,
+                created_at: admin.firestore.FieldValue.serverTimestamp(),
+              });
+              t.update(orderRef, {
+                qatrat_granted: true,
+                qatrat_granted_at: admin.firestore.FieldValue.serverTimestamp(),
+              });
+              didFlip = true;
+            });
+          } catch (e) {
+            console.error(`[rewards] qatrat txn failed for ${orderId}:`, e.message);
+          }
+          if (didFlip) {
+            await queuePush(clientId, "حصلت على نقاط زيارة جديدة! ✨🎈",
+                `أضيفت ${points} نقطة زيارة لرصيدك مكافأة على الطلب #${code}.`,
+                "qatrat_credit", {orderId: orderId});
+          }
+        }
+        if (clientId) {
+          await processReferralRewardServer(clientId, orderId, code);
+        }
+      }
+
+      // ── CANCELLATION: refund a paid (non-subscription) order to the wallet ──
+      if (cancelled) {
+        if (clientId && after.is_paid === true && after.needs_refund === true &&
+            after.payment_method !== "subscription" && amount > 0) {
+          const walletRef = db.collection("wallets").doc(clientId);
+          const txRef = walletRef.collection("transactions").doc(`refund_${orderId}`);
+          let didFlip = false;
+          try {
+            await db.runTransaction(async (t) => {
+              const oSnap = await t.get(orderRef);
+              if (oSnap.get("refund_credited") === true) return;
+              t.set(walletRef, {
+                balance: admin.firestore.FieldValue.increment(amount),
+                last_updated: admin.firestore.FieldValue.serverTimestamp(),
+              }, {merge: true});
+              t.create(txRef, {
+                amount: amount, points: 0, type: "refund",
+                description: `إعادة رصيد للطلب الملغي رقم #${code}`,
+                order_id: orderId,
+                created_at: admin.firestore.FieldValue.serverTimestamp(),
+              });
+              t.update(orderRef, {refund_credited: true});
+              didFlip = true;
+            });
+          } catch (e) {
+            console.error(`[rewards] refund txn failed for ${orderId}:`, e.message);
+          }
+          if (didFlip) {
+            await queuePush(clientId, "تم إعادة رصيد لمحفظتك 💰",
+                `تم إيداع مبلغ ${amount} ر.س في محفظتك للطلب الملغي #${code}.`,
+                "wallet_credit", {orderId: orderId});
+          }
+        }
+      }
+      return null;
+    });
+
+// 6d. Server-authoritative wallet-as-payment deduction. Replaces the client-side
+// wallet balance write in payment_summary_screen (the LAST direct client wallet
+// write), so the wallets write rule can be locked down later. Takes the amount
+// because in the wallet-checkout flow the order doc is created AFTER payment.
+// Atomic + server-side balance check so a client can never overdraw or forge it.
+exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً");
+  }
+  const uid = request.auth.uid;
+  const amount = Number(request.data && request.data.amount);
+  const note = (request.data && request.data.description) || "دفع خدمة من المحفظة";
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new HttpsError("invalid-argument", "المبلغ غير صالح");
+  }
+
+  const db = admin.firestore();
+  const walletRef = db.collection("wallets").doc(uid);
+  const txRef = walletRef.collection("transactions").doc();
+
+  const result = await db.runTransaction(async (t) => {
+    const wSnap = await t.get(walletRef);
+    const balance = wSnap.exists ? Number(wSnap.data().balance || 0) : 0;
+    if (balance < amount) {
+      throw new HttpsError("failed-precondition", "الرصيد غير كافٍ");
+    }
+    t.set(walletRef, {
+      balance: balance - amount,
+      last_updated: admin.firestore.FieldValue.serverTimestamp(),
+    }, {merge: true});
+    t.set(txRef, {
+      amount: -amount, points: 0, type: "payment",
+      description: note,
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return {success: true, newBalance: balance - amount};
+  });
+
+  return result;
+});
+
 // 7. Secure Moyasar payment verification on Call function
 exports.verifyMoyasarPayment = onCall(
     {secrets: ["MOYASAR_SECRET_KEY"], cpu: 0.25},
@@ -914,56 +1252,78 @@ exports.verifyMoyasarPayment = onCall(
     },
 );
 
-// 8. GDPR Account Deletion Firestore Update Trigger
+// 8. GDPR Account Deletion — shared server-side cleanup
+// Clients cannot delete their own users/{uid} doc (rule = isSuperAdmin), so the
+// app records an account_deletions/{uid} request and this runs the real cleanup.
+/**
+ * Performs the full server-side cleanup for a GDPR account deletion.
+ * @param {string} uid UID of the user whose data must be erased.
+ * @return {Promise<void>}
+ */
+async function processAccountDeletion(uid) {
+  console.log(`Processing legal account deletion for user: ${uid}`);
+  try {
+    // 1. Delete user from Firebase Auth
+    try {
+      await admin.auth().deleteUser(uid);
+      console.log(`Successfully deleted auth user: ${uid}`);
+    } catch (authErr) {
+      if (authErr.code === "auth/user-not-found") {
+        console.warn(`User ${uid} not found in Firebase Auth`);
+      } else {
+        throw authErr;
+      }
+    }
+
+    // 2. Delete user's document from users collection
+    await admin.firestore().collection("users").doc(uid).delete();
+    console.log(`Successfully deleted users/${uid} document`);
+
+    // 3. Clean up associated FCM tokens (both legacy collection names)
+    await admin.firestore().collection("fcm_tokens").doc(uid).delete().catch(() => {});
+    await admin.firestore().collection("fcm_token").doc(uid).delete().catch(() => {});
+
+    // 4. Mark the request fully processed
+    await admin.firestore().collection("account_deletions").doc(uid).update({
+      completed_at: admin.firestore.FieldValue.serverTimestamp(),
+      status: "deleted_fully_processed",
+    });
+    console.log(`Successfully completed deletion workflow for ${uid}`);
+  } catch (error) {
+    console.error(`Error processing account deletion for user ${uid}:`, error);
+    // Record the failure so it can be retried/inspected by an admin
+    await admin.firestore().collection("account_deletions").doc(uid).update({
+      error: error.message || "Unknown error",
+      status: "failed_deletion",
+      failed_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+}
+
+// 8a. Self-service deletion: client creates the request doc with status 'deleted'
+exports.onAccountDeletionRequested = onDocumentCreated({document: "account_deletions/{uid}", cpu: 0.083},
+    async (event) => {
+      const snap = event.data;
+      if (!snap) return null;
+      const data = snap.data();
+      if (data && data.status === "deleted") {
+        await processAccountDeletion(event.params.uid);
+      }
+      return null;
+    },
+);
+
+// 8b. Admin-approved deletion: a pending request is updated to status 'deleted'
 exports.onAccountDeletionStatusChanged = onDocumentUpdated({document: "account_deletions/{uid}", cpu: 0.083},
     async (event) => {
       const change = event.data;
       if (!change) return null;
-
       const beforeData = change.before.data();
       const afterData = change.after.data();
-
-      // Check if status changed to 'deleted'
+      // Only when status transitions INTO 'deleted' (avoids re-firing on the
+      // helper's own update to 'deleted_fully_processed')
       if (afterData && afterData.status === "deleted" && (!beforeData || beforeData.status !== "deleted")) {
-        const uid = event.params.uid;
-        console.log(`Processing legal account deletion for user: ${uid}`);
-
-        try {
-          // 1. Delete user from Firebase Auth
-          try {
-            await admin.auth().deleteUser(uid);
-            console.log(`Successfully deleted auth user: ${uid}`);
-          } catch (authErr) {
-            if (authErr.code === "auth/user-not-found") {
-              console.warn(`User ${uid} not found in Firebase Auth`);
-            } else {
-              throw authErr;
-            }
-          }
-
-          // 2. Delete user's document from users collection
-          await admin.firestore().collection("users").doc(uid).delete();
-          console.log(`Successfully deleted users/${uid} document`);
-
-          // 3. Clean up associated FCM tokens
-          await admin.firestore().collection("fcm_tokens").doc(uid).delete();
-          console.log(`Successfully deleted fcm_tokens/${uid} document`);
-
-          // 4. Update the account_deletions request status to fully completed
-          await admin.firestore().collection("account_deletions").doc(uid).update({
-            completed_at: admin.firestore.FieldValue.serverTimestamp(),
-            status: "deleted_fully_processed",
-          });
-          console.log(`Successfully completed deletion workflow for ${uid}`);
-        } catch (error) {
-          console.error(`Error processing account deletion for user ${uid}:`, error);
-          // Update status with error info so it can be retried or inspected by admin
-          await admin.firestore().collection("account_deletions").doc(uid).update({
-            error: error.message || "Unknown error",
-            status: "failed_deletion",
-            failed_at: admin.firestore.FieldValue.serverTimestamp(),
-          });
-        }
+        await processAccountDeletion(event.params.uid);
       }
       return null;
     },

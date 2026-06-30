@@ -78,6 +78,10 @@ testers.txt
 AuthKey_*.p8
 *.b64
 .claude/
+ios/dist.key
+ios/*.key
+# One-off admin/maintenance scripts (hardcode credentials — never commit)
+admin_panel/*.mjs
 
 # Sensitive credentials
 functions/*adminsdk*.json

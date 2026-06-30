@@ -134,11 +134,13 @@ service cloud.firestore {
         request.auth.uid == resource.data.driver_id &&
         resource.data.status in ['scheduled', 'on_the_way', 'in_progress', 'accepted'] &&
         request.resource.data.status in ['on_the_way', 'in_progress', 'completed'] &&
+        // 'rewards_handled_by' مسموح: تكتبه عند الإكمال ليعالج الخادم الجوائز (onOrderRewards)
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'status', 'on_the_way_at', 'arrived_at', 'start_time', 'end_time',
           'driver_location', 'last_location_update', 'updated_at',
           'is_paid', 'paid_at', 'cash_collected_by', 'cash_confirmed',
-          'cash_confirmed_at', 'payment_pin', 'payment_pin_generated_at'
+          'cash_confirmed_at', 'payment_pin', 'payment_pin_generated_at',
+          'rewards_handled_by'
         ]);
 
       // Client: cancel own pending order, update invoice URL, or submit rating
@@ -148,7 +150,7 @@ service cloud.firestore {
           // 1. Cancellation flow — only before the task is dispatched to a driver
           (resource.data.status in ['pending', 'awaiting_payment', 'pending_admin_approval'] &&
            request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['status', 'cancelled_at', 'cancelled_by', 'needs_refund']) &&
+             .hasOnly(['status', 'cancelled_at', 'cancelled_by', 'needs_refund', 'rewards_handled_by']) &&
            request.resource.data.status == 'cancelled')
           ||
           // 2. Invoice PDF URL update flow

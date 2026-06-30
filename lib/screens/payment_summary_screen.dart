@@ -374,27 +374,28 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           ));
           return;
         }
-        // Atomically deduct from wallet then create order
-        final walletRef = FirebaseFirestore.instance
-            .collection('wallets')
-            .doc(_currentUser?.uid);
-        final txRef = walletRef.collection('transactions').doc();
-        await FirebaseFirestore.instance.runTransaction((tx) async {
-          final snap = await tx.get(walletRef);
-          final current = (snap.data()?['balance'] ?? 0.0).toDouble();
-          if (current < totalWithVat) throw Exception('insufficient_balance');
-          tx.update(walletRef, {
-            'balance': current - totalWithVat,
-            'last_updated': FieldValue.serverTimestamp(),
-          });
-          tx.set(txRef, {
-            'amount': -totalWithVat,
-            'points': 0,
-            'type': 'payment',
+        // الخصم من المحفظة أصبح خادمياً (payWithWallet) — العميل لا يكتب المحفظة.
+        // الدالة تتحقق من الرصيد وتخصم ذرياً على الخادم.
+        try {
+          await FirebaseFunctions.instance.httpsCallable('payWithWallet').call({
+            'amount': totalWithVat,
             'description': 'دفع خدمة: ${widget.serviceName}',
-            'created_at': FieldValue.serverTimestamp(),
           });
-        });
+        } on FirebaseFunctionsException catch (e) {
+          if (mounted) setState(() => _isLoading = false);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+              (e.message ?? '').contains('الرصيد غير')
+                  ? 'رصيد محفظتك غير كافٍ لإتمام الدفع.'
+                  : 'تعذّر الدفع من المحفظة، حاول مجدداً.',
+              style: GoogleFonts.tajawal(),
+            ),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ));
+          return;
+        }
         if (mounted) setState(() => _walletBalance -= totalWithVat);
         await _processUnifiedSuccess(finalOrderId, 'wallet', isFree: false);
 
