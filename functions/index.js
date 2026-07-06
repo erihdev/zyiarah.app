@@ -1441,7 +1441,9 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
 
 // 8. Surge Pricing Factor
 exports.getSurgePricingFactor = onCall({cpu: 0.083}, async (request) => {
-  // if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
+  }
 
   const driversRef = admin.firestore().collection("users").where("role", "==", "driver");
   const snap = await driversRef.get();
@@ -1476,7 +1478,9 @@ exports.getSurgePricingFactor = onCall({cpu: 0.083}, async (request) => {
 
 // 9. Smart Dispatch Core: findNearestDrivers
 exports.findNearestDrivers = onCall({cpu: 0.25}, async (request) => {
-  // if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
+  }
 
   const {lat, lng} = request.data;
   if (lat == null || lng == null) {
@@ -1655,6 +1659,9 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
 // Subscription Visit Generator — pre-generate & auto-assign all contract visits
 // ════════════════════════════════════════════════════════════════════════
 exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
+  }
   const {contractId} = request.data;
   if (!contractId) throw new HttpsError("invalid-argument", "معرف العقد مطلوب");
   const db = admin.firestore();
@@ -1668,6 +1675,11 @@ exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
     if (q.empty) throw new HttpsError("not-found", "العقد غير موجود");
     contractRef = q.docs[0].ref;
     contractSnap = q.docs[0];
+  }
+
+  // SECURITY: مالك العقد أو أدمن فقط — يمنع توليد زيارات لعقود الآخرين
+  if (contractSnap.data().userId !== request.auth.uid) {
+    await _assertAdmin(request);
   }
 
   // مطالبة ذرّية بالتوليد (idempotent) لمنع التكرار عند تكرار نداء الدفع
@@ -1953,6 +1965,9 @@ exports.notifyClientOnDriverDeparture = onDocumentUpdated(
 
 // 10. Auto Assign Driver Directly (No acceptance required)
 exports.autoAssignDriverDirectly = onCall({cpu: 0.25}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
+  }
   const {orderId, durationHours} = request.data;
   if (!orderId) {
     throw new HttpsError("invalid-argument", "معرف الطلب مطلوب");
@@ -1967,6 +1982,11 @@ exports.autoAssignDriverDirectly = onCall({cpu: 0.25}, async (request) => {
   }
 
   const orderData = orderDoc.data();
+
+  // SECURITY: صاحب الطلب أو أدمن فقط — يمنع إجبار إسناد سائق لطلبات الآخرين
+  if (orderData.client_id !== request.auth.uid) {
+    await _assertAdmin(request);
+  }
   if (!orderData.service_date) {
     throw new HttpsError("failed-precondition", "تاريخ الخدمة غير محدد");
   }
@@ -1996,6 +2016,9 @@ exports.autoAssignDriverDirectly = onCall({cpu: 0.25}, async (request) => {
 
 // 11. Check hourly slot availability securely (server-side)
 exports.checkHourlySlotAvailability = onCall({cpu: 0.25}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
+  }
   const {startDateTimeIso, durationHours} = request.data;
   if (!startDateTimeIso) {
     throw new HttpsError("invalid-argument", "تاريخ البداية مطلوب");

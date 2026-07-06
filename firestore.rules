@@ -191,12 +191,15 @@ service cloud.firestore {
     }
 
     // ─── Wallets & Transactions ───────────────────────────────────────────
+    // SECURITY: الرصيد والمعاملات تُكتب حصرياً من Cloud Functions عبر Admin SDK
+    // (payWithWallet / redeemQatratPoints / onOrderRewards) — لا كتابة من العميل.
     match /wallets/{walletId} {
       allow read: if isLoggedIn() && (request.auth.uid == walletId || isAdmin());
-      allow write: if isLoggedIn() && (request.auth.uid == walletId || isAdmin());
+      allow write: if false;
 
       match /transactions/{txId} {
-        allow read, write: if isLoggedIn() && (request.auth.uid == walletId || isAdmin());
+        allow read: if isLoggedIn() && (request.auth.uid == walletId || isAdmin());
+        allow write: if false;
       }
     }
 
