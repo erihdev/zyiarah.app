@@ -403,12 +403,5 @@ service cloud.firestore {
          isAdmin());
       allow create, delete: if isAdmin();
     }
-
-    // ─── Driver payments (earnings) — driver reads own, admin manages ───────
-    match /driver_payments/{payId} {
-      allow read: if isLoggedIn() &&
-        (request.auth.uid == resource.data.driver_id || isAdmin());
-      allow create, update, delete: if isAdmin();
-    }
   }
 }

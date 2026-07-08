@@ -21,7 +21,6 @@ import 'package:go_router/go_router.dart';
 import 'package:zyiarah/screens/driver_tasks_screen.dart';
 import 'package:zyiarah/screens/driver_notifications_screen.dart';
 import 'package:zyiarah/screens/driver_profile_screen.dart';
-import 'package:zyiarah/screens/driver_earnings_screen.dart';
 
 class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
@@ -220,8 +219,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 const DriverNotificationsScreen(),
                 // Tab 3: Profile
                 DriverProfileScreen(onLogout: _performLogout),
-                // Tab 4: Earnings
-                const DriverEarningsScreen(),
               ],
             ),
             bottomNavigationBar: _buildBottomNav(),
@@ -332,11 +329,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
             activeIcon: Icon(Icons.person),
             label: 'حسابي',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.account_balance_wallet_outlined),
-            activeIcon: Icon(Icons.account_balance_wallet),
-            label: 'المالية',
-          ),
+          // تبويب «المالية/الراتب» أُزيل — السائقون موظفون براتب شهري يُدار خارج التطبيق.
         ],
       ),
     );
