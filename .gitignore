@@ -89,3 +89,7 @@ functions/service-account*.json
 
 # Local files
 order_journey_map.html
+
+# temp price/test scripts (local only)
+functions/_tmp_price.js
+functions/_zone_prices_backup.json

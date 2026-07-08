@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:moyasar/moyasar.dart';
+import 'package:zyiarah/utils/moyasar_util.dart';
 
 /// STC Pay OTP payment screen powered by Moyasar SDK.
 ///
@@ -152,7 +153,7 @@ class _MoyasarStcScreenState extends State<MoyasarStcScreen> {
       amount: (widget.amountSAR * 100).round(),
       currency: 'SAR',
       description: widget.description,
-      givenID: widget.orderId, // idempotency — prevents duplicate charges on retry
+      givenID: MoyasarUtil.givenIdFromOrder(widget.orderId), // UUID صالح لـ Moyasar (منع الشحن المزدوج)
       metadata: {'order_id': widget.orderId},
     );
 

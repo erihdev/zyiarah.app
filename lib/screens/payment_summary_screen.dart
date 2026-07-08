@@ -9,6 +9,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/utils/order_util.dart';
+import 'package:zyiarah/utils/moyasar_util.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/services/zatca_service.dart';
@@ -1127,7 +1128,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               publishableApiKey: publishableKey,
               amount: (totalWithVat * 100).round(),
               description: 'زيارة - ${widget.serviceName}',
-              givenID: _pendingOrderId, // idempotency — prevents duplicate charges on retry
+              givenID: MoyasarUtil.givenIdFromOrder(_pendingOrderId), // UUID صالح لـ Moyasar (منع الشحن المزدوج)
               metadata: {'order_id': _pendingOrderId},
               applePay: ApplePayConfig(
                 merchantId: 'merchant.com.zyiarah.app',
@@ -1228,7 +1229,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                     publishableApiKey: publishableKey,
                     amount: (totalWithVat * 100).round(),
                     description: 'زيارة - ${widget.serviceName}',
-                    givenID: _pendingOrderId, // idempotency — prevents duplicate charges
+                    givenID: MoyasarUtil.givenIdFromOrder(_pendingOrderId), // UUID صالح لـ Moyasar (منع الشحن المزدوج)
                     metadata: {'order_id': _pendingOrderId},
                     samsungPay: SamsungPayConfig(
                       serviceId: samsungServiceId,
