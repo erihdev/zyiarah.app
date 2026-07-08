@@ -346,7 +346,70 @@ exports.notifyClientOnOrderCancellation = onDocumentUpdated({document: "orders/{
       return null;
     });
 
-// 3. Unified Global Notification Trigger
+/**
+ * Deliver a broadcast: push to the target topic + fan out to the `notifications`
+ * collection for in-app viewing. Shared by the create-trigger and the scheduler.
+ * @param {FirebaseFirestore.DocumentReference} docRef notifications_log doc ref.
+ * @param {Object} data Notification payload (title, body, target).
+ * @return {Promise<void>}
+ */
+async function _deliverBroadcast(docRef, data) {
+  const {title, body, target = "all"} = data;
+  const payload = {
+    notification: {title, body},
+    data: {click_action: "FLUTTER_NOTIFICATION_CLICK", type: "global_broadcast"},
+  };
+  try {
+    // FIX: single `all_users` topic to avoid double-delivery to clients/drivers
+    if (target === "all") {
+      await admin.messaging().send({...payload, topic: "all_users"});
+    } else if (target === "clients" || target === "drivers") {
+      await admin.messaging().send({...payload, topic: target});
+    }
+
+    let query = admin.firestore().collection("users");
+    if (target === "clients") {
+      query = query.where("role", "==", "client");
+    } else if (target === "drivers") {
+      query = query.where("role", "==", "driver");
+    }
+    const usersSnap = await query.get();
+    let batch = admin.firestore().batch();
+    let count = 0;
+    for (const userDoc of usersSnap.docs) {
+      const notifRef = admin.firestore().collection("notifications").doc();
+      batch.set(notifRef, {
+        userId: userDoc.id, title, body,
+        type: "global_broadcast", isRead: false,
+        sentAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      count++;
+      if (count === 400) {
+        await batch.commit();
+        batch = admin.firestore().batch();
+        count = 0;
+      }
+    }
+    if (count > 0) await batch.commit();
+
+    await docRef.update({
+      processed: true, status: "sent",
+      processed_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    console.log(`Notification delivered for target: ${target}`);
+  } catch (error) {
+    console.error("Error sending push notification:", error);
+    await docRef.update({
+      processed: true, status: "error",
+      error: error.message || "Unknown error",
+      processed_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+}
+
+// 3. Unified Global Notification Trigger — delivers immediately, but DEFERS any
+// notification scheduled for the future to releaseScheduledNotifications (it used
+// to fire scheduled campaigns instantly).
 exports.onNotificationCreated = onDocumentCreated({document: "notifications_log/{id}", cpu: 0.083},
     async (event) => {
       const snap = event.data;
@@ -358,71 +421,33 @@ exports.onNotificationCreated = onDocumentCreated({document: "notifications_log/
         return;
       }
 
-      const {title, body, target = "all"} = newValue;
-
-      const payload = {
-        notification: {title, body},
-        data: {
-          click_action: "FLUTTER_NOTIFICATION_CLICK",
-          type: "global_broadcast",
-        },
-      };
-
-      try {
-        // FIX: use single `all_users` topic to avoid double-delivery to clients/drivers
-        if (target === "all") {
-          await admin.messaging().send({...payload, topic: "all_users"});
-        } else if (target === "clients" || target === "drivers") {
-          await admin.messaging().send({...payload, topic: target});
-        }
-
-        // --- Save notifications to Firestore for in-app viewing ---
-        let query = admin.firestore().collection("users");
-        if (target === "clients") {
-          query = query.where("role", "==", "client");
-        } else if (target === "drivers") {
-          query = query.where("role", "==", "driver");
-        }
-
-        const usersSnap = await query.get();
-        let batch = admin.firestore().batch();
-        let count = 0;
-
-        for (const userDoc of usersSnap.docs) {
-          const notifRef = admin.firestore().collection("notifications").doc();
-          batch.set(notifRef, {
-            userId: userDoc.id,
-            title: title,
-            body: body,
-            type: "global_broadcast",
-            isRead: false,
-            sentAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-          count++;
-          if (count === 400) {
-            await batch.commit();
-            batch = admin.firestore().batch();
-            count = 0;
-          }
-        }
-        if (count > 0) {
-          await batch.commit();
-        }
-        // ------------------------------------------------------------
-
-        await snap.ref.update({
-          processed: true,
-          processed_at: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        console.log(`Notification processed for target: ${target}`);
-      } catch (error) {
-        console.error("Error sending push notification:", error);
-        await snap.ref.update({
-          processed: true,
-          error: error.message || "Unknown error",
-          processed_at: admin.firestore.FieldValue.serverTimestamp(),
-        });
+      const sched = newValue.scheduled_at;
+      const isFuture = sched && typeof sched.toMillis === "function" &&
+        sched.toMillis() > Date.now();
+      if (newValue.status === "scheduled" || isFuture) {
+        console.log(`Notification ${event.params.id} is scheduled — deferring delivery`);
+        return;
       }
+
+      await _deliverBroadcast(snap.ref, newValue);
+    });
+
+// 3b. Release scheduled broadcasts whose time has come.
+exports.releaseScheduledNotifications = onSchedule({schedule: "every 10 minutes", cpu: 0.083},
+    async () => {
+      const db = admin.firestore();
+      const now = admin.firestore.Timestamp.now();
+      // Single-inequality query (auto-indexed); status is filtered in code so a
+      // delivered doc (status:'sent') is never re-sent.
+      const due = await db.collection("notifications_log")
+          .where("scheduled_at", "<=", now).limit(50).get();
+      for (const doc of due.docs) {
+        const d = doc.data();
+        if (d.status === "scheduled" && d.processed !== true) {
+          await _deliverBroadcast(doc.ref, d);
+        }
+      }
+      return null;
     });
 
 // 4. Callable function for direct sending (admin only, validated)
@@ -1186,6 +1211,37 @@ exports.syncOrderLinkedRecords = onDocumentUpdated({document: "orders/{orderId}"
         } catch (e) {
           console.error(`[linked] visit accounting failed for ${orderId}:`, e.message);
         }
+      }
+      return null;
+    });
+
+// 6c-ter. Count a coupon use server-side when an order carrying a coupon_code is
+// created. The client never reliably incremented `uses`, so max_uses limits had no
+// effect (unlimited reuse). Idempotent via a per-order `coupon_counted` flag.
+exports.countCouponUseOnOrderCreate = onDocumentCreated({document: "orders/{orderId}", cpu: 0.083},
+    async (event) => {
+      const snap = event.data;
+      if (!snap) return null;
+      const data = snap.data() || {};
+      const code = data.coupon_code;
+      if (!code || typeof code !== "string" || !code.trim()) return null;
+
+      const db = admin.firestore();
+      const orderRef = db.collection("orders").doc(event.params.orderId);
+      const q = await db.collection("promo_codes")
+          .where("code", "==", code.toUpperCase()).limit(1).get();
+      if (q.empty) return null;
+      const promoRef = q.docs[0].ref;
+
+      try {
+        await db.runTransaction(async (t) => {
+          const oSnap = await t.get(orderRef);
+          if (oSnap.get("coupon_counted") === true) return; // already counted
+          t.update(promoRef, {uses: admin.firestore.FieldValue.increment(1)});
+          t.update(orderRef, {coupon_counted: true});
+        });
+      } catch (e) {
+        console.error(`[coupon] use-count failed for order ${event.params.orderId}:`, e.message);
       }
       return null;
     });
