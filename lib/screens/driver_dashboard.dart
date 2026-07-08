@@ -1287,6 +1287,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
           status: status,
           orderCode: orderCode,
           driverName: _driverName,
+          orderId: id,
         );
         if (status == 'accepted' || status == 'completed') {
           await _notificationService.notifyAdminOfDriverUpdate(

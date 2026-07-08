@@ -264,10 +264,12 @@ class ZyiarahOrderService {
       };
     } catch (e) {
       debugPrint('Error calling checkHourlySlotAvailability Cloud Function, using secure fallback: $e');
+      // fail-open حتى لا يحجب خطأ عابر الحجز (يغطّيه sweepUnassignedPaidOrders +
+      // autoAssign خادمياً). لا نُرجع معرّف سائق وهمياً كي لا يُكتب driver_id زائف.
       return {
         'available': true,
-        'driverId': 'auto_dispatch',
-        'driverName': 'سائق تلقائي',
+        'driverId': null,
+        'driverName': null,
         'driverEmail': null,
       };
     }

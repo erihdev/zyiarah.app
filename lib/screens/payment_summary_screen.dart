@@ -788,6 +788,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               orderCode: code,
               type: 'cleaning',
               serviceName: bgServiceName,
+              orderId: id,
             );
           } catch (e) {
             debugPrint('[notifyOrderCreated bg] non-fatal: $e');

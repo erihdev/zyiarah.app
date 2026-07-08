@@ -187,6 +187,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                         orderCode: tamaraOrderCode,
                         type: 'cleaning',
                         serviceName: widget.serviceType,
+                        orderId: widget.orderId,
                       );
                     } else {
                       // في حالة تعذر التعيين المباشر، لا نلغي الطلب المدفوع بتمارا! بل يبقى pending للتوزيع اليدوي ونرسل الإشعار الافتراضي
@@ -195,6 +196,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                         orderCode: tamaraOrderCode,
                         type: 'cleaning',
                         serviceName: widget.serviceType,
+                        orderId: widget.orderId,
                       );
                     }
                   } else {
@@ -203,6 +205,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                       orderCode: tamaraOrderCode,
                       type: 'cleaning',
                       serviceName: widget.serviceType,
+                      orderId: widget.orderId,
                     );
                   }
 
