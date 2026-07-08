@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zyiarah/services/firebase_service.dart';
@@ -41,6 +42,25 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
       return;
     }
 
+    // تحقق من رقم الجوال السعودي (05XXXXXXXX أو 5XXXXXXXX أو بمفتاح 966).
+    final phoneDigits = phone.replaceAll(RegExp(r'\D'), '');
+    final normalizedPhone =
+        phoneDigits.startsWith('966') ? phoneDigits.substring(3) : phoneDigits;
+    if (!RegExp(r'^0?5\d{8}$').hasMatch(normalizedPhone)) {
+      _showError('رقم الجوال غير صحيح — أدخل رقماً سعودياً يبدأ بـ 05');
+      return;
+    }
+
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+      _showError('البريد الإلكتروني غير صحيح');
+      return;
+    }
+
+    if (password.length < 6) {
+      _showError('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      return;
+    }
+
     if (password != confirm) {
       _showError('كلمتا المرور غير متطابقتين');
       return;
@@ -71,8 +91,20 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
 
       if (!mounted) return;
       context.go('/client');
-    } catch (e) {
-      _showError('خطأ في إنشاء الحساب: $e');
+    } on FirebaseAuthException catch (e) {
+      // رسائل عربية واضحة بدل استثناء Firebase الإنجليزي الخام.
+      final msg = switch (e.code) {
+        'email-already-in-use' =>
+          'هذا البريد مسجّل مسبقاً — سجّل الدخول بدلاً من إنشاء حساب جديد',
+        'invalid-email' => 'صيغة البريد الإلكتروني غير صحيحة',
+        'weak-password' => 'كلمة المرور ضعيفة — استخدم 6 أحرف أو أكثر',
+        'network-request-failed' =>
+          'تعذّر الاتصال — تحقّق من الإنترنت وأعد المحاولة',
+        _ => 'تعذّر إنشاء الحساب، أعد المحاولة',
+      };
+      _showError(msg);
+    } catch (_) {
+      _showError('تعذّر إنشاء الحساب، أعد المحاولة');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

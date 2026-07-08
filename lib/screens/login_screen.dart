@@ -52,15 +52,21 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
         }
       }
     } on FirebaseAuthException catch (e) {
-      String message = 'حدث خطأ في تسجيل الدخول';
-      if (e.code == 'user-not-found') {
-        message = 'المستخدم غير موجود';
-      } else if (e.code == 'wrong-password') {
-        message = 'كلمة المرور غير صحيحة';
-      }
+      // firebase_auth الحديث يُرجع invalid-credential لبيانات خاطئة بدل الرمزين القديمين.
+      final message = switch (e.code) {
+        'user-not-found' || 'wrong-password' || 'invalid-credential' =>
+          'البريد الإلكتروني أو كلمة المرور غير صحيحة',
+        'invalid-email' => 'صيغة البريد الإلكتروني غير صحيحة',
+        'user-disabled' => 'تم إيقاف هذا الحساب — تواصل مع الدعم',
+        'too-many-requests' =>
+          'محاولات كثيرة — انتظر قليلاً ثم أعد المحاولة',
+        'network-request-failed' =>
+          'تعذّر الاتصال — تحقّق من الإنترنت وأعد المحاولة',
+        _ => 'تعذّر تسجيل الدخول، أعد المحاولة',
+      };
       _showError(message);
-    } catch (e) {
-      _showError('خطأ غير متوقع: $e');
+    } catch (_) {
+      _showError('تعذّر تسجيل الدخول، أعد المحاولة');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
