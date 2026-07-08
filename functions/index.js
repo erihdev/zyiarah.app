@@ -201,30 +201,34 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated({document: "orde
       if (beforeData.status === afterData.status) return null;
 
       let targetUserId = null;
-      let title = "تحديث مبدئي للطلب";
-      let body = "حدث تغيير في حالة طلبك للتطبيق.";
+      let title = "تحديث على طلبكِ";
+      let body = "تغيّرت حالة طلبكِ.";
+
+      const rawName = (afterData.client_name || "").trim();
+      const greet = ["", "عميل", "عميلة", "عميل زيارة", "عميلة زيارة"]
+          .includes(rawName) ? "" : `${rawName}، `;
 
       // FIX: field is `client_id` (snake_case) not `clientId`
       if (afterData.status === "accepted") {
         targetUserId = afterData.client_id;
-        title = "تم قبول طلبك! 🚚";
-        body = `السائق ${afterData.assigned_driver || "فريق زيارة"} في الطريق إليك.`;
+        title = "تم قبول طلبكِ 🚚";
+        body = `${greet}فريق زيارة في طريقه إليكِ.`;
       } else if (afterData.status === "arrived") {
         targetUserId = afterData.client_id;
-        title = "وصل السائق! 🏠";
-        body = "السائق متواجد الآن عند موقعك، استعد لاستقباله.";
+        title = "وصل فريقكِ 🏠";
+        body = `${greet}فريق زيارة عند بابكِ الآن — يسعدنا استقبالكِ ✨`;
       } else if (afterData.status === "in_progress") {
         targetUserId = afterData.client_id;
-        title = "بدأ العمل 🛠️";
-        body = "فريق زيارة بدأ في تنفيذ خدمتك.";
+        title = "بدأت خدمتكِ 🧽";
+        body = `${greet}فريق زيارة يعمل الآن على منزلكِ.`;
       } else if (afterData.status === "completed") {
         targetUserId = afterData.client_id;
-        title = "تم الإنجاز! ✨";
-        body = "انتهى العمل بنجاح. شكراً لثقتك بزيارة، ننتظر تقييمك.";
+        title = "اكتملت خدمتكِ ✨";
+        body = `${greet}نتمنّى أن ينال منزلكِ إعجابكِ 🌿 يسعدنا تقييمكِ.`;
       } else if (afterData.status === "cancelled") {
         targetUserId = afterData.client_id;
-        title = "تم إلغاء الطلب ⚠️";
-        body = `تم إلغاء الطلب #${afterData.code || ""}. تواصل معنا لمزيد من التفاصيل.`;
+        title = "تم إلغاء طلبكِ ⚠️";
+        body = `${greet}أُلغي طلبكِ. لأي استفسار نحن بخدمتكِ.`;
       }
 
       if (!targetUserId) return null;
@@ -582,10 +586,13 @@ async function notifyClientPaymentResult(col, orderId, data, success) {
     if (!clientUid) return;
 
     const code = data?.code || orderId;
-    const title = success ? "تم تأكيد الدفع ✅" : "تعذّر إتمام الدفع ⚠️";
+    const rawName = (data?.client_name || "").trim();
+    const greet = ["", "عميل", "عميلة", "عميل زيارة", "عميلة زيارة"]
+        .includes(rawName) ? "" : `${rawName}، `;
+    const title = success ? "تم تأكيد دفعتكِ ✅" : "تعذّر إتمام الدفع ⚠️";
     const body = success ?
-      `تم استلام دفعتك للطلب #${code} بنجاح، وسنبدأ بتجهيزه فوراً.` :
-      `لم تكتمل عملية الدفع للطلب #${code}. يمكنك إعادة المحاولة من التطبيق.`;
+      `${greet}استلمنا دفعتكِ بنجاح ونبدأ بتجهيز طلبكِ فوراً 🌿` :
+      `${greet}لم تكتمل عملية الدفع. يمكنكِ إعادة المحاولة من التطبيق.`;
 
     // 1) إشعار داخل التطبيق (سجل)
     await admin.firestore().collection("notifications").add({
@@ -2212,11 +2219,13 @@ exports.notifyClientOnDriverDeparture = onDocumentUpdated(
       // فقط عند الانتقال الفعلي إلى on_the_way
       if (before.status === "on_the_way" || after.status !== "on_the_way") return;
 
-      const code = after.code || event.params.orderId;
+      const rawName = (after.client_name || "").trim();
+      const greet = ["", "عميل", "عميلة", "عميل زيارة", "عميلة زيارة"]
+          .includes(rawName) ? "" : `${rawName}، `;
       await _pushToUid(
           after.client_id,
-          "سائقك في الطريق إليك 🚗",
-          `انطلق السائق لتنفيذ طلبك (#${code}) — يرجى الاستعداد لاستقباله.`,
+          "سائقكِ في الطريق إليكِ 🚗",
+          `${greet}انطلق فريق زيارة لتنفيذ خدمتكِ — يسعدنا استقبالكِ ✨`,
           {type: "order_update", orderId: event.params.orderId},
       );
     },
