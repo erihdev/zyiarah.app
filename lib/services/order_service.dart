@@ -78,7 +78,8 @@ class ZyiarahOrderService {
       if (currentStatus == 'completed' || currentStatus == 'cancelled') {
         throw Exception("لا يمكن إلغاء طلب مكتمل أو ملغي بالفعل");
       }
-      if (currentStatus == 'in_progress') {
+      // العميل لا يلغي طلباً قيد التنفيذ (يتواصل مع الدعم)؛ الإدارة تستطيع.
+      if (currentStatus == 'in_progress' && cancelledBy != 'admin') {
         throw Exception("لا يمكن إلغاء طلب قيد التنفيذ — تواصل مع الدعم");
       }
 
