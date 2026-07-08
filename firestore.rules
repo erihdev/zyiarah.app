@@ -60,8 +60,18 @@ service cloud.firestore {
           ['admin', 'super_admin', 'orders_manager',
            'accountant_admin', 'marketing_admin', 'driver']);
 
-      // User can update own non-sensitive fields; sensitive fields require admin
-      allow update: if isAdmin() ||
+      // SECURITY: only super_admin may set role/is_blocked (prevents a sub-admin from
+      // self-escalating to super_admin or blocking users); the `wallet` field on the
+      // user doc is never client-writable (the real balance lives in /wallets, server-only).
+      allow update: if
+        // Super admin: create staff/drivers (role), ban users (is_blocked) — but not wallet
+        (isSuperAdmin() &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['wallet'])) ||
+        // Other admins: edit user profile fields, but never role / wallet / is_blocked
+        (isAdmin() &&
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['role', 'wallet', 'is_blocked'])) ||
+        // Owner: own non-sensitive fields only
         (isOwner(userId) &&
           !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['role', 'wallet', 'rating_avg', 'rating_count',
@@ -242,15 +252,22 @@ service cloud.firestore {
     }
     match /promo_codes/{codeId} {
       allow read: if isLoggedIn();
-      // Users can only increment `uses` by exactly 1 — prevents abuse
-      allow update: if isLoggedIn() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uses']) &&
-        request.resource.data.uses == resource.data.uses + 1;
+      // Marketing admin may edit any field (activate/deactivate, extend expiry, adjust limits);
+      // regular users can ONLY increment `uses` by exactly 1 — prevents abuse.
+      allow update: if isMarketingAdmin() ||
+        (isLoggedIn() &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uses']) &&
+         request.resource.data.uses == resource.data.uses + 1);
       allow create, delete: if isMarketingAdmin();
     }
     match /coupons/{couponId} {
       allow read: if isLoggedIn();
       allow write: if isMarketingAdmin();
+    }
+
+    // ─── Payroll (accountant + super admin only) ──────────────────────────
+    match /payroll_records/{recordId} {
+      allow read, write: if isAccountantAdmin();
     }
 
     // ─── System Settings ──────────────────────────────────────────────────
@@ -261,9 +278,11 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
-    // SECURITY: order/maintenance counters — read-only for users; write locked to increment-only
+    // SECURITY: order/maintenance counters — read-only for users; write locked to increment-only.
+    // Admins may also read aggregate docs (e.g. analytics_summary) written server-side.
     match /metadata/{docId} {
-      allow get: if isLoggedIn() && docId in ['order_counter', 'maintenance_counter'];
+      allow get: if isLoggedIn() &&
+        (docId in ['order_counter', 'maintenance_counter'] || isAdmin());
       allow create: if isLoggedIn() && docId in ['order_counter', 'maintenance_counter'];
       allow update: if isLoggedIn() && docId in ['order_counter', 'maintenance_counter'] && (
         isAdmin() ||
