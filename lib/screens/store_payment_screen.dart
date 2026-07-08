@@ -309,14 +309,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
                       color: const Color(0xFFE5A170),
                     ),
                   ],
-                  const SizedBox(height: 12),
-                  _buildOption(
-                    id: 'cod',
-                    title: 'الدفع عند الاستلام',
-                    subtitle: 'ادفع نقداً أو شبكة عند استلام المنتجات',
-                    icon: Icons.money,
-                    color: Colors.green,
-                  ),
+                  // خيار «الدفع عند الاستلام» أُزيل بطلب الإدارة (الدفع مقدَّماً فقط).
                   const SizedBox(height: 20),
                   _buildTerms(),
                   const SizedBox(height: 100),

@@ -156,11 +156,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     }
   }
 
-  bool _isCodAvailableForService() {
-    if (widget.contractId != null) return false;
-    return true;
-  }
-
   // الحسابات المالية الصحيحة (بافتراض أن المبلغ شامل للضريبة، مع تطبيق Surge)
   double get totalWithVat => (widget.amount * _surgeFactor) - _discountAmount;
   double get subtotal => totalWithVat / 1.15;
@@ -1330,17 +1325,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           ),
         ],
 
-        // --- COD ---
-        if (_isCodAvailableForService()) ...[
-          const SizedBox(height: 12),
-          _buildPaymentOption(
-            id: 'cod',
-            title: 'الدفع عند الاستلام',
-            subtitle: 'دفع نقدي لمقدم الخدمة عند الوصول',
-            icon: Icons.money,
-            color: Colors.green,
-          ),
-        ],
+        // خيار «الدفع عند الاستلام» أُزيل بطلب الإدارة (الدفع مقدَّماً فقط).
 
         // --- Wallet ---
         const SizedBox(height: 12),
