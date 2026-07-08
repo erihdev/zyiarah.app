@@ -311,7 +311,16 @@ service cloud.firestore {
         request.resource.data.client_id == request.auth.uid;
       allow read: if isLoggedIn() &&
         (request.auth.uid == resource.data.client_id || isOrdersManager());
-      allow update, delete: if isOrdersManager();
+      // Client may finalise payment on their OWN order (mirrors the /orders trust model):
+      // restricted to payment-completion fields and status -> processing only, so a paid
+      // store order is no longer stuck after checkout. Full control stays with the manager.
+      allow update: if isOrdersManager() ||
+        (isLoggedIn() && request.auth.uid == resource.data.client_id &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+           ['payment_method', 'is_paid', 'payment_status', 'status',
+            'paid_at', 'invoice_pdf_url']) &&
+         request.resource.data.status == 'processing');
+      allow delete: if isOrdersManager();
     }
 
     // ─── Geographic Zones ─────────────────────────────────────────────────
