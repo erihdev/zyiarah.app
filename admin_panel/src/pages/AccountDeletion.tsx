@@ -24,7 +24,7 @@ const formatDate = (ts?: { toDate: () => Date }): string => {
 };
 
 export default function AccountDeletion() {
-    const { confirm } = useNotification();
+    const { confirm, toast } = useNotification();
     const [searchTerm, setSearchTerm] = useState('');
     const [requests, setRequests] = useState<DeletionRequest[]>([]);
     const [loading, setLoading] = useState(true);
@@ -55,6 +55,10 @@ export default function AccountDeletion() {
                 status: 'deleted',
                 processed_at: new Date(),
             });
+            toast.success('تم تنفيذ طلب الحذف');
+        } catch {
+            // امتثال آبل: لا تُظهر الحذف كناجح إن فشل فعلاً.
+            toast.error('تعذّر تنفيذ الحذف — لم يكتمل، أعد المحاولة');
         } finally {
             setProcessingId(null);
         }
@@ -67,6 +71,9 @@ export default function AccountDeletion() {
                 status: 'rejected',
                 processed_at: new Date(),
             });
+            toast.success('تم رفض الطلب');
+        } catch {
+            toast.error('تعذّر رفض الطلب — أعد المحاولة');
         } finally {
             setProcessingId(null);
         }

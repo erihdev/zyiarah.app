@@ -55,7 +55,9 @@ const formatLastLogin = (ts: { toDate: () => Date } | null | undefined): string 
 };
 
 export default function Admins() {
-    const { confirm } = useNotification();
+    const { confirm, toast } = useNotification();
+    // إنشاء/تعديل المشرفين يتطلب تهيئة حساب مصادقة (يتم في تطبيق الإدارة على الجوال).
+    const manageInApp = () => toast.info('إضافة وتعديل المشرفين تتم حالياً من تطبيق الإدارة على الجوال.');
     const [searchTerm, setSearchTerm] = useState('');
     const [admins, setAdmins] = useState<AdminUser[]>([]);
     const [loading, setLoading] = useState(true);
@@ -95,7 +97,7 @@ export default function Admins() {
                     </h2>
                     <p className="text-slate-500 font-medium text-sm mt-1">أضف موظفيك وخصص صلاحيات دخولهم للوحة التحكم بأمان</p>
                 </div>
-                <button className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20 hover:shadow-xl hover:-translate-y-0.5">
+                <button type="button" onClick={manageInApp} className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20 hover:shadow-xl hover:-translate-y-0.5">
                     <UserPlus size={20} />
                     إضافة مشرف جديد
                 </button>
@@ -162,7 +164,7 @@ export default function Admins() {
                                                 <div className="flex items-center justify-center gap-2">
                                                     {!isSuperAdmin && (
                                                         <>
-                                                            <button type="button" title="تعديل" className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                                                            <button type="button" title="تعديل" onClick={manageInApp} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
                                                                 <Edit size={16} />
                                                             </button>
                                                             <button

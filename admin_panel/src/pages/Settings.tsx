@@ -76,6 +76,9 @@ export default function Settings() {
     const [newZone, setNewZone] = useState(emptyZoneForm);
     const [isAddingZone, setIsAddingZone] = useState(false);
     const [showAddForm, setShowAddForm] = useState(false);
+    // true فقط عند فشل قراءة الإعدادات (لا عند غيابها لأول مرة) — يمنع الحفظ فوق
+    // الإعدادات الإنتاجية بالقيم الافتراضية المعروضة بعد قراءة فاشلة.
+    const [loadFailed, setLoadFailed] = useState(false);
     const zoneNameRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -88,6 +91,7 @@ export default function Settings() {
                 }
             } catch (error) {
                 console.error("Error fetching settings:", error);
+                setLoadFailed(true);
             } finally {
                 setIsLoading(false);
             }
@@ -171,6 +175,10 @@ export default function Settings() {
     };
 
     const handleSave = async () => {
+        if (loadFailed) {
+            toast.error('تعذّر تحميل الإعدادات الحالية — لا يمكن الحفظ فوقها بقيم افتراضية. أعد تحميل الصفحة أولاً.');
+            return;
+        }
         setIsSaving(true);
         try {
             const docRef = doc(db, 'system_configs', 'main_settings');

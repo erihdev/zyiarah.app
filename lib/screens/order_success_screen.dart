@@ -9,12 +9,16 @@ class ZyiarahOrderSuccessScreen extends StatefulWidget {
   final String orderCode;
   final String title;
   final String subtitle;
+  // المجموعة التي تُكتب فيها الفاتورة: 'orders' افتراضياً، و'store_orders' لطلبات المتجر
+  // (وإلا تبقى الشاشة على "جاري إنشاء الفاتورة" للأبد لعميل المتجر).
+  final String invoiceCollection;
 
   const ZyiarahOrderSuccessScreen({
     super.key,
     required this.orderCode,
     this.title = "تم استلام طلبك بنجاح!",
     this.subtitle = "شكراً لثقتك بزيارة، طلبك الآن قيد المعالجة وسنقوم بإخطارك بكل جديد.",
+    this.invoiceCollection = 'orders',
   });
 
   @override
@@ -145,7 +149,7 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
   Widget _buildInvoiceSection() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
-          .collection('orders')
+          .collection(widget.invoiceCollection)
           .where('code', isEqualTo: widget.orderCode)
           .limit(1)
           .snapshots(),

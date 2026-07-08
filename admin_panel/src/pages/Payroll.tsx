@@ -52,7 +52,7 @@ function nextMonth(key: string) {
 }
 
 export default function Payroll() {
-    const { confirm } = useNotification();
+    const { confirm, toast } = useNotification();
     const [currentMonth, setCurrentMonth] = useState(() => getMonthKey(new Date()));
     const [drivers, setDrivers] = useState<Driver[]>([]);
     const [payrollRecords, setPayrollRecords] = useState<Record<string, PayrollRecord>>({});
@@ -122,6 +122,10 @@ export default function Payroll() {
                 paid_at: serverTimestamp(),
                 paid_by: auth.currentUser?.email ?? 'admin',
             });
+            toast.success(`تم تسجيل صرف راتب ${row.name}`);
+        } catch {
+            // لا تترك فشلاً مالياً صامتاً — أعلِم المحاسب بوضوح.
+            toast.error(`تعذّر صرف راتب ${row.name} — لم يُحفظ، أعد المحاولة`);
         } finally {
             setPayingId(null);
         }
@@ -145,6 +149,9 @@ export default function Payroll() {
                     paid_by: auth.currentUser?.email ?? 'admin',
                 })
             ));
+            toast.success(`تم تسجيل صرف رواتب ${unpaid.length} موظف`);
+        } catch {
+            toast.error('تعذّر إتمام صرف بعض الرواتب — تحقّق وأعد المحاولة');
         } finally {
             setPayingAll(false);
         }
