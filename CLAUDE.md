@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Zyiarah is a Flutter-based service booking platform (cleaning services) targeting iOS and Android. It includes a React/TypeScript admin web panel and a Firebase Cloud Functions backend. The app supports three user roles: **client**, **driver**, and **admin** (sub-types: super_admin, orders_manager, accountant_admin, marketing_admin).
 
 - **Bundle ID**: com.zyiarah.zyiarah (iOS App Store ID: 6760955777)
-- **Version**: 1.2.0+25
+- **Version**: see `pubspec.yaml` (`version:` line — build number auto-increments in CI)
 - **Firebase Project**: zyiarah-app
 
 ## Commands
@@ -58,15 +58,16 @@ Key directories:
 | Service | Responsibility |
 |---|---|
 | `firebase_service.dart` | Auth, Firestore CRUD, user management |
-| `order_service.dart` | Order lifecycle management |
-| `notification_service.dart` | Firebase Cloud Messaging |
-| `edfapay_service.dart` | Primary payment gateway (EDFAPAY) |
-| `tamara_service.dart` | Installment payments |
-| `zatca_service.dart` | Saudi ZATCA tax compliance |
-| `invoice_pdf_service.dart` | PDF invoice generation |
-| `zyiarah_contract_pdf_service.dart` | Digital contract PDF generation |
+| `order_service.dart` | Order lifecycle + dispatch Cloud Function calls |
+| `notification_service.dart` + `zyiarah_messaging_service.dart` | FCM push + in-app notifications |
+| `moyasar_service.dart` | Primary payment gateway (Moyasar: cards, STC Pay, Apple Pay) |
+| `tamara_service.dart` + `tabby_service.dart` | Installment payments (BNPL) |
+| `zyiarah_wallet_service.dart` | Wallet (read-only client-side; writes via Cloud Functions) |
+| `zatca_service.dart` | Saudi ZATCA tax compliance (QR) |
+| `zyiarah_pdf_service.dart` | PDF invoices & contracts |
 | `deep_link_service.dart` | Deep linking / app_links |
-| `location_service.dart` + `geofence_service.dart` | Location tracking |
+| `location_service.dart` + `geofence_service.dart` | Location tracking (100m driver geofence) |
+| `zyiarah_capacity_service.dart` | Booking capacity / slot availability |
 | `audit_service.dart` | Admin audit trail |
 | `n8n_automation_service.dart` | N8N workflow automation |
 
@@ -76,27 +77,33 @@ React 19 + TypeScript (Vite), Tailwind CSS, MapBox GL for map views. Connects to
 
 ### Firebase Backend (`functions/index.js`)
 
-Node.js v22 Cloud Functions handling:
-- Support ticket push notifications
-- Email via Resend
-- Firestore document triggers
-- A/B testing optimization engine
+Node.js v22 Cloud Functions (~37 functions) handling:
+- FCM push notifications (Firestore triggers: orders, tickets, contracts, dispatch)
+- Email via Resend (through the `notification_triggers` queue — anti-relay guarded)
+- Payment webhooks & operations: Moyasar (primary; webhook + verify/refund/void/capture), Tamara, Tabby — all HMAC-verified and idempotent
+- Wallet operations (`payWithWallet`, `redeemQatratPoints`, `onOrderRewards`) — all wallet writes are server-side only
+- Direct Dispatch engine (driver assignment, slot availability, surge pricing)
+- Account deletion processing (Apple requirement)
+
+All callable functions require authentication; sensitive ones also verify ownership or admin role (`_assertAdmin`). Secrets are managed via `defineSecret` / Secret Manager — never hardcode keys.
 
 ## CI/CD
 
-Codemagic (`codemagic.yaml`) handles iOS App Store releases:
-1. Sets up signing from `appstore_credentials` group (App Store Connect API key)
-2. Runs `flutter pub get` + `pod install`
-3. Builds IPA with `flutter build ipa --release`
-4. Publishes directly to the App Store (not TestFlight)
+Codemagic (`codemagic.yaml`) handles iOS releases — triggered automatically on every push to `main`:
+1. Sets up signing from the "Zyiarah Key" integration + `appstore_credentials` group (App Store Connect API key)
+2. Injects payment/Mapbox keys from the `payment_keys` group into `.env` at build time
+3. Runs `flutter pub get` + `pod install`, builds IPA with auto-incremented build number
+4. Publishes to **TestFlight** (public App Store release is manual)
 
-The `AuthKey_RJMPC4734X.p8` file at root is the App Store Connect API key — do not commit or expose it.
+Any `AuthKey_*.p8` file at root is an App Store Connect API key — gitignored; never commit or expose it. Add `[skip ci]` to commit messages that shouldn't trigger an iOS build (docs, rules-only changes).
+
+The Android workflow (`android-release`) is manual-only and builds an AAB without publishing.
 
 Android signing uses `android/key.properties` (gitignored). Distribution can be triggered locally via `distribute_android.bat`.
 
 ## Environment & Config
 
-- `.env` — Mapbox token and Firebase config (loaded via `flutter_dotenv`)
+- `.env` — Mapbox token + publishable payment keys (Moyasar pk, Tabby public, Samsung Pay service ID), loaded via `flutter_dotenv` and bundled as an app asset — publishable keys only, never secrets
 - `.env.automation` — Additional automation env vars
 - `firebase.json` — Firebase project config (Firestore, hosting, functions)
 - `firestore.rules` — Database security rules
@@ -108,4 +115,5 @@ Android signing uses `android/key.properties` (gitignored). Distribution can be 
 - **Role checks**: User role is stored in Firestore and accessed via `UserProvider`; always verify role before rendering admin-only UI
 - **Arabic support**: Use `arabic_reshaper` + `bidi` for any Arabic text rendering — do not use plain `Text()` for Arabic strings
 - **PDF generation**: Use existing service classes in `lib/services/`; they depend on the `pdf` and `printing` packages
-- **Payments**: EDFAPAY is primary; Tamara handles installments; both are integrated with ZATCA for tax receipts
+- **Payments**: Moyasar is primary (cards, STC Pay, Apple Pay); Tamara and Tabby handle installments; wallet and COD are also supported — all integrated with ZATCA for tax receipts
+- **Wallet integrity**: never write to `wallets/*` from the client — Firestore rules block it; all balance changes go through Cloud Functions
