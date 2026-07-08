@@ -1075,8 +1075,12 @@ exports.onOrderRewards = onDocumentUpdated({document: "orders/{orderId}", cpu: 0
 
       // ── CANCELLATION: refund a paid (non-subscription) order to the wallet ──
       if (cancelled) {
+        // Guard against a DOUBLE refund: if the payment was already refunded through
+        // the gateway (moyasarRefundPayment sets payment_status:'refunded'), do NOT
+        // also credit the wallet.
         if (clientId && after.is_paid === true && after.needs_refund === true &&
-            after.payment_method !== "subscription" && amount > 0) {
+            after.payment_method !== "subscription" && amount > 0 &&
+            after.payment_status !== "refunded") {
           const walletRef = db.collection("wallets").doc(clientId);
           const txRef = walletRef.collection("transactions").doc(`refund_${orderId}`);
           let didFlip = false;
@@ -2432,6 +2436,20 @@ exports.moyasarRefundPayment = onCall(
       const secret = moyasarSecretKey.value();
       if (!secret) {
         throw new HttpsError("failed-precondition", "مفتاح Moyasar السري غير مهيأ");
+      }
+
+      // Guard against a DOUBLE refund: if this order was already refunded to the
+      // wallet (onOrderRewards sets refund_credited) or already refunded via the
+      // gateway, reject before hitting Moyasar again.
+      const existing = await _findOrder(orderId);
+      if (existing) {
+        if (existing.data.refund_credited === true) {
+          throw new HttpsError("failed-precondition",
+              "سبق ردّ هذا الطلب إلى محفظة العميل — لا يمكن ردّه عبر البوابة أيضاً");
+        }
+        if (existing.data.payment_status === "refunded") {
+          throw new HttpsError("failed-precondition", "سبق استرداد هذا الطلب");
+        }
       }
 
       const body = amountHalalas ? JSON.stringify({amount: amountHalalas}) : undefined;
