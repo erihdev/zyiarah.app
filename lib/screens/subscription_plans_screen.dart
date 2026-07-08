@@ -66,7 +66,7 @@ class _ZyiarahSubscriptionPlansScreenState
         final ordersSnap = await _db
             .collection('orders')
             .where('client_id', isEqualTo: user.uid)
-            .orderBy('createdAt', descending: true)
+            .orderBy('created_at', descending: true)
             .limit(1)
             .get();
         if (ordersSnap.docs.isNotEmpty) {

@@ -80,9 +80,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
 
     setState(() => _isLoading = true);
     try {
-      if (_selectedMethod == 'cod') {
-        await _finalizeStorePayment('cash_on_delivery', isPaid: false);
-      } else if (_selectedMethod == 'card') {
+      if (_selectedMethod == 'card') {
         setState(() => _isLoading = false);
         if (!mounted) return;
         await Navigator.push(
@@ -94,7 +92,9 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
               orderId: widget.storeOrderId,
               onSuccess: (paymentId) async {
                 setState(() => _isLoading = true);
-                await _finalizeStorePayment('card', isPaid: true);
+                // is_paid=false — يؤكّده moyasarWebhook خادمياً بعد فحص المبلغ
+                // (لا يكتبه العميل). يوافق نمط ترحيل الدفع في /orders.
+                await _finalizeStorePayment('card', isPaid: false);
               },
               onFailure: (error) {
                 if (mounted) {
@@ -144,7 +144,8 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
         );
         if (paid == true) {
           setState(() => _isLoading = true);
-          await _finalizeStorePayment('tamara', isPaid: true);
+          // is_paid=false — يؤكّده tamaraWebhook خادمياً (لا يكتبه العميل).
+          await _finalizeStorePayment('tamara', isPaid: false);
         }
       }
     } catch (e) {

@@ -112,7 +112,9 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
     try {
       final snapshotF = _db.collection('drivers').where('is_active', isEqualTo: true).get();
       final activeOrdersF = _db.collection('orders')
-          .where('status', whereIn: ['assigned', 'in_progress'])
+          // كل الحالات النشطة الفعلية — لولا scheduled/on_the_way/accepted يظهر
+          // سائق مشغول كأنه متاح ويُحجز مرتين.
+          .where('status', whereIn: ['assigned', 'scheduled', 'on_the_way', 'in_progress', 'accepted'])
           .get();
       final results = await Future.wait([snapshotF, activeOrdersF]);
       final snapshot = results[0];

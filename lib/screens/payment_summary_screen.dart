@@ -161,6 +161,46 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   double get subtotal => totalWithVat / 1.15;
   double get vatAmount => totalWithVat - subtotal;
 
+  /// سبب منع الدفع الأصلي (Apple/Google/Samsung) — نفس فحوص _handlePayment
+  /// المتزامنة (الشروط/الهاتف/المستخدم). لولاها تتجاوز الأزرار الأصلية الفحوص
+  /// لأنها تستدعي النجاح مباشرةً.
+  String? _nativePayBlockReason() {
+    if (_needsPhoneUpdate && _phoneController.text.trim().isEmpty) {
+      return 'يرجى إدخال رقم جوالك أولاً';
+    }
+    if (!_agreeToTerms) return 'يرجى الموافقة على الشروط والأحكام أولاً';
+    if (_currentUser == null) return 'جارٍ تحميل بيانات حسابك، حاول بعد لحظة';
+    return null;
+  }
+
+  /// يلفّ زر دفع أصلي ببوابة: يعتّمه ويمنع النقر ويُظهر السبب حين لا تتحقق الشروط.
+  Widget _gateNative(Widget child) {
+    final reason = _nativePayBlockReason();
+    if (reason == null) return child;
+    return Stack(
+      children: [
+        child,
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              final r = _nativePayBlockReason();
+              if (r != null && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(r, style: GoogleFonts.tajawal())),
+                );
+              }
+            },
+            child: Opacity(
+              opacity: 0.5,
+              child: Container(color: const Color(0xFFF1F5F9)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   /// Apple Pay via Moyasar SDK — يُستدعى من ApplePay widget callback
   Future<void> _onApplePayResult(dynamic result) async {
     if (!mounted) return;
@@ -913,8 +953,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   Widget _buildInvoiceHeader() {
-    final double total = widget.amount - _discountAmount;
-    final double vat = total - (total / 1.15);
+    // يجب أن يطابق المبلغ المشحون فعلاً (totalWithVat) — يشمل surge والخصم.
+    final double total = totalWithVat;
+    final double vat = vatAmount;
     final double basePrice = total - vat;
 
     return Container(
@@ -1166,7 +1207,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             const Expanded(child: Divider()),
           ]),
           const SizedBox(height: 12),
-          ApplePay(
+          _gateNative(ApplePay(
             config: PaymentConfig(
               publishableApiKey: publishableKey,
               amount: (totalWithVat * 100).round(),
@@ -1181,7 +1222,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               ),
             ),
             onPaymentResult: _onApplePayResult,
-          ),
+          )),
         ],
 
         // --- Google Pay (Android only) ---
@@ -1201,7 +1242,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             future: _googlePayConfigFuture,
             builder: (context, snapshot) {
               if (!snapshot.hasData) return const SizedBox.shrink();
-              return GooglePayButton(
+              return _gateNative(GooglePayButton(
                 paymentConfiguration: snapshot.data!,
                 paymentItems: [
                   PaymentItem(
@@ -1239,7 +1280,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 loadingIndicator: const Center(
                   child: CircularProgressIndicator(),
                 ),
-              );
+              ));
             },
           ),
         ],
@@ -1267,7 +1308,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                   const Expanded(child: Divider()),
                 ]),
                 const SizedBox(height: 12),
-                SamsungPay(
+                _gateNative(SamsungPay(
                   config: PaymentConfig(
                     publishableApiKey: publishableKey,
                     amount: (totalWithVat * 100).round(),
@@ -1283,7 +1324,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                     ),
                   ),
                   onPaymentResult: _onSamsungPayResult,
-                ),
+                )),
               ],
             );
           }),

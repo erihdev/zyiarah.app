@@ -345,7 +345,9 @@ service cloud.firestore {
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(
            ['payment_method', 'is_paid', 'payment_status', 'status',
             'paid_at', 'invoice_pdf_url']) &&
-         request.resource.data.status == 'processing');
+         request.resource.data.status == 'processing' &&
+         // العميل لا يؤكّد الدفع بنفسه — is_paid يقلبه الـ webhook خادمياً.
+         request.resource.data.is_paid == false);
       allow delete: if isOrdersManager();
     }
 

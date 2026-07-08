@@ -657,26 +657,30 @@ exports.tamaraWebhook = onRequest(
 
       if (status === "authorised" || status === "captured") {
         try {
-          // فحص + تحديث داخل Transaction (idempotent) لمنع تكرار المعالجة/الإشعار
-          const ref = admin.firestore().collection("orders").doc(orderId);
-          let orderData = null;
-          const flipped = await admin.firestore().runTransaction(async (tx) => {
-            const snap = await tx.get(ref);
-            if (!snap.exists) return false;
-            orderData = snap.data();
-            if (orderData.is_paid) return false; // سبق معالجته
-            // FIX: تحديث حقول الدفع فقط — الطلب يبقى 'pending' حتى يقبله سائق
-            tx.update(ref, {
-              payment_status: "paid",
-              is_paid: true,
-              tamara_status: status,
-              updated_at: admin.firestore.FieldValue.serverTimestamp(),
+          // فحص + تحديث داخل Transaction (idempotent). يبحث في orders ثم
+          // store_orders (تمارا المتجر تُنشأ is_paid=false وتؤكَّد هنا خادمياً).
+          for (const col of ["orders", "store_orders"]) {
+            const ref = admin.firestore().collection(col).doc(orderId);
+            let orderData = null;
+            const flipped = await admin.firestore().runTransaction(async (tx) => {
+              const snap = await tx.get(ref);
+              if (!snap.exists) return null;
+              orderData = snap.data();
+              if (orderData.is_paid) return false; // سبق معالجته
+              tx.update(ref, {
+                payment_status: "paid",
+                is_paid: true,
+                tamara_status: status,
+                updated_at: admin.firestore.FieldValue.serverTimestamp(),
+              });
+              return true;
             });
-            return true;
-          });
-          if (flipped) {
-            console.log(`Order ${orderId} marked as PAID via Tamara Webhook`);
-            await notifyClientPaymentResult("orders", orderId, orderData, true); // (F2)
+            if (flipped === null) continue; // غير موجود في هذه المجموعة
+            if (flipped) {
+              console.log(`Order ${orderId} in ${col} marked PAID via Tamara Webhook`);
+              await notifyClientPaymentResult(col, orderId, orderData, true); // (F2)
+            }
+            break; // وُجد المستند — أوقف البحث
           }
         } catch (error) {
           console.error("Error updating order from Tamara webhook:", error);
