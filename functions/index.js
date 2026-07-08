@@ -2121,6 +2121,76 @@ exports.remindDriversUpcomingTasks = onSchedule(
 );
 
 // ════════════════════════════════════════════════════════════════════════
+// (2c) تذكير العميل بموعده المجدول — Cron كل 30 دقيقة.
+// تذكيران: مبكّر (خلال 24 ساعة قبل الموعد) + قريب (خلال ~ساعتين). حقول علم
+// منفصلة عن تذكير السائق (reminder_sent) لتجنّب التعارض. التوقيت يُعرض من
+// booking_time_slot/booking_date المحليّين لتفادي انزياح المنطقة الزمنية.
+// ════════════════════════════════════════════════════════════════════════
+const _pad2 = (n) => String(n).padStart(2, "0");
+// إزاحة +3 ساعات ثم قراءة مكوّنات UTC = توقيت الرياض المحلي.
+const _riyadhLocalDate = (ms) => {
+  const r = new Date(ms + 3 * 60 * 60 * 1000);
+  return `${r.getUTCFullYear()}-${_pad2(r.getUTCMonth() + 1)}-${_pad2(r.getUTCDate())}`;
+};
+
+exports.remindClientsUpcomingAppointments = onSchedule(
+    {schedule: "every 30 minutes", timeZone: "Asia/Riyadh"},
+    async () => {
+      const db = admin.firestore();
+      const now = Date.now();
+      const in24h = new Date(now + 24 * 60 * 60 * 1000);
+      // نطاق مفرد على service_date (مُفهرَس تلقائياً) — الحالة تُصفّى في الكود.
+      const snap = await db.collection("orders")
+          .where("service_date", ">=", admin.firestore.Timestamp.fromDate(new Date(now)))
+          .where("service_date", "<=", admin.firestore.Timestamp.fromDate(in24h))
+          .get();
+
+      const ACTIVE = ["pending", "scheduled", "assigned", "accepted"];
+      let sent = 0;
+      for (const doc of snap.docs) {
+        const d = doc.data();
+        if (!d.client_id || d.is_paid !== true || !d.service_date) continue;
+        if (!ACTIVE.includes(d.status)) continue;
+
+        const apptMs = d.service_date.toMillis();
+        const hoursUntil = (apptMs - now) / (60 * 60 * 1000);
+        const code = d.code || doc.id;
+        const timeStr = d.booking_time_slot ||
+          `${_pad2(new Date(apptMs + 3 * 60 * 60 * 1000).getUTCHours())}:00`;
+
+        // وسم اليوم (اليوم/غداً/بعد N أيام) بالتقويم المحلي.
+        const apptDateStr = d.booking_date || _riyadhLocalDate(apptMs);
+        const dDiff = Math.round(
+            (new Date(`${apptDateStr}T00:00:00Z`).getTime() -
+             new Date(`${_riyadhLocalDate(now)}T00:00:00Z`).getTime()) / 86400000);
+        const dayLabel = dDiff <= 0 ? "اليوم" : dDiff === 1 ? "غداً" : `بعد ${dDiff} أيام`;
+
+        if (hoursUntil > 2.5 && d.client_reminder_24h_sent !== true) {
+          await _pushToUid(
+              d.client_id,
+              "تذكير بموعد خدمتك 📅",
+              `موعد خدمتك (#${code}) ${dayLabel} الساعة ${timeStr}. نحن بانتظارك!`,
+              {type: "appointment_reminder", orderId: doc.id},
+          );
+          await doc.ref.update({client_reminder_24h_sent: true});
+          sent++;
+        } else if (hoursUntil > 0 && hoursUntil <= 2.5 &&
+                   d.client_reminder_soon_sent !== true) {
+          await _pushToUid(
+              d.client_id,
+              "موعد خدمتك قريب ⏰",
+              `موعد خدمتك (#${code}) بعد ساعتين تقريباً (الساعة ${timeStr}). يرجى الاستعداد.`,
+              {type: "appointment_reminder", orderId: doc.id},
+          );
+          await doc.ref.update({client_reminder_soon_sent: true});
+          sent++;
+        }
+      }
+      console.log(`remindClientsUpcomingAppointments: sent ${sent} reminder(s)`);
+    },
+);
+
+// ════════════════════════════════════════════════════════════════════════
 // (2c) تذكير العميل عند انطلاق السائق (on_the_way) — Event-driven
 // ════════════════════════════════════════════════════════════════════════
 exports.notifyClientOnDriverDeparture = onDocumentUpdated(
