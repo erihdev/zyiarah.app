@@ -7,6 +7,7 @@ import {
     Banknote, Menu, X
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { canAccess } from '../config/access.ts';
 
 type ColorKey = 'blue' | 'violet' | 'orange' | 'amber' | 'teal' | 'green' | 'emerald'
     | 'indigo' | 'pink' | 'cyan' | 'rose' | 'yellow' | 'red' | 'sky' | 'slate';
@@ -92,13 +93,22 @@ const pageTitles: Record<string, string> = {
 // ─────────────────────────────────────────────
 function SidebarNav({
     currentPath,
+    role,
     onClose,
     onLogout,
 }: {
     currentPath: string;
+    role: string | null;
     onClose?: () => void;
     onLogout?: () => void;
 }) {
+    // Only show groups/items the current role may actually open.
+    const visibleGroups = navGroups
+        .map((group) => ({
+            ...group,
+            items: group.items.filter((item) => canAccess(role, item.path)),
+        }))
+        .filter((group) => group.items.length > 0);
     return (
         <div className="flex flex-col h-full">
             {/* Logo */}
@@ -125,7 +135,7 @@ function SidebarNav({
 
             {/* Nav Groups */}
             <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5 custom-scrollbar">
-                {navGroups.map((group) => (
+                {visibleGroups.map((group) => (
                     <div key={group.label}>
                         <p className="px-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.12em] mb-1.5">
                             {group.label}
@@ -195,11 +205,12 @@ const bottomNavItems = [
 // ─────────────────────────────────────────────
 // Main Layout
 // ─────────────────────────────────────────────
-interface LayoutProps { onLogout?: () => void; }
+interface LayoutProps { onLogout?: () => void; role?: string | null; }
 
-export default function Layout({ onLogout }: LayoutProps) {
+export default function Layout({ onLogout, role = null }: LayoutProps) {
     const location = useLocation();
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const visibleBottomNav = bottomNavItems.filter((item) => canAccess(role, item.path));
 
     // Close drawer on navigation
     useEffect(() => { setSidebarOpen(false); }, [location.pathname]);
@@ -219,6 +230,7 @@ export default function Layout({ onLogout }: LayoutProps) {
             <aside className="hidden lg:flex w-[260px] xl:w-[272px] bg-white border-l border-slate-200/70 shadow-[1px_0_0_rgba(0,0,0,0.03)] flex-col z-20 shrink-0">
                 <SidebarNav
                     currentPath={location.pathname}
+                    role={role}
                     onLogout={onLogout}
                 />
             </aside>
@@ -239,6 +251,7 @@ export default function Layout({ onLogout }: LayoutProps) {
             >
                 <SidebarNav
                     currentPath={location.pathname}
+                    role={role}
                     onClose={() => setSidebarOpen(false)}
                     onLogout={onLogout}
                 />
@@ -320,7 +333,7 @@ export default function Layout({ onLogout }: LayoutProps) {
             {/* ── Mobile Bottom Navigation ── */}
             <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-xl border-t border-slate-200/80 shadow-[0_-8px_24px_rgba(0,0,0,0.07)]">
                 <div className="flex items-stretch h-[62px] safe-area-pb">
-                    {bottomNavItems.map((item) => {
+                    {visibleBottomNav.map((item) => {
                         const active = location.pathname === item.path;
                         const Icon = item.icon;
                         return (

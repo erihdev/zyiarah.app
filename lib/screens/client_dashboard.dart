@@ -257,7 +257,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
       stream: FirebaseFirestore.instance
           .collection('orders')
           .where('client_id', isEqualTo: uid)
-          .where('status', whereIn: ['accepted', 'in_progress'])
+          .where('status', whereIn: ['assigned', 'scheduled', 'accepted', 'on_the_way', 'in_progress'])
           .limit(1)
           .snapshots(),
       builder: (context, snapshot) {

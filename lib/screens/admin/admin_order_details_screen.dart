@@ -144,31 +144,36 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
     try {
       final bool isNewAssignment = _selectedDriverId != null &&
           _selectedDriverId != _orderData?['driver_id'];
+      final String oldStatus = _orderData?['status'] ?? 'pending';
 
-      // Build the atomic Firestore update payload
-      final Map<String, dynamic> updatePayload = {'status': _currentStatus};
-      if (_selectedDriverId != null) {
-        updatePayload['driver_id'] = _selectedDriverId!;
-        updatePayload['driver_name'] = _selectedDriverName ?? '';
-        updatePayload['assigned_at'] = FieldValue.serverTimestamp();
-        // Auto-promote from pending to assigned when a driver is selected
-        if (_currentStatus == 'pending') {
-          updatePayload['status'] = 'assigned';
-          setState(() => _currentStatus = 'assigned');
-        }
-      }
-
-      // 1. Write driver fields + status atomically
-      await _db.collection('orders').doc(widget.orderId).update(updatePayload);
-
-      // 2. Invoke unified order service for side-effects
-      //    (wallet refund, Qatrat, etc.) only for terminal statuses
-      if (_currentStatus == 'completed' || _currentStatus == 'cancelled') {
+      if (_currentStatus == 'cancelled' && oldStatus != 'cancelled') {
+        // Route through the unified cancel so the refund flag (needs_refund),
+        // driver release (freeDriverOnOrderCancel) and notifications all fire.
+        // A direct status write would skip every side-effect (silent no-refund).
+        await _orderService.cancelOrder(widget.orderId, cancelledBy: 'admin');
+      } else if (_currentStatus == 'completed' && oldStatus != 'completed') {
+        // Unified completion: server rewards + driver release + end_time. Reads the
+        // OLD status (we don't pre-write) so updateOrderStatus doesn't early-return.
         await _orderService.updateOrderStatus(
           widget.orderId,
-          _currentStatus,
+          'completed',
           driverId: _selectedDriverId,
         );
+      } else {
+        // Non-terminal: assignment / manual status override written directly.
+        final Map<String, dynamic> updatePayload = {'status': _currentStatus};
+        if (_selectedDriverId != null) {
+          updatePayload['driver_id'] = _selectedDriverId!;
+          updatePayload['driver_name'] = _selectedDriverName ?? '';
+          updatePayload['assigned_at'] = FieldValue.serverTimestamp();
+          // Promote to 'scheduled' (a state the driver CAN advance and which shows in
+          // the driver's active-orders stream) — not the dead-end 'assigned'.
+          if (_currentStatus == 'pending' || _currentStatus == 'pending_admin_approval') {
+            updatePayload['status'] = 'scheduled';
+            setState(() => _currentStatus = 'scheduled');
+          }
+        }
+        await _db.collection('orders').doc(widget.orderId).update(updatePayload);
       }
 
       // 3. Audit: dedicated assignment entry when driver changes

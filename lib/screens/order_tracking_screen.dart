@@ -27,7 +27,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   bool _ratingPromptShown = false;
 
   final List<Map<String, dynamic>> _steps = [
-    {'status': 'accepted', 'label': 'السائق في الطريق', 'icon': Icons.directions_car},
+    {'status': 'scheduled', 'label': 'تم تعيين السائق', 'icon': Icons.assignment_ind},
+    {'status': 'on_the_way', 'label': 'السائق في الطريق', 'icon': Icons.directions_car},
     {'status': 'in_progress', 'label': 'وصل السائق وبدأ الخدمة', 'icon': Icons.cleaning_services},
     {'status': 'completed', 'label': 'تمت المهمة بنجاح', 'icon': Icons.verified},
   ];
@@ -233,11 +234,14 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   }
 
   Widget _buildStepper(String currentStatus) {
-    // Map Firestore status to our UI steps
+    // Map Firestore status to our UI steps (Direct Dispatch dialect included)
     Map<String, int> stepMapping = {
-      'accepted': 0,
-      'in_progress': 1,
-      'completed': 2,
+      'scheduled': 0,
+      'assigned': 0,
+      'accepted': 1, // legacy: driver en route
+      'on_the_way': 1,
+      'in_progress': 2,
+      'completed': 3,
     };
     int uiIndex = stepMapping[currentStatus] ?? -1;
 

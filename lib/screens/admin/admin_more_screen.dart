@@ -116,7 +116,8 @@ class AdminMoreScreen extends StatelessWidget {
             'icon': Icons.shopping_cart_checkout_outlined,
             'color': Colors.teal,
             'page': const AdminStoreOrdersScreen(),
-            'roles': ['super_admin', 'accountant_admin'],
+            // القواعد: تحديث store_orders = isOrdersManager (لا المحاسب)
+            'roles': ['super_admin', 'orders_manager'],
           },
           {
             'title': 'طلبات الحذف',
@@ -151,7 +152,8 @@ class AdminMoreScreen extends StatelessWidget {
             'icon': Icons.card_giftcard_outlined,
             'color': Colors.deepPurple,
             'page': const AdminSubscriptionsScreen(),
-            'roles': ['super_admin', 'accountant_admin'],
+            // القواعد: كتابة subscription_packages = isMarketingAdmin (لا المحاسب)
+            'roles': ['super_admin', 'marketing_admin'],
           },
           {
             'title': 'الإشعارات والحملات',

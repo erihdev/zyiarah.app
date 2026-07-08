@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactElement } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
@@ -24,12 +24,14 @@ import StoreProducts from './pages/StoreProducts.tsx';
 import StoreOrders from './pages/StoreOrders.tsx';
 import Services from './pages/Services.tsx';
 import Payroll from './pages/Payroll.tsx';
+import { canAccess } from './config/access.ts';
 
 const ADMIN_ROLES = ['super_admin', 'admin', 'orders_manager', 'accountant_admin', 'marketing_admin'];
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -38,18 +40,26 @@ function App() {
       if (currentUser) {
         try {
           const snap = await getDoc(doc(db, 'users', currentUser.uid));
-          const role = snap.data()?.role as string | undefined;
-          setIsAdmin(!!role && ADMIN_ROLES.includes(role));
+          const r = snap.data()?.role as string | undefined;
+          setRole(r ?? null);
+          setIsAdmin(!!r && ADMIN_ROLES.includes(r));
         } catch {
+          setRole(null);
           setIsAdmin(false);
         }
       } else {
+        setRole(null);
         setIsAdmin(false);
       }
       setLoading(false);
     });
     return () => unsubscribe();
   }, []);
+
+  // Guard a route element: render it only if the role may access that path,
+  // otherwise bounce to the dashboard (which every admin role can open).
+  const guard = (path: string, element: ReactElement) =>
+    canAccess(role, path) ? element : <Navigate to="/" replace />;
 
   if (loading) {
     return (
@@ -99,25 +109,25 @@ function App() {
         {/* Protected Routes */}
         <Route
           path="/"
-          element={user && isAdmin ? <Layout onLogout={handleLogout} /> : <Navigate to="/login" />}
+          element={user && isAdmin ? <Layout onLogout={handleLogout} role={role} /> : <Navigate to="/login" />}
         >
           <Route index element={<Dashboard />} />
-          <Route path="orders" element={<Orders />} />
-          <Route path="drivers" element={<Drivers />} />
-          <Route path="users" element={<Users />} />
-          <Route path="accountants" element={<Accountants />} />
-          <Route path="marketing" element={<Marketing />} />
-          <Route path="notifications" element={<Notifications />} />
-          <Route path="support" element={<Support />} />
-          <Route path="admins" element={<Admins />} />
-          <Route path="account-deletion" element={<AccountDeletion />} />
-          <Route path="maintenance" element={<Maintenance />} />
-          <Route path="contracts" element={<Contracts />} />
-          <Route path="store-products" element={<StoreProducts />} />
-          <Route path="store-orders" element={<StoreOrders />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="services" element={<Services />} />
-          <Route path="payroll" element={<Payroll />} />
+          <Route path="orders" element={guard('/orders', <Orders />)} />
+          <Route path="drivers" element={guard('/drivers', <Drivers />)} />
+          <Route path="users" element={guard('/users', <Users />)} />
+          <Route path="accountants" element={guard('/accountants', <Accountants />)} />
+          <Route path="marketing" element={guard('/marketing', <Marketing />)} />
+          <Route path="notifications" element={guard('/notifications', <Notifications />)} />
+          <Route path="support" element={guard('/support', <Support />)} />
+          <Route path="admins" element={guard('/admins', <Admins />)} />
+          <Route path="account-deletion" element={guard('/account-deletion', <AccountDeletion />)} />
+          <Route path="maintenance" element={guard('/maintenance', <Maintenance />)} />
+          <Route path="contracts" element={guard('/contracts', <Contracts />)} />
+          <Route path="store-products" element={guard('/store-products', <StoreProducts />)} />
+          <Route path="store-orders" element={guard('/store-orders', <StoreOrders />)} />
+          <Route path="settings" element={guard('/settings', <Settings />)} />
+          <Route path="services" element={guard('/services', <Services />)} />
+          <Route path="payroll" element={guard('/payroll', <Payroll />)} />
         </Route>
       </Routes>
     </BrowserRouter>

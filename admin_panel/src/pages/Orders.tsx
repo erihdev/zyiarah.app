@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, Filter, MoreVertical, CheckCircle2, Clock, XCircle, Package, UserCheck, X, Loader2 } from 'lucide-react';
 import {
-    collection, onSnapshot, query, orderBy, doc, Timestamp, writeBatch,
+    collection, onSnapshot, query, orderBy, doc, Timestamp, writeBatch, updateDoc,
     type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot
 } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
@@ -23,6 +23,7 @@ interface OrderRecord {
     created_at?: Timestamp;
     code?: string;
     payment_method?: string;
+    is_paid?: boolean;
 }
 
 interface DriverOption { id: string; name: string; is_available: boolean; }
@@ -31,7 +32,10 @@ const StatusBadge = ({ status }: { status: string }) => {
     switch (status) {
         case 'completed': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-100 text-xs"><CheckCircle2 size={14} />مكتمل</span>;
         case 'pending':   return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-100 text-xs"><Clock size={14} />بانتظار سائق</span>;
+        case 'pending_admin_approval': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-orange-700 font-bold border border-orange-100 text-xs"><Clock size={14} />بانتظار موافقة الإدارة</span>;
+        case 'scheduled': case 'assigned': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-50 text-teal-700 font-bold border border-teal-100 text-xs"><UserCheck size={14} />تم تعيين السائق</span>;
         case 'accepted':  return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-100 text-xs"><UserCheck size={14} />تم القبول</span>;
+        case 'on_the_way': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-50 text-cyan-700 font-bold border border-cyan-100 text-xs"><Package size={14} />في الطريق</span>;
         case 'in_progress': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-100 text-xs"><Package size={14} />جاري التنفيذ</span>;
         case 'cancelled': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-700 font-bold border border-rose-100 text-xs"><XCircle size={14} />ملغي</span>;
         default: return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 text-slate-700 font-bold border border-slate-200 text-xs">{status}</span>;
@@ -117,21 +121,17 @@ export default function Orders() {
         if (!await confirm(`هل أنت متأكد من إلغاء الطلب #${order.code || order.id.substring(0, 6).toUpperCase()}؟`)) return;
         setIsCancelling(true);
         try {
-            const batch = writeBatch(db);
-            batch.update(doc(db, 'orders', order.id), {
+            // needs_refund only for actually-paid orders; rewards_handled_by:'server'
+            // lets onOrderRewards credit the wallet refund. Driver release is handled
+            // server-side by freeDriverOnOrderCancel (guards on current_order_id, so it
+            // won't free a driver who has since moved on to another order).
+            await updateDoc(doc(db, 'orders', order.id), {
                 status: 'cancelled',
                 cancelled_at: Timestamp.now(),
                 cancelled_by: 'admin',
-                needs_refund: order.payment_method !== 'cod' && order.payment_method !== undefined,
+                needs_refund: order.is_paid === true,
+                rewards_handled_by: 'server',
             });
-            if (order.driver_id) {
-                batch.update(doc(db, 'drivers', order.driver_id), {
-                    status: 'available',
-                    current_order_id: null,
-                    is_available: true,
-                });
-            }
-            await batch.commit();
         } catch (err) {
             console.error('Error cancelling order:', err);
             toast.error('حدث خطأ أثناء الإلغاء');

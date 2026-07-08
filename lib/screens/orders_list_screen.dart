@@ -146,7 +146,11 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           return Center(child: Text('خطأ: ${snapshot.error}'));
         }
         // Filter based on phase
-        final List<String> activeStatuses = ['pending', 'assigned', 'accepted', 'in_progress'];
+        // كل حالات المسار النشط بما فيها لهجة الإرسال المباشر (Direct Dispatch)
+        final List<String> activeStatuses = [
+          'pending', 'pending_admin_approval', 'awaiting_payment',
+          'assigned', 'scheduled', 'accepted', 'on_the_way', 'in_progress',
+        ];
         final List<String> historyStatuses = ['completed', 'cancelled'];
         
         final allDocs = snapshot.data!.docs;
