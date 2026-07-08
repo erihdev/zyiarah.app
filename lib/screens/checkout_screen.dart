@@ -151,7 +151,8 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                         'service_type': widget.serviceType,
                         'service_name': widget.serviceType,
                         'amount': widget.amount,
-                        'is_paid': true,
+                        // is_paid يقلبه tamaraWebhook خادمياً — يوافق قاعدة Stage-C.
+                        'is_paid': false,
                         'status': 'pending',
                         'location': widget.location,
                         'payment_method': 'tamara',

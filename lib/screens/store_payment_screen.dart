@@ -182,7 +182,9 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
         'service_type': 'توصيل طلب متجر',
         'service_name': 'توصيل منتجات المتجر',
         'amount': widget.total,
-        'is_paid': isPaid,
+        // طلب التوصيل يُنشأ is_paid=false (حالة الدفع الحقيقية على store_orders) — يوافق
+        // قاعدة Stage-C (العميل لا يكتب is_paid=true على orders).
+        'is_paid': false,
         'payment_method': method,
         'status': 'pending_admin_approval',
         'source_collection': 'store_orders',

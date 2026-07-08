@@ -1258,16 +1258,39 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
   const uid = request.auth.uid;
   const amount = Number(request.data && request.data.amount);
   const note = (request.data && request.data.description) || "دفع خدمة من المحفظة";
+  // orderId اختياري (توافق رجعي). عند تمريره، خصم الرصيد وقلب is_paid على الطلب
+  // يحدثان ذرّياً، فلا يمكن تزوير is_paid من العميل لمدفوعات المحفظة.
+  const orderId = request.data && request.data.orderId;
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new HttpsError("invalid-argument", "المبلغ غير صالح");
   }
 
   const db = admin.firestore();
   const walletRef = db.collection("wallets").doc(uid);
-  const txRef = walletRef.collection("transactions").doc();
+  const txRef = orderId ?
+    walletRef.collection("transactions").doc(`wallet_pay_${orderId}`) :
+    walletRef.collection("transactions").doc();
+  const orderRef = orderId ? db.collection("orders").doc(orderId) : null;
 
   const result = await db.runTransaction(async (t) => {
     const wSnap = await t.get(walletRef);
+    if (orderRef) {
+      const oSnap = await t.get(orderRef);
+      if (!oSnap.exists) {
+        throw new HttpsError("not-found", "الطلب غير موجود");
+      }
+      if (oSnap.get("client_id") !== uid) {
+        throw new HttpsError("permission-denied", "لا يمكن الدفع لطلب مستخدم آخر");
+      }
+      if (oSnap.get("is_paid") === true) {
+        const bal = wSnap.exists ? Number(wSnap.data().balance || 0) : 0;
+        return {success: true, newBalance: bal, alreadyPaid: true};
+      }
+      const trueAmount = Number(oSnap.get("amount") || 0);
+      if (trueAmount > 0 && Math.abs(trueAmount - amount) > 0.01) {
+        throw new HttpsError("failed-precondition", "المبلغ لا يطابق مبلغ الطلب");
+      }
+    }
     const balance = wSnap.exists ? Number(wSnap.data().balance || 0) : 0;
     if (balance < amount) {
       throw new HttpsError("failed-precondition", "الرصيد غير كافٍ");
@@ -1279,8 +1302,18 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
     t.set(txRef, {
       amount: -amount, points: 0, type: "payment",
       description: note,
+      ...(orderId ? {order_id: orderId} : {}),
       created_at: admin.firestore.FieldValue.serverTimestamp(),
     });
+    if (orderRef) {
+      t.update(orderRef, {
+        is_paid: true,
+        payment_status: "paid",
+        payment_method: "wallet",
+        paid_at: admin.firestore.FieldValue.serverTimestamp(),
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
     return {success: true, newBalance: balance - amount};
   });
 
@@ -1329,6 +1362,16 @@ exports.verifyMoyasarPayment = onCall(
 
       if (trueAmount === null || isNaN(trueAmount) || trueAmount <= 0) {
         throw new HttpsError("not-found", "لم يتم العثور على الطلب في السيرفر أو أن المبلغ غير صالح");
+      }
+
+      // الملكية: مالك الطلب فقط يؤكّد دفعه.
+      const owner = orderDoc.data().client_id || orderDoc.data().userId;
+      if (owner && owner !== request.auth.uid) {
+        throw new HttpsError("permission-denied", "لا يمكن تأكيد دفع طلب مستخدم آخر");
+      }
+      // idempotent: مؤكَّد سلفاً → تخطَّ نداء البوابة.
+      if (orderDoc.data().is_paid === true) {
+        return {success: true, alreadyPaid: true};
       }
 
       const trueAmountHalalas = Math.round(trueAmount * 100);

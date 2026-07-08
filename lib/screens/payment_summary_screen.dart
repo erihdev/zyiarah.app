@@ -174,7 +174,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         (result.status == PaymentStatus.paid ||
          result.status == PaymentStatus.authorized)) {
       setState(() => _isLoading = true);
-      await _processUnifiedSuccess(_pendingOrderId, 'apple_pay');
+      await _processUnifiedSuccess(_pendingOrderId, 'apple_pay', paymentId: result.id);
     } else {
       String msg = 'فشل الدفع عبر Apple Pay';
       if (result is ApiError) msg = result.message;
@@ -199,7 +199,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         (result.status == PaymentStatus.paid ||
          result.status == PaymentStatus.authorized)) {
       setState(() => _isLoading = true);
-      await _processUnifiedSuccess(_pendingOrderId, 'samsung_pay');
+      await _processUnifiedSuccess(_pendingOrderId, 'samsung_pay', paymentId: result.id);
     } else {
       String msg = 'فشل الدفع عبر Samsung Pay';
       if (result is ApiError) msg = result.message;
@@ -374,29 +374,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           ));
           return;
         }
-        // الخصم من المحفظة أصبح خادمياً (payWithWallet) — العميل لا يكتب المحفظة.
-        // الدالة تتحقق من الرصيد وتخصم ذرياً على الخادم.
-        try {
-          await FirebaseFunctions.instance.httpsCallable('payWithWallet').call({
-            'amount': totalWithVat,
-            'description': 'دفع خدمة: ${widget.serviceName}',
-          });
-        } on FirebaseFunctionsException catch (e) {
-          if (mounted) setState(() => _isLoading = false);
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(
-              (e.message ?? '').contains('الرصيد غير')
-                  ? 'رصيد محفظتك غير كافٍ لإتمام الدفع.'
-                  : 'تعذّر الدفع من المحفظة، حاول مجدداً.',
-              style: GoogleFonts.tajawal(),
-            ),
-            backgroundColor: Colors.red.shade700,
-            behavior: SnackBarBehavior.floating,
-          ));
-          return;
-        }
-        if (mounted) setState(() => _walletBalance -= totalWithVat);
+        // الخصم من المحفظة يتم خادمياً داخل _processUnifiedSuccess عبر
+        // payWithWallet(orderId) بعد إنشاء الطلب — ذرّياً مع قلب is_paid على الطلب،
+        // فلا يمكن تزوير is_paid ولا الخصم من العميل.
         await _processUnifiedSuccess(finalOrderId, 'wallet', isFree: false);
 
       } else if (_selectedPaymentMethod == 'cod') {
@@ -484,7 +464,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               orderId: finalOrderId,
               onSuccess: (paymentId) async {
                 setState(() => _isLoading = true);
-                await _processUnifiedSuccess(finalOrderId, 'card');
+                await _processUnifiedSuccess(finalOrderId, 'card', paymentId: paymentId);
               },
               onFailure: (error) {
                 if (mounted) {
@@ -559,7 +539,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               orderId: finalOrderId,
               onSuccess: (paymentId) async {
                 setState(() => _isLoading = true);
-                await _processUnifiedSuccess(finalOrderId, 'stc_pay');
+                await _processUnifiedSuccess(finalOrderId, 'stc_pay', paymentId: paymentId);
               },
               onFailure: (error) {
                 if (mounted) {
@@ -588,7 +568,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   /// Unified Success Handler
-  Future<void> _processUnifiedSuccess(String id, String method, {bool isFree = false}) async {
+  Future<void> _processUnifiedSuccess(String id, String method, {bool isFree = false, String? paymentId}) async {
     final double amountToSave = isFree ? 0.0 : totalWithVat;
     // code is generated per-branch below; maintenance uses id, contract uses contractId,
     // regular order generates atomically inside the transaction
@@ -610,7 +590,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       // (Direct Dispatch) توليد Order مرتبط بحالة pending_admin_approval ليتدفق عبر
       // شاشة الاعتماد الموحّدة ثم جدول السائق. إكماله يُكمل طلب الصيانة آلياً (maintenance_id).
       try {
-        await FirebaseFirestore.instance.collection('orders').doc().set({
+        await FirebaseFirestore.instance.collection('orders').doc(id).set({
           'code': code,
           'client_id': _currentUser?.uid,
           'client_name': _currentUser?.name ?? 'عميل',
@@ -618,7 +598,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           'service_type': 'صيانة وغسيل مكيفات',
           'service_name': m['serviceType'] ?? widget.serviceName,
           'amount': amountToSave,
-          'is_paid': method != 'cod',
+          // is_paid يقلبه الخادم بعد التأكيد (verify/payWithWallet) — العميل لا يكتبه.
+          'is_paid': false,
           'payment_method': method,
           'status': 'pending_admin_approval',
           'source_collection': 'maintenance_requests',
@@ -667,7 +648,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           'service_type': widget.serviceName,
           'service_name': widget.serviceName,
           'amount': amountToSave,
-          'is_paid': method != 'cod',
+          // is_paid يقلبه الخادم بعد التأكيد (verify/payWithWallet) — العميل لا يكتبه.
+          'is_paid': false,
           // (Direct Dispatch) الساعة: تلقائي (pending ثم يُعيَّن scheduled). الكنب/الزل:
           // مسار موافقة الإدارة أولاً.
           'status': isHourly ? 'pending' : 'pending_admin_approval',
@@ -717,6 +699,30 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           type: 'cleaning',
           serviceName: widget.serviceName,
         );
+      }
+    }
+
+    // 1b. تأكيد الدفع خادمياً → يقلب is_paid على الطلب المُنشأ للتوّ (أنشأه العميل
+    // is_paid=false). هذا ما يُغلق سكّ المحفظة: لا يمكن تزوير is_paid من العميل.
+    // يُتخطّى للعقد (لا مستند order) وللنقد والاشتراك المجاني.
+    if (widget.contractId == null && !isFree && method != 'cod') {
+      if (method == 'wallet') {
+        await FirebaseFunctions.instance.httpsCallable('payWithWallet').call({
+          'amount': amountToSave,
+          'orderId': id,
+          'description': 'دفع خدمة: ${widget.serviceName}',
+        });
+        if (mounted) setState(() => _walletBalance -= amountToSave);
+      } else if (paymentId != null) {
+        try {
+          await FirebaseFunctions.instance.httpsCallable('verifyMoyasarPayment').call({
+            'paymentId': paymentId,
+            'orderId': id,
+          });
+        } catch (e) {
+          // الـ webhook يؤكّد خادمياً حتى لو فشل هذا النداء.
+          debugPrint('[verifyMoyasar] non-fatal: $e');
+        }
       }
     }
 
@@ -1166,14 +1172,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                   setState(() => _isLoading = true);
                   final messenger = ScaffoldMessenger.of(context);
                   try {
-                    await MoyasarService.processGooglePayToken(
+                    final gpayPaymentId = await MoyasarService.processGooglePayToken(
                       googlePayToken: result,
                       amountSAR: totalWithVat,
                       description: 'خدمة زيارة - ${widget.serviceName}',
                       orderId: _pendingOrderId,
                     );
                     if (mounted) {
-                      await _processUnifiedSuccess(_pendingOrderId, 'google_pay');
+                      await _processUnifiedSuccess(_pendingOrderId, 'google_pay', paymentId: gpayPaymentId);
                     }
                   } catch (e) {
                     setState(() => _isLoading = false);
