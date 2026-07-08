@@ -62,6 +62,8 @@ export default function Services() {
         outside_deposit: 50
     });
     const [isLoading, setIsLoading] = useState(true);
+    // يمنع حفظ الأسعار فوق الإنتاج بالقيم الافتراضية بعد قراءة فاشلة.
+    const [pricingLoadFailed, setPricingLoadFailed] = useState(false);
     const [isSavingPricing, setIsSavingPricing] = useState(false);
     const [isAddingService, setIsAddingService] = useState(false);
     const [editingService, setEditingService] = useState<AppService | null>(null);
@@ -95,6 +97,7 @@ export default function Services() {
             }
         } catch (error) {
             console.error("Error fetching data:", error);
+            setPricingLoadFailed(true);
         } finally {
             setIsLoading(false);
         }
@@ -123,6 +126,10 @@ export default function Services() {
     };
 
     const handleSavePricing = async () => {
+        if (pricingLoadFailed) {
+            toast.error('تعذّر تحميل الأسعار الحالية — لا يمكن الحفظ فوقها بقيم افتراضية. أعد تحميل الصفحة.');
+            return;
+        }
         setIsSavingPricing(true);
         try {
             const docRef = doc(db, 'system_configs', 'main_settings');

@@ -224,6 +224,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
       MaterialPageRoute(
         builder: (_) => ZyiarahOrderSuccessScreen(
           orderCode: widget.orderCode,
+          invoiceCollection: 'store_orders',
           title: isPaid ? 'تم تأكيد الدفع! 🎉' : 'تم تأكيد الطلب!',
           subtitle: isPaid
               ? 'تم استلام دفعتك بنجاح، سنجهّز منتجاتك ونتواصل معك للتوصيل.'
