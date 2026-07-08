@@ -42,6 +42,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   List<dynamic> _searchResults = [];
   LatLng _selectedLatLng = const LatLng(24.7136, 46.6753); // Default: Riyadh
   bool _isMapReady = false;
+  // هل حدّد المستخدم موقعه فعلاً (GPS دقيق / تحريك الخريطة / نتيجة بحث)؟ لتفادي
+  // اعتماد الموقع الافتراضي (الرياض) بصمت لمستخدم في مدينة أخرى.
+  bool _userSelected = false;
 
   final String _mapboxToken = dotenv.env['MAPBOX_TOKEN'] ?? '';
 
@@ -57,6 +60,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       setState(() {
         _selectedLatLng = LatLng(position.latitude, position.longitude);
         _isMapReady = true;
+        _userSelected = true; // GPS حدّد موقعه الفعلي
       });
       _mapController.move(_selectedLatLng, 15.0);
     } else {
@@ -114,6 +118,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     final newLatLng = LatLng(lat, lng);
     setState(() {
       _selectedLatLng = newLatLng;
+      _userSelected = true;
       _searchResults = [];
       _searchController.clear();
     });
@@ -121,7 +126,33 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     FocusScope.of(context).unfocus();
   }
 
-  void _confirmLocation() {
+  void _confirmLocation() async {
+    // إن لم يحدّد المستخدم موقعه (GPS مرفوض ولم يحرّك الخريطة) نحذّره قبل اعتماد
+    // الموقع الافتراضي — منعاً لإرسال الفريق لمدينة خاطئة بصمت.
+    if (!_userSelected) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            title: const Text('حدّد موقعك على الخريطة'),
+            content: const Text(
+                'لم تُحدِّد موقعك بعد. حرّك الخريطة على موقعك الصحيح لتفادي وصول الفريق '
+                'لمكان خاطئ. هل تريد المتابعة بالموقع الظاهر حالياً؟'),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('أُحدّد موقعي')),
+              ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('متابعة')),
+            ],
+          ),
+        ),
+      );
+      if (proceed != true) return;
+    }
+    if (!mounted) return;
     final geoPoint = GeoPoint(_selectedLatLng.latitude, _selectedLatLng.longitude);
     if (widget.hours != null) {
       Navigator.pop(context, {
@@ -167,6 +198,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                     if (hasGesture) {
                       setState(() {
                         _selectedLatLng = position.center;
+                        _userSelected = true;
                       });
                     }
                   },

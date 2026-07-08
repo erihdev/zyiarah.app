@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/screens/onboarding_screen.dart';
 import 'package:zyiarah/screens/splash_screen.dart';
@@ -80,6 +81,14 @@ class ZyiarahApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: messengerKey,
       theme: ZyiarahTheme.light,
+      // تعريب كامل: منتقيات التاريخ/الوقت والحوارات تظهر بالعربية RTL بدل الإنجليزية.
+      locale: const Locale('ar'),
+      supportedLocales: const [Locale('ar'), Locale('en')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
     );
   }
 }
