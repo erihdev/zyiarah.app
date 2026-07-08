@@ -54,11 +54,20 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
 
-      // SECURITY: user can only create their own profile, cannot self-assign admin roles
-      allow create: if isOwner(userId) &&
-        !(request.resource.data.get('role', 'client') in
-          ['admin', 'super_admin', 'orders_manager',
-           'accountant_admin', 'marketing_admin', 'driver']);
+      // SECURITY: privileged accounts are provisioned by an admin (createAccountViaAdmin
+      // writes the users doc under the admin's auth); a regular user may only create their
+      // own profile and can never self-assign a privileged role.
+      allow create: if
+        // Super admin: provision any account (staff / drivers)
+        isSuperAdmin() ||
+        // Orders manager: may provision driver accounts only (not other admins)
+        (isOrdersManager() &&
+          request.resource.data.get('role', 'client') == 'driver') ||
+        // Self-signup: own doc, non-privileged role only
+        (isOwner(userId) &&
+          !(request.resource.data.get('role', 'client') in
+            ['admin', 'super_admin', 'orders_manager',
+             'accountant_admin', 'marketing_admin', 'driver']));
 
       // SECURITY: only super_admin may set role/is_blocked (prevents a sub-admin from
       // self-escalating to super_admin or blocking users); the `wallet` field on the
