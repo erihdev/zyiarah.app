@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Search, Filter, UserCheck, UserX, Mail, Phone, Users as UsersIcon } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
+import { useNotification } from '../components/Notification.tsx';
 
 interface UserRecord {
     uid: string;
@@ -33,6 +34,7 @@ export default function Users() {
     const [searchTerm, setSearchTerm] = useState('');
     const [users, setUsers] = useState<UserRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    const { confirm, toast } = useNotification();
 
     useEffect(() => {
         const q = query(collection(db, 'users'), orderBy('created_at', 'desc'));
@@ -59,8 +61,17 @@ export default function Users() {
     );
 
     const toggleBan = async (uid: string, currentStatus: string) => {
-        const newStatus = currentStatus === 'banned' ? 'active' : 'banned';
-        await updateDoc(doc(db, 'users', uid), { status: newStatus });
+        const banning = currentStatus !== 'banned';
+        // تأكيد صريح: الحظر يُسجَّل خروج المستخدم فوراً — نقرة خاطئة تحظر عميلاً حقيقياً.
+        if (!await confirm(banning
+            ? 'هل تريد حظر هذا المستخدم؟ سيُسجَّل خروجه فوراً ولن يستطيع استخدام التطبيق.'
+            : 'هل تريد رفع الحظر عن هذا المستخدم؟')) return;
+        try {
+            await updateDoc(doc(db, 'users', uid), { status: banning ? 'banned' : 'active' });
+            toast.success(banning ? 'تم حظر المستخدم' : 'تم رفع الحظر');
+        } catch {
+            toast.error('تعذّر تحديث حالة المستخدم — أعد المحاولة');
+        }
     };
 
     return (
