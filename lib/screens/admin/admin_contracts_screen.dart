@@ -230,27 +230,38 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
   }
 
   void _approveContract(DocumentSnapshot doc) async {
+    final messenger = ScaffoldMessenger.of(context);
     final data = doc.data() as Map<String, dynamic>;
     final confirm = await _showConfirm("اعتماد العقد", "هل أنت متأكد من اعتماد باقة (${data['planName']})؟");
-    if (confirm) {
+    if (!confirm) return;
+    try {
       await FirebaseFirestore.instance.collection('contracts').doc(doc.id).update({
         'status': 'approved_waiting_payment',
         'adminApprovedAt': FieldValue.serverTimestamp(),
       });
-
-      // --- SEND NOTIFICATION TO CLIENT VIA CENTRAL SERVICE ---
       await ZyiarahMessagingService().notifyContractApproved(
-        data['userId'],
+        data['userId'] ?? '',
         data['planName'] ?? 'باقة اشتراك',
       );
-      // -----------------------------------------------------
+      messenger.showSnackBar(const SnackBar(
+          content: Text('تم اعتماد العقد ✅'), backgroundColor: Colors.green));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('تعذّر اعتماد العقد — أعد المحاولة'), backgroundColor: Colors.red));
     }
   }
 
   void _deleteContract(String id) async {
+    final messenger = ScaffoldMessenger.of(context);
     final confirm = await _showConfirm("حذف العقد", "سيتم حذف هذا السجل نهائياً. هل أنت متأكد؟");
-    if (confirm) {
+    if (!confirm) return;
+    try {
       await FirebaseFirestore.instance.collection('contracts').doc(id).delete();
+      messenger.showSnackBar(const SnackBar(
+          content: Text('تم حذف العقد'), backgroundColor: Colors.green));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('تعذّر حذف العقد — أعد المحاولة'), backgroundColor: Colors.red));
     }
   }
 

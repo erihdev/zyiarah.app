@@ -63,20 +63,32 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
     );
   }
 
+  // id_expiry مخزَّن كنص ISO 'YYYY-MM-DD' (لا Timestamp) — لذا يُقارَن نصّياً (ترتيب ISO
+  // = ترتيب زمني). الاستعلام السابق كان بـ Timestamp فلا يطابق شيئاً أبداً (الشاشة فارغة
+  // دائماً). حدّ أدنى '1900-01-01' لاستبعاد السجلات بلا تاريخ.
+  static String _isoDate(DateTime x) =>
+      '${x.year.toString().padLeft(4, '0')}-${x.month.toString().padLeft(2, '0')}-${x.day.toString().padLeft(2, '0')}';
+
   Stream<QuerySnapshot<Map<String, dynamic>>> _getComplianceStream() {
     final now = DateTime.now();
-    final timestamp30Days = Timestamp.fromDate(now.add(const Duration(days: 30)));
-    
+    final today = _isoDate(now);
+    final soon = _isoDate(now.add(const Duration(days: 30)));
+    const floor = '1900-01-01';
+
     Query<Map<String, dynamic>> query = FirebaseFirestore.instance.collection('drivers');
 
     if (_filter == 'expired') {
-      query = query.where('id_expiry', isLessThan: Timestamp.fromDate(now));
+      query = query
+          .where('id_expiry', isGreaterThan: floor)
+          .where('id_expiry', isLessThan: today);
     } else if (_filter == 'expiring_soon') {
       query = query
-          .where('id_expiry', isGreaterThanOrEqualTo: Timestamp.fromDate(now))
-          .where('id_expiry', isLessThanOrEqualTo: timestamp30Days);
+          .where('id_expiry', isGreaterThanOrEqualTo: today)
+          .where('id_expiry', isLessThanOrEqualTo: soon);
     } else {
-      query = query.where('id_expiry', isLessThanOrEqualTo: timestamp30Days);
+      query = query
+          .where('id_expiry', isGreaterThan: floor)
+          .where('id_expiry', isLessThanOrEqualTo: soon);
     }
 
     return query.snapshots();
@@ -224,34 +236,39 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
   }
 
   Future<void> _notifyAllExpiring(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
     final now = DateTime.now();
-    final timestamp30Days = Timestamp.fromDate(now.add(const Duration(days: 30)));
-    final docs = await FirebaseFirestore.instance
-        .collection('drivers')
-        .where('id_expiry', isLessThanOrEqualTo: timestamp30Days)
-        .get();
-    int count = 0;
-
-    for (var doc in docs.docs) {
-      final data = doc.data();
-      // In a real app, this would trigger an FCM push.
-      // For now, we log the "Notification Request" in broadcasts for specific target.
-      await FirebaseFirestore.instance.collection('broadcasts').add({
-        'title': 'تنبيه انتهاء وثائق رسمية',
-        'body': 'عزيزي ${data['name']}، نرجو تحديث بيانات هويتك في أقرب وقت لتجنب إيقاف الحساب.',
-        'target': 'drivers',
-        'target_uid': doc.id,
-        'timestamp': FieldValue.serverTimestamp(),
-        'type': 'compliance_alert',
-      });
-      count++;
+    final soon = _isoDate(now.add(const Duration(days: 30)));
+    try {
+      // نص ISO (لا Timestamp) — كان الاستعلام السابق لا يجد شيئاً فيُرسل 0 دائماً.
+      final docs = await FirebaseFirestore.instance
+          .collection('drivers')
+          .where('id_expiry', isGreaterThan: '1900-01-01')
+          .where('id_expiry', isLessThanOrEqualTo: soon)
+          .get();
+      int count = 0;
+      for (var doc in docs.docs) {
+        final data = doc.data();
+        await FirebaseFirestore.instance.collection('broadcasts').add({
+          'title': 'تنبيه انتهاء وثائق رسمية',
+          'body': 'عزيزي ${data['name']}، نرجو تحديث بيانات هويتك في أقرب وقت لتجنب إيقاف الحساب.',
+          'target': 'drivers',
+          'target_uid': doc.id,
+          'timestamp': FieldValue.serverTimestamp(),
+          'type': 'compliance_alert',
+        });
+        count++;
+      }
+      messenger.showSnackBar(SnackBar(
+        content: Text("تم إرسال $count تنبيه استباقي آلي بنجاح 🤖✅"),
+        backgroundColor: Colors.blueAccent,
+      ));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(
+        content: Text('تعذّر إرسال التنبيهات — أعد المحاولة'),
+        backgroundColor: Colors.red,
+      ));
     }
-
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text("تم إرسال $count تنبيه استباقي آلي بنجاح 🤖✅"),
-      backgroundColor: Colors.blueAccent,
-    ));
   }
 
   Future<void> _launchURL(String url) async {

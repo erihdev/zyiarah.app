@@ -1,5 +1,6 @@
 import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
+import 'package:zyiarah/main.dart' show messengerKey;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -303,28 +304,31 @@ class AdminMaintenanceScreen extends StatelessWidget {
   }
 
   Future<void> _updateStatus(String docId, String status, String price, String userId, String serviceType) async {
+    // لا يرمي: المستدعي (الحوار) يُغلق بعد الانتظار — لو رمى يبقى الحوار عالقاً بالسبينر.
+    // messengerKey عام (StatelessWidget بلا context هنا).
+    final messenger = messengerKey.currentState;
     final Map<String, dynamic> updates = {'status': status};
     double quotedAmount = 0.0;
     if (price.isNotEmpty) {
       quotedAmount = double.tryParse(price) ?? 0.0;
       updates['quotePrice'] = quotedAmount;
     }
-    
-    await FirebaseFirestore.instance.collection('maintenance_requests').doc(docId).update(updates);
 
-    if (status == 'waiting_payment' && userId.isNotEmpty) {
-      // --- TRIGGER CENTRAL NOTIFICATION SERVICE (Push + Email) ---
-      await ZyiarahMessagingService().notifyClientOfMaintenanceQuote(
-        userId,
-        docId,
-        quotedAmount,
-      );
-      // ------------------------------------------------------------
-    }
-    
-    // Create actual order if approved (paid) - legacy logic
-    if (status == 'approved' || status == 'paid') {
-       // ... existing driver assignment logic ...
+    try {
+      await FirebaseFirestore.instance.collection('maintenance_requests').doc(docId).update(updates);
+
+      if (status == 'waiting_payment' && userId.isNotEmpty) {
+        await ZyiarahMessagingService().notifyClientOfMaintenanceQuote(
+          userId,
+          docId,
+          quotedAmount,
+        );
+      }
+      messenger?.showSnackBar(const SnackBar(
+          content: Text('تم تحديث الطلب ✅'), backgroundColor: Colors.green));
+    } catch (_) {
+      messenger?.showSnackBar(const SnackBar(
+          content: Text('تعذّر تحديث الطلب — أعد المحاولة'), backgroundColor: Colors.red));
     }
   }
 }
