@@ -54,7 +54,15 @@ class ZyiarahUserProvider extends ChangeNotifier {
           .snapshots()
           .listen((doc) {
         if (doc.exists && doc.data() != null) {
-          _user = ZyiarahUser.fromMap(uid, doc.data()!);
+          final data = doc.data()!;
+          // فرض الحظر: مستخدم محظور يُسجَّل خروجه فوراً (كان الحظر شكلياً لا يُفحص).
+          // يغطي كلا العلمين: is_blocked (القاعدة) و status:'banned' (لوحة React).
+          if (data['is_blocked'] == true || data['status'] == 'banned') {
+            debugPrint('User $uid is blocked — signing out');
+            FirebaseAuth.instance.signOut();
+            return;
+          }
+          _user = ZyiarahUser.fromMap(uid, data);
           _role = _user!.role;
         }
         _isLoading = false;
