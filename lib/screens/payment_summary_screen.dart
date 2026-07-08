@@ -594,6 +594,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     // regular order generates atomically inside the transaction
     String code = '';
 
+    try {
     // 1. Update Database
     if (widget.maintenanceId != null) {
       code = id;
@@ -754,6 +755,33 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           ),
         ),
         (route) => route.isFirst,
+      );
+    }
+    } catch (e) {
+      // الدفع قد يكون تم فعلاً لكن إنشاء/تحديث الطلب فشل — لا تُبقِ العميل على دوران
+      // أبدي بلا تغذية راجعة. أعلِمه بمرجع للدعم (الـ webhook يُكمل التحديث خادمياً).
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      showDialog(
+        context: context,
+        builder: (ctx) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            title: const Text('تعذّر إتمام الطلب'),
+            content: Text(
+                'إن كنت قد دُفعت فلا تقلق — سيُعالَج طلبك تلقائياً أو تواصل مع الدعم '
+                'مع الرقم المرجعي: ${code.isNotEmpty ? code : id}. لن يُخصم منك مرتين.'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.of(context).popUntil((r) => r.isFirst);
+                },
+                child: const Text('حسناً'),
+              ),
+            ],
+          ),
+        ),
       );
     }
   }
