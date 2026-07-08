@@ -10,6 +10,7 @@ import 'package:intl/intl.dart' hide TextDirection;
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:zyiarah/services/order_service.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:zyiarah/services/location_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -52,14 +53,39 @@ class _DriverDashboardState extends State<DriverDashboard> {
     // إشعار توفّر تحديث — حرج للسائقين لإغلاق فجوة الإصدار (حالة scheduled لا تظهر بالنسخة القديمة)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ZyiarahAppUpdateService.checkAndPrompt(context);
+      // اطلب إذن الموقع صراحةً — بدونه لا يعمل التتبّع/الوصول على أندرويد (كان لا يُطلب أبداً).
+      _ensureLocationPermission();
     });
-    // DRIVER-005/007: single stable stream initialized once with battery-efficient settings
-    _locationStream = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 10,
-      ),
-    );
+  }
+
+  /// يطلب إذن الموقع ثم يُنشئ تيار الموقع. بدون هذا الطلب الصريح لا يظهر مربّع الإذن
+  /// على أندرويد وتفشل كل عمليات الموقع بصمت.
+  Future<void> _ensureLocationPermission() async {
+    final granted = await ZyiarahLocationService().requestPermission();
+    if (!mounted) return;
+    if (granted) {
+      setState(() {
+        _locationDenied = false;
+        // (DRIVER-005/007) تيار مستقر بإعدادات موفّرة للبطارية — يُنشأ بعد منح الإذن.
+        _locationStream = Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 10,
+          ),
+        );
+      });
+    } else {
+      setState(() => _locationDenied = true);
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(SnackBar(
+        content: const Text('يحتاج التطبيق إذن الموقع لاستقبال المهام وتتبّع التوصيل.'),
+        action: SnackBarAction(
+          label: 'الإعدادات',
+          onPressed: () => Geolocator.openAppSettings(),
+        ),
+        duration: const Duration(seconds: 8),
+      ));
+    }
   }
 
   Future<void> _syncOnlineStatus() async {
@@ -75,8 +101,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
   Timer? _syncTimer;
 
-  // DRIVER-005/007: stream created once, reused across rebuilds
-  late final Stream<Position> _locationStream;
+  // DRIVER-005/007: يُنشأ بعد منح إذن الموقع (null قبله) ويُعاد استخدامه عبر إعادة البناء.
+  Stream<Position>? _locationStream;
+  bool _locationDenied = false;
 
   void _startSync(String orderId) {
     if (_syncTimer != null && _activeOrderId == orderId) return;
@@ -962,6 +989,18 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   Widget _buildDistanceInfo(GeoPoint clientLoc) {
+    // قبل منح الإذن (أو عند رفضه) اعرض زر تفعيل بدل الصمت/الانهيار.
+    if (_locationStream == null) {
+      return TextButton.icon(
+        onPressed: _ensureLocationPermission,
+        style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 0)),
+        icon: const Icon(Icons.location_on_outlined, size: 15, color: Colors.redAccent),
+        label: Text(
+          _locationDenied ? 'إذن الموقع مرفوض — اضغط للتفعيل' : 'فعّل إذن الموقع لتتبّع الوصول',
+          style: const TextStyle(fontSize: 11, color: Colors.redAccent, fontWeight: FontWeight.bold),
+        ),
+      );
+    }
     return StreamBuilder<Position>(
       stream: _locationStream,
       builder: (context, snapshot) {
