@@ -46,7 +46,7 @@ export default function Contracts() {
             }));
             setContracts(fetched);
             setLoading(false);
-        });
+        }, (e) => { console.error("Contracts listener error:", e); setLoading(false); });
         return () => unsubscribe();
     }, []);
 

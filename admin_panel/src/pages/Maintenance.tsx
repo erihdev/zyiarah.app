@@ -48,7 +48,7 @@ export default function Maintenance() {
             }));
             setRequests(fetched);
             setLoading(false);
-        });
+        }, (e) => { console.error("Maintenance listener error:", e); setLoading(false); });
         return () => unsubscribe();
     }, []);
 
