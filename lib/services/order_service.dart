@@ -99,13 +99,9 @@ class ZyiarahOrderService {
       // تحديث حالة السائق يتم من Cloud Function عند تغيير حالة الطلب
       // (العميل لا يملك صلاحية تعديل مستند السائق مباشرة)
 
-      // إعادة الزيارة إذا كان الدفع باشتراك — الخصم يتم عند الإنشاء فقط
-      final isSubscription = orderData['payment_method'] == 'subscription';
-      final clientId = orderData['client_id'] as String?;
-      if (isSubscription && clientId != null) {
-        final userRef = _db.collection('users').doc(clientId);
-        transaction.update(userRef, {'visits_remaining': FieldValue.increment(1)});
-      }
+      // إعادة زيارة الاشتراك تُعالَج خادمياً عبر `syncOrderLinkedRecords`، ولا تُعاد
+      // إلا إذا كانت الزيارة قد استُهلكت فعلاً (visit_counted) — يمنع تعويم زيارات
+      // مجانية عند إلغاء زيارة لم تُنفَّذ أصلاً ضمن الباقة المدفوعة مسبقاً.
     });
 
     ZyiarahAuditService().logAction(
@@ -191,40 +187,15 @@ class ZyiarahOrderService {
         });
       }
 
-      // --- العمليات المرتبطة بالاكتمال (داخل الـ Transaction لضمان التكامل) ---
-      if (status == 'completed') {
-        final clientId = orderData['client_id'];
-        final isSubscriptionOrder = orderData['payment_method'] == 'subscription';
-        final maintenanceId = orderData['maintenance_id'];
-
-        if (maintenanceId != null) {
-          final maintenanceRef = _db.collection('maintenance_requests').doc(maintenanceId);
-          transaction.update(maintenanceRef, {
-            'status': 'completed',
-            'completedAt': FieldValue.serverTimestamp(),
-          });
-        }
-
-        if (clientId != null && isSubscriptionOrder) {
-          final userRef = _db.collection('users').doc(clientId);
-          transaction.update(userRef, {
-            'visits_remaining': FieldValue.increment(-1),
-          });
-        }
-      } else if (status == 'in_progress') {
-        final maintenanceId = orderData['maintenance_id'];
-        if (maintenanceId != null) {
-          final maintenanceRef = _db.collection('maintenance_requests').doc(maintenanceId);
-          transaction.update(maintenanceRef, {
-            'status': 'in_progress',
-            'startedAt': FieldValue.serverTimestamp(),
-          });
-        }
-      }
+      // ملاحظة: مزامنة السجلات المرتبطة (حالة طلب الصيانة + خصم زيارات الاشتراك)
+      // تُنفَّذ الآن خادمياً عبر Cloud Function `syncOrderLinkedRecords` — لأن السائق
+      // لا يملك صلاحية الكتابة على `maintenance_requests` ولا مستند العميل، فكانت
+      // كتابتها هنا تُفشل الـ Transaction بالكامل وتُبقي الطلب عالقاً.
     });
 
-    // الجوائز (نقاط زيارة + مكافأة الإحالة) تُمنح الآن خادمياً عبر onOrderRewards
-    // فور تعليم الطلب rewards_handled_by:'server' أعلاه — منعاً للتزوير والازدواج.
+    // الجوائز (نقاط زيارة + مكافأة الإحالة) والمرتجع ومزامنة الصيانة/الاشتراك
+    // تُعالَج كلها خادمياً (onOrderRewards + syncOrderLinkedRecords) فور تعليم الطلب
+    // rewards_handled_by:'server' وتغيّر الحالة — منعاً للتزوير والازدواج.
   }
 
   // قبول الطلب باستخدام Transaction لمنع التعارض المزدوج (Race Condition)

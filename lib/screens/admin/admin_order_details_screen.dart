@@ -32,7 +32,19 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   List<Map<String, dynamic>> _drivers = [];
   bool _isLoadingDrivers = true;
 
-  final List<String> _statuses = ['pending', 'assigned', 'in_progress', 'completed', 'cancelled'];
+  // Canonical set of statuses the admin may set manually. The order's *actual*
+  // current status (e.g. scheduled / on_the_way / pending_admin_approval / accepted
+  // from the Direct Dispatch flow) is always merged in below so the dropdown never
+  // throws an assertion when the value isn't in this base list.
+  final List<String> _baseStatuses = [
+    'pending', 'pending_admin_approval', 'scheduled', 'assigned', 'accepted',
+    'on_the_way', 'in_progress', 'completed', 'cancelled',
+  ];
+
+  List<String> get _statuses => [
+        ..._baseStatuses,
+        if (!_baseStatuses.contains(_currentStatus)) _currentStatus,
+      ];
   
   String _getStatusText(String status) {
     return ZyiarahStatus.getOrderStatus(status)['text'];

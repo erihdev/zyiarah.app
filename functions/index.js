@@ -1110,6 +1110,82 @@ exports.onOrderRewards = onDocumentUpdated({document: "orders/{orderId}", cpu: 0
       return null;
     });
 
+// 6c-bis. Sync order-linked records (maintenance request status + subscription visit
+// count) fully server-side. The DRIVER cannot write users/maintenance_requests under
+// the security rules, so doing this in the driver's client-side transaction failed and
+// left subscription/maintenance orders stuck. This trigger (Admin SDK) does it instead.
+// Idempotent: maintenance status mirroring is a plain set; visit accounting is guarded
+// by a per-order `visit_counted` flag so re-delivery never double-counts, and a cancel
+// only restores a visit that was actually consumed (kills the free-visit float).
+exports.syncOrderLinkedRecords = onDocumentUpdated({document: "orders/{orderId}", cpu: 0.083},
+    async (event) => {
+      const change = event.data;
+      if (!change) return null;
+      const before = change.before.data() || {};
+      const after = change.after.data() || {};
+      const orderId = event.params.orderId;
+
+      const beforeStatus = before.status;
+      const afterStatus = after.status;
+      if (beforeStatus === afterStatus) return null;
+
+      const db = admin.firestore();
+      const orderRef = db.collection("orders").doc(orderId);
+      const maintenanceId = after.maintenance_id;
+      const isSubscription = after.payment_method === "subscription";
+      const clientId = after.client_id;
+
+      // 1. Mirror status onto the linked maintenance request (set == idempotent)
+      if (maintenanceId) {
+        try {
+          if (afterStatus === "in_progress") {
+            await db.collection("maintenance_requests").doc(maintenanceId).set({
+              status: "in_progress",
+              startedAt: admin.firestore.FieldValue.serverTimestamp(),
+            }, {merge: true});
+          } else if (afterStatus === "completed") {
+            await db.collection("maintenance_requests").doc(maintenanceId).set({
+              status: "completed",
+              completedAt: admin.firestore.FieldValue.serverTimestamp(),
+            }, {merge: true});
+          }
+        } catch (e) {
+          console.error(`[linked] maintenance sync failed for ${orderId}:`, e.message);
+        }
+      }
+
+      // 2. Subscription visit accounting
+      if (isSubscription && clientId) {
+        const userRef = db.collection("users").doc(clientId);
+        try {
+          if (afterStatus === "completed") {
+            await db.runTransaction(async (t) => {
+              const oSnap = await t.get(orderRef);
+              if (oSnap.get("visit_counted") === true) return; // already counted
+              t.set(userRef, {
+                visits_remaining: admin.firestore.FieldValue.increment(-1),
+              }, {merge: true});
+              t.update(orderRef, {visit_counted: true});
+            });
+          } else if (afterStatus === "cancelled") {
+            await db.runTransaction(async (t) => {
+              const oSnap = await t.get(orderRef);
+              // Restore ONLY a visit that was actually consumed; a never-completed
+              // visit was part of the prepaid batch and must not mint a free visit.
+              if (oSnap.get("visit_counted") !== true) return;
+              t.set(userRef, {
+                visits_remaining: admin.firestore.FieldValue.increment(1),
+              }, {merge: true});
+              t.update(orderRef, {visit_counted: false});
+            });
+          }
+        } catch (e) {
+          console.error(`[linked] visit accounting failed for ${orderId}:`, e.message);
+        }
+      }
+      return null;
+    });
+
 // 6d. Server-authoritative wallet-as-payment deduction. Replaces the client-side
 // wallet balance write in payment_summary_screen (the LAST direct client wallet
 // write), so the wallets write rule can be locked down later. Takes the amount
