@@ -81,7 +81,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
 
       for (var doc in _orders) {
         final d = doc.data() as Map<String, dynamic>;
-        final date = d['created_at'] != null ? intl.DateFormat('yyyy-MM-dd').format((d['created_at'] as Timestamp).toDate()) : '';
+        final date = d['created_at'] is Timestamp ? intl.DateFormat('yyyy-MM-dd').format((d['created_at'] as Timestamp).toDate()) : '';
         buffer.writeln("${d['code']},$date,${d['service_name']},${d['client_name']},${d['amount']},${d['status']}");
       }
 
@@ -200,6 +200,8 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
   }
 
   Map<String, dynamic> _calculateStats(List<DocumentSnapshot> orders, List<DocumentSnapshot> maintenance, List<DocumentSnapshot> storeOrders) {
+    // تحويل آمن: بعض المبالغ مخزّنة كنص → الجمع المباشر (double += String) ينهار.
+    double d(dynamic v) => v is num ? v.toDouble() : (double.tryParse('$v') ?? 0.0);
     double cleaningRevenue = 0;
     double maintenanceRevenue = 0;
     double storeRevenue = 0;
@@ -209,7 +211,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       final data = doc.data() as Map<String, dynamic>;
       final status = data['status'] ?? 'pending';
       if (status != 'cancelled') {
-        cleaningRevenue += (data['final_amount'] ?? data['amount'] ?? 0.0);
+        cleaningRevenue += d(data['final_amount'] ?? data['amount']);
       }
       if (status == 'pending' || status == 'assigned' || status == 'in_progress') {
         activeOrders++;
@@ -220,7 +222,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       final data = doc.data() as Map<String, dynamic>;
       final status = data['status'] ?? 'pending';
       if (status == 'paid' || status == 'completed' || status == 'approved') {
-        maintenanceRevenue += (data['quotePrice'] ?? 0.0);
+        maintenanceRevenue += d(data['quotePrice']);
       }
       if (status == 'under_review' || status == 'waiting_payment' || status == 'approved') {
         activeOrders++;
@@ -229,7 +231,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
 
     for (var doc in storeOrders) {
       final data = doc.data() as Map<String, dynamic>;
-      storeRevenue += (data['total_price'] ?? data['total_amount'] ?? 0.0);
+      storeRevenue += d(data['total_price'] ?? data['total_amount']);
       if (data['status'] == 'pending' || data['status'] == 'processing') {
         activeOrders++;
       }
@@ -355,8 +357,9 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     void processDocs(List<DocumentSnapshot> docs, String dateField, String amountField) {
       for (var doc in docs) {
         final data = doc.data() as Map<String, dynamic>;
-        if (data[dateField] == null) continue;
-        DateTime date = (data[dateField] as Timestamp).toDate();
+        final rawDate = data[dateField];
+        if (rawDate is! Timestamp) continue; // تجاهل التواريخ النصّية/المفقودة بدل الانهيار
+        DateTime date = rawDate.toDate();
         String dayKey = intl.DateFormat('MM/dd').format(date);
         if (dailyRevenue.containsKey(dayKey)) {
           dailyRevenue[dayKey] = dailyRevenue[dayKey]! + (double.tryParse(data[amountField].toString()) ?? 0.0);
@@ -678,7 +681,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
   Widget _buildReputationSentinel() {
     final lowRatings = _orders.where((doc) {
       final data = doc.data() as Map<String, dynamic>;
-      final rating = (data['rating'] ?? 5.0).toDouble();
+      final rating = double.tryParse('${data['rating'] ?? 5.0}') ?? 5.0;
       return rating <= 2.0 && data['rating_comment'] != null;
     }).toList();
 

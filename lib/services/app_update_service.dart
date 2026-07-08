@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -88,11 +89,25 @@ class _UpdateDialog extends StatelessWidget {
 
   static const Color _brand = Color(0xFF5D1B5E);
 
-  Future<void> _openStore() async {
+  /// يفتح المتجر بشكل مضمون. لا يعتمد على canLaunchUrl لأنه يُرجع false زائفاً على
+  /// أندرويد 11+ حين لا تُعلَن حزمة الاستهداف — ما كان يجعل الزر ميتاً ويحبس المستخدم
+  /// في وضع الإجبار. يجرّب عدة أنماط، وإن تعذّر كلها ينسخ الرابط فلا يعلق المستخدم أبداً.
+  Future<void> _openStore(BuildContext context) async {
+    // التقط الـ messenger قبل أي await حتى لا نستخدم context عبر فجوة غير متزامنة.
+    final messenger = ScaffoldMessenger.of(context);
     final uri = Uri.parse(storeUrl);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    for (final mode in [LaunchMode.externalApplication, LaunchMode.platformDefault]) {
+      try {
+        if (await launchUrl(uri, mode: mode)) return;
+      } catch (_) {/* جرّب النمط التالي */}
     }
+    // مخرج احتياطي دائم: انسخ الرابط واعرض رسالة (لا تحبس المستخدم في وضع الإجبار).
+    await Clipboard.setData(ClipboardData(text: storeUrl));
+    messenger.showSnackBar(SnackBar(
+      content: Text('تعذّر فتح المتجر تلقائياً — نُسِخ الرابط، الصقه في المتصفح:\n$storeUrl',
+          style: GoogleFonts.tajawal()),
+      duration: const Duration(seconds: 8),
+    ));
   }
 
   @override
@@ -135,7 +150,7 @@ class _UpdateDialog extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: _openStore,
+                onPressed: () => _openStore(context),
                 icon: const Icon(Icons.download_rounded),
                 label: Text('تحديث الآن',
                     style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),

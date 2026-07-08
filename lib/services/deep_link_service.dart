@@ -6,6 +6,7 @@ import 'package:zyiarah/screens/admin/admin_ticket_details_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/screens/order_tracking_screen.dart';
+import 'package:zyiarah/screens/driver_dashboard.dart';
 
 class ZyiarahDeepLinkService {
   static final ZyiarahDeepLinkService _instance = ZyiarahDeepLinkService._internal();
@@ -75,13 +76,17 @@ class ZyiarahDeepLinkService {
     final ZyiarahFirebaseService firebaseService = ZyiarahFirebaseService();
     final String role = await firebaseService.getUserRole(user.uid);
     final bool isAdmin = ['super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin', 'admin'].contains(role);
+    final bool isDriver = role == 'driver';
 
     if (resource == 'order') {
+       // السائق يذهب للوحته (شاشة المهام القابلة للتنفيذ) لا لشاشة تتبّع العميل.
        _navKey?.currentState?.push(
          MaterialPageRoute(
-           builder: (_) => isAdmin 
+           builder: (_) => isAdmin
              ? AdminOrderDetailsScreen(orderId: id)
-             : OrderTrackingScreen(orderId: id)
+             : isDriver
+                 ? const DriverDashboard()
+                 : OrderTrackingScreen(orderId: id)
          )
        );
     } else if (resource == 'ticket' && isAdmin) {

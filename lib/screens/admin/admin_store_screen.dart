@@ -75,10 +75,13 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
   }
 
   void _showProductDialog({DocumentSnapshot? product}) {
-    final nameCtrl = TextEditingController(text: product?['name'] ?? '');
-    final priceCtrl = TextEditingController(text: (product?['price'] ?? '').toString());
-    final descCtrl = TextEditingController(text: product?['description'] ?? '');
-    String? imageUrl = product?['image_url'];
+    // اقرأ الحقول من الخريطة: الوصول product?['x'] على DocumentSnapshot يرمي
+    // StateError لأي حقل اختياري مفقود (الوصف/الصورة) → انهيار فتح التعديل.
+    final pData = product?.data() as Map<String, dynamic>?;
+    final nameCtrl = TextEditingController(text: pData?['name'] ?? '');
+    final priceCtrl = TextEditingController(text: (pData?['price'] ?? '').toString());
+    final descCtrl = TextEditingController(text: pData?['description'] ?? '');
+    String? imageUrl = pData?['image_url'];
     bool isSaving = false;
     bool isUploading = false;
 

@@ -104,10 +104,13 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   }
 
   void _selectSearchResult(dynamic feature) {
-    final coordinates = feature['geometry']['coordinates'];
-    final double lng = coordinates[0].toDouble();
-    final double lat = coordinates[1].toDouble();
-    
+    // احرس ضد نتيجة بحث بلا geometry/إحداثيات → تجنّب انهيار المنتقي وسط الحجز.
+    final geometry = feature is Map ? feature['geometry'] : null;
+    final coordinates = geometry is Map ? geometry['coordinates'] : null;
+    if (coordinates is! List || coordinates.length < 2) return;
+    final double lng = (coordinates[0] as num).toDouble();
+    final double lat = (coordinates[1] as num).toDouble();
+
     final newLatLng = LatLng(lat, lng);
     setState(() {
       _selectedLatLng = newLatLng;

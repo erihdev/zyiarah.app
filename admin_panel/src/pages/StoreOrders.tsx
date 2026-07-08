@@ -157,7 +157,7 @@ export default function StoreOrders() {
                         قائمة المنتجات
                       </h4>
                       <div className="bg-slate-50/50 rounded-2xl p-4 space-y-3">
-                        {order.items.map((item, idx) => (
+                        {(order.items ?? []).map((item, idx) => (
                           <div key={idx} className="flex items-center justify-between text-sm">
                             <span className="text-slate-600 font-medium">
                               {item.name} <span className="text-slate-400">x{item.quantity}</span>

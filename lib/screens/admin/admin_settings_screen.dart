@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'dart:ui';
 
 class AdminSettingsScreen extends StatefulWidget {
@@ -370,61 +369,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                         ),
                       ),
                       
-                      const SizedBox(height: 48),
-                      
-                      // System Testing Danger Zone
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: Colors.red.shade100, width: 2),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(top: 20, left: 20, right: 20, bottom: 12),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.warning_amber_rounded, color: Colors.red.shade400, size: 24),
-                                  const SizedBox(width: 10),
-                                  const Text("أدوات اختبار النظام (نطاق خطر)", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF1E293B))),
-                                ],
-                              ),
-                            ),
-                            const Divider(height: 1),
-                            Padding(
-                              padding: const EdgeInsets.all(20),
-                              child: Column(
-                                children: [
-                                  const Text(
-                                    "قم باختبار جودة نظام مراقبة وتتبع الأعطال (Crashlytics). النقر هنا سيتعمد إغلاق التطبيق فجأة وإرسال تقرير عطل مباشر.",
-                                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.5),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 50,
-                                    child: OutlinedButton.icon(
-                                      onPressed: () {
-                                        FirebaseCrashlytics.instance.crash();
-                                      },
-                                      icon: const Icon(Icons.bug_report_rounded),
-                                      label: const Text("محاكاة انهيار للتطبيق", style: TextStyle(fontWeight: FontWeight.bold)),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.red.shade600,
-                                        side: BorderSide(color: Colors.red.shade200, width: 1.5),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                        backgroundColor: Colors.red.shade50.withValues(alpha: 0.5),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      // (أُزيلت "أدوات اختبار النظام / محاكاة الانهيار" — لا يجوز وجود
+                      // زر يُسقط التطبيق عمداً في بناء إنتاجي.)
                       const SizedBox(height: 32),
 
                       // About Zyiarah Card

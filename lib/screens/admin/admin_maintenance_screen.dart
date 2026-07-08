@@ -83,7 +83,7 @@ class AdminMaintenanceScreen extends StatelessWidget {
                                       Text("العميل: ${req['userName'] ?? 'غير معروف'}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                                       Text("الجوال: ${req['userPhone'] ?? '-'}", style: const TextStyle(fontSize: 12)),
                                       Text("العنوان: ${req['address'] ?? 'حسب الخريطة'}", style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                      Text("التاريخ: ${req['scheduledAt'] != null ? (req['scheduledAt'] as Timestamp).toDate().toString().split(' ')[0] : '-'}", style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                      Text("التاريخ: ${req['scheduledAt'] is Timestamp ? (req['scheduledAt'] as Timestamp).toDate().toString().split(' ')[0] : '-'}", style: const TextStyle(fontSize: 11, color: Colors.grey)),
                                       Text("السعر: ${req['quotePrice'] ?? 'قيد التسعير'} ر.س", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue)),
                                     ],
                                   ),
@@ -102,7 +102,7 @@ class AdminMaintenanceScreen extends StatelessWidget {
                                       icon: const Icon(Icons.price_check, size: 18),
                                       label: const Text("تسعير / تحديث"),
                                     ),
-                                    if (req['location'] != null)
+                                    if (req['location'] is GeoPoint)
                                       TextButton.icon(
                                         onPressed: () async {
                                           final loc = req['location'] as GeoPoint;
