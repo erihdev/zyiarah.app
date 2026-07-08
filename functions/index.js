@@ -1830,6 +1830,9 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
     status: "scheduled",
     driver_id: driverDoc.id,
     driver_name: d.name || "سائق",
+    // assigned_driver: شاشات تتبّع العميل تقرأ هذا الحقل — لولاه تُظهر «جاري
+    // تعيين سائق» للأبد رغم إسناد السائق.
+    assigned_driver: d.name || "سائق",
     driver_phone: d.phone || "000000000",
     assigned_at: admin.firestore.FieldValue.serverTimestamp(),
     scheduled_at: admin.firestore.Timestamp.fromDate(startDateTime),
