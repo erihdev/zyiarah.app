@@ -176,7 +176,7 @@ service cloud.firestore {
           'driver_location', 'last_location_update', 'updated_at',
           'is_paid', 'paid_at', 'cash_collected_by', 'cash_confirmed',
           'cash_confirmed_at', 'payment_pin', 'payment_pin_generated_at',
-          'rewards_handled_by'
+          'rewards_handled_by', 'proximity_notified'
         ]);
 
       // Client: cancel own pending order, update invoice URL, or submit rating
@@ -400,6 +400,13 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead'])) ||
          isAdmin());
       allow create, delete: if isAdmin();
+    }
+
+    // ─── Driver payments (earnings) — driver reads own, admin manages ───────
+    match /driver_payments/{payId} {
+      allow read: if isLoggedIn() &&
+        (request.auth.uid == resource.data.driver_id || isAdmin());
+      allow create, update, delete: if isAdmin();
     }
   }
 }

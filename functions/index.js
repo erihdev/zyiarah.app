@@ -2208,6 +2208,50 @@ exports.remindClientsUpcomingAppointments = onSchedule(
 );
 
 // ════════════════════════════════════════════════════════════════════════
+// احتياطي خادمي: إسناد الطلبات المدفوعة المعلّقة بلا سائق — Cron كل 15 دقيقة.
+// التعيين الأساسي يتم في التطبيق كمهمة خلفية؛ لو أُغلق التطبيق بعد الدفع قد
+// يبقى الطلب pending بلا سائق. هذا المسح يضمن إسناده خادمياً.
+// ════════════════════════════════════════════════════════════════════════
+exports.sweepUnassignedPaidOrders = onSchedule(
+    {schedule: "every 15 minutes", timeZone: "Asia/Riyadh"},
+    async () => {
+      const db = admin.firestore();
+      const now = Date.now();
+      // status=pending (مساواة) + service_date نطاق → يغطيه فهرس (status,service_date).
+      const snap = await db.collection("orders")
+          .where("status", "==", "pending")
+          .where("service_date", ">=",
+              admin.firestore.Timestamp.fromDate(new Date(now - 60 * 60 * 1000)))
+          .get();
+
+      let assigned = 0;
+      for (const doc of snap.docs) {
+        const d = doc.data();
+        // فقط الطلبات المدفوعة، بلا سائق، وذات موعد.
+        if (d.driver_id || d.is_paid !== true || !d.service_date) continue;
+        const start = d.service_date.toDate();
+        const hours = Number(d.hours_contracted || 4);
+        const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
+        try {
+          const driver = await _findFreeDriverForSlot(db, {
+            zoneName: d.zone_name || null,
+            startDateTime: start,
+            endDateTime: end,
+          });
+          if (driver) {
+            await _assignDriverScheduled(db, doc.id, driver, start);
+            assigned++;
+            console.log(`sweepUnassignedPaidOrders: assigned ${doc.id} -> ${driver.id}`);
+          }
+        } catch (e) {
+          console.error(`sweepUnassignedPaidOrders: ${doc.id} failed:`, e.message);
+        }
+      }
+      console.log(`sweepUnassignedPaidOrders: assigned ${assigned} order(s)`);
+    },
+);
+
+// ════════════════════════════════════════════════════════════════════════
 // (2c) تذكير العميل عند انطلاق السائق (on_the_way) — Event-driven
 // ════════════════════════════════════════════════════════════════════════
 exports.notifyClientOnDriverDeparture = onDocumentUpdated(
@@ -2506,11 +2550,24 @@ exports.moyasarWebhook = onRequest(
             {col: "contracts", amountField: "planPrice"},
           ];
 
-          for (const {col} of collections) {
+          for (const {col, amountField} of collections) {
             const ref = admin.firestore().collection(col).doc(orderId);
             const doc = await ref.get();
             if (doc.exists) {
               const data = doc.data();
+              // (أمان C1) تحقّق أن المبلغ المدفوع فعلاً = مبلغ الطلب قبل تأكيده.
+              // يمنع دفع مبلغ صغير (بمفتاح النشر) وربطه بطلب كبير لتأكيده مجاناً.
+              const expectedHalalas = Math.round(Number(data[amountField] || 0) * 100);
+              if (expectedHalalas <= 0 || verifiedPayment.amount !== expectedHalalas) {
+                console.error(
+                    `moyasarWebhook: AMOUNT MISMATCH order ${orderId} in '${col}' — ` +
+                    `paid ${verifiedPayment.amount} halalas, expected ${expectedHalalas}. NOT confirming.`);
+                await ref.update({
+                  payment_amount_mismatch: true,
+                  updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                }).catch(() => {});
+                break;
+              }
               if (data.is_paid) {
                 console.log(`moyasarWebhook: Order ${orderId} already paid — skipping (idempotent)`);
               } else {
