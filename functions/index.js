@@ -2160,7 +2160,7 @@ exports.remindClientsUpcomingAppointments = onSchedule(
 
         const apptMs = d.service_date.toMillis();
         const hoursUntil = (apptMs - now) / (60 * 60 * 1000);
-        const code = d.code || doc.id;
+        const serviceName = d.service_name || d.service_type || "خدمتك";
         const timeStr = d.booking_time_slot ||
           `${_pad2(new Date(apptMs + 3 * 60 * 60 * 1000).getUTCHours())}:00`;
 
@@ -2174,8 +2174,9 @@ exports.remindClientsUpcomingAppointments = onSchedule(
         if (hoursUntil > 2.5 && d.client_reminder_24h_sent !== true) {
           await _pushToUid(
               d.client_id,
-              "تذكير بموعد خدمتك 📅",
-              `موعد خدمتك (#${code}) ${dayLabel} الساعة ${timeStr}. نحن بانتظارك!`,
+              "موعد زيارتك اقترب 🏡",
+              `مرحباً بك 👋 نُذكّرك بموعد «${serviceName}» ${dayLabel} الساعة ${timeStr}.\n` +
+              `فريق زيارة جاهزٌ لإسعاد منزلك ✨`,
               {type: "appointment_reminder", orderId: doc.id},
           );
           await doc.ref.update({client_reminder_24h_sent: true});
@@ -2184,8 +2185,9 @@ exports.remindClientsUpcomingAppointments = onSchedule(
                    d.client_reminder_soon_sent !== true) {
           await _pushToUid(
               d.client_id,
-              "موعد خدمتك قريب ⏰",
-              `موعد خدمتك (#${code}) بعد ساعتين تقريباً (الساعة ${timeStr}). يرجى الاستعداد.`,
+              "اقترب موعد زيارتك ⏰",
+              `استعِدّ! موعد «${serviceName}» بعد ساعتين تقريباً (الساعة ${timeStr}).\n` +
+              `فريق زيارة في طريقه إليك ليُلمّع منزلك 🚗✨`,
               {type: "appointment_reminder", orderId: doc.id},
           );
           await doc.ref.update({client_reminder_soon_sent: true});
