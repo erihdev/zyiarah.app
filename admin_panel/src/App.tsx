@@ -40,7 +40,11 @@ function App() {
       if (currentUser) {
         try {
           const snap = await getDoc(doc(db, 'users', currentUser.uid));
-          const r = snap.data()?.role as string | undefined;
+          // EFFECTIVE role: staff store their real sub-role in staff_role while role
+          // stays the generic 'admin'. Prefer staff_role so page gating actually
+          // separates staff (previously every staff = 'admin' saw every page).
+          const d = snap.data();
+          const r = (d?.staff_role ?? d?.role) as string | undefined;
           setRole(r ?? null);
           setIsAdmin(!!r && ADMIN_ROLES.includes(r));
         } catch {
