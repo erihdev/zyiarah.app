@@ -313,7 +313,10 @@ class _AssignSheetState extends State<_AssignSheet> {
               Expanded(
                 child: DropdownButtonFormField<int>(
                   initialValue: _selectedHour,
-                  items: List.generate(15, (i) => i + 7)
+                  // اضمن أن الساعة الحالية ضمن العناصر دائماً (قد يكون موعد الطلب خارج
+                  // 7–21) — وإلا ينهار الـ Dropdown.
+                  items: (<int>{...List.generate(15, (i) => i + 7), _selectedHour}.toList()
+                        ..sort())
                       .map((h) => DropdownMenuItem(
                             value: h,
                             child: Text('${h.toString().padLeft(2, '0')}:00',

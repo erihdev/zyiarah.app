@@ -140,10 +140,10 @@ class _ZyiarahSubscriptionPlansScreenState
       final rawSlots = data['slotCounts'] as Map? ?? {};
 
       final Map<String, int> daily = rawDaily.map(
-        (k, v) => MapEntry(k.toString(), (v as num).toInt()),
+        (k, v) => MapEntry(k.toString(), int.tryParse('$v') ?? 0),
       );
       final Map<String, int> slots = rawSlots.map(
-        (k, v) => MapEntry(k.toString(), (v as num).toInt()),
+        (k, v) => MapEntry(k.toString(), int.tryParse('$v') ?? 0),
       );
 
       final int maxPerDay  = ((data['maxOrdersPerDay'] as num?)?.toInt()) ?? 10;
@@ -185,7 +185,7 @@ class _ZyiarahSubscriptionPlansScreenState
     int visitHours = 4;
     if (_selectedPackageIndex != null && _selectedPackageIndex! < _packages.length) {
       final data = _packages[_selectedPackageIndex!].data() as Map<String, dynamic>;
-      visitHours = (data['hours'] ?? 4).toInt();
+      visitHours = int.tryParse('${data['hours'] ?? 4}') ?? 4;
     }
     const startHour = 8;
     const endHour = 22;
@@ -428,7 +428,7 @@ class _ZyiarahSubscriptionPlansScreenState
     final selectedData = selectedDoc.data() as Map<String, dynamic>;
     final String title = selectedData['title'] ?? 'باقة اشتراك';
     final double priceValue = double.tryParse(selectedData['price']?.toString() ?? '0') ?? 0.0;
-    int visits = ((selectedData['visits'] as num?) ?? 0).toInt();
+    int visits = int.tryParse('${selectedData['visits'] ?? 0}') ?? 0;
     // احتياطي: إن لم يُضبط حقل visits رقمياً، استخرج العدد المجاور لكلمة "زيار"
     // من العنوان/العنوان الفرعي/المزايا (الباقات تُسوَّق بـ "4 زيارات"، "8 زيارات").
     if (visits <= 0) {
@@ -1003,7 +1003,7 @@ class _SubscriptionPlanCardState extends State<SubscriptionPlanCard>
     final title = data['title'] ?? 'باقة اشتراك';
     final subtitle = data['subtitle'] ?? '';
     final price = '${data['price']} ر.س';
-    final int hours = (data['hours'] ?? 4).toInt();
+    final int hours = int.tryParse('${data['hours'] ?? 4}') ?? 4;
     final List<String> features = (data['features'] as List<dynamic>?)
             ?.map((e) => e.toString())
             .toList() ??

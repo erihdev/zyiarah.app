@@ -6,6 +6,12 @@ import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 
+/// مرجع مختصر آمن (يتجنّب RangeError على معرّفات أقصر من 8).
+String _shortRef(dynamic v) {
+  final s = v.toString().toUpperCase();
+  return s.length >= 8 ? s.substring(0, 8) : s;
+}
+
 class ZyiarahContractsListScreen extends StatelessWidget {
   const ZyiarahContractsListScreen({super.key});
 
@@ -159,7 +165,7 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                           children: [
                             Text(planName, 
                               style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF1E293B))),
-                            Text('رقم المرجعي: #${(data['contractId'] ?? contractDocId).toString().toUpperCase().substring(0, 8)}', 
+                            Text('رقم المرجعي: #${_shortRef(data['contractId'] ?? contractDocId)}',
                               style: GoogleFonts.tajawal(fontSize: 12, color: Colors.blueGrey)),
                           ],
                         ),
@@ -184,9 +190,9 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                               Navigator.push(context, MaterialPageRoute(
                                 builder: (_) => PaymentSummaryScreen(
                                   serviceName: planName,
-                                  amount: (data['planPrice'] ?? 0.0).toDouble(),
+                                  amount: double.tryParse('${data['planPrice'] ?? 0}') ?? 0.0,
                                   contractId: contractDocId,
-                                  planVisits: (data['planVisits'] ?? 0).toInt(),
+                                  planVisits: int.tryParse('${data['planVisits'] ?? 0}') ?? 0,
                                 )
                               ));
                             },
@@ -209,12 +215,12 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                                 const SnackBar(content: Text('جاري تجهيز نسخة العقد...'))
                               );
                               ZyiarahPdfService.generateAndDownloadContract(
-                                contractId: data['contractId'] ?? contractDocId.substring(0, 8),
+                                contractId: data['contractId'] ?? _shortRef(contractDocId),
                                 planName: planName,
                                 userName: data['userName'] ?? data['clientName'] ?? 'عميل زيارة',
                                 userPhone: data['userPhone'] ?? data['clientPhone'] ?? '000000000',
-                                price: (data['planPrice'] ?? 0.0).toDouble(),
-                                visits: (data['planVisits'] ?? 0).toInt(),
+                                price: double.tryParse('${data['planPrice'] ?? 0}') ?? 0.0,
+                                visits: int.tryParse('${data['planVisits'] ?? 0}') ?? 0,
                                 startDate: createdAt,
                               );
                             },

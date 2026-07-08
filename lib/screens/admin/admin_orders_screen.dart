@@ -108,9 +108,11 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
         // Improved service name mapping with fallbacks
         final service = data['service_name'] ?? data['service_type'] ?? data['service_name_ar'] ?? 'خدمة غير معروفة';
         
-        // Secure amount formatting
+        // Secure amount formatting — tryParse so a non-numeric/empty amount can't
+        // crash the whole orders list.
         final rawAmount = data['final_amount'] ?? data['amount'] ?? 0;
-        final String formattedAmount = double.parse(rawAmount.toString()).toStringAsFixed(2);
+        final String formattedAmount =
+            (double.tryParse(rawAmount.toString()) ?? 0).toStringAsFixed(2);
         
         final code = data['code'] ?? docs[index].id.substring(0, 8).toUpperCase();
         

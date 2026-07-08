@@ -272,8 +272,11 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   // الفتحات الزمنية المتاحة (8ص حتى آخر وقت تنتهي فيه الخدمة قبل 10م)
   List<int> _getStartHours() {
     const endHour = 22;
+    const startHour = 8;
     final last = endHour - _selectedHours;
-    return List.generate(last - 8 + 1, (i) => 8 + i);
+    // احرس ضد الطول السالب (لو ضبط الأدمن ساعات كبيرة) → List.generate ينهار.
+    if (last < startHour) return <int>[];
+    return List.generate(last - startHour + 1, (i) => startHour + i);
   }
 
   /// يحسب إتاحة الخانات الزمنية من الـ cache المحلي (لا يصدر أي طلب شبكة).

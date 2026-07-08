@@ -20,38 +20,46 @@ class _AdminStaffPerformanceScreenState extends State<AdminStaffPerformanceScree
   }
 
   Future<void> _calculatePerformance() async {
-    final driversSnap = await FirebaseFirestore.instance
-        .collection('drivers')
-        .orderBy('rating_avg', descending: true)
-        .get();
+    try {
+      final driversSnap = await FirebaseFirestore.instance
+          .collection('drivers')
+          .orderBy('rating_avg', descending: true)
+          .get();
 
-    List<Map<String, dynamic>> stats = [];
+      List<Map<String, dynamic>> stats = [];
 
-    for (var driverDoc in driversSnap.docs) {
-      final driverData = driverDoc.data();
-      final driverId = driverDoc.id;
-      final driverName = driverData['name'] ?? 'بدون اسم';
-      final totalCompleted = driverData['completed_orders_count'] ?? 0;
-      final double avgRating = (driverData['rating_avg'] ?? 5.0).toDouble();
+      for (var driverDoc in driversSnap.docs) {
+        final driverData = driverDoc.data();
+        final driverId = driverDoc.id;
+        final driverName = driverData['name'] ?? 'بدون اسم';
+        // تحويل آمن: قد تُخزَّن هذه الحقول كنص → الضرب المباشر في الفرز ينهار.
+        final int totalCompleted =
+            int.tryParse('${driverData['completed_orders_count'] ?? 0}') ?? 0;
+        final double avgRating =
+            double.tryParse('${driverData['rating_avg'] ?? 5.0}') ?? 5.0;
 
-      stats.add({
-        'id': driverId,
-        'name': driverName,
-        'completed': totalCompleted,
-        'rating': avgRating,
-        'phone': driverData['phone'] ?? '-',
-        'status': driverData['status'] ?? 'offline',
-      });
-    }
+        stats.add({
+          'id': driverId,
+          'name': driverName,
+          'completed': totalCompleted,
+          'rating': avgRating,
+          'phone': driverData['phone'] ?? '-',
+          'status': driverData['status'] ?? 'offline',
+        });
+      }
 
-    // Sort by performance (Rating * volume)
-    stats.sort((a, b) => (b['rating'] * b['completed']).compareTo(a['rating'] * a['completed']));
+      // Sort by performance (Rating * volume)
+      stats.sort((a, b) => (b['rating'] * b['completed']).compareTo(a['rating'] * a['completed']));
 
-    if (mounted) {
-      setState(() {
-        _staffStats = stats;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _staffStats = stats;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      // لا تُبقِ الشاشة على سبينر لانهائي عند أي خطأ (فهرس مفقود/اتصال).
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

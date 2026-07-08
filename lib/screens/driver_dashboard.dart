@@ -882,7 +882,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
           const Divider(height: 28),
           if (data['client_id'] != null) _buildHouseRulesAlert(data['client_id']),
           if (data['client_id'] != null) const Divider(height: 28),
-          if (status == 'in_progress') _buildTimer(data['hours_contracted'] ?? 4),
+          if (status == 'in_progress') _buildTimer(int.tryParse('${data['hours_contracted'] ?? 4}') ?? 4),
           const SizedBox(height: 8),
           // DRIVER-001/008: swipe-to-confirm replaces tap button — prevents accidental triggers
           _SwipeToActButton(

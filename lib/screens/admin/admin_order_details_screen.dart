@@ -312,9 +312,9 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   }
 
   Widget _buildMoyasarOperationsCard(Map<String, dynamic> data) {
-    final String paymentId = data['moyasar_payment_id'] as String;
+    final String paymentId = data['moyasar_payment_id'] as String? ?? '';
     final String moyasarStatus = data['moyasar_status'] as String? ?? data['payment_status'] as String? ?? '';
-    final double amount = ((data['final_amount'] ?? data['amount'] ?? 0) as num).toDouble();
+    final double amount = double.tryParse('${data['final_amount'] ?? data['amount'] ?? 0}') ?? 0.0;
 
     // Determine available operations per Moyasar docs
     final bool canVoid = moyasarStatus == 'authorized' ||
@@ -531,7 +531,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
     final code = data['code'] ?? widget.orderId.substring(0, 8).toUpperCase();
     
     DateTime date = DateTime.now();
-    if (data['created_at'] != null) {
+    if (data['created_at'] is Timestamp) {
       date = (data['created_at'] as Timestamp).toDate();
     }
 
@@ -653,7 +653,11 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                     _isLoadingDrivers 
                       ? const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(strokeWidth: 2)))
                       : DropdownButtonFormField<String>(
-                        initialValue: _selectedDriverId,
+                        // احرس القيمة: سائق الطلب الحالي قد يكون مشغولاً/غير نشط ومستبعَداً
+                        // من القائمة → لو لم يكن ضمن العناصر اعرض التلميح بدل الانهيار.
+                        initialValue: _drivers.any((d) => d['id'] == _selectedDriverId)
+                            ? _selectedDriverId
+                            : null,
                         hint: const Text("اختر من قائمة الكوادر النشطة..."),
                         items: _drivers.map((d) => DropdownMenuItem(value: d['id'] as String, child: Text(d['name'] as String))).toList(),
                         onChanged: (val) {

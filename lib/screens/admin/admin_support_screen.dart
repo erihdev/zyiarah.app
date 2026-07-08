@@ -53,8 +53,11 @@ class AdminSupportScreen extends StatelessWidget {
         
         // Sort locally by date
         final sortedDocs = docs.toList()..sort((a, b) {
-          final aDate = (a['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
-          final bDate = (b['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+          // اقرأ من الخريطة: a['createdAt'] على المستند يرمي StateError لتذكرة بلا الحقل.
+          final aData = a.data() as Map<String, dynamic>;
+          final bData = b.data() as Map<String, dynamic>;
+          final aDate = (aData['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+          final bDate = (bData['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
           return bDate.compareTo(aDate);
         });
 

@@ -284,7 +284,8 @@ class _ManagerFormSheetState extends State<_ManagerFormSheet> {
               
               _fieldLabel("مستوى الصلاحيات"),
               DropdownButtonFormField<String>(
-                initialValue: role,
+                // احرس القيمة: كادر قديم قد يحمل role='admin' غير الموجود في العناصر → null بدل الانهيار.
+                initialValue: roles.any((r) => r['value'] == role) ? role : null,
                 items: roles.map((r) => DropdownMenuItem(value: r['value'], child: Text(r['label']!, style: GoogleFonts.tajawal(fontSize: 14)))).toList(),
                 onChanged: isSaving ? null : (val) => setState(() => role = val!),
                 decoration: _inputDecoration("", Icons.admin_panel_settings_outlined),
