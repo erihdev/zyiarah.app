@@ -633,14 +633,16 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
             children: [
               const Icon(Icons.access_time, size: 14, color: Colors.grey),
               const SizedBox(width: 5),
-              Text(dateStr, style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 12)),
+              Text('تاريخ الطلب: $dateStr', style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 12)),
             ],
           ),
+          // موعد الخدمة المجدول — بارز حتى لا ينساه العميل
+          _buildAppointmentBanner(order),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('${order['amount']} ر.س', 
+              Text('${order['amount']} ر.س',
                 style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF5D1B5E))),
               if (status == 'completed')
                 TextButton.icon(
@@ -693,6 +695,84 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  /// شارة موعد الخدمة المجدول — تُظهر التاريخ والوقت وعدّاداً نسبياً بوضوح
+  /// حتى لا ينسى العميل موعده. تظهر فقط للطلبات ذات موعد محدد (service_date
+  /// أو booking_date/booking_time_slot).
+  Widget _buildAppointmentBanner(Map<String, dynamic> order) {
+    DateTime? appt = (order['service_date'] as Timestamp?)?.toDate();
+    if (appt == null && order['booking_date'] is String) {
+      try {
+        final t = (order['booking_time_slot'] as String?) ?? '00:00';
+        appt = DateTime.parse('${order['booking_date']}T${t.length == 5 ? t : '00:00'}:00');
+      } catch (_) {}
+    }
+    if (appt == null) return const SizedBox.shrink();
+
+    const days = ['', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'];
+    const months = ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+    final dateStr = '${days[appt.weekday]} ${appt.day} ${months[appt.month]}';
+
+    final period = appt.hour < 12 ? 'صباحاً' : 'مساءً';
+    int h12 = appt.hour % 12;
+    if (h12 == 0) h12 = 12;
+    final timeStr = '$h12:${appt.minute.toString().padLeft(2, '0')} $period';
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final apptDay = DateTime(appt.year, appt.month, appt.day);
+    final diffDays = apptDay.difference(today).inDays;
+    String rel;
+    Color relColor = const Color(0xFF5D1B5E);
+    if (diffDays < 0) {
+      rel = 'انتهى الموعد';
+      relColor = Colors.grey;
+    } else if (diffDays == 0) {
+      rel = 'اليوم';
+      relColor = Colors.green.shade700;
+    } else if (diffDays == 1) {
+      rel = 'غداً';
+      relColor = Colors.orange.shade800;
+    } else {
+      rel = 'بعد $diffDays أيام';
+    }
+
+    const purple = Color(0xFF5D1B5E);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: purple.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: purple.withValues(alpha: 0.15)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.event_available, size: 18, color: purple),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('موعد الخدمة',
+                      style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 2),
+                  Text('$dateStr — $timeStr',
+                      style: GoogleFonts.tajawal(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A))),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(color: relColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+              child: Text(rel, style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold, color: relColor)),
+            ),
+          ],
+        ),
       ),
     );
   }
