@@ -1355,7 +1355,8 @@ exports.verifyMoyasarPayment = onCall(
         orderRef = admin.firestore().collection("store_orders").doc(orderId);
         orderDoc = await orderRef.get();
         if (orderDoc.exists) {
-          trueAmount = Number(orderDoc.data().total_amount);
+          // final_amount = السعر النهائي بعد تعديل الإدارة (قد يختلف عن السلة).
+          trueAmount = Number(orderDoc.data().final_amount ?? orderDoc.data().total_amount);
         } else {
           orderRef = admin.firestore().collection("maintenance_requests").doc(orderId);
           orderDoc = await orderRef.get();
@@ -2564,7 +2565,10 @@ exports.moyasarWebhook = onRequest(
               const data = doc.data();
               // (أمان C1) تحقّق أن المبلغ المدفوع فعلاً = مبلغ الطلب قبل تأكيده.
               // يمنع دفع مبلغ صغير (بمفتاح النشر) وربطه بطلب كبير لتأكيده مجاناً.
-              const expectedHalalas = Math.round(Number(data[amountField] || 0) * 100);
+              // نُفضّل final_amount (السعر النهائي الذي قد تعدّله الإدارة لطلب متجر)
+              // على المبلغ الأساسي — وإلا رُفضت دفعة حقيقية عند تعديل السعر.
+              const expectedHalalas = Math.round(
+                  Number(data.final_amount ?? data[amountField] ?? 0) * 100);
               if (expectedHalalas <= 0 || verifiedPayment.amount !== expectedHalalas) {
                 console.error(
                     `moyasarWebhook: AMOUNT MISMATCH order ${orderId} in '${col}' — ` +
