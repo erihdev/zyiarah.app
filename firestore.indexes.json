@@ -49,6 +49,14 @@
       ]
     },
     {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "service_date", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "maintenance_requests",
       "queryScope": "COLLECTION",
       "fields": [
