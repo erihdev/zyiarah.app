@@ -674,33 +674,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         });
       });
 
-      if (isHourly) {
-        // تعيين سائق تلقائياً فور إنشاء الطلب — يُعيَّن فوراً ويظهر في لوحة السائق
-        // إذا فشل التعيين (لا يوجد سائق فارغ الآن) يبقى pending وتعيّنه الإدارة
-        try {
-          await _orderService.autoAssignDriverForHourly(
-            orderId: id,
-            startDateTime: widget.serviceDate!,
-            durationHours: widget.hours!,
-          );
-        } catch (e) {
-          debugPrint('[AutoAssign] error (non-fatal): $e');
-          // الطلب محجوز ومؤكد — الإخفاق هنا لا يلغي الحجز
-        }
-        await ZyiarahMessagingService().notifyOrderCreated(
-          clientId: _currentUser?.uid ?? '',
-          orderCode: code,
-          type: 'cleaning',
-          serviceName: widget.serviceName,
-        );
-      } else {
-        await ZyiarahMessagingService().notifyOrderCreated(
-          clientId: _currentUser?.uid ?? '',
-          orderCode: code,
-          type: 'cleaning',
-          serviceName: widget.serviceName,
-        );
-      }
+      // تعيين السائق (للساعة) وإشعار العميل يُنقَلان لمهمة الخلفية أدناه حتى لا
+      // يُبطئا ظهور شاشة النجاح — كلاهما غير حرج ولا يلمس واجهة المستخدم.
     }
 
     // 1b. تأكيد الدفع خادمياً → يقلب is_paid على الطلب المُنشأ للتوّ (أنشأه العميل
@@ -727,22 +702,95 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       }
     }
 
-    // 2. Trigger ZATCA Invoice & Notifications
-    final String? invoiceUrl = await _finalizeOrderWithInvoice(orderId: id, orderCode: code, paymentMethod: method, paidAmount: amountToSave);
-    
-    await ZyiarahMessagingService().notifyNewOrder({
-      'code': code,
-      'client_name': _currentUser?.name ?? 'عميل زيارة',
-      'amount': amountToSave,
-      'service_type': widget.serviceName,
-      'client_phone': _phoneController.text,
-      'date_time': widget.serviceDate != null ? intl.DateFormat('yyyy-MM-dd').format(widget.serviceDate!) : 'غير محدد',
-      'worker_count': widget.workerCount,
-      'zone': widget.zoneName,
-      'coupon': _appliedCoupon,
-    }, customerEmail: _currentUser?.email, invoiceUrl: invoiceUrl);
+    // 2. الفاتورة (توليد PDF + رفعه للتخزين) وإشعار الإدارة بالبريد — الأثقل زمنياً
+    // (2–5 ثوانٍ). لا يحتاجهما العميل قبل رؤية شاشة النجاح، فنُشغّلهما في الخلفية
+    // بعد الانتقال مباشرةً. نلتقط القيم الأولية الآن لأن State يُتلَف عند الانتقال —
+    // فلا نلمس widget/controllers داخل مهمة الخلفية.
+    final String bgCollection = widget.maintenanceId != null
+        ? 'maintenance_requests'
+        : widget.contractId != null
+            ? 'contracts'
+            : 'orders';
+    final double bgTotal = totalWithVat;
+    final double bgVat = vatAmount;
+    final double bgDiscount = _discountAmount;
+    final String? bgCoupon = _appliedCoupon;
+    final String bgServiceName = widget.serviceName;
+    final String bgClientName = _currentUser?.name ?? 'عميل زيارة';
+    final String bgClientPhone = _phoneController.text;
+    final String? bgClientEmail = _currentUser?.email;
+    final String bgDateTime = widget.serviceDate != null
+        ? intl.DateFormat('yyyy-MM-dd').format(widget.serviceDate!)
+        : 'غير محدد';
+    final int bgWorkerCount = widget.workerCount;
+    final String? bgZone = widget.zoneName;
+    final bool bgIsRegularOrder = widget.maintenanceId == null && widget.contractId == null;
+    final bool bgIsHourly = widget.hours != null && widget.serviceDate != null;
+    final DateTime? bgServiceDate = widget.serviceDate;
+    final int? bgHours = widget.hours;
+    final String? bgUid = _currentUser?.uid;
+    final ZyiarahOrderService bgOrderService = _orderService;
 
-    // 3. Final Step — شاشة نجاح موحدة لجميع المسارات
+    // ignore: unawaited_futures
+    Future(() async {
+      try {
+        // تعيين السائق (للساعة) + إشعار العميل بإنشاء الطلب — للطلبات العادية فقط.
+        if (bgIsRegularOrder) {
+          if (bgIsHourly) {
+            try {
+              await bgOrderService.autoAssignDriverForHourly(
+                orderId: id,
+                startDateTime: bgServiceDate!,
+                durationHours: bgHours!,
+              );
+            } catch (e) {
+              debugPrint('[AutoAssign bg] non-fatal: $e');
+            }
+          }
+          try {
+            await ZyiarahMessagingService().notifyOrderCreated(
+              clientId: bgUid ?? '',
+              orderCode: code,
+              type: 'cleaning',
+              serviceName: bgServiceName,
+            );
+          } catch (e) {
+            debugPrint('[notifyOrderCreated bg] non-fatal: $e');
+          }
+        }
+
+        final String qrData = ZatcaService.generateZatcaQrCode(
+          timestamp: DateTime.now(),
+          totalAmount: bgTotal,
+          vatAmount: bgVat,
+        );
+        final String? invoiceUrl = await ZyiarahPdfService.generateAndUploadInvoice(
+          orderId: id,
+          orderCode: code,
+          amount: bgTotal,
+          qrData: qrData,
+          serviceName: bgServiceName,
+          discountAmount: bgDiscount,
+          couponCode: bgCoupon,
+          collectionPath: bgCollection,
+        );
+        await ZyiarahMessagingService().notifyNewOrder({
+          'code': code,
+          'client_name': bgClientName,
+          'amount': amountToSave,
+          'service_type': bgServiceName,
+          'client_phone': bgClientPhone,
+          'date_time': bgDateTime,
+          'worker_count': bgWorkerCount,
+          'zone': bgZone,
+          'coupon': bgCoupon,
+        }, customerEmail: bgClientEmail, invoiceUrl: invoiceUrl);
+      } catch (e) {
+        debugPrint('[post-order background: invoice/notify] non-fatal: $e');
+      }
+    });
+
+    // 3. Final Step — شاشة نجاح موحدة لجميع المسارات (فوراً)
     if (mounted) {
       setState(() => _isLoading = false);
       Navigator.of(context).pushAndRemoveUntil(
