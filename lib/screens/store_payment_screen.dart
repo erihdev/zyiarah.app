@@ -159,6 +159,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
   Future<void> _finalizeStorePayment(String method, {required bool isPaid}) async {
     final user = FirebaseAuth.instance.currentUser;
 
+    try {
     // 1) تحديث طلب المتجر القائم
     await FirebaseFirestore.instance
         .collection('store_orders')
@@ -233,6 +234,32 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
       ),
       (route) => route.isFirst,
     );
+    } catch (e) {
+      // الدفع قد يكون تم لكن إنهاء الطلب فشل — لا تُبقِ العميل على دوران أبدي.
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      showDialog(
+        context: context,
+        builder: (ctx) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            title: const Text('تعذّر إتمام الطلب'),
+            content: Text(
+                'إن كنت قد دُفعت فلا تقلق — تواصل مع الدعم مع الرقم المرجعي: '
+                '${widget.orderCode}. لن يُخصم منك مرتين.'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.of(context).popUntil((r) => r.isFirst);
+                },
+                child: const Text('حسناً'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
   }
 
   @override
