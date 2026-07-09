@@ -430,6 +430,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         }
 
       } else if (_selectedPaymentMethod == 'tamara') {
+        // تمارا تتطلّب وجود الطلب مسبقاً كي يجلب الخادم المبلغ الحقيقي (منع التلاعب)
+        // — ننشئه is_paid=false قبل فتح الجلسة، والـ webhook يؤكّده لاحقاً.
+        if (widget.maintenanceId == null && widget.contractId == null) {
+          await _createUnpaidServiceOrder(finalOrderId);
+        }
         String? checkoutUrl = await _tamaraService.createCheckoutSession(
           orderId: finalOrderId,
           amount: totalWithVat,
@@ -601,6 +606,46 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         GlobalErrorHandler.handleError(e);
       }
     }
+  }
+
+  /// ينشئ طلب خدمة (ساعة/كنب) بـ is_paid=false قبل فتح جلسة تمارا — كي يجد
+  /// الخادم المبلغ الحقيقي. لا يُعيّن سائقاً (يتكفّل به sweepUnassignedPaidOrders
+  /// بعد أن يقلب الـ webhook is_paid). checkout_screen يتخطّى الإنشاء إن وُجد.
+  Future<void> _createUnpaidServiceOrder(String id) async {
+    final bool isHourly = widget.hours != null && widget.serviceDate != null;
+    await FirebaseFirestore.instance.runTransaction((transaction) async {
+      final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
+      final code = ZyiarahOrderUtil.formatSmartCode(nextId);
+      transaction.set(FirebaseFirestore.instance.collection('orders').doc(id), {
+        'code': code,
+        'client_id': _currentUser?.uid,
+        'client_name': _currentUser?.name ?? 'عميل زيارة',
+        'client_phone': _phoneController.text.trim(),
+        'user_phone': _phoneController.text.trim(),
+        'client_email': _currentUser?.email,
+        'service_type': widget.serviceName,
+        'service_name': widget.serviceName,
+        'amount': totalWithVat,
+        'is_paid': false,
+        'status': isHourly ? 'pending' : 'pending_admin_approval',
+        'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
+        'payment_method': 'tamara',
+        'created_at': FieldValue.serverTimestamp(),
+        'hours_contracted': widget.hours ?? 4,
+        'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
+        'zone_name': widget.zoneName,
+        'worker_count': widget.workerCount,
+        'coupon_code': _appliedCoupon,
+        'discount_amount': _discountAmount,
+        if (isHourly && widget.serviceDate != null) ...{
+          'booking_date': '${widget.serviceDate!.year}-'
+              '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
+              '${widget.serviceDate!.day.toString().padLeft(2, '0')}',
+          'booking_time_slot':
+              '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00',
+        },
+      });
+    });
   }
 
   /// Unified Success Handler
