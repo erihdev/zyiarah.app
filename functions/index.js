@@ -9,6 +9,9 @@ admin.initializeApp();
 
 // Secrets — stored in Firebase Secret Manager, never in source code
 const tamaraApiToken = defineSecret("TAMARA_API_TOKEN");
+// رمز الإشعارات (Notification Token) — يوقّع به تمارا الـ webhook (JWT/HS256).
+// منفصل عن رمز API؛ يُجلب من لوحة تمارا (API keys) ويُضبط بـ functions:secrets:set.
+const tamaraNotificationToken = defineSecret("TAMARA_NOTIFICATION_TOKEN");
 const resendApiKeySecret = defineSecret("RESEND_API_KEY");
 const moyasarSecretKey = defineSecret("MOYASAR_SECRET_KEY");
 const moyasarWebhookSecret = defineSecret("MOYASAR_WEBHOOK_SECRET");
@@ -201,30 +204,34 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated({document: "orde
       if (beforeData.status === afterData.status) return null;
 
       let targetUserId = null;
-      let title = "تحديث مبدئي للطلب";
-      let body = "حدث تغيير في حالة طلبك للتطبيق.";
+      let title = "تحديث على طلبكِ";
+      let body = "تغيّرت حالة طلبكِ.";
+
+      const rawName = (afterData.client_name || "").trim();
+      const greet = ["", "عميل", "عميلة", "عميل زيارة", "عميلة زيارة"]
+          .includes(rawName) ? "" : `${rawName}، `;
 
       // FIX: field is `client_id` (snake_case) not `clientId`
       if (afterData.status === "accepted") {
         targetUserId = afterData.client_id;
-        title = "تم قبول طلبك! 🚚";
-        body = `السائق ${afterData.assigned_driver || "فريق زيارة"} في الطريق إليك.`;
+        title = "تم قبول طلبكِ 🚚";
+        body = `${greet}فريق زيارة في طريقه إليكِ.`;
       } else if (afterData.status === "arrived") {
         targetUserId = afterData.client_id;
-        title = "وصل السائق! 🏠";
-        body = "السائق متواجد الآن عند موقعك، استعد لاستقباله.";
+        title = "وصل فريقكِ 🏠";
+        body = `${greet}فريق زيارة عند بابكِ الآن — يسعدنا استقبالكِ ✨`;
       } else if (afterData.status === "in_progress") {
         targetUserId = afterData.client_id;
-        title = "بدأ العمل 🛠️";
-        body = "فريق زيارة بدأ في تنفيذ خدمتك.";
+        title = "بدأت خدمتكِ 🧽";
+        body = `${greet}فريق زيارة يعمل الآن على منزلكِ.`;
       } else if (afterData.status === "completed") {
         targetUserId = afterData.client_id;
-        title = "تم الإنجاز! ✨";
-        body = "انتهى العمل بنجاح. شكراً لثقتك بزيارة، ننتظر تقييمك.";
+        title = "اكتملت خدمتكِ ✨";
+        body = `${greet}نتمنّى أن ينال منزلكِ إعجابكِ 🌿 يسعدنا تقييمكِ.`;
       } else if (afterData.status === "cancelled") {
         targetUserId = afterData.client_id;
-        title = "تم إلغاء الطلب ⚠️";
-        body = `تم إلغاء الطلب #${afterData.code || ""}. تواصل معنا لمزيد من التفاصيل.`;
+        title = "تم إلغاء طلبكِ ⚠️";
+        body = `${greet}أُلغي طلبكِ. لأي استفسار نحن بخدمتكِ.`;
       }
 
       if (!targetUserId) return null;
@@ -508,18 +515,18 @@ exports.createTamaraCheckout = onCall(
         throw new HttpsError("invalid-argument", "بيانات الطلب ناقصة");
       }
 
-      // Fetch the true price from Firestore to prevent client-side tampering
+      // Fetch the true price + info from Firestore (prevent client tampering)
       let trueAmount = null;
-
+      let info = {};
       const orderDoc = await admin.firestore().collection("orders").doc(orderId).get();
       if (orderDoc.exists) {
-        const orderData = orderDoc.data();
-        trueAmount = Number(orderData.amount);
+        info = orderDoc.data();
+        trueAmount = Number(info.amount);
       } else {
         const storeOrderDoc = await admin.firestore().collection("store_orders").doc(orderId).get();
         if (storeOrderDoc.exists) {
-          const storeOrderData = storeOrderDoc.data();
-          trueAmount = Number(storeOrderData.total_amount);
+          info = storeOrderDoc.data();
+          trueAmount = Number(info.total_amount);
         }
       }
 
@@ -531,6 +538,13 @@ exports.createTamaraCheckout = onCall(
       const token = tamaraApiToken.value();
       const phone = customerPhone.startsWith("+") ?
         customerPhone : `+966${customerPhone}`;
+      // حقول تمارا الإلزامية: اسم مقسّم + بريد + مدينة + عناصر + عنوان شحن.
+      const parts = String(customerName).trim().split(/\s+/);
+      const firstName = parts[0] || "عميل";
+      const lastName = parts.slice(1).join(" ") || "زيارة";
+      const email = info.client_email || `${orderId}@zyiarah.com`;
+      const city = info.zone_name || "جازان";
+      const money = (a) => ({amount: a, currency: "SAR"});
 
       try {
         const response = await fetch("https://api.tamara.co/checkout", {
@@ -541,18 +555,48 @@ exports.createTamaraCheckout = onCall(
           },
           body: JSON.stringify({
             order_reference_id: orderId,
-            total_amount: {amount, currency: "SAR"},
-            consumer: {first_name: customerName, phone_number: phone},
+            order_number: info.code || orderId,
+            total_amount: money(amount),
+            tax_amount: money(0),
+            shipping_amount: money(0),
+            country_code: "SA",
+            locale: "ar_SA",
+            payment_type: "PAY_BY_INSTALMENTS",
+            instalments: 4,
+            items: [{
+              reference_id: orderId,
+              type: "Service",
+              name: info.service_name || info.service_type || "خدمة زيارة",
+              sku: "ZYIARAH-SERVICE",
+              quantity: 1,
+              unit_price: money(amount),
+              total_amount: money(amount),
+            }],
+            consumer: {
+              first_name: firstName,
+              last_name: lastName,
+              phone_number: phone,
+              email: email,
+            },
+            shipping_address: {
+              first_name: firstName,
+              last_name: lastName,
+              line1: city,
+              city: city,
+              country_code: "SA",
+              phone_number: phone,
+            },
             merchant_url: {
               success: "https://zyiarah.com/payment-success",
               failure: "https://zyiarah.com/payment-failure",
               cancel: "https://zyiarah.com/payment-cancel",
+              notification: "https://tamarawebhook-slpwb4s3aa-uc.a.run.app",
             },
             description: "خدمات منزلية - مؤسسة معاذ يحي محمد المالكي",
           }),
         });
 
-        if (response.status !== 201) {
+        if (!response.ok) {
           const errText = await response.text();
           console.error(`Tamara API error ${response.status}: ${errText}`);
           throw new HttpsError(
@@ -582,10 +626,13 @@ async function notifyClientPaymentResult(col, orderId, data, success) {
     if (!clientUid) return;
 
     const code = data?.code || orderId;
-    const title = success ? "تم تأكيد الدفع ✅" : "تعذّر إتمام الدفع ⚠️";
+    const rawName = (data?.client_name || "").trim();
+    const greet = ["", "عميل", "عميلة", "عميل زيارة", "عميلة زيارة"]
+        .includes(rawName) ? "" : `${rawName}، `;
+    const title = success ? "تم تأكيد دفعتكِ ✅" : "تعذّر إتمام الدفع ⚠️";
     const body = success ?
-      `تم استلام دفعتك للطلب #${code} بنجاح، وسنبدأ بتجهيزه فوراً.` :
-      `لم تكتمل عملية الدفع للطلب #${code}. يمكنك إعادة المحاولة من التطبيق.`;
+      `${greet}استلمنا دفعتكِ بنجاح ونبدأ بتجهيز طلبكِ فوراً 🌿` :
+      `${greet}لم تكتمل عملية الدفع. يمكنكِ إعادة المحاولة من التطبيق.`;
 
     // 1) إشعار داخل التطبيق (سجل)
     await admin.firestore().collection("notifications").add({
@@ -619,76 +666,110 @@ async function notifyClientPaymentResult(col, orderId, data, success) {
   }
 }
 
+// يقلب is_paid على طلب تمارا (idempotent) بالبحث في orders ثم store_orders
+// عبر order_reference_id (= معرّف مستند طلبنا).
+async function _tamaraFlipPaid(db, orderRef, eventType) {
+  for (const col of ["orders", "store_orders"]) {
+    const ref = db.collection(col).doc(orderRef);
+    let data = null;
+    const flipped = await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (!snap.exists) return null;
+      data = snap.data();
+      if (data.is_paid) return false; // سبق تأكيده
+      t.update(ref, {
+        payment_status: "paid",
+        is_paid: true,
+        tamara_status: eventType,
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return true;
+    });
+    if (flipped === null) continue;
+    if (flipped) {
+      console.log(`tamaraWebhook: ${col}/${orderRef} marked PAID (${eventType})`);
+      await notifyClientPaymentResult(col, orderRef, data, true);
+    }
+    break;
+  }
+}
+
 exports.tamaraWebhook = onRequest(
-    {secrets: ["TAMARA_API_TOKEN"], cpu: 0.083},
+    {secrets: ["TAMARA_API_TOKEN", "TAMARA_NOTIFICATION_TOKEN"], cpu: 0.083},
     async (req, res) => {
-      // Verify Tamara signature to prevent spoofed payment events
-      const signature = req.headers["tamara-signature"] || req.headers["x-tamara-signature"];
-      if (!signature) {
-        console.warn("Tamara webhook rejected: missing signature header");
+      // (تمارا) التحقق الصحيح: الإشعار يصل كـ JWT (HS256) موقّع بـ Notification
+      // Token، في ترويسة Authorization: Bearer <jwt> أو كمعامل ?tamaraToken=.
+      // (ليس HMAC للجسم ولا ترويسة tamara-signature).
+      const jwt = require("jsonwebtoken");
+      const authHeader = String(req.headers["authorization"] || "");
+      const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+      const rawToken = bearer || req.query.tamaraToken;
+      if (!rawToken) {
+        console.warn("tamaraWebhook: missing tamaraToken");
         res.status(401).send("Unauthorized");
         return;
       }
-
-      const crypto = require("crypto");
-      const secret = tamaraApiToken.value();
-      const rawBody = JSON.stringify(req.body);
-      const expectedSig = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
-
-      const sigBuf = Buffer.from(String(signature));
-      const expBuf = Buffer.from(expectedSig);
-      if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
-        console.warn("Tamara webhook rejected: invalid signature");
-        res.status(401).send("Invalid signature");
+      let payload;
+      try {
+        payload = jwt.verify(String(rawToken), tamaraNotificationToken.value(),
+            {algorithms: ["HS256"]});
+      } catch (e) {
+        console.warn("tamaraWebhook: invalid token —", e.message);
+        res.status(401).send("Invalid token");
         return;
       }
 
-      const notification = req.body;
-      console.log("Verified Tamara Webhook:", JSON.stringify(notification));
+      // بيانات الحدث قد تكون داخل الـ JWT أو في جسم الطلب — نقبل الاثنين (الـ JWT
+      // المُتحقَّق يضمن الأصالة في الحالتين).
+      const body = req.body || {};
+      const tamaraOrderId = payload.order_id || body.order_id; // معرّف تمارا (للتفويض)
+      const orderRef = payload.order_reference_id || body.order_reference_id; // معرّف طلبنا
+      const eventType = payload.event_type || body.event_type;
+      console.log(`tamaraWebhook: event=${eventType} ref=${orderRef} tamaraId=${tamaraOrderId}`);
+      if (!orderRef) {
+        res.status(200).send("OK");
+        return;
+      }
 
-      const {order_id: orderId, status} = notification;
-
-      if (status === "authorised" || status === "captured") {
-        try {
-          // فحص + تحديث داخل Transaction (idempotent) لمنع تكرار المعالجة/الإشعار
-          const ref = admin.firestore().collection("orders").doc(orderId);
-          let orderData = null;
-          const flipped = await admin.firestore().runTransaction(async (tx) => {
-            const snap = await tx.get(ref);
-            if (!snap.exists) return false;
-            orderData = snap.data();
-            if (orderData.is_paid) return false; // سبق معالجته
-            // FIX: تحديث حقول الدفع فقط — الطلب يبقى 'pending' حتى يقبله سائق
-            tx.update(ref, {
-              payment_status: "paid",
-              is_paid: true,
-              tamara_status: status,
-              updated_at: admin.firestore.FieldValue.serverTimestamp(),
-            });
-            return true;
-          });
-          if (flipped) {
-            console.log(`Order ${orderId} marked as PAID via Tamara Webhook`);
-            await notifyClientPaymentResult("orders", orderId, orderData, true); // (F2)
+      const db = admin.firestore();
+      try {
+        if (eventType === "order_approved") {
+          // إلزامي: نقل approved→authorised عبر Authorize API، وإلا يبقى الطلب
+          // معلّقاً ولا يدخل دورة التسوية (لا نُقبض).
+          const authRes = await fetch(
+              `https://api.tamara.co/orders/${tamaraOrderId}/authorise`,
+              {method: "POST", headers: {
+                "Authorization": `Bearer ${tamaraApiToken.value()}`,
+                "Content-Type": "application/json",
+              }});
+          if (!authRes.ok) {
+            console.error(`tamaraWebhook: authorise failed ${authRes.status}: ${await authRes.text()}`);
+          } else {
+            console.log(`tamaraWebhook: order ${tamaraOrderId} authorised`);
+            await _tamaraFlipPaid(db, orderRef, eventType);
           }
-        } catch (error) {
-          console.error("Error updating order from Tamara webhook:", error);
-        }
-      } else if (status === "declined" || status === "expired") {
-        try {
-          const ref = admin.firestore().collection("orders").doc(orderId);
-          const doc = await ref.get();
-          if (doc.exists && !doc.data().is_paid) {
-            await ref.update({
-              payment_status: "failed",
-              tamara_status: status,
-              updated_at: admin.firestore.FieldValue.serverTimestamp(),
-            });
-            await notifyClientPaymentResult("orders", orderId, doc.data(), false); // (F2)
+        } else if (eventType === "order_authorised" || eventType === "order_captured") {
+          await _tamaraFlipPaid(db, orderRef, eventType);
+        } else if (eventType === "order_declined" ||
+                   eventType === "order_expired" || eventType === "order_canceled") {
+          for (const col of ["orders", "store_orders"]) {
+            const ref = db.collection(col).doc(orderRef);
+            const doc = await ref.get();
+            if (doc.exists) {
+              if (!doc.data().is_paid) {
+                await ref.update({
+                  payment_status: "failed",
+                  tamara_status: eventType,
+                  updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                await notifyClientPaymentResult(col, orderRef, doc.data(), false);
+              }
+              break;
+            }
           }
-        } catch (error) {
-          console.error("Error updating failed Tamara order:", error);
         }
+      } catch (error) {
+        console.error("tamaraWebhook processing error:", error);
       }
       res.status(200).send("OK");
     });
@@ -1258,16 +1339,39 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
   const uid = request.auth.uid;
   const amount = Number(request.data && request.data.amount);
   const note = (request.data && request.data.description) || "دفع خدمة من المحفظة";
+  // orderId اختياري (توافق رجعي). عند تمريره، خصم الرصيد وقلب is_paid على الطلب
+  // يحدثان ذرّياً، فلا يمكن تزوير is_paid من العميل لمدفوعات المحفظة.
+  const orderId = request.data && request.data.orderId;
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new HttpsError("invalid-argument", "المبلغ غير صالح");
   }
 
   const db = admin.firestore();
   const walletRef = db.collection("wallets").doc(uid);
-  const txRef = walletRef.collection("transactions").doc();
+  const txRef = orderId ?
+    walletRef.collection("transactions").doc(`wallet_pay_${orderId}`) :
+    walletRef.collection("transactions").doc();
+  const orderRef = orderId ? db.collection("orders").doc(orderId) : null;
 
   const result = await db.runTransaction(async (t) => {
     const wSnap = await t.get(walletRef);
+    if (orderRef) {
+      const oSnap = await t.get(orderRef);
+      if (!oSnap.exists) {
+        throw new HttpsError("not-found", "الطلب غير موجود");
+      }
+      if (oSnap.get("client_id") !== uid) {
+        throw new HttpsError("permission-denied", "لا يمكن الدفع لطلب مستخدم آخر");
+      }
+      if (oSnap.get("is_paid") === true) {
+        const bal = wSnap.exists ? Number(wSnap.data().balance || 0) : 0;
+        return {success: true, newBalance: bal, alreadyPaid: true};
+      }
+      const trueAmount = Number(oSnap.get("amount") || 0);
+      if (trueAmount > 0 && Math.abs(trueAmount - amount) > 0.01) {
+        throw new HttpsError("failed-precondition", "المبلغ لا يطابق مبلغ الطلب");
+      }
+    }
     const balance = wSnap.exists ? Number(wSnap.data().balance || 0) : 0;
     if (balance < amount) {
       throw new HttpsError("failed-precondition", "الرصيد غير كافٍ");
@@ -1279,8 +1383,18 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
     t.set(txRef, {
       amount: -amount, points: 0, type: "payment",
       description: note,
+      ...(orderId ? {order_id: orderId} : {}),
       created_at: admin.firestore.FieldValue.serverTimestamp(),
     });
+    if (orderRef) {
+      t.update(orderRef, {
+        is_paid: true,
+        payment_status: "paid",
+        payment_method: "wallet",
+        paid_at: admin.firestore.FieldValue.serverTimestamp(),
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
     return {success: true, newBalance: balance - amount};
   });
 
@@ -1311,7 +1425,8 @@ exports.verifyMoyasarPayment = onCall(
         orderRef = admin.firestore().collection("store_orders").doc(orderId);
         orderDoc = await orderRef.get();
         if (orderDoc.exists) {
-          trueAmount = Number(orderDoc.data().total_amount);
+          // final_amount = السعر النهائي بعد تعديل الإدارة (قد يختلف عن السلة).
+          trueAmount = Number(orderDoc.data().final_amount ?? orderDoc.data().total_amount);
         } else {
           orderRef = admin.firestore().collection("maintenance_requests").doc(orderId);
           orderDoc = await orderRef.get();
@@ -1329,6 +1444,16 @@ exports.verifyMoyasarPayment = onCall(
 
       if (trueAmount === null || isNaN(trueAmount) || trueAmount <= 0) {
         throw new HttpsError("not-found", "لم يتم العثور على الطلب في السيرفر أو أن المبلغ غير صالح");
+      }
+
+      // الملكية: مالك الطلب فقط يؤكّد دفعه.
+      const owner = orderDoc.data().client_id || orderDoc.data().userId;
+      if (owner && owner !== request.auth.uid) {
+        throw new HttpsError("permission-denied", "لا يمكن تأكيد دفع طلب مستخدم آخر");
+      }
+      // idempotent: مؤكَّد سلفاً → تخطَّ نداء البوابة.
+      if (orderDoc.data().is_paid === true) {
+        return {success: true, alreadyPaid: true};
       }
 
       const trueAmountHalalas = Math.round(trueAmount * 100);
@@ -1725,7 +1850,15 @@ async function _findFreeDriverForSlot(db, {zoneName, startDateTime, endDateTime}
   }
 
   for (const doc of eligible) {
-    if (!busy.has(doc.id)) return doc;
+    if (busy.has(doc.id)) continue;
+    // (H3) تأكّد أن معرّف مستند السائق حساب حقيقي (users/{id} بدور driver).
+    // مستند drivers قد يكون مسودّة id ليست uid → إسناده يترك الطلب عالقاً بلا
+    // من يراه (تطبيق السائق والقواعد يعتمدان على auth.uid == driver_id).
+    const userSnap = await db.collection("users").doc(doc.id).get();
+    const role = userSnap.exists ?
+      (userSnap.data().staff_role || userSnap.data().role) : null;
+    if (role !== "driver") continue;
+    return doc;
   }
   return null;
 }
@@ -1780,6 +1913,9 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
     status: "scheduled",
     driver_id: driverDoc.id,
     driver_name: d.name || "سائق",
+    // assigned_driver: شاشات تتبّع العميل تقرأ هذا الحقل — لولاه تُظهر «جاري
+    // تعيين سائق» للأبد رغم إسناد السائق.
+    assigned_driver: d.name || "سائق",
     driver_phone: d.phone || "000000000",
     assigned_at: admin.firestore.FieldValue.serverTimestamp(),
     scheduled_at: admin.firestore.Timestamp.fromDate(startDateTime),
@@ -2078,6 +2214,209 @@ exports.remindDriversUpcomingTasks = onSchedule(
 );
 
 // ════════════════════════════════════════════════════════════════════════
+// (2c) تذكير العميل بموعده المجدول — Cron كل 30 دقيقة.
+// تذكيران: مبكّر (خلال 24 ساعة قبل الموعد) + قريب (خلال ~ساعتين). حقول علم
+// منفصلة عن تذكير السائق (reminder_sent) لتجنّب التعارض. التوقيت يُعرض من
+// booking_time_slot/booking_date المحليّين لتفادي انزياح المنطقة الزمنية.
+// ════════════════════════════════════════════════════════════════════════
+const _pad2 = (n) => String(n).padStart(2, "0");
+// إزاحة +3 ساعات ثم قراءة مكوّنات UTC = توقيت الرياض المحلي.
+const _riyadhLocalDate = (ms) => {
+  const r = new Date(ms + 3 * 60 * 60 * 1000);
+  return `${r.getUTCFullYear()}-${_pad2(r.getUTCMonth() + 1)}-${_pad2(r.getUTCDate())}`;
+};
+
+exports.remindClientsUpcomingAppointments = onSchedule(
+    {schedule: "every 30 minutes", timeZone: "Asia/Riyadh"},
+    async () => {
+      const db = admin.firestore();
+      const now = Date.now();
+      const in24h = new Date(now + 24 * 60 * 60 * 1000);
+      // نطاق مفرد على service_date (مُفهرَس تلقائياً) — الحالة تُصفّى في الكود.
+      const snap = await db.collection("orders")
+          .where("service_date", ">=", admin.firestore.Timestamp.fromDate(new Date(now)))
+          .where("service_date", "<=", admin.firestore.Timestamp.fromDate(in24h))
+          .get();
+
+      const ACTIVE = ["pending", "scheduled", "assigned", "accepted"];
+      let sent = 0;
+      for (const doc of snap.docs) {
+        const d = doc.data();
+        // موعد حقيقي يستحق التذكير: مدفوع مسبقاً، أو دفع عند الاستلام، أو مُسنَد
+        // لسائق. نستثني فقط المعلّق غير المدفوع (محاولة دفع فاشلة/مهجورة).
+        const driverAssigned = d.status === "scheduled" ||
+          d.status === "assigned" || d.status === "accepted";
+        const realAppointment = d.is_paid === true ||
+          d.payment_method === "cash_on_delivery" || driverAssigned;
+        if (!d.client_id || !d.service_date || !realAppointment) continue;
+        if (!ACTIVE.includes(d.status)) continue;
+
+        const apptMs = d.service_date.toMillis();
+        const hoursUntil = (apptMs - now) / (60 * 60 * 1000);
+        const serviceName = d.service_name || d.service_type || "خدمتك";
+        // مناداة العميلة باسمها المسجّل (إن لم يكن اسماً افتراضياً).
+        const rawName = (d.client_name || "").trim();
+        const greet = ["", "عميل", "عميلة", "عميل زيارة", "عميلة زيارة"]
+            .includes(rawName) ? "" : `${rawName}، `;
+        const timeStr = d.booking_time_slot ||
+          `${_pad2(new Date(apptMs + 3 * 60 * 60 * 1000).getUTCHours())}:00`;
+
+        // وسم اليوم (اليوم/غداً/بعد N أيام) بالتقويم المحلي.
+        const apptDateStr = d.booking_date || _riyadhLocalDate(apptMs);
+        const dDiff = Math.round(
+            (new Date(`${apptDateStr}T00:00:00Z`).getTime() -
+             new Date(`${_riyadhLocalDate(now)}T00:00:00Z`).getTime()) / 86400000);
+        const dayLabel = dDiff <= 0 ? "اليوم" : dDiff === 1 ? "غداً" : `بعد ${dDiff} أيام`;
+
+        if (hoursUntil > 2.5 && d.client_reminder_24h_sent !== true) {
+          await _pushToUid(
+              d.client_id,
+              "موعد زيارتكِ اقترب 🏡",
+              `${greet}موعد «${serviceName}» ${dayLabel} الساعة ${timeStr}. بانتظاركِ 🌿`,
+              {type: "appointment_reminder", orderId: doc.id},
+          );
+          await doc.ref.update({client_reminder_24h_sent: true});
+          sent++;
+        } else if (hoursUntil > 0 && hoursUntil <= 2.5 &&
+                   d.client_reminder_soon_sent !== true) {
+          await _pushToUid(
+              d.client_id,
+              "اقترب موعد زيارتكِ ⏰",
+              `${greet}«${serviceName}» بعد ساعتين (الساعة ${timeStr}). فريقنا في الطريق إليكِ 🚗`,
+              {type: "appointment_reminder", orderId: doc.id},
+          );
+          await doc.ref.update({client_reminder_soon_sent: true});
+          sent++;
+        }
+      }
+      console.log(`remindClientsUpcomingAppointments: sent ${sent} reminder(s)`);
+    },
+);
+
+// ════════════════════════════════════════════════════════════════════════
+// احتياطي خادمي: إسناد الطلبات المدفوعة المعلّقة بلا سائق — Cron كل 15 دقيقة.
+// التعيين الأساسي يتم في التطبيق كمهمة خلفية؛ لو أُغلق التطبيق بعد الدفع قد
+// يبقى الطلب pending بلا سائق. هذا المسح يضمن إسناده خادمياً.
+// ════════════════════════════════════════════════════════════════════════
+exports.sweepUnassignedPaidOrders = onSchedule(
+    {schedule: "every 15 minutes", timeZone: "Asia/Riyadh"},
+    async () => {
+      const db = admin.firestore();
+      const now = Date.now();
+      // status=pending (مساواة) + service_date نطاق → يغطيه فهرس (status,service_date).
+      const snap = await db.collection("orders")
+          .where("status", "==", "pending")
+          .where("service_date", ">=",
+              admin.firestore.Timestamp.fromDate(new Date(now - 60 * 60 * 1000)))
+          .get();
+
+      let assigned = 0;
+      for (const doc of snap.docs) {
+        const d = doc.data();
+        // فقط الطلبات المدفوعة، بلا سائق، وذات موعد.
+        if (d.driver_id || d.is_paid !== true || !d.service_date) continue;
+        const start = d.service_date.toDate();
+        const hours = Number(d.hours_contracted || 4);
+        const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
+        try {
+          const driver = await _findFreeDriverForSlot(db, {
+            zoneName: d.zone_name || null,
+            startDateTime: start,
+            endDateTime: end,
+          });
+          if (driver) {
+            await _assignDriverScheduled(db, doc.id, driver, start);
+            assigned++;
+            console.log(`sweepUnassignedPaidOrders: assigned ${doc.id} -> ${driver.id}`);
+          }
+        } catch (e) {
+          console.error(`sweepUnassignedPaidOrders: ${doc.id} failed:`, e.message);
+        }
+      }
+      console.log(`sweepUnassignedPaidOrders: assigned ${assigned} order(s)`);
+    },
+);
+
+// ════════════════════════════════════════════════════════════════════════
+// احتياطي تمارا: تأكيد الطلبات غير المؤكّدة عبر واجهة تمارا مباشرةً — Cron كل
+// 3 دقائق. يعوّض حجب الويب هوك (Cloud Run invoker): يستعلم حالة الطلب، يفوّض
+// approved (فيلتقطها الحساب تلقائياً)، ويقلب is_paid. لا يعتمد على وصول الويب هوك.
+// ════════════════════════════════════════════════════════════════════════
+exports.confirmPendingTamaraOrders = onSchedule(
+    {schedule: "every 3 minutes", secrets: ["TAMARA_API_TOKEN"], cpu: 0.083},
+    async () => {
+      const db = admin.firestore();
+      const since = admin.firestore.Timestamp.fromDate(
+          new Date(Date.now() - 6 * 60 * 60 * 1000));
+      const snap = await db.collection("orders")
+          .where("payment_method", "==", "tamara")
+          .where("created_at", ">=", since)
+          .get();
+      const apiToken = tamaraApiToken.value();
+      let confirmed = 0;
+      for (const doc of snap.docs) {
+        const d = doc.data();
+        if (d.is_paid === true) continue;
+        if (["order_declined", "order_expired", "order_canceled"]
+            .includes(d.tamara_status)) continue;
+        try {
+          const r = await fetch(
+              `https://api.tamara.co/merchants/orders/reference-id/${doc.id}`,
+              {headers: {Authorization: `Bearer ${apiToken}`}});
+          if (!r.ok) continue;
+          const to = await r.json();
+          const st = to.status;
+          let justConfirmed = false;
+          if (st === "approved") {
+            const a = await fetch(
+                `https://api.tamara.co/orders/${to.order_id}/authorise`,
+                {method: "POST", headers: {
+                  Authorization: `Bearer ${apiToken}`,
+                  "Content-Type": "application/json",
+                }});
+            if (a.ok) {
+              await _tamaraFlipPaid(db, doc.id, "order_authorised");
+              justConfirmed = true;
+            }
+          } else if (["authorised", "captured", "fully_captured",
+            "partially_captured"].includes(st)) {
+            await _tamaraFlipPaid(db, doc.id, "order_" + st);
+            justConfirmed = true;
+          } else if (["declined", "expired", "canceled"].includes(st)) {
+            await doc.ref.update({
+              payment_status: "failed",
+              tamara_status: "order_" + st,
+              updated_at: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          }
+          if (justConfirmed) {
+            confirmed++;
+            // إسناد فوري للساعة بعد التأكيد (بدل انتظار الـ sweep 15 دقيقة).
+            if (d.service_date && !d.driver_id && d.status === "pending") {
+              try {
+                const start = d.service_date.toDate();
+                const hours = Number(d.hours_contracted || 4);
+                const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
+                const driver = await _findFreeDriverForSlot(db, {
+                  zoneName: d.zone_name || null,
+                  startDateTime: start,
+                  endDateTime: end,
+                });
+                if (driver) await _assignDriverScheduled(db, doc.id, driver, start);
+              } catch (e) {
+                console.error(`confirmPendingTamaraOrders assign ${doc.id}:`, e.message);
+              }
+            }
+          }
+        } catch (e) {
+          console.error(`confirmPendingTamaraOrders ${doc.id}:`, e.message);
+        }
+      }
+      console.log(`confirmPendingTamaraOrders: confirmed ${confirmed}`);
+    },
+);
+
+// ════════════════════════════════════════════════════════════════════════
 // (2c) تذكير العميل عند انطلاق السائق (on_the_way) — Event-driven
 // ════════════════════════════════════════════════════════════════════════
 exports.notifyClientOnDriverDeparture = onDocumentUpdated(
@@ -2089,15 +2428,60 @@ exports.notifyClientOnDriverDeparture = onDocumentUpdated(
       // فقط عند الانتقال الفعلي إلى on_the_way
       if (before.status === "on_the_way" || after.status !== "on_the_way") return;
 
-      const code = after.code || event.params.orderId;
+      const rawName = (after.client_name || "").trim();
+      const greet = ["", "عميل", "عميلة", "عميل زيارة", "عميلة زيارة"]
+          .includes(rawName) ? "" : `${rawName}، `;
       await _pushToUid(
           after.client_id,
-          "سائقك في الطريق إليك 🚗",
-          `انطلق السائق لتنفيذ طلبك (#${code}) — يرجى الاستعداد لاستقباله.`,
+          "سائقكِ في الطريق إليكِ 🚗",
+          `${greet}انطلق فريق زيارة لتنفيذ خدمتكِ — يسعدنا استقبالكِ ✨`,
           {type: "order_update", orderId: event.params.orderId},
       );
     },
 );
+
+// ════════════════════════════════════════════════════════════════════════
+// نظام الإحالة — ربط الإحالة خادمياً (العميل يرسل الكود فقط، والخادم يتحقّق
+// ويحدّد referrer_id — كي لا يمنح العميل مكافأة إحالة لأي شخص بضبط الحقل يدوياً).
+// ════════════════════════════════════════════════════════════════════════
+exports.applyReferralCode = onCall({cpu: 0.25}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
+  }
+  const uid = request.auth.uid;
+  const code = String(request.data && request.data.code || "").trim().toUpperCase();
+  if (!code) throw new HttpsError("invalid-argument", "كود الإحالة مطلوب");
+  const db = admin.firestore();
+
+  // (1) استخراج المُحيل من الكود خادمياً — لا يثق بأي referrer_id من العميل.
+  const rq = await db.collection("users")
+      .where("referral_code", "==", code).limit(1).get();
+  if (rq.empty) return {ok: false, reason: "not_found"};
+  const referrerDoc = rq.docs[0];
+  const referrerId = referrerDoc.id;
+  if (referrerId === uid) return {ok: false, reason: "self"};
+
+  // (2) كل مستخدم يُحال مرّة واحدة — المعرّف الحتمي = uid المُحال إليه.
+  const refRef = db.collection("referrals").doc(uid);
+  const created = await db.runTransaction(async (t) => {
+    const existing = await t.get(refRef);
+    if (existing.exists) return false;
+    t.set(refRef, {
+      referrer_id: referrerId,
+      referrer_name: referrerDoc.data().name || "",
+      referee_id: uid,
+      referral_code: code,
+      status: "pending",
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      rewarded_at: null,
+      rewarded_on_order: null,
+    });
+    t.set(db.collection("users").doc(uid),
+        {used_referral_code: code, referred_by: referrerId}, {merge: true});
+    return true;
+  });
+  return {ok: created, reason: created ? null : "already"};
+});
 
 // 10. Auto Assign Driver Directly (No acceptance required)
 exports.autoAssignDriverDirectly = onCall({cpu: 0.25}, async (request) => {
@@ -2374,11 +2758,27 @@ exports.moyasarWebhook = onRequest(
             {col: "contracts", amountField: "planPrice"},
           ];
 
-          for (const {col} of collections) {
+          for (const {col, amountField} of collections) {
             const ref = admin.firestore().collection(col).doc(orderId);
             const doc = await ref.get();
             if (doc.exists) {
               const data = doc.data();
+              // (أمان C1) تحقّق أن المبلغ المدفوع فعلاً = مبلغ الطلب قبل تأكيده.
+              // يمنع دفع مبلغ صغير (بمفتاح النشر) وربطه بطلب كبير لتأكيده مجاناً.
+              // نُفضّل final_amount (السعر النهائي الذي قد تعدّله الإدارة لطلب متجر)
+              // على المبلغ الأساسي — وإلا رُفضت دفعة حقيقية عند تعديل السعر.
+              const expectedHalalas = Math.round(
+                  Number(data.final_amount ?? data[amountField] ?? 0) * 100);
+              if (expectedHalalas <= 0 || verifiedPayment.amount !== expectedHalalas) {
+                console.error(
+                    `moyasarWebhook: AMOUNT MISMATCH order ${orderId} in '${col}' — ` +
+                    `paid ${verifiedPayment.amount} halalas, expected ${expectedHalalas}. NOT confirming.`);
+                await ref.update({
+                  payment_amount_mismatch: true,
+                  updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                }).catch(() => {});
+                break;
+              }
               if (data.is_paid) {
                 console.log(`moyasarWebhook: Order ${orderId} already paid — skipping (idempotent)`);
               } else {

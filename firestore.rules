@@ -146,11 +146,20 @@ service cloud.firestore {
       );
 
       // SECURITY: client_id must match caller; initial status limited to safe entry states.
-      // المسار الأول (تلقائي): pending/awaiting_payment — المسار الثاني (موافقة الإدارة): pending_admin_approval
+      // ⚠️ المرحلة C من ترحيل الدفع: العميل لا ينشئ طلباً مدفوعاً (is_paid=true) ولا يكتب
+      // أي حقل ثقة خادمي عند الإنشاء — is_paid يقلبه الخادم فقط (verifyMoyasarPayment /
+      // payWithWallet / webhooks). يُغلق سكّ المحفظة. **لا تُنشَر إلا بعد انتشار التطبيق
+      // الجديد (ينشئ is_paid=false) وفرض الحد الأدنى للإصدار** — وإلا تنكسر مدفوعات النسخ
+      // القديمة. (STAGE-C — DO NOT DEPLOY UNTIL THE NEW APP IS THE MINIMUM VERSION.)
       allow create: if isLoggedIn() &&
         request.resource.data.client_id == request.auth.uid &&
         request.resource.data.get('status', 'pending') in
-          ['pending', 'awaiting_payment', 'pending_admin_approval'];
+          ['pending', 'awaiting_payment', 'pending_admin_approval'] &&
+        request.resource.data.get('is_paid', false) == false &&
+        !request.resource.data.keys().hasAny([
+          'needs_refund', 'refund_credited', 'rewards_handled_by',
+          'qatrat_granted', 'visit_counted', 'coupon_counted', 'paid_confirmed',
+        ]);
 
       // Orders manager: full update (approve, assign driver -> scheduled, override status)
       allow update: if isOrdersManager();
@@ -167,7 +176,7 @@ service cloud.firestore {
           'driver_location', 'last_location_update', 'updated_at',
           'is_paid', 'paid_at', 'cash_collected_by', 'cash_confirmed',
           'cash_confirmed_at', 'payment_pin', 'payment_pin_generated_at',
-          'rewards_handled_by'
+          'rewards_handled_by', 'proximity_notified'
         ]);
 
       // Client: cancel own pending order, update invoice URL, or submit rating
@@ -336,7 +345,9 @@ service cloud.firestore {
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(
            ['payment_method', 'is_paid', 'payment_status', 'status',
             'paid_at', 'invoice_pdf_url']) &&
-         request.resource.data.status == 'processing');
+         request.resource.data.status == 'processing' &&
+         // العميل لا يؤكّد الدفع بنفسه — is_paid يقلبه الـ webhook خادمياً.
+         request.resource.data.is_paid == false);
       allow delete: if isOrdersManager();
     }
 
@@ -391,6 +402,18 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead'])) ||
          isAdmin());
       allow create, delete: if isAdmin();
+    }
+
+    // ─── Referrals — تُدار خادمياً (applyReferralCode CF + onOrderRewards).
+    // العميل يقرأ إحالته فقط؛ الكتابة من العميل ممنوعة كي لا يزوّر المُحيل
+    // (referrer_id) فيمنح مكافأة إحالة لأي شخص.
+    match /referrals/{refId} {
+      allow read: if isLoggedIn() &&
+        (request.auth.uid == refId ||
+         request.auth.uid == resource.data.referee_id ||
+         request.auth.uid == resource.data.referrer_id ||
+         isAdmin());
+      allow write: if false; // خادمي فقط (Admin SDK يتجاوز القواعد)
     }
   }
 }

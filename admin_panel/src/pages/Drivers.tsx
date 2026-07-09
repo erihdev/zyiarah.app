@@ -66,7 +66,7 @@ export default function Drivers() {
                 const data = d.data();
                 if (data.is_available) available++;
                 return { id: d.id, name: data.name || 'غير محدد', phone: data.phone || 'غير محدد', vehicle: data.vehicle || 'غير محدد', is_available: data.is_available || false, is_suspended: data.is_suspended || false, is_active: data.is_active !== false, rating: data.rating || 5.0, rides: data.rides || 0, monthly_salary: data.monthly_salary || 0, photo_url: data.photo_url || '', ...data } as DriverData;
-            });
+            }, (e: unknown) => { console.error("Drivers listener error:", e); });
             setDrivers(fetched);
             setIsAvailableCount(available);
         });

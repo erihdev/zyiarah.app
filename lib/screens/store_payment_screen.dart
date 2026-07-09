@@ -80,9 +80,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
 
     setState(() => _isLoading = true);
     try {
-      if (_selectedMethod == 'cod') {
-        await _finalizeStorePayment('cash_on_delivery', isPaid: false);
-      } else if (_selectedMethod == 'card') {
+      if (_selectedMethod == 'card') {
         setState(() => _isLoading = false);
         if (!mounted) return;
         await Navigator.push(
@@ -94,7 +92,9 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
               orderId: widget.storeOrderId,
               onSuccess: (paymentId) async {
                 setState(() => _isLoading = true);
-                await _finalizeStorePayment('card', isPaid: true);
+                // is_paid=false — يؤكّده moyasarWebhook خادمياً بعد فحص المبلغ
+                // (لا يكتبه العميل). يوافق نمط ترحيل الدفع في /orders.
+                await _finalizeStorePayment('card', isPaid: false);
               },
               onFailure: (error) {
                 if (mounted) {
@@ -144,7 +144,8 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
         );
         if (paid == true) {
           setState(() => _isLoading = true);
-          await _finalizeStorePayment('tamara', isPaid: true);
+          // is_paid=false — يؤكّده tamaraWebhook خادمياً (لا يكتبه العميل).
+          await _finalizeStorePayment('tamara', isPaid: false);
         }
       }
     } catch (e) {
@@ -182,7 +183,9 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
         'service_type': 'توصيل طلب متجر',
         'service_name': 'توصيل منتجات المتجر',
         'amount': widget.total,
-        'is_paid': isPaid,
+        // طلب التوصيل يُنشأ is_paid=false (حالة الدفع الحقيقية على store_orders) — يوافق
+        // قاعدة Stage-C (العميل لا يكتب is_paid=true على orders).
+        'is_paid': false,
         'payment_method': method,
         'status': 'pending_admin_approval',
         'source_collection': 'store_orders',
@@ -307,14 +310,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
                       color: const Color(0xFFE5A170),
                     ),
                   ],
-                  const SizedBox(height: 12),
-                  _buildOption(
-                    id: 'cod',
-                    title: 'الدفع عند الاستلام',
-                    subtitle: 'ادفع نقداً أو شبكة عند استلام المنتجات',
-                    icon: Icons.money,
-                    color: Colors.green,
-                  ),
+                  // خيار «الدفع عند الاستلام» أُزيل بطلب الإدارة (الدفع مقدَّماً فقط).
                   const SizedBox(height: 20),
                   _buildTerms(),
                   const SizedBox(height: 100),

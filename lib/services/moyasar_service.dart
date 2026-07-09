@@ -4,6 +4,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:zyiarah/utils/moyasar_util.dart';
 
 /// Moyasar payment gateway service.
 /// - Credit Card / Apple Pay / STC Pay → handled by Moyasar Flutter SDK (no code here)
@@ -45,7 +46,8 @@ class MoyasarService {
         'amount': amountHalala,
         'currency': 'SAR',
         'description': description,
-        'given_id': orderId, // idempotency — prevents duplicate charges on retry
+        // Moyasar تشترط UUID صالحاً — نشتقّه ثابتاً من معرّف الطلب (منع الشحن المزدوج).
+        'given_id': MoyasarUtil.givenIdFromOrder(orderId),
         'metadata': {'order_id': orderId},
         'source': {
           'type': 'googlepay',

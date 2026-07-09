@@ -48,7 +48,7 @@ export default function Support() {
         const q = query(collection(db, 'tickets', selected.id, 'messages'), orderBy('created_at', 'asc'));
         const unsub = onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
             setMessages(snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as SupportMessage)));
-        });
+        }, (e) => { console.error("Support listener error:", e); setLoading(false); });
         return () => unsub();
     }, [selected?.id]);
 

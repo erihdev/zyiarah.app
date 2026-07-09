@@ -135,8 +135,22 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                 } else {
                   final bool isHourly = widget.hours != null && widget.serviceDate != null;
 
-                  // Atomic: increment counter + create Tamara order in one Transaction
                   String tamaraOrderCode = '';
+                  // الطلب أُنشئ مسبقاً (is_paid=false) قبل جلسة تمارا؛ إن وُجد نتخطّى
+                  // الإنشاء والإسناد — يتكفّل sweepUnassignedPaidOrders بالإسناد بعد
+                  // أن يقلب tamaraWebhook is_paid=true.
+                  final existingOrder = await FirebaseFirestore.instance
+                      .collection('orders').doc(widget.orderId).get();
+                  if (existingOrder.exists) {
+                    tamaraOrderCode = existingOrder.data()?['code'] ?? widget.orderId;
+                    await ZyiarahMessagingService().notifyOrderCreated(
+                      clientId: user?.uid ?? '',
+                      orderCode: tamaraOrderCode,
+                      type: 'cleaning',
+                      serviceName: widget.serviceType,
+                      orderId: widget.orderId,
+                    );
+                  } else {
                   await FirebaseFirestore.instance.runTransaction((transaction) async {
                     final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
                     tamaraOrderCode = ZyiarahOrderUtil.formatSmartCode(nextId);
@@ -151,7 +165,8 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                         'service_type': widget.serviceType,
                         'service_name': widget.serviceType,
                         'amount': widget.amount,
-                        'is_paid': true,
+                        // is_paid يقلبه tamaraWebhook خادمياً — يوافق قاعدة Stage-C.
+                        'is_paid': false,
                         'status': 'pending',
                         'location': widget.location,
                         'payment_method': 'tamara',
@@ -186,6 +201,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                         orderCode: tamaraOrderCode,
                         type: 'cleaning',
                         serviceName: widget.serviceType,
+                        orderId: widget.orderId,
                       );
                     } else {
                       // في حالة تعذر التعيين المباشر، لا نلغي الطلب المدفوع بتمارا! بل يبقى pending للتوزيع اليدوي ونرسل الإشعار الافتراضي
@@ -194,6 +210,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                         orderCode: tamaraOrderCode,
                         type: 'cleaning',
                         serviceName: widget.serviceType,
+                        orderId: widget.orderId,
                       );
                     }
                   } else {
@@ -202,8 +219,10 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                       orderCode: tamaraOrderCode,
                       type: 'cleaning',
                       serviceName: widget.serviceType,
+                      orderId: widget.orderId,
                     );
                   }
+                  } // نهاية مسار الإنشاء الاحتياطي (الطلب غير موجود مسبقاً)
 
                   if (widget.couponCode != null) {
                     try {

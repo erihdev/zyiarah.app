@@ -216,6 +216,7 @@ class ZyiarahMessagingService {
     required String orderCode,
     required String type, // 'cleaning', 'store', 'maintenance'
     required String serviceName,
+    String? orderId, // معرّف المستند — يجعل النقر على الإشعار يفتح الطلب
   }) async {
     // 1. تنبيه العميل
     await triggerNotification(
@@ -223,7 +224,7 @@ class ZyiarahMessagingService {
       title: "تم استلام طلبك بنجاح! 🎉",
       body: "طلبك رقم #$orderCode ($serviceName) قيد التنفيذ الآن. شكراً لاختيارك زيارة.",
       type: 'order_update',
-      data: {'code': orderCode, 'type': type},
+      data: {'code': orderCode, 'type': type, if (orderId != null) 'orderId': orderId},
     );
 
     // 2. تنبيه الإدارة (سيتم معالجتها في الـ Cloud Function لإرسالها لجميع المشرفين)
@@ -232,7 +233,7 @@ class ZyiarahMessagingService {
       title: "طلب جديد وارد 🔔",
       body: "وصل طلب $serviceName جديد برقم #$orderCode. اضغط للمراجعة.",
       type: 'admin_order_alert',
-      data: {'code': orderCode, 'type': type},
+      data: {'code': orderCode, 'type': type, if (orderId != null) 'orderId': orderId},
     );
   }
 
@@ -258,6 +259,7 @@ class ZyiarahMessagingService {
     required String status, // 'accepted', 'in_progress', 'completed'
     required String orderCode,
     String? driverName,
+    String? orderId, // معرّف المستند — يجعل النقر على الإشعار يفتح تتبّع الطلب
   }) async {
     String title = "";
     String body = "";
@@ -283,7 +285,7 @@ class ZyiarahMessagingService {
         title: title,
         body: body,
         type: 'driver_update',
-        data: {'code': orderCode, 'status': status},
+        data: {'code': orderCode, 'status': status, if (orderId != null) 'orderId': orderId},
       );
     }
   }
