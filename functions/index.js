@@ -9,6 +9,9 @@ admin.initializeApp();
 
 // Secrets — stored in Firebase Secret Manager, never in source code
 const tamaraApiToken = defineSecret("TAMARA_API_TOKEN");
+// رمز الإشعارات (Notification Token) — يوقّع به تمارا الـ webhook (JWT/HS256).
+// منفصل عن رمز API؛ يُجلب من لوحة تمارا (API keys) ويُضبط بـ functions:secrets:set.
+const tamaraNotificationToken = defineSecret("TAMARA_NOTIFICATION_TOKEN");
 const resendApiKeySecret = defineSecret("RESEND_API_KEY");
 const moyasarSecretKey = defineSecret("MOYASAR_SECRET_KEY");
 const moyasarWebhookSecret = defineSecret("MOYASAR_WEBHOOK_SECRET");
@@ -626,80 +629,110 @@ async function notifyClientPaymentResult(col, orderId, data, success) {
   }
 }
 
+// يقلب is_paid على طلب تمارا (idempotent) بالبحث في orders ثم store_orders
+// عبر order_reference_id (= معرّف مستند طلبنا).
+async function _tamaraFlipPaid(db, orderRef, eventType) {
+  for (const col of ["orders", "store_orders"]) {
+    const ref = db.collection(col).doc(orderRef);
+    let data = null;
+    const flipped = await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (!snap.exists) return null;
+      data = snap.data();
+      if (data.is_paid) return false; // سبق تأكيده
+      t.update(ref, {
+        payment_status: "paid",
+        is_paid: true,
+        tamara_status: eventType,
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return true;
+    });
+    if (flipped === null) continue;
+    if (flipped) {
+      console.log(`tamaraWebhook: ${col}/${orderRef} marked PAID (${eventType})`);
+      await notifyClientPaymentResult(col, orderRef, data, true);
+    }
+    break;
+  }
+}
+
 exports.tamaraWebhook = onRequest(
-    {secrets: ["TAMARA_API_TOKEN"], cpu: 0.083},
+    {secrets: ["TAMARA_API_TOKEN", "TAMARA_NOTIFICATION_TOKEN"], cpu: 0.083},
     async (req, res) => {
-      // Verify Tamara signature to prevent spoofed payment events
-      const signature = req.headers["tamara-signature"] || req.headers["x-tamara-signature"];
-      if (!signature) {
-        console.warn("Tamara webhook rejected: missing signature header");
+      // (تمارا) التحقق الصحيح: الإشعار يصل كـ JWT (HS256) موقّع بـ Notification
+      // Token، في ترويسة Authorization: Bearer <jwt> أو كمعامل ?tamaraToken=.
+      // (ليس HMAC للجسم ولا ترويسة tamara-signature).
+      const jwt = require("jsonwebtoken");
+      const authHeader = String(req.headers["authorization"] || "");
+      const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+      const rawToken = bearer || req.query.tamaraToken;
+      if (!rawToken) {
+        console.warn("tamaraWebhook: missing tamaraToken");
         res.status(401).send("Unauthorized");
         return;
       }
-
-      const crypto = require("crypto");
-      const secret = tamaraApiToken.value();
-      const rawBody = JSON.stringify(req.body);
-      const expectedSig = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
-
-      const sigBuf = Buffer.from(String(signature));
-      const expBuf = Buffer.from(expectedSig);
-      if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
-        console.warn("Tamara webhook rejected: invalid signature");
-        res.status(401).send("Invalid signature");
+      let payload;
+      try {
+        payload = jwt.verify(String(rawToken), tamaraNotificationToken.value(),
+            {algorithms: ["HS256"]});
+      } catch (e) {
+        console.warn("tamaraWebhook: invalid token —", e.message);
+        res.status(401).send("Invalid token");
         return;
       }
 
-      const notification = req.body;
-      console.log("Verified Tamara Webhook:", JSON.stringify(notification));
+      // بيانات الحدث قد تكون داخل الـ JWT أو في جسم الطلب — نقبل الاثنين (الـ JWT
+      // المُتحقَّق يضمن الأصالة في الحالتين).
+      const body = req.body || {};
+      const tamaraOrderId = payload.order_id || body.order_id; // معرّف تمارا (للتفويض)
+      const orderRef = payload.order_reference_id || body.order_reference_id; // معرّف طلبنا
+      const eventType = payload.event_type || body.event_type;
+      console.log(`tamaraWebhook: event=${eventType} ref=${orderRef} tamaraId=${tamaraOrderId}`);
+      if (!orderRef) {
+        res.status(200).send("OK");
+        return;
+      }
 
-      const {order_id: orderId, status} = notification;
-
-      if (status === "authorised" || status === "captured") {
-        try {
-          // فحص + تحديث داخل Transaction (idempotent). يبحث في orders ثم
-          // store_orders (تمارا المتجر تُنشأ is_paid=false وتؤكَّد هنا خادمياً).
+      const db = admin.firestore();
+      try {
+        if (eventType === "order_approved") {
+          // إلزامي: نقل approved→authorised عبر Authorize API، وإلا يبقى الطلب
+          // معلّقاً ولا يدخل دورة التسوية (لا نُقبض).
+          const authRes = await fetch(
+              `https://api.tamara.co/orders/${tamaraOrderId}/authorise`,
+              {method: "POST", headers: {
+                "Authorization": `Bearer ${tamaraApiToken.value()}`,
+                "Content-Type": "application/json",
+              }});
+          if (!authRes.ok) {
+            console.error(`tamaraWebhook: authorise failed ${authRes.status}: ${await authRes.text()}`);
+          } else {
+            console.log(`tamaraWebhook: order ${tamaraOrderId} authorised`);
+            await _tamaraFlipPaid(db, orderRef, eventType);
+          }
+        } else if (eventType === "order_authorised" || eventType === "order_captured") {
+          await _tamaraFlipPaid(db, orderRef, eventType);
+        } else if (eventType === "order_declined" ||
+                   eventType === "order_expired" || eventType === "order_canceled") {
           for (const col of ["orders", "store_orders"]) {
-            const ref = admin.firestore().collection(col).doc(orderId);
-            let orderData = null;
-            const flipped = await admin.firestore().runTransaction(async (tx) => {
-              const snap = await tx.get(ref);
-              if (!snap.exists) return null;
-              orderData = snap.data();
-              if (orderData.is_paid) return false; // سبق معالجته
-              tx.update(ref, {
-                payment_status: "paid",
-                is_paid: true,
-                tamara_status: status,
-                updated_at: admin.firestore.FieldValue.serverTimestamp(),
-              });
-              return true;
-            });
-            if (flipped === null) continue; // غير موجود في هذه المجموعة
-            if (flipped) {
-              console.log(`Order ${orderId} in ${col} marked PAID via Tamara Webhook`);
-              await notifyClientPaymentResult(col, orderId, orderData, true); // (F2)
+            const ref = db.collection(col).doc(orderRef);
+            const doc = await ref.get();
+            if (doc.exists) {
+              if (!doc.data().is_paid) {
+                await ref.update({
+                  payment_status: "failed",
+                  tamara_status: eventType,
+                  updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                await notifyClientPaymentResult(col, orderRef, doc.data(), false);
+              }
+              break;
             }
-            break; // وُجد المستند — أوقف البحث
           }
-        } catch (error) {
-          console.error("Error updating order from Tamara webhook:", error);
         }
-      } else if (status === "declined" || status === "expired") {
-        try {
-          const ref = admin.firestore().collection("orders").doc(orderId);
-          const doc = await ref.get();
-          if (doc.exists && !doc.data().is_paid) {
-            await ref.update({
-              payment_status: "failed",
-              tamara_status: status,
-              updated_at: admin.firestore.FieldValue.serverTimestamp(),
-            });
-            await notifyClientPaymentResult("orders", orderId, doc.data(), false); // (F2)
-          }
-        } catch (error) {
-          console.error("Error updating failed Tamara order:", error);
-        }
+      } catch (error) {
+        console.error("tamaraWebhook processing error:", error);
       }
       res.status(200).send("OK");
     });
