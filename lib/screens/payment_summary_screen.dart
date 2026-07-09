@@ -1340,6 +1340,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             subtitle: 'قسم فاتورتك على 4 دفعات',
             icon: Icons.timer_outlined,
             color: const Color(0xFFE5A170),
+            logoAsset: 'assets/payment/tamara.png',
           ),
         ],
 
@@ -1364,6 +1365,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             subtitle: 'الدفع عبر محفظة STC',
             icon: Icons.phone_android_rounded,
             color: const Color(0xFF6A1B9A),
+            logoAsset: 'assets/payment/stc_pay.png',
           ),
         ],
 
@@ -1394,14 +1396,21 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              width: 48,
+              height: 48,
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: isSelected
-                    ? const Color(0xFF5D1B5E).withValues(alpha: 0.1)
-                    : Colors.grey.shade50,
-                shape: BoxShape.circle,
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
               ),
-              child: const Icon(Icons.account_balance_wallet_rounded, color: Color(0xFF5D1B5E)),
+              // شعار «زيارة» لمحفظة زيارة — يتراجع للأيقونة إن تعذّر.
+              child: Image.asset(
+                'assets/logo.png',
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Icon(
+                    Icons.account_balance_wallet_rounded, color: Color(0xFF5D1B5E)),
+              ),
             ),
             const SizedBox(width: 15),
             Expanded(
@@ -1440,11 +1449,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   Widget _buildPaymentOption({
-    required String id, 
-    required String title, 
-    required String subtitle, 
-    required IconData icon, 
+    required String id,
+    required String title,
+    required String subtitle,
+    required IconData icon,
     Color? color,
+    String? logoAsset, // شعار حقيقي (اختياري) — يتراجع للأيقونة إن تعذّر تحميله
   }) {
     bool isSelected = _selectedPaymentMethod == id;
     return InkWell(
@@ -1458,14 +1468,31 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         ),
         child: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF5D1B5E).withValues(alpha: 0.1) : Colors.grey.shade50, 
-                shape: BoxShape.circle, 
-              ),
-              child: Icon(icon, color: color ?? const Color(0xFF5D1B5E)),
-            ),
+            logoAsset != null
+                ? Container(
+                    width: 48,
+                    height: 48,
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Image.asset(
+                      logoAsset,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) =>
+                          Icon(icon, color: color ?? const Color(0xFF5D1B5E)),
+                    ),
+                  )
+                : Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isSelected ? const Color(0xFF5D1B5E).withValues(alpha: 0.1) : Colors.grey.shade50,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, color: color ?? const Color(0xFF5D1B5E)),
+                  ),
             const SizedBox(width: 15),
             Expanded(
               child: Column(
