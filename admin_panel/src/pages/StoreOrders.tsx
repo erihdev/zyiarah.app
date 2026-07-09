@@ -49,7 +49,7 @@ export default function StoreOrders() {
       const ords: StoreOrder[] = [];
       snapshot.forEach((doc) => {
         ords.push({ id: doc.id, ...doc.data() } as StoreOrder);
-      }, (e) => { console.error("StoreOrders listener error:", e); setLoading(false); });
+      }, (e: unknown) => { console.error("StoreOrders listener error:", e); setLoading(false); });
       setOrders(ords);
       setLoading(false);
     });
