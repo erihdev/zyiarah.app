@@ -157,7 +157,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   // الحسابات المالية الصحيحة (بافتراض أن المبلغ شامل للضريبة، مع تطبيق Surge)
-  double get totalWithVat => (widget.amount * _surgeFactor) - _discountAmount;
+  // مقرّب لخانتين عشريتين — يمنع أرقاماً مثل 57.4999999999 في المبلغ المخزَّن/المعروض.
+  double get totalWithVat =>
+      (((widget.amount * _surgeFactor) - _discountAmount) * 100).roundToDouble() / 100;
   double get subtotal => totalWithVat / 1.15;
   double get vatAmount => totalWithVat - subtotal;
 

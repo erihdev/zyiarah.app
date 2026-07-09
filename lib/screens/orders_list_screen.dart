@@ -642,7 +642,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('${order['amount']} ر.س',
+              Text('${((order['amount'] ?? 0) as num).toStringAsFixed(2)} ر.س',
                 style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF5D1B5E))),
               if (status == 'completed')
                 TextButton.icon(
