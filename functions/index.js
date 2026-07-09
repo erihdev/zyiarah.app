@@ -2291,6 +2291,49 @@ exports.notifyClientOnDriverDeparture = onDocumentUpdated(
     },
 );
 
+// ════════════════════════════════════════════════════════════════════════
+// نظام الإحالة — ربط الإحالة خادمياً (العميل يرسل الكود فقط، والخادم يتحقّق
+// ويحدّد referrer_id — كي لا يمنح العميل مكافأة إحالة لأي شخص بضبط الحقل يدوياً).
+// ════════════════════════════════════════════════════════════════════════
+exports.applyReferralCode = onCall({cpu: 0.25}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
+  }
+  const uid = request.auth.uid;
+  const code = String(request.data && request.data.code || "").trim().toUpperCase();
+  if (!code) throw new HttpsError("invalid-argument", "كود الإحالة مطلوب");
+  const db = admin.firestore();
+
+  // (1) استخراج المُحيل من الكود خادمياً — لا يثق بأي referrer_id من العميل.
+  const rq = await db.collection("users")
+      .where("referral_code", "==", code).limit(1).get();
+  if (rq.empty) return {ok: false, reason: "not_found"};
+  const referrerDoc = rq.docs[0];
+  const referrerId = referrerDoc.id;
+  if (referrerId === uid) return {ok: false, reason: "self"};
+
+  // (2) كل مستخدم يُحال مرّة واحدة — المعرّف الحتمي = uid المُحال إليه.
+  const refRef = db.collection("referrals").doc(uid);
+  const created = await db.runTransaction(async (t) => {
+    const existing = await t.get(refRef);
+    if (existing.exists) return false;
+    t.set(refRef, {
+      referrer_id: referrerId,
+      referrer_name: referrerDoc.data().name || "",
+      referee_id: uid,
+      referral_code: code,
+      status: "pending",
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      rewarded_at: null,
+      rewarded_on_order: null,
+    });
+    t.set(db.collection("users").doc(uid),
+        {used_referral_code: code, referred_by: referrerId}, {merge: true});
+    return true;
+  });
+  return {ok: created, reason: created ? null : "already"};
+});
+
 // 10. Auto Assign Driver Directly (No acceptance required)
 exports.autoAssignDriverDirectly = onCall({cpu: 0.25}, async (request) => {
   if (!request.auth) {

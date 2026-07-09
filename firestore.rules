@@ -403,5 +403,17 @@ service cloud.firestore {
          isAdmin());
       allow create, delete: if isAdmin();
     }
+
+    // ─── Referrals — تُدار خادمياً (applyReferralCode CF + onOrderRewards).
+    // العميل يقرأ إحالته فقط؛ الكتابة من العميل ممنوعة كي لا يزوّر المُحيل
+    // (referrer_id) فيمنح مكافأة إحالة لأي شخص.
+    match /referrals/{refId} {
+      allow read: if isLoggedIn() &&
+        (request.auth.uid == refId ||
+         request.auth.uid == resource.data.referee_id ||
+         request.auth.uid == resource.data.referrer_id ||
+         isAdmin());
+      allow write: if false; // خادمي فقط (Admin SDK يتجاوز القواعد)
+    }
   }
 }
