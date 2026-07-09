@@ -1780,7 +1780,15 @@ async function _findFreeDriverForSlot(db, {zoneName, startDateTime, endDateTime}
   }
 
   for (const doc of eligible) {
-    if (!busy.has(doc.id)) return doc;
+    if (busy.has(doc.id)) continue;
+    // (H3) تأكّد أن معرّف مستند السائق حساب حقيقي (users/{id} بدور driver).
+    // مستند drivers قد يكون مسودّة id ليست uid → إسناده يترك الطلب عالقاً بلا
+    // من يراه (تطبيق السائق والقواعد يعتمدان على auth.uid == driver_id).
+    const userSnap = await db.collection("users").doc(doc.id).get();
+    const role = userSnap.exists ?
+      (userSnap.data().staff_role || userSnap.data().role) : null;
+    if (role !== "driver") continue;
+    return doc;
   }
   return null;
 }
