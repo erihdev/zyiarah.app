@@ -71,6 +71,7 @@ flutter:
     - assets/images/sofa_cleaning.png
     - assets/images/company_cleaning.png
     - assets/images/store.png
+    - assets/payment/
 
 flutter_launcher_icons:
   android: "launcher_icon"

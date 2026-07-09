@@ -1193,6 +1193,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             title: 'بطاقة فيزا / مدى',
             subtitle: 'دفع آمن عبر ميسر',
             icon: Icons.credit_card,
+            logoAsset: 'assets/payment/mada.png',
           ),
 
         // --- Apple Pay (iOS only — Moyasar SDK) ---
@@ -1331,8 +1332,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           }),
         ],
 
-        // --- Tamara (unchanged) ---
-        if (_tamaraEnabled && totalWithVat >= 100) ...[
+        // --- Tamara — بلا حدّ مبلغ (بطلب الإدارة؛ تمارا معتمدة في الحساب) ---
+        if (_tamaraEnabled) ...[
           const SizedBox(height: 12),
           _buildPaymentOption(
             id: 'tamara',
@@ -1340,7 +1341,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             subtitle: 'قسم فاتورتك على 4 دفعات',
             icon: Icons.timer_outlined,
             color: const Color(0xFFE5A170),
-            logoAsset: 'assets/payment/tamara.png',
+            logoAsset: 'assets/payment/tamara.jpg',
           ),
         ],
 
