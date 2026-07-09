@@ -10,6 +10,7 @@ import 'package:intl/intl.dart' hide TextDirection;
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:zyiarah/services/order_service.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:zyiarah/services/location_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -98,24 +99,57 @@ class _DriverDashboardState extends State<DriverDashboard> {
     });
   }
 
-  Timer? _syncTimer;
+  StreamSubscription<Position>? _syncSub;
 
   // DRIVER-005/007: يُنشأ بعد منح إذن الموقع (null قبله) ويُعاد استخدامه عبر إعادة البناء.
   Stream<Position>? _locationStream;
   bool _locationDenied = false;
 
+  // إعدادات موقع تستمرّ في الخلفية: خدمة أمامية بإشعار على أندرويد، وتحديثات
+  // خلفية على iOS — كي لا يتجمّد تتبّع العميل إذا صغّر السائق التطبيق (مثلاً
+  // لفتح خرائط جوجل أثناء التوصيل).
+  LocationSettings _trackingSettings() {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return AndroidSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 20,
+        intervalDuration: const Duration(seconds: 15),
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationTitle: 'زيارة — تتبّع التوصيل',
+          notificationText: 'يُشارَك موقعك مع العميل أثناء تنفيذ المهمة.',
+          enableWakeLock: true,
+        ),
+      );
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return AppleSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 20,
+        allowBackgroundLocationUpdates: true,
+        pauseLocationUpdatesAutomatically: false,
+        showBackgroundLocationIndicator: true,
+      );
+    }
+    return const LocationSettings(
+        accuracy: LocationAccuracy.high, distanceFilter: 20);
+  }
+
   void _startSync(String orderId) {
-    if (_syncTimer != null && _activeOrderId == orderId) return;
+    if (_syncSub != null && _activeOrderId == orderId) return;
     _stopSync();
     _activeOrderId = orderId;
-    _syncTimer = Timer.periodic(const Duration(seconds: 15), (timer) async {
+    _syncSub = Geolocator.getPositionStream(locationSettings: _trackingSettings())
+        .listen((pos) async {
       try {
-        Position pos = await Geolocator.getCurrentPosition();
-        await _orderService.updateDriverLocation(orderId, GeoPoint(pos.latitude, pos.longitude));
-      } on PermissionDeniedException {
-        // DRIVER-006: GPS permission revoked mid-session — stop timer and alert driver
-        timer.cancel();
-        _syncTimer = null;
+        await _orderService.updateDriverLocation(
+            orderId, GeoPoint(pos.latitude, pos.longitude));
+      } catch (e) {
+        debugPrint("Location sync write error: $e");
+      }
+    }, onError: (e) {
+      if (e is PermissionDeniedException) {
+        // DRIVER-006: GPS permission revoked mid-session — stop and alert driver
+        _stopSync();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -125,15 +159,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
             ),
           );
         }
-      } catch (e) {
+      } else {
         debugPrint("Location sync error: $e");
       }
     });
   }
 
   void _stopSync() {
-    _syncTimer?.cancel();
-    _syncTimer = null;
+    _syncSub?.cancel();
+    _syncSub = null;
     _activeOrderId = null;
   }
 
