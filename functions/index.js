@@ -515,18 +515,18 @@ exports.createTamaraCheckout = onCall(
         throw new HttpsError("invalid-argument", "بيانات الطلب ناقصة");
       }
 
-      // Fetch the true price from Firestore to prevent client-side tampering
+      // Fetch the true price + info from Firestore (prevent client tampering)
       let trueAmount = null;
-
+      let info = {};
       const orderDoc = await admin.firestore().collection("orders").doc(orderId).get();
       if (orderDoc.exists) {
-        const orderData = orderDoc.data();
-        trueAmount = Number(orderData.amount);
+        info = orderDoc.data();
+        trueAmount = Number(info.amount);
       } else {
         const storeOrderDoc = await admin.firestore().collection("store_orders").doc(orderId).get();
         if (storeOrderDoc.exists) {
-          const storeOrderData = storeOrderDoc.data();
-          trueAmount = Number(storeOrderData.total_amount);
+          info = storeOrderDoc.data();
+          trueAmount = Number(info.total_amount);
         }
       }
 
@@ -538,6 +538,13 @@ exports.createTamaraCheckout = onCall(
       const token = tamaraApiToken.value();
       const phone = customerPhone.startsWith("+") ?
         customerPhone : `+966${customerPhone}`;
+      // حقول تمارا الإلزامية: اسم مقسّم + بريد + مدينة + عناصر + عنوان شحن.
+      const parts = String(customerName).trim().split(/\s+/);
+      const firstName = parts[0] || "عميل";
+      const lastName = parts.slice(1).join(" ") || "زيارة";
+      const email = info.client_email || `${orderId}@zyiarah.com`;
+      const city = info.zone_name || "جازان";
+      const money = (a) => ({amount: a, currency: "SAR"});
 
       try {
         const response = await fetch("https://api.tamara.co/checkout", {
@@ -548,18 +555,48 @@ exports.createTamaraCheckout = onCall(
           },
           body: JSON.stringify({
             order_reference_id: orderId,
-            total_amount: {amount, currency: "SAR"},
-            consumer: {first_name: customerName, phone_number: phone},
+            order_number: info.code || orderId,
+            total_amount: money(amount),
+            tax_amount: money(0),
+            shipping_amount: money(0),
+            country_code: "SA",
+            locale: "ar_SA",
+            payment_type: "PAY_BY_INSTALMENTS",
+            instalments: 4,
+            items: [{
+              reference_id: orderId,
+              type: "Service",
+              name: info.service_name || info.service_type || "خدمة زيارة",
+              sku: "ZYIARAH-SERVICE",
+              quantity: 1,
+              unit_price: money(amount),
+              total_amount: money(amount),
+            }],
+            consumer: {
+              first_name: firstName,
+              last_name: lastName,
+              phone_number: phone,
+              email: email,
+            },
+            shipping_address: {
+              first_name: firstName,
+              last_name: lastName,
+              line1: city,
+              city: city,
+              country_code: "SA",
+              phone_number: phone,
+            },
             merchant_url: {
               success: "https://zyiarah.com/payment-success",
               failure: "https://zyiarah.com/payment-failure",
               cancel: "https://zyiarah.com/payment-cancel",
+              notification: "https://tamarawebhook-slpwb4s3aa-uc.a.run.app",
             },
             description: "خدمات منزلية - مؤسسة معاذ يحي محمد المالكي",
           }),
         });
 
-        if (response.status !== 201) {
+        if (!response.ok) {
           const errText = await response.text();
           console.error(`Tamara API error ${response.status}: ${errText}`);
           throw new HttpsError(
