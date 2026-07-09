@@ -2338,6 +2338,65 @@ exports.sweepUnassignedPaidOrders = onSchedule(
 );
 
 // ════════════════════════════════════════════════════════════════════════
+// احتياطي تمارا: تأكيد الطلبات غير المؤكّدة عبر واجهة تمارا مباشرةً — Cron كل
+// 3 دقائق. يعوّض حجب الويب هوك (Cloud Run invoker): يستعلم حالة الطلب، يفوّض
+// approved (فيلتقطها الحساب تلقائياً)، ويقلب is_paid. لا يعتمد على وصول الويب هوك.
+// ════════════════════════════════════════════════════════════════════════
+exports.confirmPendingTamaraOrders = onSchedule(
+    {schedule: "every 3 minutes", secrets: ["TAMARA_API_TOKEN"], cpu: 0.083},
+    async () => {
+      const db = admin.firestore();
+      const since = admin.firestore.Timestamp.fromDate(
+          new Date(Date.now() - 6 * 60 * 60 * 1000));
+      const snap = await db.collection("orders")
+          .where("payment_method", "==", "tamara")
+          .where("created_at", ">=", since)
+          .get();
+      const apiToken = tamaraApiToken.value();
+      let confirmed = 0;
+      for (const doc of snap.docs) {
+        const d = doc.data();
+        if (d.is_paid === true) continue;
+        if (["order_declined", "order_expired", "order_canceled"]
+            .includes(d.tamara_status)) continue;
+        try {
+          const r = await fetch(
+              `https://api.tamara.co/merchants/orders/reference-id/${doc.id}`,
+              {headers: {Authorization: `Bearer ${apiToken}`}});
+          if (!r.ok) continue;
+          const to = await r.json();
+          const st = to.status;
+          if (st === "approved") {
+            const a = await fetch(
+                `https://api.tamara.co/orders/${to.order_id}/authorise`,
+                {method: "POST", headers: {
+                  Authorization: `Bearer ${apiToken}`,
+                  "Content-Type": "application/json",
+                }});
+            if (a.ok) {
+              await _tamaraFlipPaid(db, doc.id, "order_authorised");
+              confirmed++;
+            }
+          } else if (["authorised", "captured", "fully_captured",
+            "partially_captured"].includes(st)) {
+            await _tamaraFlipPaid(db, doc.id, "order_" + st);
+            confirmed++;
+          } else if (["declined", "expired", "canceled"].includes(st)) {
+            await doc.ref.update({
+              payment_status: "failed",
+              tamara_status: "order_" + st,
+              updated_at: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          }
+        } catch (e) {
+          console.error(`confirmPendingTamaraOrders ${doc.id}:`, e.message);
+        }
+      }
+      console.log(`confirmPendingTamaraOrders: confirmed ${confirmed}`);
+    },
+);
+
+// ════════════════════════════════════════════════════════════════════════
 // (2c) تذكير العميل عند انطلاق السائق (on_the_way) — Event-driven
 // ════════════════════════════════════════════════════════════════════════
 exports.notifyClientOnDriverDeparture = onDocumentUpdated(
