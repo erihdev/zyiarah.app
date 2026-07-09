@@ -2179,6 +2179,39 @@ async function _pushToUid(uid, title, body, data) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// حارس ملكية رمز FCM — رمز الجهاز يخصّ حساباً واحداً فقط (آخر من سجّل به).
+// عند كتابة fcm_tokens/{uid} نحذف نفس الرمز من أي وثيقة حساب آخر، فنمنع تسرّب
+// إشعارات حساب قديم (سائق ثم عميل على نفس الجهاز) حين لا يُنظَّف الخروج.
+// Admin SDK يتجاوز القواعد التي تمنع العميل من فعل ذلك بنفسه.
+// ════════════════════════════════════════════════════════════════════════
+exports.dedupeFcmToken = onDocumentWritten(
+    {document: "fcm_tokens/{uid}", cpu: 0.083},
+    async (event) => {
+      const after = event.data?.after?.data();
+      if (!after) return; // حذف — لا شيء نفعله (ويمنع الحلقة اللانهائية)
+      const token = after.fcmToken || after.token;
+      if (!token) return;
+      const uid = event.params.uid;
+      const db = admin.firestore();
+      const dupes = await db.collection("fcm_tokens")
+          .where("fcmToken", "==", token).get();
+      const batch = db.batch();
+      let n = 0;
+      dupes.forEach((doc) => {
+        if (doc.id !== uid) {
+          batch.delete(doc.ref);
+          n++;
+        }
+      });
+      if (n > 0) {
+        await batch.commit();
+        console.log(`dedupeFcmToken: removed ${n} stale token doc(s); ` +
+          `device token now owned solely by ${uid}`);
+      }
+    },
+);
+
+// ════════════════════════════════════════════════════════════════════════
 // (2c) تذكير السائق — Cron كل 15 دقيقة بالمهام التي تبدأ بعد ساعة تقريباً
 // ════════════════════════════════════════════════════════════════════════
 exports.remindDriversUpcomingTasks = onSchedule(

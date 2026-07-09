@@ -193,6 +193,11 @@ class ZyiarahNotificationService {
         'platform': defaultTargetPlatform.name,
       }, SetOptions(merge: true));
 
+      // ملاحظة: رمز FCM خاصّ بالجهاز لا بالحساب. إن سجّل الجهاز سابقاً بحساب آخر
+      // ولم يُنظَّف الخروج، يبقى الرمز تحت الحساب القديم فتتسرّب إشعاراته. تنظيف
+      // ذلك يتم خادمياً عبر مُشغِّل dedupeFcmToken (لأن قواعد Firestore تمنع
+      // العميل من لمس وثيقة رمز حساب آخر).
+
       debugPrint("✅ FCM Token ($role) saved for user: $uid");
     } catch (e) {
       debugPrint("❌ Error saving FCM token to Firestore: $e");
