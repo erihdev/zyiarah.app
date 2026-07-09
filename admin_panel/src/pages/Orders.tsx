@@ -1,11 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, Filter, MoreVertical, CheckCircle2, Clock, XCircle, Package, UserCheck, X, Loader2 } from 'lucide-react';
 import {
-    collection, onSnapshot, query, orderBy, doc, Timestamp, writeBatch, updateDoc,
+    collection, onSnapshot, query, orderBy, doc, Timestamp, updateDoc,
     type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot
 } from 'firebase/firestore';
-import { db } from '../services/firebase.ts';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
+
+// تنسيق تاريخ لحقل datetime-local (YYYY-MM-DDTHH:mm).
+const toDatetimeLocal = (dt: Date) => {
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}T${p(dt.getHours())}:${p(dt.getMinutes())}`;
+};
 
 interface OrderRecord {
     id: string;
@@ -26,7 +33,7 @@ interface OrderRecord {
     is_paid?: boolean;
 }
 
-interface DriverOption { id: string; name: string; is_available: boolean; }
+interface DriverOption { id: string; name: string; is_available: boolean; is_active: boolean; }
 
 const StatusBadge = ({ status }: { status: string }) => {
     switch (status) {
@@ -51,6 +58,7 @@ export default function Orders() {
     const [actionMenuId, setActionMenuId] = useState<string | null>(null);
     const [assignModal, setAssignModal] = useState<OrderRecord | null>(null);
     const [selectedDriverId, setSelectedDriverId] = useState('');
+    const [scheduledAt, setScheduledAt] = useState('');
     const [isAssigning, setIsAssigning] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
@@ -75,7 +83,7 @@ export default function Orders() {
         });
 
         const driversUnsub = onSnapshot(collection(db, 'drivers'), (snap) => {
-            setDrivers(snap.docs.map(d => ({ id: d.id, name: d.data().name || 'سائق', is_available: d.data().is_available || false })));
+            setDrivers(snap.docs.map(d => ({ id: d.id, name: d.data().name || 'سائق', is_available: d.data().is_available || false, is_active: d.data().is_active !== false })));
         });
 
         return () => { unsub(); driversUnsub(); };
@@ -90,28 +98,24 @@ export default function Orders() {
     }, []);
 
     const handleAssignDriver = async () => {
-        if (!assignModal || !selectedDriverId) return;
+        if (!assignModal || !selectedDriverId || !scheduledAt) return;
         setIsAssigning(true);
         try {
-            const driver = drivers.find(d => d.id === selectedDriverId);
-            const batch = writeBatch(db);
-            batch.update(doc(db, 'orders', assignModal.id), {
-                status: 'accepted',
-                driver_id: selectedDriverId,
-                assigned_driver: driver?.name || 'سائق',
-                accepted_at: Timestamp.now(),
+            // نوجّه عبر approveAndAssignOrder: ذرّية، تفحص تفرّغ السائق (لا حجز
+            // مزدوج)، تعتمد طلبات pending_admin_approval، وتوحّد الحالة على
+            // scheduled، وتُطلق إشعار السائق خادمياً. لا كتابة مباشرة خام.
+            await httpsCallable(functions, 'approveAndAssignOrder')({
+                orderId: assignModal.id,
+                driverId: selectedDriverId,
+                scheduledIso: new Date(scheduledAt).toISOString(),
             });
-            batch.update(doc(db, 'drivers', selectedDriverId), {
-                status: 'en_route',
-                current_order_id: assignModal.id,
-                is_available: false,
-            });
-            await batch.commit();
             setAssignModal(null);
             setSelectedDriverId('');
-        } catch (err) {
+            setScheduledAt('');
+            toast.success('تم اعتماد الطلب وتعيين السائق');
+        } catch (err: unknown) {
             console.error('Error assigning driver:', err);
-            toast.error('حدث خطأ أثناء التعيين');
+            toast.error((err as { message?: string })?.message || 'حدث خطأ أثناء التعيين');
         } finally {
             setIsAssigning(false);
         }
@@ -147,7 +151,8 @@ export default function Orders() {
         o.type.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const availableDrivers = drivers.filter(d => d.is_available);
+    // السائقون النشطون — الدالّة الخادمية تتحقّق من التفرّغ الفعلي في الفترة.
+    const availableDrivers = drivers.filter(d => d.is_active);
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
@@ -233,13 +238,19 @@ export default function Orders() {
                                             )}
                                             {actionMenuId === order.id && (
                                                 <div ref={menuRef} className="absolute left-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-slate-100 z-20 overflow-hidden">
-                                                    {order.status === 'pending' && (
+                                                    {(order.status === 'pending' || order.status === 'pending_admin_approval') && (
                                                         <button
                                                             type="button"
-                                                            onClick={() => { setAssignModal(order); setActionMenuId(null); }}
+                                                            onClick={() => {
+                                                                setAssignModal(order);
+                                                                const sd = (order as OrderRecord & { service_date?: Timestamp }).service_date;
+                                                                setScheduledAt(sd instanceof Timestamp ? toDatetimeLocal(sd.toDate()) : toDatetimeLocal(new Date()));
+                                                                setSelectedDriverId('');
+                                                                setActionMenuId(null);
+                                                            }}
                                                             className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors text-right"
                                                         >
-                                                            <UserCheck size={16} />تعيين سائق
+                                                            <UserCheck size={16} />{order.status === 'pending_admin_approval' ? 'اعتماد وتعيين' : 'تعيين سائق'}
                                                         </button>
                                                     )}
                                                     <button
@@ -293,11 +304,21 @@ export default function Orders() {
                                     </select>
                                 </div>
                             )}
+                            <div className="space-y-2">
+                                <label className="block text-sm font-extrabold text-slate-700">موعد الخدمة</label>
+                                <input
+                                    type="datetime-local"
+                                    title="موعد الخدمة"
+                                    value={scheduledAt}
+                                    onChange={e => setScheduledAt(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 font-medium"
+                                />
+                            </div>
                             <div className="flex gap-3 pt-2">
                                 <button type="button" onClick={() => setAssignModal(null)} className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors">إلغاء</button>
                                 <button
                                     type="button"
-                                    disabled={!selectedDriverId || isAssigning}
+                                    disabled={!selectedDriverId || !scheduledAt || isAssigning}
                                     onClick={handleAssignDriver}
                                     className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
