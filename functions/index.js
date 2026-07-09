@@ -2366,6 +2366,7 @@ exports.confirmPendingTamaraOrders = onSchedule(
           if (!r.ok) continue;
           const to = await r.json();
           const st = to.status;
+          let justConfirmed = false;
           if (st === "approved") {
             const a = await fetch(
                 `https://api.tamara.co/orders/${to.order_id}/authorise`,
@@ -2375,18 +2376,37 @@ exports.confirmPendingTamaraOrders = onSchedule(
                 }});
             if (a.ok) {
               await _tamaraFlipPaid(db, doc.id, "order_authorised");
-              confirmed++;
+              justConfirmed = true;
             }
           } else if (["authorised", "captured", "fully_captured",
             "partially_captured"].includes(st)) {
             await _tamaraFlipPaid(db, doc.id, "order_" + st);
-            confirmed++;
+            justConfirmed = true;
           } else if (["declined", "expired", "canceled"].includes(st)) {
             await doc.ref.update({
               payment_status: "failed",
               tamara_status: "order_" + st,
               updated_at: admin.firestore.FieldValue.serverTimestamp(),
             });
+          }
+          if (justConfirmed) {
+            confirmed++;
+            // إسناد فوري للساعة بعد التأكيد (بدل انتظار الـ sweep 15 دقيقة).
+            if (d.service_date && !d.driver_id && d.status === "pending") {
+              try {
+                const start = d.service_date.toDate();
+                const hours = Number(d.hours_contracted || 4);
+                const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
+                const driver = await _findFreeDriverForSlot(db, {
+                  zoneName: d.zone_name || null,
+                  startDateTime: start,
+                  endDateTime: end,
+                });
+                if (driver) await _assignDriverScheduled(db, doc.id, driver, start);
+              } catch (e) {
+                console.error(`confirmPendingTamaraOrders assign ${doc.id}:`, e.message);
+              }
+            }
           }
         } catch (e) {
           console.error(`confirmPendingTamaraOrders ${doc.id}:`, e.message);
