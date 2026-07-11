@@ -89,17 +89,21 @@ service cloud.firestore {
         // Super admin: create staff/drivers (role), ban users (is_blocked) — but not wallet
         (isSuperAdmin() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['wallet'])) ||
-        // Other admins: edit user profile fields, but never role / staff_role / wallet / is_blocked
-        // SECURITY: staff_role IS the effective role (getUserRole trusts it first), so only
-        // a super_admin may set it — a sub-admin must not self-escalate.
+        // Other admins: edit user profile fields, but never role / staff_role / wallet /
+        // is_blocked / visits_remaining. SECURITY: staff_role IS the effective role
+        // (getUserRole trusts it first), so only a super_admin may set it — a sub-admin
+        // must not self-escalate. visits_remaining is a prepaid subscription-credit
+        // counter (server-managed) and must not be granted outside payment.
         (isAdmin() &&
           !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['role', 'staff_role', 'wallet', 'is_blocked'])) ||
-        // Owner: own non-sensitive fields only
+            .hasAny(['role', 'staff_role', 'wallet', 'is_blocked', 'visits_remaining'])) ||
+        // Owner: own non-sensitive fields only. visits_remaining / subscription credits
+        // are server-only (they represent paid subscription visits — never client-writable).
         (isOwner(userId) &&
           !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['role', 'staff_role', 'wallet', 'rating_avg', 'rating_count',
-                     'total_orders', 'is_blocked']));
+                     'total_orders', 'is_blocked', 'visits_remaining',
+                     'subscription_expiry', 'subscription_total_visits']));
 
       allow delete: if isSuperAdmin();
     }
@@ -115,8 +119,12 @@ service cloud.firestore {
     }
 
     // ─── Account Deletion Requests ────────────────────────────────────────
+    // SECURITY: the doc ID IS the target uid, and onAccountDeletionRequested deletes
+    // that auth user + users doc when status=='deleted'. A caller may therefore ONLY
+    // request deletion of their OWN account — otherwise any user could wipe any other
+    // account (including admins) by writing account_deletions/{victimUid}.
     match /account_deletions/{deletionId} {
-      allow create: if isLoggedIn();
+      allow create: if isOwner(deletionId);
       allow read, update, delete: if isSuperAdmin();
     }
 
@@ -224,13 +232,25 @@ service cloud.firestore {
     }
 
     // ─── FCM Tokens ───────────────────────────────────────────────────────
+    // SECURITY: the `role` field on a token drives ADMIN_BROADCAST fan-out. A user must
+    // not tag their own device with a privileged role to eavesdrop on admin pushes, so a
+    // self-write must carry the caller's real users/{uid}.role (exactly what the app writes).
+    // Delete is unrestricted for owner/admin so sign-out cleanup still works.
     match /fcm_tokens/{tokenId} {
-      allow read, write: if isLoggedIn() &&
+      allow read, delete: if isLoggedIn() &&
         (request.auth.uid == tokenId || isAdmin());
+      allow create, update: if isLoggedIn() && (
+        isAdmin() ||
+        (request.auth.uid == tokenId &&
+          request.resource.data.get('role', 'client') == getUserData().get('role', 'client')));
     }
     match /fcm_token/{tokenId} {
-      allow read, write: if isLoggedIn() &&
+      allow read, delete: if isLoggedIn() &&
         (request.auth.uid == tokenId || isAdmin());
+      allow create, update: if isLoggedIn() && (
+        isAdmin() ||
+        (request.auth.uid == tokenId &&
+          request.resource.data.get('role', 'client') == getUserData().get('role', 'client')));
     }
 
     // ─── Wallets & Transactions ───────────────────────────────────────────
@@ -246,13 +266,23 @@ service cloud.firestore {
       }
     }
 
-    // ─── Contracts ────────────────────────────────────────────────────────
+    // ─── Contracts (subscriptions) ────────────────────────────────────────
+    // SECURITY: userId must match caller on create, and the owner can NEVER self-set a
+    // paid/active status or plan/visits fields. generateSubscriptionVisits mints paid
+    // (is_paid=true) visit-orders once a contract is 'active'; without this guard any
+    // client could activate their own contract and get free subscription visits.
+    // Activation/payment must be server- or admin-gated (mirrors the Stage-C order model).
     match /contracts/{contractId} {
-      // SECURITY: userId must match caller on create
       allow create: if isLoggedIn() &&
-        request.resource.data.get('userId', '') == request.auth.uid;
-      allow read, update: if isLoggedIn() &&
+        request.resource.data.get('userId', '') == request.auth.uid &&
+        request.resource.data.get('is_paid', false) == false;
+      allow read: if isLoggedIn() &&
         (request.auth.uid == resource.data.userId || isAdmin());
+      allow update: if isAdmin() ||
+        (isLoggedIn() && request.auth.uid == resource.data.userId &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'status', 'is_paid', 'paid_confirmed', 'planVisits', 'planPrice',
+            'amount', 'visits_generated', 'activatedAt', 'paymentMethod']));
       allow delete: if isSuperAdmin();
     }
 
