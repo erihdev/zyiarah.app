@@ -177,12 +177,14 @@ class ZyiarahNotificationService {
         return;
       }
 
-      // Fetch user role to include it in the token document for backend targeting
+      // Fetch role + staff_role for backend targeting (ADMIN_BROADCAST sub-role routing).
       String role = 'client';
+      String? staffRole;
       try {
         final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
         if (userDoc.exists) {
           role = userDoc.data()?['role'] ?? 'client';
+          staffRole = userDoc.data()?['staff_role'] as String?;
         }
       } catch (e) {
         debugPrint("⚠️ Could not fetch user role for token: $e");
@@ -191,6 +193,9 @@ class ZyiarahNotificationService {
       await FirebaseFirestore.instance.collection('fcm_tokens').doc(uid).set({
         'fcmToken': token, // Backend expects 'fcmToken', not 'token'
         'role': role,      // Added role for administrative broadcasts
+        // staff_role: الدور الفرعي الفعلي — يستخدمه توجيه ADMIN_BROADCAST لإيصال
+        // تنبيه (مثل عدم تطابق دفع) للمحاسب فقط بدل كل الموظّفين.
+        'staff_role': staffRole,
         'updated_at': FieldValue.serverTimestamp(),
         'platform': defaultTargetPlatform.name,
       }, SetOptions(merge: true));

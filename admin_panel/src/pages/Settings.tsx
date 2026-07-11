@@ -6,8 +6,6 @@ import { useNotification } from '../components/Notification.tsx';
 
 interface SystemSettings {
     // General
-    force_update_version: string;
-    force_update_enabled: boolean;
     terms_url: string;
     support_url: string;
     privacy_policy: string;
@@ -42,9 +40,23 @@ interface CoverageZone {
 
 const emptyZoneForm = { name: '', latitude: '', longitude: '', radiusKm: '15' };
 
+// إعداد التحديث الإجباري — يُخزَّن في مستند منفصل system_configs/app_update
+// والذي يقرأه التطبيق (app_update_service.dart). كانت اللوحة سابقاً تكتب
+// force_update_version/enabled في main_settings الذي لا يقرأه التطبيق إطلاقاً.
+interface AppUpdateConfig {
+    enabled: boolean;
+    latest_build: number;
+    force: boolean;
+    message: string;
+}
+const defaultAppUpdate: AppUpdateConfig = {
+    enabled: false,
+    latest_build: 0,
+    force: false,
+    message: '',
+};
+
 const defaultSettings: SystemSettings = {
-    force_update_version: "v2.1.0",
-    force_update_enabled: true,
     terms_url: "https://zyiarah.com/terms",
     support_url: "https://zyiarah.com/support",
     privacy_policy: "نحن في تطبيق زيارة نلتزم بحماية بياناتك الشخصية...",
@@ -69,6 +81,7 @@ export default function Settings() {
     const { toast } = useNotification();
     const [activeTab, setActiveTab] = useState<TabType>('general');
     const [settings, setSettings] = useState<SystemSettings>(defaultSettings);
+    const [appUpdate, setAppUpdate] = useState<AppUpdateConfig>(defaultAppUpdate);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
@@ -85,9 +98,13 @@ export default function Settings() {
         const fetchSettings = async () => {
             try {
                 const docRef = doc(db, 'system_configs', 'main_settings');
-                const docSnap = await getDoc(docRef);
+                const updRef = doc(db, 'system_configs', 'app_update');
+                const [docSnap, updSnap] = await Promise.all([getDoc(docRef), getDoc(updRef)]);
                 if (docSnap.exists()) {
                     setSettings({ ...defaultSettings, ...docSnap.data() } as SystemSettings);
+                }
+                if (updSnap.exists()) {
+                    setAppUpdate({ ...defaultAppUpdate, ...updSnap.data() } as AppUpdateConfig);
                 }
             } catch (error) {
                 console.error("Error fetching settings:", error);
@@ -182,8 +199,18 @@ export default function Settings() {
         setIsSaving(true);
         try {
             const docRef = doc(db, 'system_configs', 'main_settings');
-            await setDoc(docRef, settings, { merge: true });
-            
+            const updRef = doc(db, 'system_configs', 'app_update');
+            await Promise.all([
+                setDoc(docRef, settings, { merge: true }),
+                // نكتب بالمفاتيح التي يقرأها التطبيق فعلاً: enabled / latest_build (int) / force / message
+                setDoc(updRef, {
+                    enabled: appUpdate.enabled,
+                    latest_build: Number(appUpdate.latest_build) || 0,
+                    force: appUpdate.force,
+                    message: appUpdate.message || '',
+                }, { merge: true }),
+            ]);
+
             // Show brief success indication
             setSaveSuccess(true);
             setTimeout(() => setSaveSuccess(false), 3000);
@@ -395,26 +422,49 @@ export default function Settings() {
                                             <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full blur-3xl -translate-y-10 translate-x-10 pointer-events-none"></div>
                                             
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
-                                                <div className="md:col-span-2 flex flex-col md:flex-row gap-6 items-center p-5 bg-indigo-50/50 border border-indigo-100/50 rounded-2xl">
-                                                    <div className="flex-1 w-full">
-                                                        <label htmlFor="min-version" className="block text-sm font-bold text-slate-800 mb-2">الإصدار الإلزامي (Force Update Version)</label>
-                                                        <p className="text-xs text-slate-500 font-medium mb-3">سيُجبر أي مستخدم لديه إصدار أقدم على التحديث فوراً.</p>
-                                                        <input
-                                                            id="min-version"
-                                                            type="text"
-                                                            value={settings.force_update_version}
-                                                            onChange={(e) => handleChange('force_update_version', e.target.value)}
-                                                            className="w-full md:w-64 bg-white border border-slate-300 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 text-slate-800 font-bold text-sm rounded-xl px-5 py-3.5 outline-none transition-all shadow-sm text-left font-mono"
-                                                            dir="ltr"
-                                                            placeholder="v1.0.0"
-                                                        />
+                                                <div className="md:col-span-2 flex flex-col gap-5 p-5 bg-indigo-50/50 border border-indigo-100/50 rounded-2xl">
+                                                    <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
+                                                        <div className="flex-1 w-full">
+                                                            <label htmlFor="latest-build" className="block text-sm font-bold text-slate-800 mb-2">أحدث رقم بناء منشور (Latest Build)</label>
+                                                            <p className="text-xs text-slate-500 font-medium mb-3">يظهر إشعار التحديث لكل مستخدم رقم بنائه أقدم من هذا الرقم فقط. (مثال: 209)</p>
+                                                            <input
+                                                                id="latest-build"
+                                                                type="number"
+                                                                min={0}
+                                                                value={appUpdate.latest_build}
+                                                                onChange={(e) => setAppUpdate(p => ({ ...p, latest_build: parseInt(e.target.value) || 0 }))}
+                                                                className="w-full md:w-64 bg-white border border-slate-300 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 text-slate-800 font-bold text-sm rounded-xl px-5 py-3.5 outline-none transition-all shadow-sm text-left font-mono"
+                                                                dir="ltr"
+                                                                placeholder="209"
+                                                            />
+                                                        </div>
+                                                        <div className="flex flex-col gap-3 self-stretch md:self-auto">
+                                                            <div className="flex items-center justify-between gap-4 bg-white border border-slate-200 p-2 pl-4 pr-2 rounded-2xl shadow-sm">
+                                                                <span className="text-sm font-bold text-slate-700">تفعيل الإشعار</span>
+                                                                <label className="relative inline-flex items-center cursor-pointer">
+                                                                    <input type="checkbox" aria-label="تفعيل إشعار التحديث" className="sr-only peer" checked={appUpdate.enabled} onChange={(e) => setAppUpdate(p => ({ ...p, enabled: e.target.checked }))} />
+                                                                    <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all after:shadow-sm peer-checked:bg-emerald-600"></div>
+                                                                </label>
+                                                            </div>
+                                                            <div className="flex items-center justify-between gap-4 bg-white border border-slate-200 p-2 pl-4 pr-2 rounded-2xl shadow-sm">
+                                                                <span className="text-sm font-bold text-slate-700">إجباري (لا يمكن تجاهله)</span>
+                                                                <label className="relative inline-flex items-center cursor-pointer">
+                                                                    <input type="checkbox" aria-label="تحديث إجباري" className="sr-only peer" checked={appUpdate.force} onChange={(e) => setAppUpdate(p => ({ ...p, force: e.target.checked }))} />
+                                                                    <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all after:shadow-sm peer-checked:bg-indigo-600"></div>
+                                                                </label>
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex items-center bg-white border border-slate-200 p-2 pl-4 pr-2 rounded-2xl shadow-sm self-start md:self-auto">
-                                                        <span className="ml-4 text-sm font-bold text-slate-700">تفعيل الإجبار</span>
-                                                        <label className="relative inline-flex items-center cursor-pointer">
-                                                            <input type="checkbox" aria-label="تفعيل الإجبار على التحديث" className="sr-only peer" checked={settings.force_update_enabled} onChange={(e) => handleChange('force_update_enabled', e.target.checked)} />
-                                                            <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all after:shadow-sm peer-checked:bg-indigo-600"></div>
-                                                        </label>
+                                                    <div>
+                                                        <label htmlFor="update-message" className="block text-sm font-bold text-slate-800 mb-2">رسالة التحديث (اختياري)</label>
+                                                        <input
+                                                            id="update-message"
+                                                            type="text"
+                                                            value={appUpdate.message}
+                                                            onChange={(e) => setAppUpdate(p => ({ ...p, message: e.target.value }))}
+                                                            className="w-full bg-white border border-slate-300 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 text-slate-800 font-medium text-sm rounded-xl px-5 py-3.5 outline-none transition-all shadow-sm"
+                                                            placeholder="يتوفّر إصدار جديد بمزايا وتحسينات مهمة..."
+                                                        />
                                                     </div>
                                                 </div>
 

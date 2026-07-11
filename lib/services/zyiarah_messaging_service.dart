@@ -363,7 +363,10 @@ class ZyiarahMessagingService {
     String? createdBy,
   }) async {
     try {
-      await _db.collection('scheduled_notifications').add({
+      // يجب أن تُكتب في notifications_log بحالة 'scheduled' — releaseScheduledNotifications
+      // يستعلم هذه المجموعة فقط. كانت تُكتب في scheduled_notifications التي لا يقرؤها
+      // أي دالة، فالبثّ المجدول من تطبيق الإدارة لم يكن يُرسَل أبداً.
+      await _db.collection('notifications_log').add({
         'title': title,
         'body': body,
         'target': target,
@@ -371,7 +374,7 @@ class ZyiarahMessagingService {
         'created_at': FieldValue.serverTimestamp(),
         'created_by': createdBy ?? 'Admin',
         'processed': false,
-        'status': 'pending',
+        'status': 'scheduled',
       });
     } catch (e) {
       debugPrint("Error scheduling broadcast: $e");

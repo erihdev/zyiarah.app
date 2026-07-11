@@ -187,8 +187,12 @@ export default function Dashboard() {
             let sRev = 0;
             let pendingCount = 0;
             snap.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
-                const d = doc.data() as { total_amount?: number; status?: string };
-                if (d.status === 'approved') sRev += d.total_amount || 0;
+                const d = doc.data() as { total_amount?: number; status?: string; is_paid?: boolean };
+                // الطلب المدفوع يمرّ بـ processing/shipped/delivered — كان يُحسب approved فقط
+                // فتُستبعَد إيرادات المتجر المدفوعة من اللوحة.
+                if (d.is_paid === true || ['approved', 'processing', 'shipped', 'delivered', 'completed'].includes(d.status || '')) {
+                    sRev += d.total_amount || 0;
+                }
                 if (d.status === 'pending') pendingCount++;
             });
             setStoreRevenue(sRev);

@@ -266,36 +266,10 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated({document: "orde
 
 // 2.5 Notify all available drivers when a new pending order is created
 exports.notifyAvailableDriversOnNewOrder = onDocumentCreated({document: "orders/{orderId}", cpu: 0.083},
-    async (event) => {
-      const snap = event.data;
-      if (!snap) return null;
-
-      const orderData = snap.data();
-      if (orderData.status !== "pending") return null;
-
-      const displayCode = orderData.code || event.params.orderId.substring(0, 6);
-      const serviceType = orderData.service_type || "خدمة";
-      const zoneName = orderData.zone_name || "";
-
-      const payload = {
-        notification: {
-          title: "طلب جديد متاح 🚀",
-          body: `طلب ${serviceType} جديد${zoneName ? " في " + zoneName : ""}. رقم #${displayCode} — اضغط للقبول.`,
-        },
-        data: {
-          click_action: "FLUTTER_NOTIFICATION_CLICK",
-          type: "new_order_driver",
-          orderId: event.params.orderId,
-          code: displayCode,
-        },
-      };
-
-      try {
-        await admin.messaging().send({...payload, topic: "drivers"});
-        console.log(`Available drivers notified for order: ${displayCode}`);
-      } catch (error) {
-        console.error("Error notifying drivers:", error);
-      }
+    async () => {
+      // مُعطَّل: التوجيه المباشر يُسنِد الطلب تلقائياً لسائق محدَّد ويُشعره
+      // (notifyDriverOnAssignment). بثّ «طلب متاح للجميع — اضغط للقبول» كان يتعارض
+      // (يتسابق السائقون على طلب يُسنَد آليّاً فيجدونه scheduled). أُبقيَ no-op.
       return null;
     });
 
@@ -794,7 +768,9 @@ async function isAllowedEmailRecipient(email) {
 }
 
 exports.processNotificationTriggers = onDocumentCreated(
-    {document: "notification_triggers/{id}", secrets: ["RESEND_API_KEY"], cpu: 0.25},
+    // retry: إعادة المحاولة عند فشل عابر (Resend/FCM) بدل فقد الإشعار للأبد. سجلّ
+    // الصندوق (step 1) بمعرّف حتمي كي لا يتكرّر عند الإعادة.
+    {document: "notification_triggers/{id}", secrets: ["RESEND_API_KEY"], cpu: 0.25, retry: true},
     async (event) => {
       const snap = event.data;
       if (!snap) return;
@@ -812,15 +788,16 @@ exports.processNotificationTriggers = onDocumentCreated(
       try {
         // 1. Sync to In-App Notification History
         if (toUid && toUid !== "ADMIN_BROADCAST") {
-          await admin.firestore().collection("notifications").add({
-            userId: toUid,
-            title: title,
-            body: (body || "").replace(/<[^>]*>?/gm, ""),
-            type: type,
-            relatedId: data.orderId || data.code || event.params.id,
-            isRead: false,
-            sentAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
+          await admin.firestore().collection("notifications")
+              .doc(`trig_${event.params.id}`).set({
+                userId: toUid,
+                title: title,
+                body: (body || "").replace(/<[^>]*>?/gm, ""),
+                type: type,
+                relatedId: data.orderId || data.code || event.params.id,
+                isRead: false,
+                sentAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
         }
         // 1b. سجلّ تنبيهات الإدارة — تستمع إليه لوحة الويب لحظيّاً (لا FCM/VAPID).
         if (toUid === "ADMIN_BROADCAST") {
@@ -907,17 +884,27 @@ exports.processNotificationTriggers = onDocumentCreated(
         if (type !== "email") {
           let targetTokens = [];
           if (toUid === "ADMIN_BROADCAST") {
-            // توجيه حسب الدور: إن حدّد المُرسِل targetRoles (مثل ['orders_manager']
-            // لطلب جديد، أو ['accountant_admin'] لتنبيه دفع) نُرسل لتلك الأدوار فقط،
-            // مع تضمين super_admin/admin دائماً (يرى كل شيء). وإلا نبثّ لكل الأدوار.
             const allAdminRoles = ["admin", "super_admin", "orders_manager", "accountant_admin", "marketing_admin"];
-            const roles = (Array.isArray(targetRoles) && targetRoles.length > 0) ?
-              [...new Set([...targetRoles, "admin", "super_admin"])] : allAdminRoles;
-            const snap2 = await admin.firestore()
-                .collection("fcm_tokens").where("role", "in", roles).get();
-            targetTokens = snap2.docs
-                .map((d) => d.data()?.fcmToken || d.data()?.token)
-                .filter((t) => !!t);
+            if (Array.isArray(targetRoles) && targetRoles.length > 0) {
+              // توجيه فعلي حسب الدور الفرعي: نصفّي بـ staff_role (الدور الحقيقي على
+              // التوكن) — الحقل role دائماً 'admin' للموظّفين فلا يصلح للتصفية. نضمّ
+              // دائماً المدراء الكبار (role admin/super بلا staff_role) عبر استعلام ثانٍ.
+              const [byStaff, bySuper] = await Promise.all([
+                admin.firestore().collection("fcm_tokens").where("staff_role", "in", targetRoles).get(),
+                admin.firestore().collection("fcm_tokens").where("role", "in", ["admin", "super_admin"]).get(),
+              ]);
+              const seen = new Set();
+              for (const d of [...byStaff.docs, ...bySuper.docs]) {
+                const t = d.data()?.fcmToken || d.data()?.token;
+                if (t && !seen.has(t)) { seen.add(t); targetTokens.push(t); }
+              }
+            } else {
+              const snap2 = await admin.firestore()
+                  .collection("fcm_tokens").where("role", "in", allAdminRoles).get();
+              targetTokens = snap2.docs
+                  .map((d) => d.data()?.fcmToken || d.data()?.token)
+                  .filter((t) => !!t);
+            }
           } else if (toUid) {
             const tokenDoc = await admin.firestore()
                 .collection("fcm_tokens").doc(toUid).get();
@@ -928,9 +915,14 @@ exports.processNotificationTriggers = onDocumentCreated(
           }
 
           if (targetTokens.length > 0) {
+            // FCM يتطلب كل قيم data نصوصاً — بيانات التطبيق تحوي أرقاماً (amount/rating/
+            // visits) فكانت الدفعة تُرفَض بالكامل. نُحوّل كل القيم لنصوص.
+            const strData = Object.fromEntries(
+                Object.entries({...data, click_action: "FLUTTER_NOTIFICATION_CLICK"})
+                    .map(([k, v]) => [k, v == null ? "" : String(v)]));
             const pushMsg = {
               notification: {title, body: (body || "").replace(/<[^>]*>?/gm, "")},
-              data: {...data, click_action: "FLUTTER_NOTIFICATION_CLICK"},
+              data: strData,
             };
             if (targetTokens.length === 1) {
               await admin.messaging().send({...pushMsg, token: targetTokens[0]});
@@ -1091,17 +1083,20 @@ async function processReferralRewardServer(refereeUid, orderId, orderCode) {
         order_id: orderId,
         created_at: admin.firestore.FieldValue.serverTimestamp(),
       });
+      // يجب أن يطابق مخطّط الكوبونات الذي يقرؤه التطبيق (validateCoupon):
+      // type/value/maxUses/status/expiry — كان يكتب discount_type/is_active/expires_at
+      // فيفشل التحقّق دائماً ولا يُطبَّق كوبون الإحالة أبداً.
       t.set(couponRef, {
         code: couponCode,
-        discount_type: "percentage",
-        discount_value: 10,
-        description: "خصم الإحالة 10% — مكافأة الانضمام",
-        max_uses: 1,
+        type: "percentage",
+        value: 10,
+        maxUses: 1,
         uses: 0,
+        status: "active",
+        expiry: admin.firestore.Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000),
         target_user_id: refereeUid,
-        is_active: true,
+        description: "خصم الإحالة 10% — مكافأة الانضمام",
         created_at: admin.firestore.FieldValue.serverTimestamp(),
-        expires_at: admin.firestore.Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000),
       }, {merge: true});
 
       return {referrerId, couponCode};
@@ -2046,7 +2041,9 @@ exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
     const v = schedule[i];
     const dp = String(v.date).split("-").map(Number);
     const hr = Number(String(v.slot).split(":")[0] || 10);
-    const startDateTime = new Date(dp[0], dp[1] - 1, dp[2], hr, 0, 0);
+    // الدوال تعمل بـUTC، فبناء new Date(y,m,d,hr) يفسّر الساعة UTC = +3 عن الرياض.
+    // نبنيها صراحةً بتوقيت الرياض (UTC+3 ثابت) كي تتّسق مع طلبات الساعة العادية.
+    const startDateTime = new Date(Date.UTC(dp[0], dp[1] - 1, dp[2], hr - 3, 0, 0));
     const endDateTime = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
 
     // معرّف حتمي: إعادة التوليد تكتب فوق نفس المستند بدل تكرار الزيارة.
@@ -2129,7 +2126,9 @@ async function _generateContractVisits(db, contractRef, c) {
     const v = schedule[i];
     const dp = String(v.date).split("-").map(Number);
     const hr = Number(String(v.slot).split(":")[0] || 10);
-    const startDateTime = new Date(dp[0], dp[1] - 1, dp[2], hr, 0, 0);
+    // الدوال تعمل بـUTC، فبناء new Date(y,m,d,hr) يفسّر الساعة UTC = +3 عن الرياض.
+    // نبنيها صراحةً بتوقيت الرياض (UTC+3 ثابت) كي تتّسق مع طلبات الساعة العادية.
+    const startDateTime = new Date(Date.UTC(dp[0], dp[1] - 1, dp[2], hr - 3, 0, 0));
     const endDateTime = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
     // معرّف حتمي: إعادة التوليد تكتب فوق نفس المستند بدل تكرار الزيارة.
     const orderRef = db.collection("orders").doc(`sub_${contractRef.id}_${i + 1}`);
@@ -2189,10 +2188,17 @@ exports.activateContractOnPaid = onDocumentUpdated({document: "contracts/{contra
           visits_generated: true,
           visits_generated_at: admin.firestore.FieldValue.serverTimestamp(),
         });
-        // منح رصيد الزيارات ذرّياً مع مطالبة التفعيل — مرّة واحدة فقط (لا ازدواج منح).
+        // منح رصيد الزيارات + حقول عرض الاشتراك ذرّياً — بدونها كانت بطاقة الاشتراك
+        // في لوحة العميل لا تظهر أبداً (has_active_subscription تبقى false).
         if (c.userId && Number(c.planVisits || 0) > 0) {
+          const pv = Number(c.planVisits);
           tx.set(db.collection("users").doc(c.userId), {
-            visits_remaining: admin.firestore.FieldValue.increment(Number(c.planVisits)),
+            visits_remaining: admin.firestore.FieldValue.increment(pv),
+            has_active_subscription: true,
+            subscription_total_visits: pv,
+            subscription_type: c.planName || "باقة زيارة",
+            subscription_expiry: admin.firestore.Timestamp.fromMillis(
+                Date.now() + 90 * 24 * 60 * 60 * 1000),
           }, {merge: true});
         }
         return c;
@@ -2305,6 +2311,9 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
       status: "scheduled",
       driver_id: driverId,
       driver_name: d.name || "سائق",
+      // assigned_driver: شاشات التتبّع تقرأ هذا الحقل — بدونه يعلق العميل على «جاري
+      // تعيين سائق» للأبد في مسار الاعتماد اليدوي (كنب/مكيفات/متجر).
+      assigned_driver: d.name || "سائق",
       driver_phone: d.phone || "000000000",
       assigned_at: admin.firestore.FieldValue.serverTimestamp(),
       scheduled_at: admin.firestore.Timestamp.fromDate(startDateTime),
@@ -2768,7 +2777,7 @@ exports.autoAssignDriverDirectly = onCall({cpu: 0.25}, async (request) => {
     assigned: true,
     driverId: r.driverId,
     driverName: r.driverName,
-    driverEmail: driver.data().email || null,
+    // لا نُعيد بريد السائق للعميل (تسريب PII للموظّف).
   };
 });
 
@@ -2801,7 +2810,6 @@ exports.checkHourlySlotAvailability = onCall({cpu: 0.25}, async (request) => {
     available: true,
     driverId: driver.id,
     driverName: driverData.name || "سائق",
-    driverEmail: driverData.email || null,
   };
 });
 
@@ -2856,6 +2864,9 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
   for (const doc of snap.docs) {
     const d = doc.data();
     if (d.status === "cancelled" || d.status === "rejected") continue;
+    // نعدّ طلبات المنطقة المطلوبة فقط — driverCount مصفّى بالمنطقة، فعدّ طلبات كل
+    // المناطق كان يُظهر السلوت ممتلئاً لعميل منطقة سائقوها متفرّغون.
+    if (zoneName && d.zone_name !== zoneName) continue;
     const bDate = d.booking_date;
     if (!bDate) continue;
     dailyCounts[bDate] = (dailyCounts[bDate] || 0) + 1;
@@ -2964,8 +2975,9 @@ exports.moyasarWebhook = onRequest(
 
       // 1. Verify shared secret (set in Moyasar Dashboard → Webhooks)
       const webhookSecret = moyasarWebhookSecret.value();
-      if (webhookSecret && event.secret_token !== webhookSecret) {
-        console.error("moyasarWebhook: invalid secret_token — possible spoofed request");
+      // رفض قاطع: إن لم يُضبط السرّ نرفض بدل القبول المفتوح (كان يمرّ أي POST بلا سرّ).
+      if (!webhookSecret || event.secret_token !== webhookSecret) {
+        console.error("moyasarWebhook: invalid/missing secret_token — rejecting");
         return res.status(401).json({error: "Invalid secret"});
       }
 

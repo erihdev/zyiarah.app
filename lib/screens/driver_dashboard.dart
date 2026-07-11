@@ -1167,7 +1167,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     String adminPhone = "966500000000";
     try {
       final configDoc = await FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get();
-      adminPhone = configDoc.data()?['admin_whatsapp'] ?? adminPhone;
+      adminPhone = configDoc.data()?['support_whatsapp'] ?? configDoc.data()?['admin_whatsapp'] ?? adminPhone;
     } catch (_) {}
     final url = "https://wa.me/$adminPhone?text=${Uri.encodeComponent(message)}";
     if (await canLaunchUrl(Uri.parse(url))) await launchUrl(Uri.parse(url));

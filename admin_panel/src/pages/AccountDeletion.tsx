@@ -14,7 +14,9 @@ interface DeletionRequest {
     phone?: string;
     requested_at?: { toDate: () => Date };
     reason?: string;
-    status: 'pending' | 'deleted' | 'rejected';
+    // الدالة onRequestAccountDeletion تكتب deleted_fully_processed عند نجاح التنظيف
+    // الكامل، و failed_deletion عند فشله — كانت اللوحة تجهل هاتين الحالتين فتظهران فارغتين.
+    status: 'pending' | 'deleted' | 'rejected' | 'deleted_fully_processed' | 'failed_deletion';
     userId?: string;
 }
 
@@ -159,7 +161,8 @@ export default function AccountDeletion() {
                                         <td className="px-6 py-4 text-sm text-slate-600 line-clamp-1">{req.reason ?? '—'}</td>
                                         <td className="px-6 py-4">
                                             {req.status === 'pending' && <span className="inline-flex items-center gap-1 text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full text-xs font-bold border border-amber-100"><AlertTriangle size={12} />قيد المراجعة</span>}
-                                            {req.status === 'deleted' && <span className="inline-flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full text-xs font-bold border border-emerald-100"><CheckCircle2 size={12} />تم الحذف نهائياً</span>}
+                                            {(req.status === 'deleted' || req.status === 'deleted_fully_processed') && <span className="inline-flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full text-xs font-bold border border-emerald-100"><CheckCircle2 size={12} />تم الحذف نهائياً</span>}
+                                            {req.status === 'failed_deletion' && <span className="inline-flex items-center gap-1 text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full text-xs font-bold border border-rose-100"><AlertTriangle size={12} />فشل الحذف</span>}
                                             {req.status === 'rejected' && <span className="inline-flex items-center gap-1 text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full text-xs font-bold border border-slate-200"><XCircle size={12} />مرفوض</span>}
                                         </td>
                                         <td className="px-6 py-4 text-center">
@@ -188,7 +191,7 @@ export default function AccountDeletion() {
                                                     </button>
                                                 </div>
                                             ) : (
-                                                <span className="text-xs text-slate-400 font-medium">مكتمل</span>
+                                                <span className="text-xs text-slate-400 font-medium">{req.status === 'failed_deletion' ? 'فشل — يتطلب مراجعة' : 'مكتمل'}</span>
                                             )}
                                         </td>
                                     </tr>

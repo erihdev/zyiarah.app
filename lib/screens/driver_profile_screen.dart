@@ -57,7 +57,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                       _auth.currentUser?.phoneNumber ??
                       'غير محدد';
                   final email = _auth.currentUser?.email ?? 'غير محدد';
+                  // rating_count هو العدّاد الحيّ (rides حقل بذرة لا يُحدَّث).
                   final totalTasks =
+                      (data['rating_count'] as num?)?.toInt() ??
                       (data['rides'] as num?)?.toInt() ?? 0;
 
                   return SingleChildScrollView(
@@ -408,7 +410,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           .collection('system_configs')
           .doc('main_settings')
           .get();
-      adminPhone = doc.data()?['admin_whatsapp'] ?? adminPhone;
+      adminPhone = doc.data()?['support_whatsapp'] ?? doc.data()?['admin_whatsapp'] ?? adminPhone;
     } catch (_) {}
     final url =
         'https://wa.me/$adminPhone?text=${Uri.encodeComponent("استفسار من سائق زيارة")}';

@@ -34,8 +34,28 @@ interface StoreOrder {
   client_name?: string;
   items: OrderItem[];
   total_amount: number;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'processing' | 'shipped' | 'delivered' | 'completed' | 'pending_admin_approval';
+  is_paid?: boolean;
   created_at: Timestamp;
+}
+
+// حالة مدفوعة = العميل دفع فعلاً؛ كانت اللوحة تعرضها كـ"قيد الانتظار" وتُظهر أزرار موافقة/رفض خطأً.
+const PAID_STATUSES = ['processing', 'shipped', 'delivered', 'completed'];
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'قيد الانتظار',
+  pending_admin_approval: 'بانتظار الموافقة',
+  approved: 'مقبول',
+  rejected: 'مرفوض',
+  processing: 'مدفوع — قيد التجهيز',
+  shipped: 'تم الشحن',
+  delivered: 'تم التسليم',
+  completed: 'مكتمل',
+};
+function statusTone(status: string): 'green' | 'red' | 'blue' | 'amber' {
+  if (status === 'rejected') return 'red';
+  if (status === 'approved' || status === 'delivered' || status === 'completed') return 'green';
+  if (PAID_STATUSES.includes(status)) return 'blue';
+  return 'amber';
 }
 
 export default function StoreOrders() {
@@ -114,8 +134,9 @@ export default function StoreOrders() {
               >
                 <div className="flex items-center gap-4">
                   <div className={`p-3 rounded-2xl ${
-                    order.status === 'approved' ? 'bg-green-50 text-green-600' :
-                    order.status === 'rejected' ? 'bg-red-50 text-red-600' :
+                    statusTone(order.status) === 'green' ? 'bg-green-50 text-green-600' :
+                    statusTone(order.status) === 'red' ? 'bg-red-50 text-red-600' :
+                    statusTone(order.status) === 'blue' ? 'bg-blue-50 text-blue-600' :
                     'bg-amber-50 text-amber-600'
                   }`}>
                     <Package size={24} />
@@ -131,12 +152,12 @@ export default function StoreOrders() {
 
                 <div className="flex items-center gap-3">
                   <div className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase ${
-                    order.status === 'approved' ? 'bg-green-100 text-green-700' :
-                    order.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                    statusTone(order.status) === 'green' ? 'bg-green-100 text-green-700' :
+                    statusTone(order.status) === 'red' ? 'bg-red-100 text-red-700' :
+                    statusTone(order.status) === 'blue' ? 'bg-blue-100 text-blue-700' :
                     'bg-amber-100 text-amber-700'
                   }`}>
-                    {order.status === 'approved' ? 'مقبول' : 
-                     order.status === 'rejected' ? 'مرفوض' : 'قيد الانتظار'}
+                    {STATUS_LABELS[order.status] ?? order.status}
                   </div>
                   <div className="bg-slate-50 p-1.5 rounded-lg text-slate-400">
                     {expandedOrders.has(order.id) ? <ChevronUp size={20} /> : <ChevronDown size={20} />}

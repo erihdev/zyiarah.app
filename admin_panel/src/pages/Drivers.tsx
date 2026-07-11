@@ -65,7 +65,7 @@ export default function Drivers() {
             const fetched = snapshot.docs.map((d: QueryDocumentSnapshot<DocumentData>) => {
                 const data = d.data();
                 if (data.is_available) available++;
-                return { id: d.id, name: data.name || 'غير محدد', phone: data.phone || 'غير محدد', vehicle: data.vehicle || 'غير محدد', is_available: data.is_available || false, is_suspended: data.is_suspended || false, is_active: data.is_active !== false, rating: data.rating || 5.0, rides: data.rides || 0, monthly_salary: data.monthly_salary || 0, photo_url: data.photo_url || '', ...data } as DriverData;
+                return { ...data, id: d.id, name: data.name || 'غير محدد', phone: data.phone || 'غير محدد', vehicle: data.vehicle || data.car_info || 'غير محدد', is_available: data.is_available || false, is_suspended: data.is_suspended || false, is_active: data.is_active !== false, rating: data.rating_avg ?? data.rating ?? 5.0, rides: data.rating_count ?? data.rides ?? 0, monthly_salary: data.monthly_salary || 0, photo_url: data.photo_url || '' } as DriverData;
             });
             setDrivers(fetched);
             setIsAvailableCount(available);

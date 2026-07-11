@@ -337,6 +337,8 @@ class ZyiarahFirebaseService {
           'phone': phone,
           'email': email,
           'role': role,
+          // type: يقرؤه عدّاد السائقين وكشف الرواتب — بدونه يُصنَّف الجميع افتراضياً.
+          'type': role,
           'is_active': isActive,
           'created_at': FieldValue.serverTimestamp(),
           ...extraData ?? {},

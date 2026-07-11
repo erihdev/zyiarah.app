@@ -367,9 +367,10 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       }
     }
 
-    processDocs(orders, 'created_at', 'final_amount');
-    processDocs(maintenance, 'createdAt', 'quotePrice');
-    processDocs(_storeOrders, 'created_at', 'total_price');
+    // كانت تقرأ final_amount/total_price (غير مكتوبة) فيظهر مخطّط الإيرادات مسطّحاً.
+    processDocs(orders, 'created_at', 'amount');
+    processDocs(maintenance, 'createdAt', 'amount');
+    processDocs(_storeOrders, 'created_at', 'total_amount');
 
     List<String> sortedDays = dailyRevenue.keys.toList().reversed.toList();
     List<FlSpot> spots = [];
