@@ -68,14 +68,19 @@ service cloud.firestore {
       allow create: if
         // Super admin: provision any account (staff / drivers)
         isSuperAdmin() ||
-        // Orders manager: may provision driver accounts only (not other admins)
+        // Orders manager: may provision driver accounts only (not other admins),
+        // and never a privileged staff_role (blocks escalation via sub-provisioning)
         (isOrdersManager() &&
-          request.resource.data.get('role', 'client') == 'driver') ||
-        // Self-signup: own doc, non-privileged role only
+          request.resource.data.get('role', 'client') == 'driver' &&
+          request.resource.data.get('staff_role', 'client') == 'client') ||
+        // Self-signup: own doc, non-privileged role AND non-privileged staff_role only.
+        // SECURITY: getUserRole() trusts staff_role BEFORE role, so it must be guarded
+        // here too — otherwise a client self-signs with staff_role='super_admin'.
         (isOwner(userId) &&
           !(request.resource.data.get('role', 'client') in
             ['admin', 'super_admin', 'orders_manager',
-             'accountant_admin', 'marketing_admin', 'driver']));
+             'accountant_admin', 'marketing_admin', 'driver']) &&
+          request.resource.data.get('staff_role', 'client') == 'client');
 
       // SECURITY: only super_admin may set role/is_blocked (prevents a sub-admin from
       // self-escalating to super_admin or blocking users); the `wallet` field on the
@@ -84,14 +89,16 @@ service cloud.firestore {
         // Super admin: create staff/drivers (role), ban users (is_blocked) — but not wallet
         (isSuperAdmin() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['wallet'])) ||
-        // Other admins: edit user profile fields, but never role / wallet / is_blocked
+        // Other admins: edit user profile fields, but never role / staff_role / wallet / is_blocked
+        // SECURITY: staff_role IS the effective role (getUserRole trusts it first), so only
+        // a super_admin may set it — a sub-admin must not self-escalate.
         (isAdmin() &&
           !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['role', 'wallet', 'is_blocked'])) ||
+            .hasAny(['role', 'staff_role', 'wallet', 'is_blocked'])) ||
         // Owner: own non-sensitive fields only
         (isOwner(userId) &&
           !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['role', 'wallet', 'rating_avg', 'rating_count',
+            .hasAny(['role', 'staff_role', 'wallet', 'rating_avg', 'rating_count',
                      'total_orders', 'is_blocked']));
 
       allow delete: if isSuperAdmin();
@@ -399,7 +406,7 @@ service cloud.firestore {
         (request.auth.uid == resource.data.userId || isAdmin());
       allow update: if isLoggedIn() &&
         ((request.auth.uid == resource.data.userId &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead'])) ||
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead', 'is_read'])) ||
          isAdmin());
       allow create, delete: if isAdmin();
     }

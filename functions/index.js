@@ -2890,8 +2890,13 @@ async function _assertAdmin(request) {
   if (!userDoc.exists) {
     throw new HttpsError("permission-denied", "المستخدم غير موجود");
   }
-  const role = userDoc.data().role;
-  const allowedRoles = ["super_admin", "orders_manager"];
+  // Effective role mirrors the Firestore rules getUserRole(): staff_role is the real
+  // role (staff carry role:'admin' + staff_role:'<subrole>'); fall back to role for
+  // bootstrapped super admins. Checking only `role` previously rejected every
+  // orders_manager (and any admin@ whose role wasn't literally 'super_admin').
+  const data = userDoc.data();
+  const role = data.staff_role || data.role;
+  const allowedRoles = ["admin", "super_admin", "orders_manager"];
   if (!allowedRoles.includes(role)) {
     throw new HttpsError("permission-denied", "صلاحيات إدارية مطلوبة لهذه العملية");
   }
