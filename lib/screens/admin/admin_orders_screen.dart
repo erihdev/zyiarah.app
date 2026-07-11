@@ -85,6 +85,20 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
       return _buildShimmerLoading();
     }
 
+    if (snapshot.hasError) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: Colors.red[200]),
+            const SizedBox(height: 16),
+            Text("تعذّر تحميل الطلبات، تحقّق من الاتصال",
+                style: GoogleFonts.tajawal(color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+
     if (docs.isEmpty) {
       return Center(
         child: Column(

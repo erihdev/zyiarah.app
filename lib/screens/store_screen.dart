@@ -177,6 +177,12 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
                       itemBuilder: (context, index) => const ShimmerGridItem(),
                     );
                   }
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text('تعذّر تحميل المتجر، تحقّق من الاتصال',
+                          style: GoogleFonts.tajawal(color: Colors.grey)),
+                    );
+                  }
                   if (!snapshot.hasData || snapshot.data!.isEmpty) {
                     return _buildEmptyState();
                   }

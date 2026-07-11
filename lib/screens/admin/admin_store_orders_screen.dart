@@ -240,6 +240,7 @@ class AdminStoreOrdersScreen extends StatelessWidget {
           stream: FirebaseFirestore.instance.collection('store_orders').orderBy('created_at', descending: true).limit(100).snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+            if (snapshot.hasError) return const Center(child: Text("تعذّر تحميل الطلبات، تحقّق من الاتصال"));
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("لا توجد طلبات في المتجر حتى الآن"));
 
             return ListView.builder(

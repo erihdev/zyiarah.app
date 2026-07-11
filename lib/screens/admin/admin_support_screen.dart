@@ -48,7 +48,10 @@ class AdminSupportScreen extends StatelessWidget {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return ZyiarahShimmer.buildListSkeleton(count: 5);
         }
-        
+        if (snapshot.hasError) {
+          return const Center(child: Text("تعذّر تحميل التذاكر، تحقّق من الاتصال"));
+        }
+
         final docs = snapshot.data?.docs ?? [];
         
         // Sort locally by date

@@ -143,7 +143,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           );
         }
         if (snapshot.hasError) {
-          return Center(child: Text('خطأ: ${snapshot.error}'));
+          return const Center(child: Text('تعذّر تحميل البيانات، تحقّق من الاتصال'));
         }
         // Filter based on phase
         // كل حالات المسار النشط بما فيها لهجة الإرسال المباشر (Direct Dispatch)
@@ -202,7 +202,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           );
         }
         if (snapshot.hasError) {
-          return Center(child: Text('خطأ: ${snapshot.error}'));
+          return const Center(child: Text('تعذّر تحميل البيانات، تحقّق من الاتصال'));
         }
         // Filter based on phase
         final List<String> historyStatuses = ['completed', 'rejected'];
@@ -256,7 +256,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           );
         }
         if (snapshot.hasError) {
-          return Center(child: Text('خطأ: ${snapshot.error}'));
+          return const Center(child: Text('تعذّر تحميل البيانات، تحقّق من الاتصال'));
         }
         
         final List<String> activeStatuses = ['pending', 'approved', 'processing', 'shipped'];

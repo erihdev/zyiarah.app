@@ -400,6 +400,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
           stream: FirebaseFirestore.instance.collection('drivers').limit(100).snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return _buildShimmerLoading();
+            if (snapshot.hasError) return const Center(child: Text("تعذّر تحميل السائقين، تحقّق من الاتصال"));
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("لا توجد سجلات"));
 
             final docs = snapshot.data!.docs;
@@ -539,7 +540,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                         children: [
                           Icon(Icons.phone_android, size: 12, color: Colors.grey[400]),
                           const SizedBox(width: 4),
-                          Text(driver['phone'] ?? 'لا يوجد بريد', style: GoogleFonts.tajawal(color: Colors.grey[500], fontSize: 12)),
+                          Text(driver['phone'] ?? 'لا يوجد رقم', style: GoogleFonts.tajawal(color: Colors.grey[500], fontSize: 12)),
                         ],
                       ),
                       const SizedBox(height: 6),

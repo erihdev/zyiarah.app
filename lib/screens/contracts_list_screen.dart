@@ -47,7 +47,7 @@ class ZyiarahContractsListScreen extends StatelessWidget {
               return Center(
                 child: Padding(
                   padding: const EdgeInsets.all(20.0),
-                  child: Text('حدث خطأ أثناء جلب العقود: ${snapshot.error}', 
+                  child: Text('تعذّر جلب العقود، تحقّق من الاتصال',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.tajawal(color: Colors.red)),
                 ),

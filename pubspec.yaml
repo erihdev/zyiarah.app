@@ -2,7 +2,7 @@ name: zyiarah
 description: "A new Flutter project."
 publish_to: "none"
 
-version: 1.2.23+229
+version: 1.2.24+230
 
 environment:
   sdk: ">=3.0.0 <4.0.0"

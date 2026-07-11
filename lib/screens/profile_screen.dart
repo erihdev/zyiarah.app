@@ -360,7 +360,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content:
-                Text('خطأ في حذف الحساب: $e', style: GoogleFonts.tajawal()),
+                Text('تعذّر حذف الحساب، حاول لاحقاً', style: GoogleFonts.tajawal()),
             backgroundColor: Colors.red,
           ),
         );
@@ -1072,7 +1072,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
       onLongPress: () => _showThankYouMessage(context),
       child: Text.rich(
         TextSpan(
-          text: 'إصدار التطبيق 1.2.0 (Build 25)\nمؤسسة معاذ يحي محمد المالكي\nتم التطوير بواسطة\n',
+          text: 'إصدار التطبيق 1.2.23\nمؤسسة معاذ يحي محمد المالكي\nتم التطوير بواسطة\n',
           style: GoogleFonts.tajawal(fontSize: 10, color: Colors.grey),
           children: [
             TextSpan(
