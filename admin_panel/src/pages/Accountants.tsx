@@ -72,11 +72,11 @@ export default function Accountants() {
         const unsubOrders = onSnapshot(ordersQ, (snap) => {
             setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() } as Order)));
             setLoading(false);
-        });
+        }, (e: unknown) => { console.error("Accountants orders listener error:", e); setLoading(false); });
 
         const unsubDrivers = onSnapshot(collection(db, 'drivers'), (snap) => {
             setDrivers(snap.docs.map(d => d.data() as Driver));
-        });
+        }, (e: unknown) => { console.error("Accountants drivers listener error:", e); });
 
         return () => { unsubOrders(); unsubDrivers(); };
     }, []);

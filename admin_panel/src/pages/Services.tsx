@@ -65,6 +65,7 @@ export default function Services() {
     // يمنع حفظ الأسعار فوق الإنتاج بالقيم الافتراضية بعد قراءة فاشلة.
     const [pricingLoadFailed, setPricingLoadFailed] = useState(false);
     const [isSavingPricing, setIsSavingPricing] = useState(false);
+    const [isSavingService, setIsSavingService] = useState(false);
     const [isAddingService, setIsAddingService] = useState(false);
     const [editingService, setEditingService] = useState<AppService | null>(null);
 
@@ -165,6 +166,8 @@ export default function Services() {
 
     const handleSaveService = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isSavingService) return; // حارس ضدّ الإرسال المزدوج (خدمات مكرّرة)
+        setIsSavingService(true);
         const data = {
             title: formData.title,
             subtitle: formData.subtitle,
@@ -190,6 +193,8 @@ export default function Services() {
             fetchData();
         } catch {
             toast.error("حدث خطأ أثناء حفظ الخدمة");
+        } finally {
+            setIsSavingService(false);
         }
     };
 
@@ -482,11 +487,12 @@ export default function Services() {
                                 />
                             </div>
                             <div className="pt-6 border-t border-slate-100 flex gap-4">
-                                <button 
-                                    type="submit" 
-                                    className="flex-1 bg-gradient-to-r from-[#5D1B5E] to-[#7B2E7C] text-white font-black py-4 rounded-2xl hover:opacity-95 active:scale-95 transition-all shadow-lg shadow-purple-900/10 text-base"
+                                <button
+                                    type="submit"
+                                    disabled={isSavingService}
+                                    className="flex-1 bg-gradient-to-r from-[#5D1B5E] to-[#7B2E7C] text-white font-black py-4 rounded-2xl hover:opacity-95 active:scale-95 disabled:opacity-60 transition-all shadow-lg shadow-purple-900/10 text-base"
                                 >
-                                    حفظ وتحديث الخدمة
+                                    {isSavingService ? 'جارٍ الحفظ...' : 'حفظ وتحديث الخدمة'}
                                 </button>
                                 <button 
                                     type="button" 

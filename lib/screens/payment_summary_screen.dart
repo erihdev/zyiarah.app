@@ -291,7 +291,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           _appliedCoupon = _couponController.text.toUpperCase();
           double value = ((couponData['value'] as num?) ?? 0).toDouble();
           if (couponData['type'] == 'percentage') {
-            _discountAmount = widget.amount * (value / 100);
+            // النسبة على المبلغ المُطبَّق عليه Surge (هو ما يُدفع فعلاً) — كان يُحسب على
+            // المبلغ قبل Surge فيُخصَم أقل من المُعلَن أثناء ذروة التسعير.
+            _discountAmount = widget.amount * _surgeFactor * (value / 100);
           } else {
             _discountAmount = value;
           }
@@ -351,16 +353,26 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     } catch (_) {}
 
     try {
-      final timeSlot = '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00';
-      final slotSnap = await FirebaseFirestore.instance
+      final int reqStart = widget.serviceDate!.hour;
+      final int reqEnd = reqStart + (widget.hours ?? 4);
+      // نعدّ الطلبات التي تتقاطع فترتها [البداية، البداية+الساعات) مع فترتنا — لا التي
+      // تبدأ في نفس الساعة فقط. الطلب بـ8 ساعات يشغل السائق طوال المدة، وكان الفحص
+      // القديم يعتبر السلوت متاحاً فيحدث حجز لطلب لن يجد سائقاً (مدفوع بلا تنفيذ).
+      final daySnap = await FirebaseFirestore.instance
           .collection('orders')
           .where('booking_date', isEqualTo: bookingDate)
-          .where('booking_time_slot', isEqualTo: timeSlot)
           .get();
-      final count = slotSnap.docs
-          .where((d) => (d.data())['status'] != 'cancelled')
-          .length;
-      if (count >= maxTeamsPerSlot) {
+      int overlap = 0;
+      for (final d in daySnap.docs) {
+        final o = d.data();
+        if (o['status'] == 'cancelled') continue;
+        final slot = (o['booking_time_slot'] as String?) ?? '';
+        final oStart = int.tryParse(slot.split(':').first) ?? -1;
+        if (oStart < 0) continue;
+        final oHours = (o['hours_contracted'] as num?)?.toInt() ?? 4;
+        if (reqStart < oStart + oHours && oStart < reqEnd) overlap++;
+      }
+      if (overlap >= maxTeamsPerSlot) {
         return 'نعتذر، هذا الوقت محجوز بالكامل حالياً. يرجى اختيار وقت بدء آخر.';
       }
     } catch (_) {}

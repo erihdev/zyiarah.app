@@ -40,6 +40,7 @@ export default function StoreProducts() {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   
   // Form State
   const [formData, setFormData] = useState({
@@ -88,6 +89,8 @@ export default function StoreProducts() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving) return; // حارس ضدّ الإرسال المزدوج (منتجات مكرّرة)
+    setIsSaving(true);
     try {
       if (editingProduct) {
         await updateDoc(doc(db, 'products', editingProduct.id), {
@@ -103,6 +106,8 @@ export default function StoreProducts() {
       setIsModalOpen(false);
     } catch (error) {
       console.error("Error saving product:", error);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -258,7 +263,7 @@ export default function StoreProducts() {
                     required
                     className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-500 transition-all font-medium"
                     value={formData.price}
-                    onChange={(e) => setFormData({...formData, price: parseFloat(e.target.value)})}
+                    onChange={(e) => setFormData({...formData, price: parseFloat(e.target.value) || 0})}
                   />
                 </div>
                 <div className="space-y-2">
@@ -293,12 +298,13 @@ export default function StoreProducts() {
                 >
                   إلغاء
                 </button>
-                <button 
+                <button
                   type="submit"
-                  className="flex items-center space-x-2 space-x-reverse bg-blue-600 hover:bg-blue-700 text-white px-10 py-3 rounded-2xl font-bold transition-all shadow-lg shadow-blue-100"
+                  disabled={isSaving}
+                  className="flex items-center space-x-2 space-x-reverse bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white px-10 py-3 rounded-2xl font-bold transition-all shadow-lg shadow-blue-100"
                 >
                   <Save size={20} />
-                  <span>{editingProduct ? 'حفظ التعديلات' : 'نشر المنتج'}</span>
+                  <span>{isSaving ? 'جارٍ الحفظ...' : (editingProduct ? 'حفظ التعديلات' : 'نشر المنتج')}</span>
                 </button>
               </div>
             </form>

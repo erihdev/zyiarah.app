@@ -104,7 +104,9 @@ export default function Payroll() {
     });
 
     const totalBudget = drivers.reduce((s, d) => s + d.monthly_salary, 0);
-    const paidTotal = rows.filter(r => r.status === 'paid').reduce((s, r) => s + r.monthly_salary, 0);
+    // للصفوف المدفوعة نستخدم الراتب المُسجَّل وقت الصرف لا الراتب الحيّ — وإلا تغيّر
+    // إجمالي شهر سابق بأثر رجعي عند تعديل راتب السائق لاحقاً.
+    const paidTotal = rows.filter(r => r.status === 'paid').reduce((s, r) => s + (payrollRecords[r.id]?.salary ?? r.monthly_salary), 0);
     const unpaidTotal = rows.filter(r => r.status === 'unpaid').reduce((s, r) => s + r.monthly_salary, 0);
     const paidCount = rows.filter(r => r.status === 'paid').length;
     const unpaidCount = rows.filter(r => r.status === 'unpaid').length;

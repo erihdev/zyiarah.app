@@ -130,7 +130,8 @@ service cloud.firestore {
 
     // ─── Support Tickets ──────────────────────────────────────────────────
     match /support_tickets/{ticketId} {
-      allow create: if isLoggedIn();
+      allow create: if isLoggedIn() &&
+        request.resource.data.get('userId', '') == request.auth.uid;
       allow read, update: if isLoggedIn() &&
         (request.auth.uid == resource.data.userId || isAdmin());
       allow delete: if isSuperAdmin();
@@ -148,7 +149,8 @@ service cloud.firestore {
     match /tickets/{ticketId} {
       allow read, update: if isLoggedIn() &&
         (request.auth.uid == resource.data.userId || isAdmin());
-      allow create: if isLoggedIn();
+      allow create: if isLoggedIn() &&
+        request.resource.data.get('userId', '') == request.auth.uid;
       allow delete: if isSuperAdmin();
     }
 
@@ -288,18 +290,22 @@ service cloud.firestore {
 
     // ─── Maintenance Requests ─────────────────────────────────────────────
     match /maintenance_requests/{requestId} {
-      // SECURITY: ownership validation on create
+      // SECURITY: ownership + is_paid=false على الإنشاء.
       allow create: if isLoggedIn() && (
         request.resource.data.get('userId', request.auth.uid) == request.auth.uid ||
         request.resource.data.get('client_id', request.auth.uid) == request.auth.uid
-      );
+      ) && request.resource.data.get('is_paid', false) == false;
       allow read: if isLoggedIn() && (
         request.auth.uid == resource.data.get('userId', resource.data.get('client_id', '')) ||
         isAdmin()
       );
-      allow update: if isLoggedIn() && (
-        request.auth.uid == resource.data.get('userId', resource.data.get('client_id', '')) ||
-        isAdmin()
+      // SECURITY: العميل يملك amount (يقرؤه verifyMoyasarPayment كالمبلغ الحقيقي)؛ لولا
+      // هذا الحظر كان يضع amount=1 ثم يدفع 1ر.س ويؤكّده. القيمة والدفع خادمي/أدمن فقط.
+      allow update: if isAdmin() || (
+        isLoggedIn() &&
+        request.auth.uid == resource.data.get('userId', resource.data.get('client_id', '')) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(
+          ['is_paid', 'amount', 'payment_status', 'paid_confirmed', 'moyasar_payment_id'])
       );
       allow delete: if isSuperAdmin();
     }
@@ -369,9 +375,12 @@ service cloud.firestore {
       allow write: if isMarketingAdmin();
     }
     match /store_orders/{orderId} {
-      // SECURITY: client_id must match caller on create
+      // SECURITY: client_id must match caller on create, و is_paid=false (كالـ /orders) —
+      // وإلا أنشأ عميل عبر SDK طلب متجر مدفوعاً فيُشحَن مجاناً.
       allow create: if isLoggedIn() &&
-        request.resource.data.client_id == request.auth.uid;
+        request.resource.data.client_id == request.auth.uid &&
+        request.resource.data.get('is_paid', false) == false &&
+        !request.resource.data.keys().hasAny(['paid_confirmed', 'moyasar_payment_id']);
       allow read: if isLoggedIn() &&
         (request.auth.uid == resource.data.client_id || isOrdersManager());
       // Client may finalise payment on their OWN order (mirrors the /orders trust model):
@@ -402,7 +411,8 @@ service cloud.firestore {
 
     // SECURITY: audit log entries must carry the caller's own uid
     match /audit_logs/{logId} {
-      allow create: if isLoggedIn() &&
+      // سجلّ تدقيق إداري — الكتابة للأدمن فقط (كان أي مستخدم يكتب إدخالات باسمه = تلويث).
+      allow create: if isAdmin() &&
         request.resource.data.get('admin_uid', request.auth.uid) == request.auth.uid;
       allow read: if isAccountantAdmin();
       allow delete: if isSuperAdmin();

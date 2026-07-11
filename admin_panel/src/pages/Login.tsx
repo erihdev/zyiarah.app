@@ -5,6 +5,9 @@ import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebase.ts';
 
+// نفس مجموعة App.tsx — الأدوار المسموح لها دخول اللوحة (بالدور الفعلي staff_role??role).
+const ADMIN_ROLES = ['super_admin', 'admin', 'orders_manager', 'accountant_admin', 'marketing_admin'];
+
 export default function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -21,9 +24,13 @@ export default function Login() {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const uid = userCredential.user.uid;
 
-            // التحقق من صلاحية الأدمن في Firestore
-            const adminDoc = await getDoc(doc(db, 'admins', uid));
-            if (!adminDoc.exists()) {
+            // التحقق من الصلاحية بنفس منطق App.tsx (staff_role ?? role) — كان يفحص
+            // مجموعة admins المختلفة فيُقفَل موظف فرعي (role='admin'+staff_role) لا وثيقة
+            // له في admins، أو يُسمح لمن له وثيقة admins بلا دور فعلي.
+            const userSnap = await getDoc(doc(db, 'users', uid));
+            const ud = userSnap.data();
+            const effRole = (ud?.staff_role ?? ud?.role) as string | undefined;
+            if (!effRole || !ADMIN_ROLES.includes(effRole)) {
                 await signOut(auth);
                 setError('ليس لديك صلاحية الوصول للوحة التحكم.');
                 return;

@@ -430,9 +430,17 @@ exports.releaseScheduledNotifications = onSchedule({schedule: "every 10 minutes"
       const due = await db.collection("notifications_log")
           .where("scheduled_at", "<=", now).limit(50).get();
       for (const doc of due.docs) {
-        const d = doc.data();
-        if (d.status === "scheduled" && d.processed !== true) {
-          await _deliverBroadcast(doc.ref, d);
+        // مطالبة ذرّية قبل التسليم: نقلب scheduled→sending داخل معامَلة، فلو تداخل
+        // تشغيلان (بثّ بطيء يتجاوز الدقائق العشر) لا يُبثّ الإشعار لكل المستخدمين مرّتين.
+        const claimed = await db.runTransaction(async (tx) => {
+          const s = await tx.get(doc.ref);
+          const d = s.data() || {};
+          if (d.status !== "scheduled" || d.processed === true) return null;
+          tx.update(doc.ref, {status: "sending"});
+          return d;
+        });
+        if (claimed) {
+          await _deliverBroadcast(doc.ref, claimed);
         }
       }
       return null;
@@ -1505,21 +1513,25 @@ exports.verifyMoyasarPayment = onCall(
           throw new HttpsError("failed-precondition", "مبلغ الدفع لا يتطابق مع مبلغ الطلب");
         }
 
-        // Atomically update payment status in Firestore
-        await orderRef.update({
-          payment_status: "paid",
-          is_paid: true,
-          moyasar_payment_id: paymentId,
-          moyasar_status: paymentData.status,
-          updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        // قلب is_paid داخل معامَلة: نُشعر مرّة واحدة فقط عند الانتقال false→true —
+        // لو سبقنا الـ webhook للتوّ (سباق) لا يُرسَل إشعار تأكيد مزدوج للعميل.
+        const flipped = await admin.firestore().runTransaction(async (tx) => {
+          const snap = await tx.get(orderRef);
+          if (snap.data()?.is_paid === true) return false;
+          tx.update(orderRef, {
+            payment_status: "paid",
+            is_paid: true,
+            moyasar_payment_id: paymentId,
+            moyasar_status: paymentData.status,
+            updated_at: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          return true;
         });
-
-        console.log(`Order ${orderId} successfully verified and marked as PAID via Moyasar.`);
-        // إشعار العميل بتأكيد الدفع — كانت البطاقة/Apple Pay/STC/المحفظة صامتة
-        // (تمارا فقط تُشعر). يعمل مرّة واحدة فقط: النداء المُكرّر يرتدّ عند is_paid==true
-        // أعلاه، والـ webhook idempotent فلا يزدوج الإشعار.
-        notifyClientPaymentResult(orderRef.parent.id, orderId, orderDoc.data(), true)
-            .catch((e) => console.error("notify after verify:", e));
+        console.log(`Order ${orderId} verified via Moyasar (flipped=${flipped}).`);
+        if (flipped) {
+          notifyClientPaymentResult(orderRef.parent.id, orderId, orderDoc.data(), true)
+              .catch((e) => console.error("notify after verify:", e));
+        }
         return {success: true};
       } catch (error) {
         if (error instanceof HttpsError) throw error;
@@ -2177,21 +2189,21 @@ exports.activateContractOnPaid = onDocumentUpdated({document: "contracts/{contra
           visits_generated: true,
           visits_generated_at: admin.firestore.FieldValue.serverTimestamp(),
         });
+        // منح رصيد الزيارات ذرّياً مع مطالبة التفعيل — مرّة واحدة فقط (لا ازدواج منح).
+        if (c.userId && Number(c.planVisits || 0) > 0) {
+          tx.set(db.collection("users").doc(c.userId), {
+            visits_remaining: admin.firestore.FieldValue.increment(Number(c.planVisits)),
+          }, {merge: true});
+        }
         return c;
       });
       if (!claim) return null;
-      if (claim.userId && Number(claim.planVisits || 0) > 0) {
-        await db.collection("users").doc(claim.userId).set({
-          visits_remaining: admin.firestore.FieldValue.increment(Number(claim.planVisits)),
-        }, {merge: true}).catch((e) => console.error("grant visits:", e));
-      }
+      // المعرّفات حتمية فإعادة التوليد idempotent. لا نُعيد راية visits_generated عند
+      // الفشل حتى لا يتكرّر منح الزيارات — أي نقص يُكمِله مسار إداري.
       try {
         await _generateContractVisits(db, contractRef, claim);
       } catch (e) {
         console.error("activateContractOnPaid generate:", e);
-        // فشل التوليد جزئياً — أعِد الراية كي يُكمِل generateSubscriptionVisits ما نقص
-        // (المعرّفات حتمية فلا تتكرّر الزيارات المُنشأة).
-        await contractRef.update({visits_generated: false}).catch(() => {});
       }
       if (claim.userId) {
         await queuePush(claim.userId, "تم تفعيل باقتكِ ✨",
@@ -2849,8 +2861,16 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
     dailyCounts[bDate] = (dailyCounts[bDate] || 0) + 1;
     const ts = d.booking_time_slot;
     if (ts) {
-      const key = `${bDate}_${ts}`;
-      slotCounts[key] = (slotCounts[key] || 0) + 1;
+      // الطلب يشغل سائقاً طوال مدته — نعدّه في كل ساعة يشغلها كي يعكس التلوين
+      // الانشغال الحقيقي (كان يُعدّ في ساعة البدء فقط فتظهر ساعات لاحقة متاحة زوراً).
+      const startH = parseInt(String(ts).split(":")[0], 10);
+      const hrs = Number(d.hours_contracted || 4);
+      if (!isNaN(startH)) {
+        for (let h = startH; h < startH + hrs; h++) {
+          const key = `${bDate}_${String(h).padStart(2, "0")}:00`;
+          slotCounts[key] = (slotCounts[key] || 0) + 1;
+        }
+      }
     }
   }
 
@@ -3063,6 +3083,9 @@ exports.moyasarWebhook = onRequest(
             const ref = admin.firestore().collection(col).doc(orderId);
             const doc = await ref.get();
             if (doc.exists) {
+              const rd = doc.data();
+              // idempotent: مُسترَد سلفاً → لا تكرار (الاسترداد الجزئي يُرسل أحداثاً متعددة).
+              if (rd.payment_status === "refunded") break;
               await ref.update({
                 payment_status: "refunded",
                 moyasar_status: "refunded",
@@ -3070,7 +3093,6 @@ exports.moyasarWebhook = onRequest(
               });
               console.log(`moyasarWebhook: Order ${orderId} marked REFUNDED via webhook`);
               // إشعار العميل باسترداد البطاقة (كان صامتاً — المحفظة فقط تُشعر).
-              const rd = doc.data();
               const rUid = rd.client_id || rd.userId;
               if (rUid) {
                 await queuePush(rUid, "تم استرداد مبلغكِ 💳",
@@ -3190,7 +3212,10 @@ exports.moyasarRefundPayment = onCall(
           payment_status: "refunded",
           moyasar_status: result.status,
           refunded_at: admin.firestore.FieldValue.serverTimestamp(),
-          refunded_amount: amountHalalas ? amountHalalas / 100 : (order.data.amount ?? 0),
+          // المبلغ الحقيقي يختلف بالمجموعة: store=total_amount، عقد=planPrice، غيرها=amount.
+          refunded_amount: amountHalalas ? amountHalalas / 100 :
+            Number(order.data.final_amount ?? order.data.total_amount ??
+              order.data.planPrice ?? order.data.amount ?? 0),
         });
       }
 
@@ -3382,12 +3407,22 @@ exports.tabbyWebhook = onRequest(
                 // SDK callback already processed this payment — safe to skip
                 console.log(`tabbyWebhook: ${col}/${orderId} already paid — skipping (idempotent)`);
               } else {
-                await db.runTransaction(async (tx) => {
+                const result = await db.runTransaction(async (tx) => {
                   const snap = await tx.get(ref);
-                  if (snap.data()?.is_paid) {
-                    // Another write beat us to it (race between webhook + SDK callback)
-                    console.log(`tabbyWebhook: ${col}/${orderId} was paid mid-transaction — aborting (idempotent)`);
-                    return;
+                  const cur = snap.data() || {};
+                  if (cur.is_paid) return "already";
+                  // (أمان) جلسة تابي تُنشأ من العميل بمبلغ يتحكّم فيه، فنتحقّق أن المبلغ
+                  // المدفوع = مبلغ الطلب الحقيقي قبل التأكيد (كما يفعل moyasarWebhook) —
+                  // وإلا دفع 1ر.س لطلب كبير وأكّده مجاناً.
+                  const expected = Number(
+                      cur.final_amount ?? cur.total_amount ?? cur.planPrice ?? cur.amount ?? 0);
+                  const paid = Number(payment.amount || 0);
+                  if (expected <= 0 || Math.abs(paid - expected) > 0.01) {
+                    tx.update(ref, {
+                      payment_amount_mismatch: true,
+                      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                    });
+                    return "mismatch";
                   }
                   tx.update(ref, {
                     payment_status: "paid",
@@ -3396,26 +3431,37 @@ exports.tabbyWebhook = onRequest(
                     tabby_status: eventType,
                     updated_at: admin.firestore.FieldValue.serverTimestamp(),
                   });
+                  return "paid";
                 });
-                console.log(`tabbyWebhook: ${col}/${orderId} marked PAID via webhook (${eventType})`);
-                await notifyClientPaymentResult(col, orderId, data, true); // (F2)
+                if (result === "paid") {
+                  console.log(`tabbyWebhook: ${col}/${orderId} marked PAID via webhook (${eventType})`);
+                  await notifyClientPaymentResult(col, orderId, data, true);
+                } else if (result === "mismatch") {
+                  console.error(`tabbyWebhook: AMOUNT MISMATCH ${col}/${orderId} — NOT confirming.`);
+                  await queuePush("ADMIN_BROADCAST", "تنبيه: عدم تطابق مبلغ (تابي) ⚠️",
+                      `الطلب #${(data.code || orderId).toString()} استلم مبلغاً مختلفاً عبر تابي — يحتاج مراجعة.`,
+                      "admin_payment_alert", {orderId}, ["accountant_admin"]).catch(() => {});
+                }
               }
               break; // Found the document — stop searching collections
             }
           }
         } else if (eventType === "payment.rejected" || eventType === "payment.expired" || eventType === "payment.cancelled") {
-          // Mark as failed — no refund needed (payment was never captured)
+          // فشل — يشمل كل المجموعات (كان يبحث في orders فقط فتفوت الصيانة/العقد).
           const db = admin.firestore();
-          const ref = db.collection("orders").doc(orderId);
-          const doc = await ref.get();
-          if (doc.exists && !doc.data().is_paid) {
-            await ref.update({
-              payment_status: "failed",
-              tabby_status: eventType,
-              updated_at: admin.firestore.FieldValue.serverTimestamp(),
-            });
-            console.log(`tabbyWebhook: order ${orderId} marked FAILED (${eventType})`);
-            await notifyClientPaymentResult("orders", orderId, doc.data(), false); // (F2)
+          for (const col of ["orders", "maintenance_requests", "contracts"]) {
+            const ref = db.collection(col).doc(orderId);
+            const doc = await ref.get();
+            if (doc.exists && !doc.data().is_paid) {
+              await ref.update({
+                payment_status: "failed",
+                tabby_status: eventType,
+                updated_at: admin.firestore.FieldValue.serverTimestamp(),
+              });
+              console.log(`tabbyWebhook: ${col}/${orderId} marked FAILED (${eventType})`);
+              await notifyClientPaymentResult(col, orderId, doc.data(), false);
+              break;
+            }
           }
         } else {
           console.log(`tabbyWebhook: unhandled event type '${eventType}' — ignoring`);

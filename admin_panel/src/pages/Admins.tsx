@@ -141,7 +141,10 @@ export default function Admins() {
                                     <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-400 text-sm">لا يوجد مشرفون</td></tr>
                                 )}
                                 {filtered.map((admin) => {
-                                    const isSuperAdmin = admin.role === 'super_admin' || admin.role === 'admin';
+                                    // الدور الفعلي: الموظف يخزّن دوره الفرعي في staff_role و role='admin'.
+                                    // بدونه كان كل موظف يظهر «مدير متميّز» ويتعذّر تعديله/حذفه.
+                                    const effRole = (admin as { staff_role?: string }).staff_role ?? admin.role;
+                                    const isSuperAdmin = effRole === 'super_admin' || effRole === 'admin';
                                     return (
                                         <tr key={admin.id} className="hover:bg-slate-50/50 transition-colors group">
                                             <td className="px-6 py-4">
@@ -153,7 +156,7 @@ export default function Admins() {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 text-slate-600 font-medium dir-ltr text-right">{admin.email}</td>
-                                            <td className="px-6 py-4"><RoleBadge role={admin.role} /></td>
+                                            <td className="px-6 py-4"><RoleBadge role={effRole} /></td>
                                             <td className="px-6 py-4 text-sm font-medium text-slate-500">{formatLastLogin(admin.last_login)}</td>
                                             <td className="px-6 py-4">
                                                 {admin.status !== 'inactive'

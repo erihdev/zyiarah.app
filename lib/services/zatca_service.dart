@@ -52,7 +52,7 @@ class ZatcaService {
     bytesBuilder.add(_encodeTlv(2, vatNumber));
 
     // Tag 3: Timestamp (وقت إصدار الفاتورة بصيغة ISO 8601)
-    bytesBuilder.add(_encodeTlv(3, '${timestamp.toIso8601String().split('.').first}Z'));
+    bytesBuilder.add(_encodeTlv(3, '${timestamp.toUtc().toIso8601String().split('.').first}Z'));
 
     // Tag 4: Total Amount (المبلغ الإجمالي مع الضريبة)
     bytesBuilder.add(_encodeTlv(4, totalAmount.toStringAsFixed(2)));
@@ -66,13 +66,18 @@ class ZatcaService {
 
   /// دالة مساعدة لتشفير كل حقل بنظام Tag-Length-Value
   static Uint8List _encodeTlv(int tag, String value) {
-    final valueBytes = utf8.encode(value);
+    var valueBytes = utf8.encode(value);
+    // طول TLV بايت واحد (ZATCA المرحلة 1) — نحدّ القيمة بـ255 بايت كي لا يفيض العدّاد
+    // (اسم تاجر طويل جداً كان ينتج QR فاسداً). القيم الفعلية أقصر بكثير.
+    if (valueBytes.length > 255) {
+      valueBytes = valueBytes.sublist(0, 255);
+    }
     final tlv = BytesBuilder();
-    
+
     tlv.addByte(tag); // T: Tag
     tlv.addByte(valueBytes.length); // L: Length
     tlv.add(valueBytes); // V: Value
-    
+
     return tlv.toBytes();
   }
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Tag, Trash2, PlusCircle, Calendar, Percent, X, Loader2 } from 'lucide-react';
-import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useNotification } from '../components/Notification.tsx';
 
@@ -52,8 +52,21 @@ export default function Marketing() {
 
     const handleAddCoupon = async (e: React.FormEvent) => {
         e.preventDefault();
+        // تحقّق: النسبة 1-100 والمبلغ موجب (كان يُقبل 500% أو سالب).
+        if (newValue <= 0 || (newType === 'percentage' && newValue > 100)) {
+            toast.error('قيمة غير صالحة — النسبة بين 1 و100، أو مبلغ موجب.');
+            return;
+        }
         setIsSubmitting(true);
         try {
+            // منع تكرار كود موجود (addDoc يُنشئ وثيقة جديدة دائماً → أكواد متطابقة).
+            const dup = await getDocs(query(collection(db, 'promo_codes'),
+                where('code', '==', newCode.toUpperCase())));
+            if (!dup.empty) {
+                toast.error('هذا الكود موجود مسبقاً — اختر رمزاً آخر.');
+                setIsSubmitting(false);
+                return;
+            }
             await addDoc(collection(db, 'promo_codes'), {
                 code: newCode.toUpperCase(),
                 type: newType,
