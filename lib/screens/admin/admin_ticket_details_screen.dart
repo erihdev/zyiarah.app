@@ -1,4 +1,3 @@
-import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -14,7 +13,6 @@ class AdminTicketDetailsScreen extends StatefulWidget {
 
 class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final ZyiarahMessagingService _notificationService = ZyiarahMessagingService();
   final TextEditingController _replyCtrl = TextEditingController();
   bool _isSending = false;
 
@@ -31,23 +29,19 @@ class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
     setState(() => _isSending = true);
     
     try {
+      // إشعار العميل يتولّاه خادميّاً مُشغّل sendNotificationOnTicketReply عند إضافة
+      // رسالة senderRole:'admin' (يعمل الآن لكل من تطبيق الأدمن ولوحة الويب). كان
+      // الاستدعاء المباشر notifyUserOfSupportReply هنا يُنتج إشعاراً ثانياً مكرّراً.
       await _db.collection('support_tickets').doc(widget.ticketId).collection('messages').add({
         'text': text,
         'senderRole': 'admin',
         'sentAt': FieldValue.serverTimestamp(),
       });
 
-      final ticketDoc = await _db.collection('support_tickets').doc(widget.ticketId).get();
-      final userId = ticketDoc.data()?['userId'] ?? '';
-
       await _db.collection('support_tickets').doc(widget.ticketId).update({
         'status': 'replied',
         'updatedAt': FieldValue.serverTimestamp(),
       });
-
-      if (userId.isNotEmpty) {
-        await _notificationService.notifyUserOfSupportReply(userId, widget.ticketId);
-      }
 
       _replyCtrl.clear();
     } catch (e) {
