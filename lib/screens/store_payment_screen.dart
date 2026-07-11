@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'location_picker_screen.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -44,6 +45,8 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
   bool _isLoading = false;
   bool _agreeToTerms = false;
   bool _tamaraEnabled = false;
+  // عنوان التوصيل — كان الطلب يُنشأ بموقع رياض ثابت (توصيل لمدينة خاطئة). نجمعه الآن.
+  GeoPoint? _deliveryLocation;
 
   double get _vat => widget.total - (widget.total / 1.15);
   double get _subtotal => widget.total - _vat;
@@ -52,6 +55,44 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
   void initState() {
     super.initState();
     _loadConfig();
+    _loadDefaultAddress();
+  }
+
+  /// عنوان التوصيل الافتراضي = موقع آخر طلب للعميل (عنوانه المعتاد).
+  Future<void> _loadDefaultAddress() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+      final snap = await FirebaseFirestore.instance
+          .collection('orders')
+          .where('client_id', isEqualTo: uid)
+          .orderBy('created_at', descending: true)
+          .limit(5)
+          .get();
+      for (final d in snap.docs) {
+        final loc = d.data()['location'];
+        if (loc is GeoPoint) {
+          if (mounted) setState(() => _deliveryLocation = loc);
+          return;
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _pickAddress() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const LocationPickerScreen(serviceName: 'عنوان توصيل الطلب'),
+      ),
+    );
+    GeoPoint? loc;
+    if (result is GeoPoint) {
+      loc = result;
+    } else if (result is Map && result['location'] is GeoPoint) {
+      loc = result['location'] as GeoPoint;
+    }
+    if (loc != null && mounted) setState(() => _deliveryLocation = loc);
   }
 
   Future<void> _loadConfig() async {
@@ -74,6 +115,12 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
     if (!_agreeToTerms) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يرجى الموافقة على الشروط والأحكام')),
+      );
+      return;
+    }
+    if (_deliveryLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يرجى تحديد عنوان التوصيل أولاً')),
       );
       return;
     }
@@ -190,7 +237,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
         'status': 'pending_admin_approval',
         'source_collection': 'store_orders',
         'store_order_id': widget.storeOrderId,
-        'location': const GeoPoint(24.7136, 46.6753),
+        'location': _deliveryLocation ?? const GeoPoint(24.7136, 46.6753),
         'created_at': FieldValue.serverTimestamp(),
       });
     } catch (_) {}
@@ -288,6 +335,47 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
                 padding: const EdgeInsets.all(20),
                 children: [
                   _buildSummaryCard(),
+                  const SizedBox(height: 20),
+                  Text('عنوان التوصيل',
+                      style: GoogleFonts.tajawal(
+                          fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: _pickAddress,
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: _deliveryLocation == null
+                                ? Colors.red.shade200
+                                : Colors.grey.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.location_on,
+                              color: _deliveryLocation == null
+                                  ? Colors.red
+                                  : const Color(0xFF5D1B5E)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _deliveryLocation == null
+                                  ? 'اضغط لتحديد عنوان التوصيل'
+                                  : 'تم تحديد عنوان التوصيل ✓ (اضغط للتغيير)',
+                              style: GoogleFonts.tajawal(
+                                  color: _deliveryLocation == null
+                                      ? Colors.red
+                                      : Colors.grey.shade700),
+                            ),
+                          ),
+                          const Icon(Icons.chevron_left, color: Colors.grey),
+                        ],
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 20),
                   Text('اختر طريقة الدفع',
                       style: GoogleFonts.tajawal(

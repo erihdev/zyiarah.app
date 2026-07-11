@@ -22,6 +22,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final ZyiarahOrderService _orderService = ZyiarahOrderService();
   bool _isLoading = true;
+  bool _fetchError = false; // تمييز فشل التحميل عن الطلب غير الموجود
   Map<String, dynamic>? _orderData;
 
   String _currentStatus = 'pending';
@@ -55,6 +56,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   }
 
   Future<void> _fetchOrder() async {
+    if (mounted) setState(() { _isLoading = true; _fetchError = false; });
     try {
       final doc = await _db.collection('orders').doc(widget.orderId).get();
       
@@ -102,7 +104,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
         setState(() => _isLoading = false);
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() { _isLoading = false; _fetchError = true; });
     }
   }
 
@@ -522,6 +524,23 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     
+    if (_fetchError) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('تفاصيل الطلب')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 56, color: Colors.orange),
+              const SizedBox(height: 12),
+              const Text('تعذّر تحميل الطلب، تحقّق من الاتصال'),
+              const SizedBox(height: 12),
+              ElevatedButton(onPressed: _fetchOrder, child: const Text('إعادة المحاولة')),
+            ],
+          ),
+        ),
+      );
+    }
     if (_orderData == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('تفاصيل الطلب')),

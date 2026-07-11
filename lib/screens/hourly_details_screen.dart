@@ -477,9 +477,12 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           else
             const Row(
               children: [
-                Icon(Icons.location_searching, color: Colors.orange, size: 20),
+                Icon(Icons.location_off, color: Colors.orange, size: 20),
                 SizedBox(width: 8),
-                Text("جاري تحديد موقعك تلقائياً...", style: TextStyle(color: Colors.orange)),
+                Expanded(
+                  child: Text("لم يُحدَّد موقعك بعد — اختره من الزر بالأسفل",
+                      style: TextStyle(color: Colors.orange)),
+                ),
               ],
             ),
           const SizedBox(height: 15),
