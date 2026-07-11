@@ -123,10 +123,12 @@ class _NotifCard extends StatelessWidget {
     final title = data['title'] as String? ?? 'إشعار جديد';
     final body = data['body'] as String? ?? '';
     final type = data['type'] as String? ?? '';
+    // as يربط أقوى من ?? — نُحيط السلسلة كاملة بالأقواس وإلا انطبق الكاست على آخر
+    // عنصر فقط وانهار .toDate() لو خُزّن created_at بنوع غير Timestamp.
     final createdAt =
-        (data['created_at'] ?? data['sentAt'] ?? data['sent_at'] as Timestamp?)?.toDate() ?? DateTime.now();
+        ((data['created_at'] ?? data['sentAt'] ?? data['sent_at']) as Timestamp?)?.toDate() ?? DateTime.now();
     final timeAgo = _formatTimeAgo(createdAt);
-    final isRead = (data['is_read'] ?? data['isRead'] as bool?) ?? false;
+    final isRead = ((data['is_read'] ?? data['isRead']) as bool?) ?? false;
 
     IconData icon;
     Color iconColor;

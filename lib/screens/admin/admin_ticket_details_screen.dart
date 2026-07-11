@@ -60,11 +60,19 @@ class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
   }
 
   void _closeTicket() async {
-    await _db.collection('support_tickets').doc(widget.ticketId).update({
-      'status': 'resolved',
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    if (mounted) Navigator.pop(context);
+    // كان بلا try/catch: فشل الكتابة (أوفلاين/صلاحية) يُلقى غير مُلتقَط لكن الشاشة
+    // تُغلَق فيظنّ الأدمن أن التذكرة حُلّت. نُغلق فقط عند النجاح مع تنبيه عند الفشل.
+    try {
+      await _db.collection('support_tickets').doc(widget.ticketId).update({
+        'status': 'resolved',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذّر إغلاق التذكرة، حاول مجدداً')));
+      }
+    }
   }
 
   @override
@@ -135,8 +143,8 @@ class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                msg['sentAt'] != null 
-                                  ? "${(msg['sentAt'] as Timestamp).toDate().hour}:${(msg['sentAt'] as Timestamp).toDate().minute}"
+                                msg['sentAt'] != null
+                                  ? "${(msg['sentAt'] as Timestamp).toDate().hour.toString().padLeft(2, '0')}:${(msg['sentAt'] as Timestamp).toDate().minute.toString().padLeft(2, '0')}"
                                   : "...",
                                 style: TextStyle(
                                   color: isMe ? Colors.white70 : Colors.grey, 

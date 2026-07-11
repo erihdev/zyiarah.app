@@ -528,8 +528,10 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
 
   Widget _buildScheduledQueueList() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('scheduled_notifications')
-          .where('isProcessed', isEqualTo: false)
+      // الطابور الفعلي في notifications_log بحالة 'scheduled' (يكتبه scheduleBroadcast
+      // ويعالجه releaseScheduledNotifications) — كان يقرأ scheduled_notifications الفارغة.
+      stream: FirebaseFirestore.instance.collection('notifications_log')
+          .where('status', isEqualTo: 'scheduled')
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox.shrink();
@@ -594,7 +596,7 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
 
   Future<void> _deleteScheduled(String docId) async {
     try {
-      await FirebaseFirestore.instance.collection('scheduled_notifications').doc(docId).delete();
+      await FirebaseFirestore.instance.collection('notifications_log').doc(docId).delete();
       if (mounted) {
         ZyiarahCoreService.triggerHapticSuccess();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم إلغاء الإشعار المجدول بنجاح")));

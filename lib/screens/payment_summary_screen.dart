@@ -1381,7 +1381,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                       await _processUnifiedSuccess(_pendingOrderId, 'google_pay', paymentId: gpayPaymentId);
                     }
                   } catch (e) {
-                    setState(() => _isLoading = false);
+                    if (mounted) setState(() => _isLoading = false);
                     messenger.showSnackBar(SnackBar(
                       content: Text(
                         e.toString().replaceAll('Exception: ', ''),

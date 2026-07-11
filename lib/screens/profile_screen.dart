@@ -248,6 +248,8 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
         }
       }
     }
+    nameController.dispose();
+    phoneController.dispose();
   }
 
   Future<void> _showHouseRulesDialog() async {
@@ -328,6 +330,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
         }
       }
     }
+    controller.dispose();
   }
 
   Future<void> _performLogout() async {

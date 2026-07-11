@@ -185,6 +185,9 @@ class ZyiarahOrderService {
           'status': driverStatus,
           'current_order_id': status == 'completed' ? null : orderId,
           'is_available': status == 'completed',
+          // عدّاد المهام المنجزة الدائم — كان غير موجود إطلاقاً، فشاشة أداء الكوادر
+          // ولوحة السائق تعرضان صفراً دائماً وترتيب الكفاءة بلا معنى. نزيده عند الإكمال.
+          if (status == 'completed') 'completed_orders_count': FieldValue.increment(1),
         });
       }
 

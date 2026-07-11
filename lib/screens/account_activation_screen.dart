@@ -38,13 +38,22 @@ class _ZyiarahAccountActivationScreenState extends State<ZyiarahAccountActivatio
       await _auth.verifyPhoneNumber(
         phoneNumber: '+966$phone', // Adjust country code as needed
         verificationCompleted: (PhoneAuthCredential credential) async {
-          // Auto-verification handled elsewhere or if needed
+          // على أندرويد قد يُطلق التحقق التلقائي هذا الرد بدل codeSent. كان فارغاً
+          // فيبقى المستخدم عالقاً على مؤشّر تحميل أبدي ولا يظهر حقل الرمز إطلاقاً.
+          // نوقف التحميل ونُظهر واجهة الرمز + كلمة المرور ليُكمل التفعيل.
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+            _otpSent = true;
+          });
         },
         verificationFailed: (FirebaseAuthException e) {
+          if (!mounted) return;
           _showError('تعذّر إرسال الرمز — تحقّق من الرقم والاتصال');
           setState(() => _isLoading = false);
         },
         codeSent: (String verId, int? resendToken) {
+          if (!mounted) return;
           setState(() {
             _verificationId = verId;
             _otpSent = true;
@@ -56,6 +65,7 @@ class _ZyiarahAccountActivationScreenState extends State<ZyiarahAccountActivatio
         },
       );
     } catch (e) {
+      if (!mounted) return;
       _showError('تعذّر إرسال الرمز، حاول لاحقاً');
       setState(() => _isLoading = false);
     }

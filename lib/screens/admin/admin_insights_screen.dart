@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:fl_chart/fl_chart.dart';
@@ -73,7 +74,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     }
   }
 
-  void _exportDataToCSV() {
+  Future<void> _exportDataToCSV() async {
     try {
       final buffer = StringBuffer();
       // Headers
@@ -85,15 +86,17 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
         buffer.writeln("${d['code']},$date,${d['service_name']},${d['client_name']},${d['amount']},${d['status']}");
       }
 
-      // In a real device, we'd use path_provider and share_plus. 
-      // For now, we simulate success and show the power of the logic.
-      debugPrint(buffer.toString());
-      
+      // تصدير حقيقي: ننسخ الـ CSV للحافظة (بلا share_plus). كان سابقاً debugPrint فقط
+      // مع رسالة نجاح كاذبة ولا يُنتَج أي ملف. للتقرير الكامل يوجد زر PDF منفصل.
+      await Clipboard.setData(ClipboardData(text: buffer.toString()));
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text("تم تجهيز تقرير البيانات (CSV) وتصديره بنجاح! ✅"),
+        content: Text("تم نسخ بيانات التقرير (CSV) إلى الحافظة — الصقها في Excel أو Google Sheets ✅"),
         backgroundColor: Colors.green,
       ));
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل التصدير: $e")));
     }
   }
@@ -416,8 +419,11 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
   Widget _buildServicePieChart(List<DocumentSnapshot> orders, List<DocumentSnapshot> maintenance) {
     int maintenanceCount = maintenance.length;
     int cleaningCount = orders.where((d) => (d.data() as Map)['service_name']?.toString().contains('نظافة') ?? false).length;
-    int storeCount = orders.length - cleaningCount;
-    int total = (maintenanceCount + cleaningCount + storeCount);
+    int otherServicesCount = orders.length - cleaningCount;
+    // المتجر مجموعة منفصلة (_storeOrders) — كان storeCount = orders.length - cleaningCount
+    // يحسب طلبات الخدمات غير التنظيفية (كنب/تكييف) كأنها متجر ويتجاهل طلبات المتجر الحقيقية.
+    int storeCount = _storeOrders.length;
+    int total = (maintenanceCount + cleaningCount + otherServicesCount + storeCount);
     if (total == 0) return const Center(child: Text("لا توجد بيانات"));
 
     return PieChart(
@@ -426,6 +432,8 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
         centerSpaceRadius: 40,
         sections: [
           PieChartSectionData(color: const Color(0xFF2563EB), value: cleaningCount.toDouble(), title: 'تنظيف', radius: 50, titleStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
+          if (otherServicesCount > 0)
+            PieChartSectionData(color: const Color(0xFF0EA5E9), value: otherServicesCount.toDouble(), title: 'خدمات أخرى', radius: 50, titleStyle: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)),
           PieChartSectionData(color: const Color(0xFFF59E0B), value: maintenanceCount.toDouble(), title: 'صيانة', radius: 50, titleStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
           PieChartSectionData(color: const Color(0xFF7C3AED), value: storeCount.toDouble(), title: 'المتجر', radius: 50, titleStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
         ],

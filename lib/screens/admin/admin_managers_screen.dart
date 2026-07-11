@@ -221,6 +221,14 @@ class _ManagerFormSheetState extends State<_ManagerFormSheet> {
   }
 
   @override
+  void dispose() {
+    nameCtrl.dispose();
+    emailCtrl.dispose();
+    passwordCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
@@ -360,9 +368,12 @@ class _ManagerFormSheetState extends State<_ManagerFormSheet> {
     setState(() => isSaving = true);
     try {
       await FirebaseFirestore.instance.collection('admins').doc(widget.docId).delete();
+      // createAccountViaAdmin يكتب الحساب في users و admins معاً. حذف admins فقط كان
+      // يُبقي users/{id} بـ role:'admin' فيحتفظ «المحذوف» بصلاحياته. نحذف الاثنين.
+      await FirebaseFirestore.instance.collection('users').doc(widget.docId).delete();
       await ZyiarahAuditService().logAction(
         action: ZyiarahAuditService.actionDeleteStaff,
-        details: {'email': widget.docId},
+        details: {'staff_id': widget.docId},
         targetId: widget.docId,
       );
       widget.onSuccess();
@@ -440,20 +451,25 @@ class StaffSearchDelegate extends SearchDelegate {
         stream: FirebaseFirestore.instance.collection('admins').snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          // نقرأ عبر data() لا عامل [] — الأخير يرمي StateError حين يغيب الحقل
+          // (وثيقة admin بلا name/email) فينهار البحث بالكامل.
+          final q = query.toLowerCase();
           final results = snapshot.data!.docs.where((doc) {
-            final name = doc['name'].toString().toLowerCase();
-            final email = doc['email'].toString().toLowerCase();
-            return name.contains(query.toLowerCase()) || email.contains(query.toLowerCase());
+            final data = doc.data() as Map<String, dynamic>;
+            final name = (data['name'] ?? '').toString().toLowerCase();
+            final email = (data['email'] ?? '').toString().toLowerCase();
+            return name.contains(q) || email.contains(q);
           }).toList();
 
           return ListView.builder(
             itemCount: results.length,
             itemBuilder: (context, index) {
               final doc = results[index];
+              final data = doc.data() as Map<String, dynamic>;
               return ListTile(
                 leading: const CircleAvatar(child: Icon(Icons.person)),
-                title: Text(doc['name']),
-                subtitle: Text(doc['email']),
+                title: Text((data['name'] ?? 'بدون اسم').toString()),
+                subtitle: Text((data['email'] ?? '').toString()),
                 onTap: () {
                   onSelect(doc);
                   close(context, null);

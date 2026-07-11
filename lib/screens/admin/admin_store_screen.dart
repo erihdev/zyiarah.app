@@ -20,7 +20,10 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
   final ImagePicker _picker = ImagePicker();
 
   void _toggleProductVisibility(DocumentSnapshot doc) async {
-    final isHidden = doc['is_hidden'] ?? false;
+    // doc['is_hidden'] عبر عامل [] يرمي StateError حين يغيب الحقل (منتجات قديمة) بدل
+    // إرجاع null — نقرأ من الخريطة المفكوكة كي يعمل ?? false ولا ينهار التبديل.
+    final data = doc.data() as Map<String, dynamic>?;
+    final isHidden = data?['is_hidden'] ?? false;
     await _db.collection('products').doc(doc.id).update({'is_hidden': !isHidden});
   }
 
@@ -237,7 +240,7 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                         'price': double.tryParse(priceCtrl.text) ?? 0.0,
                         'description': descCtrl.text.trim(),
                         'image_url': imageUrl,
-                        'is_hidden': product?['is_hidden'] ?? false,
+                        'is_hidden': pData?['is_hidden'] ?? false,
                         'updated_at': FieldValue.serverTimestamp(),
                         if (product == null) 'created_at': FieldValue.serverTimestamp(),
                       };
@@ -275,7 +278,11 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
           );
         },
       ),
-    );
+    ).whenComplete(() {
+      nameCtrl.dispose();
+      priceCtrl.dispose();
+      descCtrl.dispose();
+    });
   }
 
   @override

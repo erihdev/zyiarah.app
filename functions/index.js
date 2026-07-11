@@ -30,7 +30,10 @@ exports.sendNotificationOnTicketReply = onDocumentCreated({document: "support_ti
       if (!ticketDoc.exists) return null;
       const ticketData = ticketDoc.data();
 
-      if (newMessage.senderId === "admin") {
+      // كشف رد الإدارة: تطبيق الأدمن يكتب senderRole:'admin' فقط، ولوحة الويب تكتب
+      // senderId:'admin' أيضاً — كان الفحص القديم على senderId فقط يفوّت ردود تطبيق الأدمن
+      // فلا يصل العميل إشعار «تم الرد على تذكرتك».
+      if (newMessage.senderRole === "admin" || newMessage.senderId === "admin") {
         // رد الدعم → أشعِر صاحب التذكرة (push + سجل داخل التطبيق).
         await queuePush(
             ticketData.userId,

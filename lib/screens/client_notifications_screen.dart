@@ -123,10 +123,12 @@ class _ClientNotifCard extends StatelessWidget {
     final title = data['title'] as String? ?? 'إشعار جديد';
     final body = data['body'] as String? ?? '';
     final type = data['type'] as String? ?? '';
+    // as يربط أقوى من ?? — لذا نُحيط السلسلة كاملة بالأقواس، وإلا انطبق الكاست على
+    // آخر عنصر فقط ومرّت القيم الأولى بلا فحص نوع → .toDate() على قيمة غير Timestamp تنهار.
     final createdAt =
-        (data['created_at'] ?? data['sentAt'] ?? data['sent_at'] as Timestamp?)?.toDate() ?? DateTime.now();
+        ((data['created_at'] ?? data['sentAt'] ?? data['sent_at']) as Timestamp?)?.toDate() ?? DateTime.now();
     final timeAgo = _formatTimeAgo(createdAt);
-    final isRead = (data['is_read'] ?? data['isRead'] as bool?) ?? false;
+    final isRead = ((data['is_read'] ?? data['isRead']) as bool?) ?? false;
 
     IconData icon;
     Color iconColor;

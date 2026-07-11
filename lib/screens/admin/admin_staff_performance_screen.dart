@@ -21,9 +21,10 @@ class _AdminStaffPerformanceScreenState extends State<AdminStaffPerformanceScree
 
   Future<void> _calculatePerformance() async {
     try {
+      // بلا orderBy على rating_avg: الاستعلام المرتّب يستبعد أي سائق لا يملك الحقل
+      // (يُنشأ عند أول تقييم فقط) فلا يظهر السائقون الجدد إطلاقاً. نجلب الكل ونرتّب محلياً.
       final driversSnap = await FirebaseFirestore.instance
           .collection('drivers')
-          .orderBy('rating_avg', descending: true)
           .get();
 
       List<Map<String, dynamic>> stats = [];

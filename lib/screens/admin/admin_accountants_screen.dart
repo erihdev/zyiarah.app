@@ -19,14 +19,15 @@ class _AdminAccountantsScreenState extends State<AdminAccountantsScreen> {
     final TextEditingController emailCtrl = TextEditingController(text: currentData?['email'] ?? '');
     final TextEditingController passwordCtrl = TextEditingController();
     final bool isNew = docId == null;
+    // خارج الـ StatefulBuilder: إعلانه داخله كان يُصفّره في كل إعادة بناء فلا يتعطّل
+    // الزر إطلاقاً → ضغطتان تُنشئان حسابَي مصادقة ووثيقتَين للمحاسب نفسه.
+    bool isSaving = false;
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
-          bool isSaving = false;
-
           Future<void> onSave() async {
             final name = nameCtrl.text.trim();
             final email = emailCtrl.text.trim();
@@ -181,7 +182,11 @@ class _AdminAccountantsScreenState extends State<AdminAccountantsScreen> {
           );
         },
       ),
-    );
+    ).whenComplete(() {
+      nameCtrl.dispose();
+      emailCtrl.dispose();
+      passwordCtrl.dispose();
+    });
   }
 
   @override

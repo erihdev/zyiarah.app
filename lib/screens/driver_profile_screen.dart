@@ -57,8 +57,10 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                       _auth.currentUser?.phoneNumber ??
                       'غير محدد';
                   final email = _auth.currentUser?.email ?? 'غير محدد';
-                  // rating_count هو العدّاد الحيّ (rides حقل بذرة لا يُحدَّث).
+                  // «مهمة منجزة» = عدد الطلبات المكتملة فعلاً (completed_orders_count)،
+                  // لا عدد التقييمات (rating_count) ولا حقل البذرة (rides).
                   final totalTasks =
+                      (data['completed_orders_count'] as num?)?.toInt() ??
                       (data['rating_count'] as num?)?.toInt() ??
                       (data['rides'] as num?)?.toInt() ?? 0;
 

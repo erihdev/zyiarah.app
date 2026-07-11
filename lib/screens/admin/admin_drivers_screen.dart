@@ -183,10 +183,10 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                     child: CircleAvatar(
                                       radius: 60,
                                       backgroundColor: Colors.white,
-                                      backgroundImage: selectedImageBytes != null 
-                                        ? MemoryImage(selectedImageBytes!) 
-                                        : (photoUrl != null ? NetworkImage(photoUrl!) : null) as ImageProvider?,
-                                      child: (selectedImageBytes == null && photoUrl == null)
+                                      backgroundImage: selectedImageBytes != null
+                                        ? MemoryImage(selectedImageBytes!)
+                                        : ((photoUrl != null && photoUrl!.isNotEmpty) ? NetworkImage(photoUrl!) : null) as ImageProvider?,
+                                      child: (selectedImageBytes == null && (photoUrl == null || photoUrl!.isEmpty))
                                         ? const Icon(Icons.person_add_rounded, size: 50, color: Colors.grey)
                                         : null,
                                     ),
@@ -372,7 +372,19 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
           );
         }
       ),
-    );
+    ).whenComplete(() {
+      // تخلّص من كل وحدات التحكّم عند إغلاق الـ sheet (كانت تُنشأ 11 وحدة في كل فتح بلا تحرير).
+      nameCtrl.dispose();
+      phoneCtrl.dispose();
+      emailCtrl.dispose();
+      carInfoCtrl.dispose();
+      licenseCtrl.dispose();
+      nationalityCtrl.dispose();
+      idNumberCtrl.dispose();
+      idExpiryCtrl.dispose();
+      salaryCtrl.dispose();
+      zoneCtrl.dispose();
+    });
   }
 
 
@@ -513,10 +525,11 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                       child: CircleAvatar(
                         radius: 28,
                         backgroundColor: Colors.grey[50],
-                        backgroundImage: driver['photo_url'] != null ? NetworkImage(driver['photo_url']) : null,
-                        child: driver['photo_url'] == null 
-                          ? Icon(isWorker ? Icons.cleaning_services_rounded : Icons.local_shipping_rounded, color: Colors.grey[400])
-                          : null,
+                        // نتحقّق من عدم الفراغ أيضاً: NetworkImage('') يرمي خطأ تحميل (أفاتار مكسور).
+                        backgroundImage: (driver['photo_url'] as String?)?.isNotEmpty == true ? NetworkImage(driver['photo_url']) : null,
+                        child: (driver['photo_url'] as String?)?.isNotEmpty == true
+                          ? null
+                          : Icon(isWorker ? Icons.cleaning_services_rounded : Icons.local_shipping_rounded, color: Colors.grey[400]),
                       ),
                     ),
                     Container(

@@ -21,6 +21,13 @@ class _AdminMarketingScreenState extends State<AdminMarketingScreen> {
   bool _isScheduled = false;
   DateTime? _scheduledTime;
 
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _bodyController.dispose();
+    super.dispose();
+  }
+
   Future<void> _pickDateTime() async {
     final date = await showDatePicker(
       context: context,

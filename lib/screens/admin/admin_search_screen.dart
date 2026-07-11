@@ -49,6 +49,7 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
     if (query.length < 3) {
       setState(() {
         _orderResults = []; _storeResults = []; _userResults = []; _productResults = []; _driverResults = [];
+        _maintenanceResults = []; // كان مفقوداً فتبقى نتائج الصيانة القديمة معروضة بعد مسح البحث
       });
       return;
     }

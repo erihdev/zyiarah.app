@@ -265,7 +265,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                             contentPadding: EdgeInsets.zero,
                           ),
                           const Divider(),
-                          _buildPremiumField("اسم المنشأة الضريبي (ZATCA)", "الاسم", _merchantNameCtrl, Icons.business_rounded),
+                          _buildPremiumField("اسم المنشأة الضريبي (ZATCA)", "الاسم", _merchantNameCtrl, Icons.business_rounded, keyboardType: TextInputType.text),
                           const SizedBox(height: 16),
                           _buildPremiumField("الرقم الضريبي (VAT)", "رقم", _vatNumberCtrl, Icons.account_balance_wallet_rounded),
                         ],
@@ -283,7 +283,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                            const SizedBox(height: 16),
                            _buildPremiumField("رقم الاتصال الموحد", "Call", _phoneSupportCtrl, Icons.phone_forwarded_rounded),
                            const SizedBox(height: 16),
-                           _buildPremiumField("البريد الإلكتروني لاستلام التنبيهات", "Admin Email", _adminEmailCtrl, Icons.alternate_email_rounded),
+                           _buildPremiumField("البريد الإلكتروني لاستلام التنبيهات", "Admin Email", _adminEmailCtrl, Icons.alternate_email_rounded, keyboardType: TextInputType.emailAddress),
                         ],
                       ),
 
@@ -300,7 +300,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                             style: TextStyle(fontSize: 11, color: Colors.grey, height: 1.5),
                           ),
                           const SizedBox(height: 12),
-                          _buildPremiumField("رابط Webhook التنبيهات", "https://...", _webhookUrlCtrl, Icons.link_rounded),
+                          _buildPremiumField("رابط Webhook التنبيهات", "https://...", _webhookUrlCtrl, Icons.link_rounded, keyboardType: TextInputType.url),
                         ],
                       ),
                       
@@ -534,7 +534,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
     );
   }
 
-  Widget _buildPremiumField(String label, String suffix, TextEditingController controller, IconData icon) {
+  Widget _buildPremiumField(String label, String suffix, TextEditingController controller, IconData icon, {TextInputType? keyboardType}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -544,7 +544,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         ),
         TextFormField(
           controller: controller,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          // النوع الافتراضي رقمي لكن الحقول النصّية (اسم المنشأة/الويبهوك/البريد) تمرّر
+          // نوعها الخاص — كان الرقمي مفروضاً عليها فيتعذّر إدخال الحروف و@ و/ إطلاقاً.
+          keyboardType: keyboardType ?? const TextInputType.numberWithOptions(decimal: true),
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1E293B)),
           decoration: InputDecoration(
             prefixIcon: Icon(icon, color: const Color(0xFF94A3B8), size: 20),

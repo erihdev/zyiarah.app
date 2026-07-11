@@ -243,7 +243,7 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
           );
         },
       ),
-    );
+    ).whenComplete(() => actionUrlCtrl.dispose());
   }
 
   @override

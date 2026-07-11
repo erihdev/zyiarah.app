@@ -28,8 +28,9 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
   Future<void> _fetchZones() async {
     try {
       final snapshot = await _db.collection('service_zones').get();
+      if (!mounted) return; // كان بلا حارس → setState بعد dispose عند مغادرة الشاشة أثناء التحميل
       setState(() {
-        _availableZones = snapshot.docs.map((d) => d['name'] as String).toList();
+        _availableZones = snapshot.docs.map((d) => (d.data()['name'] ?? '').toString()).toList();
       });
     } catch (_) {}
   }
@@ -214,6 +215,25 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                         ),
                       ),
                       const SizedBox(height: 15),
+                      // مفتاح تفعيل/تعطيل الكوبون — لم يكن موجوداً فيتعذّر تعطيل كوبون
+                      // من التطبيق (حالة «غير فعال» غير قابلة للوصول إلا بالحذف).
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 10),
+                        decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(10)),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(status == 'active' ? 'الكوبون مُفعّل' : 'الكوبون معطّل',
+                                style: const TextStyle(fontWeight: FontWeight.bold)),
+                            Switch(
+                              value: status == 'active',
+                              activeThumbColor: Colors.green,
+                              onChanged: (v) => setDialogState(() => status = v ? 'active' : 'inactive'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 15),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.location_city, size: 18),
                         label: Text(restrictedZones.isEmpty ? 'متاح لكل المناطق' : 'محصور لـ ${restrictedZones.length} مناطق'),
@@ -343,7 +363,11 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
           }
         );
       },
-    );
+    ).whenComplete(() {
+      codeCtrl.dispose();
+      valueCtrl.dispose();
+      maxUsesCtrl.dispose();
+    });
   }
 
   Future<void> _deleteCoupon(String id) async {

@@ -120,7 +120,10 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
       final snapshot = results[0];
       final activeOrders = results[1];
 
+      // نستثني الطلب الحالي: سائقه المُسنَد ليس «مشغولاً» بالنسبة لهذا الطلب، وإلا
+      // اختفى من القائمة وظهر المنسدل فارغاً ولم يعُد الأدمن يرى من هو المُعيَّن.
       final busyDriverIds = activeOrders.docs
+          .where((d) => d.id != widget.orderId)
           .map((d) => d.data()['driver_id'] as String?)
           .whereType<String>()
           .toSet();
@@ -210,6 +213,11 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
           'assigned_driver': _selectedDriverName ?? 'None',
         },
       );
+
+      // نُحدّث _orderData من الخادم بعد الحفظ. بدونه يبقى driver_id/status قديماً في
+      // الذاكرة، فحفظٌ ثانٍ يحسب isNewAssignment=true مجدداً فيُعيد كتابة driver_id
+      // (يُطلق إشعار تعيين مكرّراً) ويُضيف سجلّ تدقيق مكرّراً في كل ضغطة.
+      await _fetchOrder();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(

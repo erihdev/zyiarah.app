@@ -223,7 +223,17 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
           );
         },
       ),
-    );
+    ).whenComplete(() {
+      nameCtrl.dispose();
+      radiusCtrl.dispose();
+      p1Ctrl.dispose();
+      p4Ctrl.dispose();
+      p5Ctrl.dispose();
+      p6Ctrl.dispose();
+      p8Ctrl.dispose();
+      pSofaCtrl.dispose();
+      pRugCtrl.dispose();
+    });
   }
 
   @override

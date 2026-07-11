@@ -64,7 +64,7 @@ class AdminStoreOrdersScreen extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ).whenComplete(() => controller.dispose());
   }
 
   /// الموافقة على الطلب بالسعر النهائي [finalAmount]: تنتقل حالته إلى

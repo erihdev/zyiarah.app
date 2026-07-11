@@ -32,8 +32,17 @@ class AdminMaintenanceScreen extends StatelessWidget {
             
             // Stats Calculation
             int pending = docs.where((d) => (d.data() as Map)['status'] == 'under_review').length;
-            int waitingPayment = docs.where((d) => (d.data() as Map)['status'] == 'waiting_payment').length;
-            int completed = docs.where((d) => (d.data() as Map)['status'] == 'completed').length;
+            // نشمل waiting_payment_cod (نفس حالة انتظار الدفع لـ status_util) — كان يُهمَل فتُنقَص طلبات COD.
+            int waitingPayment = docs.where((d) {
+              final s = (d.data() as Map)['status'];
+              return s == 'waiting_payment' || s == 'waiting_payment_cod';
+            }).length;
+            // «مكتملة/معالَجة» = عائلة ما بعد قبول التسعير والدفع؛ حالة 'completed' وحدها
+            // لا تُنتَج من هذه الشاشة إطلاقاً فكانت البطاقة صفراً دائماً.
+            int completed = docs.where((d) {
+              final s = (d.data() as Map)['status'];
+              return s == 'approved' || s == 'paid' || s == 'in_progress' || s == 'completed';
+            }).length;
 
             // Sort manually
             docs.sort((a, b) {
@@ -290,7 +299,7 @@ class AdminMaintenanceScreen extends StatelessWidget {
           );
         }
       ),
-    );
+    ).whenComplete(() => priceCtrl.dispose());
   }
 
   Widget _buildStatusItem({required String title, required IconData icon, required Color color, required VoidCallback onTap, bool enabled = true}) {

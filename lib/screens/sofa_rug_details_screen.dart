@@ -174,6 +174,9 @@ class _SofaRugCleaningDetailsScreenState extends State<SofaRugCleaningDetailsScr
             serviceName: "${widget.serviceName} (${_selectedZoneName ?? ''})",
             amount: totalAmount,
             location: _selectedLocation!,
+            // تمرير المنطقة كي يعمل التحقق من كوبونات المنطقة ولا يُكتب zone_name=null
+            // على الطلب/الفاتورة (كانت شاشة الأثاث/السجاد الوحيدة التي تُسقطها).
+            zoneName: _selectedZoneName,
           ),
         ),
       ).then((success) {

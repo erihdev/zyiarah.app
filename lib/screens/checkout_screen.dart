@@ -79,8 +79,10 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
             // فشل تحميل الصفحة الأولى (شبكة/جلسة منتهية) → أغلق برسالة بدل بياض.
             if (_paymentProcessed || !_pageLoading || !mounted) return;
             _paymentProcessed = true;
+            // نلتقط الـ messenger قبل pop لأن السياق يُتلَف بعده فلا يظهر التنبيه.
+            final messenger = ScaffoldMessenger.of(context);
             Navigator.of(context).pop();
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            messenger.showSnackBar(const SnackBar(
               content: Text('تعذّر تحميل صفحة الدفع — تحقّق من الاتصال'),
               backgroundColor: Colors.red,
             ));
@@ -91,8 +93,9 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
             if (url.contains('payment-cancel') || url.contains('payment-failure')) {
               _paymentProcessed = true;
               if (mounted) {
+                final messenger = ScaffoldMessenger.of(context);
                 Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                messenger.showSnackBar(const SnackBar(
                   content: Text('تم إلغاء الدفع عبر تمارا'),
                   backgroundColor: Colors.orange,
                 ));

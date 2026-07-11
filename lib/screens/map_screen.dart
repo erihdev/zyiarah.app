@@ -22,6 +22,12 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
   bool _mapReady = false;
 
   @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,

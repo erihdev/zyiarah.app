@@ -18,13 +18,19 @@ class ZyiarahConfigProvider extends ChangeNotifier {
 
   void _init() {
     _uxSubscription = _configService.streamUxExperiments().listen((data) {
-      if (data.containsKey('checkout_button_color')) {
-        _checkoutButtonColor = _configService.getColorFromHex(data['checkout_button_color']);
+      // فحص النوع صراحةً: قيمة غير نصية في مستند التجارب كانت تُسنَد مباشرةً وترمي
+      // خطأً غير مُلتقَط داخل المستمع فيتوقّف عن التحديث. onError يحمي من أي فشل بثّ.
+      final hex = data['checkout_button_color'];
+      if (hex is String && hex.isNotEmpty) {
+        _checkoutButtonColor = _configService.getColorFromHex(hex);
       }
-      if (data.containsKey('checkout_variant_name')) {
-        _checkoutVariantName = data['checkout_variant_name'];
+      final variant = data['checkout_variant_name'];
+      if (variant is String) {
+        _checkoutVariantName = variant;
       }
       notifyListeners();
+    }, onError: (e) {
+      debugPrint('UX experiments stream error: $e');
     });
   }
 

@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:zyiarah/screens/admin/admin_order_details_screen.dart';
 import 'package:zyiarah/screens/admin/admin_ticket_details_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/screens/order_tracking_screen.dart';
-import 'package:zyiarah/screens/driver_dashboard.dart';
 
 class ZyiarahDeepLinkService {
   static final ZyiarahDeepLinkService _instance = ZyiarahDeepLinkService._internal();
@@ -79,16 +79,21 @@ class ZyiarahDeepLinkService {
     final bool isDriver = role == 'driver';
 
     if (resource == 'order') {
-       // السائق يذهب للوحته (شاشة المهام القابلة للتنفيذ) لا لشاشة تتبّع العميل.
-       _navKey?.currentState?.push(
-         MaterialPageRoute(
-           builder: (_) => isAdmin
-             ? AdminOrderDetailsScreen(orderId: id)
-             : isDriver
-                 ? const DriverDashboard()
-                 : OrderTrackingScreen(orderId: id)
-         )
-       );
+       if (isDriver) {
+         // السائق يذهب للوحته عبر go_router بدل push شاشة جديدة. الدفع المباشر لـ
+         // DriverDashboard على الـ navigator الجذري (نفسه الذي يملكه go_router) كان
+         // يكدّس لوحة ثانية فوق الأولى مع سهم رجوع شارد ومزامنة/تتبّع مضاعفَين.
+         final ctx = _navKey?.currentContext;
+         if (ctx != null && ctx.mounted) GoRouter.of(ctx).go('/driver');
+       } else {
+         _navKey?.currentState?.push(
+           MaterialPageRoute(
+             builder: (_) => isAdmin
+               ? AdminOrderDetailsScreen(orderId: id)
+               : OrderTrackingScreen(orderId: id),
+           ),
+         );
+       }
     } else if (resource == 'ticket' && isAdmin) {
        _navKey?.currentState?.push(
          MaterialPageRoute(builder: (_) => AdminTicketDetailsScreen(ticketId: id))

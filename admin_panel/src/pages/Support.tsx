@@ -3,23 +3,26 @@ import { LifeBuoy, Search, MessageSquare, AlertCircle, CheckCircle2, Send, Clock
 import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc, addDoc, serverTimestamp, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 
+// المجموعة الصحيحة هي support_tickets (يكتبها العميل في support_screen.dart والدوال في functions/index.js).
+// كانت اللوحة سابقاً مرتبطة بمجموعة وهمية 'tickets' بأسماء حقول خاطئة → صفحة الدعم فارغة دائماً
+// وأي رد يُكتب في مجموعة لا يراها العميل ولا يُطلق إشعار sendNotificationOnTicketReply.
 interface SupportMessage {
     id: string;
     text: string;
-    sender: string;
+    senderRole?: string;
+    senderId?: string;
     senderName?: string;
-    created_at?: Timestamp;
+    sentAt?: Timestamp;
 }
 
 interface Ticket {
     id: string;
-    sender: string;
-    userType: string;
-    issue: string;
-    status: string;
-    priority: string;
-    created_at?: Timestamp;
-    uid?: string;
+    userId?: string;
+    userEmail?: string;
+    subject: string;
+    lastMessage?: string;
+    status: string; // open | replied | resolved | closed
+    createdAt?: Timestamp;
 }
 
 export default function Support() {
@@ -33,7 +36,7 @@ export default function Support() {
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        const q = query(collection(db, 'tickets'), orderBy('created_at', 'desc'));
+        const q = query(collection(db, 'support_tickets'), orderBy('createdAt', 'desc'));
         const unsub = onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
             const data = snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Ticket));
             setTickets(data);
@@ -45,10 +48,10 @@ export default function Support() {
     // Load messages from subcollection whenever selected ticket changes
     useEffect(() => {
         if (!selected) { setMessages([]); return; }
-        const q = query(collection(db, 'tickets', selected.id, 'messages'), orderBy('created_at', 'asc'));
+        const q = query(collection(db, 'support_tickets', selected.id, 'messages'), orderBy('sentAt', 'asc'));
         const unsub = onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
             setMessages(snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as SupportMessage)));
-        }, (e) => { console.error("Support listener error:", e); setLoading(false); });
+        }, (e) => { console.error("Support listener error:", e); });
         return () => unsub();
     }, [selected?.id]);
 
@@ -57,29 +60,36 @@ export default function Support() {
     }, [messages]);
 
     const filteredTickets = tickets.filter(t =>
-        (t.sender || '').includes(searchTerm) ||
-        (t.issue || '').includes(searchTerm)
+        (t.subject || '').includes(searchTerm) ||
+        (t.userEmail || '').includes(searchTerm)
     );
 
     const openCount = tickets.filter(t => t.status === 'open').length;
-    const inProgressCount = tickets.filter(t => t.status === 'in-progress' || t.status === 'in_progress').length;
-    const closedCount = tickets.filter(t => t.status === 'closed').length;
+    const inProgressCount = tickets.filter(t => t.status === 'replied').length;
+    const closedCount = tickets.filter(t => t.status === 'resolved' || t.status === 'closed').length;
+
+    const isAdminMsg = (m: SupportMessage) => m.senderRole === 'admin' || m.senderId === 'admin';
 
     const handleSend = async () => {
-        if (!reply.trim() || !selected) return;
+        if (!reply.trim() || !selected || sending) return;
         setSending(true);
         try {
-            await addDoc(collection(db, 'tickets', selected.id, 'messages'), {
+            // نكتب senderRole و senderId='admin' معاً: الأول ليتعرّف عليه تطبيق العميل،
+            // والثاني ليُطلق مُشغّل sendNotificationOnTicketReply إشعار «تم الرد على تذكرتك» للعميل.
+            await addDoc(collection(db, 'support_tickets', selected.id, 'messages'), {
                 text: reply.trim(),
-                sender: 'admin',
+                senderRole: 'admin',
+                senderId: 'admin',
                 senderName: 'فريق زيارة',
-                created_at: serverTimestamp(),
+                sentAt: serverTimestamp(),
             });
-            await updateDoc(doc(db, 'tickets', selected.id), {
-                status: 'in-progress',
-                last_reply: serverTimestamp(),
+            await updateDoc(doc(db, 'support_tickets', selected.id), {
+                status: 'replied',
+                updatedAt: serverTimestamp(),
             });
             setReply('');
+        } catch (e) {
+            console.error('send reply failed:', e);
         } finally {
             setSending(false);
         }
@@ -87,9 +97,14 @@ export default function Support() {
 
     const handleClose = async () => {
         if (!selected) return;
-        await updateDoc(doc(db, 'tickets', selected.id), { status: 'closed' });
-        setSelected(prev => prev ? { ...prev, status: 'closed' } : null);
+        await updateDoc(doc(db, 'support_tickets', selected.id), { status: 'resolved', updatedAt: serverTimestamp() });
+        setSelected(prev => prev ? { ...prev, status: 'resolved' } : null);
     };
+
+    const statusLabel = (s: string) => s === 'open' ? 'مفتوحة' : s === 'replied' ? 'تم الرد' : s === 'resolved' ? 'تم الحل' : s === 'closed' ? 'مغلقة' : s;
+    const statusClasses = (s: string) => s === 'open' ? 'text-rose-600 bg-rose-50 border-rose-100'
+        : s === 'resolved' || s === 'closed' ? 'text-emerald-600 bg-emerald-50 border-emerald-100'
+        : 'text-blue-600 bg-blue-50 border-blue-100';
 
     const relativeTime = (ts?: Timestamp) => {
         if (!ts) return '';
@@ -128,14 +143,14 @@ export default function Support() {
                         <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center"><MessageSquare size={20} /></div>
                         <Clock size={16} className="text-slate-300 mt-2" />
                     </div>
-                    <p className="text-sm font-bold text-slate-500 mb-1">قيد المعالجة</p>
+                    <p className="text-sm font-bold text-slate-500 mb-1">تم الرد عليها</p>
                     <h3 className="text-3xl font-extrabold text-slate-800">{loading ? '...' : inProgressCount}</h3>
                 </div>
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] flex flex-col border-l-4 border-l-emerald-500">
                     <div className="flex justify-between items-start mb-4">
                         <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center"><CheckCircle2 size={20} /></div>
                     </div>
-                    <p className="text-sm font-bold text-slate-500 mb-1">تم الحل</p>
+                    <p className="text-sm font-bold text-slate-500 mb-1">تم الحل / الإغلاق</p>
                     <h3 className="text-3xl font-extrabold text-slate-800">{loading ? '...' : closedCount}</h3>
                 </div>
             </div>
@@ -165,15 +180,15 @@ export default function Support() {
                                 <div className="flex justify-between items-center mb-1">
                                     <span className="text-xs font-bold text-slate-400 font-mono">#{ticket.id.substring(0, 6).toUpperCase()}</span>
                                     {ticket.status === 'open' && <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />}
-                                    {(ticket.status === 'in-progress' || ticket.status === 'in_progress') && <span className="w-2 h-2 rounded-full bg-blue-500" />}
+                                    {ticket.status === 'replied' && <span className="w-2 h-2 rounded-full bg-blue-500" />}
                                 </div>
-                                <h4 className="font-bold text-slate-800 text-sm mb-1 line-clamp-2">{ticket.issue || 'مشكلة غير محددة'}</h4>
+                                <h4 className="font-bold text-slate-800 text-sm mb-1 line-clamp-2">{ticket.subject || 'مشكلة غير محددة'}</h4>
                                 <div className="flex justify-between items-center text-xs text-slate-500">
-                                    <span className="flex items-center gap-1">
-                                        <div className="w-4 h-4 bg-slate-200 rounded-full flex items-center justify-center text-[8px] font-bold">{(ticket.sender || 'U')[0]}</div>
-                                        {ticket.sender || 'مجهول'} <span className="text-[10px] bg-slate-100 px-1 rounded">{ticket.userType || 'عميل'}</span>
+                                    <span className="flex items-center gap-1 truncate max-w-[60%]">
+                                        <div className="w-4 h-4 bg-slate-200 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0">{(ticket.userEmail || 'U')[0]}</div>
+                                        <span className="truncate">{ticket.userEmail || 'مجهول'}</span>
                                     </span>
-                                    <span>{relativeTime(ticket.created_at)}</span>
+                                    <span>{relativeTime(ticket.createdAt)}</span>
                                 </div>
                             </div>
                         ))}
@@ -192,15 +207,15 @@ export default function Support() {
                             <div className="p-6 border-b border-slate-100 bg-white/80 backdrop-blur z-10 flex justify-between items-start">
                                 <div>
                                     <div className="flex gap-2 items-center mb-2">
-                                        <span className={`text-xs font-bold px-2 py-1 rounded border ${selected.status === 'open' ? 'text-rose-600 bg-rose-50 border-rose-100' : selected.status === 'closed' ? 'text-emerald-600 bg-emerald-50 border-emerald-100' : 'text-blue-600 bg-blue-50 border-blue-100'}`}>
-                                            {selected.status === 'open' ? 'مفتوحة' : selected.status === 'closed' ? 'مغلقة' : 'قيد المعالجة'}
+                                        <span className={`text-xs font-bold px-2 py-1 rounded border ${statusClasses(selected.status)}`}>
+                                            {statusLabel(selected.status)}
                                         </span>
                                         <span className="text-xs font-bold text-slate-400 font-mono">#{selected.id.substring(0, 8).toUpperCase()}</span>
                                     </div>
-                                    <h3 className="text-lg font-extrabold text-slate-800">{selected.issue}</h3>
-                                    <p className="text-sm text-slate-500 mt-1">من: <strong>{selected.sender}</strong> ({selected.userType})</p>
+                                    <h3 className="text-lg font-extrabold text-slate-800">{selected.subject}</h3>
+                                    <p className="text-sm text-slate-500 mt-1">من: <strong>{selected.userEmail || 'عميل'}</strong></p>
                                 </div>
-                                {selected.status !== 'closed' && (
+                                {selected.status !== 'resolved' && selected.status !== 'closed' && (
                                     <button type="button" onClick={handleClose} className="px-4 py-2 bg-slate-50 text-slate-600 hover:bg-slate-100 font-bold rounded-lg border border-slate-200 text-sm transition-colors">
                                         إغلاق التذكرة ✓
                                     </button>
@@ -208,22 +223,25 @@ export default function Support() {
                             </div>
 
                             <div className="flex-1 overflow-y-auto p-6 space-y-5 z-10">
-                                {messages.map((msg: SupportMessage) => (
-                                    <div key={msg.id} className={`flex gap-4 max-w-2xl ${msg.sender === 'admin' ? 'mr-auto flex-row-reverse' : ''}`}>
-                                        <div className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-sm font-bold mt-1 ${msg.sender === 'admin' ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white' : 'bg-slate-100 border border-slate-200 text-slate-600'}`}>
-                                            {msg.sender === 'admin' ? 'Z' : (selected.sender || 'U')[0]}
+                                {messages.map((msg: SupportMessage) => {
+                                    const admin = isAdminMsg(msg);
+                                    return (
+                                    <div key={msg.id} className={`flex gap-4 max-w-2xl ${admin ? 'mr-auto flex-row-reverse' : ''}`}>
+                                        <div className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-sm font-bold mt-1 ${admin ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white' : 'bg-slate-100 border border-slate-200 text-slate-600'}`}>
+                                            {admin ? 'Z' : (selected.userEmail || 'U')[0]}
                                         </div>
-                                        <div className={msg.sender === 'admin' ? 'text-left' : ''}>
-                                            <div className={`rounded-2xl p-4 text-sm leading-relaxed ${msg.sender === 'admin' ? 'bg-blue-600 text-white rounded-tl-sm text-right' : 'bg-slate-50 border border-slate-100 text-slate-700 rounded-tr-sm'}`}>
+                                        <div className={admin ? 'text-left' : ''}>
+                                            <div className={`rounded-2xl p-4 text-sm leading-relaxed ${admin ? 'bg-blue-600 text-white rounded-tl-sm text-right' : 'bg-slate-50 border border-slate-100 text-slate-700 rounded-tr-sm'}`}>
                                                 {msg.text}
                                             </div>
                                             <span className="text-xs text-slate-400 mt-1 inline-block">
-                                                {msg.created_at instanceof Timestamp ? msg.created_at.toDate().toLocaleTimeString('ar-EG') : ''}
-                                                {msg.sender === 'admin' ? ' (أنت)' : ''}
+                                                {msg.sentAt instanceof Timestamp ? msg.sentAt.toDate().toLocaleTimeString('ar-EG') : ''}
+                                                {admin ? ' (أنت)' : ''}
                                             </span>
                                         </div>
                                     </div>
-                                ))}
+                                    );
+                                })}
                                 {messages.length === 0 && (
                                     <div className="text-center py-10 text-slate-400">
                                         <MessageSquare size={40} className="mx-auto mb-3 opacity-30" />
@@ -233,7 +251,7 @@ export default function Support() {
                                 <div ref={messagesEndRef} />
                             </div>
 
-                            {selected.status !== 'closed' && (
+                            {selected.status !== 'resolved' && selected.status !== 'closed' && (
                                 <div className="p-4 border-t border-slate-100 bg-white z-10">
                                     <div className="relative">
                                         <textarea
@@ -262,4 +280,3 @@ export default function Support() {
         </div>
     );
 }
-

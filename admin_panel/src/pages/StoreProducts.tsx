@@ -57,10 +57,10 @@ export default function StoreProducts() {
       const prods: Product[] = [];
       snapshot.forEach((doc) => {
         prods.push({ id: doc.id, ...doc.data() } as Product);
-      }, (e: unknown) => { console.error("StoreProducts listener error:", e); setLoading(false); });
+      });
       setProducts(prods);
       setLoading(false);
-    });
+    }, (e: unknown) => { console.error("StoreProducts listener error:", e); setLoading(false); });
     return () => unsubscribe();
   }, []);
 

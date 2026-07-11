@@ -9,7 +9,7 @@ interface MaintenanceRecord {
     userId: string;
     serviceType: string;
     requestId: string;
-    qty: number;
+    quantity: number;
     floor: string;
     status: string;
     userName?: string;
@@ -64,11 +64,12 @@ export default function Maintenance() {
         }
     };
 
+    const q = searchTerm.toLowerCase();
     const filtered = requests.filter(r =>
-        r.serviceType.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.requestId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.userId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (r.userName && r.userName.toLowerCase().includes(searchTerm.toLowerCase()))
+        (r.serviceType || '').toLowerCase().includes(q) ||
+        (r.requestId || '').toLowerCase().includes(q) ||
+        (r.userId || '').toLowerCase().includes(q) ||
+        (r.userName || '').toLowerCase().includes(q)
     );
 
     return (
@@ -127,11 +128,11 @@ export default function Maintenance() {
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-col">
                                                     <span className="font-bold text-slate-700">{req.userName || 'عميل زيارة'}</span>
-                                                    <span className="text-[10px] text-slate-400 font-mono">UID: {req.userId.substring(0, 8)}...</span>
+                                                    <span className="text-[10px] text-slate-400 font-mono">UID: {(req.userId || '').substring(0, 8)}...</span>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 font-bold text-indigo-700">{req.serviceType}</td>
-                                            <td className="px-6 py-4 text-xs font-medium">العدد: {req.qty} | {req.floor}</td>
+                                            <td className="px-6 py-4 text-xs font-medium">العدد: {req.quantity ?? '—'} | {req.floor}</td>
                                             <td className="px-6 py-4 font-medium text-slate-500 text-sm">
                                                 {req.createdAt?.toDate().toLocaleDateString('ar-EG')}
                                             </td>

@@ -89,8 +89,11 @@ class AdminUsersScreen extends StatelessWidget {
           elevation: 0,
         ),
         body: StreamBuilder<QuerySnapshot>(
+          // نصفّي role=='client' خادميّاً: كان التصفية محليّاً على آخر 100 مستخدم
+          // (قد يكونون سائقين/إدارة) فيختفي عملاء حقيقيون ويكون العدّاد مضلِّلاً.
           stream: FirebaseFirestore.instance
               .collection('users')
+              .where('role', isEqualTo: 'client')
               .orderBy('created_at', descending: true)
               .limit(100)
               .snapshots(),
@@ -114,9 +117,7 @@ class AdminUsersScreen extends StatelessWidget {
               );
             }
 
-            final docs = snapshot.data!.docs
-                .where((d) => (d.data() as Map<String, dynamic>)['role'] == 'client')
-                .toList();
+            final docs = snapshot.data!.docs;
 
             if (docs.isEmpty) {
               return Center(

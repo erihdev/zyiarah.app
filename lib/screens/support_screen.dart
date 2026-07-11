@@ -15,14 +15,21 @@ class ZyiarahSupportScreen extends StatefulWidget {
 class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
   final TextEditingController _subjectController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
-  final TextEditingController _replyController = TextEditingController();
+  // وحدة تحكّم ردّ مستقلّة لكل تذكرة — كانت وحدة واحدة مشتركة، فيتسرّب نصّ إحدى
+  // التذاكر المفتوحة إلى الأخرى ويمحو clear() مسوّدتها.
+  final Map<String, TextEditingController> _replyControllers = {};
   bool _isSending = false;
+
+  TextEditingController _replyCtrlFor(String ticketId) =>
+      _replyControllers.putIfAbsent(ticketId, () => TextEditingController());
 
   @override
   void dispose() {
     _subjectController.dispose();
     _messageController.dispose();
-    _replyController.dispose();
+    for (final c in _replyControllers.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -146,6 +153,10 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
     if (status == 'replied') {
       statusColor = Colors.green;
       statusText = "تم الرد";
+    } else if (status == 'resolved') {
+      // كانت resolved تسقط للحالة الافتراضية «قيد المراجعة» رغم عرضها في سجل التذاكر.
+      statusColor = Colors.teal;
+      statusText = "تم الحل";
     } else if (status == 'closed') {
       statusColor = Colors.grey;
       statusText = "مغلقة";
@@ -187,6 +198,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
 
   Widget _buildMessagesList(String ticketId) {
     bool isSendingReply = false;
+    final replyCtrl = _replyCtrlFor(ticketId);
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -247,7 +259,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
                   children: [
                     Expanded(
                       child: TextField(
-                        controller: _replyController,
+                        controller: replyCtrl,
                         decoration: InputDecoration(
                           hintText: "اكتب ردك هنا...",
                           isDense: true,
@@ -261,7 +273,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
                       : IconButton(
                           icon: const Icon(Icons.send, color: Color(0xFF5D1B5E)),
                           onPressed: () async {
-                            final text = _replyController.text.trim();
+                            final text = replyCtrl.text.trim();
                             if (text.isEmpty) return;
                             
                             setInternalState(() => isSendingReply = true);
@@ -285,7 +297,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
                                     'updatedAt': FieldValue.serverTimestamp(),
                                   });
 
-                              _replyController.clear();
+                              replyCtrl.clear();
                             } catch (e) {
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -312,7 +324,9 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
-      builder: (context) => Directionality(
+      builder: (context) {
+        bool sheetSending = false; // حالة مستمرّة عبر إعادات بناء الـ StatefulBuilder
+        return Directionality(
         textDirection: TextDirection.rtl,
         child: Padding(
           padding: EdgeInsets.only(
@@ -344,35 +358,45 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF5D1B5E),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                  ),
-                  onPressed: _isSending ? null : () => _submitTicket(context),
-                  child: _isSending
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text("إرسال التذكرة", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
+              // StatefulBuilder: الزر داخل الـ sheet لا يُعاد بناؤه على setState الأب،
+              // فكان لا يُظهر مؤشّر التحميل ولا يتعطّل بصريّاً أثناء الإرسال.
+              StatefulBuilder(
+                builder: (context, setSheetState) {
+                  return SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF5D1B5E),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                      ),
+                      onPressed: sheetSending
+                          ? null
+                          : () => _submitTicket(context, (v) => setSheetState(() => sheetSending = v)),
+                      child: sheetSending
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text("إرسال التذكرة", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 30),
             ],
           ),
         ),
-      ),
+        );
+      },
     );
   }
 
-  void _submitTicket(BuildContext sheetContext) async {
-    if (_isSending) return; // حارس ضدّ الإرسال المزدوج (الزر داخل sheet لا يتعطّل بصريّاً)
+  void _submitTicket(BuildContext sheetContext, [void Function(bool)? setSending]) async {
+    if (_isSending) return; // حارس ضدّ الإرسال المزدوج
     if (_subjectController.text.isEmpty || _messageController.text.isEmpty) {
       ScaffoldMessenger.of(sheetContext).showSnackBar(const SnackBar(content: Text("يرجى ملء جميع الحقول")));
       return;
     }
 
+    setSending?.call(true);
     setState(() => _isSending = true);
 
     try {
@@ -407,6 +431,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ في الإرسال: $e")));
       }
     } finally {
+      setSending?.call(false);
       if (mounted) setState(() => _isSending = false);
     }
   }

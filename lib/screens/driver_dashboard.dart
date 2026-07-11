@@ -938,16 +938,19 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   ],
                 ),
               ),
-              TextButton.icon(
-                onPressed: () => _openMaps(data['location']),
-                icon: const Icon(Icons.directions, color: Colors.blue, size: 24),
-                label: Text("خرائط", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 13)),
-                style: TextButton.styleFrom(
-                  backgroundColor: Colors.blue.withValues(alpha: 0.1),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              // نُظهر زر «خرائط» فقط حين يوجد موقع فعلي — كان _openMaps يرجع بصمت
+              // عند غياب الموقع فيبدو الزر معطّلاً بلا أي ردّ فعل للسائق.
+              if (data['location'] is GeoPoint)
+                TextButton.icon(
+                  onPressed: () => _openMaps(data['location']),
+                  icon: const Icon(Icons.directions, color: Colors.blue, size: 24),
+                  label: Text("خرائط", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 13)),
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.blue.withValues(alpha: 0.1),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
                 ),
-              ),
             ],
           ),
           const Divider(height: 28),

@@ -48,8 +48,13 @@ final GoRouter appRouter = GoRouter(
       try {
         userProvider = Provider.of<ZyiarahUserProvider>(context, listen: false);
       } catch (_) {}
-      // إذا لم يكتمل تحميل الدور بعد → AuthWrapper يتولى عرض Splash
-      if (userProvider != null && !userProvider.isLoading) {
+      const protectedRolePaths = {'/client', '/driver', '/admin'};
+      if (userProvider == null || userProvider.isLoading) {
+        // أثناء تحميل الدور: لا تسمح بالوصول المباشر لمسار دور حسّاس (كان يفشل
+        // مفتوحاً فيَعرض شاشة الدور الخطأ لرابط عميق أثناء الإقلاع). نحوّل إلى '/'
+        // حيث يعرض AuthWrapper سبلاش ثم يوجّه تلقائياً للوجهة الصحيحة بعد معرفة الدور.
+        if (protectedRolePaths.contains(path)) return '/';
+      } else {
         final role = userProvider.role ?? 'client';
         final isAdmin = _adminRoles.contains(role);
         if (path == '/client' && role != 'client') return '/';

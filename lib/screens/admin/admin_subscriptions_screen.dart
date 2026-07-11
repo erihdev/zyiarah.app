@@ -140,7 +140,13 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
 
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {
+                      // كان الفشل صامتاً: يُعاد تفعيل الزر بلا أي رسالة فيظنّ الأدمن أن شيئاً لم يحدث.
                       setDialogState(() => isSaving = false);
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(content: Text('تعذّر حفظ الباقة، تحقّق من اتصالك وحاول مجدداً'), backgroundColor: Colors.red),
+                        );
+                      }
                     }
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E), foregroundColor: Colors.white),
@@ -151,7 +157,14 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
           );
         },
       ),
-    );
+    ).whenComplete(() {
+      titleCtrl.dispose();
+      subtitleCtrl.dispose();
+      priceCtrl.dispose();
+      visitsCtrl.dispose();
+      hoursCtrl.dispose();
+      featuresCtrl.dispose();
+    });
   }
 
   @override

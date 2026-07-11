@@ -192,7 +192,14 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
                 _buildActionBtn(Icons.block_flipped, isExpired ? "تعطيل الحساب" : "حظر مؤقت", Colors.red, () async {
                    final confirm = await _showConfirm("تأكيد الإجراء", "هل تريد تغيير حالة هذا الكادر؟");
                    if (confirm) {
-                     await FirebaseFirestore.instance.collection('drivers').doc(doc.id).update({'is_active': false});
+                     // نضبط is_suspended/is_available أيضاً: لوحة الويب تبني شارة الحالة
+                     // ومفتاح الإيقاف على is_suspended، فحظرٌ يكتب is_active فقط كان يُظهر
+                     // السائق «نشطاً» في الويب رغم تعطيله هنا.
+                     await FirebaseFirestore.instance.collection('drivers').doc(doc.id).update({
+                       'is_active': false,
+                       'is_suspended': true,
+                       'is_available': false,
+                     });
                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم تعطيل الحساب بنجاح")));
                    }
                 }),

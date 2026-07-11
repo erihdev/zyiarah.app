@@ -177,9 +177,12 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
     final bool active = service.isActive;
     final Color accentColor = active ? const Color(0xFF4F46E5) : const Color(0xFF94A3B8);
     
-    // Simulate some business logic details (In a real app, these would come from sub-streams)
-    final String ordersCount = active ? "12 طلب نشط" : "متوقف";
-    final String rating = active ? "4.8" : "-";
+    // بيانات حقيقية من نموذج الخدمة بدل أرقام ثابتة ملفّقة (كانت "12 طلب / 4.8"
+    // لكل خدمة) — نعرض السعر وحالة التفعيل الفعليّين.
+    final String priceLabel = service.priceText.isNotEmpty
+        ? service.priceText
+        : (service.basePrice > 0 ? "${service.basePrice.toStringAsFixed(0)} ر.س" : "—");
+    final String statusLabel = active ? "مفعّلة" : "متوقفة";
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -273,9 +276,9 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
                   // Intelligence Metrics Row
                   Row(
                     children: [
-                      _buildIntelligenceMetric(Icons.trending_up, ordersCount, const Color(0xFF10B981)),
+                      _buildIntelligenceMetric(Icons.payments_rounded, priceLabel, const Color(0xFF10B981)),
                       const SizedBox(width: 12),
-                      _buildIntelligenceMetric(Icons.star_rounded, rating, Colors.amber),
+                      _buildIntelligenceMetric(active ? Icons.check_circle_rounded : Icons.pause_circle_rounded, statusLabel, active ? const Color(0xFF10B981) : Colors.grey),
                       const Spacer(),
                       if (active && service.title.contains("تنظيف"))
                         _buildPopularityTag(),

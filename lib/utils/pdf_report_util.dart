@@ -125,7 +125,7 @@ class ZyiarahPdfReportUtil {
                 children: [
                   pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(data['code'] ?? doc.id.substring(0, 6))),
                   pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(data['service_name'] ?? 'General')),
-                  pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('${data['final_amount'] ?? 0} SAR')),
+                  pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('${data['amount'] ?? data['total_amount'] ?? data['final_amount'] ?? 0} SAR')),
                   pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(data['status'] ?? 'pending')),
                 ],
               );

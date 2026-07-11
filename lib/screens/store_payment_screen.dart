@@ -131,6 +131,21 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
 
     setState(() => _isLoading = true);
     try {
+      // البطاقة (Moyasar) هي الطريقة الافتراضية، لكنها لا تُعرَض حين يغيب المفتاح.
+      // لو بقيت الطريقة 'card' بلا مفتاح لفُتحت شاشة بطاقة بمفتاح فارغ (طريق مسدود).
+      // نحوّل لتمارا إن توفّرت، وإلا نُبلغ المستخدم بدل المتابعة.
+      final moyasarReady = (dotenv.env['MOYASAR_PUBLISHABLE_KEY'] ?? '').isNotEmpty;
+      if (_selectedMethod == 'card' && !moyasarReady) {
+        if (_tamaraAvailable) {
+          _selectedMethod = 'tamara';
+        } else {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('طريقة الدفع بالبطاقة غير متاحة حالياً')),
+          );
+          return;
+        }
+      }
       if (_selectedMethod == 'card') {
         setState(() => _isLoading = false);
         if (!mounted) return;

@@ -150,11 +150,14 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
 
   List<QueryDocumentSnapshot> _applyFilter(List<QueryDocumentSnapshot> docs) {
     if (_selectedFilter == 'ALL') return docs.take(100).toList();
+    // contains لا startsWith: أسماء الإجراءات تبدأ بفعل (CREATE_STAFF/DELETE_COUPON/
+    // ASSIGN_DRIVER) بينما المرشّحات أسماء (STAFF/COUPON/DRIVER/ORDER) — كان startsWith
+    // لا يطابق أي إجراء فتظهر كل الفلاتر فارغة.
     return docs
         .where((d) =>
             ((d.data() as Map)['action'] as String? ?? '')
                 .toUpperCase()
-                .startsWith(_selectedFilter))
+                .contains(_selectedFilter))
         .take(100)
         .toList();
   }

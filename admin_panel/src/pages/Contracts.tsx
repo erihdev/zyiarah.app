@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Search, FileSignature, CheckCircle2, Clock, XCircle, AlertCircle, Calendar, CreditCard, Trash2, Info } from 'lucide-react';
-import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc, deleteDoc, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc, deleteDoc, addDoc, serverTimestamp, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
 
@@ -50,13 +50,27 @@ export default function Contracts() {
         return () => unsubscribe();
     }, []);
 
-    const handleApprove = async (id: string, planName: string) => {
+    const handleApprove = async (id: string, planName: string, userId?: string) => {
         if (!await confirm(`هل أنت متأكد من رغبتك في اعتماد عقد (${planName})؟`)) return;
         try {
             await updateDoc(doc(db, 'contracts', id), {
                 status: 'approved_waiting_payment',
                 adminApprovedAt: Timestamp.now()
             });
+            // إشعار العميل بإتمام الدفع — مسار تطبيق الأدمن يستدعي notifyContractApproved،
+            // أما لوحة الويب فكانت تعتمد العقد بصمت ولا يصل العميل أي تنبيه. نكتب هنا في
+            // نفس طابور notification_triggers (نوع غير بريدي = دفع + سجل داخل التطبيق فقط).
+            if (userId) {
+                await addDoc(collection(db, 'notification_triggers'), {
+                    toUid: userId,
+                    title: 'تمت الموافقة على طلبك بنجاح! 📄',
+                    body: `تم اعتماد عقد باقة (${planName}) من قبل الإدارة. يرجى إتمام الدفع لتفعيل الباقة.`,
+                    type: 'contract_approved',
+                    data: { planName, deepLink: 'zyiarah://app/contracts' },
+                    createdAt: serverTimestamp(),
+                    processed: false,
+                });
+            }
             toast.success("تم اعتماد العقد بنجاح وبانتظار دفع العميل");
         } catch (error) {
             console.error(error);
@@ -159,7 +173,7 @@ export default function Contracts() {
                                     {contract.status === 'pending' && (
                                         <button 
                                             type="button"
-                                            onClick={() => handleApprove(contract.id, contract.planName)}
+                                            onClick={() => handleApprove(contract.id, contract.planName, contract.userId)}
                                             className="flex-1 py-3.5 bg-blue-600 text-white text-sm font-black rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95"
                                         >
                                             اعتماد الباقة
