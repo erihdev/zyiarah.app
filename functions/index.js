@@ -24,54 +24,43 @@ exports.sendNotificationOnTicketReply = onDocumentCreated({document: "support_ti
       if (!snap) return null;
 
       const newMessage = snap.data();
-      if (newMessage.senderId !== "admin") return null;
-
       const ticketId = event.params.ticketId;
-      const ticketRef = admin.firestore().collection("support_tickets")
-          .doc(ticketId);
-      const ticketDoc = await ticketRef.get();
-
+      const ticketDoc = await admin.firestore().collection("support_tickets")
+          .doc(ticketId).get();
       if (!ticketDoc.exists) return null;
-
       const ticketData = ticketDoc.data();
-      const userId = ticketData.userId;
 
-      const tokenDoc = await admin.firestore().collection("fcm_tokens")
-          .doc(userId).get();
-      if (!tokenDoc.exists) return null;
-
-      const fcmToken = tokenDoc.data()?.fcmToken || tokenDoc.data()?.token;
-      if (!fcmToken) return null;
-
-      const payload = {
-        notification: {
-          title: "تم الرد على تذكرتك",
-          body: "قام الدعم الفني بالرد على تذكرة الدعم الخاصة بك للتو.",
-        },
-        data: {
-          click_action: "FLUTTER_NOTIFICATION_CLICK",
-          type: "support_ticket",
-          ticketId: ticketId,
-        },
-        token: fcmToken,
-      };
-
-      try {
-        await admin.messaging().send(payload);
-        console.log(`Notification sent to user ${userId} for ticket ${ticketId}`);
-
-        // Save to notifications collection for in-app history
-        await admin.firestore().collection("notifications").add({
-          userId: userId,
-          title: payload.notification.title,
-          body: payload.notification.body,
-          type: "support_ticket",
-          relatedId: ticketId,
-          sentAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-      } catch (error) {
-        console.error("Error sending notification:", error);
+      if (newMessage.senderId === "admin") {
+        // رد الدعم → أشعِر صاحب التذكرة (push + سجل داخل التطبيق).
+        await queuePush(
+            ticketData.userId,
+            "تم الرد على تذكرتك 💬",
+            "قام الدعم الفني بالرد على تذكرتك للتو.",
+            "support_ticket", {ticketId});
+      } else {
+        // رد العميل → أشعِر الإدارة (كانت عمياء عن ردود العملاء).
+        await queuePush(
+            "ADMIN_BROADCAST",
+            "رد جديد على تذكرة دعم 💬",
+            "وصل رد جديد من عميل على تذكرة دعم — بانتظار المتابعة.",
+            "admin_ticket_reply", {ticketId});
       }
+      return null;
+    });
+
+// 1.1 Notify Admins on a NEW support ticket (was previously missing — admins never
+// learned a client opened a ticket until they manually checked the panel).
+exports.sendNotificationToAdminsOnNewTicket = onDocumentCreated({document: "support_tickets/{ticketId}", cpu: 0.083},
+    async (event) => {
+      const snap = event.data;
+      if (!snap) return null;
+      const t = snap.data() || {};
+      const subject = (t.subject || t.title || "استفسار جديد").toString().slice(0, 60);
+      await queuePush(
+          "ADMIN_BROADCAST",
+          "تذكرة دعم جديدة 🎫",
+          `فتح عميل تذكرة دعم جديدة: ${subject}`,
+          "admin_new_ticket", {ticketId: event.params.ticketId});
       return null;
     });
 
@@ -311,45 +300,37 @@ exports.notifyAvailableDriversOnNewOrder = onDocumentCreated({document: "orders/
     });
 
 // 2.6 Notify client when their order is cancelled by admin
+// ملغاة عمداً: إلغاء الطلب صار يُشعِر العميل عبر sendNotificationOnOrderStatusChange
+// (نص مؤنّث + سجل داخل التطبيق). إبقاء هذا المُشغّل كان يرسل إشعاراً ثانياً مذكّراً
+// ("طلبك") بلا سجل — تكرار وتعارض مع معيار التأنيث. أُبقيَ كـ no-op لتفادي حذف الدالة.
 exports.notifyClientOnOrderCancellation = onDocumentUpdated({document: "orders/{orderId}", cpu: 0.083},
+    async () => null);
+
+// إشعار عميل المتجر بتغيّر حالة طلبه (تحضير/شحن/تسليم) — كانت التغييرات صامتة،
+// فلا يعرف العميل مصير طلبه بعد الدفع حتى يصله.
+exports.notifyClientOnStoreOrderStatus = onDocumentUpdated({document: "store_orders/{orderId}", cpu: 0.083},
     async (event) => {
       const change = event.data;
       if (!change) return null;
-
-      const before = change.before.data();
-      const after = change.after.data();
-
-      if (before.status === after.status || after.status !== "cancelled") return null;
-      if (after.cancelled_by === "client") return null; // Client already knows
-
+      const before = change.before.data() || {};
+      const after = change.after.data() || {};
+      if (before.status === after.status) return null;
       const clientId = after.client_id;
       if (!clientId) return null;
-
-      const tokenDoc = await admin.firestore().collection("fcm_tokens").doc(clientId).get();
-      if (!tokenDoc.exists) return null;
-
-      const fcmToken = tokenDoc.data()?.fcmToken || tokenDoc.data()?.token;
-      if (!fcmToken) return null;
-
-      const displayCode = after.code || event.params.orderId.substring(0, 6);
-
-      try {
-        await admin.messaging().send({
-          notification: {
-            title: "تم إلغاء طلبك ⚠️",
-            body: `تم إلغاء الطلب #${displayCode} من قبل الإدارة. تواصل معنا لمزيد من التفاصيل.`,
-          },
-          data: {
-            click_action: "FLUTTER_NOTIFICATION_CLICK",
-            type: "order_cancelled",
-            orderId: event.params.orderId,
-          },
-          token: fcmToken,
-        });
-        console.log(`Cancellation notification sent to client ${clientId}`);
-      } catch (error) {
-        console.error("Error sending cancellation notification:", error);
-      }
+      const map = {
+        processing: {t: "جارٍ تجهيز طلبكِ 📦", b: "بدأنا تجهيز طلبكِ من المتجر."},
+        preparing: {t: "جارٍ تجهيز طلبكِ 📦", b: "بدأنا تجهيز طلبكِ من المتجر."},
+        shipped: {t: "طلبكِ في الطريق 🚚", b: "شُحن طلبكِ من المتجر وهو في طريقه إليكِ."},
+        out_for_delivery: {t: "طلبكِ قارب الوصول 🚚", b: "خرج طلبكِ للتوصيل — يصلكِ قريباً."},
+        delivered: {t: "تم تسليم طلبكِ ✅", b: "سُلّم طلبكِ من المتجر. نتمنى لكِ تجربة سعيدة 🌿"},
+        completed: {t: "اكتمل طلبكِ ✅", b: "اكتمل طلبكِ من المتجر. شكراً لكِ 🌿"},
+        cancelled: {t: "تم إلغاء طلب المتجر ⚠️", b: "أُلغي طلبكِ من المتجر."},
+      };
+      const m = map[after.status];
+      if (!m) return null;
+      const code = after.code || event.params.orderId.substring(0, 6);
+      await queuePush(clientId, m.t, `${m.b} (#${code})`, "store_update",
+          {orderId: event.params.orderId});
       return null;
     });
 
@@ -1398,6 +1379,13 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
     return {success: true, newBalance: balance - amount};
   });
 
+  // إشعار العميل بتأكيد الدفع بالمحفظة (كان صامتاً) — بعد نجاح المعاملة، وأول مرّة فقط.
+  if (orderId && !result.alreadyPaid) {
+    admin.firestore().collection("orders").doc(orderId).get()
+        .then((s) => s.exists &&
+          notifyClientPaymentResult("orders", orderId, s.data(), true))
+        .catch((e) => console.error("notify after wallet pay:", e));
+  }
   return result;
 });
 
@@ -1505,6 +1493,11 @@ exports.verifyMoyasarPayment = onCall(
         });
 
         console.log(`Order ${orderId} successfully verified and marked as PAID via Moyasar.`);
+        // إشعار العميل بتأكيد الدفع — كانت البطاقة/Apple Pay/STC/المحفظة صامتة
+        // (تمارا فقط تُشعر). يعمل مرّة واحدة فقط: النداء المُكرّر يرتدّ عند is_paid==true
+        // أعلاه، والـ webhook idempotent فلا يزدوج الإشعار.
+        notifyClientPaymentResult(orderRef.parent.id, orderId, orderDoc.data(), true)
+            .catch((e) => console.error("notify after verify:", e));
         return {success: true};
       } catch (error) {
         if (error instanceof HttpsError) throw error;
@@ -2719,6 +2712,18 @@ exports.notifyDriverOnAssignment = onDocumentUpdated({document: "orders/{orderId
           }
         }
       }
+
+      // إشعار السائق السابق عند سحب/إعادة إسناد المهمة (كان صامتاً — كان قد يذهب
+      // لموعد لم يعد مُسنداً إليه). يشمل حالة التحرير (driver_id → null).
+      if (beforeData.driver_id && beforeData.driver_id !== afterData.driver_id) {
+        const displayCode = (beforeData.code || afterData.code ||
+          orderId.substring(0, 6)).toString().toUpperCase();
+        await queuePush(
+            beforeData.driver_id,
+            "تم سحب مهمة منك ℹ️",
+            `لم تعد المهمة #${displayCode} مُسندة إليك. تحقّق من مهامك الحالية.`,
+            "driver_task_removed", {orderId});
+      }
       return null;
     });
 
@@ -2810,6 +2815,12 @@ exports.moyasarWebhook = onRequest(
                   payment_amount_mismatch: true,
                   updated_at: admin.firestore.FieldValue.serverTimestamp(),
                 }).catch(() => {});
+                // أبلغ الإدارة — إشارة احتيال محتملة تحتاج مراجعة/تسوية يدوية.
+                await queuePush(
+                    "ADMIN_BROADCAST",
+                    "تنبيه: عدم تطابق مبلغ دفع ⚠️",
+                    `الطلب #${(data.code || orderId).toString()} استلم مبلغاً مختلفاً عن المطلوب — يحتاج مراجعة.`,
+                    "admin_payment_alert", {orderId}).catch(() => {});
                 break;
               }
               if (data.is_paid) {
@@ -2858,6 +2869,14 @@ exports.moyasarWebhook = onRequest(
                 updated_at: admin.firestore.FieldValue.serverTimestamp(),
               });
               console.log(`moyasarWebhook: Order ${orderId} marked REFUNDED via webhook`);
+              // إشعار العميل باسترداد البطاقة (كان صامتاً — المحفظة فقط تُشعر).
+              const rd = doc.data();
+              const rUid = rd.client_id || rd.userId;
+              if (rUid) {
+                await queuePush(rUid, "تم استرداد مبلغكِ 💳",
+                    `أعدنا مبلغ الطلب #${(rd.code || orderId).toString()} إلى بطاقتكِ. قد يستغرق ظهوره أياماً وفق مصرفكِ.`,
+                    "payment_update", {orderId}).catch(() => {});
+              }
               break;
             }
           }
