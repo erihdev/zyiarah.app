@@ -200,6 +200,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                       // Header
                       Row(
                         children: [
+                          // زر رجوع — الشاشة مدفوعة بلا AppBar.
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF6366F1)),
+                            onPressed: () => Navigator.of(context).maybePop(),
+                            tooltip: 'رجوع',
+                          ),
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(

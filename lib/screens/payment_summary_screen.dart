@@ -1053,7 +1053,17 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       ),
       child: Column(
         children: [
-          const SizedBox(height: 20),
+          // زر رجوع — الشاشة مدفوعة بلا AppBar، فبدونه يعلق المستخدم في صفحة الدفع.
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+              onPressed: () => Navigator.of(context).maybePop(),
+              tooltip: 'رجوع',
+            ),
+          ),
+          const SizedBox(height: 8),
           const Icon(Icons.receipt_long_rounded, color: Colors.white, size: 48),
           const SizedBox(height: 16),
           Text(
