@@ -807,7 +807,7 @@ exports.processNotificationTriggers = onDocumentCreated(
           await admin.firestore().collection("notifications").add({
             userId: toUid,
             title: title,
-            body: body.replace(/<[^>]*>?/gm, ""),
+            body: (body || "").replace(/<[^>]*>?/gm, ""),
             type: type,
             relatedId: data.orderId || data.code || event.params.id,
             isRead: false,
@@ -818,7 +818,7 @@ exports.processNotificationTriggers = onDocumentCreated(
         if (toUid === "ADMIN_BROADCAST") {
           await admin.firestore().collection("admin_notifications").add({
             title: title,
-            body: body.replace(/<[^>]*>?/gm, ""),
+            body: (body || "").replace(/<[^>]*>?/gm, ""),
             type: type,
             data: data || {},
             targetRoles: Array.isArray(targetRoles) ? targetRoles : null,
@@ -921,7 +921,7 @@ exports.processNotificationTriggers = onDocumentCreated(
 
           if (targetTokens.length > 0) {
             const pushMsg = {
-              notification: {title, body: body.replace(/<[^>]*>?/gm, "")},
+              notification: {title, body: (body || "").replace(/<[^>]*>?/gm, "")},
               data: {...data, click_action: "FLUTTER_NOTIFICATION_CLICK"},
             };
             if (targetTokens.length === 1) {
@@ -2033,7 +2033,8 @@ exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
     const startDateTime = new Date(dp[0], dp[1] - 1, dp[2], hr, 0, 0);
     const endDateTime = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
 
-    const orderRef = db.collection("orders").doc();
+    // معرّف حتمي: إعادة التوليد تكتب فوق نفس المستند بدل تكرار الزيارة.
+    const orderRef = db.collection("orders").doc(`sub_${contractRef.id}_${i + 1}`);
     await orderRef.set({
       code: `SUB-${String(contractRef.id).slice(-5)}-${i + 1}`,
       contract_id: contractRef.id,
@@ -2062,7 +2063,7 @@ exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
     const driver = await _findFreeDriverForSlot(db, {zoneName, startDateTime, endDateTime});
     if (driver) {
       const r = await _assignDriverScheduled(db, orderRef.id, driver, startDateTime);
-      results.push({visit: i + 1, assigned: true, driverId: r.driverId});
+      results.push({visit: i + 1, assigned: r.assigned !== false, driverId: r.driverId});
     } else {
       results.push({visit: i + 1, assigned: false});
     }
@@ -2114,7 +2115,8 @@ async function _generateContractVisits(db, contractRef, c) {
     const hr = Number(String(v.slot).split(":")[0] || 10);
     const startDateTime = new Date(dp[0], dp[1] - 1, dp[2], hr, 0, 0);
     const endDateTime = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
-    const orderRef = db.collection("orders").doc();
+    // معرّف حتمي: إعادة التوليد تكتب فوق نفس المستند بدل تكرار الزيارة.
+    const orderRef = db.collection("orders").doc(`sub_${contractRef.id}_${i + 1}`);
     await orderRef.set({
       code: `SUB-${String(contractRef.id).slice(-5)}-${i + 1}`,
       contract_id: contractRef.id,
@@ -2183,6 +2185,9 @@ exports.activateContractOnPaid = onDocumentUpdated({document: "contracts/{contra
         await _generateContractVisits(db, contractRef, claim);
       } catch (e) {
         console.error("activateContractOnPaid generate:", e);
+        // فشل التوليد جزئياً — أعِد الراية كي يُكمِل generateSubscriptionVisits ما نقص
+        // (المعرّفات حتمية فلا تتكرّر الزيارات المُنشأة).
+        await contractRef.update({visits_generated: false}).catch(() => {});
       }
       if (claim.userId) {
         await queuePush(claim.userId, "تم تفعيل باقتكِ ✨",
@@ -2738,6 +2743,11 @@ exports.autoAssignDriverDirectly = onCall({cpu: 0.25}, async (request) => {
   }
 
   const r = await _assignDriverScheduled(db, orderId, driver, startDateTime);
+  // إن رفضت المعامَلة الكتابة (الطلب مُسنَد سلفاً في سباق) لا نكذب على المستدعي
+  // بأننا أسندنا السائق — نُعيد فشلاً كي لا تعرض الواجهة سائقاً خاطئاً.
+  if (r.assigned === false) {
+    return {assigned: false, error: "already_assigned"};
+  }
   return {
     assigned: true,
     driverId: r.driverId,
