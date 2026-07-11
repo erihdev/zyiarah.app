@@ -106,9 +106,11 @@ class ZyiarahNotificationService {
 
       _foregroundMessageSub = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         debugPrint("Foreground message received: ${message.notification?.title}");
-        final isNewOrder = message.data['type'] == 'new_order_driver';
         final n = message.notification;
-        if (n != null && isNewOrder) {
+        // اعرض بانراً محلياً لأي رسالة أمامية تحمل عنواناً. كان مقصوراً على
+        // 'new_order_driver' فقط، فكان العميل/السائق داخل التطبيق لا يرى بانر
+        // تعيين مهمته أو تأكيد دفعته أو تحديث طلبه — يظهر في الجرس فقط.
+        if (n != null) {
           _localNotifications.show(
             message.hashCode,
             n.title,

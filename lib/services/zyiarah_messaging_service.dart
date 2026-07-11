@@ -253,41 +253,20 @@ class ZyiarahMessagingService {
     );
   }
 
-  /// تنبيه العميل بحركات السائق
+  /// تنبيه العميل بحركات السائق — أُلغي الإرسال عمداً.
+  ///
+  /// تغيّر حالة الطلب (accepted/in_progress/completed/cancelled) يُشعِر العميل
+  /// خادميّاً عبر sendNotificationOnOrderStatusChange بنص مؤنّث ومخصّص باسمه + سجل
+  /// داخل التطبيق. الإبقاء على هذا الإرسال كان يُنتج إشعاراً ثانياً مكرّراً بنص
+  /// مذكّر/عام. أُبقيت الدالة كـ no-op لتفادي كسر مواضع النداء.
   Future<void> notifyClientOfDriverStatus({
     required String clientId,
-    required String status, // 'accepted', 'in_progress', 'completed'
+    required String status,
     required String orderCode,
     String? driverName,
-    String? orderId, // معرّف المستند — يجعل النقر على الإشعار يفتح تتبّع الطلب
+    String? orderId,
   }) async {
-    String title = "";
-    String body = "";
-
-    switch (status) {
-      case 'accepted':
-        title = "تم قبول طلبك! 🚚";
-        body = "السائق ${driverName ?? ''} في الطريق إليك الآن لتنفيذ الطلب #$orderCode.";
-        break;
-      case 'in_progress':
-        title = "وصل السائق وبدأ العمل! 🏠🛠️";
-        body = "السائق ${driverName ?? ''} وصل وبدأ تنفيذ خدمتك للطلب #$orderCode.";
-        break;
-      case 'completed':
-        title = "تم الإنجاز! ✨";
-        body = "انتهى العمل على الطلب #$orderCode بنجاح. شكراً لثقتك بنا، ننتظر تقييمك.";
-        break;
-    }
-
-    if (title.isNotEmpty) {
-      await triggerNotification(
-        toUid: clientId,
-        title: title,
-        body: body,
-        type: 'driver_update',
-        data: {'code': orderCode, 'status': status, if (orderId != null) 'orderId': orderId},
-      );
-    }
+    // no-op — المصدر الوحيد هو المُشغّل الخادمي (منعاً للتكرار).
   }
 
   /// تنبيه الإدارة بحركات السائق الميدانية

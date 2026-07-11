@@ -1,4 +1,3 @@
-import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -21,7 +20,6 @@ class AdminOrderDetailsScreen extends StatefulWidget {
 
 class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final ZyiarahMessagingService _notificationService = ZyiarahMessagingService();
   final ZyiarahOrderService _orderService = ZyiarahOrderService();
   bool _isLoading = true;
   Map<String, dynamic>? _orderData;
@@ -167,7 +165,12 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
         if (_selectedDriverId != null) {
           updatePayload['driver_id'] = _selectedDriverId!;
           updatePayload['driver_name'] = _selectedDriverName ?? '';
+          updatePayload['assigned_driver'] = _selectedDriverName ?? '';
           updatePayload['assigned_at'] = FieldValue.serverTimestamp();
+          // scheduled_at لازم لتذكير الساعة (remindDriversUpcomingTasks يستعلم به).
+          // كان مفقوداً في هذا المسار فتفوت الطلبات المُسندة يدوياً تذكيرَ السائق.
+          final sd = _orderData?['service_date'];
+          if (sd is Timestamp) updatePayload['scheduled_at'] = sd;
           // Promote to 'scheduled' (a state the driver CAN advance and which shows in
           // the driver's active-orders stream) — not the dead-end 'assigned'.
           if (_currentStatus == 'pending' || _currentStatus == 'pending_admin_approval') {
@@ -189,11 +192,9 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
             'driver_name': _selectedDriverName ?? '',
           },
         );
-        // 4. Immediate push alert to the assigned driver
-        await _notificationService.notifyDriverOfAssignment(
-          _selectedDriverId!,
-          widget.orderId,
-        );
+        // ملاحظة: لا نُرسل إشعار تعيين يدوياً — كتابة driver_id أعلاه تُطلق المُشغّل
+        // الخادمي notifyDriverOnAssignment الذي يُشعِر السائق (push + سجل). كان
+        // الاستدعاء الصريح هنا يُنتج إشعاراً ثانياً مكرّراً بنص مختلف.
       }
 
       // 5. Always log the status update

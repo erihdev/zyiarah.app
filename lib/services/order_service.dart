@@ -317,7 +317,6 @@ class ZyiarahOrderService {
       if (!orderDoc.exists) return false;
       
       final location = orderDoc.data()?['location'] as GeoPoint?;
-      final serviceType = orderDoc.data()?['service_type'] as String?;
       final serviceDate = orderDoc.data()?['service_date'] as Timestamp?;
       
       if (location == null) return false;
@@ -330,14 +329,27 @@ class ZyiarahOrderService {
       final List<dynamic> drivers = result.data['drivers'] ?? [];
       if (drivers.isEmpty) return false;
 
-      for (var driverId in drivers) {
-        await ZyiarahMessagingService().notifyDriverOfAssignment(
-          driverId.toString(),
-          orderId,
-          serviceType: serviceType,
-          serviceDate: serviceDate != null ? serviceDate.toDate().toString() : startDateTime.toString(),
-        );
-      }
+      // أسند لأقرب سائق واحد فعليّاً (كتابة driver_id تُطلق إشعار التعيين خادميّاً
+      // عبر notifyDriverOnAssignment). البثّ السابق كان يُشعِر عدة سائقين بأنهم
+      // "مُسندون" دون كتابة driver_id — تعيينات وهمية وطلب يبقى بلا سائق.
+      final String driverId = drivers.first.toString();
+      String driverName = '';
+      try {
+        final dDoc = await _db.collection('drivers').doc(driverId).get();
+        driverName = (dDoc.data()?['name'] as String?) ?? '';
+        if (driverName.isEmpty) {
+          final uDoc = await _db.collection('users').doc(driverId).get();
+          driverName = (uDoc.data()?['name'] as String?) ?? '';
+        }
+      } catch (_) {}
+      await _db.collection('orders').doc(orderId).update({
+        'driver_id': driverId,
+        'driver_name': driverName,
+        'assigned_driver': driverName,
+        'status': 'scheduled',
+        'assigned_at': FieldValue.serverTimestamp(),
+        if (serviceDate != null) 'scheduled_at': serviceDate,
+      });
       return true;
     } catch (e) {
       debugPrint('Error in Fallback Smart Dispatch: $e');
