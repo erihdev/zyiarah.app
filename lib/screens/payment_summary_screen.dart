@@ -68,6 +68,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
   String _selectedPaymentMethod = 'card'; // 'card', 'apple_pay', 'google_pay', 'tamara', 'tabby', 'stc_pay', 'wallet', 'subscription', 'cod'
   bool _isLoading = false;
+  // سبب امتلاء السعة (للطلبات بالساعة) — يُفحص عند فتح الشاشة ويُستخدم لمنع أزرار
+  // الدفع الأصلية (Apple/Google/Samsung Pay) التي تخصم فوراً وتتجاوز فحص _handlePayment.
+  String? _capacityError;
   ZyiarahUser? _currentUser;
   bool _agreeToTerms = false;
   bool _tamaraEnabled = false;
@@ -96,6 +99,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       _googlePayConfigFuture = null;
     }
     _loadUserData();
+    // فحص السعة مبكّراً للطلبات بالساعة — كي نمنع أزرار الدفع الأصلية عند الامتلاء.
+    if (widget.hours != null && widget.serviceDate != null) {
+      _checkHourlyCapacity().then((err) {
+        if (mounted && err != null) setState(() => _capacityError = err);
+      });
+    }
   }
 
   @override
@@ -172,6 +181,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   /// المتزامنة (الشروط/الهاتف/المستخدم). لولاها تتجاوز الأزرار الأصلية الفحوص
   /// لأنها تستدعي النجاح مباشرةً.
   String? _nativePayBlockReason() {
+    // السعة أولاً: الأزرار الأصلية تخصم فوراً، فنمنعها إن امتلأ الموعد (منع الحجز الزائد).
+    if (_capacityError != null) return _capacityError;
     if (_needsPhoneUpdate && _phoneController.text.trim().isEmpty) {
       return 'يرجى إدخال رقم جوالك أولاً';
     }
@@ -443,7 +454,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           await _createUnpaidServiceOrder(finalOrderId);
         }
         String? checkoutUrl = await _tamaraService.createCheckoutSession(
-          orderId: finalOrderId,
+          // للعقد: مرجع تمارا = معرّف العقد كي يقلب الـ webhook is_paid عليه فيُفعّله.
+          orderId: widget.contractId ?? finalOrderId,
           amount: totalWithVat,
           customerPhone: _phoneController.text.trim(),
           customerName: _currentUser?.name ?? 'عميل زيارة',
@@ -710,23 +722,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       await ZyiarahMessagingService().notifyAdminOfPayment(orderCode: code, amount: amountToSave, type: 'maintenance', clientName: _currentUser?.name);
     } else if (widget.contractId != null) {
       code = widget.contractId!;
-      await FirebaseFirestore.instance.collection('contracts').doc(widget.contractId).update({
-        'status': 'active',
-        'paymentMethod': method,
-        'activatedAt': FieldValue.serverTimestamp(),
-      });
-      await FirebaseFirestore.instance.collection('users').doc(_currentUser?.uid).update({
-        'visits_remaining': FieldValue.increment(widget.planVisits ?? 0),
-      });
-      // (Direct Dispatch) توليد جميع زيارات العقد مسبقاً وإسنادها للسائقين — non-fatal
-      try {
-        await FirebaseFunctions.instance
-            .httpsCallable('generateSubscriptionVisits')
-            .call({'contractId': widget.contractId});
-      } catch (e) {
-        debugPrint('[generateSubscriptionVisits] error (non-fatal): $e');
-      }
-      await ZyiarahMessagingService().notifyContractActivated(_currentUser?.uid ?? '', widget.serviceName, widget.planVisits ?? 0);
+      // التفعيل (status='active') + منح visits_remaining + توليد الزيارات + إشعار
+      // العميل يتم كلّه خادميّاً في activateContractOnPaid عند قلب is_paid — لا نكتب
+      // من العميل (القواعد تمنعه وتُغلق منح زيارات بلا دفع). قلب is_paid في كتلة أدناه.
     } else {
       final bool isHourly = widget.hours != null && widget.serviceDate != null;
 
@@ -783,8 +781,26 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     // 1b. تأكيد الدفع خادمياً → يقلب is_paid على الطلب المُنشأ للتوّ (أنشأه العميل
     // is_paid=false). هذا ما يُغلق سكّ المحفظة: لا يمكن تزوير is_paid من العميل.
     // يُتخطّى للعقد (لا مستند order) وللنقد والاشتراك المجاني.
-    if (widget.contractId == null && !isFree && method != 'cod') {
-      if (method == 'wallet') {
+    if (!isFree && method != 'cod') {
+      if (widget.contractId != null) {
+        // اشتراك: نقلب is_paid على العقد خادميّاً → يُفعّله activateContractOnPaid
+        // (status='active' + منح الزيارات + توليدها). تمارا تقلبه عبر webhook.
+        if (method == 'wallet') {
+          await FirebaseFunctions.instance.httpsCallable('payContractWithWallet').call({
+            'contractId': widget.contractId,
+          });
+          if (mounted) setState(() => _walletBalance -= amountToSave);
+        } else if (paymentId != null) {
+          try {
+            await FirebaseFunctions.instance.httpsCallable('verifyMoyasarPayment').call({
+              'paymentId': paymentId,
+              'orderId': widget.contractId,
+            });
+          } catch (e) {
+            debugPrint('[verify contract] non-fatal: $e');
+          }
+        }
+      } else if (method == 'wallet') {
         await FirebaseFunctions.instance.httpsCallable('payWithWallet').call({
           'amount': amountToSave,
           'orderId': id,

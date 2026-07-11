@@ -114,27 +114,9 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                     'totalAmountPaid': widget.amount,
                   });
                 } else if (widget.contractId != null) {
-                  // تفعيل العقد الإلكتروني
-                  await FirebaseFirestore.instance.collection('contracts').doc(widget.contractId).update({
-                    'status': 'active',
-                    'paymentMethod': 'tamara',
-                    'activatedAt': FieldValue.serverTimestamp(),
-                  });
-
-                  if (user != null) {
-                    await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-                      'visits_remaining': FieldValue.increment(widget.planVisits ?? 0),
-                    });
-                  }
-
-                  // إرسال إشعار التفعيل
-                  await ZyiarahMessagingService().notifyContractActivated(
-                    user?.uid ?? '',
-                    widget.serviceType,
-                    widget.planVisits ?? 0,
-                  );
-
-                  // سجل التدقيق
+                  // التفعيل (status='active') + منح الزيارات + توليدها + الإشعار يتم
+                  // خادميّاً في activateContractOnPaid عند قلب is_paid عبر tamara webhook
+                  // (مرجع تمارا = معرّف العقد). لا كتابة من العميل — القواعد تمنعها.
                   ZyiarahAuditService().logAction(
                     action: 'ACTIVATE_CONTRACT_TAMARA',
                     details: {
