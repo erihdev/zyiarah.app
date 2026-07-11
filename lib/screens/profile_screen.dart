@@ -52,7 +52,12 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
   Future<void> _loadUserData() async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) {
-      setState(() => _isLoading = false);
+      // ضيف: أوقف كل مؤشّرات التحميل (المحفظة/الإحالة) وإلا بقيت shimmer للأبد.
+      setState(() {
+        _isLoading = false;
+        _walletLoaded = true;
+        _referralLoaded = true;
+      });
       return;
     }
     try {

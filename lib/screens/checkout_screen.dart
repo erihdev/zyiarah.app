@@ -218,21 +218,9 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                   }
                   } // نهاية مسار الإنشاء الاحتياطي (الطلب غير موجود مسبقاً)
 
-                  if (widget.couponCode != null) {
-                    try {
-                      final couponSnap = await FirebaseFirestore.instance
-                          .collection('promo_codes')
-                          .where('code', isEqualTo: widget.couponCode)
-                          .get();
-                      if (couponSnap.docs.isNotEmpty) {
-                        await couponSnap.docs.first.reference.update({
-                          'uses': FieldValue.increment(1)
-                        });
-                      }
-                    } catch (e) {
-                      debugPrint("Coupon usage update failed (likely permission restriction): $e");
-                    }
-                  }
+                  // ملاحظة: لا نزيد عدّاد استخدام الكوبون من العميل — تكفّلت به الدالة
+                  // countCouponUseOnOrderCreate خادميّاً. الزيادة هنا كانت تحسبه مرّتين
+                  // لطلبات تمارا (فينفد كوبون maxUses:100 عند ~50 استخداماً حقيقياً).
                 }
 
                 // ... بقية المنطق الخاص بـ ZATCA والفاتورة ...

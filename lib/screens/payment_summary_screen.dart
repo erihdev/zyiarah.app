@@ -187,7 +187,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       return 'يرجى إدخال رقم جوالك أولاً';
     }
     if (!_agreeToTerms) return 'يرجى الموافقة على الشروط والأحكام أولاً';
-    if (_currentUser == null) return 'جارٍ تحميل بيانات حسابك، حاول بعد لحظة';
+    if (_currentUser == null) {
+      return FirebaseAuth.instance.currentUser == null
+          ? 'يرجى تسجيل الدخول لإتمام الدفع'
+          : 'جارٍ تحميل بيانات حسابك، حاول بعد لحظة';
+    }
     return null;
   }
 
@@ -378,7 +382,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     }
 
     if (_currentUser == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("جارٍ تحميل بيانات الحساب، يرجى المحاولة مجدداً")));
+      final guest = FirebaseAuth.instance.currentUser == null;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
+          guest ? "يرجى تسجيل الدخول لإتمام الدفع"
+                : "جارٍ تحميل بيانات الحساب، يرجى المحاولة مجدداً")));
       return;
     }
 

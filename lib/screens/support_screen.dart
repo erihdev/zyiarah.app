@@ -367,6 +367,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
   }
 
   void _submitTicket(BuildContext sheetContext) async {
+    if (_isSending) return; // حارس ضدّ الإرسال المزدوج (الزر داخل sheet لا يتعطّل بصريّاً)
     if (_subjectController.text.isEmpty || _messageController.text.isEmpty) {
       ScaffoldMessenger.of(sheetContext).showSnackBar(const SnackBar(content: Text("يرجى ملء جميع الحقول")));
       return;

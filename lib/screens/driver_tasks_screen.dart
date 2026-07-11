@@ -69,7 +69,9 @@ class _DriverTasksScreenState extends State<DriverTasksScreen>
       return const Center(child: Text('يرجى تسجيل الدخول'));
     }
 
-    final activeStatuses = ['assigned', 'accepted', 'in_progress'];
+    // التوجيه المباشر يستخدم scheduled→on_the_way→in_progress (+accepted القديمة).
+    // كانت 'assigned' حالة غير مُستخدمة، وكان scheduled/on_the_way يختفيان من الشاشة.
+    final activeStatuses = ['scheduled', 'accepted', 'on_the_way', 'in_progress'];
     final historyStatuses = ['completed', 'cancelled'];
 
     return StreamBuilder<QuerySnapshot>(

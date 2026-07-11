@@ -657,7 +657,11 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                   label: Text('أعد الطلب', style: GoogleFonts.tajawal(fontSize: 12)),
                   style: TextButton.styleFrom(foregroundColor: const Color(0xFF5D1B5E)),
                 )
-              else if (status == 'pending')
+              else if (['pending', 'pending_admin_approval', 'waiting_payment_cod',
+                'scheduled', 'accepted'].contains(status))
+                // كان الإلغاء متاحاً لـ pending فقط، فالطلبات المدفوعة غير الساعية
+                // (كنب/صيانة/اشتراك = pending_admin_approval) لا يستطيع العميل إلغاءها
+                // ولا يُطلق استرداد المحفظة الجاهز خادميّاً. نُتيحه قبل انطلاق السائق.
                 OutlinedButton.icon(
                   onPressed: () => _confirmCancelOrder(context, docId, order['code']),
                   icon: const Icon(Icons.cancel_outlined, size: 16),

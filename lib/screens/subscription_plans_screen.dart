@@ -620,8 +620,9 @@ class _ZyiarahSubscriptionPlansScreenState
             width: double.infinity,
             height: 56,
             child: ElevatedButton(
-              onPressed: (_scheduledVisits.length != visits)
-                  ? null
+              onPressed: (visits <= 0 || _scheduledVisits.isEmpty ||
+                      _scheduledVisits.length != visits)
+                  ? null // باقة بلا زيارات (بيانات ناقصة) → لا تُفعّل الزر (كان ينهار)
                   : () {
                       HapticFeedback.lightImpact();
                       final first = _scheduledVisits.first;
