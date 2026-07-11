@@ -234,8 +234,15 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
 
     for (var doc in storeOrders) {
       final data = doc.data() as Map<String, dynamic>;
-      storeRevenue += d(data['total_price'] ?? data['total_amount']);
-      if (data['status'] == 'pending' || data['status'] == 'processing') {
+      final sStatus = data['status'];
+      // الإيراد للمدفوع فقط: كان يجمع كل الطلبات (بما فيها pending/awaiting/rejected)
+      // فيُضخّم إيراد المتجر. نعتمد is_paid أو حالات ما بعد الدفع، ونفضّل final_amount.
+      final bool storePaid = data['is_paid'] == true ||
+          ['processing', 'shipped', 'delivered', 'completed', 'approved'].contains(sStatus);
+      if (storePaid) {
+        storeRevenue += d(data['final_amount'] ?? data['total_amount'] ?? data['total_price']);
+      }
+      if (sStatus == 'pending' || sStatus == 'processing') {
         activeOrders++;
       }
     }

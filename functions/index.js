@@ -41,7 +41,11 @@ exports.sendNotificationOnTicketReply = onDocumentCreated({document: "support_ti
             "قام الدعم الفني بالرد على تذكرتك للتو.",
             "support_ticket", {ticketId});
       } else {
-        // رد العميل → أشعِر الإدارة (كانت عمياء عن ردود العملاء).
+        // رد العميل → أشعِر الإدارة. لكن تخطَّ الرسالة الأولى (نصّ التذكرة عند إنشائها)
+        // لأن sendNotificationToAdminsOnNewTicket يُشعر الإدارة بها أصلاً — منعاً لتنبيهٍ مزدوج.
+        const msgs = await admin.firestore().collection("support_tickets")
+            .doc(ticketId).collection("messages").limit(2).get();
+        if (msgs.size <= 1) return null;
         await queuePush(
             "ADMIN_BROADCAST",
             "رد جديد على تذكرة دعم 💬",
@@ -295,6 +299,9 @@ exports.notifyClientOnStoreOrderStatus = onDocumentUpdated({document: "store_ord
       const clientId = after.client_id;
       if (!clientId) return null;
       const map = {
+        // اعتماد الطلب (من تطبيق الأدمن أو لوحة الويب) → اطلب من العميل إتمام الدفع.
+        // المصدر الوحيد للإشعار: كانت لوحة الويب تعتمد بصمت بلا تنبيه للعميل.
+        approved: {t: "تم اعتماد طلبكِ 💳", b: "اعتمدت الإدارة طلبكِ من المتجر — يرجى إتمام الدفع لتجهيزه."},
         processing: {t: "جارٍ تجهيز طلبكِ 📦", b: "بدأنا تجهيز طلبكِ من المتجر."},
         preparing: {t: "جارٍ تجهيز طلبكِ 📦", b: "بدأنا تجهيز طلبكِ من المتجر."},
         shipped: {t: "طلبكِ في الطريق 🚚", b: "شُحن طلبكِ من المتجر وهو في طريقه إليكِ."},
@@ -492,7 +499,9 @@ exports.createTamaraCheckout = onCall(
         const storeOrderDoc = await admin.firestore().collection("store_orders").doc(orderId).get();
         if (storeOrderDoc.exists) {
           info = storeOrderDoc.data();
-          trueAmount = Number(info.total_amount);
+          // final_amount = السعر النهائي بعد تعديل الإدارة (رسوم توصيل مثلاً). كان
+          // Tamara تشحن total_amount (سعر السلة) فتُحصّل مبلغاً مختلفاً عمّا وافق عليه العميل.
+          trueAmount = Number(info.final_amount ?? info.total_amount);
         }
       }
 

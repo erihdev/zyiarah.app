@@ -428,6 +428,9 @@ class _ZyiarahSubscriptionPlansScreenState
     final selectedData = selectedDoc.data() as Map<String, dynamic>;
     final String title = selectedData['title'] ?? 'باقة اشتراك';
     final double priceValue = double.tryParse(selectedData['price']?.toString() ?? '0') ?? 0.0;
+    // مدة الزيارة بالساعات — تُمرَّر للعقد كي يولّد الخادم زيارات بالمدة الصحيحة بدل
+    // القيمة الافتراضية 4 دائماً (لا أثر حالياً لأن الباقات 4 ساعات، لكنه تحصين).
+    final int planHours = int.tryParse('${selectedData['hours'] ?? 4}') ?? 4;
     int visits = int.tryParse('${selectedData['visits'] ?? 0}') ?? 0;
     // احتياطي: إن لم يُضبط حقل visits رقمياً، استخرج العدد المجاور لكلمة "زيار"
     // من العنوان/العنوان الفرعي/المزايا (الباقات تُسوَّق بـ "4 زيارات"، "8 زيارات").
@@ -637,6 +640,7 @@ class _ZyiarahSubscriptionPlansScreenState
                             planName: title,
                             planPrice: priceValue,
                             planVisits: visits,
+                            planHours: planHours,
                             bookingDate: firstDate,
                             bookingTimeSlot: first['slot']!,
                             scheduledVisits:

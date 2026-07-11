@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/audit_service.dart';
-import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 
 class AdminStoreOrdersScreen extends StatelessWidget {
   const AdminStoreOrdersScreen({super.key});
@@ -83,12 +82,8 @@ class AdminStoreOrdersScreen extends StatelessWidget {
         details: {'code': order['code'], 'final_amount': finalAmount},
         targetId: orderId,
       );
-      ZyiarahMessagingService().notifyClientStoreOrderApproved(
-        order['client_id'] ?? '',
-        order['code'] ?? orderId.substring(0, 6).toUpperCase(),
-        finalAmount,
-        clientName: order['client_name'],
-      ).catchError((_) {});
+      // إشعار العميل يتولّاه الآن مُشغّل notifyClientOnStoreOrderStatus خادميّاً عند
+      // status→approved (يعمل للوحة الويب أيضاً). أزلنا النداء المباشر لمنع التكرار.
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("تمت الموافقة وإشعار العميل لإتمام الدفع")),

@@ -8,6 +8,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'package:zyiarah/services/tamara_service.dart';
+import 'package:zyiarah/services/moyasar_service.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:zyiarah/services/zyiarah_messaging_service.dart';
@@ -158,9 +159,10 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
               orderId: widget.storeOrderId,
               onSuccess: (paymentId) async {
                 setState(() => _isLoading = true);
-                // is_paid=false — يؤكّده moyasarWebhook خادمياً بعد فحص المبلغ
-                // (لا يكتبه العميل). يوافق نمط ترحيل الدفع في /orders.
-                await _finalizeStorePayment('card', isPaid: false);
+                // is_paid=false يكتبه العميل (القاعدة تمنعه من true)، ثم نؤكّد خادميّاً
+                // فوراً عبر verifyMoyasarPayment (يقلب is_paid=true بعد فحص المبلغ). كان
+                // المتجر يعتمد على webhook ميسر وحده (المعلّق) فيبقى الطلب غير مؤكَّد.
+                await _finalizeStorePayment('card', isPaid: false, paymentId: paymentId);
               },
               onFailure: (error) {
                 if (mounted) {
@@ -223,21 +225,33 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
   }
 
   /// تحديث طلب المتجر بعد نجاح الدفع + توليد طلب التوصيل والفاتورة.
-  Future<void> _finalizeStorePayment(String method, {required bool isPaid}) async {
+  Future<void> _finalizeStorePayment(String method, {required bool isPaid, String? paymentId}) async {
     final user = FirebaseAuth.instance.currentUser;
 
     try {
-    // 1) تحديث طلب المتجر القائم
+    // 1) تحديث طلب المتجر القائم (is_paid=false — القاعدة تمنع العميل من كتابة true)
     await FirebaseFirestore.instance
         .collection('store_orders')
         .doc(widget.storeOrderId)
         .update({
       'payment_method': method,
       'is_paid': isPaid,
-      'payment_status': isPaid ? 'paid' : 'cod',
+      'payment_status': isPaid ? 'paid' : 'awaiting_confirmation',
       'status': 'processing',
       'paid_at': FieldValue.serverTimestamp(),
     });
+
+    // 1b) تأكيد خادمي فوري للبطاقة: verifyMoyasarPayment يقلب is_paid=true (متجاوزاً
+    // القواعد) بعد فحص المبلغ ويُشعر العميل — فلا يبقى الطلب معلّقاً بانتظار webhook.
+    bool serverConfirmed = isPaid;
+    if (method == 'card' && paymentId != null && paymentId.isNotEmpty) {
+      try {
+        serverConfirmed = await MoyasarService.verifyPayment(paymentId, widget.storeOrderId);
+      } catch (_) {
+        // فشل التأكيد المباشر (شبكة) — يبقى moyasarWebhook احتياطاً.
+      }
+    }
+    isPaid = isPaid || serverConfirmed;
 
     // 2) توليد طلب توصيل مرتبط (Direct Dispatch) — non-fatal
     try {

@@ -1,4 +1,3 @@
-import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:signature/signature.dart';
@@ -13,6 +12,7 @@ class ZyiarahContractSigningScreen extends StatefulWidget {
   final String planName;
   final double planPrice;
   final int planVisits;
+  final int planHours;
   final DateTime? bookingDate;
   final String? bookingTimeSlot;
   // (2c) مواعيد الزيارات المتعددة + المنطقة + الموقع — لتوليد وإسناد الزيارات جغرافياً
@@ -24,6 +24,7 @@ class ZyiarahContractSigningScreen extends StatefulWidget {
     required this.planName,
     this.planPrice = 0.0,
     this.planVisits = 0,
+    this.planHours = 4,
     this.bookingDate,
     this.bookingTimeSlot,
     this.scheduledVisits,
@@ -128,6 +129,9 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
         'planName': widget.planName,
         'planPrice': widget.planPrice,
         'planVisits': widget.planVisits,
+        // مدة الزيارة — يقرؤها _generateContractVisits/generateSubscriptionVisits (c.hours)
+        // بدل القيمة الافتراضية 4 دائماً.
+        'hours': widget.planHours,
         'booking_date': widget.bookingDate != null
             ? intl.DateFormat('yyyy-MM-dd').format(widget.bookingDate!)
             : null,
@@ -154,14 +158,9 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
         targetId: contractId,
       );
 
-      // --- إرسال تنبيه فوري للإدارة عبر النظام المتقدم ---
-      await ZyiarahMessagingService().notifyAdminOfNewContractRequest(
-        clientName: _userName,
-        planName: widget.planName,
-        contractId: contractId,
-      );
-      // ----------------------------------------------
-      
+      // إشعار الإدارة يتولّاه المُشغّل الخادمي sendNotificationToAdminsOnNewContract
+      // عند إنشاء العقد. أزلنا النداء المباشر هنا لأنه كان يُنتج تنبيهاً ثانياً مكرّراً.
+
       if (!mounted) return;
       // توقيع → صفحة الدفع مباشرة. تفعيل العقد وتوليد زيارات الاشتراك يتمّان عند نجاح الدفع.
       Navigator.pushReplacement(

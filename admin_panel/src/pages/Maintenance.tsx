@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Search, Wrench, CheckCircle2, Clock, XCircle, AlertCircle } from 'lucide-react';
-import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc, addDoc, serverTimestamp, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
 
@@ -20,10 +20,15 @@ const StatusBadge = ({ status }: { status: string }) => {
     switch (status) {
         case 'under_review':
             return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-100 text-xs"><Clock size={14} />تحت المراجعة</span>;
-        case 'approved':
+        case 'waiting_payment':
+        case 'waiting_payment_cod':
+            // بانتظار الدفع — تطابق status_util (الحالة التي يظهر عندها زر الدفع للعميل).
             return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-100 text-xs"><AlertCircle size={14} />بانتظار الدفع</span>;
+        case 'approved':
         case 'paid':
-            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-100 text-xs"><CheckCircle2 size={14} />تم الدفع</span>;
+        case 'in_progress':
+            // جاري التنفيذ — كان 'approved' يُعرَض خطأً كـ«بانتظار الدفع» مخالفاً status_util.
+            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 text-xs"><CheckCircle2 size={14} />جاري التنفيذ</span>;
         case 'completed':
             return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-100 text-xs"><CheckCircle2 size={14} />تم التنفيذ</span>;
         case 'rejected':
@@ -52,15 +57,46 @@ export default function Maintenance() {
         return () => unsubscribe();
     }, []);
 
-    const updateStatus = async (id: string, newStatus: string) => {
-        const label = newStatus === 'approved' ? 'قبول' : 'رفض';
-        if (!await confirm(`هل أنت متأكد من ${label} هذا الطلب؟`)) return;
+    // تسعير الطلب: يكتب quotePrice + status:'waiting_payment' (الحالة الوحيدة التي
+    // يعرض عندها تطبيق العميل زر الدفع) ويُشعر العميل. كانت اللوحة تكتب 'approved'
+    // بلا سعر فلا يظهر للعميل زر دفع إطلاقاً → طريق مسدود.
+    const sendQuote = async (req: MaintenanceRecord) => {
+        const raw = window.prompt('أدخل سعر عرض الصيانة (ر.س):', '');
+        if (raw === null) return;
+        const price = parseFloat(raw);
+        if (isNaN(price) || price <= 0) { toast.error('سعر غير صالح'); return; }
         try {
-            await updateDoc(doc(db, 'maintenance_requests', id), { status: newStatus });
-            toast.success("تم تحديث حالة الطلب بنجاح");
+            await updateDoc(doc(db, 'maintenance_requests', req.id), {
+                quotePrice: price,
+                status: 'waiting_payment',
+                updatedAt: serverTimestamp(),
+            });
+            if (req.userId) {
+                await addDoc(collection(db, 'notification_triggers'), {
+                    toUid: req.userId,
+                    title: 'عرض سعر الصيانة جاهز 🧾',
+                    body: `تم تسعير طلب صيانتك بمبلغ ${price} ر.س. يرجى إتمام الدفع لتأكيد الموعد.`,
+                    type: 'maintenance_quote',
+                    data: { requestId: req.requestId, deepLink: 'zyiarah://app/maintenance' },
+                    createdAt: serverTimestamp(),
+                    processed: false,
+                });
+            }
+            toast.success('تم إرسال عرض السعر وإشعار العميل');
         } catch (error) {
             console.error(error);
-            toast.error("حدث خطأ أثناء التحديث");
+            toast.error('حدث خطأ أثناء التسعير');
+        }
+    };
+
+    const rejectRequest = async (id: string) => {
+        if (!await confirm('هل أنت متأكد من رفض هذا الطلب؟')) return;
+        try {
+            await updateDoc(doc(db, 'maintenance_requests', id), { status: 'rejected', updatedAt: serverTimestamp() });
+            toast.success('تم رفض الطلب');
+        } catch (error) {
+            console.error(error);
+            toast.error('حدث خطأ أثناء التحديث');
         }
     };
 
@@ -141,16 +177,16 @@ export default function Maintenance() {
                                                 <div className="flex items-center justify-center gap-2">
                                                     {req.status === 'under_review' && (
                                                         <>
-                                                            <button 
+                                                            <button
                                                                 type="button"
-                                                                onClick={() => updateStatus(req.id, 'approved')}
+                                                                onClick={() => sendQuote(req)}
                                                                 className="px-2 py-1 bg-emerald-600 text-white text-[10px] font-bold rounded hover:bg-emerald-700 transition-colors shadow-sm"
                                                             >
-                                                                قبول
+                                                                تسعير
                                                             </button>
-                                                            <button 
+                                                            <button
                                                                 type="button"
-                                                                onClick={() => updateStatus(req.id, 'rejected')}
+                                                                onClick={() => rejectRequest(req.id)}
                                                                 className="px-2 py-1 bg-rose-600 text-white text-[10px] font-bold rounded hover:bg-rose-700 transition-colors shadow-sm"
                                                             >
                                                                 رفض
