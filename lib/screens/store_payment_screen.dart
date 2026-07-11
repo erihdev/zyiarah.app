@@ -109,6 +109,10 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
   }
 
   bool get _tamaraAvailable => _tamaraEnabled && widget.total >= 100;
+  // هل تتوفّر أي طريقة دفع؟ (بطاقة عبر مفتاح Moyasar أو تمارا) — لتعطيل زر الدفع
+  // حين لا تُعرَض أي طريقة، بدل زرّ ميّت يفتح شاشة بمفتاح فارغ.
+  bool get _hasPaymentMethod =>
+      _tamaraAvailable || (dotenv.env['MOYASAR_PUBLISHABLE_KEY'] ?? '').isNotEmpty;
 
   Future<void> _handlePay() async {
     if (_isLoading) return;
@@ -566,7 +570,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
           ],
         ),
         child: ElevatedButton(
-          onPressed: _isLoading ? null : _handlePay,
+          onPressed: (_isLoading || !_hasPaymentMethod) ? null : _handlePay,
           style: ElevatedButton.styleFrom(
             backgroundColor:
                 _agreeToTerms ? const Color(0xFF5D1B5E) : Colors.grey.shade300,

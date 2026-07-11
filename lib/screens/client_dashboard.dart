@@ -499,11 +499,15 @@ class _ClientDashboardState extends State<ClientDashboard> {
                     child: const Icon(Icons.workspace_premium, color: Colors.amber, size: 24),
                   ),
                   const SizedBox(width: 12),
-                  const Column(
+                  Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('زيارة جولد (الذهبية)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text('اشتراك فعّال', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      Text(
+                        (user.subscriptionType?.trim().isNotEmpty ?? false)
+                            ? user.subscriptionType!
+                            : 'زيارة جولد (الذهبية)',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                      const Text('اشتراك فعّال', style: TextStyle(color: Colors.white70, fontSize: 12)),
                     ],
                   ),
                 ],

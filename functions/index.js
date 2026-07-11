@@ -1298,16 +1298,20 @@ exports.syncOrderLinkedRecords = onDocumentUpdated({document: "orders/{orderId}"
 // 6c-ter. Count a coupon use server-side when an order carrying a coupon_code is
 // created. The client never reliably incremented `uses`, so max_uses limits had no
 // effect (unlimited reuse). Idempotent via a per-order `coupon_counted` flag.
-exports.countCouponUseOnOrderCreate = onDocumentCreated({document: "orders/{orderId}", cpu: 0.083},
+exports.countCouponUseOnOrderCreate = onDocumentUpdated({document: "orders/{orderId}", cpu: 0.083},
     async (event) => {
-      const snap = event.data;
-      if (!snap) return null;
-      const data = snap.data() || {};
-      const code = data.coupon_code;
+      const change = event.data;
+      if (!change) return null;
+      const before = change.before.data() || {};
+      const after = change.after.data() || {};
+      // نعدّ استخدام الكوبون فقط عند تأكيد الدفع (is_paid يصبح true) — لا عند إنشاء
+      // طلب قد يُهجَر بلا دفع (كان يستنزف maxUses بمحاولات فاشلة). idempotent.
+      if (before.is_paid === true || after.is_paid !== true) return null;
+      const code = after.coupon_code;
       if (!code || typeof code !== "string" || !code.trim()) return null;
 
       const db = admin.firestore();
-      const orderRef = db.collection("orders").doc(event.params.orderId);
+      const orderRef = change.after.ref;
       const q = await db.collection("promo_codes")
           .where("code", "==", code.toUpperCase()).limit(1).get();
       if (q.empty) return null;
