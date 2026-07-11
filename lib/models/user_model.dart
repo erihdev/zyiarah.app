@@ -30,21 +30,27 @@ class ZyiarahUser {
   });
 
   factory ZyiarahUser.fromMap(String id, Map<String, dynamic> data) {
+    // تحويل دفاعي: قيمة بنوع خاطئ (rating نصّ، visits عدد عشري، expiry ليس
+    // Timestamp) كانت ترمي استثناءً يُعطّل أي شاشة تقرأ هذا المستخدم.
+    double toD(dynamic v, double fallback) =>
+        v is num ? v.toDouble() : double.tryParse('$v') ?? fallback;
+    int toI(dynamic v, int fallback) =>
+        v is num ? v.toInt() : int.tryParse('$v') ?? fallback;
     return ZyiarahUser(
       uid: id,
       name: data['name'] ?? '',
       email: data['email'] ?? '',
       phone: data['phone'] ?? '',
       role: data['role'] ?? 'client',
-      rating: (data['rating'] ?? 4.9).toDouble(),
+      rating: toD(data['rating'], 4.9),
       hasActiveSubscription: data['has_active_subscription'] ?? false,
-      visitsRemaining: data['visits_remaining'] ?? 0,
-      subscriptionExpiry: data['subscription_expiry'] != null 
-          ? (data['subscription_expiry'] as Timestamp).toDate() 
+      visitsRemaining: toI(data['visits_remaining'], 0),
+      subscriptionExpiry: data['subscription_expiry'] is Timestamp
+          ? (data['subscription_expiry'] as Timestamp).toDate()
           : null,
       subscriptionType: data['subscription_type'],
       houseRules: data['house_rules'],
-      subscriptionTotalVisits: data['subscription_total_visits'] ?? 4,
+      subscriptionTotalVisits: toI(data['subscription_total_visits'], 4),
     );
   }
 

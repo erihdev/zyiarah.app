@@ -73,6 +73,18 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
         NavigationDelegate(
           onPageStarted: (url) async {
             if (_paymentProcessed) return;
+            // إلغاء/فشل الدفع → أغلق الشاشة برسالة بدل ترك المستخدم عالقاً في الصفحة.
+            if (url.contains('payment-cancel') || url.contains('payment-failure')) {
+              _paymentProcessed = true;
+              if (mounted) {
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('تم إلغاء الدفع عبر تمارا'),
+                  backgroundColor: Colors.orange,
+                ));
+              }
+              return;
+            }
             if (url.contains('payment-success')) {
                 _paymentProcessed = true;
                 String newOrderId = widget.orderId;

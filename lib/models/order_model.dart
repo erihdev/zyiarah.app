@@ -34,23 +34,29 @@ class ZyiarahOrder {
   });
 
   factory ZyiarahOrder.fromMap(String id, Map<String, dynamic> data) {
+    // تحويل دفاعي: مستند واحد بنوع خاطئ (amount نصّ، worker_count/hours عدد عشري،
+    // service_date ليس Timestamp) كان يرمي استثناءً داخل .map() فيُعطّل شاشة القائمة
+    // كاملةً — لا صفّاً واحداً فقط.
+    double toD(dynamic v) => v is num ? v.toDouble() : double.tryParse('$v') ?? 0.0;
+    int toI(dynamic v, int fallback) =>
+        v is num ? v.toInt() : int.tryParse('$v') ?? fallback;
     return ZyiarahOrder(
       id: id,
       clientId: data['client_id'] ?? '',
       driverId: data['driver_id'],
       serviceType: data['service_type'] ?? data['service_name'] ?? '',
-      amount: (data['amount'] ?? 0.0).toDouble(),
+      amount: toD(data['amount']),
       status: data['status'] ?? 'pending',
       paymentStatus: data['payment_method'] ?? 'unpaid',
       location: data['location'] is GeoPoint ? data['location'] : const GeoPoint(0, 0),
       createdAt: data['created_at'] is Timestamp ? (data['created_at'] as Timestamp).toDate() : DateTime.now(),
-      hours: data['hours_contracted'],
-      serviceDate: data['service_date'] != null
+      hours: data['hours_contracted'] == null ? null : toI(data['hours_contracted'], 0),
+      serviceDate: data['service_date'] is Timestamp
           ? (data['service_date'] as Timestamp).toDate()
           : null,
-      workerCount: data['worker_count'] ?? 1,
+      workerCount: toI(data['worker_count'], 1),
       couponCode: data['coupon_code'],
-      discountAmount: (data['discount_amount'] ?? 0.0).toDouble(),
+      discountAmount: toD(data['discount_amount']),
     );
   }
 

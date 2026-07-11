@@ -158,8 +158,13 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
   // الحسابات المالية الصحيحة (بافتراض أن المبلغ شامل للضريبة، مع تطبيق Surge)
   // مقرّب لخانتين عشريتين — يمنع أرقاماً مثل 57.4999999999 في المبلغ المخزَّن/المعروض.
-  double get totalWithVat =>
-      (((widget.amount * _surgeFactor) - _discountAmount) * 100).roundToDouble() / 100;
+  double get totalWithVat {
+    // نحدّ الخصم بألا يتجاوز المبلغ (كوبون قيمته أكبر من الطلب كان يجعل المبلغ
+    // سالباً → دفعة/محفظة بمبلغ سالب).
+    final raw = (widget.amount * _surgeFactor) - _discountAmount;
+    final clamped = raw < 0 ? 0.0 : raw;
+    return (clamped * 100).roundToDouble() / 100;
+  }
   double get subtotal => totalWithVat / 1.15;
   double get vatAmount => totalWithVat - subtotal;
 
@@ -496,6 +501,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
       } else if (_selectedPaymentMethod == 'card') {
         // Moyasar SDK — Credit Card
+        // ننشئ الطلب is_paid=false قبل فتح شاشة الدفع (كتمارا): لو نجح الخصم ثم
+        // فشلت كتابة الطلب، يظل موجوداً ويؤكّده الـ webhook — فلا دفعة يتيمة بلا طلب.
+        if (widget.maintenanceId == null && widget.contractId == null) {
+          await _createUnpaidServiceOrder(finalOrderId, method: 'card');
+        }
         setState(() => _isLoading = false);
         if (!mounted) return;
         await Navigator.push(
@@ -570,7 +580,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         return;
 
       } else if (_selectedPaymentMethod == 'stc_pay') {
-        // Moyasar STC Pay
+        // Moyasar STC Pay — أنشئ الطلب is_paid=false قبل شاشة الدفع (كالبطاقة/تمارا).
+        if (widget.maintenanceId == null && widget.contractId == null) {
+          await _createUnpaidServiceOrder(finalOrderId, method: 'stc_pay');
+        }
         setState(() => _isLoading = false);
         if (!mounted) return;
         await Navigator.push(
@@ -613,7 +626,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   /// ينشئ طلب خدمة (ساعة/كنب) بـ is_paid=false قبل فتح جلسة تمارا — كي يجد
   /// الخادم المبلغ الحقيقي. لا يُعيّن سائقاً (يتكفّل به sweepUnassignedPaidOrders
   /// بعد أن يقلب الـ webhook is_paid). checkout_screen يتخطّى الإنشاء إن وُجد.
-  Future<void> _createUnpaidServiceOrder(String id) async {
+  Future<void> _createUnpaidServiceOrder(String id, {String method = 'tamara'}) async {
     final bool isHourly = widget.hours != null && widget.serviceDate != null;
     await FirebaseFirestore.instance.runTransaction((transaction) async {
       final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
@@ -631,7 +644,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         'is_paid': false,
         'status': isHourly ? 'pending' : 'pending_admin_approval',
         'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
-        'payment_method': 'tamara',
+        'payment_method': method,
         'created_at': FieldValue.serverTimestamp(),
         'hours_contracted': widget.hours ?? 4,
         'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
@@ -717,11 +730,17 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     } else {
       final bool isHourly = widget.hours != null && widget.serviceDate != null;
 
-      // Atomic: increment counter + create order in one Transaction
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
-        code = ZyiarahOrderUtil.formatSmartCode(nextId);
-        transaction.set(FirebaseFirestore.instance.collection('orders').doc(id), {
+      // إن كان الطلب أُنشئ مسبقاً (بطاقة/STC/تمارا تنشئه is_paid=false قبل الدفع)
+      // فلا نُعيد إنشاءه — يتفادى عدّاداً مزدوجاً وكتابةً فوق المستند؛ نكتفي بكوده.
+      final existingOrder = await FirebaseFirestore.instance.collection('orders').doc(id).get();
+      if (existingOrder.exists) {
+        code = (existingOrder.data()?['code'] as String?) ?? id;
+      } else {
+        // Atomic: increment counter + create order in one Transaction
+        await FirebaseFirestore.instance.runTransaction((transaction) async {
+          final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
+          code = ZyiarahOrderUtil.formatSmartCode(nextId);
+          transaction.set(FirebaseFirestore.instance.collection('orders').doc(id), {
           'code': code,
           'client_id': _currentUser?.uid,
           'client_name': _currentUser?.name ?? 'عميل زيارة',
@@ -754,7 +773,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00',
           },
         });
-      });
+        });
+      }
 
       // تعيين السائق (للساعة) وإشعار العميل يُنقَلان لمهمة الخلفية أدناه حتى لا
       // يُبطئا ظهور شاشة النجاح — كلاهما غير حرج ولا يلمس واجهة المستخدم.
