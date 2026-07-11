@@ -419,6 +419,11 @@ service cloud.firestore {
       allow read: if isAccountantAdmin();
       allow write: if isAdmin();
     }
+    // سجلّ تنبيهات الإدارة (ADMIN_BROADCAST) — تستمع إليه لوحة الويب. خادمي الكتابة.
+    match /admin_notifications/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
     match /marketing_campaigns/{campaignId} {
       allow read, write: if isMarketingAdmin();
     }

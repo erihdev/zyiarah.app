@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { canAccess } from '../config/access.ts';
+import AdminNotificationsListener from './AdminNotificationsListener.tsx';
 
 type ColorKey = 'blue' | 'violet' | 'orange' | 'amber' | 'teal' | 'green' | 'emerald'
     | 'indigo' | 'pink' | 'cyan' | 'rose' | 'yellow' | 'red' | 'sky' | 'slate';
@@ -225,6 +226,9 @@ export default function Layout({ onLogout, role = null }: LayoutProps) {
 
     return (
         <div className="flex h-screen bg-[#f1f5f9] font-tajawal selection:bg-blue-100 selection:text-blue-900" dir="rtl">
+
+            {/* مستمع تنبيهات الإدارة اللحظي (إشعارات متصفح — بلا FCM/VAPID) */}
+            <AdminNotificationsListener />
 
             {/* ── Desktop Sidebar ── */}
             <aside className="hidden lg:flex w-[260px] xl:w-[272px] bg-white border-l border-slate-200/70 shadow-[1px_0_0_rgba(0,0,0,0.03)] flex-col z-20 shrink-0">

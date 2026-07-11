@@ -43,7 +43,7 @@ exports.sendNotificationOnTicketReply = onDocumentCreated({document: "support_ti
             "ADMIN_BROADCAST",
             "رد جديد على تذكرة دعم 💬",
             "وصل رد جديد من عميل على تذكرة دعم — بانتظار المتابعة.",
-            "admin_ticket_reply", {ticketId});
+            "admin_ticket_reply", {ticketId}, ["orders_manager"]);
       }
       return null;
     });
@@ -60,7 +60,7 @@ exports.sendNotificationToAdminsOnNewTicket = onDocumentCreated({document: "supp
           "ADMIN_BROADCAST",
           "تذكرة دعم جديدة 🎫",
           `فتح عميل تذكرة دعم جديدة: ${subject}`,
-          "admin_new_ticket", {ticketId: event.params.ticketId});
+          "admin_new_ticket", {ticketId: event.params.ticketId}, ["orders_manager"]);
       return null;
     });
 
@@ -647,10 +647,10 @@ async function notifyClientPaymentResult(col, orderId, data, success) {
   }
 }
 
-// يقلب is_paid على طلب تمارا (idempotent) بالبحث في orders ثم store_orders
-// عبر order_reference_id (= معرّف مستند طلبنا).
+// يقلب is_paid على طلب تمارا (idempotent) بالبحث في orders ثم store_orders ثم
+// contracts (اشتراك) عبر order_reference_id (= معرّف مستند طلبنا/عقدنا).
 async function _tamaraFlipPaid(db, orderRef, eventType) {
-  for (const col of ["orders", "store_orders"]) {
+  for (const col of ["orders", "store_orders", "contracts"]) {
     const ref = db.collection(col).doc(orderRef);
     let data = null;
     const flipped = await db.runTransaction(async (t) => {
@@ -794,7 +794,7 @@ exports.processNotificationTriggers = onDocumentCreated(
       const trigger = snap.data();
       if (!trigger || trigger.processed === true) return;
 
-      const {toUid, title, body, type, template, data = {}} = trigger;
+      const {toUid, title, body, type, template, data = {}, targetRoles} = trigger;
       const attachmentUrls = Array.isArray(trigger.attachmentUrls) ? trigger.attachmentUrls : [];
       const recipientEmail =
         trigger.recipientEmail || data.customerEmail || "admin@zyiarah.com";
@@ -812,6 +812,18 @@ exports.processNotificationTriggers = onDocumentCreated(
             relatedId: data.orderId || data.code || event.params.id,
             isRead: false,
             sentAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+        // 1b. سجلّ تنبيهات الإدارة — تستمع إليه لوحة الويب لحظيّاً (لا FCM/VAPID).
+        if (toUid === "ADMIN_BROADCAST") {
+          await admin.firestore().collection("admin_notifications").add({
+            title: title,
+            body: body.replace(/<[^>]*>?/gm, ""),
+            type: type,
+            data: data || {},
+            targetRoles: Array.isArray(targetRoles) ? targetRoles : null,
+            relatedId: data.orderId || data.ticketId || data.code || event.params.id,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
           });
         }
 
@@ -887,10 +899,14 @@ exports.processNotificationTriggers = onDocumentCreated(
         if (type !== "email") {
           let targetTokens = [];
           if (toUid === "ADMIN_BROADCAST") {
-            // FIX: include all admin role variants, not just 'admin'
-            const adminRoles = ["admin", "super_admin", "orders_manager", "accountant_admin", "marketing_admin"];
+            // توجيه حسب الدور: إن حدّد المُرسِل targetRoles (مثل ['orders_manager']
+            // لطلب جديد، أو ['accountant_admin'] لتنبيه دفع) نُرسل لتلك الأدوار فقط،
+            // مع تضمين super_admin/admin دائماً (يرى كل شيء). وإلا نبثّ لكل الأدوار.
+            const allAdminRoles = ["admin", "super_admin", "orders_manager", "accountant_admin", "marketing_admin"];
+            const roles = (Array.isArray(targetRoles) && targetRoles.length > 0) ?
+              [...new Set([...targetRoles, "admin", "super_admin"])] : allAdminRoles;
             const snap2 = await admin.firestore()
-                .collection("fcm_tokens").where("role", "in", adminRoles).get();
+                .collection("fcm_tokens").where("role", "in", roles).get();
             targetTokens = snap2.docs
                 .map((d) => d.data()?.fcmToken || d.data()?.token)
                 .filter((t) => !!t);
@@ -996,13 +1012,15 @@ exports.redeemQatratPoints = onCall({cpu: 0.083}, async (request) => {
  * @param {object} data Extra data payload.
  * @return {Promise<void>}
  */
-async function queuePush(toUid, title, body, type, data) {
+async function queuePush(toUid, title, body, type, data, targetRoles) {
   await admin.firestore().collection("notification_triggers").add({
     toUid: toUid,
     title: title,
     body: body,
     type: type,
     data: data || {},
+    // توجيه إشعارات الإدارة حسب الدور الفرعي (يُستخدم فقط مع ADMIN_BROADCAST).
+    ...(Array.isArray(targetRoles) && targetRoles.length ? {targetRoles} : {}),
     createdBy: "server",
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     processed: false,
@@ -1901,23 +1919,37 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
     `${String(startDateTime.getMonth() + 1).padStart(2, "0")}-` +
     `${String(startDateTime.getDate()).padStart(2, "0")}`;
   const timeSlot = `${String(startDateTime.getHours()).padStart(2, "0")}:00`;
+  const orderRef = db.collection("orders").doc(orderId);
 
-  await db.collection("orders").doc(orderId).update({
-    status: "scheduled",
-    driver_id: driverDoc.id,
-    driver_name: d.name || "سائق",
-    // assigned_driver: شاشات تتبّع العميل تقرأ هذا الحقل — لولاه تُظهر «جاري
-    // تعيين سائق» للأبد رغم إسناد السائق.
-    assigned_driver: d.name || "سائق",
-    driver_phone: d.phone || "000000000",
-    assigned_at: admin.firestore.FieldValue.serverTimestamp(),
-    scheduled_at: admin.firestore.Timestamp.fromDate(startDateTime),
-    // service_date مطلوب حتى يحتسب مُحدِّد التوفّر هذه المهمة ضمن انشغال السائق
-    service_date: admin.firestore.Timestamp.fromDate(startDateTime),
-    booking_date: bookingDate,
-    booking_time_slot: timeSlot,
+  // معامَلة: نُعيد قراءة الطلب ولا نكتب فوقه إن كان مُسنَداً سلفاً أو لم يعد قابلاً
+  // للإسناد. يمنع سباق الازدواج: قبول السائق يدوياً مقابل الإسناد التلقائي، أو
+  // تشغيل كرونين متزامنين (كل 3د/15د) يُسنِدان نفس الطلب لسائقين مختلفين.
+  const assigned = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(orderRef);
+    if (!snap.exists) return false;
+    const cur = snap.data();
+    if (cur.driver_id) return false; // مُسنَد سلفاً — لا تكتب فوقه
+    if (!["pending", "pending_admin_approval", "scheduled"].includes(cur.status)) {
+      return false; // حالة غير قابلة للإسناد
+    }
+    tx.update(orderRef, {
+      status: "scheduled",
+      driver_id: driverDoc.id,
+      driver_name: d.name || "سائق",
+      // assigned_driver: شاشات تتبّع العميل تقرأ هذا الحقل — لولاه تُظهر «جاري
+      // تعيين سائق» للأبد رغم إسناد السائق.
+      assigned_driver: d.name || "سائق",
+      driver_phone: d.phone || "000000000",
+      assigned_at: admin.firestore.FieldValue.serverTimestamp(),
+      scheduled_at: admin.firestore.Timestamp.fromDate(startDateTime),
+      // service_date مطلوب حتى يحتسب مُحدِّد التوفّر هذه المهمة ضمن انشغال السائق
+      service_date: admin.firestore.Timestamp.fromDate(startDateTime),
+      booking_date: bookingDate,
+      booking_time_slot: timeSlot,
+    });
+    return true;
   });
-  return {driverId: driverDoc.id, driverName: d.name || "سائق"};
+  return {driverId: driverDoc.id, driverName: d.name || "سائق", assigned};
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -2037,6 +2069,160 @@ exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
   }
 
   return {generated: schedule.length, results};
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// Server-side subscription activation — يحلّ محلّ التفعيل العميلي الذي منعته
+// قواعد Stage-C (العميل كان يكتب status='active' + visits_remaining بلا تحقّق دفع).
+// ════════════════════════════════════════════════════════════════════════
+
+/**
+ * يولّد زيارات العقد (طلبات + إسناد سائقين). مشترك؛ لا يرمي — يُعيد {skipped}.
+ * @param {admin.firestore.Firestore} db
+ * @param {FirebaseFirestore.DocumentReference} contractRef
+ * @param {object} c بيانات العقد
+ * @return {Promise<object>}
+ */
+async function _generateContractVisits(db, contractRef, c) {
+  const totalVisits = Number(c.planVisits || 0);
+  if (totalVisits <= 0) return {generated: 0, skipped: true, reason: "no_visits"};
+  let schedule = [];
+  if (Array.isArray(c.scheduled_visits) && c.scheduled_visits.length > 0) {
+    schedule = c.scheduled_visits.slice(0, totalVisits).map((v) => ({
+      date: v.date, slot: v.slot || c.booking_time_slot || "10:00",
+    }));
+  } else if (c.booking_date) {
+    const parts = String(c.booking_date).split("-").map(Number);
+    const slot = c.booking_time_slot || "10:00";
+    for (let i = 0; i < totalVisits; i++) {
+      const dt = new Date(parts[0], parts[1] - 1, parts[2] + i * 7);
+      schedule.push({date: `${dt.getFullYear()}-` +
+        `${String(dt.getMonth() + 1).padStart(2, "0")}-` +
+        `${String(dt.getDate()).padStart(2, "0")}`, slot});
+    }
+  } else {
+    return {generated: 0, skipped: true, reason: "no_schedule"};
+  }
+  const zoneName = c.zone_name || null;
+  const location = c.location || new admin.firestore.GeoPoint(24.7136, 46.6753);
+  const hours = Number(c.hours || 4);
+  const planName = c.planName || "باقة اشتراك";
+  const results = [];
+  for (let i = 0; i < schedule.length; i++) {
+    const v = schedule[i];
+    const dp = String(v.date).split("-").map(Number);
+    const hr = Number(String(v.slot).split(":")[0] || 10);
+    const startDateTime = new Date(dp[0], dp[1] - 1, dp[2], hr, 0, 0);
+    const endDateTime = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
+    const orderRef = db.collection("orders").doc();
+    await orderRef.set({
+      code: `SUB-${String(contractRef.id).slice(-5)}-${i + 1}`,
+      contract_id: contractRef.id,
+      visit_index: i + 1,
+      total_visits: totalVisits,
+      client_id: c.userId,
+      client_name: c.userName || c.clientName || "عميل",
+      client_phone: c.userPhone || "",
+      service_type: planName,
+      service_name: `${planName} — زيارة ${i + 1}/${totalVisits}`,
+      amount: 0,
+      is_paid: true,
+      payment_method: "subscription",
+      status: "pending_admin_approval",
+      location: location,
+      zone_name: zoneName,
+      hours_contracted: hours,
+      service_date: admin.firestore.Timestamp.fromDate(startDateTime),
+      booking_date: v.date,
+      booking_time_slot: v.slot,
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      reminder_sent: false,
+    });
+    const driver = await _findFreeDriverForSlot(db, {zoneName, startDateTime, endDateTime});
+    if (driver) {
+      const r = await _assignDriverScheduled(db, orderRef.id, driver, startDateTime);
+      results.push({visit: i + 1, assigned: r.assigned !== false, driverId: r.driverId});
+    } else {
+      results.push({visit: i + 1, assigned: false});
+    }
+  }
+  return {generated: schedule.length, results};
+}
+
+// مُشغّل: عند تأكيد دفع العقد (is_paid يصبح true عبر verify/webhook/wallet) نفعّل
+// خادميّاً: status='active' + منح الزيارات + توليدها + إسناد السائقين. idempotent.
+exports.activateContractOnPaid = onDocumentUpdated({document: "contracts/{contractId}", cpu: 0.25},
+    async (event) => {
+      const change = event.data;
+      if (!change) return null;
+      const before = change.before.data() || {};
+      const after = change.after.data() || {};
+      if (before.is_paid === true || after.is_paid !== true) return null;
+      const db = admin.firestore();
+      const contractRef = change.after.ref;
+      // مطالبة ذرّية (idempotent) بالتفعيل + التوليد
+      const claim = await db.runTransaction(async (tx) => {
+        const s = await tx.get(contractRef);
+        const c = s.data() || {};
+        if (c.visits_generated === true) return null;
+        tx.update(contractRef, {
+          status: "active",
+          activated_at: admin.firestore.FieldValue.serverTimestamp(),
+          visits_generated: true,
+          visits_generated_at: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return c;
+      });
+      if (!claim) return null;
+      if (claim.userId && Number(claim.planVisits || 0) > 0) {
+        await db.collection("users").doc(claim.userId).set({
+          visits_remaining: admin.firestore.FieldValue.increment(Number(claim.planVisits)),
+        }, {merge: true}).catch((e) => console.error("grant visits:", e));
+      }
+      try {
+        await _generateContractVisits(db, contractRef, claim);
+      } catch (e) {
+        console.error("activateContractOnPaid generate:", e);
+      }
+      if (claim.userId) {
+        await queuePush(claim.userId, "تم تفعيل باقتكِ ✨",
+            `فُعِّل اشتراككِ وأُضيفت ${Number(claim.planVisits || 0)} زيارة لحسابكِ.`,
+            "contract_activated", {contractId: event.params.contractId}).catch(() => {});
+      }
+      return null;
+    });
+
+// دفع باقة اشتراك بالمحفظة (خادميّاً) — يخصم planPrice ذرّياً ويقلب is_paid على
+// العقد، فيُشغّل activateContractOnPaid. القواعد تمنع العميل من فعل ذلك بنفسه.
+exports.payContractWithWallet = onCall({cpu: 0.083}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
+  const uid = request.auth.uid;
+  const contractId = request.data && request.data.contractId;
+  if (!contractId) throw new HttpsError("invalid-argument", "معرف العقد مطلوب");
+  const db = admin.firestore();
+  const contractRef = db.collection("contracts").doc(contractId);
+  const walletRef = db.collection("wallets").doc(uid);
+  return await db.runTransaction(async (t) => {
+    const cSnap = await t.get(contractRef);
+    if (!cSnap.exists) throw new HttpsError("not-found", "العقد غير موجود");
+    const c = cSnap.data();
+    if (c.userId !== uid) throw new HttpsError("permission-denied", "ليس عقدك");
+    if (c.is_paid === true) return {alreadyPaid: true};
+    const price = Number(c.planPrice || 0);
+    if (price <= 0) throw new HttpsError("failed-precondition", "سعر الباقة غير صالح");
+    const wSnap = await t.get(walletRef);
+    const balance = wSnap.exists ? Number(wSnap.data().balance || 0) : 0;
+    if (balance < price) throw new HttpsError("failed-precondition", "الرصيد غير كافٍ");
+    const txRef = walletRef.collection("transactions").doc(`wallet_contract_${contractId}`);
+    t.set(walletRef, {balance: balance - price,
+      last_updated: admin.firestore.FieldValue.serverTimestamp()}, {merge: true});
+    t.set(txRef, {amount: -price, points: 0, type: "payment",
+      description: "دفع باقة اشتراك", contract_id: contractId,
+      created_at: admin.firestore.FieldValue.serverTimestamp()});
+    t.update(contractRef, {is_paid: true, payment_method: "wallet",
+      paid_at: admin.firestore.FieldValue.serverTimestamp()});
+    return {success: true, newBalance: balance - price};
+  });
 });
 
 // ════════════════════════════════════════════════════════════════════════
@@ -2820,7 +3006,7 @@ exports.moyasarWebhook = onRequest(
                     "ADMIN_BROADCAST",
                     "تنبيه: عدم تطابق مبلغ دفع ⚠️",
                     `الطلب #${(data.code || orderId).toString()} استلم مبلغاً مختلفاً عن المطلوب — يحتاج مراجعة.`,
-                    "admin_payment_alert", {orderId}).catch(() => {});
+                    "admin_payment_alert", {orderId}, ["accountant_admin"]).catch(() => {});
                 break;
               }
               if (data.is_paid) {
