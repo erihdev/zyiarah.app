@@ -154,8 +154,17 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
           .limit(1)
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const SizedBox();
-        
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.all(12),
+            child: Center(child: SizedBox(width: 22, height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2))),
+          );
+        }
+        if (snapshot.hasError || !snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const SizedBox();
+        }
+
         final data = snapshot.data!.docs.first.data() as Map<String, dynamic>;
         final invoiceUrl = data['invoice_pdf_url'] as String?;
 

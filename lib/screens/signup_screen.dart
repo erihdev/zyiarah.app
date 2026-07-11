@@ -83,10 +83,14 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
 
       final referralCode = _referralCodeController.text.trim();
       if (referralCode.isNotEmpty && credential.user != null) {
-        await ZyiarahReferralService().applyReferralCode(
-          newUserId: credential.user!.uid,
-          referralCode: referralCode,
-        );
+        // فشل تطبيق كود الإحالة يجب ألا يُجهض حساباً أُنشئ فعلاً (وإلا يعلق المستخدم
+        // بـ«فشل الإنشاء» ثم «البريد مسجّل مسبقاً»). نتجاهله بصمت.
+        try {
+          await ZyiarahReferralService().applyReferralCode(
+            newUserId: credential.user!.uid,
+            referralCode: referralCode,
+          );
+        } catch (_) {/* إحالة غير صالحة — لا يمنع المتابعة */}
       }
 
       if (!mounted) return;

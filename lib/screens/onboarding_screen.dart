@@ -100,7 +100,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Lottie.network(item['lottie']!, height: 260, repeat: true, fit: BoxFit.contain),
+          Lottie.network(item['lottie']!, height: 260, repeat: true, fit: BoxFit.contain,
+            errorBuilder: (c, e, s) => const SizedBox(
+              height: 260,
+              child: Icon(Icons.cleaning_services_rounded, size: 120, color: Color(0xFF5D1B5E)),
+            )),
           const SizedBox(height: 48),
           Text(
             item['title']!,

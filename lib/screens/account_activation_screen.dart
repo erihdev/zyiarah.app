@@ -41,7 +41,7 @@ class _ZyiarahAccountActivationScreenState extends State<ZyiarahAccountActivatio
           // Auto-verification handled elsewhere or if needed
         },
         verificationFailed: (FirebaseAuthException e) {
-          _showError('فشل إرسال الرمز: ${e.message}');
+          _showError('تعذّر إرسال الرمز — تحقّق من الرقم والاتصال');
           setState(() => _isLoading = false);
         },
         codeSent: (String verId, int? resendToken) {
@@ -56,7 +56,7 @@ class _ZyiarahAccountActivationScreenState extends State<ZyiarahAccountActivatio
         },
       );
     } catch (e) {
-      _showError('خطأ: $e');
+      _showError('تعذّر إرسال الرمز، حاول لاحقاً');
       setState(() => _isLoading = false);
     }
   }
@@ -97,7 +97,7 @@ class _ZyiarahAccountActivationScreenState extends State<ZyiarahAccountActivatio
         Navigator.pop(context);
       }
     } catch (e) {
-      _showError('خطأ في التفعيل: $e');
+      _showError('تعذّر التفعيل — تحقّق من الرمز');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

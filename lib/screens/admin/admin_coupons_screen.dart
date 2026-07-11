@@ -286,6 +286,13 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                         setDialogState(() => valueEmpty = true);
                         return;
                       }
+                      // تحقّق من المدى: النسبة 1-100، والمبلغ الثابت موجب — كان يُقبل
+                      // كوبون 500% أو سالب.
+                      final couponVal = num.tryParse(valueCtrl.text) ?? 0;
+                      if (couponVal <= 0 || (type == 'percentage' && couponVal > 100)) {
+                        setDialogState(() => valueEmpty = true);
+                        return;
+                      }
 
                       setDialogState(() => isSaving = true);
 
@@ -293,7 +300,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                         final newData = {
                           'code': codeCtrl.text.trim().toUpperCase(),
                           'type': type,
-                          'value': num.tryParse(valueCtrl.text) ?? 0,
+                          'value': couponVal,
                           'maxUses': int.tryParse(maxUsesCtrl.text) ?? 0,
                           'uses': data?['uses'] ?? 0,
                           'expiry': Timestamp.fromDate(expiryDate),

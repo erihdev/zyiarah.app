@@ -31,8 +31,17 @@ class _ZyiarahForgotPasswordScreenState extends State<ZyiarahForgotPasswordScree
       Future.delayed(const Duration(seconds: 3), () {
         if (mounted) Navigator.pop(context);
       });
-    } catch (e) {
-      if (mounted) _showError('تأكد من صحة البريد الإلكتروني المدخل.');
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        _showError(switch (e.code) {
+          'invalid-email' => 'صيغة البريد الإلكتروني غير صحيحة',
+          'user-not-found' => 'لا يوجد حساب بهذا البريد الإلكتروني',
+          'network-request-failed' => 'تعذّر الاتصال — تحقّق من الإنترنت',
+          _ => 'تعذّر إرسال الرابط، حاول لاحقاً',
+        });
+      }
+    } catch (_) {
+      if (mounted) _showError('تعذّر إرسال الرابط، حاول لاحقاً');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

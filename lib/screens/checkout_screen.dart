@@ -63,6 +63,7 @@ class TamaraCheckoutScreen extends StatefulWidget {
 class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
   late final WebViewController _controller;
   bool _paymentProcessed = false; // guard against duplicate onPageStarted fires
+  bool _pageLoading = true; // مؤشّر تحميل أثناء فتح صفحة تمارا
 
   @override
   void initState() {
@@ -71,6 +72,19 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
+          onPageFinished: (_) {
+            if (mounted) setState(() => _pageLoading = false);
+          },
+          onWebResourceError: (err) {
+            // فشل تحميل الصفحة الأولى (شبكة/جلسة منتهية) → أغلق برسالة بدل بياض.
+            if (_paymentProcessed || !_pageLoading || !mounted) return;
+            _paymentProcessed = true;
+            Navigator.of(context).pop();
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('تعذّر تحميل صفحة الدفع — تحقّق من الاتصال'),
+              backgroundColor: Colors.red,
+            ));
+          },
           onPageStarted: (url) async {
             if (_paymentProcessed) return;
             // إلغاء/فشل الدفع → أغلق الشاشة برسالة بدل ترك المستخدم عالقاً في الصفحة.
@@ -310,7 +324,13 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
         title: const Text("إتمام الدفع - تمارا"),
         backgroundColor: const Color(0xFF5D1B5E),
       ),
-      body: WebViewWidget(controller: _controller),
+      body: Stack(
+        children: [
+          WebViewWidget(controller: _controller),
+          if (_pageLoading)
+            const Center(child: CircularProgressIndicator(color: Color(0xFF5D1B5E))),
+        ],
+      ),
     );
   }
 }

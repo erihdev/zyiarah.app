@@ -43,6 +43,13 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                     .doc(uid)
                     .get(),
                 builder: (context, snap) {
+                  if (snap.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snap.hasError) {
+                    return const Center(
+                        child: Text('تعذّر تحميل الملف، تحقّق من الاتصال'));
+                  }
                   final data =
                       snap.data?.data() as Map<String, dynamic>? ?? {};
                   final name = data['name'] as String? ?? 'سائق زيارة';

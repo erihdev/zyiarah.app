@@ -21,7 +21,6 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
 
   bool _isLoading = false;
   bool _isPasswordVisible = false;
-  bool _rememberMe = false;
 
   final Color brandColor = const Color(0xFF5D1B5E);
 
@@ -161,17 +160,6 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                 ),
                 
                 const SizedBox(height: 30),
-                Row(
-                  children: [
-                    Checkbox(
-                      value: _rememberMe,
-                      onChanged: (val) => setState(() => _rememberMe = val!),
-                      fillColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? brandColor : null),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                    ),
-                    Text("تذكرني", style: GoogleFonts.tajawal(color: Colors.grey[700])),
-                  ],
-                ),
                 const SizedBox(height: 30),
                 _isLoading
                     ? Center(child: CircularProgressIndicator(color: brandColor))

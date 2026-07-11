@@ -300,10 +300,20 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   // DRIVER-004: cancel sync timer immediately when going offline
                   if (!val) _stopSync();
                   if (_currentDriverId != null) {
-                    await FirebaseFirestore.instance.collection('drivers').doc(_currentDriverId).update({
-                      'is_available': val,
-                      'status': val ? 'idle' : 'off',
-                    });
+                    try {
+                      await FirebaseFirestore.instance.collection('drivers').doc(_currentDriverId).update({
+                        'is_available': val,
+                        'status': val ? 'idle' : 'off',
+                      });
+                    } catch (_) {
+                      // فشلت الكتابة → أعد الحالة المحلية وأبلغ السائق، وإلا يظنّ
+                      // نفسه متصلاً بينما الخادم يبقيه غير متاح فلا تصله مهام.
+                      if (mounted) {
+                        setState(() => _isOnline = !val);
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('تعذّر تحديث الحالة — تحقّق من الاتصال')));
+                      }
+                    }
                   }
                 },
                 activeThumbColor: Colors.greenAccent,
@@ -494,6 +504,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
         StreamBuilder<QuerySnapshot>(
           stream: _orderService.streamDriverActiveOrders(_currentDriverId!),
           builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return _buildStatusPlaceholder(
+                Icons.error_outline,
+                "تعذّر تحميل مهامك",
+                "تحقّق من الاتصال وحاول مجدداً",
+              );
+            }
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
               WidgetsBinding.instance.addPostFrameCallback((_) => _stopSync());
               return _buildStatusPlaceholder(
@@ -1285,7 +1302,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
           pinController.dispose();
         }
 
-        if (!confirmed) return;
+        if (!confirmed) {
+          // نظّف رمز الدفع المكتوب مسبقاً إن أُلغي الحوار — وإلا يبقى رمز معلّق
+          // على الطلب قد يعرضه تطبيق العميل لتحصيل لم يحدث.
+          FirebaseFirestore.instance.collection('orders').doc(id).update({
+            'payment_pin': FieldValue.delete(),
+            'payment_pin_generated_at': FieldValue.delete(),
+          }).catchError((_) {});
+          return;
+        }
 
         // (C) بدل تحديث is_paid منفصلاً (يُكتب محلياً حتى دون اتصال ويسبب تضارباً)،
         // نُمرّره ليُدمج داخل نفس Transaction الإكمال أدناه — فإمّا أن ينجح الكل أو يفشل الكل.

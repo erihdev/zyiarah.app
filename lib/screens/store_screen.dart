@@ -452,6 +452,7 @@ class _CartSheetState extends State<_CartSheet> {
       child: StreamBuilder<List<StoreProduct>>(
           stream: widget.storeService.streamProducts(),
           builder: (context, snapshot) {
+            if (snapshot.hasError) return const Center(child: Text('تعذّر تحميل السلة، تحقّق من الاتصال'));
             if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
             
             final cartProducts = snapshot.data!.where((p) => widget.cart.containsKey(p.id)).toList();

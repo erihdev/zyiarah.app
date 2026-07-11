@@ -453,9 +453,12 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   }
 
   void _callDriver(String phone) async {
-    final url = 'tel:$phone';
-    if (await canLaunchUrl(Uri.parse(url))) {
-      await launchUrl(Uri.parse(url));
+    final uri = Uri.parse('tel:$phone');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذّر فتح الاتصال — رقم السائق: $phone')));
     }
   }
 }

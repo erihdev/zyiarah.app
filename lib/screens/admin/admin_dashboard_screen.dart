@@ -121,6 +121,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   'https://lottie.host/85cc1144-6729-4d64-88aa-3e753456c636/Hw4h8Pndr5.json', // Error anim
                   width: 250,
                   height: 250,
+                  errorBuilder: (c, e, s) =>
+                      const Icon(Icons.lock_outline, size: 120, color: Colors.grey),
                 ),
                 const SizedBox(height: 20),
                 const Text(
