@@ -2246,13 +2246,33 @@ exports.activateContractOnPaid = onDocumentUpdated({document: "contracts/{contra
         // في لوحة العميل لا تظهر أبداً (has_active_subscription تبقى false).
         if (c.userId && Number(c.planVisits || 0) > 0) {
           const pv = Number(c.planVisits);
+          // انتهاء الاشتراك = تاريخ آخر زيارة مجدولة + مهلة 7 أيام (بدل ثابت 90 يوماً
+          // بلا صلة بالباقة). نشتق آخر تاريخ من scheduled_visits، أو من booking_date
+          // بنمط الأسبوع (التاريخ الأول + (العدد-1)×7 أيام) كما يولّد _generateContractVisits.
+          let lastVisitMs = Date.now();
+          if (Array.isArray(c.scheduled_visits) && c.scheduled_visits.length > 0) {
+            for (const v of c.scheduled_visits.slice(0, pv)) {
+              const dp = String(v.date || "").split("-").map(Number);
+              if (dp.length === 3 && !dp.some(isNaN)) {
+                const ms = Date.UTC(dp[0], dp[1] - 1, dp[2]);
+                if (ms > lastVisitMs) lastVisitMs = ms;
+              }
+            }
+          } else if (c.booking_date) {
+            const bp = String(c.booking_date).split("-").map(Number);
+            if (bp.length === 3 && !bp.some(isNaN)) {
+              lastVisitMs = Date.UTC(bp[0], bp[1] - 1, bp[2] + Math.max(0, pv - 1) * 7);
+            }
+          }
+          const expiryMs = Math.max(
+              lastVisitMs + 7 * 24 * 60 * 60 * 1000, // مهلة بعد آخر زيارة
+              Date.now() + 24 * 60 * 60 * 1000); // لا يقلّ عن يوم من الآن
           tx.set(db.collection("users").doc(c.userId), {
             visits_remaining: admin.firestore.FieldValue.increment(pv),
             has_active_subscription: true,
             subscription_total_visits: pv,
             subscription_type: c.planName || "باقة زيارة",
-            subscription_expiry: admin.firestore.Timestamp.fromMillis(
-                Date.now() + 90 * 24 * 60 * 60 * 1000),
+            subscription_expiry: admin.firestore.Timestamp.fromMillis(expiryMs),
           }, {merge: true});
         }
         return c;
