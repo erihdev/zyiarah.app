@@ -97,3 +97,13 @@ functions/_zone_prices_backup.json
 # temp price-test helpers (local only)
 functions/_price_backup_full.json
 functions/_restore_price.js
+functions/_tmp_drivers.js
+functions/_tmp_check.js
+functions/_tmp_one.js
+functions/_tmp_moyasar_test.js
+functions/_tmp_moyasar_list.js
+functions/_tmp_moyasar_one.js
+functions/_tmp_one2.js
+functions/_tmp_latest.js
+functions/_tmp_verify_test.js
+functions/_tmp_audit.js

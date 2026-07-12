@@ -81,24 +81,13 @@ exports.sendNotificationToAdminsOnNewOrder = onDocumentCreated({document: "order
       const orderData = snap.data();
       const displayCode = orderData.code || orderId.substring(0, 6);
 
-      const payload = {
-        notification: {
-          title: "طلب خدمات جديد! 🚨",
-          body: `وصلك طلب تنظيف جديد من العميل. رقم الطلب: ${displayCode}`,
-        },
-        data: {
-          click_action: "FLUTTER_NOTIFICATION_CLICK",
-          type: "new_order_admin",
-          orderId: orderId,
-        },
-      };
-
-      try {
-        await admin.messaging().send({...payload, topic: "admins"});
-        console.log(`Admin notification sent for new order: ${orderId}`);
-      } catch (error) {
-        console.error("Error sending admin notification for new order:", error);
-      }
+      // عبر ADMIN_BROADCAST: يكتب admin_notifications (لوحة الويب) + FCM حسب الدور —
+      // بدل موضوع "admins" وحده الذي لا يصل لوحة الويب.
+      await queuePush(
+          "ADMIN_BROADCAST",
+          "طلب خدمات جديد! 🚨",
+          `وصلك طلب تنظيف جديد من العميل. رقم الطلب: ${displayCode}`,
+          "new_order_admin", {orderId: orderId}, ["orders_manager"]);
       return null;
     });
 
@@ -111,23 +100,13 @@ exports.sendNotificationToAdminsOnNewStoreOrder = onDocumentCreated({document: "
       const orderData = snap.data();
       const displayCode = orderData.code || event.params.orderId.substring(0, 6);
 
-      const payload = {
-        notification: {
-          title: "طلب متجر جديد! 🛒",
-          body: `وصلك طلب منتجات من المتجر. رقم الطلب: ${displayCode}`,
-        },
-        data: {
-          click_action: "FLUTTER_NOTIFICATION_CLICK",
-          type: "new_store_order_admin",
-          orderId: event.params.orderId,
-        },
-      };
-
-      try {
-        await admin.messaging().send({...payload, topic: "admins"});
-      } catch (error) {
-        console.error("Error sending store order alert:", error);
-      }
+      // عبر ADMIN_BROADCAST: يكتب admin_notifications (تراها لوحة الويب لحظيّاً) + يرسل FCM
+      // حسب الدور. كان يرسل لموضوع "admins" فقط فلا يصل لوحة الويب إطلاقاً.
+      await queuePush(
+          "ADMIN_BROADCAST",
+          "طلب متجر جديد! 🛒",
+          `وصلك طلب منتجات من المتجر. رقم الطلب: ${displayCode}`,
+          "new_store_order_admin", {orderId: event.params.orderId}, ["orders_manager"]);
       return null;
     });
 
