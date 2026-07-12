@@ -7,7 +7,7 @@ import { db } from '../services/firebase';
  * (طلب جديد، تذكرة دعم، فشل دفع...). حلّ بلا FCM/VAPID — يعمل ما دامت اللوحة مفتوحة،
  * وهي حالة الاستخدام الأساسية للإدارة. يتجاهل الحِمل الأولي كي لا يُغرق عند الدخول.
  */
-export default function AdminNotificationsListener() {
+export default function AdminNotificationsListener({ role }: { role?: string | null }) {
     const initialized = useRef(false);
 
     useEffect(() => {
@@ -28,7 +28,15 @@ export default function AdminNotificationsListener() {
                 }
                 snap.docChanges().forEach((chg) => {
                     if (chg.type !== 'added') return;
-                    const d = chg.doc.data() as { title?: string; body?: string };
+                    const d = chg.doc.data() as { title?: string; body?: string; targetRoles?: string[] | null };
+                    // تصفية حسب الدور الفرعي: التنبيه الموجَّه لأدوار محددة لا يظهر إلا لمن
+                    // يملك أحدها (والمدراء الكبار يرون الكل). كان يتجاهل targetRoles فيرى كل
+                    // أدمن كل تنبيه بالمتصفح.
+                    const target = d.targetRoles;
+                    if (Array.isArray(target) && target.length > 0) {
+                        const isSuper = role === 'super_admin' || role === 'admin';
+                        if (!isSuper && !(role && target.includes(role))) return;
+                    }
                     try {
                         if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
                             new Notification(d.title || 'تنبيه إداري 🔔', {

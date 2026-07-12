@@ -318,6 +318,25 @@ exports.notifyClientOnStoreOrderStatus = onDocumentUpdated({document: "store_ord
       return null;
     });
 
+// إشعار العميل عند رفض طلب الصيانة — لم يكن يُشعَر إطلاقاً. قاصر على 'rejected' فقط كي
+// لا يتضاعف مع إشعار عرض السعر (waiting_payment) الذي يُرسله تطبيق الأدمن/لوحة الويب مباشرةً.
+exports.notifyClientOnMaintenanceRejected = onDocumentUpdated(
+    {document: "maintenance_requests/{reqId}", cpu: 0.083},
+    async (event) => {
+      const change = event.data;
+      if (!change) return null;
+      const before = change.before.data() || {};
+      const after = change.after.data() || {};
+      if (before.status === after.status || after.status !== "rejected") return null;
+      const uid = after.userId;
+      if (!uid) return null;
+      const code = after.requestId || after.code || event.params.reqId.substring(0, 6);
+      await queuePush(uid, "بخصوص طلب الصيانة ⚠️",
+          `نعتذر، تعذّر قبول طلب الصيانة رقم (#${code}). يمكنك التواصل مع الدعم أو إنشاء طلب جديد.`,
+          "maintenance_rejected", {requestId: event.params.reqId});
+      return null;
+    });
+
 /**
  * Deliver a broadcast: push to the target topic + fan out to the `notifications`
  * collection for in-app viewing. Shared by the create-trigger and the scheduler.
@@ -1955,6 +1974,29 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
     if (!["pending", "pending_admin_approval", "scheduled"].includes(cur.status)) {
       return false; // حالة غير قابلة للإسناد
     }
+
+    // (منع التعارض) إعادة فحص حرّية السائق ذرّياً داخل المعاملة: _findFreeDriverForSlot
+    // يفحص قبل المعاملة، لكن حجزَين متزامنَين (زيارة اشتراك ↔ طلب عميل آخر) قد يقرآن
+    // السائق "حرّاً" ثم يُسنِدانه لفترة متداخلة. القراءة داخل المعاملة تجعلها آمنة من السباق
+    // فلا تُحجَز زيارة تتعارض مع موعد اختاره عميل آخر مسبقاً.
+    const slotHours = Number(cur.hours_contracted || 4);
+    const slotEnd = new Date(startDateTime.getTime() + slotHours * 60 * 60 * 1000);
+    const dayStartC = new Date(
+        startDateTime.getFullYear(), startDateTime.getMonth(), startDateTime.getDate());
+    const dayEndC = new Date(dayStartC.getTime() + 24 * 60 * 60 * 1000);
+    const dayQ = db.collection("orders")
+        .where("service_date", ">=", admin.firestore.Timestamp.fromDate(dayStartC))
+        .where("service_date", "<", admin.firestore.Timestamp.fromDate(dayEndC))
+        .where("status", "in", ["scheduled", "on_the_way", "in_progress", "accepted"]);
+    const daySnap = await tx.get(dayQ);
+    for (const d2 of daySnap.docs) {
+      const od = d2.data();
+      if (od.driver_id !== driverDoc.id || !od.service_date) continue;
+      const oStart = od.service_date.toDate();
+      const oEnd = new Date(oStart.getTime() + Number(od.hours_contracted || 4) * 60 * 60 * 1000);
+      if (startDateTime < oEnd && oStart < slotEnd) return false; // تعارض زمني — لا تُسنِد
+    }
+
     tx.update(orderRef, {
       status: "scheduled",
       driver_id: driverDoc.id,

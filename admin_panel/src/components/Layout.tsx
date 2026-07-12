@@ -228,7 +228,7 @@ export default function Layout({ onLogout, role = null }: LayoutProps) {
         <div className="flex h-screen bg-[#f1f5f9] font-tajawal selection:bg-blue-100 selection:text-blue-900" dir="rtl">
 
             {/* مستمع تنبيهات الإدارة اللحظي (إشعارات متصفح — بلا FCM/VAPID) */}
-            <AdminNotificationsListener />
+            <AdminNotificationsListener role={role} />
 
             {/* ── Desktop Sidebar ── */}
             <aside className="hidden lg:flex w-[260px] xl:w-[272px] bg-white border-l border-slate-200/70 shadow-[1px_0_0_rgba(0,0,0,0.03)] flex-col z-20 shrink-0">
