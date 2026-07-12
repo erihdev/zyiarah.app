@@ -694,6 +694,26 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     });
   }
 
+  /// بيانات الطلب الكاملة داخل metadata الدفعة — كي يستطيع verifyMoyasarPayment خادميّاً
+  /// إنشاء الطلب إن فشل العميل في إنشائه (الدفع الأصلي Apple/Google/Samsung Pay ينشئ الطلب
+  /// بعد الخصم، وقد يفشل بسبب الحالة/الخلفية بعد شاشة الدفع). القيم نصّية (شرط Moyasar).
+  Map<String, String> _nativePayMeta() {
+    final bool isHourly = widget.hours != null && widget.serviceDate != null;
+    return {
+      'order_id': _pendingOrderId,
+      'client_id': FirebaseAuth.instance.currentUser?.uid ?? '',
+      'service_name': widget.serviceName,
+      'is_hourly': isHourly ? '1' : '0',
+      'hours': (widget.hours ?? 4).toString(),
+      'worker_count': widget.workerCount.toString(),
+      'zone_name': widget.zoneName ?? '',
+      'lat': (widget.location?.latitude ?? 24.7136).toStringAsFixed(6),
+      'lng': (widget.location?.longitude ?? 46.6753).toStringAsFixed(6),
+      'service_date': widget.serviceDate?.toIso8601String() ?? '',
+      'client_phone': _phoneController.text.trim(),
+    };
+  }
+
   /// Unified Success Handler
   Future<void> _processUnifiedSuccess(String id, String method, {bool isFree = false, String? paymentId}) async {
     final double amountToSave = isFree ? 0.0 : totalWithVat;
@@ -795,12 +815,17 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             transaction.set(orderRef, {...orderPayload, 'code': code});
           });
         } catch (txErr) {
-          // احتياطي حرج: الدفع الأصلي (Apple/Google/Samsung Pay) لا يُنشئ الطلب مسبقاً
-          // كالبطاقة. لو فشلت معاملة العدّاد بعد نجاح الخصم، كانت تبقى «دفعة يتيمة» بلا طلب
-          // (مالٌ مخصوم دون طلب). نضمن إنشاء الطلب بكود احتياطي كي يؤكّده verify/الـ webhook.
-          debugPrint('[order create tx failed → fallback] $txErr');
-          code = 'ZY-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
-          await orderRef.set({...orderPayload, 'code': code, 'counter_fallback': true});
+          debugPrint('[order create tx failed → fallback set] $txErr');
+          try {
+            code = 'ZY-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
+            await orderRef.set({...orderPayload, 'code': code, 'counter_fallback': true});
+          } catch (fbErr) {
+            // لا نرمي: الدفع الأصلي (Apple/Google/Samsung Pay) قد يفشل إنشاؤه للطلب بعد
+            // الخصم (حالة/شبكة/خلفية بعد شاشة الدفع). نتابع إلى verifyMoyasarPayment الذي
+            // يُنشئ الطلب خادميّاً من metadata الدفعة ويؤكّده — فلا تبقى «دفعة يتيمة» أبداً.
+            debugPrint('[client create failed → server verify will create from metadata] $fbErr');
+            if (code.isEmpty) code = _pendingOrderId.substring(0, 6).toUpperCase();
+          }
         }
       }
 
@@ -1338,7 +1363,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               amount: (totalWithVat * 100).round(),
               description: 'زيارة - ${widget.serviceName}',
               givenID: MoyasarUtil.givenIdFromOrder(_pendingOrderId), // UUID صالح لـ Moyasar (منع الشحن المزدوج)
-              metadata: {'order_id': _pendingOrderId},
+              metadata: _nativePayMeta(),
               applePay: ApplePayConfig(
                 merchantId: 'merchant.com.zyiarah.app',
                 label: 'زيارة',
@@ -1439,7 +1464,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                     amount: (totalWithVat * 100).round(),
                     description: 'زيارة - ${widget.serviceName}',
                     givenID: MoyasarUtil.givenIdFromOrder(_pendingOrderId), // UUID صالح لـ Moyasar (منع الشحن المزدوج)
-                    metadata: {'order_id': _pendingOrderId},
+                    metadata: _nativePayMeta(),
                     samsungPay: SamsungPayConfig(
                       serviceId: samsungServiceId,
                       merchantName: 'زيارة',

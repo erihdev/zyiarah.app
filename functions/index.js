@@ -1458,31 +1458,107 @@ exports.verifyMoyasarPayment = onCall(
         throw new HttpsError("invalid-argument", "بيانات التحقق غير مكتملة");
       }
 
-      // Fetch the true amount from Firestore (orders, store_orders, maintenance_requests, or contracts) to prevent tampering
-      let trueAmount = null;
-      let orderRef = admin.firestore().collection("orders").doc(orderId);
+      const secret = moyasarSecretKey.value();
+      if (!secret) {
+        throw new HttpsError("failed-precondition", "مفتاح Moyasar السري غير مهيأ في الخادم");
+      }
+      const authHeader = `Basic ${Buffer.from(secret + ":").toString("base64")}`;
 
+      // نجلب الدفعة من Moyasar أولاً — نحتاج metadata لإنشاء الطلب خادميّاً إن غاب.
+      let paymentData;
+      try {
+        const response = await fetch(`https://api.moyasar.com/v1/payments/${paymentId}`, {
+          method: "GET", headers: {"Authorization": authHeader},
+        });
+        if (!response.ok) {
+          const errText = await response.text();
+          console.error(`Moyasar API response error ${response.status}: ${errText}`);
+          throw new HttpsError("internal", "فشل التحقق من الدفع مع بوابة Moyasar");
+        }
+        paymentData = await response.json();
+      } catch (error) {
+        if (error instanceof HttpsError) throw error;
+        throw new HttpsError("internal", error.message);
+      }
+      if (paymentData.status !== "paid") {
+        throw new HttpsError("failed-precondition", `حالة عملية الدفع ليست مدفوعة: ${paymentData.status}`);
+      }
+
+      const db = admin.firestore();
+      const FieldValue = admin.firestore.FieldValue;
+
+      // ابحث عن الطلب في المجموعات المعروفة (منع التلاعب: المبلغ المرجعي من الطلب).
+      let trueAmount = null;
+      let orderRef = db.collection("orders").doc(orderId);
       let orderDoc = await orderRef.get();
       if (orderDoc.exists) {
         trueAmount = Number(orderDoc.data().amount);
       } else {
-        orderRef = admin.firestore().collection("store_orders").doc(orderId);
-        orderDoc = await orderRef.get();
-        if (orderDoc.exists) {
-          // final_amount = السعر النهائي بعد تعديل الإدارة (قد يختلف عن السلة).
-          trueAmount = Number(orderDoc.data().final_amount ?? orderDoc.data().total_amount);
-        } else {
-          orderRef = admin.firestore().collection("maintenance_requests").doc(orderId);
-          orderDoc = await orderRef.get();
-          if (orderDoc.exists) {
-            trueAmount = Number(orderDoc.data().amount);
-          } else {
-            orderRef = admin.firestore().collection("contracts").doc(orderId);
-            orderDoc = await orderRef.get();
-            if (orderDoc.exists) {
-              trueAmount = Number(orderDoc.data().planPrice);
+        let r = db.collection("store_orders").doc(orderId);
+        let d = await r.get();
+        if (d.exists) { orderRef = r; orderDoc = d; trueAmount = Number(d.data().final_amount ?? d.data().total_amount); } else {
+          r = db.collection("maintenance_requests").doc(orderId); d = await r.get();
+          if (d.exists) { orderRef = r; orderDoc = d; trueAmount = Number(d.data().amount); } else {
+            r = db.collection("contracts").doc(orderId); d = await r.get();
+            if (d.exists) { orderRef = r; orderDoc = d; trueAmount = Number(d.data().planPrice); }
+          }
+        }
+      }
+
+      // إن غاب الطلب تماماً: أنشئه خادميّاً من metadata الدفعة. هذا يمنع «الدفعة اليتيمة»
+      // نهائياً — الدفع الأصلي (Apple/Google/Samsung Pay) قد يفشل إنشاؤه للطلب في العميل
+      // بعد الخصم. المبلغ المرجعي = المخصوم فعلاً (paymentData.amount) فلا مجال لتلاعب.
+      if (!orderDoc.exists) {
+        const md = paymentData.metadata || {};
+        if (md.order_id === orderId && (md.service_name || md.is_hourly)) {
+          const isHourly = String(md.is_hourly) === "1";
+          const amountSar = Number(paymentData.amount) / 100;
+          let code = `ZY-${Date.now().toString().slice(5)}`;
+          try {
+            code = await db.runTransaction(async (tx) => {
+              const cRef = db.collection("metadata").doc("order_counter");
+              const cs = await tx.get(cRef);
+              const next = ((cs.exists ? cs.data().last_id : 100) || 100) + 1;
+              if (cs.exists) tx.update(cRef, {last_id: next}); else tx.set(cRef, {last_id: next});
+              return String(next);
+            });
+          } catch (e) { console.error("counter for server-created order:", e); }
+          const lat = Number(md.lat); const lng = Number(md.lng);
+          const payload = {
+            code,
+            client_id: md.client_id || request.auth.uid,
+            client_phone: md.client_phone || "",
+            service_type: md.service_name || "خدمة زيارة",
+            service_name: md.service_name || "خدمة زيارة",
+            amount: amountSar,
+            is_paid: false, // يُقلب أدناه ذرّياً
+            status: isHourly ? "pending" : "pending_admin_approval",
+            payment_method: (paymentData.source && paymentData.source.type) || "native_pay",
+            hours_contracted: Number(md.hours || 4),
+            worker_count: Number(md.worker_count || 1),
+            zone_name: md.zone_name || null,
+            location: (!isNaN(lat) && !isNaN(lng)) ?
+              new admin.firestore.GeoPoint(lat, lng) :
+              new admin.firestore.GeoPoint(24.7136, 46.6753),
+            created_at: FieldValue.serverTimestamp(),
+            server_created_from_payment: true,
+          };
+          if (md.service_date) {
+            const sd = new Date(md.service_date);
+            if (!isNaN(sd.getTime())) {
+              payload.service_date = admin.firestore.Timestamp.fromDate(sd);
+              if (isHourly) {
+                const pad = (n) => String(n).padStart(2, "0");
+                payload.booking_date = `${sd.getFullYear()}-${pad(sd.getMonth() + 1)}-${pad(sd.getDate())}`;
+                payload.booking_time_slot = `${pad(sd.getHours())}:00`;
+              }
             }
           }
+          orderRef = db.collection("orders").doc(orderId);
+          await orderRef.set(payload);
+          orderDoc = await orderRef.get();
+          trueAmount = amountSar;
+          console.log(`Order ${orderId} CREATED server-side from payment metadata (${amountSar} SAR).`);
         }
       }
 
@@ -1495,74 +1571,37 @@ exports.verifyMoyasarPayment = onCall(
       if (owner && owner !== request.auth.uid) {
         throw new HttpsError("permission-denied", "لا يمكن تأكيد دفع طلب مستخدم آخر");
       }
-      // idempotent: مؤكَّد سلفاً → تخطَّ نداء البوابة.
+      // idempotent: مؤكَّد سلفاً.
       if (orderDoc.data().is_paid === true) {
         return {success: true, alreadyPaid: true};
       }
 
       const trueAmountHalalas = Math.round(trueAmount * 100);
-
-      // Verify payment details with Moyasar API
-      const secret = moyasarSecretKey.value();
-      if (!secret) {
-        throw new HttpsError("failed-precondition", "مفتاح Moyasar السري غير مهيأ في الخادم");
+      const paidAmountHalalas = Number(paymentData.amount);
+      if (paidAmountHalalas !== trueAmountHalalas) {
+        console.error(`Amount mismatch. Paid: ${paidAmountHalalas}, expected: ${trueAmountHalalas}`);
+        throw new HttpsError("failed-precondition", "مبلغ الدفع لا يتطابق مع مبلغ الطلب");
       }
 
-      const authHeader = `Basic ${Buffer.from(secret + ":").toString("base64")}`;
-
-      try {
-        const response = await fetch(`https://api.moyasar.com/v1/payments/${paymentId}`, {
-          method: "GET",
-          headers: {
-            "Authorization": authHeader,
-          },
+      // قلب is_paid داخل معامَلة: إشعار مرّة واحدة عند الانتقال false→true.
+      const flipped = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(orderRef);
+        if (snap.data()?.is_paid === true) return false;
+        tx.update(orderRef, {
+          payment_status: "paid",
+          is_paid: true,
+          moyasar_payment_id: paymentId,
+          moyasar_status: paymentData.status,
+          updated_at: FieldValue.serverTimestamp(),
         });
-
-        if (!response.ok) {
-          const errText = await response.text();
-          console.error(`Moyasar API response error ${response.status}: ${errText}`);
-          throw new HttpsError("internal", "فشل التحقق من الدفع مع بوابة Moyasar");
-        }
-
-        const paymentData = await response.json();
-
-        // Perform validations:
-        // 1. Paid amount matches order amount (in Halalas)
-        // 2. Status is 'paid'
-        if (paymentData.status !== "paid") {
-          throw new HttpsError("failed-precondition", `حالة عملية الدفع ليست مدفوعة: ${paymentData.status}`);
-        }
-
-        const paidAmountHalalas = Number(paymentData.amount);
-        if (paidAmountHalalas !== trueAmountHalalas) {
-          console.error(`Amount mismatch. Paid: ${paidAmountHalalas}, expected: ${trueAmountHalalas}`);
-          throw new HttpsError("failed-precondition", "مبلغ الدفع لا يتطابق مع مبلغ الطلب");
-        }
-
-        // قلب is_paid داخل معامَلة: نُشعر مرّة واحدة فقط عند الانتقال false→true —
-        // لو سبقنا الـ webhook للتوّ (سباق) لا يُرسَل إشعار تأكيد مزدوج للعميل.
-        const flipped = await admin.firestore().runTransaction(async (tx) => {
-          const snap = await tx.get(orderRef);
-          if (snap.data()?.is_paid === true) return false;
-          tx.update(orderRef, {
-            payment_status: "paid",
-            is_paid: true,
-            moyasar_payment_id: paymentId,
-            moyasar_status: paymentData.status,
-            updated_at: admin.firestore.FieldValue.serverTimestamp(),
-          });
-          return true;
-        });
-        console.log(`Order ${orderId} verified via Moyasar (flipped=${flipped}).`);
-        if (flipped) {
-          notifyClientPaymentResult(orderRef.parent.id, orderId, orderDoc.data(), true)
-              .catch((e) => console.error("notify after verify:", e));
-        }
-        return {success: true};
-      } catch (error) {
-        if (error instanceof HttpsError) throw error;
-        throw new HttpsError("internal", error.message);
+        return true;
+      });
+      console.log(`Order ${orderId} verified via Moyasar (flipped=${flipped}).`);
+      if (flipped) {
+        notifyClientPaymentResult(orderRef.parent.id, orderId, orderDoc.data(), true)
+            .catch((e) => console.error("notify after verify:", e));
       }
+      return {success: true};
     },
 );
 
