@@ -93,3 +93,7 @@ order_journey_map.html
 # temp price/test scripts (local only)
 functions/_tmp_price.js
 functions/_zone_prices_backup.json
+
+# temp price-test helpers (local only)
+functions/_price_backup_full.json
+functions/_restore_price.js
