@@ -790,8 +790,19 @@ exports.processNotificationTriggers = onDocumentCreated(
 
       const {toUid, title, body, type, template, data = {}, targetRoles} = trigger;
       const attachmentUrls = Array.isArray(trigger.attachmentUrls) ? trigger.attachmentUrls : [];
-      const recipientEmail =
+      let recipientEmail =
         trigger.recipientEmail || data.customerEmail || "admin@zyiarah.com";
+      // تنبيهات الإدارة تذهب لبريد الإدارة المُهيّأ (admin_email) لا لبريد العميل —
+      // كان data.customerEmail قد يوجّه «تنبيه الإدارة» لبريد العميل بالخطأ.
+      if (toUid === "ADMIN_BROADCAST") {
+        try {
+          const cfgA = await admin.firestore()
+              .collection("system_configs").doc("main_settings").get();
+          const ae = (cfgA.exists && cfgA.data()?.admin_email) ?
+            String(cfgA.data().admin_email).trim() : "";
+          recipientEmail = ae || "admin@zyiarah.com";
+        } catch (_) { recipientEmail = "admin@zyiarah.com"; }
+      }
 
       console.log(`Processing trigger ${event.params.id}`);
 
@@ -823,7 +834,10 @@ exports.processNotificationTriggers = onDocumentCreated(
         }
 
         // 2. Email via Resend (key from Secret Manager)
-        const wantsEmail = (type === "email" || type === "hybrid" || type === "admin_order_alert");
+        // new_store_order_admin مُضاف: يُرسل بريداً للإدارة عند طلب متجر جديد (طلبات
+        // الخدمة تُرسل عبر admin_order_alert أصلاً). البريد يذهب لبريد الإدارة المُهيّأ أعلاه.
+        const wantsEmail = (type === "email" || type === "hybrid" ||
+          type === "admin_order_alert" || type === "new_store_order_admin");
         // SECURITY: notification_triggers is client-writable; refuse to relay
         // email to any address that isn't a registered user/driver/admin.
         const emailAllowed = wantsEmail ? await isAllowedEmailRecipient(recipientEmail) : false;

@@ -107,3 +107,7 @@ functions/_tmp_one2.js
 functions/_tmp_latest.js
 functions/_tmp_verify_test.js
 functions/_tmp_audit.js
+functions/_tmp_notif.js
+functions/_tmp_notif_test.js
+functions/_tmp_notif_check.js
+functions/_tmp_email_test.js
