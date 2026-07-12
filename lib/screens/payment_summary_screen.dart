@@ -753,12 +753,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       if (existingOrder.exists) {
         code = (existingOrder.data()?['code'] as String?) ?? id;
       } else {
-        // Atomic: increment counter + create order in one Transaction
-        await FirebaseFirestore.instance.runTransaction((transaction) async {
-          final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
-          code = ZyiarahOrderUtil.formatSmartCode(nextId);
-          transaction.set(FirebaseFirestore.instance.collection('orders').doc(id), {
-          'code': code,
+        // حقول الطلب مُجمَّعة مرّة واحدة كي نستخدمها في المعاملة وفي الاحتياطي معاً.
+        final orderRef = FirebaseFirestore.instance.collection('orders').doc(id);
+        final Map<String, dynamic> orderPayload = {
           'client_id': _currentUser?.uid,
           'client_name': _currentUser?.name ?? 'عميل زيارة',
           'client_phone': _phoneController.text.trim(),
@@ -789,8 +786,22 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             'booking_time_slot':
                 '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00',
           },
-        });
-        });
+        };
+        try {
+          // Atomic: increment counter + create order in one Transaction
+          await FirebaseFirestore.instance.runTransaction((transaction) async {
+            final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
+            code = ZyiarahOrderUtil.formatSmartCode(nextId);
+            transaction.set(orderRef, {...orderPayload, 'code': code});
+          });
+        } catch (txErr) {
+          // احتياطي حرج: الدفع الأصلي (Apple/Google/Samsung Pay) لا يُنشئ الطلب مسبقاً
+          // كالبطاقة. لو فشلت معاملة العدّاد بعد نجاح الخصم، كانت تبقى «دفعة يتيمة» بلا طلب
+          // (مالٌ مخصوم دون طلب). نضمن إنشاء الطلب بكود احتياطي كي يؤكّده verify/الـ webhook.
+          debugPrint('[order create tx failed → fallback] $txErr');
+          code = 'ZY-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
+          await orderRef.set({...orderPayload, 'code': code, 'counter_fallback': true});
+        }
       }
 
       // تعيين السائق (للساعة) وإشعار العميل يُنقَلان لمهمة الخلفية أدناه حتى لا
