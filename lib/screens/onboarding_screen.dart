@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:lottie/lottie.dart';
 import 'package:zyiarah/screens/login_screen.dart';
 import 'package:zyiarah/screens/guest_explore_screen.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
@@ -18,21 +17,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   int _currentPage = 0;
   static const Color _brand = Color(0xFF5D1B5E);
 
-  final List<Map<String, String>> _data = [
+  // أيقونات محلّية مميّزة لكل شريحة — بديل موثوق عن Lottie عبر الإنترنت الذي كان
+  // يفشل فيسقط للمكنسة نفسها في الشرائح الثلاث.
+  final List<Map<String, dynamic>> _data = [
     {
       "title": "أهلاً بكِ في زيارة",
       "desc": "المنصة الأولى لخدمات النظافة والصيانة في القطاع الجبلي بجازان.",
-      "lottie": "https://lottie.host/9972352b-4780-4545-8f65-021199346747/XJzQitkR2f.json"
+      "icon": Icons.cleaning_services_rounded,
     },
     {
       "title": "دفع آمن وتقسيط",
       "desc": "احجزي خدمتكِ الآن وادفعي بكل سهولة عبر تمارا بنظام التقسيط المريح.",
-      "lottie": "https://lottie.host/341f22e8-9614-4114-8785-30fa9831c238/X73rA1Z5a1.json"
+      "icon": Icons.credit_card_rounded,
     },
     {
       "title": "تتبع حي ودقيق",
       "desc": "تابعي موقع السائق والعاملة لحظة بلحظة حتى وصولهم لباب منزلكِ.",
-      "lottie": "https://lottie.host/6429f55e-a61d-4519-94b2-0545cf026131/V088G0M8hS.json"
+      "icon": Icons.location_on_rounded,
     }
   ];
 
@@ -94,26 +95,30 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  Widget _buildPage(Map<String, String> item) {
+  Widget _buildPage(Map<String, dynamic> item) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32.0),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Lottie.network(item['lottie']!, height: 260, repeat: true, fit: BoxFit.contain,
-            errorBuilder: (c, e, s) => const SizedBox(
-              height: 260,
-              child: Icon(Icons.cleaning_services_rounded, size: 120, color: Color(0xFF5D1B5E)),
-            )),
+          Container(
+            width: 200,
+            height: 200,
+            decoration: BoxDecoration(
+              color: _brand.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(item['icon'] as IconData, size: 96, color: _brand),
+          ),
           const SizedBox(height: 48),
           Text(
-            item['title']!,
+            item['title'] as String,
             style: GoogleFonts.tajawal(fontSize: 26, fontWeight: FontWeight.bold, color: _brand),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
           Text(
-            item['desc']!,
+            item['desc'] as String,
             style: GoogleFonts.tajawal(fontSize: 15, color: Colors.grey[600], height: 1.6),
             textAlign: TextAlign.center,
           ),
@@ -147,8 +152,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 250),
               child: isLast
-                  ? _buildActionButton('ابدأ الآن', Icons.arrow_forward_rounded, _goToLogin)
-                  : _buildActionButton('التالي', Icons.arrow_forward_ios_rounded, () {
+                  ? _buildActionButton('ابدأ الآن', _goToLogin)
+                  : _buildActionButton('التالي', () {
                       ZyiarahCoreService.triggerHapticSelection();
                       _controller.nextPage(
                         duration: const Duration(milliseconds: 500),
@@ -173,19 +178,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  Widget _buildActionButton(String label, IconData icon, VoidCallback onTap) {
-    return ElevatedButton.icon(
+  Widget _buildActionButton(String label, VoidCallback onTap) {
+    // نصّ واضح بلا سهم اتجاهي: الشيفرون في RTL كان يُقرأ كـ«رجوع» فيربك.
+    return ElevatedButton(
       key: ValueKey(label),
       onPressed: onTap,
-      icon: Icon(icon, size: 20),
-      label: Text(label, style: GoogleFonts.tajawal(fontSize: 16, fontWeight: FontWeight.bold)),
       style: ElevatedButton.styleFrom(
         backgroundColor: _brand,
         foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.symmetric(vertical: 18),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         elevation: 0,
       ),
+      child: Text(label,
+          style: GoogleFonts.tajawal(fontSize: 17, fontWeight: FontWeight.bold, letterSpacing: 0.3)),
     );
   }
 }

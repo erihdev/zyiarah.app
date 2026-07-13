@@ -346,8 +346,15 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
   Future<void> _performLogout() async {
     HapticFeedback.lightImpact();
     // الخروج المركزي يتولى إيقاف مستمع الصيانة وتنظيف الإشعارات قبل تسجيل الخروج
-    await _firebaseService.signOut();
-    if (mounted) context.go('/');
+    try {
+      await _firebaseService.signOut();
+    } catch (_) {}
+    if (!mounted) return;
+    // هذه الشاشة مدفوعة عبر Navigator.push فوق موجّه GoRouter، فـ go('/') وحده كان
+    // يغيّر المسار تحتها دون إزالتها → لا يظهر شيء. نُفرّغ المكدّس للجذر حيث يعيد
+    // AuthWrapper البناء تلقائياً لشاشة الترحيب/الدخول بعد تحديث حالة المصادقة.
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    context.go('/');
   }
 
   Future<void> _deleteAccount() async {
