@@ -1189,6 +1189,37 @@ class _DriverDashboardState extends State<DriverDashboard> {
       final amount = (data['amount'] ?? 0.0).toDouble();
       final clientName = data['client_name'] ?? 'العميل';
 
+      // (جيوفنس متساهل) عند الإكمال: لو GPS متاح وموقع الطلب معروف والمسافة > 1كم،
+      // امنع (احتيال صارخ). fail-open: إذنٌ مرفوض/لا GPS/لا موقع → اسمح دون منع.
+      // نسجّل المسافة على الطلب دائماً (completed_distance_m) لمراجعة الإدارة.
+      double? completionDistanceM;
+      if (status == 'completed') {
+        final GeoPoint? loc = data['location'] as GeoPoint?;
+        if (loc != null) {
+          try {
+            final pos = await Geolocator.getCurrentPosition(
+              locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+            ).timeout(const Duration(seconds: 8));
+            completionDistanceM = Geolocator.distanceBetween(
+                pos.latitude, pos.longitude, loc.latitude, loc.longitude);
+            if (completionDistanceM > 1000) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(
+                    'أنت بعيد عن موقع الخدمة (${(completionDistanceM / 1000).toStringAsFixed(1)} كم). اقترب من الموقع لإتمام الطلب.',
+                    style: GoogleFonts.tajawal()),
+                  backgroundColor: Colors.red.shade800,
+                  behavior: SnackBarBehavior.floating,
+                ));
+              }
+              return; // امنع الإكمال — finally يُعيد ضبط _isUpdatingStatus
+            }
+          } catch (_) {
+            // fail-open: تعذّر تحديد الموقع (إذن مرفوض/مهلة) → لا نمنع الإكمال
+          }
+        }
+      }
+
       // (C) حقول دفع COD — تُدمج لاحقاً ذرّياً داخل Transaction الإكمال
       Map<String, dynamic>? codPaymentUpdates;
 
@@ -1330,8 +1361,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
       // (C) Transaction واحد ذرّي: الحالة + دفع COD معاً. يفشل بالكامل دون اتصال،
       // فلا يبقى الطلب "مدفوعاً وغير مكتمل" ولا العكس.
+      final Map<String, dynamic> extraUpdates = {...?codPaymentUpdates};
+      if (completionDistanceM != null) {
+        extraUpdates['completed_distance_m'] = completionDistanceM.round();
+      }
       await _orderService.updateOrderStatus(id, status,
-          driverId: _currentDriverId, extraOrderUpdates: codPaymentUpdates);
+          driverId: _currentDriverId,
+          extraOrderUpdates: extraUpdates.isEmpty ? null : extraUpdates);
 
       // إشعار الإدارة بتحصيل النقد — بعد نجاح الإكمال فقط
       if (codPaymentUpdates != null) {
