@@ -134,10 +134,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             _phoneController.text = phone;
           }
 
-          // Auto-select subscription if available and not paying for a contract
-          if ((_currentUser?.visitsRemaining ?? 0) > 0 && widget.contractId == null) {
-            _selectedPaymentMethod = 'subscription';
-          }
 
           _tamaraEnabled = configDoc.data()?['tamara_enabled'] as bool? ?? false;
         });
@@ -1358,7 +1354,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   Widget _buildPaymentMethods() {
-    final int remainingVisits = _currentUser?.visitsRemaining ?? 0;
     final String publishableKey =
         dotenv.env['MOYASAR_PUBLISHABLE_KEY'] ?? '';
     final bool moyasarReady = publishableKey.isNotEmpty;
@@ -1371,17 +1366,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 fontWeight: FontWeight.bold, fontSize: 16)),
         const SizedBox(height: 15),
 
-        // --- الدفع بالباقة ---
-        if (remainingVisits > 0 && widget.contractId == null) ...[
-          _buildPaymentOption(
-            id: 'subscription',
-            title: 'الدفع بالباقة',
-            subtitle: 'سيتم خصم زيارة واحدة (المتبقي: $remainingVisits)',
-            icon: Icons.workspace_premium,
-            color: Colors.amber.shade700,
-          ),
-          const SizedBox(height: 12),
-        ],
+        // «الدفع بالباقة» أُزيل عمداً: زيارات الاشتراك مُولّدة ومجدولة مسبقاً (SUB-*)،
+        // فليست رصيداً يُنفق على حجوزات عادية — استخدامها هنا كان يخصم مزدوجاً ويجعل
+        // العدّاد سالباً. العميل يستهلك اشتراكه عبر زياراته المجدولة فقط.
 
         // --- بطاقة ائتمانية (Moyasar) ---
         if (moyasarReady)
