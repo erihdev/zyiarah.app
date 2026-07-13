@@ -2686,6 +2686,86 @@ exports.sweepUnassignedPaidOrders = onSchedule(
 );
 
 // ════════════════════════════════════════════════════════════════════════
+// مُصالِح الدفعات اليتيمة (Apple/Google/Samsung Pay): يفحص دفعات Moyasar المدفوعة
+// دورياً ويُنشئ أي طلب مفقود من الـ metadata — مستقلّ تماماً عن التطبيق. الدفع الأصلي
+// يُعلّق التطبيق في الخلفية فقد لا يستدعي verifyMoyasarPayment، فيبقى مالٌ بلا طلب.
+// هذا يضمن ظهور الطلب خادميّاً خلال دقائق دون أي اعتماد على التطبيق أو الويب هوك.
+// ════════════════════════════════════════════════════════════════════════
+exports.reconcileOrphanPayments = onSchedule(
+    {schedule: "every 5 minutes", secrets: ["MOYASAR_SECRET_KEY"], cpu: 0.083},
+    async () => {
+      const secret = moyasarSecretKey.value();
+      if (!secret) { console.error("[reconcile] Moyasar secret not set"); return null; }
+      const authHeader = `Basic ${Buffer.from(secret + ":").toString("base64")}`;
+      const db = admin.firestore();
+      let recovered = 0;
+      try {
+        const resp = await fetch("https://api.moyasar.com/v1/payments?per=25",
+            {method: "GET", headers: {Authorization: authHeader}});
+        if (!resp.ok) { console.error("[reconcile] list failed", resp.status); return null; }
+        const data = await resp.json();
+        for (const p of (data.payments || [])) {
+          if (p.status !== "paid") continue;
+          const md = p.metadata || {};
+          const oid = md.order_id;
+          // نحتاج تفاصيل كافية لبناء طلب حقيقي — نسخ التطبيق القديمة ترسل order_id فقط.
+          if (!oid || !md.service_name) continue;
+          let exists = false;
+          for (const col of ["orders", "store_orders", "maintenance_requests", "contracts"]) {
+            const d = await db.collection(col).doc(oid).get();
+            if (d.exists) { exists = true; break; }
+          }
+          if (exists) continue;
+          const isHourly = String(md.is_hourly) === "1";
+          const amountSar = Number(p.amount) / 100; // المخصوم فعلاً (مرجع موثوق)
+          let code = `ZY-${Date.now().toString().slice(5)}`;
+          try {
+            code = await db.runTransaction(async (tx) => {
+              const cRef = db.collection("metadata").doc("order_counter");
+              const cs = await tx.get(cRef);
+              const next = ((cs.exists ? cs.data().last_id : 100) || 100) + 1;
+              if (cs.exists) tx.update(cRef, {last_id: next}); else tx.set(cRef, {last_id: next});
+              return String(next);
+            });
+          } catch (e) { console.error("[reconcile] counter:", e); }
+          const lat = Number(md.lat); const lng = Number(md.lng);
+          const payload = {
+            code, client_id: md.client_id, client_phone: md.client_phone || "",
+            service_type: md.service_name || "خدمة زيارة", service_name: md.service_name || "خدمة زيارة",
+            amount: amountSar, is_paid: true, payment_status: "paid",
+            moyasar_payment_id: p.id, moyasar_status: "paid",
+            status: isHourly ? "pending" : "pending_admin_approval",
+            payment_method: (p.source && p.source.type) || "applepay",
+            hours_contracted: Number(md.hours || 4), worker_count: Number(md.worker_count || 1),
+            zone_name: md.zone_name || null,
+            location: (!isNaN(lat) && !isNaN(lng)) ?
+              new admin.firestore.GeoPoint(lat, lng) : new admin.firestore.GeoPoint(24.7136, 46.6753),
+            created_at: admin.firestore.FieldValue.serverTimestamp(),
+            server_created_from_payment: true, reconciled: true,
+          };
+          if (md.service_date) {
+            const sd = new Date(md.service_date);
+            if (!isNaN(sd.getTime())) {
+              payload.service_date = admin.firestore.Timestamp.fromDate(sd);
+              if (isHourly) {
+                const pad = (n) => String(n).padStart(2, "0");
+                payload.booking_date = `${sd.getFullYear()}-${pad(sd.getMonth() + 1)}-${pad(sd.getDate())}`;
+                payload.booking_time_slot = `${pad(sd.getHours())}:00`;
+              }
+            }
+          }
+          await db.collection("orders").doc(oid).set(payload);
+          console.log(`[reconcile] RECOVERED order ${oid} (${amountSar} SAR) code ${code}`);
+          recovered++;
+        }
+      } catch (e) {
+        console.error("[reconcile] error:", e);
+      }
+      if (recovered) console.log(`[reconcile] recovered ${recovered} orphan order(s).`);
+      return null;
+    });
+
+// ════════════════════════════════════════════════════════════════════════
 // احتياطي تمارا: تأكيد الطلبات غير المؤكّدة عبر واجهة تمارا مباشرةً — Cron كل
 // 3 دقائق. يعوّض حجب الويب هوك (Cloud Run invoker): يستعلم حالة الطلب، يفوّض
 // approved (فيلتقطها الحساب تلقائياً)، ويقلب is_paid. لا يعتمد على وصول الويب هوك.
