@@ -12,8 +12,6 @@ import 'package:zyiarah/screens/order_tracking_screen.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/utils/zyiarah_strings.dart';
-import 'package:lottie/lottie.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/popup_service.dart';
 import 'package:zyiarah/services/app_update_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -135,10 +133,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
                         _buildAnimatedItem(_buildSectionTitle(ZyiarahStrings.servicesHeader, Icons.auto_awesome, Colors.amber)),
                         const SizedBox(height: 15),
                         _buildAnimatedItem(_buildServicesGrid()),
-                        const SizedBox(height: 25),
-                        _buildAnimatedItem(_buildSectionTitle(ZyiarahStrings.latestBookings, Icons.calendar_month, const Color(0xFF5D1B5E))),
-                        const SizedBox(height: 15),
-                        _buildAnimatedItem(_buildLatestBookings(orderProvider.activeOrders.take(5).toList())),
                         const SizedBox(height: 30),
                       ],
                     ),
@@ -940,87 +934,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
     ),
     );
   }
-
-  Widget _buildLatestBookings(List<DocumentSnapshot> orders) {
-    return Column(
-      children: [
-        if (orders.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(30),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 20, offset: const Offset(0, 8)),
-              ],
-            ),
-            child: Column(
-              children: [
-                Lottie.network(
-                  'https://lottie.host/9972352b-4780-4545-8f65-021199346747/XJzQitkR2f.json', // Search/Empty anim
-                  height: 150,
-                ),
-                const SizedBox(height: 10),
-                Text(ZyiarahStrings.noBookings, style: GoogleFonts.tajawal(color: Colors.grey.shade600, fontSize: 14, fontWeight: FontWeight.bold)),
-              ],
-            ),
-          )
-        else
-          ...orders.map((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final status = data['status'] ?? 'pending';
-            final isCompleted = status == 'completed';
-            return GestureDetector(
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen())),
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(0, 4)),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF5D1B5E).withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.cleaning_services_rounded, color: Color(0xFF5D1B5E), size: 20),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(data['service_type'] ?? 'خدمة زيارة', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A))),
-                          const SizedBox(height: 2),
-                          Text(
-                            isCompleted ? 'تم التنفيذ ✓' : 'قيد المعالجة',
-                            style: TextStyle(
-                              color: isCompleted ? const Color(0xFF10B981) : const Color(0xFF64748B),
-                              fontSize: 11,
-                              fontWeight: isCompleted ? FontWeight.w600 : FontWeight.normal,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.chevron_left_rounded, color: Color(0xFFCBD5E1), size: 20),
-                  ],
-                ),
-              ),
-            );
-          }),
-      ],
-    );
-  }
-
 
   Widget _buildAnimatedItem(Widget child) {
     return TweenAnimationBuilder<double>(
