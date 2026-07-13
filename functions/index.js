@@ -2708,14 +2708,38 @@ exports.reconcileOrphanPayments = onSchedule(
           if (p.status !== "paid") continue;
           const md = p.metadata || {};
           const oid = md.order_id;
-          // نحتاج تفاصيل كافية لبناء طلب حقيقي — نسخ التطبيق القديمة ترسل order_id فقط.
-          if (!oid || !md.service_name) continue;
-          let exists = false;
+          if (!oid) continue;
+          let foundRef = null; let foundData = null;
           for (const col of ["orders", "store_orders", "maintenance_requests", "contracts"]) {
             const d = await db.collection(col).doc(oid).get();
-            if (d.exists) { exists = true; break; }
+            if (d.exists) { foundRef = d.ref; foundData = d.data(); break; }
           }
-          if (exists) continue;
+          // السجلّ موجود لكنه غير مدفوع (قُتل التطبيق قبل verify) → أكّده إن غطّى المبلغ
+          // المدفوع المستحقَّ. flip is_paid يُشغّل مُشغّلاته (activateContractOnPaid للعقود…).
+          if (foundRef) {
+            if (foundData.is_paid !== true) {
+              const paidH = Math.round(Number(p.amount));
+              const expected = Number(
+                  foundData.amount ?? foundData.final_amount ??
+                  foundData.total_amount ?? foundData.planPrice ?? 0);
+              const expectedH = Math.round(expected * 100);
+              if (expectedH > 0 && paidH >= expectedH) {
+                await foundRef.update({
+                  is_paid: true, payment_status: "paid",
+                  moyasar_payment_id: p.id, moyasar_status: "paid",
+                  updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                console.log(`[reconcile] CONFIRMED existing ${oid} (paid ${paidH}/${expectedH})`);
+                recovered++;
+              } else {
+                console.warn(`[reconcile] amount too low for ${oid}: paid ${paidH} expected ${expectedH} — skip`);
+              }
+            }
+            continue; // موجود → لا نُنشئ
+          }
+          // غير موجود → نُنشئه من الـ metadata، لكن ذلك يحتاج تفاصيل كافية (نسخ قديمة
+          // ترسل order_id فقط فلا يمكن بناء طلب حقيقي — تلك تبقى للاسترداد اليدوي).
+          if (!md.service_name) continue;
           const isHourly = String(md.is_hourly) === "1";
           const amountSar = Number(p.amount) / 100; // المخصوم فعلاً (مرجع موثوق)
           let code = `ZY-${Date.now().toString().slice(5)}`;

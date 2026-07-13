@@ -318,29 +318,21 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
       (route) => route.isFirst,
     );
     } catch (e) {
-      // الدفع قد يكون تم لكن إنهاء الطلب فشل — لا تُبقِ العميل على دوران أبدي.
+      // الدفع نجح والطلب موجود مسبقاً (أُنشئ قبل الدفع) — لا نُظهر أي خطأ إطلاقاً.
+      // verify يؤكّده، والمُصالِح الدوري يؤكّد أي سجلّ غير مدفوع. نعرض شاشة النجاح دائماً.
+      debugPrint('[store finalize non-fatal after paid] $e');
       if (!mounted) return;
       setState(() => _isLoading = false);
-      showDialog(
-        context: context,
-        builder: (ctx) => Directionality(
-          textDirection: TextDirection.rtl,
-          child: AlertDialog(
-            title: const Text('تعذّر إتمام الطلب'),
-            content: Text(
-                'إن كنت قد دُفعت فلا تقلق — تواصل مع الدعم مع الرقم المرجعي: '
-                '${widget.orderCode}. لن يُخصم منك مرتين.'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  Navigator.of(context).popUntil((r) => r.isFirst);
-                },
-                child: const Text('حسناً'),
-              ),
-            ],
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => ZyiarahOrderSuccessScreen(
+            orderCode: widget.orderCode,
+            invoiceCollection: 'store_orders',
+            title: 'تم تأكيد الطلب!',
+            subtitle: 'استلمنا طلبك من المتجر، سنجهّزه ونتواصل معك للتوصيل.',
           ),
         ),
+        (route) => route.isFirst,
       );
     }
   }
