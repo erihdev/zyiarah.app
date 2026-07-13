@@ -126,9 +126,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                         _buildAnimatedItem(_buildPromoBanners()),
                         _buildMaintenanceAlertCard(user?.uid),
                         _buildAnimatedItem(_buildSubscriptionCards(user?.uid)),
-                        const SizedBox(height: 10),
-                        _buildAnimatedItem(_buildMetricsList(user?.uid)),
-                        const SizedBox(height: 25),
+                        const SizedBox(height: 15),
                         _buildAnimatedItem(_buildSectionTitle(ZyiarahStrings.servicesHeader, Icons.auto_awesome, Colors.amber)),
                         const SizedBox(height: 15),
                         _buildAnimatedItem(_buildServicesGrid()),
@@ -685,93 +683,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
           ),
         );
       },
-    );
-  }
-
-  Widget _buildMetricsList(String? uid) {
-    if (uid == null) return const SizedBox.shrink();
-
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
-      builder: (context, userSnapshot) {
-        final isWaiting = userSnapshot.connectionState == ConnectionState.waiting && !userSnapshot.hasData;
-        final userData = userSnapshot.data?.data() as Map<String, dynamic>?;
-        final rating = isWaiting ? '--' : (userData?['rating'] ?? 4.9).toString();
-        final orderProvider = Provider.of<ZyiarahOrderProvider>(context, listen: false);
-        final totalBookings = orderProvider.recentOrders.length.toString();
-
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          clipBehavior: Clip.none,
-          child: Row(
-            children: [
-                  _buildColorfulMetricCard(
-                    title: 'إجمالي الحجوزات',
-                    value: totalBookings,
-                    iconPath: Icons.calendar_today_rounded,
-                    cardColor: const Color(0xFF3B82F6),
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdersListScreen())),
-                  ),
-                  const SizedBox(width: 15),
-                  _buildColorfulMetricCard(
-                     title: 'تقييمك',
-                     value: '$rating ★',
-                     iconPath: Icons.star_border_rounded,
-                     cardColor: const Color(0xFFF59E0B),
-                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahProfileScreen())),
-                  ),
-                ],
-              ),
-            );
-      }
-    );
-  }
-
-  Widget _buildColorfulMetricCard({
-    required String title,
-    required String value,
-    required IconData iconPath,
-    required Color cardColor,
-    VoidCallback? onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 200,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: const TextStyle(color: Color(0xFF64748B), fontSize: 13, fontWeight: FontWeight.w500)),
-              const SizedBox(height: 8),
-              Text(value, style: const TextStyle(color: Color(0xFF0F172A), fontSize: 24, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: cardColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(iconPath, color: cardColor, size: 28),
-          ),
-        ],
-      ),
-      ),
     );
   }
 

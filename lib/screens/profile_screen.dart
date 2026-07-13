@@ -13,6 +13,8 @@ import 'package:zyiarah/screens/support_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
 import 'package:zyiarah/services/zyiarah_wallet_service.dart';
 import 'package:zyiarah/services/zyiarah_referral_service.dart';
+import 'package:provider/provider.dart';
+import 'package:zyiarah/providers/order_provider.dart';
 
 class ZyiarahProfileScreen extends StatefulWidget {
   const ZyiarahProfileScreen({super.key});
@@ -473,6 +475,9 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               children: [
+                // ── Stats (نُقلت من الصفحة الرئيسية) ─────────
+                _buildStatsRow(),
+                const SizedBox(height: 14),
                 // ── Premium Financial Hub ──────────────────
                 _buildFinancialHub(),
                 const SizedBox(height: 14),
@@ -490,6 +495,90 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                 const SizedBox(height: 24),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // STATS (إجمالي الحجوزات + تقييمك) — منقولة من الرئيسية
+  // ─────────────────────────────────────────────────────────
+
+  Widget _buildStatsRow() {
+    final double rating = _currentUser?.rating ?? 4.9;
+    final String ratingText = rating == rating.roundToDouble()
+        ? rating.toStringAsFixed(0)
+        : rating.toStringAsFixed(1);
+    final String totalBookings =
+        context.watch<ZyiarahOrderProvider>().recentOrders.length.toString();
+    return Row(
+      children: [
+        Expanded(
+          child: _buildStatCard(
+            'إجمالي الحجوزات',
+            totalBookings,
+            Icons.calendar_today_rounded,
+            const Color(0xFF3B82F6),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildStatCard(
+            'تقييمك',
+            '$ratingText ★',
+            Icons.star_rounded,
+            const Color(0xFFF59E0B),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500)),
+                const SizedBox(height: 6),
+                Text(value,
+                    style: const TextStyle(
+                        color: Color(0xFF0F172A),
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 24),
           ),
         ],
       ),
