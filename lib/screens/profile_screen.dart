@@ -13,6 +13,7 @@ import 'package:zyiarah/screens/support_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
 import 'package:zyiarah/services/zyiarah_wallet_service.dart';
 import 'package:zyiarah/services/zyiarah_referral_service.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class ZyiarahProfileScreen extends StatefulWidget {
   const ZyiarahProfileScreen({super.key});
@@ -33,6 +34,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
   ZyiarahUser? _currentUser;
   bool _isLoading = true;
   int? _totalBookings; // عدد فعلي عبر count() بدل طول قائمة مقصوصة عند 20
+  String _appVersion = ''; // يُقرأ ديناميكياً من الحزمة بدل رقم ثابت قديم
 
   // Wallet & loyalty state
   double _walletBalance = 0.0;
@@ -48,6 +50,14 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
   void initState() {
     super.initState();
     _loadUserData();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) setState(() => _appVersion = '${info.version} (${info.buildNumber})');
+    } catch (_) {/* غير حرِج */}
   }
 
   Future<void> _loadUserData() async {
@@ -1178,7 +1188,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
       onLongPress: () => _showThankYouMessage(context),
       child: Text.rich(
         TextSpan(
-          text: 'إصدار التطبيق 1.2.23\nمؤسسة معاذ يحي محمد المالكي\nتم التطوير بواسطة\n',
+          text: 'إصدار التطبيق ${_appVersion.isEmpty ? '—' : _appVersion}\nمؤسسة معاذ يحي محمد المالكي\nتم التطوير بواسطة\n',
           style: GoogleFonts.tajawal(fontSize: 10, color: Colors.grey),
           children: [
             TextSpan(
