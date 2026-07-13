@@ -1104,9 +1104,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                         const SizedBox(height: 20),
                         _buildCouponSection(),
                         const SizedBox(height: 20),
-                        _buildPaymentMethods(),
-                        const SizedBox(height: 25),
+                        // الموافقة على الشروط تحت كود الخصم مباشرةً (بدل أسفل الصفحة).
                         _buildTermsAndConditions(),
+                        const SizedBox(height: 20),
+                        _buildPaymentMethods(),
                         const SizedBox(height: 100),
                       ],
                     ),
