@@ -163,6 +163,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
           widget.orderId,
           'completed',
           driverId: _selectedDriverId,
+          adminOverride: true, // إكمال يدوي إداري — يتجاوز فرض التسلسل
         );
       } else {
         // Non-terminal: assignment / manual status override written directly.

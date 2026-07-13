@@ -138,20 +138,27 @@ class ZyiarahOrderService {
 
   // تحديث حالة الطلب باستخدام Transaction لضمان سلامة البيانات ومنع التعارض
   Future<void> updateOrderStatus(String orderId, String status,
-      {String? driverId, Map<String, dynamic>? extraOrderUpdates}) async {
+      {String? driverId, Map<String, dynamic>? extraOrderUpdates,
+      bool adminOverride = false}) async {
     await _db.runTransaction((transaction) async {
       final orderRef = _db.collection('orders').doc(orderId);
       final orderSnap = await transaction.get(orderRef);
-      
+
       if (!orderSnap.exists) throw Exception("الطلب غير موجود");
-      
+
       final orderData = orderSnap.data() as Map<String, dynamic>;
       final currentStatus = orderData['status'] as String?;
-      
+
       // منع التحديث إذا كانت الحالة هي نفسها أو إذا كانت الحالة النهائية (مكتمل/ملغي) قد تم الوصول إليها
       if (currentStatus == status) return;
       if (currentStatus == 'completed' || currentStatus == 'cancelled') {
         throw Exception("لا يمكن تعديل حالة طلب مكتمل أو ملغي");
+      }
+      // (تسلسل منطقي) لا يُكمَل طلب لم يمرّ بـ in_progress — أي لم يصل السائق ويبدأ
+      // الخدمة فعلاً — فلا يبقى «مكتمل» بسجلّ زمني ناقص. الإدارة تتجاوزه صراحةً
+      // (adminOverride) للإكمال اليدوي من لوحة التحكم.
+      if (status == 'completed' && !adminOverride && currentStatus != 'in_progress') {
+        throw Exception("لا يمكن إكمال الطلب قبل بدء الخدمة");
       }
 
       final Map<String, dynamic> updates = {
