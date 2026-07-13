@@ -824,7 +824,31 @@ exports.processNotificationTriggers = onDocumentCreated(
           console.warn(`[EMAIL] Refused relay to unregistered recipient: ${recipientEmail}`);
           await snap.ref.update({emailStatus: "refused_unregistered_recipient"});
         }
-        if (wantsEmail && emailAllowed) {
+        // SECURITY: البريد لا يُرسله إلا الخادم (createdBy='server') أو موظّف (إدارة/سائق).
+        // عميلٌ عادي لا مسوّغ له لإرسال بريد — يمنع تصيّداً بنطاق الشركة عبر SDK الخام.
+        // (queuePush يختم createdBy='server'؛ بريد الصيانة/الإسناد ينشئه أدمن/سائق.)
+        let emailSenderOk = true;
+        if (wantsEmail) {
+          const cb = trigger.createdBy;
+          if (cb === "server") {
+            emailSenderOk = true;
+          } else if (!cb) {
+            emailSenderOk = false;
+          } else {
+            try {
+              const cu = await admin.firestore().collection("users").doc(String(cb)).get();
+              const r = cu.exists ? cu.data().role : null;
+              emailSenderOk = r != null && r !== "client";
+            } catch (_) {
+              emailSenderOk = false;
+            }
+          }
+          if (!emailSenderOk) {
+            console.warn(`[EMAIL] Refused relay from non-staff creator: ${cb}`);
+            await snap.ref.update({emailStatus: "refused_non_staff_sender"});
+          }
+        }
+        if (wantsEmail && emailAllowed && emailSenderOk) {
           const resendKey = resendApiKeySecret.value();
           if (!resendKey) {
             console.error("[EMAIL] RESEND_API_KEY secret is not set");
@@ -2008,12 +2032,12 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
     // فلا تُحجَز زيارة تتعارض مع موعد اختاره عميل آخر مسبقاً.
     const slotHours = Number(cur.hours_contracted || 4);
     const slotEnd = new Date(startDateTime.getTime() + slotHours * 60 * 60 * 1000);
-    const dayStartC = new Date(
-        startDateTime.getFullYear(), startDateTime.getMonth(), startDateTime.getDate());
-    const dayEndC = new Date(dayStartC.getTime() + 24 * 60 * 60 * 1000);
+    // نافذة [البداية−8س، النهاية): تلتقط مهمّة تبدأ قبل منتصف ليل UTC وتمتدّ للفترة
+    // (حدود اليوم الثابتة كانت تُفوّت تعارض المهام العابرة لمنتصف الليل).
+    const winStart = new Date(startDateTime.getTime() - 8 * 60 * 60 * 1000);
     const dayQ = db.collection("orders")
-        .where("service_date", ">=", admin.firestore.Timestamp.fromDate(dayStartC))
-        .where("service_date", "<", admin.firestore.Timestamp.fromDate(dayEndC))
+        .where("service_date", ">=", admin.firestore.Timestamp.fromDate(winStart))
+        .where("service_date", "<", admin.firestore.Timestamp.fromDate(slotEnd))
         .where("status", "in", ["scheduled", "on_the_way", "in_progress", "accepted"]);
     const daySnap = await tx.get(dayQ);
     for (const d2 of daySnap.docs) {
@@ -2418,6 +2442,26 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
     if (st !== "pending_admin_approval" && st !== "pending") {
       throw new HttpsError("failed-precondition", "تم اعتماد الطلب بالفعل من مدير آخر");
     }
+    // (منع الحجز المزدوج) إعادة فحص حرّية السائق ذرّياً داخل المعاملة — الفحص أعلاه
+    // خارج المعاملة كان يسمح لموافقتين متزامنتين على طلبين مختلفين بإسناد نفس السائق
+    // لفترة متداخلة. النافذة تمتدّ 8س للخلف لالتقاط مهمّة تعبر منتصف ليل UTC.
+    const slotEnd = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
+    const winStart = new Date(startDateTime.getTime() - 8 * 60 * 60 * 1000);
+    const conflictQ = db.collection("orders")
+        .where("service_date", ">=", admin.firestore.Timestamp.fromDate(winStart))
+        .where("service_date", "<", admin.firestore.Timestamp.fromDate(slotEnd))
+        .where("status", "in", ["scheduled", "on_the_way", "in_progress", "accepted"]);
+    const conflictSnap = await tx.get(conflictQ);
+    for (const d2 of conflictSnap.docs) {
+      const od = d2.data();
+      if (od.driver_id !== driverId || !od.service_date) continue;
+      const oStart = od.service_date.toDate();
+      const oEnd = new Date(oStart.getTime() + Number(od.hours_contracted || 4) * 60 * 60 * 1000);
+      if (startDateTime < oEnd && oStart < slotEnd) {
+        throw new HttpsError("failed-precondition",
+            "السائق مشغول بمهمة أخرى في هذا الوقت — اختر سائقاً أو موعداً آخر");
+      }
+    }
     tx.update(orderRef, {
       status: "scheduled",
       driver_id: driverId,
@@ -2656,15 +2700,24 @@ exports.sweepUnassignedPaidOrders = onSchedule(
     async () => {
       const db = admin.firestore();
       const now = Date.now();
-      // status=pending (مساواة) + service_date نطاق → يغطيه فهرس (status,service_date).
-      const snap = await db.collection("orders")
-          .where("status", "==", "pending")
-          .where("service_date", ">=",
-              admin.firestore.Timestamp.fromDate(new Date(now - 60 * 60 * 1000)))
-          .get();
+      const cutoff = admin.firestore.Timestamp.fromDate(new Date(now - 60 * 60 * 1000));
+      // استعلامان بمساواة على status (كلاهما يغطيه فهرس (status,service_date)):
+      // pending العادية + زيارات الاشتراك المعلّقة (pending_admin_approval + contract_id).
+      // طلبات الخدمة العادية بحالة pending_admin_approval تنتظر مراجعة الإدارة عمداً،
+      // فلا نُسنِدها آلياً — نقتصر على زيارات الاشتراك المدفوعة مسبقاً.
+      const [snapPending, snapSub] = await Promise.all([
+        db.collection("orders").where("status", "==", "pending")
+            .where("service_date", ">=", cutoff).get(),
+        db.collection("orders").where("status", "==", "pending_admin_approval")
+            .where("service_date", ">=", cutoff).get(),
+      ]);
+      const docs = [
+        ...snapPending.docs,
+        ...snapSub.docs.filter((doc) => !!doc.data().contract_id),
+      ];
 
       let assigned = 0;
-      for (const doc of snap.docs) {
+      for (const doc of docs) {
         const d = doc.data();
         // فقط الطلبات المدفوعة، بلا سائق، وذات موعد.
         if (d.driver_id || d.is_paid !== true || !d.service_date) continue;

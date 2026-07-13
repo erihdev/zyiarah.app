@@ -103,7 +103,9 @@ service cloud.firestore {
           !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['role', 'staff_role', 'wallet', 'rating_avg', 'rating_count',
                      'total_orders', 'is_blocked', 'visits_remaining',
-                     'subscription_expiry', 'subscription_total_visits']));
+                     'subscription_expiry', 'subscription_total_visits',
+                     // خادمية فقط (activateContractOnPaid) — منعُ تزييف بطاقة اشتراك.
+                     'has_active_subscription', 'subscription_type']));
 
       allow delete: if isSuperAdmin();
     }
@@ -244,7 +246,10 @@ service cloud.firestore {
       allow create, update: if isLoggedIn() && (
         isAdmin() ||
         (request.auth.uid == tokenId &&
-          request.resource.data.get('role', 'client') == getUserData().get('role', 'client')));
+          request.resource.data.get('role', 'client') == getUserData().get('role', 'client') &&
+          // SECURITY: لا يجوز وسم الجهاز بدور فرعي إداري لا يملكه المستخدم — توجيه
+          // ADMIN_BROADCAST يفلتر على staff_role، فتركُه دون قيد كان يتيح التنصّت.
+          request.resource.data.get('staff_role', null) == getUserData().get('staff_role', null)));
     }
     match /fcm_token/{tokenId} {
       allow read, delete: if isLoggedIn() &&
@@ -252,7 +257,10 @@ service cloud.firestore {
       allow create, update: if isLoggedIn() && (
         isAdmin() ||
         (request.auth.uid == tokenId &&
-          request.resource.data.get('role', 'client') == getUserData().get('role', 'client')));
+          request.resource.data.get('role', 'client') == getUserData().get('role', 'client') &&
+          // SECURITY: لا يجوز وسم الجهاز بدور فرعي إداري لا يملكه المستخدم — توجيه
+          // ADMIN_BROADCAST يفلتر على staff_role، فتركُه دون قيد كان يتيح التنصّت.
+          request.resource.data.get('staff_role', null) == getUserData().get('staff_role', null)));
     }
 
     // ─── Wallets & Transactions ───────────────────────────────────────────
