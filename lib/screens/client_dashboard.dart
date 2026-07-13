@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:zyiarah/screens/profile_screen.dart';
-import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/screens/hourly_details_screen.dart';
 import 'package:zyiarah/screens/orders_list_screen.dart';
 import 'package:zyiarah/screens/support_screen.dart';
@@ -126,7 +125,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                         _buildActiveTrackingCard(user?.uid),
                         _buildAnimatedItem(_buildPromoBanners()),
                         _buildMaintenanceAlertCard(user?.uid),
-                        if (user?.hasActiveSubscription == true) _buildAnimatedItem(_buildSubscriptionCard(user!)),
+                        _buildAnimatedItem(_buildSubscriptionCards(user?.uid)),
                         const SizedBox(height: 10),
                         _buildAnimatedItem(_buildMetricsList(user?.uid)),
                         const SizedBox(height: 25),
@@ -492,10 +491,46 @@ class _ClientDashboardState extends State<ClientDashboard> {
     );
   }
 
-  Widget _buildSubscriptionCard(ZyiarahUser user) {
-    final int remaining = user.visitsRemaining;
-    final int total = user.subscriptionTotalVisits > 0 ? user.subscriptionTotalVisits : 4;
-    final double progress = (remaining / total).clamp(0.0, 1.0);
+  // يعرض بطاقة مستقلّة لكل عقد اشتراك نشط (الشهرية + الأسبوعية معاً) — لا يُنسى أيٌّ منها.
+  Widget _buildSubscriptionCards(String? uid) {
+    if (uid == null) return const SizedBox.shrink();
+    return StreamBuilder<QuerySnapshot>(
+      // فلترة userId فقط (حقل واحد، بلا فهرس مركّب)؛ نُصفّي الحالة محلياً.
+      stream: FirebaseFirestore.instance
+          .collection('contracts')
+          .where('userId', isEqualTo: uid)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox.shrink();
+        // إزالة التكرار بمعرّف العقد ثم إبقاء العقود النشطة التي بقيت بها زيارات
+        final Map<String, Map<String, dynamic>> unique = {};
+        for (final d in snapshot.data!.docs) {
+          final m = d.data() as Map<String, dynamic>;
+          final key = (m['contractId'] ?? d.id).toString();
+          unique.putIfAbsent(key, () => m);
+        }
+        final active = unique.values.where((m) {
+          if (m['status'] != 'active') return false;
+          final rem = (m['visits_remaining'] as num?)?.toInt();
+          // عقود قديمة قبل العدّاد (rem == null) تظهر أيضاً
+          return rem == null || rem > 0;
+        }).toList();
+        if (active.isEmpty) return const SizedBox.shrink();
+        return Column(
+          children: active.map(_buildSubscriptionCard).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildSubscriptionCard(Map<String, dynamic> contract) {
+    final int total = ((contract['visits_total'] ?? contract['planVisits']) as num?)?.toInt() ?? 4;
+    final int remaining = (contract['visits_remaining'] as num?)?.toInt() ?? total;
+    final double progress = total > 0 ? (remaining / total).clamp(0.0, 1.0) : 0.0;
+    final String planName = ((contract['planName'] as String?)?.trim().isNotEmpty ?? false)
+        ? contract['planName'] as String
+        : 'زيارة جولد (الذهبية)';
+    final DateTime? expiry = (contract['expiry'] as Timestamp?)?.toDate();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -536,9 +571,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        (user.subscriptionType?.trim().isNotEmpty ?? false)
-                            ? user.subscriptionType!
-                            : 'زيارة جولد (الذهبية)',
+                        planName,
                         style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
                       const Text('اشتراك فعّال', style: TextStyle(color: Colors.white70, fontSize: 12)),
                     ],
@@ -562,10 +595,10 @@ class _ClientDashboardState extends State<ClientDashboard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('الزيارات المتبقية لهذا الشهر', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12)),
-              if (user.subscriptionExpiry != null)
+              Text('الزيارات المتبقية', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12)),
+              if (expiry != null)
                 Text(
-                  'التجديد في: ${user.subscriptionExpiry!.day}/${user.subscriptionExpiry!.month}',
+                  'ينتهي في: ${expiry.day}/${expiry.month}',
                   style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 10),
                 ),
             ],

@@ -1298,9 +1298,16 @@ exports.syncOrderLinkedRecords = onDocumentUpdated({document: "orders/{orderId}"
             await db.runTransaction(async (t) => {
               const oSnap = await t.get(orderRef);
               if (oSnap.get("visit_counted") === true) return; // already counted
+              const cId = oSnap.get("contract_id");
               t.set(userRef, {
                 visits_remaining: admin.firestore.FieldValue.increment(-1),
               }, {merge: true});
+              // اخصم من عدّاد العقد نفسه أيضاً كي تعكس بطاقة الباقة رصيدها الفعلي
+              if (cId) {
+                t.set(db.collection("contracts").doc(cId), {
+                  visits_remaining: admin.firestore.FieldValue.increment(-1),
+                }, {merge: true});
+              }
               t.update(orderRef, {visit_counted: true});
             });
           } else if (afterStatus === "cancelled") {
@@ -1309,9 +1316,15 @@ exports.syncOrderLinkedRecords = onDocumentUpdated({document: "orders/{orderId}"
               // Restore ONLY a visit that was actually consumed; a never-completed
               // visit was part of the prepaid batch and must not mint a free visit.
               if (oSnap.get("visit_counted") !== true) return;
+              const cId = oSnap.get("contract_id");
               t.set(userRef, {
                 visits_remaining: admin.firestore.FieldValue.increment(1),
               }, {merge: true});
+              if (cId) {
+                t.set(db.collection("contracts").doc(cId), {
+                  visits_remaining: admin.firestore.FieldValue.increment(1),
+                }, {merge: true});
+              }
               t.update(orderRef, {visit_counted: false});
             });
           }
@@ -2305,6 +2318,13 @@ exports.activateContractOnPaid = onDocumentUpdated({document: "contracts/{contra
             subscription_total_visits: pv,
             subscription_type: c.planName || "باقة زيارة",
             subscription_expiry: admin.firestore.Timestamp.fromMillis(expiryMs),
+          }, {merge: true});
+          // عدّادات مستقلّة لكل عقد — كي تعرض الرئيسية بطاقة منفصلة لكل باقة نشطة
+          // (الشهرية + الأسبوعية معاً) بدل طمس حقول المستخدم المجمّعة بعضها بعضاً.
+          tx.set(contractRef, {
+            visits_remaining: pv,
+            visits_total: pv,
+            expiry: admin.firestore.Timestamp.fromMillis(expiryMs),
           }, {merge: true});
         }
         return c;
