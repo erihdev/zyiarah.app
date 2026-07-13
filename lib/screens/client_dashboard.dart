@@ -258,19 +258,58 @@ class _ClientDashboardState extends State<ClientDashboard> {
           .collection('orders')
           .where('client_id', isEqualTo: uid)
           .where('status', whereIn: ['assigned', 'scheduled', 'accepted', 'on_the_way', 'in_progress'])
-          .limit(1)
+          .limit(20)
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const SizedBox.shrink();
         }
 
-        final orderDoc = snapshot.data!.docs.first;
+        // اختر الأنسب: الطلبات الحيّة (في الطريق/جارية) أولاً، ثم الأقرب موعداً
+        const liveRank = {'in_progress': 0, 'on_the_way': 1, 'accepted': 2, 'assigned': 3, 'scheduled': 4};
+        final docs = snapshot.data!.docs.toList()
+          ..sort((a, b) {
+            final ad = a.data() as Map<String, dynamic>;
+            final bd = b.data() as Map<String, dynamic>;
+            final ar = liveRank[ad['status']] ?? 5;
+            final br = liveRank[bd['status']] ?? 5;
+            if (ar != br) return ar.compareTo(br);
+            int ts(Map<String, dynamic> d) {
+              final v = d['service_date'];
+              return v is Timestamp ? v.millisecondsSinceEpoch : (1 << 62);
+            }
+            return ts(ad).compareTo(ts(bd));
+          });
+
+        final orderDoc = docs.first;
         final data = orderDoc.data() as Map<String, dynamic>;
         final String orderId = orderDoc.id;
         final String status = data['status'] ?? '';
-        String statusText = ZyiarahStrings.driverOnWay;
-        if (status == 'in_progress') statusText = ZyiarahStrings.serviceInProgress;
+        // نص دقيق لكل حالة — لا نقول "السائق في الطريق" لحجز مجدول مستقبلي
+        String statusText;
+        bool isLive; // هل السائق فعلاً في الطريق/يعمل الآن؟
+        switch (status) {
+          case 'in_progress':
+            statusText = ZyiarahStrings.serviceInProgress;
+            isLive = true;
+            break;
+          case 'on_the_way':
+            statusText = ZyiarahStrings.driverOnWay;
+            isLive = true;
+            break;
+          case 'accepted':
+            statusText = ZyiarahStrings.orderAccepted;
+            isLive = false;
+            break;
+          case 'assigned':
+            statusText = ZyiarahStrings.driverAssigned;
+            isLive = false;
+            break;
+          case 'scheduled':
+          default:
+            statusText = ZyiarahStrings.orderScheduled;
+            isLive = false;
+        }
 
         return Container(
           margin: const EdgeInsets.only(bottom: 20),
@@ -309,7 +348,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                         children: [
                           Text(statusText, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white)),
                           const SizedBox(height: 2),
-                          Text(ZyiarahStrings.tapToTrackMap, style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.75))),
+                          Text(isLive ? ZyiarahStrings.tapToTrackMap : ZyiarahStrings.tapToViewDetails, style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.75))),
                         ],
                       ),
                     ),
@@ -320,7 +359,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
                       ),
-                      child: Text(ZyiarahStrings.track, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                      child: Text(isLive ? ZyiarahStrings.track : ZyiarahStrings.view, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                     ),
                   ],
                 ),
