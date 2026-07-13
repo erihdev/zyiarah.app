@@ -722,6 +722,20 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     String code = '';
 
     try {
+    // (0) تأكيد خادمي فوري: verifyMoyasarPayment يُنشئ الطلب من metadata إن غاب ويقلب
+    // is_paid — فوري وموثوق، لا يعتمد على كتابة العميل (تفشل مع Apple Pay بعد تعليق
+    // الخلفية على iOS). بهذا يظهر الطلب مؤكّداً لحظةَ نجاح الدفع دون انتظار المُصالِح الدوري.
+    if (!isFree && paymentId != null && method != 'wallet' && method != 'cod') {
+      try {
+        await FirebaseFunctions.instance.httpsCallable('verifyMoyasarPayment').call({
+          'paymentId': paymentId,
+          'orderId': widget.contractId ?? widget.maintenanceId ?? id,
+        });
+      } catch (e) {
+        // لا نرمي: المُصالِح الخادمي الدوري يضمن الطلب احتياطاً خلال دقائق.
+        debugPrint('[verify-first non-fatal] $e');
+      }
+    }
     // 1. Update Database
     if (widget.maintenanceId != null) {
       code = id;
@@ -987,31 +1001,53 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       );
     }
     } catch (e) {
-      // الدفع قد يكون تم فعلاً لكن إنشاء/تحديث الطلب فشل — لا تُبقِ العميل على دوران
-      // أبدي بلا تغذية راجعة. أعلِمه بمرجع للدعم (الـ webhook يُكمل التحديث خادمياً).
       if (!mounted) return;
       setState(() => _isLoading = false);
-      showDialog(
-        context: context,
-        builder: (ctx) => Directionality(
-          textDirection: TextDirection.rtl,
-          child: AlertDialog(
-            title: const Text('تعذّر إتمام الطلب'),
-            content: Text(
-                'إن كنت قد دُفعت فلا تقلق — سيُعالَج طلبك تلقائياً أو تواصل مع الدعم '
-                'مع الرقم المرجعي: ${code.isNotEmpty ? code : id}. لن يُخصم منك مرتين.'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  Navigator.of(context).popUntil((r) => r.isFirst);
-                },
-                child: const Text('حسناً'),
-              ),
-            ],
+      if (paymentId != null) {
+        // دفعٌ ناجح بمعرّف (بطاقة/Apple/Google/Samsung/STC) — لا نُظهر أي خطأ إطلاقاً.
+        // الطلب مضمون خادميّاً (verifyMoyasarPayment الفوري أعلاه + المُصالِح الدوري)،
+        // فنعرض شاشة النجاح دائماً كما طلب المالك: «لا خطأ بعد نجاح الدفع».
+        debugPrint('[non-fatal after successful payment → show success] $e');
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => ZyiarahOrderSuccessScreen(
+              orderCode: code.isNotEmpty ? code : id.substring(0, 6).toUpperCase(),
+              title: widget.contractId != null
+                  ? 'تم تفعيل الباقة بنجاح! 🎉'
+                  : widget.maintenanceId != null
+                      ? 'تم تأكيد دفع الصيانة!'
+                      : 'تم استلام طلبك بنجاح!',
+              subtitle: widget.contractId != null
+                  ? 'تم تفعيل باقتك وإضافة الزيارات لحسابك.'
+                  : 'شكراً لثقتك بزيارة، طلبك الآن قيد المعالجة وسنخطرك بكل جديد.',
+            ),
           ),
-        ),
-      );
+          (route) => route.isFirst,
+        );
+      } else {
+        // مسار المحفظة/بلا معرّف دفع — قد يكون الخصم فشل فعلاً، فنُبقي رسالة الدعم.
+        showDialog(
+          context: context,
+          builder: (ctx) => Directionality(
+            textDirection: TextDirection.rtl,
+            child: AlertDialog(
+              title: const Text('تعذّر إتمام الطلب'),
+              content: Text(
+                  'إن كنت قد دُفعت فلا تقلق — سيُعالَج طلبك تلقائياً أو تواصل مع الدعم '
+                  'مع الرقم المرجعي: ${code.isNotEmpty ? code : id}. لن يُخصم منك مرتين.'),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Navigator.of(context).popUntil((r) => r.isFirst);
+                  },
+                  child: const Text('حسناً'),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
     }
   }
 

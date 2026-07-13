@@ -2692,7 +2692,7 @@ exports.sweepUnassignedPaidOrders = onSchedule(
 // هذا يضمن ظهور الطلب خادميّاً خلال دقائق دون أي اعتماد على التطبيق أو الويب هوك.
 // ════════════════════════════════════════════════════════════════════════
 exports.reconcileOrphanPayments = onSchedule(
-    {schedule: "every 5 minutes", secrets: ["MOYASAR_SECRET_KEY"], cpu: 0.083},
+    {schedule: "every 1 minutes", secrets: ["MOYASAR_SECRET_KEY"], cpu: 0.083},
     async () => {
       const secret = moyasarSecretKey.value();
       if (!secret) { console.error("[reconcile] Moyasar secret not set"); return null; }
