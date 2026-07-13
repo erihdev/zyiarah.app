@@ -700,7 +700,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   Map<String, String> _nativePayMeta() {
     final bool isHourly = widget.hours != null && widget.serviceDate != null;
     return {
-      'order_id': _pendingOrderId,
+      // للعقد/الصيانة نستخدم معرّفهما لا _pendingOrderId العشوائي — كي يجد المُصالِح
+      // الخادمي السجلّ الصحيح فيؤكّده (العقد يُفعَّل عبر activateContractOnPaid) بدل
+      // إنشاء «طلب خدمة» خاطئ لا يُفعّل الاشتراك.
+      'order_id': widget.contractId ?? widget.maintenanceId ?? _pendingOrderId,
       'client_id': FirebaseAuth.instance.currentUser?.uid ?? '',
       'service_name': widget.serviceName,
       'is_hourly': isHourly ? '1' : '0',
