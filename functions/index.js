@@ -801,15 +801,17 @@ exports.processNotificationTriggers = onDocumentCreated(
         }
         // 1b. سجلّ تنبيهات الإدارة — تستمع إليه لوحة الويب لحظيّاً (لا FCM/VAPID).
         if (toUid === "ADMIN_BROADCAST") {
-          await admin.firestore().collection("admin_notifications").add({
-            title: title,
-            body: (body || "").replace(/<[^>]*>?/gm, ""),
-            type: type,
-            data: data || {},
-            targetRoles: Array.isArray(targetRoles) ? targetRoles : null,
-            relatedId: data.orderId || data.ticketId || data.code || event.params.id,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
+          // معرّف حتمي (بدل add): إعادة المحاولة تكتب فوق نفس المستند بدل تكرار التنبيه.
+          await admin.firestore().collection("admin_notifications")
+              .doc(`admin_trig_${event.params.id}`).set({
+                title: title,
+                body: (body || "").replace(/<[^>]*>?/gm, ""),
+                type: type,
+                data: data || {},
+                targetRoles: Array.isArray(targetRoles) ? targetRoles : null,
+                relatedId: data.orderId || data.ticketId || data.code || event.params.id,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
         }
 
         // 2. Email via Resend (key from Secret Manager)
@@ -848,7 +850,7 @@ exports.processNotificationTriggers = onDocumentCreated(
             await snap.ref.update({emailStatus: "refused_non_staff_sender"});
           }
         }
-        if (wantsEmail && emailAllowed && emailSenderOk) {
+        if (wantsEmail && emailAllowed && emailSenderOk && trigger.emailStatus !== "sent") {
           const resendKey = resendApiKeySecret.value();
           if (!resendKey) {
             console.error("[EMAIL] RESEND_API_KEY secret is not set");
@@ -907,8 +909,8 @@ exports.processNotificationTriggers = onDocumentCreated(
           console.log(`[EMAIL] Sent. Message ID: ${resendData.id}`);
         }
 
-        // 3. Push Notification via FCM
-        if (type !== "email") {
+        // 3. Push Notification via FCM (حارس pushSent يمنع تكرار الدفع عند إعادة المحاولة)
+        if (type !== "email" && trigger.pushSent !== true) {
           let targetTokens = [];
           if (toUid === "ADMIN_BROADCAST") {
             const allAdminRoles = ["admin", "super_admin", "orders_manager", "accountant_admin", "marketing_admin"];
@@ -961,6 +963,7 @@ exports.processNotificationTriggers = onDocumentCreated(
               });
             }
             console.log(`Push sent to ${targetTokens.length} devices`);
+            await snap.ref.update({pushSent: true}); // حتمية: لا يُعاد الدفع عند الإعادة
           }
         }
 
@@ -970,11 +973,20 @@ exports.processNotificationTriggers = onDocumentCreated(
         });
       } catch (error) {
         console.error(`Error processing trigger ${event.params.id}:`, error);
+        const attempts = Number(trigger.attempts || 0) + 1;
         await snap.ref.update({
           processed: false,
+          attempts,
           error: error.message,
           lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
         });
+        // إعادة محاولة محدودة: كل الخطوات أعلاه حتمية/محروسة (in-app بمعرّف حتمي،
+        // admin_notifications بمعرّف حتمي، البريد بحارس emailStatus، الدفع بحارس
+        // pushSent) — فإعادة التشغيل لا تُكرّر شيئاً. نتوقّف بعد 3 محاولات لمنع
+        // عاصفة إعادة المحاولات على فشل دائم (بريد غير صالح مثلاً).
+        if (attempts < 3) throw error;
+        await snap.ref.update({giveUp: true});
+        console.error(`Trigger ${event.params.id} gave up after ${attempts} attempts`);
       }
     });
 
