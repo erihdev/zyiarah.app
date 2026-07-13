@@ -374,7 +374,8 @@ service cloud.firestore {
     }
     match /services/{serviceId} {
       allow read: if isLoggedIn();
-      allow write: if isAdmin();
+      // الأسعار قرار تشغيلي: المالك + مدير الطلبات فقط (يستثني المسوّق والمحاسب).
+      allow write: if isOrdersManager();
     }
 
     // ─── Store ────────────────────────────────────────────────────────────
@@ -408,11 +409,12 @@ service cloud.firestore {
     // ─── Geographic Zones ─────────────────────────────────────────────────
     match /regions/{regionId} {
       allow read: if isLoggedIn();
-      allow write: if isAdmin();
+      // المناطق/التسعير الجغرافي قرار تشغيلي: المالك + مدير الطلبات فقط.
+      allow write: if isOrdersManager();
     }
     match /service_zones/{zoneId} {
       allow read: if isLoggedIn();
-      allow write: if isAdmin();
+      allow write: if isOrdersManager();
     }
 
     // ─── Logs & Triggers ──────────────────────────────────────────────────
