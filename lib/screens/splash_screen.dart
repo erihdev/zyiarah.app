@@ -51,14 +51,13 @@ class _ZyiarahSplashScreenState extends State<ZyiarahSplashScreen>
       duration: const Duration(milliseconds: 1400),
     )..repeat(reverse: true);
 
-    _logoScale = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _logoController, curve: Curves.elasticOut),
+    // يبدأ الشعار ظاهراً بحجم شبه كامل ليطابق شعار الشاشة الأصلية (native splash)
+    // الذي يظهر فوراً — فلا يحدث «قفز» بتصغير/تلاشٍ بعد الظهور المباشر. استقرار خفيف فقط.
+    _logoScale = Tween<double>(begin: 0.96, end: 1.0).animate(
+      CurvedAnimation(parent: _logoController, curve: Curves.easeOut),
     );
-    _logoOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _logoController,
-        curve: const Interval(0.0, 0.5, curve: Curves.easeIn),
-      ),
+    _logoOpacity = Tween<double>(begin: 1.0, end: 1.0).animate(
+      CurvedAnimation(parent: _logoController, curve: Curves.linear),
     );
 
     // Pin 1 (top-left, above ز)
