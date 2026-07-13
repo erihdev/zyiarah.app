@@ -2740,6 +2740,9 @@ exports.reconcileOrphanPayments = onSchedule(
           // غير موجود → نُنشئه من الـ metadata، لكن ذلك يحتاج تفاصيل كافية (نسخ قديمة
           // ترسل order_id فقط فلا يمكن بناء طلب حقيقي — تلك تبقى للاسترداد اليدوي).
           if (!md.service_name) continue;
+          // باقات الاشتراك تُدار كعقود (contracts) لا كطلبات خدمة. لو لم نجد العقد
+          // (نسخة قديمة أرسلت معرّفاً عشوائياً) نتخطّى بدل إنشاء «طلب اشتراك» شبحي.
+          if (md.service_name.includes("باقة")) continue;
           const isHourly = String(md.is_hourly) === "1";
           const amountSar = Number(p.amount) / 100; // المخصوم فعلاً (مرجع موثوق)
           let code = `ZY-${Date.now().toString().slice(5)}`;

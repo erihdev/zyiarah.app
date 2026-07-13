@@ -119,3 +119,5 @@ functions/_tmp_reconcile.js
 functions/_tmp_sub.js
 functions/_tmp_fixsub.js
 functions/_tmp_fixsub2.js
+functions/_tmp_active.js
+functions/_tmp_cleanstray.js
