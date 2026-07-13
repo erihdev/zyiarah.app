@@ -12,6 +12,12 @@ import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:go_router/go_router.dart';
 
+// تحويل رقمي دفاعي — حقول Firestore (amount/total_amount/quotePrice) قد تصل نصّاً
+// أو null، و.toDouble()/as num المباشر كان يعطّل بطاقة الطلب داخل القائمة.
+double _asDouble(dynamic v) => v is num
+    ? v.toDouble()
+    : (v == null ? 0.0 : double.tryParse(v.toString()) ?? 0.0);
+
 class OrdersListScreen extends StatefulWidget {
   const OrdersListScreen({super.key});
 
@@ -296,11 +302,11 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
   Widget _buildStoreOrderCard(BuildContext context, String docId, Map<String, dynamic> data) {
     final status = data['status'] ?? 'pending';
     final code = data['code'] ?? 'ORD-000';
-    final total = data['total_amount'] ?? 0;
+    final double total = _asDouble(data['total_amount']);
     final bool awaitingPayment = status == 'approved';
     // المبلغ الذي يدفعه العميل = السعر المعتمد من الإدارة إن وُجد، وإلا مجموع السلة
     final double payAmount =
-        (data['final_amount'] as num?)?.toDouble() ?? (total as num).toDouble();
+        (data['final_amount'] as num?)?.toDouble() ?? total;
 
     Color statusColor = Colors.orange;
     String statusText = "قيد المعالجة";
@@ -347,7 +353,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text("المجموع: $total ر.س", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF5D1B5E))),
+                Text("المجموع: ${total % 1 == 0 ? total.toStringAsFixed(0) : total.toStringAsFixed(2)} ر.س", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF5D1B5E))),
                 Text("${(data['items'] as List?)?.length ?? 0} منتجات", style: const TextStyle(fontSize: 12, color: Colors.grey)),
               ],
             ),
@@ -409,7 +415,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
   Widget _buildMaintenanceCard(BuildContext context, Map<String, dynamic> data, String docId) {
     final status = data['status'] ?? 'under_review';
     final requestId = data['requestId'] ?? '-';
-    final quotePrice = (data['quotePrice'] ?? 0.0).toDouble();
+    final quotePrice = _asDouble(data['quotePrice']);
     
     final statusData = ZyiarahStatus.getMaintenanceStatus(status);
     final statusColor = statusData['color'];
@@ -642,14 +648,14 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('${((order['amount'] ?? 0) as num).toStringAsFixed(2)} ر.س',
+              Text('${_asDouble(order['amount']).toStringAsFixed(2)} ر.س',
                 style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF5D1B5E))),
               if (status == 'completed')
                 TextButton.icon(
                   onPressed: () {
                     Navigator.push(context, MaterialPageRoute(builder: (context) => PaymentSummaryScreen(
                       serviceName: order['service_type'] ?? 'خدمة عامة',
-                      amount: (order['amount'] ?? 0.0).toDouble(),
+                      amount: _asDouble(order['amount']),
                       location: order['location'],
                     )));
                   },

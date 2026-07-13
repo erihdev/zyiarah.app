@@ -13,8 +13,6 @@ import 'package:zyiarah/screens/support_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
 import 'package:zyiarah/services/zyiarah_wallet_service.dart';
 import 'package:zyiarah/services/zyiarah_referral_service.dart';
-import 'package:provider/provider.dart';
-import 'package:zyiarah/providers/order_provider.dart';
 
 class ZyiarahProfileScreen extends StatefulWidget {
   const ZyiarahProfileScreen({super.key});
@@ -34,6 +32,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
 
   ZyiarahUser? _currentUser;
   bool _isLoading = true;
+  int? _totalBookings; // عدد فعلي عبر count() بدل طول قائمة مقصوصة عند 20
 
   // Wallet & loyalty state
   double _walletBalance = 0.0;
@@ -75,6 +74,15 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
+    // إجمالي الحجوزات — عدّ فعلي (aggregate) لا يتأثّر بسقف الـ20 في المزوّد
+    try {
+      final agg = await _firestore
+          .collection('orders')
+          .where('client_id', isEqualTo: uid)
+          .count()
+          .get();
+      if (mounted) setState(() => _totalBookings = agg.count);
+    } catch (_) {/* غير حرِج — تبقى — */}
     // Load wallet and referral in parallel after user data
     _loadWallet(uid);
     _loadReferralCode(uid);
@@ -510,8 +518,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
     final String ratingText = rating == rating.roundToDouble()
         ? rating.toStringAsFixed(0)
         : rating.toStringAsFixed(1);
-    final String totalBookings =
-        context.watch<ZyiarahOrderProvider>().recentOrders.length.toString();
+    final String totalBookings = _totalBookings?.toString() ?? '—';
     return Row(
       children: [
         Expanded(

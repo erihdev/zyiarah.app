@@ -29,6 +29,7 @@ class MoyasarService {
     required double amountSAR,
     required String description,
     required String orderId,
+    Map<String, String>? metadata,
   }) async {
     if (!isConfigured) {
       throw Exception('خدمة الدفع غير مُهيأة — يرجى التواصل مع الدعم');
@@ -48,7 +49,9 @@ class MoyasarService {
         'description': description,
         // Moyasar تشترط UUID صالحاً — نشتقّه ثابتاً من معرّف الطلب (منع الشحن المزدوج).
         'given_id': MoyasarUtil.givenIdFromOrder(orderId),
-        'metadata': {'order_id': orderId},
+        // بيانات وصفية كاملة كي يتمكّن الخادم (verify/reconcile) من إنشاء الطلب من
+        // الدفعة لو مات التطبيق بعد الشحن — بدونها يبقى الدفع يتيماً على أندرويد.
+        'metadata': {'order_id': orderId, ...?metadata},
         'source': {
           'type': 'googlepay',
           'token': googlePayToken,

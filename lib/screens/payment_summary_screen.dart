@@ -168,9 +168,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   // الحسابات المالية الصحيحة (بافتراض أن المبلغ شامل للضريبة، مع تطبيق Surge)
   // مقرّب لخانتين عشريتين — يمنع أرقاماً مثل 57.4999999999 في المبلغ المخزَّن/المعروض.
   double get totalWithVat {
+    // Surge يُطبَّق فقط على الطلبات عند الطلب (بالساعة/الكنب) — لا على الأسعار الثابتة:
+    // الاشتراك (planPrice) والصيانة (quotePrice) أسعار معلَنة ثابتة، وضربُها في surge
+    // كان يفرض دفعاً زائداً + يجعل الخادم يرفض تطابق المبلغ فلا يُفعَّل العقد/الصيانة.
+    final bool fixedPrice = widget.contractId != null || widget.maintenanceId != null;
+    final double surge = fixedPrice ? 1.0 : _surgeFactor;
     // نحدّ الخصم بألا يتجاوز المبلغ (كوبون قيمته أكبر من الطلب كان يجعل المبلغ
     // سالباً → دفعة/محفظة بمبلغ سالب).
-    final raw = (widget.amount * _surgeFactor) - _discountAmount;
+    final raw = (widget.amount * surge) - _discountAmount;
     final clamped = raw < 0 ? 0.0 : raw;
     return (clamped * 100).roundToDouble() / 100;
   }
@@ -567,7 +572,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         return;
 
       } else if (_selectedPaymentMethod == 'tabby') {
-        // Tabby BNPL
+        // Tabby BNPL — أنشئ الطلب is_paid=false قبل فتح تابي (كالبطاقة/تمارا) كي يجده
+        // الـ webhook ويؤكّده؛ بدونه دفعة تابي ناجحة قد لا تجد طلباً فيبقى يتيماً.
+        if (widget.maintenanceId == null && widget.contractId == null) {
+          await _createUnpaidServiceOrder(finalOrderId, method: 'tabby');
+        }
         final webUrl = await TabbyService.createCheckoutUrl(
           amountSAR: totalWithVat,
           customerPhone: _phoneController.text.trim().isNotEmpty
@@ -1452,6 +1461,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                       amountSAR: totalWithVat,
                       description: 'خدمة زيارة - ${widget.serviceName}',
                       orderId: _pendingOrderId,
+                      metadata: _nativePayMeta(),
                     );
                     if (mounted) {
                       await _processUnifiedSuccess(_pendingOrderId, 'google_pay', paymentId: gpayPaymentId);

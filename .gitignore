@@ -124,3 +124,5 @@ functions/_tmp_cleanstray.js
 functions/_tmp_allbk.js
 functions/_tmp_cleanbk.js
 functions/_tmp_backfill.js
+functions/_tmp_degold.js
+functions/_tmp_consist.js

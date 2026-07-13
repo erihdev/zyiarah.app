@@ -116,23 +116,13 @@ exports.sendNotificationToAdminsOnNewMaintenance = onDocumentCreated({document: 
       const snap = event.data;
       if (!snap) return null;
 
-      const payload = {
-        notification: {
-          title: "طلب صيانة جديد! 🛠️",
-          body: `وصلك طلب صيانة جديد من عميل.`,
-        },
-        data: {
-          click_action: "FLUTTER_NOTIFICATION_CLICK",
-          type: "new_maintenance_admin",
-          requestId: event.params.requestId,
-        },
-      };
-
-      try {
-        await admin.messaging().send({...payload, topic: "admins"});
-      } catch (error) {
-        console.error("Error sending maintenance alert:", error);
-      }
+      // عبر ADMIN_BROADCAST: يكتب admin_notifications (لوحة الويب) + FCM حسب الدور —
+      // كان يرسل لموضوع "admins" فقط فلا يصل لوحة الويب فتبقى طلبات الصيانة دون متابعة.
+      await queuePush(
+          "ADMIN_BROADCAST",
+          "طلب صيانة جديد! 🛠️",
+          "وصلك طلب صيانة جديد من عميل ينتظر عرض السعر.",
+          "new_maintenance_admin", {requestId: event.params.requestId}, ["orders_manager"]);
       return null;
     });
 
@@ -145,24 +135,13 @@ exports.sendNotificationToAdminsOnNewContract = onDocumentCreated({document: "co
       const contractData = snap.data();
       const planName = contractData.planName || "باقة غير محددة";
 
-      const payload = {
-        notification: {
-          title: "طلب تعاقد جديد! 📄",
-          body: `هناك طلب اشتراك في (${planName}) ينتظر موافقتك.`,
-        },
-        data: {
-          click_action: "FLUTTER_NOTIFICATION_CLICK",
-          type: "new_contract_admin",
-          contractId: event.params.contractId,
-        },
-      };
-
-      try {
-        await admin.messaging().send({...payload, topic: "admins"});
-        console.log(`Admin alert sent for contract: ${event.params.contractId}`);
-      } catch (error) {
-        console.error("Error sending contract alert:", error);
-      }
+      // عبر ADMIN_BROADCAST: يكتب admin_notifications (لوحة الويب) + FCM حسب الدور —
+      // كان يرسل لموضوع "admins" فقط فلا يصل لوحة الويب فيبقى العقد دون اعتماد.
+      await queuePush(
+          "ADMIN_BROADCAST",
+          "طلب تعاقد جديد! 📄",
+          `هناك طلب اشتراك في (${planName}) ينتظر موافقتك.`,
+          "new_contract_admin", {contractId: event.params.contractId}, ["orders_manager"]);
       return null;
     });
 
@@ -2002,10 +1981,13 @@ async function _isDriverFreeForSlot(db, driverId, startDateTime, endDateTime) {
  */
 async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
   const d = driverDoc.data();
-  const bookingDate = `${startDateTime.getFullYear()}-` +
-    `${String(startDateTime.getMonth() + 1).padStart(2, "0")}-` +
-    `${String(startDateTime.getDate()).padStart(2, "0")}`;
-  const timeSlot = `${String(startDateTime.getHours()).padStart(2, "0")}:00`;
+  // موعد الرياض (UTC+3): الدوال تعمل بـUTC، فحساب المكوّنات مباشرةً كان يعطي ساعة
+  // ناقصة 3 (07:00 بدل 10:00) → تذكير بوقت خاطئ + عدم احتساب الفترة في السعة.
+  const riyadh = new Date(startDateTime.getTime() + 3 * 60 * 60 * 1000);
+  const bookingDate = `${riyadh.getUTCFullYear()}-` +
+    `${String(riyadh.getUTCMonth() + 1).padStart(2, "0")}-` +
+    `${String(riyadh.getUTCDate()).padStart(2, "0")}`;
+  const timeSlot = `${String(riyadh.getUTCHours()).padStart(2, "0")}:00`;
   const orderRef = db.collection("orders").doc(orderId);
 
   // معامَلة: نُعيد قراءة الطلب ولا نكتب فوقه إن كان مُسنَداً سلفاً أو لم يعد قابلاً
@@ -2422,10 +2404,13 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   // (الثغرة #2) Transaction ذرّي: يُعيد فحص حالة الطلب قبل الإسناد لمنع التعيين
   // المزدوج عند موافقة مديرَين على نفس الطلب معاً.
   const d = driverSnap.data();
-  const bookingDate = `${startDateTime.getFullYear()}-` +
-    `${String(startDateTime.getMonth() + 1).padStart(2, "0")}-` +
-    `${String(startDateTime.getDate()).padStart(2, "0")}`;
-  const timeSlot = `${String(startDateTime.getHours()).padStart(2, "0")}:00`;
+  // موعد الرياض (UTC+3) — انظر _assignDriverScheduled: حساب المكوّنات بـUTC مباشرةً
+  // كان يخزّن ساعة/يوماً خاطئاً في booking_time_slot/booking_date.
+  const riyadh = new Date(startDateTime.getTime() + 3 * 60 * 60 * 1000);
+  const bookingDate = `${riyadh.getUTCFullYear()}-` +
+    `${String(riyadh.getUTCMonth() + 1).padStart(2, "0")}-` +
+    `${String(riyadh.getUTCDate()).padStart(2, "0")}`;
+  const timeSlot = `${String(riyadh.getUTCHours()).padStart(2, "0")}:00`;
 
   await db.runTransaction(async (tx) => {
     const fresh = await tx.get(orderRef);

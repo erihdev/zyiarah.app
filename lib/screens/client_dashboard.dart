@@ -27,6 +27,12 @@ import 'package:provider/provider.dart';
 import 'package:zyiarah/providers/user_provider.dart';
 import 'package:zyiarah/providers/order_provider.dart';
 
+// تحويل رقمي دفاعي: حقول Firestore قد تصل نصّاً ("150") أو null من لوحة الإدارة،
+// و.toDouble() المباشر عليها كان يرمي استثناءً يعطّل بناء الشاشة بالكامل.
+double _asDouble(dynamic v) => v is num
+    ? v.toDouble()
+    : (v == null ? 0.0 : double.tryParse(v.toString()) ?? 0.0);
+
 class ClientDashboard extends StatefulWidget {
   const ClientDashboard({super.key});
 
@@ -380,7 +386,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
         final reqDoc = snapshot.data!.docs.first;
         final data = reqDoc.data() as Map<String, dynamic>;
         final String serviceType = data['serviceType'] ?? 'صيانة';
-        final double price = (data['quotePrice'] ?? 0.0).toDouble();
+        final double price = _asDouble(data['quotePrice']);
 
         return Container(
           margin: const EdgeInsets.only(bottom: 20),
@@ -505,7 +511,22 @@ class _ClientDashboardState extends State<ClientDashboard> {
         for (final d in snapshot.data!.docs) {
           final m = d.data() as Map<String, dynamic>;
           final key = (m['contractId'] ?? d.id).toString();
-          unique.putIfAbsent(key, () => m);
+          final existing = unique[key];
+          if (existing == null) {
+            unique[key] = m;
+            continue;
+          }
+          // عند تكرار المعرّف (تجديد): فضّل النشِط، ثم الأحدث — كي لا تُسقِط نسخةٌ
+          // منتهيةٌ العقدَ النشط فتختفي بطاقة اشتراك فعّالة من الرئيسية.
+          final bool mActive = m['status'] == 'active';
+          final bool eActive = existing['status'] == 'active';
+          if (mActive != eActive) {
+            if (mActive) unique[key] = m;
+            continue;
+          }
+          final mt = (m['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+          final et = (existing['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+          if (mt > et) unique[key] = m;
         }
         final active = unique.values.where((m) {
           if (m['status'] != 'active') return false;
@@ -523,7 +544,8 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
   Widget _buildSubscriptionCard(Map<String, dynamic> contract) {
     final int total = ((contract['visits_total'] ?? contract['planVisits']) as num?)?.toInt() ?? 4;
-    final int remaining = (contract['visits_remaining'] as num?)?.toInt() ?? total;
+    final int remainingRaw = (contract['visits_remaining'] as num?)?.toInt() ?? total;
+    final int remaining = remainingRaw.clamp(0, total); // يمنع عرض "6 / 4"
     final double progress = total > 0 ? (remaining / total).clamp(0.0, 1.0) : 0.0;
     final String planName = ((contract['planName'] as String?)?.trim().isNotEmpty ?? false)
         ? contract['planName'] as String
@@ -596,7 +618,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
               Text('الزيارات المتبقية', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12)),
               if (expiry != null)
                 Text(
-                  'ينتهي في: ${expiry.day}/${expiry.month}',
+                  'ينتهي في: ${expiry.day}/${expiry.month}/${expiry.year}',
                   style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 10),
                 ),
             ],
