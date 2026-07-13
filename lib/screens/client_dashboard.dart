@@ -527,7 +527,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
     final double progress = total > 0 ? (remaining / total).clamp(0.0, 1.0) : 0.0;
     final String planName = ((contract['planName'] as String?)?.trim().isNotEmpty ?? false)
         ? contract['planName'] as String
-        : 'زيارة جولد (الذهبية)';
+        : 'باقة اشتراك';
     final DateTime? expiry = (contract['expiry'] as Timestamp?)?.toDate();
 
     return Container(

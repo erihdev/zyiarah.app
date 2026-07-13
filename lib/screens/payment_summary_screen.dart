@@ -1362,11 +1362,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 fontWeight: FontWeight.bold, fontSize: 16)),
         const SizedBox(height: 15),
 
-        // --- باقة جولد ---
+        // --- الدفع بالباقة ---
         if (remainingVisits > 0 && widget.contractId == null) ...[
           _buildPaymentOption(
             id: 'subscription',
-            title: 'باقة زيارة جولد',
+            title: 'الدفع بالباقة',
             subtitle: 'سيتم خصم زيارة واحدة (المتبقي: $remainingVisits)',
             icon: Icons.workspace_premium,
             color: Colors.amber.shade700,
