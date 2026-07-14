@@ -58,12 +58,11 @@ class ZyiarahNotificationService {
         // Check auth state for specific topics
         _authStateSub = FirebaseAuth.instance.authStateChanges().listen((User? user) async {
           if (user != null) {
-            // Determine if user is client or driver (you might need logic here based on your app's user roles, 
-            // but for simplicity, let's assume if they have the driver app they are a driver, 
-            // or we can subscribe them based on a database check.)
-            
-            // For now, let's subscribe everyone to clients topic unless we have a specific driver verification.
-            // In a real app, you'd fetch the user role from Firestore first.
+            // أعِد الاشتراك في all_users عند كل دخول — الخروج يُلغيه، وكان يُعاد فقط في
+            // initialize() (عند تشغيل التطبيق). فمن يخرج ويدخل بحساب آخر دون إعادة
+            // تشغيل كان يبقى خارج all_users فلا يصله بثّ «الكل» كإشعار Push.
+            await _fcm.subscribeToTopic('all_users');
+
             final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
             if (userDoc.exists) {
               final role = userDoc.data()?['role'];
