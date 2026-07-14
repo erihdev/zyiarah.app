@@ -710,6 +710,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       // إنشاء «طلب خدمة» خاطئ لا يُفعّل الاشتراك.
       'order_id': widget.contractId ?? widget.maintenanceId ?? _pendingOrderId,
       'client_id': FirebaseAuth.instance.currentUser?.uid ?? '',
+      'client_name': _currentUser?.name ?? 'عميل زيارة',
       'service_name': widget.serviceName,
       'is_hourly': isHourly ? '1' : '0',
       'hours': (widget.hours ?? 4).toString(),

@@ -1577,9 +1577,20 @@ exports.verifyMoyasarPayment = onCall(
             });
           } catch (e) { console.error("counter for server-created order:", e); }
           const lat = Number(md.lat); const lng = Number(md.lng);
+          // اسم العميل: من الـmetadata، وإلا نجلبه من مستند المستخدم — وإلا تظهر
+          // الطلبات المُنشأة خادمياً (Apple Pay) بلا اسم في لوحة الإدارة/السائق.
+          let clientName = (md.client_name || "").trim();
+          if (!clientName) {
+            try {
+              const uDoc = await admin.firestore().collection("users")
+                  .doc(md.client_id || request.auth.uid).get();
+              if (uDoc.exists) clientName = (uDoc.data().name || "").trim();
+            } catch (_) {}
+          }
           const payload = {
             code,
             client_id: md.client_id || request.auth.uid,
+            client_name: clientName || "عميل زيارة",
             client_phone: md.client_phone || "",
             service_type: md.service_name || "خدمة زيارة",
             service_name: md.service_name || "خدمة زيارة",
@@ -2858,8 +2869,15 @@ exports.reconcileOrphanPayments = onSchedule(
             });
           } catch (e) { console.error("[reconcile] counter:", e); }
           const lat = Number(md.lat); const lng = Number(md.lng);
+          let clientName = (md.client_name || "").trim();
+          if (!clientName && md.client_id) {
+            try {
+              const uDoc = await admin.firestore().collection("users").doc(md.client_id).get();
+              if (uDoc.exists) clientName = (uDoc.data().name || "").trim();
+            } catch (_) {}
+          }
           const payload = {
-            code, client_id: md.client_id, client_phone: md.client_phone || "",
+            code, client_id: md.client_id, client_name: clientName || "عميل زيارة", client_phone: md.client_phone || "",
             service_type: md.service_name || "خدمة زيارة", service_name: md.service_name || "خدمة زيارة",
             amount: amountSar, is_paid: true, payment_status: "paid",
             moyasar_payment_id: p.id, moyasar_status: "paid",
