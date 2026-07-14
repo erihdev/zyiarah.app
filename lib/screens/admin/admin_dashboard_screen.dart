@@ -8,6 +8,7 @@ import 'package:zyiarah/screens/admin/admin_more_screen.dart';
 import 'package:zyiarah/screens/admin/admin_store_screen.dart';
 import 'package:zyiarah/screens/admin/admin_insights_screen.dart';
 import 'package:zyiarah/screens/onboarding_screen.dart';
+import 'package:zyiarah/screens/admin/admin_search_screen.dart';
 import 'package:zyiarah/screens/splash_screen.dart';
 import 'package:lottie/lottie.dart';
 import 'package:zyiarah/utils/zyiarah_strings.dart';
@@ -170,10 +171,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           systemOverlayStyle: SystemUiOverlayStyle.light,
           actions: [
             IconButton(
+              icon: const Icon(Icons.search_rounded),
+              onPressed: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const AdminSearchScreen())),
+              tooltip: "بحث شامل",
+            ),
+            IconButton(
               icon: const Icon(Icons.logout_rounded),
               onPressed: _logout,
               tooltip: "تسجيل الخروج",
-            )
+            ),
           ],
         ),
         body: IndexedStack(

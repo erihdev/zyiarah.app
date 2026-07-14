@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/screens/admin/admin_compliance_screen.dart';
-import 'package:zyiarah/screens/admin/admin_broadcast_screen.dart';
-import 'package:zyiarah/screens/admin/admin_search_screen.dart';
 import 'package:zyiarah/screens/admin/admin_staff_performance_screen.dart';
-import 'package:zyiarah/utils/pdf_report_util.dart';
 import 'package:zyiarah/screens/admin/admin_maintenance_screen.dart';
 import 'package:zyiarah/screens/admin/admin_orders_screen.dart';
 import 'package:zyiarah/screens/admin/admin_store_orders_screen.dart';
@@ -74,33 +70,6 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     }
   }
 
-  Future<void> _exportDataToCSV() async {
-    try {
-      final buffer = StringBuffer();
-      // Headers
-      buffer.writeln("الكود,التاريخ,الخدمة,العميل,المبلغ,الحالة");
-
-      for (var doc in _orders) {
-        final d = doc.data() as Map<String, dynamic>;
-        final date = d['created_at'] is Timestamp ? intl.DateFormat('yyyy-MM-dd').format((d['created_at'] as Timestamp).toDate()) : '';
-        buffer.writeln("${d['code']},$date,${d['service_name']},${d['client_name']},${d['amount']},${d['status']}");
-      }
-
-      // تصدير حقيقي: ننسخ الـ CSV للحافظة (بلا share_plus). كان سابقاً debugPrint فقط
-      // مع رسالة نجاح كاذبة ولا يُنتَج أي ملف. للتقرير الكامل يوجد زر PDF منفصل.
-      await Clipboard.setData(ClipboardData(text: buffer.toString()));
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text("تم نسخ بيانات التقرير (CSV) إلى الحافظة — الصقها في Excel أو Google Sheets ✅"),
-        backgroundColor: Colors.green,
-      ));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل التصدير: $e")));
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -120,9 +89,6 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // أدوات سريعة (بدل شريط «لوحة التحكم الذكية» المكرّر الذي أُزيل)
-                _buildQuickTools(stats),
-                const SizedBox(height: 18),
                 _buildLivePulseSection(),
                 const SizedBox(height: 15),
                 _buildReputationSentinel(),
@@ -235,52 +201,6 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
 
   Widget _buildSectionTitle(String title) {
     return Text(title, style: GoogleFonts.tajawal(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)));
-  }
-
-  // أدوات سريعة — نُقلت من شريط «لوحة التحكم الذكية» المحذوف.
-  Widget _buildQuickTools(Map<String, dynamic> stats) {
-    return Row(
-      children: [
-        _toolButton(Icons.search_rounded, "بحث", const Color(0xFF2563EB),
-            () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminSearchScreen()))),
-        _toolButton(Icons.campaign_rounded, "بثّ إشعار", const Color(0xFF7C3AED),
-            () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminBroadcastScreen()))),
-        _toolButton(Icons.file_download_rounded, "CSV", const Color(0xFF059669), _exportDataToCSV),
-        _toolButton(Icons.picture_as_pdf_rounded, "تقرير", const Color(0xFFDC2626),
-            () => ZyiarahPdfReportUtil.generateFinancialReport(
-                  orders: _orders,
-                  totalRevenue: stats['revenue'],
-                  activeOrders: stats['active'],
-                )),
-      ],
-    );
-  }
-
-  Widget _toolButton(IconData icon, String label, Color color, VoidCallback onTap) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 4))],
-          ),
-          child: Column(
-            children: [
-              Icon(icon, color: color, size: 24),
-              const SizedBox(height: 6),
-              Text(label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.tajawal(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF334155))),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _buildQuickStats(Map<String, dynamic> stats) {

@@ -18,7 +18,11 @@ import 'package:zyiarah/screens/admin/admin_hourly_zones_screen.dart';
 import 'package:zyiarah/screens/admin/admin_subscriptions_screen.dart';
 import 'package:zyiarah/screens/admin/admin_audit_logs_screen.dart';
 import 'package:zyiarah/screens/admin/admin_analytics_screen.dart';
+import 'package:zyiarah/screens/admin/admin_broadcast_screen.dart';
+import 'package:zyiarah/utils/pdf_report_util.dart';
 import 'package:zyiarah/utils/zyiarah_strings.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart' as intl;
 
 class AdminMoreScreen extends StatelessWidget {
   final String role;
@@ -162,6 +166,13 @@ class AdminMoreScreen extends StatelessWidget {
             'page': const AdminMarketingScreen(),
             'roles': ['super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin'],
           },
+          {
+            'title': 'بثّ إشعار جماعي',
+            'icon': Icons.notifications_active_outlined,
+            'color': const Color(0xFF7C3AED),
+            'page': const AdminBroadcastScreen(),
+            'roles': ['super_admin', 'orders_manager', 'marketing_admin'],
+          },
         ],
       },
       {
@@ -182,6 +193,20 @@ class AdminMoreScreen extends StatelessWidget {
             'color': const Color(0xFF1E293B),
             'page': const AdminAuditLogsScreen(),
             'roles': ['super_admin'],
+          },
+          {
+            'title': 'تصدير الطلبات (CSV)',
+            'icon': Icons.file_download_outlined,
+            'color': const Color(0xFF059669),
+            'onTap': _exportOrdersCsv,
+            'roles': ['super_admin', 'accountant_admin', 'orders_manager'],
+          },
+          {
+            'title': 'تقرير مالي (PDF)',
+            'icon': Icons.picture_as_pdf_outlined,
+            'color': const Color(0xFFDC2626),
+            'onTap': _exportFinancialPdf,
+            'roles': ['super_admin', 'accountant_admin', 'orders_manager'],
           },
         ],
       },
@@ -282,10 +307,15 @@ class AdminMoreScreen extends StatelessWidget {
     return InkWell(
       onTap: () {
         HapticFeedback.lightImpact();
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => item['page'] as Widget),
-        );
+        final action = item['onTap'];
+        if (action is Future<void> Function(BuildContext)) {
+          action(context); // عنصر إجرائي (تصدير) — لا ينقل لصفحة
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => item['page'] as Widget),
+          );
+        }
       },
       borderRadius: BorderRadius.circular(16),
       child: Container(
@@ -329,5 +359,62 @@ class AdminMoreScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  // تصدير الطلبات CSV — نُقل من الرئيسية إلى «التقارير والمالية» (مكانه الأساسي).
+  static Future<void> _exportOrdersCsv(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text('جاري تجهيز التصدير...')));
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('orders')
+          .orderBy('created_at', descending: true)
+          .limit(2000)
+          .get();
+      final buffer = StringBuffer();
+      buffer.writeln('الكود,التاريخ,الخدمة,العميل,المبلغ,الحالة');
+      for (final doc in snap.docs) {
+        final d = doc.data();
+        final date = d['created_at'] is Timestamp
+            ? intl.DateFormat('yyyy-MM-dd').format((d['created_at'] as Timestamp).toDate())
+            : '';
+        buffer.writeln('${d['code']},$date,${d['service_name']},${d['client_name']},${d['amount']},${d['status']}');
+      }
+      await Clipboard.setData(ClipboardData(text: buffer.toString()));
+      messenger.showSnackBar(const SnackBar(
+        content: Text('تم نسخ بيانات الطلبات (CSV) إلى الحافظة — الصقها في Excel أو Google Sheets ✅'),
+        backgroundColor: Colors.green,
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('فشل التصدير: $e')));
+    }
+  }
+
+  // تقرير مالي PDF — نُقل من الرئيسية إلى «التقارير والمالية».
+  static Future<void> _exportFinancialPdf(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text('جاري تجهيز التقرير...')));
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('orders')
+          .orderBy('created_at', descending: true)
+          .limit(2000)
+          .get();
+      double revenue = 0;
+      int active = 0;
+      for (final doc in snap.docs) {
+        final d = doc.data();
+        if (d['is_paid'] == true && d['amount'] is num) revenue += (d['amount'] as num).toDouble();
+        final s = d['status'];
+        if (s != 'completed' && s != 'cancelled') active++;
+      }
+      await ZyiarahPdfReportUtil.generateFinancialReport(
+        orders: snap.docs.cast<DocumentSnapshot>(),
+        totalRevenue: revenue,
+        activeOrders: active,
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('فشل إنشاء التقرير: $e')));
+    }
   }
 }
