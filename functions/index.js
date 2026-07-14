@@ -788,6 +788,61 @@ async function isAllowedEmailRecipient(email) {
   return false;
 }
 
+// يبني بريد HTML منسّقاً لتنبيهات الإدارة بتفاصيل الطلب/العميل بدل نصّ عارٍ.
+// يُرجع null إن لم يكن النوع تنبيهاً إدارياً معروفاً → يُستخدم النص العادي.
+async function _buildAdminAlertHtml(type, data) {
+  const db = admin.firestore();
+  const d = data || {};
+  let heading = "تنبيه إداري";
+  let rows = [];
+  try {
+    if (type === "new_order_admin" || type === "admin_order_alert") {
+      heading = "طلب خدمة جديد";
+      const o = (await db.collection("orders").doc(d.orderId).get()).data() || {};
+      rows = [["رقم الطلب", o.code || d.orderId || "—"], ["العميل", o.client_name || "—"],
+        ["الجوال", o.client_phone || "—"], ["الخدمة", o.service_name || o.service_type || "—"],
+        ["المبلغ", o.amount != null ? `${o.amount} ر.س` : "—"],
+        ["المنطقة", o.zone_name || "—"], ["الحالة", o.status || "—"]];
+    } else if (type === "new_store_order_admin") {
+      heading = "طلب متجر جديد";
+      const o = (await db.collection("store_orders").doc(d.orderId).get()).data() || {};
+      const items = Array.isArray(o.items) ? o.items.length : "—";
+      rows = [["رقم الطلب", o.code || d.orderId || "—"], ["العميل", o.client_name || "—"],
+        ["الجوال", o.client_phone || "—"], ["عدد المنتجات", items],
+        ["الإجمالي", `${o.total_amount ?? o.final_amount ?? "—"} ر.س`]];
+    } else if (type === "new_maintenance_admin") {
+      heading = "طلب صيانة جديد";
+      const o = (await db.collection("maintenance_requests").doc(d.requestId).get()).data() || {};
+      rows = [["رقم الطلب", d.requestId || "—"], ["العميل", o.userName || o.client_name || "—"],
+        ["الجوال", o.userPhone || o.phone || "—"], ["نوع الصيانة", o.serviceType || "—"]];
+    } else if (type === "new_contract_admin") {
+      heading = "طلب اشتراك/عقد جديد";
+      const o = (await db.collection("contracts").doc(d.contractId).get()).data() || {};
+      rows = [["الباقة", o.planName || "—"], ["العميل", o.userName || o.clientName || "—"],
+        ["الجوال", o.userPhone || "—"], ["القيمة", o.planPrice != null ? `${o.planPrice} ر.س` : "—"]];
+    } else {
+      return null;
+    }
+  } catch (e) {
+    console.error("[EMAIL] admin alert html failed:", e.message);
+    return null;
+  }
+  const rowsHtml = rows.map(([k, v]) =>
+    `<tr><td style="padding:11px 10px;color:#64748b;font-size:14px;border-bottom:1px solid #f1f5f9">${k}</td>` +
+    `<td style="padding:11px 10px;font-weight:bold;color:#1e293b;text-align:left;border-bottom:1px solid #f1f5f9">${v}</td></tr>`).join("");
+  return `<div dir="rtl" style="font-family:Tajawal,Arial,sans-serif;max-width:600px;margin:auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0">
+  <div style="background:linear-gradient(135deg,#5D1B5E,#8B3D8C);padding:28px;text-align:center">
+    <h1 style="color:#fff;margin:0;font-size:22px">${heading} 🔔</h1>
+    <p style="color:#e9d5ea;margin:6px 0 0">لوحة إدارة زيارة</p>
+  </div>
+  <div style="padding:28px">
+    <p style="font-size:15px;color:#475569;margin:0 0 8px">وصلك طلب جديد يحتاج مراجعتك — التفاصيل:</p>
+    <table style="width:100%;border-collapse:collapse">${rowsHtml}</table>
+  </div>
+  <div style="background:#f8fafc;padding:14px;text-align:center;color:#94a3b8;font-size:12px">زيارة — إشعار إداري آلي</div>
+</div>`;
+}
+
 exports.processNotificationTriggers = onDocumentCreated(
     // retry: إعادة المحاولة عند فشل عابر (Resend/FCM) بدل فقد الإشعار للأبد. سجلّ
     // الصندوق (step 1) بمعرّف حتمي كي لا يتكرّر عند الإعادة.
@@ -928,7 +983,10 @@ exports.processNotificationTriggers = onDocumentCreated(
           if (template && template.id) {
             emailPayload.template = {id: template.id, variables: template.variables || {}};
           } else {
-            emailPayload.html = body;
+            // تنبيهات الإدارة: قالب HTML منسّق بتفاصيل الطلب/العميل بدل النص العارٍ.
+            const adminHtml = (toUid === "ADMIN_BROADCAST") ?
+              await _buildAdminAlertHtml(type, data) : null;
+            emailPayload.html = adminHtml || body;
           }
 
           const {data: resendData, error: resendError} = await resend.emails.send(emailPayload);
