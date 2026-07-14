@@ -221,7 +221,9 @@ class ZyiarahPdfService {
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (format) => pdf.save(), name: 'Zyiarah_Report.pdf');
+    // نُولّد البايتات أولاً — توليدها داخل onLayout يبتلع أي خطأ فتعلق المعاينة للأبد.
+    final Uint8List reportBytes = await pdf.save();
+    await Printing.layoutPdf(onLayout: (format) async => reportBytes, name: 'Zyiarah_Report.pdf');
   }
 
   // ============================================================================

@@ -43,8 +43,10 @@ class ZyiarahPdfReportUtil {
       ),
     );
 
+    // نُولّد البايتات أولاً — توليدها داخل onLayout يبتلع أي خطأ فتعلق المعاينة للأبد.
+    final bytes = await pdf.save();
     await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
+      onLayout: (PdfPageFormat format) async => bytes,
       name: 'Zyiarah_Financial_Report_${DateTime.now().millisecondsSinceEpoch}.pdf',
     );
   }
