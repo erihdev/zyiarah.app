@@ -670,6 +670,12 @@ class _ClientDashboardState extends State<ClientDashboard> {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahStoreScreen()));
                   } else if (routeType == '/support') {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahSupportScreen()));
+                  } else if (routeType == '/sofa_cleaning' || routeType == '/rug_cleaning') {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SofaRugCleaningDetailsScreen(serviceName: "تنظيف الكنب والزل")));
+                  } else if (routeType == '/maintenance') {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahMaintenanceRequestScreen()));
+                  } else if (routeType == '/subscriptions') {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahSubscriptionPlansScreen()));
                   } else if (routeType != 'none' && routeType.isNotEmpty && context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('هذا الرابط غير متاح حالياً')),
