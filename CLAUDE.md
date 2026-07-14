@@ -69,7 +69,6 @@ Key directories:
 | `location_service.dart` + `geofence_service.dart` | Location tracking (100m driver geofence) |
 | `zyiarah_capacity_service.dart` | Booking capacity / slot availability |
 | `audit_service.dart` | Admin audit trail |
-| `n8n_automation_service.dart` | N8N workflow automation |
 
 ### Admin Web Panel (`admin_panel/`)
 
