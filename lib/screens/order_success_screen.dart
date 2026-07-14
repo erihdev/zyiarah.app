@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/screens/orders_list_screen.dart';
+import 'package:zyiarah/services/zatca_service.dart';
+import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 
 class ZyiarahOrderSuccessScreen extends StatefulWidget {
   final String orderCode;
@@ -29,6 +31,41 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
   late Animation<double> _checkAnimation;
+  bool _retryingInvoice = false;
+
+  // إعادة توليد الفاتورة ورفعها عند فشل المحاولة الأولى — يعيد بناء بيانات ZATCA من
+  // وثيقة الطلب نفسها (المبلغ شامل الضريبة 15% ضمنية) ثم يستدعي الخدمة المحصّنة بالمهلة.
+  Future<void> _retryInvoice(String docId, Map<String, dynamic> data) async {
+    setState(() => _retryingInvoice = true);
+    try {
+      final double amount = (data['amount'] as num?)?.toDouble() ?? 0;
+      final double vat = amount - (amount / 1.15);
+      final String qrData = ZatcaService.generateZatcaQrCode(
+        timestamp: DateTime.now(),
+        totalAmount: amount,
+        vatAmount: vat,
+      );
+      // نمسح علامة الفشل حتى يعود الدوّار أثناء المحاولة.
+      await FirebaseFirestore.instance
+          .collection(widget.invoiceCollection)
+          .doc(docId)
+          .update({'invoice_pdf_status': 'retrying'});
+      await ZyiarahPdfService.generateAndUploadInvoice(
+        orderId: docId,
+        orderCode: widget.orderCode,
+        amount: amount,
+        qrData: qrData,
+        serviceName: (data['service_name'] as String?) ?? '-',
+        discountAmount: (data['discount_amount'] as num?)?.toDouble() ?? 0,
+        couponCode: data['coupon_code'] as String?,
+        collectionPath: widget.invoiceCollection,
+      );
+    } catch (_) {
+      // عند تكرار الفشل تُعاد كتابة علامة failed داخل الخدمة فيظهر الزر ثانيةً.
+    } finally {
+      if (mounted) setState(() => _retryingInvoice = false);
+    }
+  }
 
   @override
   void initState() {
@@ -166,9 +203,20 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
         }
 
         final data = snapshot.data!.docs.first.data() as Map<String, dynamic>;
+        final docId = snapshot.data!.docs.first.id;
         final invoiceUrl = data['invoice_pdf_url'] as String?;
+        final invoiceStatus = data['invoice_pdf_status'] as String?;
 
         if (invoiceUrl == null) {
+          // فشل الرفع (اتصال ضعيف مثلاً) → زر إعادة محاولة بدل دوّار لا ينتهي.
+          if (invoiceStatus == 'failed' && !_retryingInvoice) {
+            return TextButton.icon(
+              onPressed: () => _retryInvoice(docId, data),
+              icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.blueGrey),
+              label: Text("تعذّر إنشاء الفاتورة — إعادة المحاولة",
+                  style: GoogleFonts.tajawal(fontSize: 12, color: Colors.blueGrey)),
+            );
+          }
           return Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -180,7 +228,8 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
         }
 
         return OutlinedButton.icon(
-          onPressed: () => launchUrl(Uri.parse(invoiceUrl)),
+          onPressed: () =>
+              launchUrl(Uri.parse(invoiceUrl), mode: LaunchMode.externalApplication),
           style: OutlinedButton.styleFrom(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             side: const BorderSide(color: Color(0xFF1E293B)),

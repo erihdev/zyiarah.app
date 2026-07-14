@@ -171,17 +171,32 @@ class ZyiarahPdfService {
     try {
       final Uint8List pdfBytes = await pdf.save();
       final storageRef = FirebaseStorage.instance.ref().child('invoices/$orderId.pdf');
-      
-      await storageRef.putData(pdfBytes, SettableMetadata(contentType: 'application/pdf'));
-      final downloadUrl = await storageRef.getDownloadURL();
-      
-      await FirebaseFirestore.instance.collection(collectionPath).doc(orderId).update({
-        'invoice_pdf_url': downloadUrl,
-      });
-      
+
+      // مهلة زمنية على كل عملية شبكية: بلا timeout كان الرفع على اتصال ضعيف أو محجوب
+      // لا يعود أبداً، فيبقى دوّار "جاري إنشاء الفاتورة الضريبية..." يدور للأبد. الآن
+      // تفشل العملية بأمان خلال ثوانٍ محدودة بدل التعليق.
+      await storageRef
+          .putData(pdfBytes, SettableMetadata(contentType: 'application/pdf'))
+          .timeout(const Duration(seconds: 30));
+      final downloadUrl =
+          await storageRef.getDownloadURL().timeout(const Duration(seconds: 15));
+
+      await FirebaseFirestore.instance
+          .collection(collectionPath)
+          .doc(orderId)
+          .update({'invoice_pdf_url': downloadUrl}).timeout(const Duration(seconds: 15));
+
       return downloadUrl;
     } catch (e) {
-      debugPrint('Error generating ZATCA PDF: $e');
+      debugPrint('Error generating/uploading ZATCA invoice: $e');
+      // نعلّم الوثيقة بالفشل حتى تُظهر الواجهة زرّ إعادة المحاولة بدل دوّار أبدي.
+      try {
+        await FirebaseFirestore.instance
+            .collection(collectionPath)
+            .doc(orderId)
+            .update({'invoice_pdf_status': 'failed'}).timeout(
+                const Duration(seconds: 10));
+      } catch (_) {}
       return null;
     }
   }
