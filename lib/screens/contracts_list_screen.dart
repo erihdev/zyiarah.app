@@ -210,19 +210,26 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                       else
                          Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
+                            onPressed: () async {
+                              final messenger = ScaffoldMessenger.of(context);
+                              messenger.showSnackBar(
                                 const SnackBar(content: Text('جاري تجهيز نسخة العقد...'))
                               );
-                              ZyiarahPdfService.generateAndDownloadContract(
-                                contractId: data['contractId'] ?? _shortRef(contractDocId),
-                                planName: planName,
-                                userName: data['userName'] ?? data['clientName'] ?? 'عميل زيارة',
-                                userPhone: data['userPhone'] ?? data['clientPhone'] ?? '000000000',
-                                price: double.tryParse('${data['planPrice'] ?? 0}') ?? 0.0,
-                                visits: int.tryParse('${data['planVisits'] ?? 0}') ?? 0,
-                                startDate: createdAt,
-                              );
+                              try {
+                                await ZyiarahPdfService.generateAndDownloadContract(
+                                  contractId: data['contractId'] ?? _shortRef(contractDocId),
+                                  planName: planName,
+                                  userName: data['userName'] ?? data['clientName'] ?? 'عميل زيارة',
+                                  userPhone: data['userPhone'] ?? data['clientPhone'] ?? '000000000',
+                                  price: double.tryParse('${data['planPrice'] ?? 0}') ?? 0.0,
+                                  visits: int.tryParse('${data['planVisits'] ?? 0}') ?? 0,
+                                  startDate: createdAt,
+                                );
+                              } catch (e) {
+                                messenger.showSnackBar(
+                                  SnackBar(content: Text('تعذّر تجهيز العقد: $e')),
+                                );
+                              }
                             },
                             icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
                             label: Text('تحميل العقد', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),

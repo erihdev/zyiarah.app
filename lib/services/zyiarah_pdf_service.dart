@@ -247,6 +247,20 @@ class ZyiarahPdfService {
       logoBytes = data.buffer.asUint8List();
     } catch (_) {}
 
+    // فكّ التوقيع بأمان: بادئة data-URI أو محارف/تلف كانت تجعل base64Decode يرمي داخل
+    // build (أثناء save) → تعلق معاينة الطباعة للأبد. عند أي فشل نتجاهل التوقيع فقط.
+    Uint8List? signatureBytes;
+    if (signatureData != null && signatureData.isNotEmpty) {
+      try {
+        var s = signatureData;
+        final comma = s.indexOf(',');
+        if (s.startsWith('data:') && comma != -1) s = s.substring(comma + 1);
+        signatureBytes = base64Decode(s.replaceAll(RegExp(r'\s'), ''));
+      } catch (_) {
+        signatureBytes = null;
+      }
+    }
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -349,8 +363,8 @@ class ZyiarahPdfService {
                   children: [
                     pw.Text(_ar('توقيع العميل (الطرف الثاني)'), style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                     pw.SizedBox(height: 5),
-                    if (signatureData != null && signatureData.isNotEmpty)
-                      pw.Image(pw.MemoryImage(base64Decode(signatureData)), width: 100),
+                    if (signatureBytes != null)
+                      pw.Image(pw.MemoryImage(signatureBytes), width: 100),
                   ],
                 ),
               ],
@@ -373,7 +387,10 @@ class ZyiarahPdfService {
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save(), name: 'Zyiarah_Contract_$contractId.pdf');
+    // نُولّد البايتات أولاً ثم نمرّرها جاهزة — كان توليدها داخل onLayout يبتلع أي خطأ
+    // (خطّ/صورة) فتبقى «Loading Preview» للأبد. الآن أي خطأ يُرمى فيلتقطه المُستدعي.
+    final Uint8List bytes = await pdf.save();
+    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => bytes, name: 'Zyiarah_Contract_$contractId.pdf');
   }
 
   // --- Helpers ---
