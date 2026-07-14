@@ -18,7 +18,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
 
   final TextEditingController _maxWorkerCtrl = TextEditingController();
   final TextEditingController _maxOrdersPerDayCtrl = TextEditingController();
-  final TextEditingController _maxTeamsPerSlotCtrl = TextEditingController();
   final TextEditingController _merchantNameCtrl = TextEditingController();
   final TextEditingController _vatNumberCtrl = TextEditingController();
   final TextEditingController _whatsappSupportCtrl = TextEditingController();
@@ -50,7 +49,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
             _phoneSupportCtrl.text = data['support_phone'] ?? "920000000";
             _webhookUrlCtrl.text = data['webhook_url'] ?? "https://n8n.zyiarah.com/webhook/zyiarah-comm";
             _adminEmailCtrl.text = data['admin_email'] ?? "admin@zyiarah.com";
-            _maxTeamsPerSlotCtrl.text = (data['max_teams_per_slot'] ?? 5).toString();
             _contractTermsCtrl.text = data['contract_terms'] ??
                 "1. يتم تفعيل العقد تلقائياً فور سداد القيمة واعتماد الإدارة.\n"
                 "2. يحق للعميل طلب الخدمة عبر التطبيق ضمن نطاق الباقة.\n"
@@ -106,7 +104,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         'support_phone': _phoneSupportCtrl.text.trim(),
         'webhook_url': _webhookUrlCtrl.text.trim(),
         'admin_email': _adminEmailCtrl.text.trim(),
-        'max_teams_per_slot': int.tryParse(_maxTeamsPerSlotCtrl.text) ?? 5,
         'contract_terms': _contractTermsCtrl.text.trim(),
       }, SetOptions(merge: true));
 
@@ -150,7 +147,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
     _fadeController.dispose();
     _maxWorkerCtrl.dispose();
     _maxOrdersPerDayCtrl.dispose();
-    _maxTeamsPerSlotCtrl.dispose();
     _merchantNameCtrl.dispose();
     _vatNumberCtrl.dispose();
     _whatsappSupportCtrl.dispose();
@@ -335,7 +331,27 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                           const SizedBox(height: 16),
                           _buildPremiumField("الحد الأقصى للطلبات اليومية الاستيعابية", "طلبات/يوم", _maxOrdersPerDayCtrl, Icons.calendar_month_rounded),
                           const SizedBox(height: 16),
-                          _buildPremiumField("الحد الأقصى للطلبات المتزامنة (الفتحة الزمنية)", "حجوزات/ساعة", _maxTeamsPerSlotCtrl, Icons.hourglass_bottom_rounded),
+                          // السعة المتزامنة تُحسب تلقائياً = عدد السائقين النشطين (لا رقم يدوي)
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF5D1B5E).withValues(alpha: 0.06),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: const Color(0xFF5D1B5E).withValues(alpha: 0.15)),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.info_outline_rounded, color: Color(0xFF5D1B5E), size: 20),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    "الحد الأقصى للطلبات المتزامنة في الفترة يُحسب تلقائياً = عدد السائقين النشطين المسجّلين. أضِف سائقين لزيادة السعة.",
+                                    style: TextStyle(fontSize: 12, color: Color(0xFF475569), height: 1.5),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
 
