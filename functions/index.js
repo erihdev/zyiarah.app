@@ -311,12 +311,42 @@ async function _deliverBroadcast(docRef, data) {
     data: {click_action: "FLUTTER_NOTIFICATION_CLICK", type: "global_broadcast"},
   };
   try {
-    // FIX: single `all_users` topic to avoid double-delivery to clients/drivers
-    if (target === "all") {
-      await admin.messaging().send({...payload, topic: "all_users"});
-    } else if (target === "clients" || target === "drivers") {
-      await admin.messaging().send({...payload, topic: target});
+    // إرسال لرموز الأجهزة مباشرةً بدل topic — أوثق بكثير: لا يعتمد على اشتراك المواضيع
+    // ولا على تأخّر انتشارها (كان سبب عدم وصول البثّ لبعض الأجهزة رغم تسجيلها).
+    let tokQuery = admin.firestore().collection("fcm_tokens");
+    if (target === "clients") {
+      tokQuery = tokQuery.where("role", "==", "client");
+    } else if (target === "drivers") {
+      tokQuery = tokQuery.where("role", "==", "driver");
+    } else if (target === "admins") {
+      tokQuery = tokQuery.where("role", "in", ["admin", "super_admin"]);
     }
+    const tokSnap = await tokQuery.get();
+    const uniqTokens = [...new Set(
+        tokSnap.docs.map((d) => d.data().token || d.data().fcmToken).filter(Boolean))];
+    let sent = 0; let failed = 0; const invalid = [];
+    for (let i = 0; i < uniqTokens.length; i += 500) {
+      const chunk = uniqTokens.slice(i, i + 500);
+      const resp = await admin.messaging().sendEachForMulticast({
+        ...payload,
+        tokens: chunk,
+        apns: {payload: {aps: {sound: "default"}}},
+      });
+      sent += resp.successCount; failed += resp.failureCount;
+      resp.responses.forEach((r, idx) => {
+        if (!r.success) {
+          const code = r.error && r.error.code;
+          if (code === "messaging/registration-token-not-registered" ||
+              code === "messaging/invalid-registration-token") invalid.push(chunk[idx]);
+        }
+      });
+    }
+    // نظّف الرموز الميتة (أجهزة أُلغي تثبيتها) كي لا تتضخّم المجموعة
+    for (const bad of invalid) {
+      const q = await admin.firestore().collection("fcm_tokens").where("token", "==", bad).limit(5).get();
+      for (const dd of q.docs) await dd.ref.delete().catch(() => {});
+    }
+    console.log(`broadcast(${target}) tokens: sent=${sent} failed=${failed} cleaned=${invalid.length}`);
 
     let query = admin.firestore().collection("users");
     if (target === "clients") {
