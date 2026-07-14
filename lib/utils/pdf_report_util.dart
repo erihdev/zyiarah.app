@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -5,6 +6,19 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart' as intl;
 
 class ZyiarahPdfReportUtil {
+  // نفس سبب التضمين المحلي في ZyiarahPdfService: PdfGoogleFonts كانت تجلب الخط
+  // عبر http.get بلا timeout فيتجمّد التقرير عند ضعف الاتصال.
+  static pw.Font? _baseFont;
+  static pw.Font? _boldFont;
+
+  static Future<({pw.Font base, pw.Font bold})> _fonts() async {
+    _baseFont ??=
+        pw.Font.ttf(await rootBundle.load('assets/fonts/Tajawal-Regular.ttf'));
+    _boldFont ??=
+        pw.Font.ttf(await rootBundle.load('assets/fonts/Tajawal-Bold.ttf'));
+    return (base: _baseFont!, bold: _boldFont!);
+  }
+
   /// Generates and prints/saves a professional financial report.
   static Future<void> generateFinancialReport({
     required List<DocumentSnapshot> orders,
@@ -12,9 +26,10 @@ class ZyiarahPdfReportUtil {
     required int activeOrders,
   }) async {
     final pdf = pw.Document();
-    final ttf = await PdfGoogleFonts.tajawalRegular();
-    final ttfBold = await PdfGoogleFonts.tajawalBold();
-    
+    final f = await _fonts();
+    final ttf = f.base;
+    final ttfBold = f.bold;
+
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,

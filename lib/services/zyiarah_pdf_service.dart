@@ -17,6 +17,23 @@ class ZyiarahPdfService {
     return ArabicReshaper().reshape(input);
   }
 
+  // خطوط الـ PDF مضمّنة كأصول محلية ومحفوظة في الذاكرة بعد أول تحميل.
+  //
+  // البديل السابق `PdfGoogleFonts.tajawalRegular()` كان ينفّذ
+  // `http.get('https://fonts.gstatic.com/...')` بلا timeout عند كل توليد. فإذا
+  // كان الاتصال ضعيفاً أو محجوباً، لا يعود الـ await أبداً — فتبقى معاينة الطباعة
+  // معلّقة إلى الأبد وهو ما كان يظهر للمستخدم كأن العقد "لا يُحمَّل".
+  static pw.Font? _baseFont;
+  static pw.Font? _boldFont;
+
+  static Future<({pw.Font base, pw.Font bold})> _fonts() async {
+    _baseFont ??=
+        pw.Font.ttf(await rootBundle.load('assets/fonts/Tajawal-Regular.ttf'));
+    _boldFont ??=
+        pw.Font.ttf(await rootBundle.load('assets/fonts/Tajawal-Bold.ttf'));
+    return (base: _baseFont!, bold: _boldFont!);
+  }
+
   // ============================================================================
   // 1. توليد فاتورة ضريبية ZATCA (ZATCA Invoice)
   // ============================================================================
@@ -34,8 +51,9 @@ class ZyiarahPdfService {
     await ZatcaService.ensureConfigLoaded();
 
     final pdf = pw.Document();
-    final arabicFont = await PdfGoogleFonts.tajawalRegular();
-    final arabicFontBold = await PdfGoogleFonts.tajawalBold();
+    final f = await _fonts();
+    final arabicFont = f.base;
+    final arabicFontBold = f.bold;
 
     // --- تصحيح حسابات ZATCA الضريبية ---
     // المبلغ الإجمالي قبل أي خصومات (شامل الضريبة)
@@ -177,8 +195,9 @@ class ZyiarahPdfService {
     required double totalRevenue,
   }) async {
     final pdf = pw.Document();
-    final ttf = await PdfGoogleFonts.tajawalRegular();
-    final ttfBold = await PdfGoogleFonts.tajawalBold();
+    final f = await _fonts();
+    final ttf = f.base;
+    final ttfBold = f.bold;
 
     pdf.addPage(
       pw.MultiPage(
@@ -240,8 +259,9 @@ class ZyiarahPdfService {
     String? signatureData,
   }) async {
     final pdf = pw.Document();
-    final arabicFont = await PdfGoogleFonts.tajawalRegular();
-    final arabicFontBold = await PdfGoogleFonts.tajawalBold();
+    final f = await _fonts();
+    final arabicFont = f.base;
+    final arabicFontBold = f.bold;
 
     Uint8List? logoBytes;
     try {
