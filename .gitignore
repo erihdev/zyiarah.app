@@ -80,6 +80,12 @@ AuthKey_*.p8
 .claude/
 ios/dist.key
 ios/*.key
+# Code-signing material — never commit (the .p12 carries the private key)
+*.p12
+*.pem
+*.csr
+*.mobileprovision
+*.cer
 # One-off admin/maintenance scripts (hardcode credentials — never commit)
 admin_panel/*.mjs
 

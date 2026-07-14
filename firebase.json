@@ -62,7 +62,11 @@
         ".git",
         "firebase-debug.log",
         "firebase-debug.*.log",
-        "*.local"
+        "*.local",
+        "*adminsdk*.json",
+        "service-account*.json",
+        "_tmp_*.js",
+        "_*.json"
       ]
     }
   ],
