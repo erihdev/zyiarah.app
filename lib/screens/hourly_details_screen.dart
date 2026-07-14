@@ -286,9 +286,18 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     final slots = _getStartHours();
     final Map<int, bool> result = {};
     for (final h in slots) {
-      final slotKey = '${dateKey}_${h.toString().padLeft(2, '0')}:00';
-      final count = _slotCounts[slotKey] ?? 0;
-      result[h] = count < _maxTeamsPerSlot;
+      // متاح فقط إن وُجد سائق حرّ طوال مدة الحجز كلها (لا ساعة البدء وحدها) — وإلا
+      // كان العميل يحجز بدايةً متاحة بينما ساعةٌ لاحقة كل السائقين فيها مشغولون،
+      // فينتهي الطلب معلّقاً بلا إسناد. slotCounts يراعي التداخل، وmaxTeams = عدد السائقين.
+      bool available = true;
+      for (int hh = h; hh < h + _selectedHours; hh++) {
+        final slotKey = '${dateKey}_${hh.toString().padLeft(2, '0')}:00';
+        if ((_slotCounts[slotKey] ?? 0) >= _maxTeamsPerSlot) {
+          available = false;
+          break;
+        }
+      }
+      result[h] = available;
     }
     setState(() {
       _slotAvailability = result;
