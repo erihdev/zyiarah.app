@@ -84,7 +84,7 @@ class AdminUsersScreen extends StatelessWidget {
             "العملاء والمستخدمون",
             style: GoogleFonts.tajawal(fontWeight: FontWeight.bold),
           ),
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
           elevation: 0,
         ),
@@ -179,7 +179,7 @@ class AdminUsersScreen extends StatelessWidget {
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           leading: CircleAvatar(
                             radius: 24,
-                            backgroundColor: const Color(0xFF6366F1).withValues(alpha: 0.1),
+                            backgroundColor: const Color(0xFF5D1B5E).withValues(alpha: 0.1),
                             child: Text(
                               name.isNotEmpty ? name[0] : 'م',
                               style: const TextStyle(

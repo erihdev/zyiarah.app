@@ -17,7 +17,7 @@ class AdminMaintenanceScreen extends StatelessWidget {
       child: Scaffold(
         appBar: AppBar(
           title: Text("طلبات الصيانة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
         ),
         body: StreamBuilder<QuerySnapshot>(

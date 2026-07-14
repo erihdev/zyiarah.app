@@ -72,7 +72,7 @@ class _AdminStaffPerformanceScreenState extends State<AdminStaffPerformanceScree
         backgroundColor: const Color(0xFFF1F5F9),
         appBar: AppBar(
           title: Text("كفاءة وأداء الكوادر", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
           elevation: 0,
         ),

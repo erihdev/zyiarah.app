@@ -99,7 +99,7 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
           elevation: 0,
           title: Container(

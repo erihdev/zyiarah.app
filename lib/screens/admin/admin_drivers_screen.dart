@@ -274,7 +274,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                             ? const Center(child: CircularProgressIndicator(color: Color(0xFF1E293B)))
                             : ElevatedButton(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF1E293B),
+                                  backgroundColor: const Color(0xFF5D1B5E),
                                   foregroundColor: Colors.white,
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                                   elevation: 5,
@@ -397,13 +397,13 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: Text("إدارة الكوادر والتوصيل", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
           elevation: 0,
         ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => _showDriverDialog(),
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
           icon: const Icon(Icons.add_task_rounded),
           label: Text("تسجيل كادر جديد", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),

@@ -121,7 +121,7 @@ class AdminAnalyticsScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Text('لوحة التحليلات', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: const Color(0xFF5D1B5E),
         foregroundColor: Colors.white,
         elevation: 0,
       ),

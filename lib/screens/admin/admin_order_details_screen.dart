@@ -571,7 +571,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text("طلب #$code", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
         ),
         body: ListView(
@@ -706,7 +706,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B)),
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E)),
                         onPressed: _updateOrder,
                         child: const Text("حفظ التعديلات", style: TextStyle(fontSize: 16, color: Colors.white)),
                       ),

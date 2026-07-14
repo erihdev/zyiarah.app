@@ -100,7 +100,7 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
                       if (dialogCtx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ في التحديث: $e")));
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B)),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E)),
                   child: Text(isSaving ? "جاري الحفظ..." : "حفظ التعديل", style: const TextStyle(color: Colors.white)),
                 ),
               ],
@@ -122,7 +122,7 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
             "إدارة الخدمات",
             style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
           ),
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
           elevation: 0,
         ),

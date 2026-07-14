@@ -235,7 +235,7 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                       setDialogState(() => isSaving = false);
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E), foregroundColor: Colors.white),
                   child: Text(isSaving ? "جاري الحفظ..." : "حفظ ونشر"),
                 ),
               ],
@@ -254,12 +254,12 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: Text('إدارة البنرات الإعلانية', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: () => _showBannerDialog(),
-          backgroundColor: const Color(0xFF2563EB),
+          backgroundColor: const Color(0xFF5D1B5E),
           child: const Icon(Icons.add, color: Colors.white),
         ),
         body: StreamBuilder<QuerySnapshot>(

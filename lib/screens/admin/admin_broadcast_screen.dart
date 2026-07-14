@@ -37,7 +37,7 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: Text("مركز البث الإداري", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
           elevation: 0,
         ),
@@ -370,7 +370,7 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
       : ElevatedButton.icon(
           onPressed: _sendBroadcast,
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF1E293B),
+            backgroundColor: const Color(0xFF5D1B5E),
             foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             elevation: 5,

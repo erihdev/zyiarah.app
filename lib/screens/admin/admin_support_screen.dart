@@ -16,7 +16,7 @@ class AdminSupportScreen extends StatelessWidget {
         child: Scaffold(
           appBar: AppBar(
             title: Text("مركز المساعدة والدعم", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-            backgroundColor: const Color(0xFF1E293B),
+            backgroundColor: const Color(0xFF5D1B5E),
             foregroundColor: Colors.white,
             bottom: TabBar(
               indicatorColor: Colors.blueAccent,

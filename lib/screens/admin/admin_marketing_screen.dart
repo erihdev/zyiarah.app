@@ -110,7 +110,7 @@ class _AdminMarketingScreenState extends State<AdminMarketingScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text("التسويق والإشعارات", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
           elevation: 0,
         ),
@@ -161,7 +161,7 @@ class _AdminMarketingScreenState extends State<AdminMarketingScreen> {
                   style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: const Color(0xFF1E293B),
+                backgroundColor: const Color(0xFF5D1B5E),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),

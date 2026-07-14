@@ -357,7 +357,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                         child: ElevatedButton(
                           onPressed: _isSaving ? null : _savePricing,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF6366F1),
+                            backgroundColor: const Color(0xFF5D1B5E),
                             foregroundColor: Colors.white,
                             elevation: 0,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),

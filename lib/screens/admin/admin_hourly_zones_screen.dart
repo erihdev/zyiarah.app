@@ -215,7 +215,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                       setDialogState(() => isSaving = false);
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B), foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E), foregroundColor: Colors.white),
                   child: Text(isSaving ? "جاري الحفظ..." : "حفظ المنطقة"),
                 ),
               ],
@@ -244,12 +244,12 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: Text('إدارة ونطاقات الخدمة', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: () => _showZoneDialog(),
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: const Color(0xFF5D1B5E),
           child: const Icon(Icons.add_location_alt_rounded, color: Colors.white),
         ),
         body: StreamBuilder<QuerySnapshot>(
