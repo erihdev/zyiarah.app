@@ -847,10 +847,13 @@ exports.processNotificationTriggers = onDocumentCreated(
         }
 
         // 2. Email via Resend (key from Secret Manager)
-        // new_store_order_admin مُضاف: يُرسل بريداً للإدارة عند طلب متجر جديد (طلبات
-        // الخدمة تُرسل عبر admin_order_alert أصلاً). البريد يذهب لبريد الإدارة المُهيّأ أعلاه.
+        // كل تنبيهات الإدارة للكيانات الجديدة تُرسل بريداً لبريد الإدارة المُهيّأ: طلب خدمة
+        // (new_order_admin) + متجر + صيانة + عقد. كان البريد يصل للمتجر فقط لأن بقية
+        // الأنواع لم تكن مُدرَجة هنا.
         const wantsEmail = (type === "email" || type === "hybrid" ||
-          type === "admin_order_alert" || type === "new_store_order_admin");
+          type === "admin_order_alert" || type === "new_store_order_admin" ||
+          type === "new_order_admin" || type === "new_maintenance_admin" ||
+          type === "new_contract_admin");
         // SECURITY: notification_triggers is client-writable; refuse to relay
         // email to any address that isn't a registered user/driver/admin.
         const emailAllowed = wantsEmail ? await isAllowedEmailRecipient(recipientEmail) : false;
