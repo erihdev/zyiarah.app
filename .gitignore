@@ -133,3 +133,10 @@ functions/_tmp_delorphan.js
 functions/_tmp_sig.js
 functions/_tmp_oldorders.js
 functions/_tmp_wipe.js
+functions/_tmp_checkorder.js
+functions/_tmp_adminemail.js
+functions/_tmp_banners.js
+functions/_tmp_fcm.js
+functions/_tmp_apns.js
+functions/_tmp_realpush.js
+functions/_tmp_ord198.js
