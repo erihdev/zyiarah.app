@@ -382,7 +382,7 @@ exports.onNotificationCreated = onDocumentCreated({document: "notifications_log/
     });
 
 // 3b. Release scheduled broadcasts whose time has come.
-exports.releaseScheduledNotifications = onSchedule({schedule: "every 10 minutes", cpu: 0.083},
+exports.releaseScheduledNotifications = onSchedule({schedule: "every 1 minutes", cpu: 0.083},
     async () => {
       const db = admin.firestore();
       const now = admin.firestore.Timestamp.now();
