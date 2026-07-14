@@ -2,6 +2,8 @@
 const {onDocumentCreated, onDocumentUpdated, onDocumentWritten} = require("firebase-functions/v2/firestore");
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
+const {onTaskDispatched} = require("firebase-functions/v2/tasks");
+const {getFunctions} = require("firebase-admin/functions");
 const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const geofire = require("geofire-common");
@@ -374,11 +376,41 @@ exports.onNotificationCreated = onDocumentCreated({document: "notifications_log/
       const isFuture = sched && typeof sched.toMillis === "function" &&
         sched.toMillis() > Date.now();
       if (newValue.status === "scheduled" || isFuture) {
-        console.log(`Notification ${event.params.id} is scheduled — deferring delivery`);
+        // تنفيذ دقيق باللحظة المختارة عبر Cloud Task (بدل انتظار فحص الـcron). الـcron
+        // كل دقيقة يبقى شبكة أمان لأي مهمّة تفشل/تُفقد أو مجدولة لأبعد من حدّ Cloud Tasks.
+        try {
+          if (isFuture && sched.toMillis() - Date.now() < 29 * 24 * 60 * 60 * 1000) {
+            await getFunctions().taskQueue("deliverScheduledNotification").enqueue(
+                {docId: event.params.id},
+                {scheduleTime: new Date(sched.toMillis())});
+            console.log(`Exact Cloud Task queued for ${event.params.id} at ${sched.toDate().toISOString()}`);
+          }
+        } catch (e) {
+          console.error(`enqueue failed for ${event.params.id} — cron will cover:`, e.message);
+        }
         return;
       }
 
       await _deliverBroadcast(snap.ref, newValue);
+    });
+
+// 3a. تسليم دقيق في اللحظة المختارة — تُشغّله Cloud Tasks عند حلول scheduled_at.
+// يستخدم نفس مطالبة الحالة الذرّية (scheduled→sending) فلا يتكرّر مع الـcron الاحتياطي.
+exports.deliverScheduledNotification = onTaskDispatched(
+    {retryConfig: {maxAttempts: 3, minBackoffSeconds: 15}, rateLimits: {maxConcurrentDispatches: 5}, cpu: 0.083},
+    async (req) => {
+      const docId = req.data && req.data.docId;
+      if (!docId) return;
+      const db = admin.firestore();
+      const docRef = db.collection("notifications_log").doc(docId);
+      const claimed = await db.runTransaction(async (tx) => {
+        const s = await tx.get(docRef);
+        const d = s.data() || {};
+        if (d.status !== "scheduled" || d.processed === true) return null;
+        tx.update(docRef, {status: "sending"});
+        return d;
+      });
+      if (claimed) await _deliverBroadcast(docRef, claimed);
     });
 
 // 3b. Release scheduled broadcasts whose time has come.
