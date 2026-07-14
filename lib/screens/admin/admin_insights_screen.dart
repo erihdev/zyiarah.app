@@ -113,38 +113,6 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFFF1F5F9),
-        appBar: AppBar(
-          title: Text("لوحة التحكم الذكية", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
-          backgroundColor: const Color(0xFF1E293B),
-          foregroundColor: Colors.white,
-          elevation: 0,
-          actions: [
-            IconButton(
-              tooltip: "تصدير البيانات (CSV)",
-              icon: const Icon(Icons.file_download_rounded),
-              onPressed: _exportDataToCSV,
-            ),
-            IconButton(
-              tooltip: "تحميل تقرير أداء PDF",
-              icon: const Icon(Icons.picture_as_pdf_rounded),
-              onPressed: () => ZyiarahPdfReportUtil.generateFinancialReport(
-                orders: _orders,
-                totalRevenue: stats['revenue'],
-                activeOrders: stats['active'],
-              ),
-            ),
-            IconButton(
-              tooltip: "بث تنبيه جماعي",
-              icon: const Icon(Icons.campaign_rounded),
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminBroadcastScreen())),
-            ),
-            IconButton(
-              tooltip: "بحث شامل",
-              icon: const Icon(Icons.search_rounded),
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminSearchScreen())),
-            ),
-          ],
-        ),
         body: RefreshIndicator(
           onRefresh: _fetchData,
           child: SingleChildScrollView(
@@ -152,6 +120,9 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // أدوات سريعة (بدل شريط «لوحة التحكم الذكية» المكرّر الذي أُزيل)
+                _buildQuickTools(stats),
+                const SizedBox(height: 18),
                 _buildLivePulseSection(),
                 const SizedBox(height: 15),
                 _buildReputationSentinel(),
@@ -264,6 +235,52 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
 
   Widget _buildSectionTitle(String title) {
     return Text(title, style: GoogleFonts.tajawal(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)));
+  }
+
+  // أدوات سريعة — نُقلت من شريط «لوحة التحكم الذكية» المحذوف.
+  Widget _buildQuickTools(Map<String, dynamic> stats) {
+    return Row(
+      children: [
+        _toolButton(Icons.search_rounded, "بحث", const Color(0xFF2563EB),
+            () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminSearchScreen()))),
+        _toolButton(Icons.campaign_rounded, "بثّ إشعار", const Color(0xFF7C3AED),
+            () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminBroadcastScreen()))),
+        _toolButton(Icons.file_download_rounded, "CSV", const Color(0xFF059669), _exportDataToCSV),
+        _toolButton(Icons.picture_as_pdf_rounded, "تقرير", const Color(0xFFDC2626),
+            () => ZyiarahPdfReportUtil.generateFinancialReport(
+                  orders: _orders,
+                  totalRevenue: stats['revenue'],
+                  activeOrders: stats['active'],
+                )),
+      ],
+    );
+  }
+
+  Widget _toolButton(IconData icon, String label, Color color, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 4))],
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: color, size: 24),
+              const SizedBox(height: 6),
+              Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.tajawal(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF334155))),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildQuickStats(Map<String, dynamic> stats) {
