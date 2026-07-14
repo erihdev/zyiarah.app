@@ -6,7 +6,6 @@ import 'package:zyiarah/screens/admin/admin_settings_screen.dart';
 import 'package:zyiarah/screens/admin/admin_users_screen.dart';
 import 'package:zyiarah/screens/admin/admin_drivers_screen.dart';
 import 'package:zyiarah/screens/admin/admin_support_screen.dart';
-import 'package:zyiarah/screens/admin/admin_marketing_screen.dart';
 import 'package:zyiarah/screens/admin/admin_banners_screen.dart';
 import 'package:zyiarah/screens/admin/admin_coupons_screen.dart';
 import 'package:zyiarah/screens/admin/admin_contracts_screen.dart';
@@ -158,13 +157,6 @@ class AdminMoreScreen extends StatelessWidget {
             'page': const AdminSubscriptionsScreen(),
             // القواعد: كتابة subscription_packages = isMarketingAdmin (لا المحاسب)
             'roles': ['super_admin', 'marketing_admin'],
-          },
-          {
-            'title': 'الإشعارات والحملات',
-            'icon': Icons.campaign_outlined,
-            'color': Colors.pink,
-            'page': const AdminMarketingScreen(),
-            'roles': ['super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin'],
           },
           {
             'title': 'بثّ إشعار جماعي',
