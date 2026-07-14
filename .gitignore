@@ -128,3 +128,8 @@ functions/_tmp_degold.js
 functions/_tmp_consist.js
 functions/_tmp_upd.js
 functions/_tmp_admins.js
+functions/_tmp_admins2.js
+functions/_tmp_delorphan.js
+functions/_tmp_sig.js
+functions/_tmp_oldorders.js
+functions/_tmp_wipe.js
