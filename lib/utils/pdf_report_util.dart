@@ -58,11 +58,11 @@ class ZyiarahPdfReportUtil {
       ),
     );
 
-    // نُولّد البايتات أولاً — توليدها داخل onLayout يبتلع أي خطأ فتعلق المعاينة للأبد.
+    // sharePdf (عرض/حفظ عبر النظام) بدل layoutPdf الذي يعلّق على "Loading Preview" في iOS.
     final bytes = await pdf.save();
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => bytes,
-      name: 'Zyiarah_Financial_Report_${DateTime.now().millisecondsSinceEpoch}.pdf',
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'Zyiarah_Financial_Report_${DateTime.now().millisecondsSinceEpoch}.pdf',
     );
   }
 

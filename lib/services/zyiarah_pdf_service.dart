@@ -255,9 +255,11 @@ class ZyiarahPdfService {
       ),
     );
 
-    // نُولّد البايتات أولاً — توليدها داخل onLayout يبتلع أي خطأ فتعلق المعاينة للأبد.
+    // نُولّد البايتات أولاً ثم نشاركها عبر ورقة المشاركة بدل معاينة الطباعة.
+    // `layoutPdf` يفتح شاشة طباعة iOS التي تعلّق على "Loading Preview" عند ترسيم
+    // المستند؛ `sharePdf` يعرضه عبر عارض النظام (QuickLook) بلا ترسيم طباعة.
     final Uint8List reportBytes = await pdf.save();
-    await Printing.layoutPdf(onLayout: (format) async => reportBytes, name: 'Zyiarah_Report.pdf');
+    await Printing.sharePdf(bytes: reportBytes, filename: 'Zyiarah_Report.pdf');
   }
 
   // ============================================================================
@@ -424,10 +426,11 @@ class ZyiarahPdfService {
       ),
     );
 
-    // نُولّد البايتات أولاً ثم نمرّرها جاهزة — كان توليدها داخل onLayout يبتلع أي خطأ
-    // (خطّ/صورة) فتبقى «Loading Preview» للأبد. الآن أي خطأ يُرمى فيلتقطه المُستدعي.
+    // نُولّد البايتات أولاً ثم نشاركها عبر ورقة المشاركة (QuickLook) بدل معاينة الطباعة.
+    // `layoutPdf` كان يفتح شاشة طباعة iOS ويعلّق على «Loading Preview» عند الترسيم؛
+    // `sharePdf` يعرض العقد مباشرةً ويتيح الحفظ في «الملفات» أو المشاركة أو الطباعة منه.
     final Uint8List bytes = await pdf.save();
-    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => bytes, name: 'Zyiarah_Contract_$contractId.pdf');
+    await Printing.sharePdf(bytes: bytes, filename: 'Zyiarah_Contract_$contractId.pdf');
   }
 
   // --- Helpers ---

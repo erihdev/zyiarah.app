@@ -83,6 +83,11 @@ exports.sendNotificationToAdminsOnNewOrder = onDocumentCreated({document: "order
       const orderData = snap.data();
       const displayCode = orderData.code || orderId.substring(0, 6);
 
+      // زيارات الاشتراك تُنشأ دفعةً واحدة (باقة 4 زيارات = 4 طلبات) فتُغرِق الإدارة بـ4
+      // إشعارات «طلب جديد». الإدارة تُشعَر أصلاً بإشعار «عقد اشتراك جديد» عند إنشاء العقد،
+      // فنكتم إشعار كل زيارة على حدة. الطلبات العادية (بلا contract_id) تبقى تُشعِر طبيعياً.
+      if (orderData.contract_id) return null;
+
       // عبر ADMIN_BROADCAST: يكتب admin_notifications (لوحة الويب) + FCM حسب الدور —
       // بدل موضوع "admins" وحده الذي لا يصل لوحة الويب.
       await queuePush(
@@ -131,19 +136,10 @@ exports.sendNotificationToAdminsOnNewMaintenance = onDocumentCreated({document: 
 // 1.8 Notify Admins on New Contract (Pending Approval)
 exports.sendNotificationToAdminsOnNewContract = onDocumentCreated({document: "contracts/{contractId}", cpu: 0.083},
     async (event) => {
-      const snap = event.data;
-      if (!snap) return null;
-
-      const contractData = snap.data();
-      const planName = contractData.planName || "باقة غير محددة";
-
-      // عبر ADMIN_BROADCAST: يكتب admin_notifications (لوحة الويب) + FCM حسب الدور —
-      // كان يرسل لموضوع "admins" فقط فلا يصل لوحة الويب فيبقى العقد دون اعتماد.
-      await queuePush(
-          "ADMIN_BROADCAST",
-          "طلب تعاقد جديد! 📄",
-          `هناك طلب اشتراك في (${planName}) ينتظر موافقتك.`,
-          "new_contract_admin", {contractId: event.params.contractId}, ["orders_manager"]);
+      if (!event.data) return null;
+      // لا نُشعِر الإدارة عند إنشاء العقد (لا دفع مؤكّد ولا زيارات بعد). الإشعار الإداري
+      // الموحّد — بجدول كل الزيارات — يُرسَل مرة واحدة من activateContractOnPaid بعد تأكيد
+      // الدفع وتوليد الزيارات. هذا يستبدل إشعاراً مبكّراً بلا تفاصيل + إشعاراً لكل زيارة.
       return null;
     });
 
@@ -846,10 +842,26 @@ async function _buildAdminAlertHtml(type, data) {
       rows = [["رقم الطلب", d.requestId || "—"], ["العميل", o.userName || o.client_name || "—"],
         ["الجوال", o.userPhone || o.phone || "—"], ["نوع الصيانة", o.serviceType || "—"]];
     } else if (type === "new_contract_admin") {
-      heading = "طلب اشتراك/عقد جديد";
+      heading = "اشتراك جديد";
       const o = (await db.collection("contracts").doc(d.contractId).get()).data() || {};
       rows = [["الباقة", o.planName || "—"], ["العميل", o.userName || o.clientName || "—"],
         ["الجوال", o.userPhone || "—"], ["القيمة", o.planPrice != null ? `${o.planPrice} ر.س` : "—"]];
+      // جدول كل زيارات الاشتراك (أسبوعي/شهري) — كل زيارة صفٌّ بتاريخها ووقتها.
+      try {
+        const vs = await db.collection("orders")
+            .where("contract_id", "==", d.contractId).get();
+        const visits = vs.docs.map((x) => x.data())
+            .sort((a, b) => (a.visit_index || 0) - (b.visit_index || 0));
+        if (visits.length) {
+          rows.push(["عدد الزيارات", String(visits.length)]);
+          for (const v of visits) {
+            rows.push([
+              `زيارة ${v.visit_index || "—"}/${v.total_visits || visits.length}`,
+              `${v.booking_date || "—"} — ${v.booking_time_slot || "—"}`,
+            ]);
+          }
+        }
+      } catch (_) { /* التفاصيل الأساسية تكفي إن تعذّر جلب الزيارات */ }
     } else {
       return null;
     }
@@ -2489,6 +2501,14 @@ exports.activateContractOnPaid = onDocumentUpdated({document: "contracts/{contra
       } catch (e) {
         console.error("activateContractOnPaid generate:", e);
       }
+      // إشعار إداري موحّد واحد لكل اشتراك (أسبوعي/شهري) — بريده يسرد جدول كل الزيارات
+      // (يُبنى في _buildAdminAlertHtml). داخل الـ claim الذرّي فيُرسل مرة واحدة لكل عقد،
+      // ويحلّ محلّ إشعارات «طلب خدمة جديد» المكتومة لكل زيارة.
+      await queuePush("ADMIN_BROADCAST", "اشتراك جديد! 📄",
+          `اشتراك جديد في (${claim.planName || "باقة"}) — ${Number(claim.planVisits || 0)} ` +
+          `زيارة. تفاصيل الجدول في البريد.`,
+          "new_contract_admin", {contractId: event.params.contractId},
+          ["orders_manager"]).catch(() => {});
       if (claim.userId) {
         await queuePush(claim.userId, "تم تفعيل باقتكِ ✨",
             `فُعِّل اشتراككِ وأُضيفت ${Number(claim.planVisits || 0)} زيارة لحسابكِ.`,
