@@ -300,6 +300,26 @@ class ZyiarahPdfService {
       }
     }
 
+    // جدول الزيارات المجدولة (أسبوعي/شهري): نقرأ الطلبات المولّدة لهذا العقد كي يعرض
+    // العقد تاريخ ووقت كل زيارة لا عددها فقط. مرتّبة بترتيب الزيارة.
+    final List<List<String>> visitRows = [];
+    try {
+      final vs = await FirebaseFirestore.instance
+          .collection('orders')
+          .where('contract_id', isEqualTo: contractId)
+          .get();
+      final docs = vs.docs.map((d) => d.data()).toList()
+        ..sort((a, b) => ((a['visit_index'] ?? 0) as num)
+            .compareTo((b['visit_index'] ?? 0) as num));
+      for (final v in docs) {
+        visitRows.add([
+          'زيارة ${v['visit_index'] ?? '-'}/${v['total_visits'] ?? docs.length}',
+          '${v['booking_date'] ?? '-'}',
+          '${v['booking_time_slot'] ?? '-'}',
+        ]);
+      }
+    } catch (_) {/* إن تعذّر الجلب يبقى العقد بالتفاصيل الأساسية */}
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -364,7 +384,39 @@ class ZyiarahPdfService {
                 _buildTableRow(_ar('تاريخ الإصدار / Issue Date'), intl.DateFormat('yyyy-MM-dd').format(startDate)),
               ],
             ),
-            pw.SizedBox(height: 30),
+            pw.SizedBox(height: 20),
+
+            // Visit Schedule (جدول الزيارات — تاريخ ووقت كل زيارة)
+            if (visitRows.isNotEmpty) ...[
+              pw.Text(_ar('جدول الزيارات / Visit Schedule:'), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 10),
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey300),
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(2),
+                  1: const pw.FlexColumnWidth(2),
+                  2: const pw.FlexColumnWidth(1.4),
+                },
+                children: [
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: PdfColors.grey100),
+                    children: [
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_ar('الزيارة / Visit'), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_ar('التاريخ / Date'), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_ar('الوقت / Time'), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
+                    ],
+                  ),
+                  ...visitRows.map((r) => pw.TableRow(
+                        children: [
+                          pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_ar(r[0]), style: const pw.TextStyle(fontSize: 11))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(r[1], style: const pw.TextStyle(fontSize: 11))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(r[2], style: const pw.TextStyle(fontSize: 11))),
+                        ],
+                      )),
+                ],
+              ),
+              pw.SizedBox(height: 30),
+            ],
 
             // Terms
             pw.Text(_ar('الشروط والأحكام / Terms and Conditions:'), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
