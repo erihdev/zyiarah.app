@@ -2908,8 +2908,22 @@ exports.reconcileOrphanPayments = onSchedule(
             {method: "GET", headers: {Authorization: authHeader}});
         if (!resp.ok) { console.error("[reconcile] list failed", resp.status); return null; }
         const data = await resp.json();
+        // حدّ تجاهل: مدفوعات تجريبية/قديمة تمّ تنظيف طلباتها لا تُعاد مطابقتها أبداً.
+        // يُضبط في system_configs/reconcile.ignore_before (ISO). بلا إعداد = السلوك السابق.
+        let ignoreBeforeMs = 0;
+        try {
+          const rc = await db.collection("system_configs").doc("reconcile").get();
+          const v = rc.exists ? rc.data().ignore_before : null;
+          if (v) ignoreBeforeMs = new Date(v).getTime();
+        } catch (e) { /* افتراضياً بلا حدّ */ }
         for (const p of (data.payments || [])) {
           if (p.status !== "paid") continue;
+          // تجاهُل الدفعات الأقدم من نقطة التنظيف (طلبات اختبار مُزالة عمداً).
+          const pCreated = p.created_at || p.created;
+          if (ignoreBeforeMs && pCreated &&
+              new Date(pCreated).getTime() < ignoreBeforeMs) {
+            continue;
+          }
           const md = p.metadata || {};
           const oid = md.order_id;
           if (!oid) continue;
