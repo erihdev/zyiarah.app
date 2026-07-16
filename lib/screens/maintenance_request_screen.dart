@@ -32,7 +32,12 @@ class _ZyiarahMaintenanceRequestScreenState extends State<ZyiarahMaintenanceRequ
   TimeOfDay _selectedTime = const TimeOfDay(hour: 10, minute: 0);
   bool _isSubmitting = false;
 
-  final List<String> _services = ['صيانة مكيفات', 'غسيل مكيفات', 'صيانة اجهزة منزلية'];
+  // المكيفات خرجت من هنا: صارت طلباً مباشراً مسعّراً في AcServiceDetailsScreen
+  // (الإدارة تحدّد سعر كل نوع لكل منطقة، والعميلة تدفع فوراً ويُسنَد السائق تلقائياً).
+  // إبقاؤها هنا كان يعني مسارين للمكيفات — أحدهما مسعّر والآخر ينتظر تسعيراً يدوياً —
+  // وهو تكرار المرض نفسه الذي أنتج نظامَي تسعير للكنب. الأجهزة المنزلية تبقى على مسار
+  // عرض السعر لأنها لا تُسعَّر مسبقاً بصدق.
+  final List<String> _services = ['صيانة اجهزة منزلية'];
   final List<String> _floors = ['الدور الأرضي', 'الدور الأول', 'الدور الثاني', 'الدور الثالث'];
 
   Future<void> _submitRequest() async {

@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/services/app_update_service.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:zyiarah/widgets/service_meta_view.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:zyiarah/services/order_service.dart';
@@ -954,6 +955,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
             ],
           ),
           const Divider(height: 28),
+          // تفصيل الخدمة: كم قطعة ومقاسها / كم مكيفاً ونوعه. كان السائق يصل ولا يعرف
+          // ما يحمل من عُدّة — الطلب يحمل مبلغاً واسم خدمة فقط.
+          ZyiarahServiceMetaView(meta: data['service_meta']),
           if (data['client_id'] != null) _buildHouseRulesAlert(data['client_id']),
           if (data['client_id'] != null) const Divider(height: 28),
           if (status == 'in_progress') _buildTimer(int.tryParse('${data['hours_contracted'] ?? 4}') ?? 4),

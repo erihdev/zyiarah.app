@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:zyiarah/widgets/service_meta_view.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/services/audit_service.dart';
@@ -577,6 +578,9 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
         body: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            // تفصيل الخدمة (قطع الكنب بمقاساتها / المكيفات بأنواعها) — كان الطلب يصل
+            // بمبلغ مجرّد فلا تملك الإدارة ما تدقّق به المبلغ إن اعترضت العميلة.
+            ZyiarahServiceMetaView(meta: data['service_meta']),
             Card(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
               child: Padding(

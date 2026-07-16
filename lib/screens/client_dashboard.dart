@@ -16,6 +16,7 @@ import 'package:zyiarah/screens/store_screen.dart';
 import 'package:zyiarah/screens/sofa_rug_details_screen.dart';
 import 'package:zyiarah/screens/subscription_plans_screen.dart';
 import 'package:zyiarah/screens/maintenance_request_screen.dart';
+import 'package:zyiarah/screens/ac_service_details_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/maintenance_listener_service.dart';
 import 'package:zyiarah/widgets/support_fab.dart';
@@ -661,7 +662,11 @@ class _ClientDashboardState extends State<ClientDashboard> {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahSupportScreen()));
                   } else if (routeType == '/sofa_cleaning' || routeType == '/rug_cleaning') {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const SofaRugCleaningDetailsScreen(serviceName: "تنظيف الكنب والزل")));
+                  } else if (routeType == '/ac' || routeType == '/ac_service') {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const AcServiceDetailsScreen()));
                   } else if (routeType == '/maintenance') {
+                    // يبقى على معناه الحرفي: صيانة الأجهزة المنزلية (مسار عرض السعر).
+                    // بانرات المكيفات تستخدم '/ac' — طلب مباشر مسعّر.
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahMaintenanceRequestScreen()));
                   } else if (routeType == '/subscriptions') {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahSubscriptionPlansScreen()));
@@ -761,14 +766,15 @@ class _ClientDashboardState extends State<ClientDashboard> {
         ),
         _buildWebStyleServiceCard(
           title: "صيانة وغسيل المكيفات",
-          subtitle: "تنظيف وصيانة شاملة",
-          price: "حسب الطلب",
+          subtitle: "شباك أو سبليت",
+          price: "سعر لكل مكيف",
           numericPrice: 0.0,
           themeColor: const Color(0xFF475569),
-          icon: Icons.handyman,
+          icon: Icons.ac_unit_rounded,
           iconBgColor: const Color(0xFFF1F5F9),
           imagePath: 'assets/images/company_cleaning.png',
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahMaintenanceRequestScreen())),
+          // صارت طلباً مباشراً مسعّراً بدل طلب عرض سعر ينتظر تسعير الإدارة.
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AcServiceDetailsScreen())),
         ),
         _buildWebStyleServiceCard(
           title: "متجر المنظفات",
