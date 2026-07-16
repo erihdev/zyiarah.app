@@ -1305,13 +1305,24 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 ),
                 actions: [
                   TextButton(
-                    onPressed: () async {
-                      // Cancel: remove the PIN from Firestore and abort
-                      await FirebaseFirestore.instance.collection('orders').doc(id).update({
-                        'payment_pin': FieldValue.delete(),
-                        'payment_pin_generated_at': FieldValue.delete(),
-                      });
-                      if (dialogCtx.mounted) Navigator.pop(dialogCtx, false);
+                    onPressed: () {
+                      // نُغلق **أولاً** ثم ننظّف الرمز.
+                      //
+                      // كان الانتظار يسبق الإغلاق: `await ...update(...)` ثم `Navigator.pop`.
+                      // فإن فشلت الكتابة (انقطاع شبكة — وهو أرجح ما يكون داخل منزل
+                      // العميلة، وهناك بالضبط يُستعمل الدفع عند الاستلام) يرمي الـ await
+                      // ولا يُنفَّذ الإغلاق أبداً. والحوار `barrierDismissible: false`،
+                      // فلا مخرج للسائق إلا إنهاء التطبيق — وهو واقف أمام العميلة.
+                      //
+                      // تنظيف الرمز عملية أفضل-جهد لا يجوز أن تحبس الواجهة: الرمز
+                      // يُولَّد من جديد في المحاولة التالية على أي حال.
+                      Navigator.pop(dialogCtx, false);
+                      unawaited(
+                        FirebaseFirestore.instance.collection('orders').doc(id).update({
+                          'payment_pin': FieldValue.delete(),
+                          'payment_pin_generated_at': FieldValue.delete(),
+                        }).catchError((e) => debugPrint('[COD] pin cleanup failed: $e')),
+                      );
                     },
                     child: Text("إلغاء", style: GoogleFonts.tajawal(color: Colors.grey[600])),
                   ),

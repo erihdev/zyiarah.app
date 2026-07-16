@@ -1,8 +1,23 @@
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/models/service_model.dart';
-import 'package:zyiarah/services/audit_service.dart';
 
+/// كتالوج الخدمات — **للعرض فقط**.
+///
+/// كانت هذه الشاشة تَعِد بثلاثة أشياء لا يفعلها أيٌّ منها:
+///
+/// 1. **مفتاح «إخفاء الخدمة»** — يكتب `is_active` ويقول «تم إخفاء الخدمة». لا أحد
+///    يقرأ الحقل: شبكة خدمات العميلة نصوص مكتوبة في الشيفرة
+///    (`client_dashboard._buildDefaultStaticGrid`). فالخدمة تبقى معروضة وتُطلب،
+///    والإدارة مقتنعة أنها أوقفتها. **أخطر ما في الشاشة** — لذلك أُزيل المفتاح.
+/// 2. **تعديل التسعير** — يكتب `base_price`/`price_text` ويقول «تم التحديث الجذري ✅».
+///    مجموعة `services` لا تُقرأ في تطبيق العميلة إطلاقاً (`ZyiarahService` مستعمل في
+///    هذا الملف وحده). الأسعار الحقيقية في `service_zones` لكل منطقة.
+/// 3. **شارة «الأكثر طلباً»** — لم تكن بيانات: شرطها `title.contains("تنظيف")`.
+///
+/// أُزيلت الثلاثة. ما بقي: عرض صادق + بيان يقول أين يُضبط كل شيء فعلاً.
+/// (نفس ما فُعل ببطاقة التسعير الميتة في `admin_panel/src/pages/Services.tsx`.)
 class AdminServicesScreen extends StatefulWidget {
   const AdminServicesScreen({super.key});
 
@@ -12,104 +27,7 @@ class AdminServicesScreen extends StatefulWidget {
 
 class _AdminServicesScreenState extends State<AdminServicesScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final ZyiarahAuditService _audit = ZyiarahAuditService();
-
-  Future<void> _toggleServiceStatus(ZyiarahService service) async {
-    try {
-      await _db.collection('services').doc(service.id).update({
-        'is_active': !service.isActive,
-      });
-      await _audit.logAction(
-        action: ZyiarahAuditService.actionToggleService,
-        details: {'service': service.title, 'status': !service.isActive ? 'نشط' : 'معطل'},
-        targetId: service.id,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(service.isActive ? "تم إخفاء الخدمة" : "تم عرض الخدمة"),
-        backgroundColor: service.isActive ? Colors.orange : Colors.green,
-      ));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("حدث خطأ")));
-    }
-  }
-
-  void _showEditPriceDialog(ZyiarahService service) {
-    TextEditingController priceCtrl = TextEditingController(text: service.basePrice.toString());
-    TextEditingController displayCtrl = TextEditingController(text: service.priceText);
-    bool isSaving = false;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return Directionality(
-            textDirection: TextDirection.rtl,
-            child: AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: Text("تعديل تسعير: ${service.title}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (isSaving)
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 15),
-                      child: LinearProgressIndicator(color: Color(0xFF1E293B)),
-                    ),
-                  TextField(
-                    controller: displayCtrl,
-                    enabled: !isSaving,
-                    decoration: const InputDecoration(labelText: "السعر المعروض (للعميل)", hintText: "مثال: من 50 ر.س", border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 15),
-                  TextField(
-                    controller: priceCtrl,
-                    enabled: !isSaving,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: "السعر الأساسي الرقمي", border: OutlineInputBorder()),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(onPressed: isSaving ? null : () => Navigator.pop(context), child: const Text("إلغاء", style: TextStyle(color: Colors.grey))),
-                ElevatedButton(
-                  onPressed: isSaving ? null : () async {
-                    setDialogState(() => isSaving = true);
-                    try {
-                      final double newPrice = double.tryParse(priceCtrl.text) ?? service.basePrice;
-                      await _db.collection('services').doc(service.id).update({
-                        'base_price': newPrice,
-                        'price_text': displayCtrl.text,
-                        'updated_at': FieldValue.serverTimestamp(),
-                      });
-                      
-                      await _audit.logAction(
-                        action: ZyiarahAuditService.actionUpdateServicePrice,
-                        details: {'service': service.title, 'price': newPrice, 'display': displayCtrl.text},
-                        targetId: service.id,
-                      );
-
-                      if (dialogCtx.mounted) {
-                        Navigator.pop(dialogCtx);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم التحديث الجذري بنجاح ✅")));
-                      }
-                    } catch (e) {
-                      setDialogState(() => isSaving = false);
-                      if (dialogCtx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ في التحديث: $e")));
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E)),
-                  child: Text(isSaving ? "جاري الحفظ..." : "حفظ التعديل", style: const TextStyle(color: Colors.white)),
-                ),
-              ],
-            ),
-          );
-        }
-      ),
-    );
-  }
+  static const Color _brand = Color(0xFF5D1B5E);
 
   @override
   Widget build(BuildContext context) {
@@ -118,233 +36,56 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
-          title: const Text(
-            "إدارة الخدمات",
-            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-          ),
-          backgroundColor: const Color(0xFF5D1B5E),
+          title: Text('كتالوج الخدمات',
+              style: GoogleFonts.tajawal(fontWeight: FontWeight.w900, fontSize: 18)),
+          backgroundColor: _brand,
           foregroundColor: Colors.white,
           elevation: 0,
         ),
-        body: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFFF8FAFC), Color(0xFFF1F5F9)],
-            ),
-          ),
-          child: StreamBuilder<QuerySnapshot>(
-            stream: _db.collection('services').orderBy('order_index').snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator(color: Color(0xFF4F46E5)));
-              }
-
-              final docs = snapshot.data?.docs ?? [];
-              if (docs.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.cleaning_services_outlined, size: 80, color: Colors.grey[300]),
-                      const SizedBox(height: 20),
-                      const Text("لا توجد خدمات حالياً، يرجى إضافتها من لوحة القيادة."),
-                    ],
-                  ),
-                );
-              }
-
-              return ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-                itemCount: docs.length,
-                itemBuilder: (context, index) {
-                  final service = ZyiarahService.fromMap(
-                    docs[index].id,
-                    docs[index].data() as Map<String, dynamic>,
-                  );
-                  return _buildModernServiceIntelligenceCard(service);
-                },
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildModernServiceIntelligenceCard(ZyiarahService service) {
-    final bool active = service.isActive;
-    final Color accentColor = active ? const Color(0xFF4F46E5) : const Color(0xFF94A3B8);
-    
-    // بيانات حقيقية من نموذج الخدمة بدل أرقام ثابتة ملفّقة (كانت "12 طلب / 4.8"
-    // لكل خدمة) — نعرض السعر وحالة التفعيل الفعليّين.
-    final String priceLabel = service.priceText.isNotEmpty
-        ? service.priceText
-        : (service.basePrice > 0 ? "${service.basePrice.toStringAsFixed(0)} ر.س" : "—");
-    final String statusLabel = active ? "مفعّلة" : "متوقفة";
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(32),
-        boxShadow: [
-          BoxShadow(
-            color: accentColor.withValues(alpha: 0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(32),
-        child: Stack(
+        body: Column(
           children: [
-            // Decorative Background Element
-            Positioned(
-              left: -20,
-              top: -20,
-              child: CircleAvatar(
-                radius: 50,
-                backgroundColor: accentColor.withValues(alpha: 0.03),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Icon with Glow
-                      Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [accentColor.withValues(alpha: 0.15), accentColor.withValues(alpha: 0.05)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: accentColor.withValues(alpha: 0.1), width: 1.5),
-                        ),
-                        child: Icon(
-                          ZyiarahService.getIcon(service.iconName),
-                          color: accentColor,
-                          size: 30,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      // Core Details
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    service.title,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 18,
-                                      color: Color(0xFF0F172A),
-                                      letterSpacing: -0.5,
-                                    ),
-                                  ),
-                                ),
-                                _buildStatusChip(active),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              service.subtitle,
-                              style: TextStyle(
-                                color: Colors.blueGrey[400],
-                                fontSize: 13,
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  // Intelligence Metrics Row
-                  Row(
-                    children: [
-                      _buildIntelligenceMetric(Icons.payments_rounded, priceLabel, const Color(0xFF10B981)),
-                      const SizedBox(width: 12),
-                      _buildIntelligenceMetric(active ? Icons.check_circle_rounded : Icons.pause_circle_rounded, statusLabel, active ? const Color(0xFF10B981) : Colors.grey),
-                      const Spacer(),
-                      if (active && service.title.contains("تنظيف"))
-                        _buildPopularityTag(),
-                    ],
-                  ),
-                  const Divider(height: 48, thickness: 0.8),
-                  // Controls Footer
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+            _honestNotice(),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: _db.collection('services').orderBy('order_index').snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text('تعذّر تحميل الكتالوج، تحقّق من الاتصال',
+                          style: GoogleFonts.tajawal(color: Colors.grey)),
+                    );
+                  }
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                        child: CircularProgressIndicator(color: _brand));
+                  }
+                  final docs = snapshot.data?.docs ?? [];
+                  if (docs.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Text(
-                            "التسعير الإستراتيجي",
-                            style: TextStyle(fontSize: 10, color: Colors.blueGrey, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            service.priceText,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 18,
-                              color: active ? const Color(0xFF4F46E5) : Colors.blueGrey,
-                            ),
-                          ),
+                          Icon(Icons.cleaning_services_outlined,
+                              size: 72, color: Colors.grey[300]),
+                          const SizedBox(height: 16),
+                          Text('لا توجد خدمات في الكتالوج',
+                              style: GoogleFonts.tajawal(color: Colors.grey)),
                         ],
                       ),
-                      Row(
-                        children: [
-                          // Edit Action
-                          InkWell(
-                            onTap: () => _showEditPriceDialog(service),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: const Row(
-                                children: [
-                                  Icon(Icons.edit_rounded, size: 16, color: Color(0xFF475569)),
-                                  SizedBox(width: 6),
-                                  Text("تعديل", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          // Toggle Action
-                          Transform.scale(
-                            scale: 1,
-                            child: Switch(
-                              value: active,
-                              onChanged: (val) => _toggleServiceStatus(service),
-                              activeThumbColor: const Color(0xFF4F46E5),
-                              activeTrackColor: const Color(0xFF4F46E5).withValues(alpha: 0.2),
-                              inactiveThumbColor: Colors.white,
-                              inactiveTrackColor: Colors.grey.shade300,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
+                    );
+                  }
+                  return ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    itemCount: docs.length,
+                    itemBuilder: (context, i) {
+                      final service = ZyiarahService.fromMap(
+                        docs[i].id,
+                        docs[i].data() as Map<String, dynamic>,
+                      );
+                      return _serviceCard(service);
+                    },
+                  );
+                },
               ),
             ),
           ],
@@ -353,60 +94,95 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
     );
   }
 
-  Widget _buildIntelligenceMetric(IconData icon, String label, Color color) {
+  Widget _honestNotice() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(10),
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFDE68A)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline_rounded,
+              color: Color(0xFFB45309), size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: GoogleFonts.tajawal(
+                    fontSize: 12, color: const Color(0xFF92400E), height: 1.7),
+                children: const [
+                  TextSpan(
+                      text: 'هذه القائمة للعرض فقط.\n',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  TextSpan(text: '• الأسعار تُضبط لكل منطقة من '),
+                  TextSpan(
+                      text: '«نطاقات التغطية»',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  TextSpan(text: ' — الكنب والسجاد بالمتر المربع، والمكيفات لكل وحدة.\n'),
+                  TextSpan(
+                      text: '• الخدمات المعروضة للعميلة ثابتة داخل التطبيق ولا تتأثر بهذه القائمة.\n'),
+                  TextSpan(text: '• لتعطيل خدمة في منطقة: اجعل سعرها '),
+                  TextSpan(
+                      text: 'صفراً',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  TextSpan(text: ' في تلك المنطقة.'),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _serviceCard(ZyiarahService service) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 12),
+        ],
       ),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color),
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: _brand.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(ZyiarahService.getIcon(service.iconName),
+                color: _brand, size: 24),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(service.title,
+                    style: GoogleFonts.tajawal(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: const Color(0xFF0F172A))),
+                if (service.subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(service.subtitle,
+                      style: GoogleFonts.tajawal(
+                          fontSize: 12, color: const Color(0xFF94A3B8))),
+                ],
+              ],
+            ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildPopularityTag() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.orange.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.whatshot, size: 14, color: Colors.orange),
-          SizedBox(width: 6),
-          Text(
-            "الأكثر طلباً",
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusChip(bool active) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: active ? const Color(0xFF10B981).withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        active ? "نشط" : "معطل",
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w900,
-          color: active ? const Color(0xFF059669) : Colors.orange.shade800,
-        ),
       ),
     );
   }

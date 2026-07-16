@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart' show Position;
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -54,18 +55,34 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     _setInitialLocation();
   }
 
+  /// **بمهلة، ولا تعليق أبدي.**
+  ///
+  /// كان: `await getCurrentLocation()` بلا مهلة، والخريطة لا تُرسَم إلا بعد
+  /// `_isMapReady = true`. فإن لم يُحسم الموقع (داخل مبنى، أو مربّع الإذن معلّق، أو
+  /// GPS بطيء) تبقى الشاشة **بيضاء بلا دوّار ولا رسالة** — تعليق صامت تام. وأي خطأ
+  /// من الخدمة كان يمنع `_isMapReady = true` إلى الأبد لأن الاستدعاء بلا try.
+  ///
+  /// الآن: مهلة 8 ثوانٍ ثم نعرض الخريطة على الموقع الافتراضي ليُحدّد المستخدم يدوياً
+  /// (`_userSelected` يبقى false فلا يُعتمد الافتراضي بصمت).
   Future<void> _setInitialLocation() async {
-    final position = await ZyiarahLocationService().getCurrentLocation();
-    if (position != null) {
-      setState(() {
-        _selectedLatLng = LatLng(position.latitude, position.longitude);
-        _isMapReady = true;
-        _userSelected = true; // GPS حدّد موقعه الفعلي
-      });
-      _mapController.move(_selectedLatLng, 15.0);
-    } else {
-      setState(() => _isMapReady = true);
+    Position? position;
+    try {
+      position = await ZyiarahLocationService()
+          .getCurrentLocation()
+          .timeout(const Duration(seconds: 8));
+    } catch (e) {
+      debugPrint('[LocationPicker] initial location unavailable: $e');
     }
+
+    if (!mounted) return; // الشاشة قد تُغلق أثناء الانتظار — setState بعدها يرمي
+    setState(() {
+      if (position != null) {
+        _selectedLatLng = LatLng(position.latitude, position.longitude);
+        _userSelected = true; // GPS حدّد موقعه الفعلي
+      }
+      _isMapReady = true; // تُعرض الخريطة في كل الأحوال
+    });
+    if (position != null) _mapController.move(_selectedLatLng, 15.0);
   }
 
   void _onSearchChanged(String query) {
@@ -88,22 +105,20 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       final url = Uri.parse(
           'https://api.mapbox.com/search/geocode/v6/forward?q=${Uri.encodeComponent(query)}&access_token=$_mapboxToken&language=ar&country=sa');
       
-      final response = await http.get(url);
+      // بمهلة: طلب معلّق كان يترك البحث بلا استجابة إلى الأبد.
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        setState(() {
-          _searchResults = data['features'] ?? [];
-        });
-      } else {
-        setState(() {
-          _searchResults = [];
-        });
-      }
-    } catch (e) {
+      if (!mounted) return; // حارس ضروري: setState بعد إغلاق الشاشة يرمي
       setState(() {
-        _searchResults = [];
+        _searchResults =
+            response.statusCode == 200 ? (json.decode(response.body)['features'] ?? []) : [];
       });
+    } catch (e) {
+      debugPrint('[LocationPicker] search failed: $e');
+      // كان setState هنا بلا حارس mounted، فيرمي داخل الـ catch نفسه — استثناء
+      // ثانٍ لا يلتقطه أحد بينما نحن أصلاً في مسار معالجة خطأ.
+      if (!mounted) return;
+      setState(() => _searchResults = []);
     }
   }
 
@@ -188,6 +203,20 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         ),
         body: Stack(
           children: [
+            // دوّار صريح بدل شاشة بيضاء: قبل هذا لم يكن يُرسَم شيء إطلاقاً ريثما
+            // يُحسم الموقع — فيبدو التطبيق معلّقاً وهو ينتظر GPS.
+            if (!_isMapReady)
+              const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Color(0xFF5D1B5E)),
+                    SizedBox(height: 14),
+                    Text('جارٍ تحديد موقعك…',
+                        style: TextStyle(color: Color(0xFF64748B), fontSize: 13)),
+                  ],
+                ),
+              ),
             if (_isMapReady)
               FlutterMap(
                 mapController: _mapController,

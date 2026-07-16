@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -160,18 +161,31 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ));
         } else {
+          // الخادم لا يُرجع success:false (يرمي بدلاً منها) — دفاعيّ فقط.
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('تحتاج 50 نقطة على الأقل للاستبدال',
+            content: Text('تعذّر إتمام الاستبدال، حاولي مجدداً',
                 style: GoogleFonts.tajawal()),
             backgroundColor: Colors.orange,
             behavior: SnackBarBehavior.floating,
           ));
         }
       }
+    } on FirebaseFunctionsException catch (e) {
+      // نعرض سبب الخادم كما هو («نقاطك غير كافية»…). كان يُبتلع في الخدمة ويُستبدل
+      // بـ«تحتاج 50 نقطة على الأقل» — رسالة خاطئة: الزر لا يعمل أصلاً دون 50 نقطة،
+      // فالمستخدمة تملكها ويُقال لها إنها لا تملكها.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.message ?? 'تعذّر الاستبدال، حاولي مجدداً',
+              style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('فشل الاستبدال، حاول مجدداً',
+          content: Text('فشل الاستبدال، تحقّقي من اتصالك وحاولي مجدداً',
               style: GoogleFonts.tajawal()),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
