@@ -39,6 +39,13 @@ class PaymentSummaryScreen extends StatefulWidget {
   final int? hours;
   final DateTime? serviceDate;
   final String? zoneName;
+
+  /// تفصيل الخدمة كما اختارته العميلة (قطع الكنب/السجاد بمقاساتها، أنواع المكيفات
+  /// وأعدادها…). يُكتب على الطلب في `service_meta` — بدونه يصل الطلب للإدارة والسائق
+  /// بمبلغٍ مجرّد بلا بيان: كم قطعة؟ ما مقاسها؟ فلا يعرف السائق ما يحمل ولا الإدارة
+  /// ما تدقّق. القيم بدائية (أرقام/نصوص/قوائم) لتُكتب في Firestore كما هي.
+  final Map<String, dynamic>? serviceMeta;
+
   final int workerCount;
   final String? maintenanceId;
   final String? contractId;
@@ -52,6 +59,7 @@ class PaymentSummaryScreen extends StatefulWidget {
     this.hours,
     this.serviceDate,
     this.zoneName,
+    this.serviceMeta,
     this.workerCount = 1,
     this.maintenanceId,
     this.contractId,
@@ -699,6 +707,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         'worker_count': widget.workerCount,
         'coupon_code': _appliedCoupon,
         'discount_amount': _discountAmount,
+        if (widget.serviceMeta != null) 'service_meta': widget.serviceMeta,
         if (isHourly && widget.serviceDate != null) ...{
           'booking_date': '${widget.serviceDate!.year}-'
               '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
@@ -820,8 +829,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           'amount': amountToSave,
           // is_paid يقلبه الخادم بعد التأكيد (verify/payWithWallet) — العميل لا يكتبه.
           'is_paid': false,
-          // (Direct Dispatch) الساعة: تلقائي (pending ثم يُعيَّن scheduled). الكنب/الزل:
-          // مسار موافقة الإدارة أولاً.
+          // (Direct Dispatch) كل خدمة تصل بموعد (hours + serviceDate) تمرّ مباشرةً:
+          // pending ⇒ فحص سعة ⇒ إسناد تلقائي ⇒ scheduled. وهذا يشمل الآن الكنب/السجاد
+          // بعد أن صار يختار يوماً ووقتاً. ما يصل بلا موعد يبقى على موافقة الإدارة.
           'status': isHourly ? 'pending' : 'pending_admin_approval',
           'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
           'payment_method': method,
@@ -832,6 +842,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           'worker_count': widget.workerCount,
           'coupon_code': _appliedCoupon,
           'discount_amount': _discountAmount,
+          if (widget.serviceMeta != null) 'service_meta': widget.serviceMeta,
           // Capacity index fields — queried by ZyiarahCapacityService
           if (isHourly && widget.serviceDate != null) ...{
             'booking_date': '${widget.serviceDate!.year}-'

@@ -1,31 +1,46 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:zyiarah/models/sqm_piece.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
+import 'package:zyiarah/widgets/booking_slot_picker.dart';
 
+/// تنظيف الكنب والسجاد — **بالمتر المربع**، كل قطعة بمقاسها.
+///
+/// حلّ محلّ التسعير بالمتر الطولي (`sofaPrice`/`rugPrice` + عدّاد + و −). النظام القديم
+/// أُزيل بالكامل بقرار صريح: إبقاء نظامَي تسعير معاً هو ما جعل الإدارة تسعّر حقولاً
+/// لا يقرؤها أحد بينما يحاسب العميلَ حقلٌ موسوم «للنسخ القديمة فقط».
+///
+/// الطلب هنا **مباشر**: يمرّر `hours` و`serviceDate` إلى شاشة الدفع، وهذا ما يقلب
+/// الطلب إلى `status: 'pending'` (لا `pending_admin_approval`) ويُفعّل فحص السعة
+/// والإسناد التلقائي للسائق — نفس مسار الخدمة بالساعة تماماً.
 class SofaRugCleaningDetailsScreen extends StatefulWidget {
   final String serviceName;
   const SofaRugCleaningDetailsScreen({super.key, required this.serviceName});
 
   @override
-  State<SofaRugCleaningDetailsScreen> createState() => _SofaRugCleaningDetailsScreenState();
+  State<SofaRugCleaningDetailsScreen> createState() =>
+      _SofaRugCleaningDetailsScreenState();
 }
 
-class _SofaRugCleaningDetailsScreenState extends State<SofaRugCleaningDetailsScreen> {
-  double _sofaMeters = 0;
-  double _rugMeters = 0;
-  
+class _SofaRugCleaningDetailsScreenState
+    extends State<SofaRugCleaningDetailsScreen> {
+  static const Color _brand = Color(0xFF5D1B5E);
+
   bool _isLoading = true;
 
-  double _sofaPrice = 35.0; // Default fallback
-  double _rugPrice = 15.0; // Default fallback
-  
+  double _sofaSqmPrice = 0;
+  double _rugSqmPrice = 0;
+
   String? _selectedZoneName;
   GeoPoint? _selectedLocation;
-  
+  DateTime? _selectedSlot;
+
   List<Map<String, dynamic>> _zones = [];
+  final List<SqmPiece> _pieces = [const SqmPiece(kind: SqmPieceKind.sofa)];
 
   @override
   void initState() {
@@ -39,150 +54,191 @@ class _SofaRugCleaningDetailsScreenState extends State<SofaRugCleaningDetailsScr
           .collection('service_zones')
           .where('enabled', isEqualTo: true)
           .get();
-      if (mounted) {
-        final sorted = snapshot.docs.map((doc) => doc.data()).toList()
-          ..sort((a, b) => (a['rank'] as int? ?? 0).compareTo(b['rank'] as int? ?? 0));
-        setState(() {
-          _zones = sorted;
-          _isLoading = false;
-        });
-        _attemptAutoLocation();
-      }
+      if (!mounted) return;
+      final sorted = snapshot.docs.map((d) => d.data()).toList()
+        ..sort((a, b) =>
+            (a['rank'] as int? ?? 0).compareTo(b['rank'] as int? ?? 0));
+      setState(() {
+        _zones = sorted;
+        _isLoading = false;
+      });
+      _attemptAutoLocation();
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  /// السعر من المنطقة. **صفر أو غائب = الخدمة غير مسعّرة هنا** فتُعطَّل — وهذا ما يَعِد
+  /// به نصّ لوحة الإدارة، وقد كان وعداً كاذباً إلى أن صارت هذه الشاشة تقرأ الحقلين فعلاً.
+  ///
+  /// **لا نستعمل قيمة افتراضية عند الغياب عمداً.** الشاشة القديمة كانت `?? 35` فتبيع
+  /// بسعرٍ لم تعتمده الإدارة قط لأي منطقة يخلو مستندها من الحقل — والعميلة تُحاسَب عليه.
+  /// أن تظهر الخدمة «غير متاحة» أصدق من أن تُباع برقمٍ لم يقرّه أحد.
+  void _applyZone(Map<String, dynamic> zone) {
+    _sofaSqmPrice = (zone['sofaSqmPrice'] as num?)?.toDouble() ?? 0;
+    _rugSqmPrice = (zone['rugSqmPrice'] as num?)?.toDouble() ?? 0;
+  }
+
+  Map<String, dynamic>? _matchZone(GeoPoint loc) {
+    Map<String, dynamic>? matched;
+    double minDistance = double.infinity;
+    for (final z in _zones) {
+      final center = z['centerLoc'];
+      if (center is! GeoPoint) continue;
+      final radius = ((z['radiusKm'] as num?)?.toDouble() ?? 15.0) * 1000;
+      final distance = Geolocator.distanceBetween(
+          loc.latitude, loc.longitude, center.latitude, center.longitude);
+      if (distance <= radius && distance < minDistance) {
+        minDistance = distance;
+        matched = z;
+      }
+    }
+    return matched;
+  }
+
   Future<void> _attemptAutoLocation() async {
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) return;
-
-      LocationPermission permission = await Geolocator.checkPermission();
+      if (!await Geolocator.isLocationServiceEnabled()) return;
+      var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) return;
       }
-      
       if (permission == LocationPermission.deniedForever) return;
 
-      Position pos = await Geolocator.getCurrentPosition();
+      final pos = await Geolocator.getCurrentPosition();
       if (!mounted) return;
-      GeoPoint loc = GeoPoint(pos.latitude, pos.longitude);
+      final loc = GeoPoint(pos.latitude, pos.longitude);
+      final zone = _matchZone(loc);
+      if (zone == null || !mounted) return;
 
-      Map<String, dynamic>? matchedZone;
-      double minDistance = double.infinity;
-
-      for (var z in _zones) {
-        final center = z['centerLoc'];
-        if (center is GeoPoint) {
-          double radius = (z['radiusKm'] ?? 15.0) * 1000;
-          double distance = Geolocator.distanceBetween(loc.latitude, loc.longitude, center.latitude, center.longitude);
-          if (distance <= radius && distance < minDistance) {
-            minDistance = distance;
-            matchedZone = z;
-          }
-        }
-      }
-
-      if (matchedZone != null && mounted) {
-        setState(() {
-          _selectedLocation = loc;
-          _selectedZoneName = matchedZone!['name'];
-          _sofaPrice = (matchedZone['sofaPrice'] ?? 35).toDouble();
-          _rugPrice = (matchedZone['rugPrice'] ?? 15).toDouble();
-        });
-        
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("تم تحديد موقعك تلقائياً: $_selectedZoneName"),
-          backgroundColor: const Color(0xFF5D1B5E),
-          duration: const Duration(seconds: 2),
-        ));
-      }
-    } catch (e) {
-      // Silent error
+      setState(() {
+        _selectedLocation = loc;
+        _selectedZoneName = zone['name'] as String?;
+        _applyZone(zone);
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('تم تحديد موقعك تلقائياً: $_selectedZoneName',
+            style: GoogleFonts.tajawal()),
+        backgroundColor: _brand,
+        duration: const Duration(seconds: 2),
+      ));
+    } catch (_) {
+      // تحديد يدوي متاح دائماً — لا نُزعج العميلة برسالة خطأ هنا.
     }
   }
 
   Future<void> _pickLocation() async {
-    final dynamic result = await Navigator.push(
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const LocationPickerScreen(
-          serviceName: "تحديد موقع تنفيذ خدمة الكنب والزل",
+        builder: (_) => const LocationPickerScreen(
+          serviceName: 'تحديد موقع تنفيذ خدمة الكنب والسجاد',
         ),
       ),
     );
+    if (!mounted || result is! GeoPoint) return;
 
-    if (!mounted) return;
-    if (result == null || result is! GeoPoint) return;
-    
-    GeoPoint loc = result;
-    
-    // Find matching zone
-    Map<String, dynamic>? matchedZone;
-    double minDistance = double.infinity;
-
-    for (var z in _zones) {
-      final center = z['centerLoc'];
-      if (center is GeoPoint) {
-        double radius = (z['radiusKm'] ?? 15.0) * 1000; // to meters
-        double distance = Geolocator.distanceBetween(loc.latitude, loc.longitude, center.latitude, center.longitude);
-        if (distance <= radius && distance < minDistance) {
-          minDistance = distance;
-          matchedZone = z;
-        }
-      }
+    final zone = _matchZone(result);
+    if (zone == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('نأسف، موقعك خارج نطاق خدماتنا حالياً',
+            style: GoogleFonts.tajawal()),
+        backgroundColor: Colors.red,
+      ));
+      return;
     }
-
-    if (matchedZone != null) {
-      setState(() {
-        _selectedLocation = loc;
-        _selectedZoneName = matchedZone!['name'];
-        _sofaPrice = (matchedZone['sofaPrice'] ?? 35).toDouble();
-        _rugPrice = (matchedZone['rugPrice'] ?? 15).toDouble();
-      });
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("نأسف، موقعك خارج نطاق خدماتنا حالياً"), backgroundColor: Colors.red));
-    }
+    setState(() {
+      _selectedLocation = result;
+      _selectedZoneName = zone['name'] as String?;
+      _applyZone(zone);
+      _selectedSlot = null; // المنطقة تغيّرت ⇒ السعة تغيّرت ⇒ الموعد يُعاد اختياره
+    });
   }
 
-  // (E) موحّد مع باقي الخدمات و ZATCA: السعر المُدخل شامل ضريبة القيمة المضافة.
-  // الإجمالي = ما يدفعه العميل فعلاً، والضريبة تُحتسب قسمةً (مُتضمَّنة) لا إضافةً.
-  double get totalAmount {
-    return (_sofaMeters * _sofaPrice) + (_rugMeters * _rugPrice);
+  double _priceFor(SqmPieceKind k) =>
+      k == SqmPieceKind.sofa ? _sofaSqmPrice : _rugSqmPrice;
+
+  bool _kindEnabled(SqmPieceKind k) => _priceFor(k) > 0;
+
+  bool get _anyKindEnabled =>
+      _kindEnabled(SqmPieceKind.sofa) || _kindEnabled(SqmPieceKind.rug);
+
+  /// شامل ضريبة القيمة المضافة — موحّد مع باقي الخدمات و ZATCA: المبلغ المُدخل من
+  /// الإدارة هو ما يدفعه العميل، والضريبة تُحتسب قسمةً (متضمَّنة) لا إضافةً.
+  double get totalAmount => _pieces
+      .where((p) => p.isComplete)
+      .fold(0.0, (acc, p) => acc + p.priceWith(_priceFor(p.kind)));
+
+  double get subTotal => totalAmount / 1.15;
+  double get vat => totalAmount - subTotal;
+
+  double get totalArea =>
+      _pieces.where((p) => p.isComplete).fold(0.0, (s, p) => s + p.area);
+
+  /// مدة انشغال السائق. تكبر مع المساحة كي لا يُسنَد له عملُ يومٍ في ساعتين:
+  /// ساعتان لأي عمل دون 10 م²، ثم ساعة إضافية لكل 10 م² كاملة، بسقف 8 ساعات
+  /// (طول يوم العمل — وتجاوزه يُفرِغ قائمة خانات البدء 8→22).
+  int get _durationHours => (2 + (totalArea / 10).floor()).clamp(2, 8);
+
+  void _addPiece(SqmPieceKind kind) {
+    HapticFeedback.selectionClick();
+    setState(() => _pieces.add(SqmPiece(kind: kind)));
   }
 
-  double get subTotal => totalAmount / 1.15; // الصافي قبل الضريبة
-  double get vat => totalAmount - subTotal;   // ضريبة 15% المتضمَّنة في السعر
+  void _removePiece(int i) {
+    HapticFeedback.lightImpact();
+    setState(() => _pieces.removeAt(i));
+  }
 
-  void _handleNext() async {
+  void _handleNext() {
     if (_selectedLocation == null) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى تحديد موقعك أولاً")));
-       return;
+      _snack('يرجى تحديد موقعك أولاً');
+      return;
     }
-    if (subTotal <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى إدخال الأمتار المطلوبة للخدمة")));
+    if (totalAmount <= 0) {
+      _snack('أدخلي طول وعرض قطعة واحدة على الأقل');
+      return;
+    }
+    if (_selectedSlot == null) {
+      _snack('اختاري اليوم ووقت البدء');
       return;
     }
 
-    if (mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => PaymentSummaryScreen(
-            serviceName: "${widget.serviceName} (${_selectedZoneName ?? ''})",
-            amount: totalAmount,
-            location: _selectedLocation!,
-            // تمرير المنطقة كي يعمل التحقق من كوبونات المنطقة ولا يُكتب zone_name=null
-            // على الطلب/الفاتورة (كانت شاشة الأثاث/السجاد الوحيدة التي تُسقطها).
-            zoneName: _selectedZoneName,
-          ),
+    final meta = {
+      'kind': 'sofa_rug_sqm',
+      'total_area_sqm': double.parse(totalArea.toStringAsFixed(2)),
+      'sofa_price_per_sqm': _sofaSqmPrice,
+      'rug_price_per_sqm': _rugSqmPrice,
+      'pieces': _pieces
+          .where((p) => p.isComplete)
+          .map((p) => p.toMap(_priceFor(p.kind)))
+          .toList(),
+    };
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PaymentSummaryScreen(
+          serviceName: '${widget.serviceName} (${_selectedZoneName ?? ''})',
+          amount: totalAmount,
+          location: _selectedLocation!,
+          zoneName: _selectedZoneName,
+          // hours + serviceDate = طلب مباشر: فحص سعة، status 'pending'، إسناد تلقائي.
+          hours: _durationHours,
+          serviceDate: _selectedSlot,
+          serviceMeta: meta,
         ),
-      ).then((success) {
-        if (success == true && mounted) Navigator.pop(context, true);
-      });
-    }
+      ),
+    ).then((success) {
+      if (success == true && mounted) Navigator.pop(context, true);
+    });
+  }
+
+  void _snack(String m) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(m, style: GoogleFonts.tajawal())));
   }
 
   @override
@@ -192,7 +248,9 @@ class _SofaRugCleaningDetailsScreenState extends State<SofaRugCleaningDetailsScr
       child: Scaffold(
         extendBodyBehindAppBar: true,
         appBar: AppBar(
-          title: Text(widget.serviceName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          title: Text(widget.serviceName,
+              style: GoogleFonts.tajawal(
+                  color: Colors.white, fontWeight: FontWeight.bold)),
           backgroundColor: Colors.transparent,
           foregroundColor: Colors.white,
           elevation: 0,
@@ -209,159 +267,378 @@ class _SofaRugCleaningDetailsScreenState extends State<SofaRugCleaningDetailsScr
         body: Directionality(
           textDirection: TextDirection.rtl,
           child: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: Color(0xFF5D1B5E)))
-            : Column(
-                children: [
-                  Hero(
-                    tag: 'svc-assets/images/sofa_cleaning.png',
-                    child: SizedBox(
-                      height: 220,
-                      width: double.infinity,
-                      child: Image.asset(
-                        'assets/images/sofa_cleaning.png',
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          color: const Color(0xFFF1E9FE),
-                          child: const Icon(Icons.chair, color: Color(0xFF8B5CF6), size: 60),
-                        ),
+              ? const Center(child: CircularProgressIndicator(color: _brand))
+              : ListView(
+                  padding: EdgeInsets.zero,
+                  children: [
+                    _header(),
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _locationCard(),
+                          if (_selectedLocation != null) ...[
+                            const SizedBox(height: 26),
+                            if (!_anyKindEnabled)
+                              _unpricedBanner()
+                            else ...[
+                              _piecesSection(),
+                              const SizedBox(height: 26),
+                              ZyiarahBookingSlotPicker(
+                                zoneName: _selectedZoneName,
+                                durationHours: _durationHours,
+                                onSlotSelected: (dt) =>
+                                    setState(() => _selectedSlot = dt),
+                              ),
+                              const SizedBox(height: 26),
+                              _summaryCard(),
+                              const SizedBox(height: 24),
+                              _nextButton(),
+                            ],
+                          ] else ...[
+                            const SizedBox(height: 40),
+                            Center(
+                              child: Text(
+                                'حدّدي موقعك لعرض أسعار منطقتك',
+                                style: GoogleFonts.tajawal(color: Colors.grey),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 20),
+                        ],
                       ),
                     ),
-                  ),
-                  Expanded(
-                    child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                    color: const Color(0xFF5D1B5E).withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFF5D1B5E).withValues(alpha: 0.2)),
-                  ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text("موقع تقديم الخدمة:", style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF5D1B5E))),
-                        const SizedBox(height: 10),
-                        if (_selectedLocation != null)
-                          Text("المنطقة المحددة: $_selectedZoneName", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold))
-                        else
-                          const Text("لم يتم تحديد الموقع بعد", style: TextStyle(color: Colors.red)),
-                        const SizedBox(height: 15),
-                        ElevatedButton.icon(
-                          onPressed: _pickLocation,
-                          icon: const Icon(Icons.map_outlined),
-                          label: Text(_selectedLocation == null ? "تحديد الموقع من الخريطة" : "تغيير الموقع"),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF5D1B5E),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 30),
-                  
-                  if (_selectedLocation != null) ...[
-                    _buildInputRow("أمتار الكنب", _sofaMeters, (val) => setState(() => _sofaMeters = val), _sofaPrice),
-                    const SizedBox(height: 20),
-                    _buildInputRow("أمتار الزل (السجاد)", _rugMeters, (val) => setState(() => _rugMeters = val), _rugPrice),
-                    const SizedBox(height: 40),
-                    _buildSummaryCard(),
-                    const SizedBox(height: 30),
-                    _buildNextButton(),
-                  ] else ...[
-                     const Center(child: Text("يرجى تحديد الموقع لرؤية الأسعار المخصصة لمنطقتك المحددة", style: TextStyle(color: Colors.grey))),
-                  ]
-                ],
-              ),
-            ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
         ),
       ),
     );
   }
 
-  Widget _buildInputRow(String label, double value, Function(double) onChanged, double pricePerMeter) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10)]),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-              Text("($pricePerMeter ر.س/متر)", style: const TextStyle(color: Color(0xFF5D1B5E), fontWeight: FontWeight.bold)),
-            ],
+  Widget _header() => Hero(
+        tag: 'svc-assets/images/sofa_cleaning.png',
+        child: SizedBox(
+          height: 200,
+          width: double.infinity,
+          child: Image.asset(
+            'assets/images/sofa_cleaning.png',
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              color: const Color(0xFFF1E9FE),
+              child: const Icon(Icons.chair, color: Color(0xFF8B5CF6), size: 60),
+            ),
           ),
-          const SizedBox(height: 15),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildAdjustButton(Icons.remove, () {
-                if (value > 0) onChanged(value - 1);
-              }),
-              Container(width: 80, alignment: Alignment.center, child: Text("${value.toInt()}", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold))),
-              _buildAdjustButton(Icons.add, () => onChanged(value + 1)),
-            ],
+        ),
+      );
+
+  Widget _locationCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _brand.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _brand.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('موقع تقديم الخدمة',
+              style: GoogleFonts.tajawal(
+                  fontWeight: FontWeight.bold, color: _brand)),
+          const SizedBox(height: 8),
+          if (_selectedLocation != null)
+            Text('المنطقة: $_selectedZoneName',
+                style: GoogleFonts.tajawal(
+                    color: const Color(0xFF059669), fontWeight: FontWeight.bold))
+          else
+            Text('لم يتم تحديد الموقع بعد',
+                style: GoogleFonts.tajawal(color: Colors.red)),
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            onPressed: _pickLocation,
+            icon: const Icon(Icons.map_outlined, size: 18),
+            label: Text(
+                _selectedLocation == null ? 'تحديد الموقع' : 'تغيير الموقع',
+                style: GoogleFonts.tajawal()),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _brand,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildAdjustButton(IconData icon, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: const Color(0xFF5D1B5E).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: const Color(0xFF5D1B5E))),
+  Widget _unpricedBanner() => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBEB),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFFDE68A)),
+        ),
+        child: Text(
+          'هذه الخدمة غير متاحة في منطقتك حالياً.',
+          style: GoogleFonts.tajawal(
+              color: const Color(0xFF92400E), height: 1.6, fontSize: 13),
+        ),
+      );
+
+  Widget _piecesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('القطع المطلوب تنظيفها',
+            style: GoogleFonts.tajawal(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF1E293B))),
+        Text('أدخلي طول وعرض كل قطعة — لا يوجد حد أدنى.',
+            style: GoogleFonts.tajawal(
+                fontSize: 12, color: const Color(0xFF94A3B8))),
+        const SizedBox(height: 12),
+        ...List.generate(_pieces.length, (i) => _pieceCard(i)),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            if (_kindEnabled(SqmPieceKind.sofa))
+              Expanded(child: _addButton(SqmPieceKind.sofa)),
+            if (_kindEnabled(SqmPieceKind.sofa) && _kindEnabled(SqmPieceKind.rug))
+              const SizedBox(width: 10),
+            if (_kindEnabled(SqmPieceKind.rug))
+              Expanded(child: _addButton(SqmPieceKind.rug)),
+          ],
+        ),
+      ],
     );
   }
 
-  Widget _buildSummaryCard() {
+  Widget _addButton(SqmPieceKind kind) => OutlinedButton.icon(
+        onPressed: () => _addPiece(kind),
+        icon: const Icon(Icons.add_rounded, size: 18),
+        label: Text('إضافة ${kind.label}', style: GoogleFonts.tajawal()),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _brand,
+          side: BorderSide(color: _brand.withValues(alpha: 0.4)),
+          padding: const EdgeInsets.symmetric(vertical: 13),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+
+  Widget _pieceCard(int i) {
+    final piece = _pieces[i];
+    final price = _priceFor(piece.kind);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10)
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(
+                piece.kind == SqmPieceKind.sofa
+                    ? Icons.chair_rounded
+                    : Icons.texture_rounded,
+                size: 18,
+                color: _brand,
+              ),
+              const SizedBox(width: 8),
+              Text('${piece.kind.label} ${i + 1}',
+                  style: GoogleFonts.tajawal(
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF1E293B))),
+              const SizedBox(width: 8),
+              Text('(${price.toStringAsFixed(0)} ر.س/م²)',
+                  style: GoogleFonts.tajawal(
+                      fontSize: 12, color: const Color(0xFF94A3B8))),
+              const Spacer(),
+              if (_pieces.length > 1)
+                IconButton(
+                  onPressed: () => _removePiece(i),
+                  icon: const Icon(Icons.delete_outline_rounded,
+                      size: 20, color: Color(0xFFDC2626)),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'حذف',
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: _dimField(
+                  label: 'الطول (م)',
+                  value: piece.length,
+                  onChanged: (v) => setState(
+                      () => _pieces[i] = piece.copyWith(length: v)),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10),
+                child: Text('×',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF94A3B8))),
+              ),
+              Expanded(
+                child: _dimField(
+                  label: 'العرض (م)',
+                  value: piece.width,
+                  onChanged: (v) =>
+                      setState(() => _pieces[i] = piece.copyWith(width: v)),
+                ),
+              ),
+            ],
+          ),
+          if (piece.isComplete) ...[
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '${piece.area.toStringAsFixed(2)} م²',
+                  style: GoogleFonts.tajawal(
+                      fontSize: 12, color: const Color(0xFF64748B)),
+                ),
+                Text(
+                  '${piece.priceWith(price).toStringAsFixed(2)} ر.س',
+                  style: GoogleFonts.tajawal(
+                      fontWeight: FontWeight.bold, color: _brand),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _dimField({
+    required String label,
+    required double value,
+    required ValueChanged<double> onChanged,
+  }) {
+    return TextFormField(
+      initialValue: value == 0 ? '' : _trim(value),
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'^\d{0,2}([.,]\d{0,2})?')),
+      ],
+      style: GoogleFonts.tajawal(fontWeight: FontWeight.bold),
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.center,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: GoogleFonts.tajawal(fontSize: 12),
+        isDense: true,
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: Colors.grey.shade200),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: Colors.grey.shade200),
+        ),
+      ),
+      // الفاصلة العربية شائعة في لوحات المفاتيح — نقبلها كفاصلة عشرية بدل رفضها.
+      onChanged: (t) => onChanged(double.tryParse(t.replaceAll(',', '.')) ?? 0),
+    );
+  }
+
+  String _trim(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
+
+  Widget _summaryCard() {
+    final complete = _pieces.where((p) => p.isComplete).length;
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 15)]),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 15)
+        ],
+      ),
       child: Column(
         children: [
-          _buildSummaryRow("المجموع الفرعي:", subTotal),
-          const Divider(height: 20, thickness: 1),
-          _buildSummaryRow("ضريبة القيمة المضافة (15%):", vat, isVat: true),
-          const Divider(height: 20, thickness: 2, color: Color(0xFFE2E8F0)),
+          _row('عدد القطع:', '$complete'),
+          const SizedBox(height: 8),
+          _row('المساحة الإجمالية:', '${totalArea.toStringAsFixed(2)} م²'),
+          const Divider(height: 22),
+          _row('المجموع الفرعي:', '${subTotal.toStringAsFixed(2)} ر.س'),
+          const SizedBox(height: 8),
+          _row('ضريبة القيمة المضافة (15%):', '${vat.toStringAsFixed(2)} ر.س',
+              muted: true),
+          const Divider(height: 22, thickness: 2, color: Color(0xFFE2E8F0)),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("الإجمالي المطلوب:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-              Text("${totalAmount.toStringAsFixed(2)} ر.س", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF5D1B5E))),
+              Text('الإجمالي المطلوب:',
+                  style: GoogleFonts.tajawal(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF1E293B))),
+              Text('${totalAmount.toStringAsFixed(2)} ر.س',
+                  style: GoogleFonts.tajawal(
+                      fontSize: 21,
+                      fontWeight: FontWeight.w900,
+                      color: _brand)),
             ],
-          )
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildSummaryRow(String label, double value, {bool isVat = false}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [Text(label, style: TextStyle(color: isVat ? Colors.grey : const Color(0xFF64748B), fontWeight: isVat ? FontWeight.normal : FontWeight.w600)), Text("${value.toStringAsFixed(2)} ر.س", style: TextStyle(fontWeight: FontWeight.bold, color: isVat ? Colors.grey : const Color(0xFF1E293B)))],
-    );
-  }
+  Widget _row(String label, String value, {bool muted = false}) => Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: GoogleFonts.tajawal(
+                  color: muted ? Colors.grey : const Color(0xFF64748B),
+                  fontSize: 13)),
+          Text(value,
+              style: GoogleFonts.tajawal(
+                  fontWeight: FontWeight.bold,
+                  color: muted ? Colors.grey : const Color(0xFF1E293B),
+                  fontSize: 13)),
+        ],
+      );
 
-  Widget _buildNextButton() {
+  Widget _nextButton() {
+    final ready = totalAmount > 0 && _selectedSlot != null;
     return SizedBox(
       width: double.infinity,
-      height: 60,
+      height: 56,
       child: ElevatedButton(
-        onPressed: _handleNext,
-        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), elevation: 4),
-        child: const Text("متابعة لملخص الدفع", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+        onPressed: ready ? _handleNext : null,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _brand,
+          disabledBackgroundColor: const Color(0xFFCBD5E1),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          elevation: ready ? 4 : 0,
+        ),
+        child: Text('متابعة لملخص الدفع',
+            style: GoogleFonts.tajawal(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: Colors.white)),
       ),
     );
   }

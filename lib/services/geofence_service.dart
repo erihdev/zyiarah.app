@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:zyiarah/utils/service_pricing_defaults.dart';
 
 class ZyiarahZone {
   final String name;
@@ -88,15 +87,18 @@ class GeofenceService {
           '6': 180.0,
           '8': 240.0,
         },
-        'sofaPrice': 35.0,
-        'rugPrice': 15.0,
-        // نفس الافتراضيات المعروضة في شاشة المناطق — مصدر واحد يمنع تضارب الأرقام.
-        'sofaSqmPrice': kDefaultSofaSqmPrice,
-        'rugSqmPrice': kDefaultRugSqmPrice,
-        'acMaintWindowPrice': kDefaultAcMaintWindowPrice,
-        'acMaintSplitPrice': kDefaultAcMaintSplitPrice,
-        'acWashWindowPrice': kDefaultAcWashWindowPrice,
-        'acWashSplitPrice': kDefaultAcWashSplitPrice,
+        // صفر = «غير مسعّرة» فتُعطَّل الخدمة حتى تُسعّرها الإدارة لكل منطقة.
+        // كان هذا البذر يضع 35/15 تلقائياً بلا أن يراها بشر — ومنذ صارت حقول م² هي
+        // ما يحاسب العميلة فعلاً، صار ذلك بيعاً بسعرٍ لم يعتمده أحد. ولوحة React كانت
+        // تبذر صفراً في الحقول نفسها، فكانت المنطقة تُسعَّر أو تُعطَّل حسب الشاشة التي
+        // أنشأتها. مصدر واحد الآن: لا سعر ⇒ لا بيع.
+        // (sofaPrice/rugPrice الطوليان لم يعودا يُبذران — النظام أُلغي ولا قارئ لهما.)
+        'sofaSqmPrice': 0,
+        'rugSqmPrice': 0,
+        'acMaintWindowPrice': 0,
+        'acMaintSplitPrice': 0,
+        'acWashWindowPrice': 0,
+        'acWashSplitPrice': 0,
         'updated_at': FieldValue.serverTimestamp(),
       });
     }

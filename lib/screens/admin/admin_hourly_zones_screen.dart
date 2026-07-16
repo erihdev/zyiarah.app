@@ -78,12 +78,10 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     final p6Ctrl = TextEditingController(text: data?['prices']?['6']?.toString() ?? '');
     final p8Ctrl = TextEditingController(text: data?['prices']?['8']?.toString() ?? '');
 
-    final pSofaCtrl = TextEditingController(text: data?['sofaPrice']?.toString() ?? '35');
-    final pRugCtrl = TextEditingController(text: data?['rugPrice']?.toString() ?? '15');
-
-    // أسعار جديدة: الكنب/السجاد بالمتر المربع + المكيفات لكل وحدة. حقول مستقلة عن
-    // sofaPrice/rugPrice القديمين (بالمتر الطولي) لأن النسخ المثبَّتة ما زالت تقرؤهما.
-    // تبدأ بقيم افتراضية معقولة تعمل فوراً، والإدارة تعدّلها لكل منطقة.
+    // sofaPrice/rugPrice (المتر الطولي) أُزيلا بقرار المالك: «المتر الطولي يختفي».
+    // لم يعد لهما حقلٌ هنا ولا قارئ في التطبيق — نظام تسعير واحد فقط، بالمتر المربع.
+    // (كان وجودهما مع حقول م² هو سبب المشكلة: الحيّان موسومان «قديمة» والميتة معروضة
+    // كأنها العاملة، فمن يسعّر الجديدة لا يغيّر شيئاً وهو مقتنع أنه سعّر.)
     final pSofaSqmCtrl = TextEditingController(text: (data?['sofaSqmPrice'] ?? kDefaultSofaSqmPrice).toString());
     final pRugSqmCtrl = TextEditingController(text: (data?['rugSqmPrice'] ?? kDefaultRugSqmPrice).toString());
     final pAcMaintWinCtrl = TextEditingController(text: (data?['acMaintWindowPrice'] ?? kDefaultAcMaintWindowPrice).toString());
@@ -185,8 +183,8 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     ),
                     
                     const Divider(height: 30),
-                    const Text("أسعار الكنب والزل — بالمتر المربع (ر.س/م²):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    const Text("العميل يُدخل الطول والعرض ويُحسب السعر آلياً. اتركه فارغاً لتعطيل الخدمة في هذه المنطقة.",
+                    const Text("أسعار الكنب والسجاد — بالمتر المربع (ر.س/م²):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Text("العميلة تُدخل طول وعرض كل قطعة ويُحسب السعر آلياً. صفر = تعطيل الخدمة في هذه المنطقة.",
                         style: TextStyle(fontSize: 11, color: Colors.grey)),
                     const SizedBox(height: 10),
                     Row(
@@ -218,16 +216,6 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                       ],
                     ),
 
-                    const Divider(height: 30),
-                    const Text("الأسعار القديمة (بالمتر الطولي) — للنسخ القديمة فقط:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(child: TextField(controller: pSofaCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'الكنب (قديم)', border: OutlineInputBorder(), isDense: true))),
-                        const SizedBox(width: 8),
-                        Expanded(child: TextField(controller: pRugCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'الزل (قديم)', border: OutlineInputBorder(), isDense: true))),
-                      ],
-                    ),
                   ],
                 ),
               ),
@@ -252,10 +240,10 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                           '6': double.tryParse(p6Ctrl.text) ?? 0,
                           '8': double.tryParse(p8Ctrl.text) ?? 0,
                         },
-                        // القديمة (بالمتر الطولي) — تبقى للنسخ المثبَّتة التي ما زالت تقرؤها.
-                        'sofaPrice': double.tryParse(pSofaCtrl.text) ?? 35,
-                        'rugPrice': double.tryParse(pRugCtrl.text) ?? 15,
-                        // الجديدة: صفر = «غير مسعّرة» فتُعطَّل الخدمة بدل بيعها بسعر افتراضي.
+                        // صفر = «غير مسعّرة» فتُعطَّل الخدمة بدل بيعها بسعر افتراضي.
+                        // (sofaPrice/rugPrice الطوليان لم يعودا يُكتبان — النظام أُلغي.
+                        //  نتركهما في المستندات القائمة بلا مساس: لا قارئ لهما، وحذفهما
+                        //  يكسر أي نسخة قديمة ما زالت مثبَّتة قبل التحديث الإجباري.)
                         'sofaSqmPrice': double.tryParse(pSofaSqmCtrl.text) ?? 0,
                         'rugSqmPrice': double.tryParse(pRugSqmCtrl.text) ?? 0,
                         'acMaintWindowPrice': double.tryParse(pAcMaintWinCtrl.text) ?? 0,
@@ -303,8 +291,13 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
       p5Ctrl.dispose();
       p6Ctrl.dispose();
       p8Ctrl.dispose();
-      pSofaCtrl.dispose();
-      pRugCtrl.dispose();
+      // الستة الجديدة كانت تُسرَّب في كل فتح/إغلاق للحوار — أُضيفت الحقول ونُسي التخلّص.
+      pSofaSqmCtrl.dispose();
+      pRugSqmCtrl.dispose();
+      pAcMaintWinCtrl.dispose();
+      pAcMaintSplitCtrl.dispose();
+      pAcWashWinCtrl.dispose();
+      pAcWashSplitCtrl.dispose();
     });
   }
 
