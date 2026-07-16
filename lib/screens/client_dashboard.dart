@@ -1,13 +1,11 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
-import 'package:zyiarah/screens/profile_screen.dart';
 import 'package:zyiarah/screens/hourly_details_screen.dart';
-import 'package:zyiarah/screens/orders_list_screen.dart';
 import 'package:zyiarah/screens/support_screen.dart';
-import 'package:zyiarah/screens/order_tracking_screen.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/utils/zyiarah_strings.dart';
@@ -68,34 +66,25 @@ class _ClientDashboardState extends State<ClientDashboard> {
       setState(() => _selectedNavIndex = 0);
     } else if (index == 1) {
       setState(() => _selectedNavIndex = 1);
-      Navigator.push(context, _pageRoute(const OrdersListScreen())).then((_) {
-        if (mounted) setState(() => _selectedNavIndex = 0);
-      });
+      _openTab('/orders');
     } else if (index == 2) {
       setState(() => _selectedNavIndex = 2);
-      Navigator.push(context, _pageRoute(const ZyiarahStoreScreen())).then((_) {
-        if (mounted) setState(() => _selectedNavIndex = 0);
-      });
+      _openTab('/store');
     } else if (index == 3) {
       setState(() => _selectedNavIndex = 3);
-      Navigator.push(context, _pageRoute(const ZyiarahProfileScreen())).then((_) {
-        if (mounted) setState(() => _selectedNavIndex = 0);
-      });
+      _openTab('/profile');
     }
   }
 
-  PageRouteBuilder _pageRoute(Widget page) {
-    return PageRouteBuilder(
-      pageBuilder: (_, animation, __) => page,
-      transitionsBuilder: (_, animation, __, child) {
-        return SlideTransition(
-          position: Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero)
-              .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-          child: FadeTransition(opacity: animation, child: child),
-        );
-      },
-      transitionDuration: const Duration(milliseconds: 280),
-    );
+  /// عبر الراوتر لا Navigator: هذه الشاشات تستدعي context.go(...) بداخلها، ودفعها فوق
+  /// المكدّس كان يجعل الراوتر يتغيّر تحتها وهي تبقى فوقه (فشل صامت). الانتقال يبقى
+  /// كما هو — عُرِّف في lib/router.dart كـ CustomTransitionPage بالحركة نفسها.
+  /// context.push يُرجع Future يكتمل عند الرجوع، تماماً كـ Navigator.push، فيبقى
+  /// إرجاع مؤشّر التبويب للرئيسية سليماً.
+  void _openTab(String location) {
+    context.push(location).then((_) {
+      if (mounted) setState(() => _selectedNavIndex = 0);
+    });
   }
 
   @override
@@ -324,7 +313,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OrderTrackingScreen(orderId: orderId))),
+              onTap: () => context.push('/track/$orderId'),
               borderRadius: BorderRadius.circular(20),
               child: Padding(
                 padding: const EdgeInsets.all(16),

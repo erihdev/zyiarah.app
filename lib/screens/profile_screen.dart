@@ -360,10 +360,9 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
       await _firebaseService.signOut();
     } catch (_) {}
     if (!mounted) return;
-    // هذه الشاشة مدفوعة عبر Navigator.push فوق موجّه GoRouter، فـ go('/') وحده كان
-    // يغيّر المسار تحتها دون إزالتها → لا يظهر شيء. نُفرّغ المكدّس للجذر حيث يعيد
-    // AuthWrapper البناء تلقائياً لشاشة الترحيب/الدخول بعد تحديث حالة المصادقة.
-    Navigator.of(context).popUntil((route) => route.isFirst);
+    // الشاشة صارت مساراً في الراوتر ('/profile')، فـ go('/') يستبدل المكدّس فعلاً
+    // ويعرض AuthWrapper شاشة الترحيب بعد تحديث حالة المصادقة. حيلة popUntil التي كانت
+    // هنا كانت التفافاً على دفع الشاشة عبر Navigator — أُزيل سببها فأُزيلت.
     context.go('/');
   }
 

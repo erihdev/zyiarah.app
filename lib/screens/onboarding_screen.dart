@@ -1,8 +1,7 @@
+import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:zyiarah/screens/login_screen.dart';
-import 'package:zyiarah/screens/guest_explore_screen.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -45,12 +44,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   void _goToLogin() {
     ZyiarahCoreService.triggerHapticSelection();
-    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ZyiarahLoginScreen()));
+    // عبر الراوتر لا Navigator.push: شاشة الدخول مسار في GoRouter ('/login')، ودفعها
+    // فوق المكدّس يدوياً كان يجعلها تبقى معروضة بعد نجاح الدخول — لأن context.go('/')
+    // يغيّر مسار الراوتر **تحتها** بينما هي فوق مكدّس Navigator. فيرى المستخدم شاشة
+    // الدخول كما هي ويظنّ أن الزر لا يعمل، رغم أن الدخول نجح فعلاً.
+    context.go('/login');
   }
 
   void _goToGuest() {
     ZyiarahCoreService.triggerHapticLight();
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const GuestExploreScreen()));
+    // push لا go: نحتفظ بالترحيب تحتها ليعمل زر الرجوع. والأهم أنها عبر الراوتر —
+    // فشاشة التصفّح تستدعي context.go('/login')، ودفعها عبر Navigator كان يجعل ذلك
+    // الزر بلا أثر مرئي إطلاقاً (يتغيّر المسار تحتها وهي تبقى فوقه).
+    context.push('/guest');
   }
 
   @override

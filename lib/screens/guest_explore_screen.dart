@@ -1,7 +1,7 @@
+import 'package:go_router/go_router.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:zyiarah/screens/login_screen.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 
 class GuestExploreScreen extends StatelessWidget {
@@ -296,7 +296,9 @@ class GuestExploreScreen extends StatelessWidget {
 
   void _navigateToLogin(BuildContext context) {
     ZyiarahCoreService.triggerHapticSelection();
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahLoginScreen()));
+    // عبر الراوتر لا Navigator.push — انظر التعليق في onboarding_screen._goToLogin:
+    // شاشة دخول مدفوعة فوق المكدّس تبقى ظاهرة بعد نجاح الدخول فيبدو الزر معطّلاً.
+    context.go('/login');
   }
 }
 
@@ -338,8 +340,8 @@ class _LoginPromptSheet extends StatelessWidget {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahLoginScreen()));
+                  Navigator.pop(context); // يغلق الورقة السفلية
+                  context.go('/login');   // عبر الراوتر — لا دفع فوق المكدّس
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: brand,

@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
-import 'package:zyiarah/screens/order_tracking_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/screens/store_payment_screen.dart';
 import 'package:zyiarah/widgets/shimmer_loading.dart';
@@ -519,8 +518,10 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
             const SizedBox(height: 28),
             ElevatedButton.icon(
               onPressed: () {
-                if (Navigator.canPop(context)) {
-                  Navigator.pop(context);
+                // الشاشة مسار في الراوتر: pop يرجع للرئيسية إن جئنا منها، وإلا نذهب
+                // إليها صراحةً (رابط عميق فتح '/orders' مباشرةً بلا مكدّس تحته).
+                if (context.canPop()) {
+                  context.pop();
                 } else {
                   context.go('/client');
                 }
@@ -684,9 +685,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                   onPressed: () {
                     if (order['driver_id'] != null && order['location'] != null) {
                       ZyiarahCoreService.triggerHapticLight();
-                      Navigator.push(context, MaterialPageRoute(builder: (context) => OrderTrackingScreen(
-                        orderId: docId,
-                      )));
+                      context.push('/track/$docId');
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('لم يُعيَّن سائق بعد، يُرجى الانتظار')),

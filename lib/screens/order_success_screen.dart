@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:zyiarah/screens/orders_list_screen.dart';
+import 'package:go_router/go_router.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 
@@ -161,12 +161,8 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
-                  onPressed: () {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => const OrdersListScreen()),
-                    );
-                  },
+                  // go لا push: شاشة النجاح نهاية رحلة الطلب، فلا معنى للرجوع إليها.
+                  onPressed: () => context.go('/orders'),
                   child: Text("تتبع الطلب الآن", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.white)),
                 ),
               ),

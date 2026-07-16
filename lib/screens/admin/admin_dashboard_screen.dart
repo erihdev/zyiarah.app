@@ -7,7 +7,6 @@ import 'package:zyiarah/screens/admin/admin_approval_screen.dart';
 import 'package:zyiarah/screens/admin/admin_more_screen.dart';
 import 'package:zyiarah/screens/admin/admin_store_screen.dart';
 import 'package:zyiarah/screens/admin/admin_insights_screen.dart';
-import 'package:zyiarah/screens/onboarding_screen.dart';
 import 'package:zyiarah/screens/admin/admin_search_screen.dart';
 import 'package:zyiarah/screens/splash_screen.dart';
 import 'package:lottie/lottie.dart';
@@ -94,12 +93,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     if (confirm == true && mounted) {
       // الخروج المركزي (B3): تنظيف كامل للذاكرة بدل FirebaseAuth.signOut() المباشرة
       await ZyiarahFirebaseService().signOut();
-      if (mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const OnboardingScreen()),
-          (Route<dynamic> route) => false,
-        );
-      }
+      // لا دفع يدوي: الراوتر مربوط بـ refreshListenable(authStateChanges)، فيعيد التقييم
+      // فور الخروج ويعرض AuthWrapper شاشة الترحيب على '/'. الدفع اليدوي كان يضع نسخة
+      // ثانية من الترحيب **فوق** الراوتر تبقى عالقة بعد الدخول التالي.
     }
   }
 

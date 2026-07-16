@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zyiarah/services/firebase_service.dart';
-import 'package:zyiarah/screens/signup_screen.dart';
 import 'package:zyiarah/screens/forgot_password_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -185,7 +184,9 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                     Text("ليس لديك حساب ؟ ", style: GoogleFonts.tajawal(color: Colors.grey[700])),
                     GestureDetector(
                       onTap: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahSignupScreen()));
+                        // عبر الراوتر: شاشة التسجيل تستدعي context.go('/') عند النجاح، ودفعها
+                        // فوق مكدّس Navigator كان يبقيها معروضة بعد إنشاء الحساب فعلاً.
+                        context.push('/signup');
                       },
                       child: Text(
                         "انشاء حساب",
