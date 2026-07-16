@@ -31,6 +31,10 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   Map<String, int> _slotCounts = {};          // "yyyy-MM-dd_HH:00" → orders in slot
   bool _loadingDailyCounts = true;
 
+  /// تعذّر جلب الإتاحة من الخادم. **لا يجوز عرض تقويم أخضر في هذه الحالة**: الأعداد
+  /// تكون فارغة فيبدو كل يوم متاحاً، فيختار العميل يوماً ممتلئاً. نعرض إعادة محاولة.
+  bool _availabilityError = false;
+
   double _hourlyBasePrice = 0.0;
   String? _selectedZoneName;
   GeoPoint? _selectedLocation;
@@ -50,15 +54,25 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   /// تُعيد الأعداد الحقيقية للطلبات لكل تاريخ وكل خانة زمنية.
   Future<void> _loadAvailabilityFromServer() async {
     if (!mounted) return;
-    setState(() => _loadingDailyCounts = true);
+    setState(() {
+      _loadingDailyCounts = true;
+      _availabilityError = false;
+    });
     try {
       final now = DateTime.now();
       final startDate = intl.DateFormat('yyyy-MM-dd').format(now);
       final endDate = intl.DateFormat('yyyy-MM-dd').format(now.add(const Duration(days: 31)));
 
+      // نمرّر المنطقة متى عُرفت: الدالة تحسب السعة من **سائقي هذه المنطقة** وتعدّ
+      // طلباتها وحدها. بدونها كان التلوين يقيس عدد كل السائقين مقابل طلبات كل
+      // المناطق — فيخالف بوابة الدفع التي تفحص بالمنطقة، فيرى العميل أخضر ثم يُرفض.
       final result = await FirebaseFunctions.instance
           .httpsCallable('getHourlyAvailability')
-          .call({'startDate': startDate, 'endDate': endDate});
+          .call({
+            'startDate': startDate,
+            'endDate': endDate,
+            if (_selectedZoneName != null) 'zoneName': _selectedZoneName,
+          });
 
       final data = result.data as Map;
 
@@ -102,8 +116,17 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
         _buildSlotAvailabilityFromCache();
       }
     } catch (e) {
+      // **لا نبتلع الفشل بصمت.** كان هذا الـ catch يكتفي بإطفاء الدوّار، فتبقى
+      // ‎_dailyOrderCounts فارغة ⇒ ‎`activeOrders = 0` لكل تاريخ ⇒ ‎`0 >= _maxOrdersPerDay`
+      // = false ⇒ **كل التواريخ تظهر خضراء** والعميل يختار يوماً ممتلئاً.
+      // الأخضر يجب أن يعني «متاح»، لا «لا نعرف».
       debugPrint('[getHourlyAvailability] error: $e');
-      if (mounted) setState(() => _loadingDailyCounts = false);
+      if (mounted) {
+        setState(() {
+          _loadingDailyCounts = false;
+          _availabilityError = true;
+        });
+      }
     }
   }
 
@@ -550,6 +573,35 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   }
 
   Widget _buildDateSelector() {
+    // تعذّر معرفة الإتاحة ⇒ لا نرسم تقويماً أخضر كاذباً. الأخضر وعدٌ بوجود سائق.
+    if (_availabilityError) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFEF2F2),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFFECACA)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.wifi_off_rounded, color: Color(0xFFDC2626), size: 22),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'تعذّر تحميل المواعيد المتاحة.\nتحقّق من اتصالك وأعد المحاولة.',
+                style: TextStyle(fontSize: 13, color: Color(0xFF991B1B), height: 1.5),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _loadAvailabilityFromServer,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('إعادة'),
+              style: TextButton.styleFrom(foregroundColor: const Color(0xFFDC2626)),
+            ),
+          ],
+        ),
+      );
+    }
     if (_loadingDailyCounts) {
       return const SizedBox(
         height: 82,

@@ -321,62 +321,73 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   /// يتحقق من توفر سعة الحجز للخدمة بالساعة.
-  /// يعيد رسالة خطأ إذا كانت السعة ممتلئة، أو null إذا كان الحجز متاحاً.
+  /// يعيد رسالة خطأ إذا امتلأت السعة **أو تعذّر التحقق**، أو null إذا كان الحجز متاحاً.
+  ///
+  /// **كانت هذه البوابة ميتة تماماً — لم تمنع حجزاً واحداً منذ كُتبت.**
+  /// الفحص السابق كان يستعلم `orders` مباشرةً من جهاز العميل بلا قيد `client_id`:
+  ///
+  ///     .collection('orders').where('booking_date', isEqualTo: bookingDate).get()
+  ///
+  /// وقاعدة القراءة الوحيدة للطلبات (firestore.rules) تسمح للعميل بطلباته هو فقط
+  /// (`client_id == uid` أو `driver_id == uid` أو `isAdmin`). القواعد ليست مُرشِّحات:
+  /// Firestore يرفض **الاستعلام كاملاً** بـ permission-denied. وكان `catch (_) {}`
+  /// يبتلع الرفض، وجملتا `return '<رسالة>'` تقعان **داخل** الـ try — فتُتخطّيان،
+  /// وتُرجع الدالة null أي «متاح» في كل مرة. النتيجة: العميل يدفع ليومٍ ممتلئ ولا
+  /// يجد سائقاً — وهو بالضبط ما حذّر منه تعليق الشيفرة القديم («مدفوع بلا تنفيذ»).
+  ///
+  /// نستخدم الآن `getHourlyAvailability` الخادمية — وهي موجودة أصلاً لهذا الغرض
+  /// حرفياً («server-side to bypass Firestore rules») — وتحسب السعة من **عدد
+  /// السائقين المؤهّلين في المنطقة** لا من رقم ثابت في الإعدادات.
+  ///
+  /// **ويفشل مغلقاً عمداً:** أي تعذّر في التحقق يمنع الدفع بدل أن يسمح به صامتاً.
+  /// حجزٌ مؤجَّل دقيقة أهون من طلبٍ مدفوع لا سائق له (استرداد + عميل غاضب).
   Future<String?> _checkHourlyCapacity() async {
     if (widget.hours == null || widget.serviceDate == null) return null;
-
-    int maxOrdersPerDay = 10;
-    int maxTeamsPerSlot = 5;
-    try {
-      final results = await Future.wait([
-        FirebaseFirestore.instance.collection('system_configs').doc('hourly_settings').get(),
-        FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get(),
-      ]);
-      maxOrdersPerDay = (results[0].data()?['max_orders_per_day'] as num?)?.toInt() ?? 10;
-      maxTeamsPerSlot = (results[1].data()?['max_teams_per_slot'] as num?)?.toInt() ?? 5;
-    } catch (_) {}
 
     final String bookingDate = '${widget.serviceDate!.year}-'
         '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
         '${widget.serviceDate!.day.toString().padLeft(2, '0')}';
 
+    final Map data;
     try {
-      final dailySnap = await FirebaseFirestore.instance
-          .collection('orders')
-          .where('booking_date', isEqualTo: bookingDate)
-          .get();
-      final count = dailySnap.docs
-          .where((d) => (d.data())['status'] != 'cancelled')
-          .length;
-      if (count >= maxOrdersPerDay) {
-        return 'نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.';
-      }
-    } catch (_) {}
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('getHourlyAvailability')
+          .call({
+            'startDate': bookingDate,
+            'endDate': bookingDate,
+            if (widget.zoneName != null) 'zoneName': widget.zoneName,
+          })
+          .timeout(const Duration(seconds: 20));
+      data = result.data as Map;
+    } catch (e) {
+      debugPrint('[capacity] getHourlyAvailability failed: $e');
+      return 'تعذّر التحقق من توفّر الموعد. تحقّق من اتصالك وأعد المحاولة.';
+    }
 
-    try {
-      final int reqStart = widget.serviceDate!.hour;
-      final int reqEnd = reqStart + (widget.hours ?? 4);
-      // نعدّ الطلبات التي تتقاطع فترتها [البداية، البداية+الساعات) مع فترتنا — لا التي
-      // تبدأ في نفس الساعة فقط. الطلب بـ8 ساعات يشغل السائق طوال المدة، وكان الفحص
-      // القديم يعتبر السلوت متاحاً فيحدث حجز لطلب لن يجد سائقاً (مدفوع بلا تنفيذ).
-      final daySnap = await FirebaseFirestore.instance
-          .collection('orders')
-          .where('booking_date', isEqualTo: bookingDate)
-          .get();
-      int overlap = 0;
-      for (final d in daySnap.docs) {
-        final o = d.data();
-        if (o['status'] == 'cancelled') continue;
-        final slot = (o['booking_time_slot'] as String?) ?? '';
-        final oStart = int.tryParse(slot.split(':').first) ?? -1;
-        if (oStart < 0) continue;
-        final oHours = (o['hours_contracted'] as num?)?.toInt() ?? 4;
-        if (reqStart < oStart + oHours && oStart < reqEnd) overlap++;
-      }
-      if (overlap >= maxTeamsPerSlot) {
+    final Map daily = data['dailyCounts'] as Map? ?? {};
+    final Map slots = data['slotCounts'] as Map? ?? {};
+    final int maxOrdersPerDay = (data['maxOrdersPerDay'] as num?)?.toInt() ?? 10;
+    // maxTeamsPerSlot = عدد السائقين المؤهّلين فعلاً في المنطقة (تحسبه الدالة).
+    final int maxTeamsPerSlot = (data['maxTeamsPerSlot'] as num?)?.toInt() ?? 0;
+
+    if (maxTeamsPerSlot <= 0) {
+      return 'لا يوجد سائق متاح في منطقتك حالياً. تواصل معنا لتحديد موعد.';
+    }
+
+    if (((daily[bookingDate] as num?)?.toInt() ?? 0) >= maxOrdersPerDay) {
+      return 'نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.';
+    }
+
+    // الطلب يشغل سائقاً طوال مدته، فنفحص **كل ساعة يشغلها** لا ساعة البدء وحدها —
+    // الدالة تعدّ الطلب في كل ساعة من فترته للسبب نفسه.
+    final int reqStart = widget.serviceDate!.hour;
+    final int reqEnd = reqStart + widget.hours!;
+    for (int h = reqStart; h < reqEnd; h++) {
+      final key = '${bookingDate}_${h.toString().padLeft(2, '0')}:00';
+      if (((slots[key] as num?)?.toInt() ?? 0) >= maxTeamsPerSlot) {
         return 'نعتذر، هذا الوقت محجوز بالكامل حالياً. يرجى اختيار وقت بدء آخر.';
       }
-    } catch (_) {}
+    }
 
     return null;
   }
