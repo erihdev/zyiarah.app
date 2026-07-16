@@ -23,6 +23,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   final TextEditingController _whatsappSupportCtrl = TextEditingController();
   final TextEditingController _phoneSupportCtrl = TextEditingController();
   final TextEditingController _adminEmailCtrl = TextEditingController();
+  // نسبة سعر الذروة يدوياً — 0 = بلا ذروة. تحلّ محلّ الحساب الآلي من حالة السائقين.
+  final TextEditingController _surgePercentCtrl = TextEditingController();
   final TextEditingController _contractTermsCtrl = TextEditingController();
   List<int> _selectedHours = [4, 5, 6, 8];
   bool _codEnabled = false;
@@ -47,6 +49,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
             _whatsappSupportCtrl.text = data['support_whatsapp'] ?? "966500000000";
             _phoneSupportCtrl.text = data['support_phone'] ?? "920000000";
             _adminEmailCtrl.text = data['admin_email'] ?? "admin@zyiarah.com";
+            _surgePercentCtrl.text = (data['surge_percent'] ?? 0).toString();
             _contractTermsCtrl.text = data['contract_terms'] ??
                 "1. يتم تفعيل العقد تلقائياً فور سداد القيمة واعتماد الإدارة.\n"
                 "2. يحق للعميل طلب الخدمة عبر التطبيق ضمن نطاق الباقة.\n"
@@ -101,6 +104,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         'support_whatsapp': _whatsappSupportCtrl.text.trim(),
         'support_phone': _phoneSupportCtrl.text.trim(),
         'admin_email': _adminEmailCtrl.text.trim(),
+        'surge_percent':
+            (double.tryParse(_surgePercentCtrl.text.trim()) ?? 0).clamp(0, 100),
         'contract_terms': _contractTermsCtrl.text.trim(),
       }, SetOptions(merge: true));
 
@@ -149,6 +154,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
     _whatsappSupportCtrl.dispose();
     _phoneSupportCtrl.dispose();
     _adminEmailCtrl.dispose();
+    _surgePercentCtrl.dispose();
     _contractTermsCtrl.dispose();
     super.dispose();
   }
@@ -255,6 +261,16 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                               });
                             },
                             contentPadding: EdgeInsets.zero,
+                          ),
+                          const Divider(),
+                          _buildPremiumField("نسبة سعر الذروة (%)", "0", _surgePercentCtrl, Icons.trending_up_rounded),
+                          const Padding(
+                            padding: EdgeInsets.only(top: 6, bottom: 4),
+                            child: Text(
+                              "تُضاف على أسعار الطلبات عند الطلب (بالساعة والكنب والمكيفات) وتظهر للعميل في الفاتورة.\n"
+                              "0 = بلا ذروة (السعر كما هو). مثال: 15 = زيادة 15%. الحد الأقصى 100.",
+                              style: TextStyle(fontSize: 11, color: Colors.grey, height: 1.5),
+                            ),
                           ),
                           const Divider(),
                           _buildPremiumField("اسم المنشأة الضريبي (ZATCA)", "الاسم", _merchantNameCtrl, Icons.business_rounded, keyboardType: TextInputType.text),

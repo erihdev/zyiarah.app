@@ -1960,40 +1960,29 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
 });
 
 // 8. Surge Pricing Factor
+// سعر الذروة: **يدوي بالكامل** — الإدارة تحدد النسبة وترفعها/تنقصها متى شاءت.
+//
+// كان يُحسب آلياً من حالة السائقين: إن كان أقل من 20% منهم status='available'
+// يقفز السعر +15% على العميل. هذا منطق ندرة (نموذج أوبر) لا يناسب زيارة — السائقون
+// برواتب شهرية — وكان يكفي أن ينسى السائقون تحديث حالتهم ليُشحن العميل زيادةً لم
+// تقرّرها الإدارة ولا تراها. الآن: يقرأ system_configs/main_settings.surge_percent
+// (0 = بلا ذروة، 15 = +15%). التوقيع كما هو فالنسخ المثبَّتة تعمل بلا تغيير.
 exports.getSurgePricingFactor = onCall({cpu: 0.083}, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
   }
-
-  const driversRef = admin.firestore().collection("users").where("role", "==", "driver");
-  const snap = await driversRef.get();
-
-  if (snap.empty) {
+  try {
+    const cfg = await admin.firestore()
+        .collection("system_configs").doc("main_settings").get();
+    const pct = Number(cfg.exists ? cfg.data().surge_percent : 0);
+    if (!Number.isFinite(pct) || pct <= 0) return {surgeFactor: 1.0};
+    // سقف 100% حارس: خطأ إدخال (مثلاً 1500) لا يضاعف فاتورة عميل خمسة عشر ضعفاً.
+    const capped = Math.min(pct, 100);
+    return {surgeFactor: Math.round((1 + capped / 100) * 100) / 100};
+  } catch (e) {
+    console.error("[surge] read failed, defaulting to 1.0:", e.message);
     return {surgeFactor: 1.0};
   }
-
-  let totalActive = 0;
-  let availableCount = 0;
-
-  snap.forEach((doc) => {
-    const data = doc.data();
-    // Assuming active drivers are those who are not banned or deactivated
-    if (data.isActive !== false) {
-      totalActive++;
-      if (data.status === "available" || data.status === "online") {
-        availableCount++;
-      }
-    }
-  });
-
-  if (totalActive === 0) return {surgeFactor: 1.0};
-
-  const availablePercentage = availableCount / totalActive;
-  if (availablePercentage < 0.20) {
-    return {surgeFactor: 1.15};
-  }
-
-  return {surgeFactor: 1.0};
 });
 
 // 9. Smart Dispatch Core: findNearestDrivers

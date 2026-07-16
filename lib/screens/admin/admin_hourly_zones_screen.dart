@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
+import 'package:zyiarah/utils/service_pricing_defaults.dart';
 
 class AdminHourlyZonesScreen extends StatefulWidget {
   const AdminHourlyZonesScreen({super.key});
@@ -77,6 +81,16 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     final pSofaCtrl = TextEditingController(text: data?['sofaPrice']?.toString() ?? '35');
     final pRugCtrl = TextEditingController(text: data?['rugPrice']?.toString() ?? '15');
 
+    // أسعار جديدة: الكنب/السجاد بالمتر المربع + المكيفات لكل وحدة. حقول مستقلة عن
+    // sofaPrice/rugPrice القديمين (بالمتر الطولي) لأن النسخ المثبَّتة ما زالت تقرؤهما.
+    // تبدأ بقيم افتراضية معقولة تعمل فوراً، والإدارة تعدّلها لكل منطقة.
+    final pSofaSqmCtrl = TextEditingController(text: (data?['sofaSqmPrice'] ?? kDefaultSofaSqmPrice).toString());
+    final pRugSqmCtrl = TextEditingController(text: (data?['rugSqmPrice'] ?? kDefaultRugSqmPrice).toString());
+    final pAcMaintWinCtrl = TextEditingController(text: (data?['acMaintWindowPrice'] ?? kDefaultAcMaintWindowPrice).toString());
+    final pAcMaintSplitCtrl = TextEditingController(text: (data?['acMaintSplitPrice'] ?? kDefaultAcMaintSplitPrice).toString());
+    final pAcWashWinCtrl = TextEditingController(text: (data?['acWashWindowPrice'] ?? kDefaultAcWashWindowPrice).toString());
+    final pAcWashSplitCtrl = TextEditingController(text: (data?['acWashSplitPrice'] ?? kDefaultAcWashSplitPrice).toString());
+
     int rank = data?['rank'] ?? 0;
     GeoPoint? selectedGeo = data?['centerLoc'] as GeoPoint?;
     bool isSaving = false;
@@ -125,8 +139,24 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     ),
                     const SizedBox(height: 15),
 
-                    TextField(controller: radiusCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'نصف القطر للتغطية (كم)', border: OutlineInputBorder())),
-                    
+                    TextField(
+                      controller: radiusCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'نصف القطر للتغطية (كم)', border: OutlineInputBorder()),
+                      // إعادة الرسم عند كل تغيير كي تتحدث دائرة التغطية في المعاينة حيّاً.
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // معاينة حيّة لنطاق التغطية: تُظهر للإدارة ما الذي يغطيه نصف القطر فعلاً
+                    // على الخريطة قبل الحفظ — وتتحدث فور تغيير الرقم أو المركز.
+                    if (selectedGeo != null)
+                      _ZoneCoveragePreview(
+                        center: selectedGeo!,
+                        radiusKm: double.tryParse(radiusCtrl.text) ?? 15.0,
+                      ),
+                    if (selectedGeo != null) const SizedBox(height: 15),
+
                     const Divider(height: 30),
                     const Text("أسعار النظافة بالساعة (ر.س):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     const SizedBox(height: 10),
@@ -155,13 +185,47 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     ),
                     
                     const Divider(height: 30),
-                    const Text("أسعار الكنب والزل (ر.س للمتر):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Text("أسعار الكنب والزل — بالمتر المربع (ر.س/م²):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Text("العميل يُدخل الطول والعرض ويُحسب السعر آلياً. اتركه فارغاً لتعطيل الخدمة في هذه المنطقة.",
+                        style: TextStyle(fontSize: 11, color: Colors.grey)),
                     const SizedBox(height: 10),
                     Row(
                       children: [
-                        Expanded(child: TextField(controller: pSofaCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'الكنب', border: OutlineInputBorder()))),
+                        Expanded(child: TextField(controller: pSofaSqmCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'الكنب (ر.س/م²)', border: OutlineInputBorder()))),
                         const SizedBox(width: 8),
-                        Expanded(child: TextField(controller: pRugCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'الزل / السجاد', border: OutlineInputBorder()))),
+                        Expanded(child: TextField(controller: pRugSqmCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'السجاد (ر.س/م²)', border: OutlineInputBorder()))),
+                      ],
+                    ),
+
+                    const Divider(height: 30),
+                    const Text("أسعار المكيفات — لكل مكيف (ر.س):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Text("اتركه فارغاً لتعطيل النوع في هذه المنطقة.",
+                        style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(child: TextField(controller: pAcMaintWinCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'صيانة — شباك', border: OutlineInputBorder()))),
+                        const SizedBox(width: 8),
+                        Expanded(child: TextField(controller: pAcMaintSplitCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'صيانة — سبليت', border: OutlineInputBorder()))),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(child: TextField(controller: pAcWashWinCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'غسيل — شباك', border: OutlineInputBorder()))),
+                        const SizedBox(width: 8),
+                        Expanded(child: TextField(controller: pAcWashSplitCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'غسيل — سبليت', border: OutlineInputBorder()))),
+                      ],
+                    ),
+
+                    const Divider(height: 30),
+                    const Text("الأسعار القديمة (بالمتر الطولي) — للنسخ القديمة فقط:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(child: TextField(controller: pSofaCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'الكنب (قديم)', border: OutlineInputBorder(), isDense: true))),
+                        const SizedBox(width: 8),
+                        Expanded(child: TextField(controller: pRugCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'الزل (قديم)', border: OutlineInputBorder(), isDense: true))),
                       ],
                     ),
                   ],
@@ -188,8 +252,16 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                           '6': double.tryParse(p6Ctrl.text) ?? 0,
                           '8': double.tryParse(p8Ctrl.text) ?? 0,
                         },
+                        // القديمة (بالمتر الطولي) — تبقى للنسخ المثبَّتة التي ما زالت تقرؤها.
                         'sofaPrice': double.tryParse(pSofaCtrl.text) ?? 35,
                         'rugPrice': double.tryParse(pRugCtrl.text) ?? 15,
+                        // الجديدة: صفر = «غير مسعّرة» فتُعطَّل الخدمة بدل بيعها بسعر افتراضي.
+                        'sofaSqmPrice': double.tryParse(pSofaSqmCtrl.text) ?? 0,
+                        'rugSqmPrice': double.tryParse(pRugSqmCtrl.text) ?? 0,
+                        'acMaintWindowPrice': double.tryParse(pAcMaintWinCtrl.text) ?? 0,
+                        'acMaintSplitPrice': double.tryParse(pAcMaintSplitCtrl.text) ?? 0,
+                        'acWashWindowPrice': double.tryParse(pAcWashWinCtrl.text) ?? 0,
+                        'acWashSplitPrice': double.tryParse(pAcWashSplitCtrl.text) ?? 0,
                         'rank': rank,
                         'enabled': data?['enabled'] ?? true,
                         'updated_at': FieldValue.serverTimestamp(),
@@ -317,5 +389,107 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
         ),
       ),
     );
+  }
+}
+
+/// معاينة حيّة لنطاق تغطية المنطقة داخل نافذة الإضافة/التعديل.
+///
+/// تُظهر للإدارة **ما الذي يغطيه نصف القطر فعلاً على الأرض** قبل الحفظ: دائرة حول المركز
+/// المختار تتحدث فور تغيير الرقم. بدونها كان على الأدمن فتح الخريطة والرجوع لكل تجربة،
+/// ولا يرى أثر تغيير نصف القطر إطلاقاً بعد اختيار المركز.
+class _ZoneCoveragePreview extends StatelessWidget {
+  final GeoPoint center;
+  final double radiusKm;
+
+  const _ZoneCoveragePreview({required this.center, required this.radiusKm});
+
+  @override
+  Widget build(BuildContext context) {
+    final token = dotenv.env['MAPBOX_TOKEN'] ?? '';
+    final latLng = LatLng(center.latitude, center.longitude);
+    // كل تغيير في نصف القطر يعيد بناء الخريطة بمفتاح جديد فتُعاد المركزة بالزوم المناسب.
+    final zoom = _zoomForRadius(radiusKm);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.travel_explore_rounded, size: 16, color: Colors.blue),
+            const SizedBox(width: 6),
+            Text(
+              'نطاق التغطية — ${radiusKm.toStringAsFixed(radiusKm % 1 == 0 ? 0 : 1)} كم',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox(
+            height: 190,
+            child: Stack(
+              children: [
+                FlutterMap(
+                  key: ValueKey('zone_preview_${center.latitude}_${center.longitude}_$radiusKm'),
+                  options: MapOptions(
+                    initialCenter: latLng,
+                    initialZoom: zoom,
+                    // معاينة فقط — لا تفاعل كي لا تبتلع تمرير النافذة.
+                    interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/{z}/{x}/{y}?access_token=$token',
+                      additionalOptions: {'accessToken': token},
+                      userAgentPackageName: 'com.zyiarah.zyiarah',
+                    ),
+                    CircleLayer(
+                      circles: [
+                        CircleMarker(
+                          point: latLng,
+                          radius: radiusKm * 1000,
+                          useRadiusInMeter: true,
+                          color: Colors.blue.withValues(alpha: 0.22),
+                          borderColor: Colors.blue,
+                          borderStrokeWidth: 2,
+                        ),
+                      ],
+                    ),
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: latLng,
+                          child: const Icon(Icons.location_on, color: Color(0xFF50B498), size: 34),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                // تعذّر تحميل الخريطة (توكن مفقود مثلاً) لا يترك مربعاً أسود غامضاً.
+                if (token.isEmpty)
+                  Container(
+                    color: Colors.grey.shade200,
+                    alignment: Alignment.center,
+                    child: const Text('تعذّر عرض الخريطة (رمز Mapbox غير مضبوط)',
+                        style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// زوم يجعل الدائرة كاملةً ظاهرة في المعاينة مهما كان نصف القطر.
+  static double _zoomForRadius(double km) {
+    if (km <= 2) return 12.5;
+    if (km <= 5) return 11.3;
+    if (km <= 10) return 10.3;
+    if (km <= 20) return 9.3;
+    if (km <= 40) return 8.3;
+    return 7.3;
   }
 }

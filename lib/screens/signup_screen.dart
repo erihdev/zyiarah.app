@@ -94,7 +94,9 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
       }
 
       if (!mounted) return;
-      context.go('/client');
+      // كشاشة الدخول: نذهب للجذر ويوجّه AuthWrapper بعد أن يُحمّل المزوّد الدور —
+      // بدل القفز إلى '/client' قبل أن يلحق المزوّد فيردّنا الحارس ونعود للترحيب.
+      context.go('/');
     } on FirebaseAuthException catch (e) {
       // رسائل عربية واضحة بدل استثناء Firebase الإنجليزي الخام.
       final msg = switch (e.code) {

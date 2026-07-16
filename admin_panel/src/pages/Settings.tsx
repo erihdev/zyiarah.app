@@ -161,6 +161,15 @@ export default function Settings() {
                 },
                 sofaPrice: 35,
                 rugPrice: 15,
+                // الأسعار الجديدة (م² للكنب/السجاد، ولكل مكيف) تُبذر بصفر عمداً: صفر =
+                // «غير مسعّرة» فتُعطَّل الخدمة حتى تُسعّرها الإدارة من تطبيق الأدمن —
+                // بدل بيعها بسعر افتراضي لم يعتمده أحد.
+                sofaSqmPrice: 0,
+                rugSqmPrice: 0,
+                acMaintWindowPrice: 0,
+                acMaintSplitPrice: 0,
+                acWashWindowPrice: 0,
+                acWashSplitPrice: 0,
                 updated_at: new Date(),
             });
             setNewZone(emptyZoneForm);

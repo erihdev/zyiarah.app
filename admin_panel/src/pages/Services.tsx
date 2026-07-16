@@ -5,7 +5,6 @@ import {
     Trash2,
     Eye,
     EyeOff,
-    Save,
     Settings,
     LayoutGrid,
     Loader2,
@@ -19,8 +18,6 @@ import {
     collection,
     getDocs,
     doc,
-    getDoc,
-    setDoc,
     addDoc,
     updateDoc,
     deleteDoc,
@@ -43,28 +40,15 @@ interface AppService {
     order_index: number;
 }
 
-interface SofaRugPricing {
-    sofa_price_inside: number;
-    sofa_price_outside: number;
-    rug_price_inside: number;
-    rug_price_outside: number;
-    outside_deposit: number;
-}
+// أُزيلت بطاقة تسعير الكنب/السجاد من هنا: حقولها (sofa_price_inside/outside,
+// rug_price_inside/outside, outside_deposit) لم يكن لها قارئ واحد في التطبيق ولا في
+// الدوال — كانت الإدارة تعدّلها وترى «تم الحفظ» ولا يتغيّر شيء. التسعير الحقيقي لكل
+// منطقة في service_zones (تطبيق الإدارة ← مناطق التغطية).
 
 export default function Services() {
     const { toast, confirm } = useNotification();
     const [services, setServices] = useState<AppService[]>([]);
-    const [pricing, setPricing] = useState<SofaRugPricing>({
-        sofa_price_inside: 35,
-        sofa_price_outside: 39,
-        rug_price_inside: 15,
-        rug_price_outside: 17,
-        outside_deposit: 50
-    });
     const [isLoading, setIsLoading] = useState(true);
-    // يمنع حفظ الأسعار فوق الإنتاج بالقيم الافتراضية بعد قراءة فاشلة.
-    const [pricingLoadFailed, setPricingLoadFailed] = useState(false);
-    const [isSavingPricing, setIsSavingPricing] = useState(false);
     const [isSavingService, setIsSavingService] = useState(false);
     const [isAddingService, setIsAddingService] = useState(false);
     const [editingService, setEditingService] = useState<AppService | null>(null);
@@ -83,22 +67,8 @@ export default function Services() {
             const bSnap = await getDocs(bQuery);
             const bList = bSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppService));
             setServices(bList);
-
-            const configRef = doc(db, 'system_configs', 'main_settings');
-            const configSnap = await getDoc(configRef);
-            if (configSnap.exists()) {
-                const data = configSnap.data();
-                setPricing({
-                    sofa_price_inside: data.sofa_price_inside ?? 35,
-                    sofa_price_outside: data.sofa_price_outside ?? 39,
-                    rug_price_inside: data.rug_price_inside ?? 15,
-                    rug_price_outside: data.rug_price_outside ?? 17,
-                    outside_deposit: data.outside_deposit ?? 50
-                });
-            }
         } catch (error) {
             console.error("Error fetching data:", error);
-            setPricingLoadFailed(true);
         } finally {
             setIsLoading(false);
         }
@@ -123,23 +93,6 @@ export default function Services() {
             toast.success("تم حذف الخدمة بنجاح");
         } catch {
             toast.error("حدث خطأ أثناء الحذف");
-        }
-    };
-
-    const handleSavePricing = async () => {
-        if (pricingLoadFailed) {
-            toast.error('تعذّر تحميل الأسعار الحالية — لا يمكن الحفظ فوقها بقيم افتراضية. أعد تحميل الصفحة.');
-            return;
-        }
-        setIsSavingPricing(true);
-        try {
-            const docRef = doc(db, 'system_configs', 'main_settings');
-            await setDoc(docRef, pricing, { merge: true });
-            toast.success("تم حفظ أسعار الأمتار وعربون الخارج بنجاح");
-        } catch {
-            toast.error("حدث خطأ أثناء الحفظ");
-        } finally {
-            setIsSavingPricing(false);
         }
     };
 
@@ -240,66 +193,21 @@ export default function Services() {
             <section className="relative bg-white/80 backdrop-blur-xl rounded-[36px] p-8 shadow-xl shadow-slate-100/60 border border-slate-100/80 overflow-hidden">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-[#5D1B5E]/2 rounded-bl-full pointer-events-none" />
                 
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-                    <div className="flex items-center gap-4">
-                        <div className="p-4 bg-gradient-to-tr from-[#5D1B5E]/10 to-[#7B2E7C]/5 rounded-2xl text-[#5D1B5E] border border-purple-50">
-                            <Settings size={26} className="animate-spin-slow text-[#5D1B5E]" />
-                        </div>
-                        <div>
-                            <h3 className="text-xl font-black text-slate-800">تسعير خدمات الأمتار (الكنب والزل)</h3>
-                            <p className="text-sm text-slate-400 font-medium mt-0.5">تحديث تلقائي وفوري ينعكس على شاشات التطبيق لخدمات الغسيل بالمتار.</p>
-                        </div>
+                <div className="flex items-center gap-4">
+                    <div className="p-4 bg-gradient-to-tr from-amber-100 to-amber-50 rounded-2xl text-amber-700 border border-amber-100">
+                        <Settings size={26} className="text-amber-700" />
                     </div>
-                    
-                    <span className="self-start sm:self-auto px-4 py-1.5 rounded-full bg-amber-50 text-amber-700 text-xs font-extrabold border border-amber-100">
-                        مزامنة حية
-                    </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
-                    <PriceInput 
-                        label="كنب (داخل النطاق)" 
-                        value={pricing.sofa_price_inside} 
-                        onChange={v => setPricing({...pricing, sofa_price_inside: v})} 
-                        subLabel="سعر المتر"
-                    />
-                    <PriceInput 
-                        label="كنب (خارج النطاق)" 
-                        value={pricing.sofa_price_outside} 
-                        onChange={v => setPricing({...pricing, sofa_price_outside: v})} 
-                        subLabel="سعر المتر"
-                    />
-                    <PriceInput 
-                        label="زل (داخل النطاق)" 
-                        value={pricing.rug_price_inside} 
-                        onChange={v => setPricing({...pricing, rug_price_inside: v})} 
-                        subLabel="سعر المتر"
-                    />
-                    <PriceInput 
-                        label="زل (خارج النطاق)" 
-                        value={pricing.rug_price_outside} 
-                        onChange={v => setPricing({...pricing, rug_price_outside: v})} 
-                        subLabel="سعر المتر"
-                    />
-                    <PriceInput 
-                        label="عربون النطاق الخارجي" 
-                        value={pricing.outside_deposit} 
-                        onChange={v => setPricing({...pricing, outside_deposit: v})} 
-                        subLabel="دفعة مقدمة"
-                        highlighted
-                    />
-                </div>
-
-                <div className="mt-8 pt-6 border-t border-slate-100/80 flex justify-end">
-                    <button
-                        type="button"
-                        onClick={handleSavePricing}
-                        disabled={isSavingPricing}
-                        className="flex items-center gap-3 px-8 py-4 bg-[#5D1B5E] text-white rounded-2xl font-black hover:bg-[#4E144F] active:scale-95 transition-all shadow-lg shadow-purple-900/10 disabled:opacity-50"
-                    >
-                        {isSavingPricing ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
-                        <span>حفظ أسعار الأمتار والعربون</span>
-                    </button>
+                    <div>
+                        <h3 className="text-xl font-black text-slate-800">تسعير الكنب والسجاد والمكيفات</h3>
+                        <p className="text-sm text-slate-500 font-medium mt-1 leading-relaxed">
+                            الأسعار تُحدَّد <b>لكل منطقة تغطية على حدة</b> من تطبيق الإدارة ← <b>مناطق التغطية</b>:
+                            سعر المتر المربع للكنب والسجاد، وسعر كل مكيف (صيانة/غسيل × شباك/سبليت).
+                            <br />
+                            <span className="text-amber-700">
+                                منطقة بسعر صفر = الخدمة معطّلة فيها حتى تُسعَّر.
+                            </span>
+                        </p>
+                    </div>
                 </div>
             </section>
 
@@ -506,43 +414,6 @@ export default function Services() {
                     </div>
                 </div>
             )}
-        </div>
-    );
-}
-
-function PriceInput({ 
-    label, 
-    value, 
-    onChange, 
-    subLabel,
-    highlighted = false
-}: { 
-    label: string, 
-    value: number, 
-    onChange: (v: number) => void,
-    subLabel?: string,
-    highlighted?: boolean
-}) {
-    return (
-        <div className="space-y-2 group">
-            <div className="flex items-center justify-between">
-                <label className="text-xs font-black text-slate-500 tracking-wider group-focus-within:text-[#5D1B5E] transition-colors">{label}</label>
-                {subLabel && <span className="text-[10px] text-slate-400 font-bold">{subLabel}</span>}
-            </div>
-            <div className="relative">
-                <input 
-                    type="number" 
-                    value={value} 
-                    onChange={e => onChange(Number(e.target.value))}
-                    title={label}
-                    className={`w-full bg-slate-50 border rounded-2xl pl-12 pr-4 py-4 font-extrabold text-slate-800 outline-none transition-all text-left ${
-                        highlighted 
-                            ? 'border-purple-200 focus:border-[#5D1B5E] focus:ring-4 focus:ring-[#5D1B5E]/15 bg-purple-50/20' 
-                            : 'border-slate-200/80 focus:border-[#5D1B5E] focus:ring-4 focus:ring-[#5D1B5E]/10'
-                    }`}
-                />
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-slate-400 text-xs">ر.س</span>
-            </div>
         </div>
     );
 }

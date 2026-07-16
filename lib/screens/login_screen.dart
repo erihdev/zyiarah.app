@@ -36,19 +36,21 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      UserCredential userCredential = await _firebaseService.signInWithRealEmailAndPassword(email, password);
-      
+      final userCredential =
+          await _firebaseService.signInWithRealEmailAndPassword(email, password);
+
       if (userCredential.user != null) {
-        String role = await _firebaseService.getUserRole(userCredential.user!.uid);
         if (!mounted) return;
-        
-        if (role == 'driver') {
-          context.go('/driver');
-        } else if (['admin', 'super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin'].contains(role)) {
-          context.go('/admin');
-        } else {
-          context.go('/client');
-        }
+        // نذهب للجذر فقط ولا نوجّه بالدور هنا.
+        //
+        // كانت الشاشة تجلب الدور بنفسها ثم تنتقل مباشرةً إلى '/admin' أو '/driver'،
+        // بينما ZyiarahUserProvider يجلب الدور مرة ثانية بالتوازي عبر authStateChanges.
+        // حارس الراوتر يحكم على حالة **المزوّد** لا على ما جلبناه هنا، وهي وقتها ما زالت
+        // قديمة (role=null ⇒ يُعامَل كـ'client') فيردّ الأدمن/السائق إلى '/'، فيرى
+        // المستخدم شاشة الترحيب ويظنّ أن الدخول فشل — ثم تنجح الضغطة الثانية لأن
+        // المزوّد يكون قد أنهى التحميل. الجذر يعرض AuthWrapper الذي ينتظر المزوّد
+        // ويوجّه للوجهة الصحيحة بعد معرفة الدور — فلا سباق.
+        context.go('/');
       }
     } on FirebaseAuthException catch (e) {
       // firebase_auth الحديث يُرجع invalid-credential لبيانات خاطئة بدل الرمزين القديمين.

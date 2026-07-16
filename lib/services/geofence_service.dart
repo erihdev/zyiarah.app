@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:zyiarah/utils/service_pricing_defaults.dart';
 
 class ZyiarahZone {
   final String name;
@@ -89,6 +90,13 @@ class GeofenceService {
         },
         'sofaPrice': 35.0,
         'rugPrice': 15.0,
+        // نفس الافتراضيات المعروضة في شاشة المناطق — مصدر واحد يمنع تضارب الأرقام.
+        'sofaSqmPrice': kDefaultSofaSqmPrice,
+        'rugSqmPrice': kDefaultRugSqmPrice,
+        'acMaintWindowPrice': kDefaultAcMaintWindowPrice,
+        'acMaintSplitPrice': kDefaultAcMaintSplitPrice,
+        'acWashWindowPrice': kDefaultAcWashWindowPrice,
+        'acWashSplitPrice': kDefaultAcWashSplitPrice,
         'updated_at': FieldValue.serverTimestamp(),
       });
     }
