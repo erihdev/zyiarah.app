@@ -26,6 +26,8 @@ const _screens = [
   'lib/screens/ac_service_details_screen.dart',
 ];
 
+const _picker = 'lib/screens/location_picker_screen.dart';
+
 void main() {
   group('لكل سبب رسالة وإجراء', () {
     test('كل حالات الفشل لها رسالة غير فارغة ومميّزة', () {
@@ -118,6 +120,34 @@ void main() {
         expect(s.contains('userInitiated: true'), isTrue,
             reason: '$p: بدون طلب صريح لن يظهر مربّع الإذن بعد رفض سابق');
       }
+    });
+  });
+
+  group('منتقي الخريطة: الدبوس عند المستخدم، ولا سقوط صامت على الرياض', () {
+    test('يستعمل المُحدِّد المشترك لا Geolocator مباشرةً', () {
+      final s = _code(_picker);
+      expect(s.contains('ZyiarahZoneLocator.locate'), isTrue);
+      expect(s.contains('Geolocator.'), isFalse);
+    });
+
+    test('زرّ «موقعي» موجود ويطلب الإذن صراحةً', () {
+      // كان غائباً: إن فشل التحديد مرّة فلا سبيل لإعادة المحاولة بعد منح الإذن.
+      final s = _code(_picker);
+      expect(s.contains('locate_me_fab'), isTrue);
+      expect(s.contains('_locateMe(userInitiated: true)'), isTrue);
+    });
+
+    test('يُعرض سبب بقاء الدبوس على الافتراضي', () {
+      final s = _code(_picker);
+      expect(s.contains('_locateFailure'), isTrue,
+          reason: 'خريطة الرياض لمستخدم في جازان بلا سبب = يبدو عطلاً عشوائياً');
+      expect(s.contains('_locateFailure!.message'), isTrue);
+    });
+
+    test('حارس الموقع الافتراضي باقٍ — لا يُرسَل الفريق لمدينة خاطئة', () {
+      final s = _code(_picker);
+      expect(s.contains('if (!_userSelected)'), isTrue,
+          reason: 'تأكيد الرياض بصمت لمستخدم في جازان = فريق يصل لمدينة أخرى');
     });
   });
 }

@@ -1,14 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart' show Position;
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
-import 'package:zyiarah/services/location_service.dart';
+import 'package:zyiarah/services/zone_locator_service.dart';
 
 class LocationPickerScreen extends StatefulWidget {
   final String serviceName;
@@ -47,42 +46,62 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   // اعتماد الموقع الافتراضي (الرياض) بصمت لمستخدم في مدينة أخرى.
   bool _userSelected = false;
 
+  /// سبب تعذّر التحديد التلقائي — يُعرض بدل ترك الدبوس على الرياض بلا تفسير.
+  LocateFailure? _locateFailure;
+  bool _isLocating = false;
+
   final String _mapboxToken = dotenv.env['MAPBOX_TOKEN'] ?? '';
 
   @override
   void initState() {
     super.initState();
-    _setInitialLocation();
+    _locateMe();
   }
 
-  /// **بمهلة، ولا تعليق أبدي.**
+  /// يضع الدبوس على موقع المستخدم — **ويقول لماذا إن لم يستطع.**
   ///
-  /// كان: `await getCurrentLocation()` بلا مهلة، والخريطة لا تُرسَم إلا بعد
-  /// `_isMapReady = true`. فإن لم يُحسم الموقع (داخل مبنى، أو مربّع الإذن معلّق، أو
-  /// GPS بطيء) تبقى الشاشة **بيضاء بلا دوّار ولا رسالة** — تعليق صامت تام. وأي خطأ
-  /// من الخدمة كان يمنع `_isMapReady = true` إلى الأبد لأن الاستدعاء بلا try.
+  /// كان مسار الفشل صامتاً تماماً: يسقط على الرياض (24.71, 46.67) فيرى مستخدمٌ في
+  /// جازان خريطة الرياض بلا كلمة واحدة عن السبب — فيظنّ أن التطبيق يعرض مكاناً
+  /// عشوائياً. (تحذير `_userSelected` يمنع تأكيد الافتراضي بصمت، لكنه علاجُ عرَضٍ
+  /// سببُه هذا الصمت.)
   ///
-  /// الآن: مهلة 8 ثوانٍ ثم نعرض الخريطة على الموقع الافتراضي ليُحدّد المستخدم يدوياً
-  /// (`_userSelected` يبقى false فلا يُعتمد الافتراضي بصمت).
-  Future<void> _setInitialLocation() async {
-    Position? position;
-    try {
-      position = await ZyiarahLocationService()
-          .getCurrentLocation()
-          .timeout(const Duration(seconds: 8));
-    } catch (e) {
-      debugPrint('[LocationPicker] initial location unavailable: $e');
+  /// ولم يكن ثمّة زرّ «موقعي» إطلاقاً: إن فشل التحديد مرّة، فلا سبيل لإعادة المحاولة
+  /// بعد منح الإذن سوى إغلاق الشاشة وفتحها.
+  ///
+  /// المُحدِّد المشترك يعطينا المهلة نفسها وتصنيف الأسباب نفسه في كل الشاشات.
+  /// [userInitiated] من زرّ «موقعي» يطلب الإذن صراحةً.
+  Future<void> _locateMe({bool userInitiated = false}) async {
+    if (!mounted) return;
+    setState(() {
+      _isLocating = true;
+      _locateFailure = null;
+    });
+
+    // نستعمل المُحدِّد المشترك: نفس المهلة ونفس تصنيف الأسباب في كل الشاشات.
+    final res = await ZyiarahZoneLocator.locate(const [],
+        requestPermission: userInitiated);
+    if (!mounted) return;
+
+    // zones فارغة ⇒ outOfServiceArea يعني «حُدِّد الموقع بنجاح» هنا: هذه الشاشة
+    // تختار نقطة على الخريطة ولا تعنيها المناطق.
+    final GeoPoint? loc = res.location;
+    if (loc != null) {
+      setState(() {
+        _selectedLatLng = LatLng(loc.latitude, loc.longitude);
+        _userSelected = true;
+        _isMapReady = true;
+        _isLocating = false;
+        _locateFailure = null;
+      });
+      _mapController.move(_selectedLatLng, 16.0);
+      return;
     }
 
-    if (!mounted) return; // الشاشة قد تُغلق أثناء الانتظار — setState بعدها يرمي
     setState(() {
-      if (position != null) {
-        _selectedLatLng = LatLng(position.latitude, position.longitude);
-        _userSelected = true; // GPS حدّد موقعه الفعلي
-      }
-      _isMapReady = true; // تُعرض الخريطة في كل الأحوال
+      _isLocating = false;
+      _isMapReady = true; // تُعرض الخريطة دائماً — الاختيار اليدوي متاح
+      _locateFailure = res.failure;
     });
-    if (position != null) _mapController.move(_selectedLatLng, 15.0);
   }
 
   void _onSearchChanged(String query) {
@@ -254,6 +273,62 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                 ],
               ),
             
+            // سبب بقاء الدبوس على الموقع الافتراضي — بدل صمتٍ يبدو عطلاً عشوائياً.
+            if (_isMapReady && _locateFailure != null)
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 96,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFBEB),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 2)),
+                    ],
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.info_outline_rounded,
+                          size: 18, color: Color(0xFFB45309)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${_locateFailure!.message}\nحرّكي الخريطة لتضعي الدبوس على موقعك.',
+                          style: const TextStyle(
+                              fontSize: 11, color: Color(0xFF92400E), height: 1.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            // زرّ «موقعي» — كان غائباً تماماً: إن فشل التحديد التلقائي مرّة، لم يكن
+            // للمستخدم أي وسيلة لإعادة المحاولة بعد منح الإذن سوى إغلاق الشاشة.
+            Positioned(
+              left: 16,
+              bottom: 96,
+              child: FloatingActionButton(
+                heroTag: 'locate_me_fab',
+                onPressed: _isLocating ? null : () => _locateMe(userInitiated: true),
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF5D1B5E),
+                tooltip: 'موقعي الحالي',
+                child: _isLocating
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Color(0xFF5D1B5E)),
+                      )
+                    : const Icon(Icons.my_location_rounded),
+              ),
+            ),
+
             // Fixed marker in center
             const Center(
               child: Padding(
