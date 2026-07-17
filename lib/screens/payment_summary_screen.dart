@@ -352,11 +352,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     try {
       final result = await FirebaseFunctions.instance
           .httpsCallable('getHourlyAvailability')
-          .call({
-            'startDate': bookingDate,
-            'endDate': bookingDate,
-            if (widget.zoneName != null) 'zoneName': widget.zoneName,
-          })
+          .call({'startDate': bookingDate, 'endDate': bookingDate})
           .timeout(const Duration(seconds: 20));
       data = result.data as Map;
     } catch (e) {
@@ -367,11 +363,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     final Map daily = data['dailyCounts'] as Map? ?? {};
     final Map slots = data['slotCounts'] as Map? ?? {};
     final int maxOrdersPerDay = (data['maxOrdersPerDay'] as num?)?.toInt() ?? 10;
-    // maxTeamsPerSlot = عدد السائقين المؤهّلين فعلاً في المنطقة (تحسبه الدالة).
+    // maxTeamsPerSlot = عدد السائقين النشطين (بلا مناطق — تحسبه الدالة).
     final int maxTeamsPerSlot = (data['maxTeamsPerSlot'] as num?)?.toInt() ?? 0;
 
     if (maxTeamsPerSlot <= 0) {
-      return 'لا يوجد سائق متاح في منطقتك حالياً. تواصل معنا لتحديد موعد.';
+      return 'لا يوجد فريق متاح حالياً. تواصل معنا لتحديد موعد.';
     }
 
     if (((daily[bookingDate] as num?)?.toInt() ?? 0) >= maxOrdersPerDay) {

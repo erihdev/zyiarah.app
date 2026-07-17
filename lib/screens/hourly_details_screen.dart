@@ -63,16 +63,11 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       final startDate = intl.DateFormat('yyyy-MM-dd').format(now);
       final endDate = intl.DateFormat('yyyy-MM-dd').format(now.add(const Duration(days: 31)));
 
-      // نمرّر المنطقة متى عُرفت: الدالة تحسب السعة من **سائقي هذه المنطقة** وتعدّ
-      // طلباتها وحدها. بدونها كان التلوين يقيس عدد كل السائقين مقابل طلبات كل
-      // المناطق — فيخالف بوابة الدفع التي تفحص بالمنطقة، فيرى العميل أخضر ثم يُرفض.
+      // بلا منطقة: السائقون يقبلون أي طلب (قرار المالك)، فالسعة رقم واحد للنشاط
+      // كلّه — عدد السائقين النشطين والسقف اليومي المتفق عليه.
       final result = await FirebaseFunctions.instance
           .httpsCallable('getHourlyAvailability')
-          .call({
-            'startDate': startDate,
-            'endDate': endDate,
-            if (_selectedZoneName != null) 'zoneName': _selectedZoneName,
-          });
+          .call({'startDate': startDate, 'endDate': endDate});
 
       final data = result.data as Map;
 

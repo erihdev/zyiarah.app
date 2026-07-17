@@ -2051,33 +2051,24 @@ exports.findNearestDrivers = onCall({cpu: 0.25}, async (request) => {
 // ════════════════════════════════════════════════════════════════════════
 
 /**
- * يجد سائقاً مؤهلاً وحرّاً لفترة زمنية في منطقة محددة.
- * - المنطقة: يُفضَّل السائق الذي zone_name == منطقة الطلب أو assigned_zones تحتويها.
- *   السائق بلا منطقة مُسجَّلة يُعامَل مؤقتاً كمن يخدم كل المناطق (fallback أثناء الإطلاق
- *   حتى تُسنِد الإدارة المناطق للسائقين).
+ * يجد سائقاً حرّاً لفترة زمنية.
+ * - **بلا مناطق**: قرار المالك — السائق يقبل أي طلب يُسنَد إليه، والسعة تُضبط بالسقف
+ *   اليومي المتفق عليه مسبقاً (max_orders_per_day) وبعدد السائقين، لا بالجغرافيا.
+ *   (وواقعاً لم تُسنَد منطقة لسائق قط: zone_name غائب عن كل السائقين، و assigned_zones
+ *   لم يُكتب في أي مكان — كان الترشيح يعمل دائماً على مسار «بلا منطقة».)
  * - الانشغال: السائق مشغول إن كان لديه طلب يتقاطع زمنياً بحالة
  *   scheduled/on_the_way/in_progress/accepted (لا يُحسب الانشغال "الآني" بل تقاطع الفترة).
  * @param {admin.firestore.Firestore} db
- * @param {object} opts {zoneName, startDateTime, endDateTime}
+ * @param {object} opts {startDateTime, endDateTime}
  * @return {Promise<FirebaseFirestore.QueryDocumentSnapshot|null>}
  */
-async function _findFreeDriverForSlot(db, {zoneName, startDateTime, endDateTime}) {
+async function _findFreeDriverForSlot(db, {startDateTime, endDateTime}) {
   const dayStart = new Date(
       startDateTime.getFullYear(), startDateTime.getMonth(), startDateTime.getDate());
   const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
 
   const driversSnap = await db.collection("drivers").get();
-  let eligible = driversSnap.docs.filter((doc) => doc.data().is_active !== false);
-
-  if (zoneName) {
-    eligible = eligible.filter((doc) => {
-      const d = doc.data();
-      const dz = d.zone_name;
-      const zones = Array.isArray(d.assigned_zones) ? d.assigned_zones : [];
-      const unzoned = (!dz || dz === "") && zones.length === 0;
-      return unzoned || dz === zoneName || zones.includes(zoneName);
-    });
-  }
+  const eligible = driversSnap.docs.filter((doc) => doc.data().is_active !== false);
   if (eligible.length === 0) return null;
 
   // بناء مجموعة السائقين المشغولين بطلبات متقاطعة في نفس اليوم
@@ -2325,7 +2316,7 @@ exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
     });
 
     // محاولة الإسناد التلقائي (منطقة + فترة) → scheduled، وإلا تبقى للإدارة
-    const driver = await _findFreeDriverForSlot(db, {zoneName, startDateTime, endDateTime});
+    const driver = await _findFreeDriverForSlot(db, {startDateTime, endDateTime});
     if (driver) {
       const r = await _assignDriverScheduled(db, orderRef.id, driver, startDateTime);
       results.push({visit: i + 1, assigned: r.assigned !== false, driverId: r.driverId});
@@ -2407,7 +2398,7 @@ async function _generateContractVisits(db, contractRef, c) {
       created_at: admin.firestore.FieldValue.serverTimestamp(),
       reminder_sent: false,
     });
-    const driver = await _findFreeDriverForSlot(db, {zoneName, startDateTime, endDateTime});
+    const driver = await _findFreeDriverForSlot(db, {startDateTime, endDateTime});
     if (driver) {
       const r = await _assignDriverScheduled(db, orderRef.id, driver, startDateTime);
       results.push({visit: i + 1, assigned: r.assigned !== false, driverId: r.driverId});
@@ -2881,7 +2872,6 @@ exports.sweepUnassignedPaidOrders = onSchedule(
         const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
         try {
           const driver = await _findFreeDriverForSlot(db, {
-            zoneName: d.zone_name || null,
             startDateTime: start,
             endDateTime: end,
           });
@@ -3087,7 +3077,6 @@ exports.confirmPendingTamaraOrders = onSchedule(
                 const hours = Number(d.hours_contracted || 4);
                 const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
                 const driver = await _findFreeDriverForSlot(db, {
-                  zoneName: d.zone_name || null,
                   startDateTime: start,
                   endDateTime: end,
                 });
@@ -3204,9 +3193,9 @@ exports.autoAssignDriverDirectly = onCall({cpu: 0.25}, async (request) => {
   const hours = Number(durationHours || orderData.hours_contracted || 4);
   const endDateTime = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
 
-  // (Direct Dispatch) اختيار سائق متاح في نفس المنطقة والفترة ثم إسناده بحالة scheduled
+  // (Direct Dispatch) اختيار أي سائق حرّ في الفترة ثم إسناده بحالة scheduled.
+  // بلا منطقة: السائق يقبل أي طلب (قرار المالك).
   const driver = await _findFreeDriverForSlot(db, {
-    zoneName: orderData.zone_name || null,
     startDateTime,
     endDateTime,
   });
@@ -3243,9 +3232,8 @@ exports.checkHourlySlotAvailability = onCall({cpu: 0.25}, async (request) => {
   const endDateTime = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
   const db = admin.firestore();
 
-  // (Direct Dispatch) التوفّر = وجود سائق حرّ في نفس المنطقة والفترة عبر نفس مُحدِّد الإسناد
+  // (Direct Dispatch) التوفّر = وجود سائق حرّ في الفترة عبر نفس مُحدِّد الإسناد.
   const driver = await _findFreeDriverForSlot(db, {
-    zoneName: request.data.zoneName || null,
     startDateTime,
     endDateTime,
   });
@@ -3269,25 +3257,19 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
     throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
   }
 
-  const {startDate, endDate, zoneName} = request.data;
+  // zoneName ما زالت تصل من النسخ المثبَّتة القديمة — نقبلها ونتجاهلها عمداً:
+  // السعة صارت رقماً واحداً للنشاط كلّه (السائقون بلا مناطق).
+  const {startDate, endDate} = request.data;
   if (!startDate || !endDate) {
     throw new HttpsError("invalid-argument", "startDate و endDate مطلوبان");
   }
 
   const db = admin.firestore();
 
-  // 1. السعة الحقيقية للفترة = عدد السائقين الحرّين القابلين للإسناد في المنطقة.
-  // (Direct Dispatch / قرار 4) — الفترة حمراء إذا بلغ عدد الطلبات عدد السائقين.
+  // 1. السعة الحقيقية للفترة = عدد السائقين النشطين. **بلا مناطق** (قرار المالك):
+  // السائق يقبل أي طلب، فالسعة رقم واحد للنشاط كلّه لا لكل منطقة.
   const driversSnap = await db.collection("drivers").get();
-  let eligible = driversSnap.docs.filter((doc) => doc.data().is_active !== false);
-  if (zoneName) {
-    eligible = eligible.filter((doc) => {
-      const d = doc.data();
-      const zones = Array.isArray(d.assigned_zones) ? d.assigned_zones : [];
-      const unzoned = (!d.zone_name) && zones.length === 0;
-      return unzoned || d.zone_name === zoneName || zones.includes(zoneName);
-    });
-  }
+  const eligible = driversSnap.docs.filter((doc) => doc.data().is_active !== false);
   const driverCount = eligible.length;
 
   // 2. السعة اليومية تبقى من الإعدادات (سقف إضافي)
@@ -3311,9 +3293,11 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
   for (const doc of snap.docs) {
     const d = doc.data();
     if (d.status === "cancelled" || d.status === "rejected") continue;
-    // نعدّ طلبات المنطقة المطلوبة فقط — driverCount مصفّى بالمنطقة، فعدّ طلبات كل
-    // المناطق كان يُظهر السلوت ممتلئاً لعميل منطقة سائقوها متفرّغون.
-    if (zoneName && d.zone_name !== zoneName) continue;
+    // **نعدّ طلبات كل المناطق.** كان العدّ مقصوراً على منطقة الطلب بينما driverCount
+    // يشمل كل السائقين (لأنهم بلا مناطق) — فيُقاس بسطٌ منطقةٍ واحدة على مقامٍ عالمي:
+    // سائقان مشغولان بطلبَي «الدائر» الساعة 10، وعميلة «أبو السلع» ترى عدّادها صفراً
+    // فتحجز نفس الساعة ⇒ ثلاثة طلبات وسائقان ⇒ طلبٌ مدفوع بلا سائق. البسط والمقام
+    // يجب أن يكونا من العالم نفسه.
     const bDate = d.booking_date;
     if (!bDate) continue;
     dailyCounts[bDate] = (dailyCounts[bDate] || 0) + 1;

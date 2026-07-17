@@ -19,8 +19,8 @@ import 'package:intl/intl.dart' as intl;
 /// السعة تأتي من `getHourlyAvailability` (Admin SDK) لأن قواعد Firestore تمنع العميل
 /// من قراءة طلبات غيره، والاستعلام المباشر يُرفض كاملاً بـ permission-denied.
 class ZyiarahBookingSlotPicker extends StatefulWidget {
-  /// منطقة الخدمة — تُمرَّر للخادم ليحسب السعة من **سائقي هذه المنطقة** ويعدّ طلباتها
-  /// وحدها. بدونها يُقاس كل السائقين مقابل طلبات كل المناطق فيخالف التلوينُ بوابةَ الدفع.
+  /// منطقة الخدمة — تُحفظ على الطلب (تسعير/فاتورة/كوبونات) ولا تؤثّر في السعة:
+  /// السائقون بلا مناطق بقرار المالك، فالسعة رقم واحد للنشاط كلّه.
   final String? zoneName;
 
   /// مدة انشغال السائق بالطلب — تحدّد الخانات الصالحة والسعة المطلوبة.
@@ -67,7 +67,8 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
   @override
   void didUpdateWidget(covariant ZyiarahBookingSlotPicker old) {
     super.didUpdateWidget(old);
-    // المنطقة تُعرف بعد تحديد الموقع، والمدة قد تتغيّر — كلاهما يغيّر السعة فنُعيد الجلب.
+    // المدة تغيّر عدد الساعات المطلوب توفّرها ⇒ تُعيد حساب الخانات. (المنطقة لم تعد
+    // تؤثّر في السعة، لكن تغيّرها يعني اختياراً جديداً فنُلغي الموعد المحدَّد.)
     if (old.zoneName != widget.zoneName || old.durationHours != widget.durationHours) {
       _clearSelection();
       _load();
@@ -93,7 +94,6 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
           .call({
             'startDate': fmt.format(now),
             'endDate': fmt.format(now.add(const Duration(days: _horizonDays + 1))),
-            if (widget.zoneName != null) 'zoneName': widget.zoneName,
           })
           .timeout(const Duration(seconds: 20));
 
@@ -137,7 +137,7 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
 
   /// متاح فقط إن توفّر سائق حرّ في **كل ساعة** من ساعات المدة.
   bool _isSlotFree(DateTime day, int startHour) {
-    if (_maxTeamsPerSlot <= 0) return false; // لا سائق مؤهّل في المنطقة أصلاً
+    if (_maxTeamsPerSlot <= 0) return false; // لا سائق نشط أصلاً
     final dateKey = _key(day);
     for (int h = startHour; h < startHour + widget.durationHours; h++) {
       final k = '${dateKey}_${h.toString().padLeft(2, '0')}:00';
@@ -235,7 +235,7 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'لا يوجد فريق متاح في منطقتك حالياً. تواصلي معنا لتحديد موعد.',
+              'لا يوجد فريق متاح حالياً. تواصلي معنا لتحديد موعد.',
               style: GoogleFonts.tajawal(
                   fontSize: 13, color: const Color(0xFF92400E), height: 1.5),
             ),
