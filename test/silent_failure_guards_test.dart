@@ -55,14 +55,22 @@ void main() {
   group('منتقي الموقع لا يعلّق بصمت', () {
     final src = _code('lib/screens/location_picker_screen.dart');
 
-    test('تحديد الموقع الابتدائي بمهلة', () {
-      final i = src.indexOf('Future<void> _setInitialLocation');
+    test('تحديد الموقع الابتدائي بمهلة وبحارس mounted', () {
+      // ‎_setInitialLocation صارت ‎_locateMe وانتقلت المهلة إلى المُحدِّد المشترك
+      // (ZyiarahZoneLocator.gpsTimeout) — نفحص الواقع لا الشكل القديم.
+      final i = src.indexOf('Future<void> _locateMe(');
+      expect(i, greaterThan(-1), reason: 'دالة التحديد اختفت أو أُعيدت تسميتها');
       final body = src.substring(i, src.indexOf('\n  void _onSearchChanged', i));
-      expect(body.contains('.timeout('), isTrue,
-          reason: 'بلا مهلة: GPS لا يُحسم داخل مبنى ⇒ الشاشة بيضاء إلى الأبد');
+      expect(body.contains('ZyiarahZoneLocator.locate'), isTrue,
+          reason: 'المهلة وتصنيف الأسباب في المُحدِّد المشترك — لا نسخة محلّية');
       expect(body.contains('if (!mounted) return'), isTrue,
           reason: 'setState بعد await وقد أُغلقت الشاشة يرمي');
-      expect(body.contains('_isMapReady = true'), isTrue);
+      expect(body.contains('_isMapReady = true'), isTrue,
+          reason: 'الخريطة تُعرض في كل الأحوال — التحديد اليدوي متاح دائماً');
+      // المهلة نفسها مثبَّتة في zone_locator_test؛ نتأكّد هنا أنها لم تُلتَفّ محلياً.
+      final locator = _code('lib/services/zone_locator_service.dart');
+      expect(locator.contains('.timeout(gpsTimeout)'), isTrue,
+          reason: 'بلا مهلة: GPS لا يُحسم داخل مبنى ⇒ الشاشة عالقة إلى الأبد');
     });
 
     test('دوّار بدل شاشة بيضاء أثناء الانتظار', () {
