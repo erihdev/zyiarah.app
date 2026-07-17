@@ -183,18 +183,23 @@ service cloud.firestore {
       // Orders manager: full update (approve, assign driver -> scheduled, override status)
       allow update: if isOrdersManager();
 
-      // Driver (Direct Dispatch): may ONLY advance an assigned task forward + sync location
-      // + confirm COD. No accept/reject, no self-reassignment, no identity/amount tampering.
+      // Driver (Direct Dispatch): may ONLY advance an assigned task forward + sync location.
+      // No accept/reject, no self-reassignment, no identity/amount tampering, and — since
+      // cash-on-delivery was removed at the root — NO payment fields at all: a driver can
+      // no longer mark an order paid. Payment is always upfront and confirmed server-side
+      // (webhook / verifyMoyasarPayment / payWithWallet).
       allow update: if isLoggedIn() &&
         request.auth.uid == resource.data.driver_id &&
         resource.data.status in ['scheduled', 'on_the_way', 'in_progress', 'accepted'] &&
         request.resource.data.status in ['on_the_way', 'in_progress', 'completed'] &&
         // 'rewards_handled_by' مسموح: تكتبه عند الإكمال ليعالج الخادم الجوائز (onOrderRewards)
+        // 'completed_distance_m' مسموح: يكتبه driver_dashboard عند الإكمال متى توفّر GPS.
+        //   كان غائباً عن هذه القائمة، و hasOnly ترفض **المعاملة كاملة** لأي مفتاح خارجها —
+        //   أي أن إكمال الطلب كان يفشل لدى كل سائق يعمل GPS جهازه، بينما ينجح لمن لا يعمل.
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'status', 'on_the_way_at', 'arrived_at', 'start_time', 'end_time',
           'driver_location', 'last_location_update', 'updated_at',
-          'is_paid', 'paid_at', 'cash_collected_by', 'cash_confirmed',
-          'cash_confirmed_at', 'payment_pin', 'payment_pin_generated_at',
+          'completed_distance_m',
           'rewards_handled_by', 'proximity_notified'
         ]);
 

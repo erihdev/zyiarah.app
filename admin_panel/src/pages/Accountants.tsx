@@ -31,7 +31,6 @@ interface Transaction {
 
 const PAYMENT_LABELS: Record<string, string> = {
     card: 'بطاقة ائتمانية',
-    cash: 'دفع عند الاستلام',
     tamara: 'تمارة (تقسيط)',
     wallet: 'المحفظة',
 };

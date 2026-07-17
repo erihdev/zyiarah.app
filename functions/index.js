@@ -2794,12 +2794,12 @@ exports.remindClientsUpcomingAppointments = onSchedule(
       let sent = 0;
       for (const doc of snap.docs) {
         const d = doc.data();
-        // موعد حقيقي يستحق التذكير: مدفوع مسبقاً، أو دفع عند الاستلام، أو مُسنَد
-        // لسائق. نستثني فقط المعلّق غير المدفوع (محاولة دفع فاشلة/مهجورة).
+        // موعد حقيقي يستحق التذكير: مدفوع مسبقاً أو مُسنَد لسائق. نستثني فقط
+        // المعلّق غير المدفوع (محاولة دفع فاشلة/مهجورة).
+        // (شرط cash_on_delivery أُزيل: الدفع عند الاستلام حُذف من الجذور.)
         const driverAssigned = d.status === "scheduled" ||
           d.status === "assigned" || d.status === "accepted";
-        const realAppointment = d.is_paid === true ||
-          d.payment_method === "cash_on_delivery" || driverAssigned;
+        const realAppointment = d.is_paid === true || driverAssigned;
         if (!d.client_id || !d.service_date || !realAppointment) continue;
         if (!ACTIVE.includes(d.status)) continue;
 

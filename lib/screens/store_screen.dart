@@ -509,7 +509,7 @@ class _CartSheetState extends State<_CartSheet> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'سيُراجع طلبك من قِبل الإدارة، وفور الموافقة سنُشعرك لإتمام الدفع بالطريقة التي تناسبك (تمارا / بطاقة / عند الاستلام).',
+                          'سيُراجع طلبك من قِبل الإدارة، وفور الموافقة سنُشعرك لإتمام الدفع بالطريقة التي تناسبك (بطاقة / تمارا).',
                           style: GoogleFonts.tajawal(fontSize: 12, height: 1.5, color: const Color(0xFF5D1B5E), fontWeight: FontWeight.w600),
                         ),
                       ),

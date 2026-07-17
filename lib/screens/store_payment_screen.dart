@@ -17,7 +17,7 @@ import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
 
 /// شاشة دفع طلب المتجر — تُفتح فقط بعد موافقة الإدارة على الطلب.
-/// طرق الدفع المعتمدة: ميسر (بطاقة) + تمارا + الدفع عند الاستلام (COD).
+/// طرق الدفع المعتمدة: ميسر (بطاقة) + تمارا. لا دفع عند الاستلام — أُزيل من الجذور.
 /// لا تُنشئ طلباً جديداً؛ بل تُحدّث طلب المتجر القائم وتولّد طلب التوصيل والفاتورة.
 class StorePaymentScreen extends StatefulWidget {
   final String storeOrderId;
@@ -42,7 +42,7 @@ class StorePaymentScreen extends StatefulWidget {
 }
 
 class _StorePaymentScreenState extends State<StorePaymentScreen> {
-  String _selectedMethod = 'card'; // 'card' | 'tamara' | 'cod'
+  String _selectedMethod = 'card'; // 'card' | 'tamara'
   bool _isLoading = false;
   bool _agreeToTerms = false;
   bool _tamaraEnabled = false;
@@ -309,10 +309,14 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
         builder: (_) => ZyiarahOrderSuccessScreen(
           orderCode: widget.orderCode,
           invoiceCollection: 'store_orders',
-          title: isPaid ? 'تم تأكيد الدفع! 🎉' : 'تم تأكيد الطلب!',
+          // isPaid=false تعني «لم يؤكّده الخادم بعد» لا «لم تدفع»: كلا المسارَين
+          // (بطاقة/تمارا) يمرّران false لأن التأكيد خادميّ (webhook/verify). وكان
+          // النصّ هنا يقول «سيتم تحصيل المبلغ عند الاستلام» — فتقرأه كلُّ عميلة
+          // دفعت بالبطاقة للتوّ. بقيّة من الدفع عند الاستلام، وقد حُذف من الجذور.
+          title: isPaid ? 'تم تأكيد الدفع! 🎉' : 'تم استلام طلبك!',
           subtitle: isPaid
               ? 'تم استلام دفعتك بنجاح، سنجهّز منتجاتك ونتواصل معك للتوصيل.'
-              : 'سيتم تحصيل المبلغ عند الاستلام. سنجهّز منتجاتك ونتواصل معك للتوصيل.',
+              : 'جارٍ تأكيد دفعتك. سنجهّز منتجاتك ونتواصل معك للتوصيل.',
         ),
       ),
       (route) => route.isFirst,
@@ -423,7 +427,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
                       color: const Color(0xFFE5A170),
                     ),
                   ],
-                  // خيار «الدفع عند الاستلام» أُزيل بطلب الإدارة (الدفع مقدَّماً فقط).
+                  // لا «دفع عند الاستلام»: أُزيل من الجذور — الدفع مقدَّم دائماً.
                   const SizedBox(height: 20),
                   _buildTerms(),
                   const SizedBox(height: 100),

@@ -74,7 +74,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   final TamaraService _tamaraService = TamaraService();
   final ZyiarahOrderService _orderService = ZyiarahOrderService();
 
-  String _selectedPaymentMethod = 'card'; // 'card', 'apple_pay', 'google_pay', 'tamara', 'tabby', 'stc_pay', 'wallet', 'subscription', 'cod'
+  // 'cod' أُزيل من الجذور: الدفع مقدَّم دائماً.
+  String _selectedPaymentMethod = 'card'; // card | apple_pay | google_pay | tamara | tabby | stc_pay | wallet | subscription
   bool _isLoading = false;
   // سبب امتلاء السعة (للطلبات بالساعة) — يُفحص عند فتح الشاشة ويُستخدم لمنع أزرار
   // الدفع الأصلية (Apple/Google/Samsung Pay) التي تخصم فوراً وتتجاوز فحص _handlePayment.
@@ -320,13 +321,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     }
   }
 
-  Future<void> _navigateToSuccess(String code) async {
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => ZyiarahOrderSuccessScreen(orderCode: code)),
-      (route) => route.isFirst,
-    );
-  }
 
   /// يتحقق من توفر سعة الحجز للخدمة بالساعة.
   /// يعيد رسالة خطأ إذا امتلأت السعة **أو تعذّر التحقق**، أو null إذا كان الحجز متاحاً.
@@ -471,20 +465,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         // payWithWallet(orderId) بعد إنشاء الطلب — ذرّياً مع قلب is_paid على الطلب،
         // فلا يمكن تزوير is_paid ولا الخصم من العميل.
         await _processUnifiedSuccess(finalOrderId, 'wallet', isFree: false);
-
-      } else if (_selectedPaymentMethod == 'cod') {
-        if (widget.maintenanceId != null) {
-          await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
-            'status': 'waiting_payment_cod',
-            'paymentMethod': 'cod',
-            'paidAt': FieldValue.serverTimestamp(),
-          });
-          // Use maintenanceId as the display code for the cod+maintenance invoice path
-          await _finalizeOrderWithInvoice(orderId: finalOrderId, orderCode: widget.maintenanceId!, paymentMethod: 'cod', paidAmount: 0);
-          await _navigateToSuccess(widget.maintenanceId!);
-        } else {
-          await _processUnifiedSuccess(finalOrderId, 'cod', isFree: false);
-        }
 
       } else if (_selectedPaymentMethod == 'tamara') {
         // تمارا تتطلّب وجود الطلب مسبقاً كي يجلب الخادم المبلغ الحقيقي (منع التلاعب)
@@ -754,7 +734,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     // (0) تأكيد خادمي فوري: verifyMoyasarPayment يُنشئ الطلب من metadata إن غاب ويقلب
     // is_paid — فوري وموثوق، لا يعتمد على كتابة العميل (تفشل مع Apple Pay بعد تعليق
     // الخلفية على iOS). بهذا يظهر الطلب مؤكّداً لحظةَ نجاح الدفع دون انتظار المُصالِح الدوري.
-    if (!isFree && paymentId != null && method != 'wallet' && method != 'cod') {
+    if (!isFree && paymentId != null && method != 'wallet') {
       try {
         await FirebaseFunctions.instance.httpsCallable('verifyMoyasarPayment').call({
           'paymentId': paymentId,
@@ -881,7 +861,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     // 1b. تأكيد الدفع خادمياً → يقلب is_paid على الطلب المُنشأ للتوّ (أنشأه العميل
     // is_paid=false). هذا ما يُغلق سكّ المحفظة: لا يمكن تزوير is_paid من العميل.
     // يُتخطّى للعقد (لا مستند order) وللنقد والاشتراك المجاني.
-    if (!isFree && method != 'cod') {
+    if (!isFree) {
       if (widget.contractId != null) {
         // اشتراك: نقلب is_paid على العقد خادميّاً → يُفعّله activateContractOnPaid
         // (status='active' + منح الزيارات + توليدها). تمارا تقلبه عبر webhook.
@@ -1082,34 +1062,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     }
   }
 
-  /// Finalization: Invoice & DB check
-  Future<String?> _finalizeOrderWithInvoice({
-    required String orderId,
-    required String orderCode,
-    required String paymentMethod,
-    double paidAmount = 0,
-  }) async {
-    String collection = 'orders';
-    if (widget.maintenanceId != null) collection = 'maintenance_requests';
-    if (widget.contractId != null) collection = 'contracts';
-
-    final String qrData = ZatcaService.generateZatcaQrCode(
-      timestamp: DateTime.now(),
-      totalAmount: totalWithVat,
-      vatAmount: vatAmount,
-    );
-
-    return await ZyiarahPdfService.generateAndUploadInvoice(
-      orderId: orderId,
-      orderCode: orderCode,
-      amount: totalWithVat,
-      qrData: qrData,
-      serviceName: widget.serviceName,
-      discountAmount: _discountAmount,
-      couponCode: _appliedCoupon,
-      collectionPath: collection,
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1578,7 +1530,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           ),
         ],
 
-        // خيار «الدفع عند الاستلام» أُزيل بطلب الإدارة (الدفع مقدَّماً فقط).
+        // لا «دفع عند الاستلام»: أُزيل من الجذور — الدفع مقدَّم دائماً.
 
         // --- Wallet ---
         const SizedBox(height: 12),

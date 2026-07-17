@@ -179,8 +179,11 @@ class AdminStoreOrdersScreen extends StatelessWidget {
     final method = order['payment_method'] ?? 'pending';
     final paid = order['is_paid'] == true;
     switch (method) {
+      // شاهد قبر: الدفع عند الاستلام حُذف من الجذور ولا يمكن إنشاؤه بعد اليوم، لكن
+      // طلبات المتجر التاريخية قد تحمله — تركُ التسمية يُبقيها مقروءة للإدارة بدل
+      // عرض 'cash_on_delivery' خامّاً. لا شيء في التطبيق يكتب هذه القيمة الآن.
       case 'cash_on_delivery':
-        return 'عند الاستلام';
+        return 'عند الاستلام (طلب قديم)';
       case 'tamara':
         return paid ? 'تمارا (مدفوع)' : 'تمارا';
       case 'card':

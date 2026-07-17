@@ -27,7 +27,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   final TextEditingController _surgePercentCtrl = TextEditingController();
   final TextEditingController _contractTermsCtrl = TextEditingController();
   List<int> _selectedHours = [4, 5, 6, 8];
-  bool _codEnabled = false;
 
   @override
   void initState() {
@@ -43,7 +42,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         final data = doc.data()!;
         if (mounted) {
           setState(() {
-            _codEnabled = data['cod_enabled'] ?? false;
             _merchantNameCtrl.text = data['merchant_name'] ?? "مؤسسة معاذ يحي محمد المالكي";
             _vatNumberCtrl.text = data['vat_number'] ?? "310885360200003";
             _whatsappSupportCtrl.text = data['support_whatsapp'] ?? "966500000000";
@@ -98,7 +96,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
     setState(() => _isSaving = true);
     try {
       await _db.collection('system_configs').doc('main_settings').set({
-        'cod_enabled': _codEnabled,
         'merchant_name': _merchantNameCtrl.text.trim(),
         'vat_number': _vatNumberCtrl.text.trim(),
         'support_whatsapp': _whatsappSupportCtrl.text.trim(),
@@ -250,19 +247,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                         icon: Icons.payments_rounded,
                         color: const Color(0xFF8B5CF6),
                         children: [
-                          SwitchListTile(
-                            title: const Text("تفعيل الدفع عند الاستلام", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                            subtitle: const Text("السماح للعملاء باختيار الدفع نقداً", style: TextStyle(fontSize: 12, color: Colors.grey)),
-                            value: _codEnabled,
-                            activeThumbColor: const Color(0xFF8B5CF6),
-                            onChanged: (val) {
-                              setState(() {
-                                _codEnabled = val;
-                              });
-                            },
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          const Divider(),
                           _buildPremiumField("نسبة سعر الذروة (%)", "0", _surgePercentCtrl, Icons.trending_up_rounded),
                           const Padding(
                             padding: EdgeInsets.only(top: 6, bottom: 4),

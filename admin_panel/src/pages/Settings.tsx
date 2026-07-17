@@ -15,11 +15,6 @@ interface SystemSettings {
     commission_rate: number;
     vat_rate: number;
     min_wallet_balance: number;
-    cod_enabled: boolean;
-    cod_hourly: boolean;
-    cod_monthly: boolean;
-    cod_maintenance: boolean;
-    cod_contracts: boolean;
     tamara_enabled: boolean;
 
     // Notifications
@@ -64,11 +59,6 @@ const defaultSettings: SystemSettings = {
     commission_rate: 15,
     vat_rate: 15,
     min_wallet_balance: -50,
-    cod_enabled: true,
-    cod_hourly: true,
-    cod_monthly: false,
-    cod_maintenance: true,
-    cod_contracts: false,
     tamara_enabled: false,
     sms_on_order: true,
     push_on_assign: true,
@@ -601,45 +591,6 @@ export default function Settings() {
                                                     dir="ltr"
                                                 />
                                                 <span className="absolute left-6 text-red-400 font-bold text-sm pointer-events-none">SAR</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* COD Section */}
-                                    <div className="bg-slate-50/50 border border-slate-200 rounded-[2.5rem] p-8 mt-10">
-                                        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 pb-6 border-b border-slate-200/80">
-                                            <div>
-                                                <h4 className="text-xl font-black text-slate-800 flex items-center gap-3">
-                                                    <CreditCard className="text-emerald-500" />
-                                                    الدفع السائل / عند الاستلام (COD)
-                                                </h4>
-                                                <p className="text-slate-500 font-medium mt-2">السماح بتشكيل طرق الدفع النقدي في الخدمات والمتاجر المختارة.</p>
-                                            </div>
-                                            <div className="mt-4 md:mt-0 bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex items-center">
-                                                <span className="px-4 font-bold text-slate-700 text-sm">الحالة العامة</span>
-                                                <label className="relative inline-flex items-center cursor-pointer mr-2">
-                                                    <input type="checkbox" aria-label="تفعيل الدفع النقدي" className="sr-only peer" checked={settings.cod_enabled} onChange={(e) => handleChange('cod_enabled', e.target.checked)} />
-                                                    <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all after:shadow-sm peer-checked:bg-emerald-500"></div>
-                                                </label>
-                                            </div>
-                                        </div>
-
-                                        <div className={`transition-all duration-500 ${settings.cod_enabled ? 'opacity-100' : 'opacity-40 pointer-events-none grayscale'}`}>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                                                {[
-                                                    { id: 'cod_hourly', label: 'التنظيف بالساعة', color: 'blue' },
-                                                    { id: 'cod_monthly', label: 'التنظيف الشهري', color: 'indigo' },
-                                                    { id: 'cod_maintenance', label: 'قسم الصيانة', color: 'orange' },
-                                                    { id: 'cod_contracts', label: 'العقود الإلكترونية', color: 'purple' },
-                                                ].map((item) => (
-                                                    <label key={item.id} className={`group cursor-pointer flex flex-col items-center p-6 bg-white border-2 rounded-3xl transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${settings[item.id as keyof SystemSettings] ? `border-${item.color}-500 shadow-md shadow-${item.color}-500/10` : 'border-slate-100 hover:border-slate-300'}`}>
-                                                        <span className={`text-[15px] font-bold mb-4 ${settings[item.id as keyof SystemSettings] ? 'text-slate-800' : 'text-slate-500'}`}>{item.label}</span>
-                                                        <div className="relative inline-flex items-center mt-auto">
-                                                            <input type="checkbox" className="sr-only peer" checked={settings[item.id as keyof SystemSettings] as boolean} onChange={(e) => handleChange(item.id as keyof SystemSettings, e.target.checked)} />
-                                                            <div className={`w-12 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-${item.color}-500`}></div>
-                                                        </div>
-                                                    </label>
-                                                ))}
                                             </div>
                                         </div>
                                     </div>

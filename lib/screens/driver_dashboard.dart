@@ -17,7 +17,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:async';
-import 'dart:math';
 import 'package:lottie/lottie.dart' hide Marker;
 import 'package:go_router/go_router.dart';
 import 'package:zyiarah/screens/driver_tasks_screen.dart';
@@ -1189,9 +1188,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
       final data = doc.data();
       if (data == null) return;
 
-      final paymentMethod = data['payment_method'];
-      final amount = (data['amount'] ?? 0.0).toDouble();
-      final clientName = data['client_name'] ?? 'العميل';
 
       // (جيوفنس متساهل) عند الإكمال: لو GPS متاح وموقع الطلب معروف والمسافة > 1كم،
       // امنع (احتيال صارخ). fail-open: إذنٌ مرفوض/لا GPS/لا موقع → اسمح دون منع.
@@ -1224,174 +1220,21 @@ class _DriverDashboardState extends State<DriverDashboard> {
         }
       }
 
-      // (C) حقول دفع COD — تُدمج لاحقاً ذرّياً داخل Transaction الإكمال
-      Map<String, dynamic>? codPaymentUpdates;
-
-      if (status == 'completed' && paymentMethod == 'cod') {
-        if (!mounted) return;
-
-        // Generate 4-digit PIN and write to Firestore so client can see it immediately
-        final pin = (Random().nextInt(9000) + 1000).toString();
-        await FirebaseFirestore.instance.collection('orders').doc(id).update({
-          'payment_pin': pin,
-          'payment_pin_generated_at': FieldValue.serverTimestamp(),
-        });
-
-        // Show PIN entry dialog for driver — client will show the same PIN from their app
-        if (!mounted) return;
-        final pinController = TextEditingController();
-        String? pinError;
-        bool confirmed = false;
-        try {
-        final dialogResult = await showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (dialogCtx) => StatefulBuilder(
-            builder: (dialogCtx, setDialogState) => Directionality(
-              textDirection: TextDirection.rtl,
-              child: AlertDialog(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                title: Row(
-                  children: [
-                    const Icon(Icons.lock_outline, color: Color(0xFF5D1B5E)),
-                    const SizedBox(width: 8),
-                    Text("رمز الدفع", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text("المبلغ: ", style: GoogleFonts.tajawal(fontSize: 13)),
-                          Text("${amount.toStringAsFixed(2)} ر.س",
-                              style: GoogleFonts.tajawal(fontWeight: FontWeight.w900, fontSize: 17, color: Colors.green.shade800)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      "اطلب من $clientName رمز الدفع المعروض في تطبيقه وأدخله هنا",
-                      style: GoogleFonts.tajawal(fontSize: 13, color: Colors.grey[600], height: 1.5),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: pinController,
-                      keyboardType: TextInputType.number,
-                      maxLength: 4,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.tajawal(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: 10),
-                      decoration: InputDecoration(
-                        counterText: '',
-                        hintText: '0000',
-                        hintStyle: TextStyle(color: Colors.grey[300], letterSpacing: 10),
-                        errorText: pinError,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFF5D1B5E), width: 2),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      // نُغلق **أولاً** ثم ننظّف الرمز.
-                      //
-                      // كان الانتظار يسبق الإغلاق: `await ...update(...)` ثم `Navigator.pop`.
-                      // فإن فشلت الكتابة (انقطاع شبكة — وهو أرجح ما يكون داخل منزل
-                      // العميلة، وهناك بالضبط يُستعمل الدفع عند الاستلام) يرمي الـ await
-                      // ولا يُنفَّذ الإغلاق أبداً. والحوار `barrierDismissible: false`،
-                      // فلا مخرج للسائق إلا إنهاء التطبيق — وهو واقف أمام العميلة.
-                      //
-                      // تنظيف الرمز عملية أفضل-جهد لا يجوز أن تحبس الواجهة: الرمز
-                      // يُولَّد من جديد في المحاولة التالية على أي حال.
-                      Navigator.pop(dialogCtx, false);
-                      unawaited(
-                        FirebaseFirestore.instance.collection('orders').doc(id).update({
-                          'payment_pin': FieldValue.delete(),
-                          'payment_pin_generated_at': FieldValue.delete(),
-                        }).catchError((e) => debugPrint('[COD] pin cleanup failed: $e')),
-                      );
-                    },
-                    child: Text("إلغاء", style: GoogleFonts.tajawal(color: Colors.grey[600])),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      if (pinController.text == pin) {
-                        Navigator.pop(dialogCtx, true);
-                      } else {
-                        setDialogState(() => pinError = "الرمز غير صحيح، حاول مجدداً");
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF5D1B5E),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: Text("تأكيد", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-        confirmed = dialogResult == true;
-        } finally {
-          pinController.dispose();
-        }
-
-        if (!confirmed) {
-          // نظّف رمز الدفع المكتوب مسبقاً إن أُلغي الحوار — وإلا يبقى رمز معلّق
-          // على الطلب قد يعرضه تطبيق العميل لتحصيل لم يحدث.
-          FirebaseFirestore.instance.collection('orders').doc(id).update({
-            'payment_pin': FieldValue.delete(),
-            'payment_pin_generated_at': FieldValue.delete(),
-          }).catchError((_) {});
-          return;
-        }
-
-        // (C) بدل تحديث is_paid منفصلاً (يُكتب محلياً حتى دون اتصال ويسبب تضارباً)،
-        // نُمرّره ليُدمج داخل نفس Transaction الإكمال أدناه — فإمّا أن ينجح الكل أو يفشل الكل.
-        codPaymentUpdates = {
-          'is_paid': true,
-          'paid_at': FieldValue.serverTimestamp(),
-          'cash_collected_by': _currentDriverId,
-          'cash_confirmed': true,
-          'cash_confirmed_at': FieldValue.serverTimestamp(),
-          'payment_pin': FieldValue.delete(),
-          'payment_pin_generated_at': FieldValue.delete(),
-        };
-      }
+      // الدفع عند الاستلام أُزيل من الجذور بطلب المالك: لا يقبله العميل.
+      // كان هنا: توليد رمز 4 أرقام يُكتب على الطلب، وحوار يُدخله السائق، ثم دمج
+      // is_paid/cash_confirmed داخل Transaction الإكمال، وإشعار الإدارة بالتحصيل.
+      // الدفع الآن مقدَّم دائماً (بطاقة/Apple Pay/STC/تمارا/تابي/محفظة)، فالطلب يصل
+      // السائق مدفوعاً ولا شيء يُحصَّل يدوياً.
 
       // (C) Transaction واحد ذرّي: الحالة + دفع COD معاً. يفشل بالكامل دون اتصال،
       // فلا يبقى الطلب "مدفوعاً وغير مكتمل" ولا العكس.
-      final Map<String, dynamic> extraUpdates = {...?codPaymentUpdates};
+      final Map<String, dynamic> extraUpdates = {};
       if (completionDistanceM != null) {
         extraUpdates['completed_distance_m'] = completionDistanceM.round();
       }
       await _orderService.updateOrderStatus(id, status,
           driverId: _currentDriverId,
           extraOrderUpdates: extraUpdates.isEmpty ? null : extraUpdates);
-
-      // إشعار الإدارة بتحصيل النقد — بعد نجاح الإكمال فقط
-      if (codPaymentUpdates != null) {
-        await _notificationService.notifyAdminOfCashCollection(
-          driverName: _driverName,
-          orderCode: data['code'] ?? id,
-          amount: amount,
-        );
-      }
 
       if (data['client_id'] != null) {
         final orderCode = data['code'] ?? id;

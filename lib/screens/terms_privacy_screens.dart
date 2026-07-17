@@ -26,7 +26,7 @@ class ZyiarahTermsScreen extends StatelessWidget {
               _buildSectionText('يقوم التطبيق بتقديم خدمات التنظيف المنزلي، الصيانة، والعقود الإلكترونية وفقاً للمعايير المتبعة...'),
               const SizedBox(height: 20),
               _buildSectionTitle('3. سياسة الدفع'),
-              _buildSectionText('يتم الدفع عبر الوسائل المتاحة في التطبيق (مدى، فيزا، تمارا، أو الدفع عند الاستلام في حالات محددة)...'),
+              _buildSectionText('يتم الدفع مقدَّماً عبر الوسائل المتاحة في التطبيق (مدى، فيزا، Apple Pay، STC Pay، تمارا، تابي، أو رصيد المحفظة)...'),
               // Add more sections as needed
             ],
           ),

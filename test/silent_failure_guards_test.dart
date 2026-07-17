@@ -23,25 +23,13 @@ String _code(String path) {
 }
 
 void main() {
-  group('حوار الدفع عند الاستلام لا يحبس السائق', () {
-    final src = _code('lib/screens/driver_dashboard.dart');
-
-    test('«إلغاء» يُغلق قبل أي انتظار شبكي', () {
-      // كان: await ...update(...) ثم Navigator.pop. وفشل الكتابة (انقطاع داخل منزل
-      // العميلة — وهناك بالضبط يُستعمل الدفع عند الاستلام) يرمي فلا يُنفَّذ الإغلاق.
-      // والحوار barrierDismissible:false ⇒ لا مخرج إلا إنهاء التطبيق.
-      final i = src.indexOf("'payment_pin': FieldValue.delete()");
-      expect(i, greaterThan(-1), reason: 'تنظيف الرمز اختفى — حدِّث الحارس');
-      final before = src.substring(i - 700, i);
-      final popAt = before.lastIndexOf('Navigator.pop(dialogCtx, false)');
-      expect(popAt, greaterThan(-1),
-          reason: 'الإغلاق يجب أن يسبق تنظيف الرمز لا أن يليه');
-      // لا await بين الإغلاق وبداية الكتابة
-      expect(RegExp(r'\bawait\b').hasMatch(before.substring(popAt)), isFalse,
-          reason: 'أي await قبل الإغلاق يعيد احتمال حبس السائق '
-              '(حدود الكلمة تمنع مطابقة unawaited — وهي المقصودة هنا)');
-    });
-  });
+  // حارس «حوار الدفع عند الاستلام لا يحبس السائق» أُزيل مع الميزة نفسها:
+  // الدفع عند الاستلام حُذف من الجذور، فلا حوار ولا رمز ولا احتمال حبس. يحرس
+  // test/no_cod_test.dart ما هو أقوى: ألّا تعود الميزة إطلاقاً — بما فيها منع
+  // السائق من كتابة أي حقل دفع في firestore.rules.
+  //
+  // (الحارس هو من أبلغ عن نفسه: أسقط نفسه برسالة «تنظيف الرمز اختفى — حدِّث
+  //  الحارس» فور حذف الميزة. حارسٌ يتعفّن بصمت أسوأ من غيابه.)
 
   group('المحفظة تقول الحقيقة', () {
     test('الخدمة لا تبتلع خطأ الدالة الخادمية', () {
