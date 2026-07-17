@@ -15,6 +15,7 @@ import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:pay/pay.dart';
 import 'package:zyiarah/services/moyasar_service.dart';
 import 'package:zyiarah/services/tabby_service.dart';
@@ -94,12 +95,19 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   late String _pendingOrderId;
   late final Future<PaymentConfiguration>? _googlePayConfigFuture;
 
+  // dart:io Platform **يرمي على الويب** (Unsupported operation: Platform._operatingSystem)
+  // فيقتل الشاشة كاملة بشاشة حمراء لحظة فتحها. نحرسه بـ kIsWeb: على الويب لا
+  // Apple/Google/Samsung Pay (حِزمها أصلية فقط) — تُخفى أزرارها وتبقى البطاقة
+  // وSTC وتمارا وتابي والمحفظة. iOS/أندرويد بلا تغيير.
+  static final bool _isNativeIOS = !kIsWeb && Platform.isIOS;
+  static final bool _isNativeAndroid = !kIsWeb && Platform.isAndroid;
+
   @override
   void initState() {
     super.initState();
     _pendingOrderId =
         FirebaseFirestore.instance.collection('orders').doc().id;
-    if (!Platform.isIOS) {
+    if (_isNativeAndroid) {
       _googlePayConfigFuture =
           PaymentConfiguration.fromAsset('assets/google_pay_config.json');
     } else {
@@ -1321,7 +1329,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           ),
 
         // --- Apple Pay (iOS only — Moyasar SDK) ---
-        if (Platform.isIOS && moyasarReady) ...[
+        if (_isNativeIOS && moyasarReady) ...[
           const SizedBox(height: 16),
           Row(children: [
             const Expanded(child: Divider()),
@@ -1352,7 +1360,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         ],
 
         // --- Google Pay (Android only) ---
-        if (!Platform.isIOS && _googlePayConfigFuture != null) ...[
+        if (_isNativeAndroid && _googlePayConfigFuture != null) ...[
           const SizedBox(height: 16),
           Row(children: [
             const Expanded(child: Divider()),
@@ -1413,7 +1421,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         ],
 
         // --- Samsung Pay (Android — Moyasar SDK, auto-hides if unavailable) ---
-        if (!Platform.isIOS) ...[
+        if (_isNativeAndroid) ...[
           Builder(builder: (context) {
             final samsungServiceId =
                 dotenv.env['SAMSUNG_PAY_SERVICE_ID'] ?? '';
