@@ -344,10 +344,87 @@ class _SofaRugCleaningDetailsScreenState
         ),
       );
 
+  /// بطاقة «كيف يُحسب السعر؟» — بأسعار منطقة العميلة نفسها ومثال محسوب منها.
+  ///
+  /// كان سعر المتر يظهر بخطّ صغير بجانب كل قطعة فقط، فلا تفهم العميلة الأساس الذي
+  /// بُني عليه الإجمالي (ملاحظة المالك بعد تجربة العميل). الشرح بالمثال الحيّ —
+  /// بأرقام منطقتها لا أرقام افتراضية — يجيب «كيف؟» قبل أن تُسأل.
+  Widget _pricingExplainer() {
+    final rows = <Widget>[];
+    void addRow(String label, double perSqm) {
+      if (perSqm <= 0) return;
+      rows.add(Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label,
+                style: GoogleFonts.tajawal(
+                    fontSize: 13, color: const Color(0xFF1E293B))),
+            Text('${_trim(perSqm)} ر.س لكل متر مربع',
+                style: GoogleFonts.tajawal(
+                    fontSize: 13, fontWeight: FontWeight.bold, color: _brand)),
+          ],
+        ),
+      ));
+    }
+
+    addRow('الكنب', _sofaSqmPrice);
+    addRow('السجاد', _rugSqmPrice);
+
+    // المثال بسعر منطقتها الفعلي: كنبة 2م × 1.5م.
+    final examplePrice = _sofaSqmPrice > 0 ? _sofaSqmPrice : _rugSqmPrice;
+    final exampleKind = _sofaSqmPrice > 0 ? 'كنبة' : 'سجادة';
+    final exampleTotal = (3 * examplePrice).toStringAsFixed(0);
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFBBF7D0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.calculate_rounded,
+                  size: 18, color: Color(0xFF059669)),
+              const SizedBox(width: 8),
+              Text('كيف يُحسب السعر؟',
+                  style: GoogleFonts.tajawal(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF059669))),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...rows,
+          const Divider(height: 16, color: Color(0xFFBBF7D0)),
+          Text('السعر = الطول × العرض × سعر المتر المربع',
+              style: GoogleFonts.tajawal(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF166534))),
+          const SizedBox(height: 3),
+          Text(
+            'مثال: $exampleKind بطول 2م وعرض 1.5م = 3 م² × ${_trim(examplePrice)} = $exampleTotal ر.س',
+            style: GoogleFonts.tajawal(
+                fontSize: 12, color: const Color(0xFF166534), height: 1.6),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _piecesSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _pricingExplainer(),
         Text('القطع المطلوب تنظيفها',
             style: GoogleFonts.tajawal(
                 fontSize: 15,
@@ -463,10 +540,15 @@ class _SofaRugCleaningDetailsScreenState
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  '${piece.area.toStringAsFixed(2)} م²',
-                  style: GoogleFonts.tajawal(
-                      fontSize: 12, color: const Color(0xFF64748B)),
+                // المعادلة كاملة لا الناتج وحده: «3.00 م²» المجرّدة لا تقول للعميلة
+                // كيف صارت 105 ر.س — فتظنّ الرقم اعتباطياً. الحساب المرئي يبني الثقة.
+                Expanded(
+                  child: Text(
+                    '${_trim(piece.length)}م × ${_trim(piece.width)}م'
+                    ' = ${piece.area.toStringAsFixed(2)} م² × ${_trim(price)} ر.س',
+                    style: GoogleFonts.tajawal(
+                        fontSize: 12, color: const Color(0xFF64748B)),
+                  ),
                 ),
                 Text(
                   '${piece.priceWith(price).toStringAsFixed(2)} ر.س',

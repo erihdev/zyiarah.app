@@ -103,6 +103,15 @@ void main() {
       expect(src.contains('serviceDate: _selectedSlot'), isTrue);
     });
 
+    test('بطاقة «كيف يُحسب السعر؟» تشرح المعادلة بأسعار المنطقة', () {
+      // ملاحظة المالك بعد تجربة العميل: سعر المتر كان خطّاً صغيراً بجانب القطعة،
+      // فلا تفهم العميلة أساس الإجمالي. الشرح بالمثال الحيّ يجيب «كيف؟» قبل السؤال.
+      expect(src.contains('كيف يُحسب السعر؟'), isTrue);
+      expect(src.contains('السعر = الطول × العرض × سعر المتر المربع'), isTrue);
+      expect(src.contains('لكل متر مربع'), isTrue,
+          reason: 'سعر المتر يُعرض صريحاً لا رمزاً مختصراً فقط');
+    });
+
     test('التفصيل يصل الطلب عبر service_meta', () {
       expect(src.contains('serviceMeta: meta'), isTrue,
           reason: 'بدونه يصل الطلب بمبلغ مجرّد: كم قطعة؟ ما مقاسها؟');
