@@ -3,7 +3,7 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard, Users, CarFront, ClipboardList, Settings, LogOut,
     Bell, Search, Calculator, Megaphone, BellRing, LifeBuoy, Shield,
-    ShieldAlert, Wrench, FileSignature, ShoppingBasket, ShoppingBag,
+    ShieldAlert, FileSignature, ShoppingBasket, ShoppingBag,
     Banknote, Menu, X
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -41,7 +41,6 @@ const navGroups: NavGroup[] = [
             { icon: LayoutDashboard, label: 'لوحة القيادة',         path: '/',               color: 'blue' },
             { icon: Settings,        label: 'الخدمات والتسعير',      path: '/services',       color: 'violet' },
             { icon: ClipboardList,   label: 'إدارة الطلبات',         path: '/orders',         color: 'orange' },
-            { icon: Wrench,          label: 'طلبات الصيانة',          path: '/maintenance',    color: 'amber' },
             { icon: FileSignature,   label: 'العقود الإلكترونية',    path: '/contracts',      color: 'teal' },
             { icon: ShoppingBasket,  label: 'إدارة المتجر',           path: '/store-products', color: 'green' },
             { icon: ShoppingBag,     label: 'طلبات المتجر',           path: '/store-orders',   color: 'emerald' },
@@ -75,7 +74,6 @@ const pageTitles: Record<string, string> = {
     '/drivers':          'إدارة السائقين',
     '/users':            'إدارة العملاء',
     '/services':         'إدارة الخدمات والتسعير',
-    '/maintenance':      'إدارة طلبات الصيانة',
     '/contracts':        'العقود الإلكترونية',
     '/store-products':   'إدارة منتجات المتجر',
     '/store-orders':     'طلبات المتجر',

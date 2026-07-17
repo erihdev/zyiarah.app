@@ -9,7 +9,6 @@ import 'package:zyiarah/screens/admin/admin_support_screen.dart';
 import 'package:zyiarah/screens/admin/admin_banners_screen.dart';
 import 'package:zyiarah/screens/admin/admin_coupons_screen.dart';
 import 'package:zyiarah/screens/admin/admin_contracts_screen.dart';
-import 'package:zyiarah/screens/admin/admin_maintenance_screen.dart';
 import 'package:zyiarah/screens/admin/admin_managers_screen.dart';
 import 'package:zyiarah/screens/admin/admin_deletions_screen.dart';
 import 'package:zyiarah/screens/admin/admin_store_orders_screen.dart';
@@ -100,13 +99,6 @@ class AdminMoreScreen extends StatelessWidget {
         'icon': Icons.assignment_outlined,
         'color': Colors.teal,
         'items': [
-          {
-            'title': 'طلبات الصيانة',
-            'icon': Icons.build_circle_outlined,
-            'color': Colors.brown,
-            'page': const AdminMaintenanceScreen(),
-            'roles': ['super_admin', 'orders_manager'],
-          },
           {
             'title': 'العقود الإلكترونية',
             'icon': Icons.description_outlined,

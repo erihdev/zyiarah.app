@@ -6,7 +6,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:zyiarah/firebase_options.dart';
 import 'package:zyiarah/services/notification_service.dart';
-import 'package:zyiarah/services/maintenance_listener_service.dart';
 import 'dart:math';
 
 /// خدمة إدارة Firebase لتطبيق زيارة
@@ -177,12 +176,6 @@ class ZyiarahFirebaseService {
   /// تضمن تنظيف الذاكرة بالكامل قبل تبديل الحساب لمنع تسرب بيانات/Streams الحساب السابق.
   /// تستدعيها جميع الشاشات بدل FirebaseAuth.signOut() المباشرة.
   Future<void> signOut() async {
-    // (B5) إيقاف مستمع الصيانة (Singleton يبقى عبر الجلسات) — يجب إيقافه يدوياً
-    try {
-      MaintenanceListenerService().stopListening();
-    } catch (e) {
-      debugPrint("⚠️ stopListening (maintenance) failed on signOut: $e");
-    }
 
     // (B2) تنظيف الإشعارات: حذف توكن FCM للمستخدم الحالي + إلغاء الاشتراك في الـ Topics
     // يُنفّذ قبل _auth.signOut() لأنه يحتاج uid الحالي

@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:zyiarah/screens/subscription_plans_screen.dart';
-import 'package:zyiarah/screens/maintenance_request_screen.dart';
+import 'package:zyiarah/screens/ac_service_details_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
 
 class ZyiarahPopupService {
@@ -178,8 +178,11 @@ class ZyiarahPopupService {
       case 'family_basket':
         Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahSubscriptionPlansScreen()));
         break;
+      // 'maintenance' يعني المكيفات في هذا النشاط — صيانة الأجهزة المنزلية حُذفت.
+      // نوجّهه للشاشة الحيّة بدل تركه بلا وجهة: بانر لا يفعل شيئاً = فشل صامت.
       case 'maintenance':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahMaintenanceRequestScreen()));
+      case 'ac':
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AcServiceDetailsScreen()));
         break;
       case 'contracts':
         Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahContractsListScreen()));

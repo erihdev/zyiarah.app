@@ -7,7 +7,6 @@ export const PAGE_ROLES: Record<string, string[]> = {
   '/':                 ['super_admin', 'admin', 'orders_manager', 'accountant_admin', 'marketing_admin'],
   '/services':         ['super_admin', 'admin', 'orders_manager'],
   '/orders':           ['super_admin', 'admin', 'orders_manager'],
-  '/maintenance':      ['super_admin', 'admin', 'orders_manager'],
   '/contracts':        ['super_admin', 'admin', 'orders_manager'],
   '/store-products':   ['super_admin', 'admin', 'marketing_admin'],
   '/store-orders':     ['super_admin', 'admin', 'orders_manager'],

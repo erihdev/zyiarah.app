@@ -47,7 +47,6 @@ class PaymentSummaryScreen extends StatefulWidget {
   final Map<String, dynamic>? serviceMeta;
 
   final int workerCount;
-  final String? maintenanceId;
   final String? contractId;
   final int? planVisits;
 
@@ -61,7 +60,6 @@ class PaymentSummaryScreen extends StatefulWidget {
     this.zoneName,
     this.serviceMeta,
     this.workerCount = 1,
-    this.maintenanceId,
     this.contractId,
     this.planVisits,
   });
@@ -99,7 +97,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   @override
   void initState() {
     super.initState();
-    _pendingOrderId = widget.maintenanceId ??
+    _pendingOrderId =
         FirebaseFirestore.instance.collection('orders').doc().id;
     if (!Platform.isIOS) {
       _googlePayConfigFuture =
@@ -176,7 +174,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     // Surge يُطبَّق فقط على الطلبات عند الطلب (بالساعة/الكنب) — لا على الأسعار الثابتة:
     // الاشتراك (planPrice) والصيانة (quotePrice) أسعار معلَنة ثابتة، وضربُها في surge
     // كان يفرض دفعاً زائداً + يجعل الخادم يرفض تطابق المبلغ فلا يُفعَّل العقد/الصيانة.
-    final bool fixedPrice = widget.contractId != null || widget.maintenanceId != null;
+    final bool fixedPrice = widget.contractId != null;
     final double surge = fixedPrice ? 1.0 : _surgeFactor;
     // نحدّ الخصم بألا يتجاوز المبلغ (كوبون قيمته أكبر من الطلب كان يجعل المبلغ
     // سالباً → دفعة/محفظة بمبلغ سالب).
@@ -469,7 +467,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       } else if (_selectedPaymentMethod == 'tamara') {
         // تمارا تتطلّب وجود الطلب مسبقاً كي يجلب الخادم المبلغ الحقيقي (منع التلاعب)
         // — ننشئه is_paid=false قبل فتح الجلسة، والـ webhook يؤكّده لاحقاً.
-        if (widget.maintenanceId == null && widget.contractId == null) {
+        if (widget.contractId == null) {
           await _createUnpaidServiceOrder(finalOrderId);
         }
         String? checkoutUrl = await _tamaraService.createCheckoutSession(
@@ -499,7 +497,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 customerPhone: _phoneController.text,
                 couponCode: _appliedCoupon,
                 discountAmount: _discountAmount,
-                maintenanceId: widget.maintenanceId,
                 contractId: widget.contractId,
                 planVisits: widget.planVisits,
                 onOrderCreated: (code) async {
@@ -510,14 +507,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                         orderCode: code,
                         title: widget.contractId != null
                             ? 'تم تفعيل الباقة بنجاح! 🎉'
-                            : widget.maintenanceId != null
-                                ? 'تم تأكيد دفع الصيانة!'
-                                : 'تم استلام طلبك بنجاح!',
+                            : 'تم استلام طلبك بنجاح!',
                         subtitle: widget.contractId != null
                             ? 'تم تفعيل باقتك وإضافة الزيارات لحسابك.'
-                            : widget.maintenanceId != null
-                                ? 'تمت معالجة الدفع بنجاح. سنتواصل معك لتأكيد الموعد.'
-                                : 'شكراً لثقتك بزيارة، طلبك الآن قيد المعالجة.',
+                            : 'شكراً لثقتك بزيارة، طلبك الآن قيد المعالجة.',
                       ),
                     ),
                     (route) => route.isFirst,
@@ -534,7 +527,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         // Moyasar SDK — Credit Card
         // ننشئ الطلب is_paid=false قبل فتح شاشة الدفع (كتمارا): لو نجح الخصم ثم
         // فشلت كتابة الطلب، يظل موجوداً ويؤكّده الـ webhook — فلا دفعة يتيمة بلا طلب.
-        if (widget.maintenanceId == null && widget.contractId == null) {
+        if (widget.contractId == null) {
           await _createUnpaidServiceOrder(finalOrderId, method: 'card');
         }
         setState(() => _isLoading = false);
@@ -569,7 +562,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       } else if (_selectedPaymentMethod == 'tabby') {
         // Tabby BNPL — أنشئ الطلب is_paid=false قبل فتح تابي (كالبطاقة/تمارا) كي يجده
         // الـ webhook ويؤكّده؛ بدونه دفعة تابي ناجحة قد لا تجد طلباً فيبقى يتيماً.
-        if (widget.maintenanceId == null && widget.contractId == null) {
+        if (widget.contractId == null) {
           await _createUnpaidServiceOrder(finalOrderId, method: 'tabby');
         }
         final webUrl = await TabbyService.createCheckoutUrl(
@@ -616,7 +609,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
       } else if (_selectedPaymentMethod == 'stc_pay') {
         // Moyasar STC Pay — أنشئ الطلب is_paid=false قبل شاشة الدفع (كالبطاقة/تمارا).
-        if (widget.maintenanceId == null && widget.contractId == null) {
+        if (widget.contractId == null) {
           await _createUnpaidServiceOrder(finalOrderId, method: 'stc_pay');
         }
         setState(() => _isLoading = false);
@@ -708,7 +701,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       // للعقد/الصيانة نستخدم معرّفهما لا _pendingOrderId العشوائي — كي يجد المُصالِح
       // الخادمي السجلّ الصحيح فيؤكّده (العقد يُفعَّل عبر activateContractOnPaid) بدل
       // إنشاء «طلب خدمة» خاطئ لا يُفعّل الاشتراك.
-      'order_id': widget.contractId ?? widget.maintenanceId ?? _pendingOrderId,
+      'order_id': widget.contractId ?? _pendingOrderId,
       'client_id': FirebaseAuth.instance.currentUser?.uid ?? '',
       'client_name': _currentUser?.name ?? 'عميل زيارة',
       'service_name': widget.serviceName,
@@ -738,7 +731,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       try {
         await FirebaseFunctions.instance.httpsCallable('verifyMoyasarPayment').call({
           'paymentId': paymentId,
-          'orderId': widget.contractId ?? widget.maintenanceId ?? id,
+          'orderId': widget.contractId ?? id,
         });
       } catch (e) {
         // لا نرمي: المُصالِح الخادمي الدوري يضمن الطلب احتياطاً خلال دقائق.
@@ -746,43 +739,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       }
     }
     // 1. Update Database
-    if (widget.maintenanceId != null) {
-      code = id;
-      final maintRef = FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId);
-      final maintSnap = await maintRef.get();
-      final m = maintSnap.data() ?? {};
-      await maintRef.update({
-        'status': 'paid',
-        'paymentMethod': method,
-        'paidAt': FieldValue.serverTimestamp(),
-        'totalAmount': amountToSave,
-      });
-      // (Direct Dispatch) توليد Order مرتبط بحالة pending_admin_approval ليتدفق عبر
-      // شاشة الاعتماد الموحّدة ثم جدول السائق. إكماله يُكمل طلب الصيانة آلياً (maintenance_id).
-      try {
-        await FirebaseFirestore.instance.collection('orders').doc(id).set({
-          'code': code,
-          'client_id': _currentUser?.uid,
-          'client_name': _currentUser?.name ?? 'عميل',
-          'client_phone': _phoneController.text.trim(),
-          'service_type': 'صيانة وغسيل مكيفات',
-          'service_name': m['serviceType'] ?? widget.serviceName,
-          'amount': amountToSave,
-          // is_paid يقلبه الخادم بعد التأكيد (verify/payWithWallet) — العميل لا يكتبه.
-          'is_paid': false,
-          'payment_method': method,
-          'status': 'pending_admin_approval',
-          'source_collection': 'maintenance_requests',
-          'maintenance_id': widget.maintenanceId,
-          'location': m['location'] ?? const GeoPoint(24.7136, 46.6753),
-          'zone_name': m['zone_name'] ?? m['zoneName'],
-          'created_at': FieldValue.serverTimestamp(),
-        });
-      } catch (e) {
-        debugPrint('[maintenance order job] error (non-fatal): $e');
-      }
-      await ZyiarahMessagingService().notifyAdminOfPayment(orderCode: code, amount: amountToSave, type: 'maintenance', clientName: _currentUser?.name);
-    } else if (widget.contractId != null) {
+    if (widget.contractId != null) {
       code = widget.contractId!;
       // التفعيل (status='active') + منح visits_remaining + توليد الزيارات + إشعار
       // العميل يتم كلّه خادميّاً في activateContractOnPaid عند قلب is_paid — لا نكتب
@@ -904,11 +861,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     // (2–5 ثوانٍ). لا يحتاجهما العميل قبل رؤية شاشة النجاح، فنُشغّلهما في الخلفية
     // بعد الانتقال مباشرةً. نلتقط القيم الأولية الآن لأن State يُتلَف عند الانتقال —
     // فلا نلمس widget/controllers داخل مهمة الخلفية.
-    final String bgCollection = widget.maintenanceId != null
-        ? 'maintenance_requests'
-        : widget.contractId != null
-            ? 'contracts'
-            : 'orders';
+    final String bgCollection = widget.contractId != null ? 'contracts' : 'orders';
     final double bgTotal = totalWithVat;
     final double bgVat = vatAmount;
     final double bgDiscount = _discountAmount;
@@ -922,7 +875,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         : 'غير محدد';
     final int bgWorkerCount = widget.workerCount;
     final String? bgZone = widget.zoneName;
-    final bool bgIsRegularOrder = widget.maintenanceId == null && widget.contractId == null;
+    final bool bgIsRegularOrder = widget.contractId == null;
     final bool bgIsHourly = widget.hours != null && widget.serviceDate != null;
     final DateTime? bgServiceDate = widget.serviceDate;
     final int? bgHours = widget.hours;
@@ -998,14 +951,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             orderCode: code,
             title: widget.contractId != null
                 ? 'تم تفعيل الباقة بنجاح! 🎉'
-                : widget.maintenanceId != null
-                    ? 'تم تأكيد دفع الصيانة!'
-                    : 'تم استلام طلبك بنجاح!',
+                : 'تم استلام طلبك بنجاح!',
             subtitle: widget.contractId != null
                 ? 'تم تفعيل باقتك وإضافة الزيارات لحسابك. يمكنك الآن حجز زياراتك.'
-                : widget.maintenanceId != null
-                    ? 'تمت معالجة الدفع بنجاح. سنتواصل معك لتأكيد موعد الصيانة.'
-                    : 'شكراً لثقتك بزيارة، طلبك الآن قيد المعالجة وسنقوم بإخطارك بكل جديد.',
+                : 'شكراً لثقتك بزيارة، طلبك الآن قيد المعالجة وسنقوم بإخطارك بكل جديد.',
           ),
         ),
         (route) => route.isFirst,
@@ -1025,9 +974,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               orderCode: code.isNotEmpty ? code : id.substring(0, 6).toUpperCase(),
               title: widget.contractId != null
                   ? 'تم تفعيل الباقة بنجاح! 🎉'
-                  : widget.maintenanceId != null
-                      ? 'تم تأكيد دفع الصيانة!'
-                      : 'تم استلام طلبك بنجاح!',
+                  : 'تم استلام طلبك بنجاح!',
               subtitle: widget.contractId != null
                   ? 'تم تفعيل باقتك وإضافة الزيارات لحسابك.'
                   : 'شكراً لثقتك بزيارة، طلبك الآن قيد المعالجة وسنخطرك بكل جديد.',

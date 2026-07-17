@@ -301,25 +301,20 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
     }
 
-    // ─── Maintenance Requests ─────────────────────────────────────────────
+    // ─── Maintenance Requests (ARCHIVE — مغلقة للكتابة) ───────────────────
+    // مسار «طلب عرض السعر» حُذف بالكامل بقرار المالك: المكيفات صارت طلباً مباشراً
+    // مسعّراً، وصيانة الأجهزة المنزلية أُلغيت (لم يُنشأ لها طلب واحد قط). لم تبقَ في
+    // التطبيق شاشةٌ تُنشئ مستنداً هنا.
+    //
+    // لذلك: **لا إنشاء ولا تعديل من العميل.** إبقاء `allow create` مفتوحاً بعد حذف
+    // الواجهة يترك باباً خلفياً لكتابة مستندات لا تعرضها أي شاشة إدارية — تُنشأ ولا
+    // يراها أحد. القاعدة تتبع الواقع: المجموعة أرشيف للقراءة.
+    //
+    // القراءة تبقى للإدارة وحدها: التحليلات (إيرادات تاريخية) والبحث تقرأ منها.
+    // الحذف يبقى لـ super_admin لتنظيف الأرشيف عند الحاجة.
     match /maintenance_requests/{requestId} {
-      // SECURITY: ownership + is_paid=false على الإنشاء.
-      allow create: if isLoggedIn() && (
-        request.resource.data.get('userId', request.auth.uid) == request.auth.uid ||
-        request.resource.data.get('client_id', request.auth.uid) == request.auth.uid
-      ) && request.resource.data.get('is_paid', false) == false;
-      allow read: if isLoggedIn() && (
-        request.auth.uid == resource.data.get('userId', resource.data.get('client_id', '')) ||
-        isAdmin()
-      );
-      // SECURITY: العميل يملك amount (يقرؤه verifyMoyasarPayment كالمبلغ الحقيقي)؛ لولا
-      // هذا الحظر كان يضع amount=1 ثم يدفع 1ر.س ويؤكّده. القيمة والدفع خادمي/أدمن فقط.
-      allow update: if isAdmin() || (
-        isLoggedIn() &&
-        request.auth.uid == resource.data.get('userId', resource.data.get('client_id', '')) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-          ['is_paid', 'amount', 'payment_status', 'paid_confirmed', 'moyasar_payment_id'])
-      );
+      allow create, update: if false;
+      allow read: if isAdmin();
       allow delete: if isSuperAdmin();
     }
 

@@ -5,7 +5,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/screens/admin/admin_compliance_screen.dart';
 import 'package:zyiarah/screens/admin/admin_staff_performance_screen.dart';
-import 'package:zyiarah/screens/admin/admin_maintenance_screen.dart';
 import 'package:zyiarah/screens/admin/admin_orders_screen.dart';
 import 'package:zyiarah/screens/admin/admin_store_orders_screen.dart';
 import 'package:zyiarah/screens/admin/admin_contracts_screen.dart';
@@ -488,7 +487,6 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
 
   Widget _buildLivePulseSection() {
     // Calculating New (Pending) Counts for each section
-    final int maintenanceNew = _maintenance.where((doc) => (doc.data() as Map)['status'] == 'under_review').length;
     final int cleaningNew = _orders.where((doc) => (doc.data() as Map)['status'] == 'pending' || (doc.data() as Map)['status'] == 'waiting_payment').length;
     final int storeNew = _storeOrders.where((doc) => (doc.data() as Map)['status'] == 'pending').length;
     
@@ -522,13 +520,6 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
           mainAxisSpacing: 12,
           childAspectRatio: MediaQuery.of(context).size.width > 600 ? 1.3 : 1.15,
           children: [
-            _buildLuxuryRequestCard(
-              title: "صيانة المكيفات",
-              count: maintenanceNew,
-              icon: Icons.handyman_rounded,
-              gradient: const [Color(0xFF0F172A), Color(0xFF334155)], // Slate/Dark Blue
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminMaintenanceScreen())),
-            ),
             _buildLuxuryRequestCard(
               title: "خدمات بالساعة",
               count: cleaningNew,

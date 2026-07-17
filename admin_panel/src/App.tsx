@@ -18,7 +18,6 @@ import Notifications from './pages/Notifications.tsx';
 import Support from './pages/Support.tsx';
 import Admins from './pages/Admins.tsx';
 import AccountDeletion from './pages/AccountDeletion.tsx';
-import Maintenance from './pages/Maintenance.tsx';
 import Contracts from './pages/Contracts.tsx';
 import StoreProducts from './pages/StoreProducts.tsx';
 import StoreOrders from './pages/StoreOrders.tsx';
@@ -125,7 +124,6 @@ function App() {
           <Route path="support" element={guard('/support', <Support />)} />
           <Route path="admins" element={guard('/admins', <Admins />)} />
           <Route path="account-deletion" element={guard('/account-deletion', <AccountDeletion />)} />
-          <Route path="maintenance" element={guard('/maintenance', <Maintenance />)} />
           <Route path="contracts" element={guard('/contracts', <Contracts />)} />
           <Route path="store-products" element={guard('/store-products', <StoreProducts />)} />
           <Route path="store-orders" element={guard('/store-orders', <StoreOrders />)} />

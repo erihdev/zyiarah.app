@@ -24,7 +24,6 @@ class TamaraCheckoutScreen extends StatefulWidget {
   final int workerCount;
   final String? couponCode;
   final double discountAmount;
-  final String? maintenanceId;
   final String? contractId;
   final int? planVisits;
   final String? customerName;
@@ -46,7 +45,6 @@ class TamaraCheckoutScreen extends StatefulWidget {
     this.workerCount = 1,
     this.couponCode,
     this.discountAmount = 0.0,
-    this.maintenanceId,
     this.contractId,
     this.planVisits,
     this.customerName,
@@ -122,15 +120,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
 
                 try {
 
-                if (widget.maintenanceId != null) {
-                  // تحديث طلب الصيانة
-                  await FirebaseFirestore.instance.collection('maintenance_requests').doc(widget.maintenanceId).update({
-                    'status': 'paid',
-                    'paymentMethod': 'tamara',
-                    'paidAt': FieldValue.serverTimestamp(),
-                    'totalAmountPaid': widget.amount,
-                  });
-                } else if (widget.contractId != null) {
+                if (widget.contractId != null) {
                   // التفعيل (status='active') + منح الزيارات + توليدها + الإشعار يتم
                   // خادميّاً في activateContractOnPaid عند قلب is_paid عبر tamara webhook
                   // (مرجع تمارا = معرّف العقد). لا كتابة من العميل — القواعد تمنعها.
@@ -284,7 +274,6 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
 
               // إرسال تأكيد بالبريد الإلكتروني للعميل والمسؤول (تمارا)
               String finalCommCode = orderCode;
-              if (widget.maintenanceId != null) finalCommCode = widget.maintenanceId!;
               if (widget.contractId != null) finalCommCode = widget.contractId!;
 
               await ZyiarahMessagingService().notifyNewOrder({

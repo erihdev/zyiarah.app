@@ -15,10 +15,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:zyiarah/screens/store_screen.dart';
 import 'package:zyiarah/screens/sofa_rug_details_screen.dart';
 import 'package:zyiarah/screens/subscription_plans_screen.dart';
-import 'package:zyiarah/screens/maintenance_request_screen.dart';
 import 'package:zyiarah/screens/ac_service_details_screen.dart';
-import 'package:zyiarah/screens/payment_summary_screen.dart';
-import 'package:zyiarah/services/maintenance_listener_service.dart';
 import 'package:zyiarah/widgets/support_fab.dart';
 import 'package:zyiarah/screens/client_notifications_screen.dart';
 
@@ -27,10 +24,6 @@ import 'package:zyiarah/providers/user_provider.dart';
 import 'package:zyiarah/providers/order_provider.dart';
 
 // تحويل رقمي دفاعي: حقول Firestore قد تصل نصّاً ("150") أو null من لوحة الإدارة،
-// و.toDouble() المباشر عليها كان يرمي استثناءً يعطّل بناء الشاشة بالكامل.
-double _asDouble(dynamic v) => v is num
-    ? v.toDouble()
-    : (v == null ? 0.0 : double.tryParse(v.toString()) ?? 0.0);
 
 class ClientDashboard extends StatefulWidget {
   const ClientDashboard({super.key});
@@ -47,7 +40,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
   @override
   void initState() {
     super.initState();
-    MaintenanceListenerService().startListening();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ZyiarahPopupService.checkAndShowPopup(context);
       // إشعار توفّر تحديث للتطبيق (متحكَّم به من الإدارة، يظهر للنسخ القديمة فقط)
@@ -120,7 +112,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
                       children: [
                         _buildActiveTrackingCard(user?.uid),
                         _buildAnimatedItem(_buildPromoBanners()),
-                        _buildMaintenanceAlertCard(user?.uid),
                         _buildAnimatedItem(_buildSubscriptionCards(user?.uid)),
                         const SizedBox(height: 15),
                         _buildAnimatedItem(_buildSectionTitle(ZyiarahStrings.servicesHeader, Icons.auto_awesome, Colors.amber)),
@@ -358,87 +349,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
     );
   }
 
-  Widget _buildMaintenanceAlertCard(String? uid) {
-    if (uid == null) return const SizedBox.shrink();
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('maintenance_requests')
-          .where('userId', isEqualTo: uid)
-          .where('status', isEqualTo: 'waiting_payment')
-          .limit(1)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const SizedBox.shrink();
-        }
-
-        final reqDoc = snapshot.data!.docs.first;
-        final data = reqDoc.data() as Map<String, dynamic>;
-        final String serviceType = data['serviceType'] ?? 'صيانة';
-        final double price = _asDouble(data['quotePrice']);
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 20),
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFF7ED),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.orange.shade200, width: 2),
-            boxShadow: [BoxShadow(color: Colors.orange.withValues(alpha: 0.05), blurRadius: 15, offset: const Offset(0, 8))],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: Colors.orange.shade100, shape: BoxShape.circle),
-                    child: const Icon(Icons.receipt_long, color: Colors.orange),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(ZyiarahStrings.waitingPayment, style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.orange, fontSize: 16)),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                "تم تحديد تكلفة خدمة ($serviceType) بمبلغ $price ر.س. يرجى إتمام الدفع لبدء التنفيذ.",
-                style: const TextStyle(fontSize: 13, height: 1.5, color: Color(0xFF431407)),
-              ),
-              const SizedBox(height: 15),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => PaymentSummaryScreen(
-                          serviceName: serviceType,
-                          amount: price,
-                          maintenanceId: reqDoc.id,
-                          location: data['location'] is GeoPoint ? data['location'] : null,
-                        ),
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: Text(ZyiarahStrings.viewAndPayNow, style: const TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
 
   PreferredSizeWidget _buildTopBar() {
     return AppBar(
@@ -664,10 +574,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const SofaRugCleaningDetailsScreen(serviceName: "تنظيف الكنب والزل")));
                   } else if (routeType == '/ac' || routeType == '/ac_service') {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const AcServiceDetailsScreen()));
-                  } else if (routeType == '/maintenance') {
-                    // يبقى على معناه الحرفي: صيانة الأجهزة المنزلية (مسار عرض السعر).
-                    // بانرات المكيفات تستخدم '/ac' — طلب مباشر مسعّر.
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahMaintenanceRequestScreen()));
                   } else if (routeType == '/subscriptions') {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahSubscriptionPlansScreen()));
                   } else if (routeType != 'none' && routeType.isNotEmpty && context.mounted) {

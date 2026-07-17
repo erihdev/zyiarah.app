@@ -98,14 +98,12 @@ void main() {
           reason: 'المكيفات لم تعد تنتظر تسعير الإدارة');
     });
 
-    test('شاشة عرض السعر لم تعد تعرض المكيفات (لا مسار ثانٍ)', () {
-      final m = File('lib/screens/maintenance_request_screen.dart').readAsStringSync();
-      final i = m.indexOf('_services =');
-      final line = m.substring(i, m.indexOf(';', i));
-      expect(line.contains('مكيف'), isFalse,
-          reason: 'مساران للمكيفات — أحدهما مسعّر والآخر ينتظر تسعيراً — هو المرض نفسه');
-      expect(line.contains('اجهزة منزلية'), isTrue,
-          reason: 'الأجهزة المنزلية تبقى على عرض السعر — لا تُسعَّر مسبقاً بصدق');
+    test('لا مسار ثانٍ للمكيفات — شاشة عرض السعر لم تعد موجودة أصلاً', () {
+      // كان هذا الحارس يتحقّق أن المكيفات خرجت من قائمة خدمات شاشة عرض السعر.
+      // ثم حُذف مسار عرض السعر بالكامل بقرار المالك (لم يُنشأ له طلب أجهزة منزلية
+      // واحد قط)، فصار غياب الملف ضمانةً أقوى من غياب سطر داخله.
+      expect(File('lib/screens/maintenance_request_screen.dart').existsSync(), isFalse,
+          reason: 'شاشة عرض السعر عادت — مساران للمكيفات هو المرض نفسه');
     });
 
     test('الطلب مباشر: hours + serviceDate + service_meta', () {
