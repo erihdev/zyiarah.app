@@ -120,23 +120,47 @@ void main() {
     });
   });
 
-  test('«تطبيق على كل المناطق» يعمّم الأسعار فقط — لا الهوية ولا الجدول', () {
-    // زرّ التعميم يستبدل أسعار كل المناطق بضغطة. حصرُ حقوله في الأسعار هو الضمانة
-    // ألا يمسح تعميمٌ عابر أسماء المناطق أو مواقعها أو جداول فتحها.
+  test('نسخ الأسعار لمناطق مختارة — الأسعار فقط، باختيار صريح من قائمة', () {
+    // طلب المالك بعد تجربة نسخة «الكل»: قائمة بكل المدن يختار منها ما يُطبَّق عليه.
+    // حصرُ الحقول في الأسعار هو الضمانة ألا يمسح النسخ أسماء المناطق أو مواقعها
+    // أو جداول فتحها.
     final s = File('lib/screens/admin/admin_hourly_zones_screen.dart').readAsStringSync();
-    expect(s.contains('تطبيق على كل المناطق'), isTrue);
-    expect(s.contains('_applyPricesToAllZones'), isTrue);
+    expect(s.contains('_applyPricesToZones'), isTrue);
+    expect(s.contains('_pickTargetZones'), isTrue);
+    expect(s.contains('اختر المناطق لتطبيق الأسعار'), isTrue,
+        reason: 'القائمة تعرض كل المدن للاختيار');
+    expect(s.contains('تحديد الكل'), isTrue,
+        reason: 'اختصار «الكل» يبقي سلوك التعميم الكامل متاحاً بنقرة');
+    expect(s.contains('CheckboxListTile'), isTrue);
 
-    final i = s.indexOf('Future<int> _applyPricesToAllZones');
+    final i = s.indexOf('Future<int> _applyPricesToZones');
     expect(i, greaterThan(-1));
     final body = s.substring(i, s.indexOf('\n  }', i));
     for (final forbidden in ["'name'", "'centerLoc'", "'radiusKm'", "'enabled'", "'schedule'", "'rank'"]) {
       expect(body.contains(forbidden), isFalse,
-          reason: 'التعميم كتب $forbidden — يجب أن يقتصر على الأسعار');
+          reason: 'النسخ كتب $forbidden — يجب أن يقتصر على الأسعار');
     }
-    // والتأكيد الصريح قبل الاستبدال الجماعي.
-    expect(s.contains('تطبيق على كل المناطق؟'), isTrue,
-        reason: 'استبدال جماعي بلا تأكيد = ضغطة خاطئة تمسح أسعار كل المناطق');
+    // زرّ الحفظ معطّل بلا اختيار — لا نسخ صفري ولا نسخ بالخطأ.
+    expect(s.contains('selected.isEmpty'), isTrue);
+  });
+
+  test('قائمة «نسخ الأسعار من منطقة سابقة» تملأ الحقول ولا تكتب على أحد', () {
+    // طلب المالك: عند إضافة مدينة جديدة، منسدلة بالمدن السابقة — يختار واحدة
+    // فتُنسخ أسعارها إلى حقول النموذج فوراً («تنتسخ وتلتصق») ثم يحفظ عادي.
+    final s = File('lib/screens/admin/admin_hourly_zones_screen.dart').readAsStringSync();
+    expect(s.contains('نسخ الأسعار من منطقة سابقة'), isTrue);
+    expect(s.contains('DropdownButtonFormField<String>'), isTrue);
+    // تعبئة نموذج فقط: الاختيار يكتب في المتحكّمات لا في Firestore.
+    final i = s.indexOf('نسخ الأسعار من منطقة سابقة');
+    final region = s.substring(i, i + 2600);
+    expect(region.contains('pSofaSqmCtrl.text ='), isTrue,
+        reason: 'النسخ يملأ حقول م² لا الساعات فقط');
+    expect(region.contains('pAcWashSplitCtrl.text ='), isTrue,
+        reason: 'النسخ يملأ أسعار المكيفات الأربعة');
+    expect(region.contains('.update(') || region.contains('.set('), isFalse,
+        reason: 'الاختيار من المنسدلة تعبئة نموذج — لا كتابة على أي منطقة');
+    // المنطقة الحالية لا تظهر في قائمة النسخ من نفسها.
+    expect(s.contains('d.id != doc?.id'), isTrue);
   });
 
   test('حوار المنطقة بعرض مضبوط — وإلا انفجر قياس IntrinsicWidth على الخريطة', () {

@@ -69,28 +69,113 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     }
   }
 
-  /// يطبّق أسعار الحوار الحالي على **كل** المناطق — الأسعار فقط.
+  /// يطبّق أسعار الحوار الحالي على **المناطق المختارة** — الأسعار فقط.
   ///
-  /// طلب المالك: تعديل واحد يعمّ الجميع بدل تكرار الإدخال منطقةً منطقة (ومع التوسّع
-  /// يصير التكرار نسياناً: منطقة تبقى بسعر قديم). الحقول المكتوبة محصورة عمداً في
-  /// الأسعار — لا اسم ولا إحداثيات ولا نصف قطر ولا تفعيل ولا جدول: تعميم الأسعار
-  /// يجب ألا يمسّ هويّة المنطقة ولا جدولها.
-  Future<int> _applyPricesToAllZones(Map<String, dynamic> priceFields) async {
-    final snap = await _db.collection('service_zones').get();
+  /// طلب المالك (بعد تجربة نسخة «الكل»): قائمة بكل المدن يختار منها ما يُطبَّق
+  /// عليه، بدل الكل-أو-لا-شيء. الحقول المكتوبة محصورة عمداً في الأسعار — لا اسم
+  /// ولا إحداثيات ولا نصف قطر ولا تفعيل ولا جدول: نسخ الأسعار يجب ألا يمسّ
+  /// هويّة المنطقة ولا جدولها.
+  Future<int> _applyPricesToZones(
+      Iterable<String> zoneIds, Map<String, dynamic> priceFields) async {
     final batch = _db.batch();
-    for (final d in snap.docs) {
-      batch.update(d.reference, {
+    for (final id in zoneIds) {
+      batch.update(_db.collection('service_zones').doc(id), {
         ...priceFields,
         'updated_at': FieldValue.serverTimestamp(),
       });
     }
     await batch.commit();
     await ZyiarahAuditService().logAction(
-      action: 'APPLY_PRICES_ALL_ZONES',
-      details: {'zones': snap.size, ...priceFields},
+      action: 'APPLY_PRICES_TO_ZONES',
+      details: {'zones': zoneIds.toList(), ...priceFields},
       targetId: 'service_zones',
     );
-    return snap.size;
+    return zoneIds.length;
+  }
+
+  /// منتقي المناطق: كل المدن كمربعات اختيار + «تحديد الكل». يُرجع المعرّفات
+  /// المختارة أو null عند الإلغاء. الاختيار الصريح هو التأكيد — لا حوار ثانٍ.
+  Future<Set<String>?> _pickTargetZones(BuildContext ctx) async {
+    final snap = await _db.collection('service_zones').get();
+    if (!ctx.mounted) return null;
+    final zones = snap.docs;
+    final selected = <String>{};
+    return showDialog<Set<String>>(
+      context: ctx,
+      builder: (c2) => StatefulBuilder(
+        builder: (c2, setPickState) {
+          final allChecked = selected.length == zones.length && zones.isNotEmpty;
+          return Directionality(
+            textDirection: TextDirection.rtl,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Text('اختر المناطق لتطبيق الأسعار',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+              content: SizedBox(
+                width: 340,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CheckboxListTile(
+                      value: allChecked,
+                      onChanged: (v) => setPickState(() {
+                        selected.clear();
+                        if (v == true) selected.addAll(zones.map((d) => d.id));
+                      }),
+                      title: const Text('تحديد الكل',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    const Divider(height: 8),
+                    Flexible(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          children: [
+                            for (final d in zones)
+                              CheckboxListTile(
+                                value: selected.contains(d.id),
+                                onChanged: (v) => setPickState(() {
+                                  if (v == true) {
+                                    selected.add(d.id);
+                                  } else {
+                                    selected.remove(d.id);
+                                  }
+                                }),
+                                title: Text((d.data()['name'] ?? d.id).toString()),
+                                controlAffinity: ListTileControlAffinity.leading,
+                                contentPadding: EdgeInsets.zero,
+                                dense: true,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'تُنسخ الأسعار فقط — الأسماء والمواقع والجداول لا تتأثر.',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(c2),
+                    child: const Text('إلغاء')),
+                ElevatedButton(
+                  onPressed: selected.isEmpty
+                      ? null
+                      : () => Navigator.pop(c2, Set<String>.of(selected)),
+                  child: Text(
+                      selected.isEmpty ? 'حفظ' : 'حفظ (${selected.length})'),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
   }
 
   void _showZoneDialog({DocumentSnapshot? doc}) {
@@ -116,6 +201,11 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     final pAcWashSplitCtrl = TextEditingController(text: (data?['acWashSplitPrice'] ?? kDefaultAcWashSplitPrice).toString());
 
     // rank عبر num: لو خُزّن double يوماً (لوحة الويب) لا ينفجر الحوار.
+    // مصدر القائمة المنسدلة «نسخ الأسعار من»: يُجلب مرة عند فتح الحوار.
+    final Future<QuerySnapshot<Map<String, dynamic>>> zonesFuture =
+        _db.collection('service_zones').get();
+    String? copiedFromId;
+
     int rank = (data?['rank'] as num?)?.toInt() ?? 0;
     GeoPoint? selectedGeo = data?['centerLoc'] as GeoPoint?;
     bool isSaving = false;
@@ -196,6 +286,72 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     if (selectedGeo != null) const SizedBox(height: 15),
 
                     const Divider(height: 30),
+                    // «نسخ الأسعار من منطقة سابقة» (طلب المالك): عند إضافة مدينة
+                    // جديدة يختار مدينة قائمة فتُنسخ أسعارها **إلى الحقول فوراً**
+                    // (الساعات + م² + المكيفات) ثم يعدّل ما شاء ويحفظ عادي.
+                    // لا كتابة على أي منطقة أخرى — تعبئة نموذج فحسب.
+                    FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                      future: zonesFuture,
+                      builder: (context, snap) {
+                        final docs = (snap.data?.docs ?? [])
+                            .where((d) => d.id != doc?.id)
+                            .toList();
+                        if (docs.isEmpty) return const SizedBox.shrink();
+                        return DropdownButtonFormField<String>(
+                          initialValue: copiedFromId,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'نسخ الأسعار من منطقة سابقة',
+                            prefixIcon: Icon(Icons.content_copy_rounded, size: 18),
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: [
+                            for (final d in docs)
+                              DropdownMenuItem(
+                                value: d.id,
+                                child: Text((d.data()['name'] ?? d.id).toString()),
+                              ),
+                          ],
+                          onChanged: isSaving
+                              ? null
+                              : (id) {
+                                  if (id == null) return;
+                                  final src = docs
+                                      .firstWhere((d) => d.id == id)
+                                      .data();
+                                  final prices =
+                                      stringKeyedMap(src['prices']) ?? {};
+                                  String n(dynamic v) => v == null
+                                      ? ''
+                                      : (v is num
+                                          ? (v == v.roundToDouble()
+                                              ? v.toInt().toString()
+                                              : v.toString())
+                                          : v.toString());
+                                  setDialogState(() {
+                                    copiedFromId = id;
+                                    p1Ctrl.text = n(prices['1']);
+                                    p4Ctrl.text = n(prices['4']);
+                                    p5Ctrl.text = n(prices['5']);
+                                    p6Ctrl.text = n(prices['6']);
+                                    p8Ctrl.text = n(prices['8']);
+                                    pSofaSqmCtrl.text = n(src['sofaSqmPrice']);
+                                    pRugSqmCtrl.text = n(src['rugSqmPrice']);
+                                    pAcMaintWinCtrl.text =
+                                        n(src['acMaintWindowPrice']);
+                                    pAcMaintSplitCtrl.text =
+                                        n(src['acMaintSplitPrice']);
+                                    pAcWashWinCtrl.text =
+                                        n(src['acWashWindowPrice']);
+                                    pAcWashSplitCtrl.text =
+                                        n(src['acWashSplitPrice']);
+                                  });
+                                },
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
                     const Text("أسعار النظافة بالساعة (ر.س):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     const SizedBox(height: 10),
                     Row(
@@ -266,36 +422,17 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
               ),
               ),
               actions: [
-                // تعميم الأسعار: يقرأ حقول الأسعار المُدخلة الآن ويكتبها لكل المناطق —
-                // بتأكيد صريح، لأنه استبدال جماعي لا رجعة فيه بضغطة.
+                // نسخ الأسعار لمناطق يختارها الأدمن من قائمة (طلب المالك) —
+                // الاختيار الصريح + زرّ الحفظ هما التأكيد.
                 TextButton.icon(
                   onPressed: isSaving
                       ? null
                       : () async {
-                          final confirmed = await showDialog<bool>(
-                            context: ctx,
-                            builder: (c2) => Directionality(
-                              textDirection: TextDirection.rtl,
-                              child: AlertDialog(
-                                title: const Text('تطبيق على كل المناطق؟'),
-                                content: const Text(
-                                    'ستُستبدل أسعار الساعات والكنب والسجاد والمكيفات في كل المناطق '
-                                    'بالأسعار المُدخلة هنا.\n(الأسماء والمواقع والجداول لا تتأثر.)'),
-                                actions: [
-                                  TextButton(
-                                      onPressed: () => Navigator.pop(c2, false),
-                                      child: const Text('إلغاء')),
-                                  ElevatedButton(
-                                      onPressed: () => Navigator.pop(c2, true),
-                                      child: const Text('نعم، طبّق')),
-                                ],
-                              ),
-                            ),
-                          );
-                          if (confirmed != true) return;
+                          final targets = await _pickTargetZones(ctx);
+                          if (targets == null || targets.isEmpty) return;
                           setDialogState(() => isSaving = true);
                           try {
-                            final n = await _applyPricesToAllZones({
+                            final n = await _applyPricesToZones(targets, {
                               'prices': {
                                 '1': double.tryParse(p1Ctrl.text) ?? 0,
                                 '4': double.tryParse(p4Ctrl.text) ?? 0,
@@ -313,20 +450,20 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                             if (ctx.mounted) {
                               Navigator.pop(ctx);
                               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                  content: Text('طُبّقت الأسعار على $n منطقة ✅'),
+                                  content: Text('حُفظت الأسعار في $n منطقة ✅'),
                                   backgroundColor: Colors.green));
                             }
                           } catch (e) {
                             setDialogState(() => isSaving = false);
                             if (ctx.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                  content: Text('تعذّر التعميم: $e'),
+                                  content: Text('تعذّر النسخ: $e'),
                                   backgroundColor: Colors.red));
                             }
                           }
                         },
                   icon: const Icon(Icons.copy_all_rounded, size: 18),
-                  label: const Text('تطبيق على كل المناطق'),
+                  label: const Text('تطبيق على مناطق…'),
                 ),
                 TextButton(onPressed: isSaving ? null : () => Navigator.pop(ctx), child: const Text("إلغاء")),
                 ElevatedButton(
