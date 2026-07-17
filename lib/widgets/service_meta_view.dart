@@ -10,6 +10,47 @@ import 'package:google_fonts/google_fonts.dart';
 /// وكتابة `service_meta` بلا قارئ = بيانات ميتة، وهو المرض نفسه الذي أنتج حقول تسعير
 /// تكتبها الإدارة ولا يقرؤها أحد. لذلك يُعرض هنا للطرفين من مصدر واحد.
 ///
+/// سطر مختصر للتفصيل — لبطاقات القوائم حيث لا مساحة لجدول كامل.
+///
+/// «صيانة شباك ×1 • غسيل سبليت ×2» للمكيفات، و«كنب ×2 (4.50 م²) • سجاد ×1 (6.00 م²)»
+/// للكنب والسجاد. كانت قوائم الإدارة تعرض اسم الخدمة والمبلغ فقط، فلا يُعرف نوع
+/// المكيف ولا عدد الوحدات إلا بفتح تفاصيل كل طلب (ملاحظة المالك).
+///
+/// يُرجع null إن غاب الحقل (طلبات قديمة) أو تلف — فلا يُرسم السطر أصلاً.
+String? zyiarahServiceMetaSummary(dynamic meta) {
+  if (meta is! Map) return null;
+  final parts = <String>[];
+  switch (meta['kind']) {
+    case 'ac_service':
+      final lines = meta['lines'];
+      if (lines is! List) return null;
+      for (final l in lines.whereType<Map>()) {
+        final c = ZyiarahServiceMetaView._num(l['count']).toInt();
+        if (c > 0) parts.add('${l['label'] ?? '-'} ×$c');
+      }
+    case 'sofa_rug_sqm':
+      final pieces = meta['pieces'];
+      if (pieces is! List) return null;
+      // تجميع القطع حسب النوع: العدد والمساحة الإجمالية.
+      final count = <String, int>{};
+      final area = <String, double>{};
+      for (final p in pieces.whereType<Map>()) {
+        final label = '${p['label'] ?? '-'}'.split(' ').first; // «كنب 1» → «كنب»
+        count[label] = (count[label] ?? 0) + 1;
+        area[label] = (area[label] ?? 0) + ZyiarahServiceMetaView._num(p['area_sqm']);
+      }
+      for (final label in count.keys) {
+        parts.add(
+            '$label ×${count[label]} (${area[label]!.toStringAsFixed(2)} م²)');
+      }
+    default:
+      return null;
+  }
+  return parts.isEmpty ? null : parts.join(' • ');
+}
+
+/// الجدول الكامل للتفصيل — لشاشتي تفاصيل الطلب (إدارة وسائق).
+///
 /// يتجاهل نفسه بصمت إن كان الحقل غائباً (الطلبات القديمة) أو تالفاً — لا يُسقط الشاشة.
 class ZyiarahServiceMetaView extends StatelessWidget {
   final dynamic meta;

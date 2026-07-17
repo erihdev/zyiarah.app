@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:zyiarah/widgets/service_meta_view.dart';
 import 'package:zyiarah/utils/time_format.dart';
 import 'package:intl/intl.dart' as intl;
 
@@ -112,6 +113,16 @@ class _ApprovalCard extends StatelessWidget {
                   Text('$serviceType',
                       style: GoogleFonts.tajawal(
                           fontWeight: FontWeight.bold, fontSize: 15)),
+                  Builder(builder: (_) {
+                    final summary =
+                        zyiarahServiceMetaSummary(data['service_meta']);
+                    if (summary == null) return const SizedBox.shrink();
+                    return Text(summary,
+                        style: GoogleFonts.tajawal(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF5D1B5E)));
+                  }),
                   Text('#$code — $clientName',
                       style: GoogleFonts.tajawal(
                           fontSize: 12, color: Colors.grey.shade600)),

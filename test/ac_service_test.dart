@@ -11,6 +11,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zyiarah/models/ac_line.dart';
+import 'package:zyiarah/widgets/service_meta_view.dart';
 
 void main() {
   _metaGuards();
@@ -149,6 +150,52 @@ void main() {
 // تصل العميلة. إن كُتب التفصيل فيجب أن يراه من يحتاجه: الإدارة (للتدقيق) والسائق
 // (ليعرف ما يحمل).
 void _metaGuards() {
+  group('الملخّص المختصر لبطاقات القوائم', () {
+    // كانت قوائم الإدارة تعرض اسم الخدمة والمبلغ فقط — نوع المكيف وعدد الوحدات
+    // خلف نقرة تفاصيل لكل طلب (ملاحظة المالك: «أضف خانات مثل نوع المكيف وكم وحدة»).
+    test('مكيفات: النوع والعدد في سطر واحد', () {
+      final meta = {
+        'kind': 'ac_service',
+        'lines': [
+          {'label': 'صيانة شباك', 'count': 1},
+          {'label': 'غسيل سبليت', 'count': 2},
+        ],
+      };
+      expect(zyiarahServiceMetaSummary(meta), 'صيانة شباك ×1 • غسيل سبليت ×2');
+    });
+
+    test('كنب وسجاد: عدد القطع ومساحتها مجمّعة بالنوع', () {
+      final meta = {
+        'kind': 'sofa_rug_sqm',
+        'pieces': [
+          {'label': 'كنب 1', 'area_sqm': 3.0},
+          {'label': 'كنب 2', 'area_sqm': 1.5},
+          {'label': 'سجاد 1', 'area_sqm': 6.0},
+        ],
+      };
+      expect(zyiarahServiceMetaSummary(meta),
+          'كنب ×2 (4.50 م²) • سجاد ×1 (6.00 م²)');
+    });
+
+    test('طلب قديم بلا service_meta ⇒ null فلا يُرسم السطر', () {
+      expect(zyiarahServiceMetaSummary(null), isNull);
+      expect(zyiarahServiceMetaSummary('garbage'), isNull);
+      expect(zyiarahServiceMetaSummary({'kind': 'unknown'}), isNull);
+      expect(zyiarahServiceMetaSummary({'kind': 'ac_service'}), isNull);
+    });
+
+    test('قوائم الإدارة تعرض الملخّص فعلاً (لا دالة بلا قارئ)', () {
+      for (final p in [
+        'lib/screens/admin/admin_orders_screen.dart',
+        'lib/screens/admin/admin_approval_screen.dart',
+      ]) {
+        expect(File(p).readAsStringSync().contains('zyiarahServiceMetaSummary'),
+            isTrue, reason: '$p — الملخّص يُعرض في البطاقة لا خلف نقرة');
+      }
+    });
+  });
+
+
   group('service_meta مقروء لا مكتوب فقط', () {
     test('الإدارة تعرض التفصيل', () {
       final s = File('lib/screens/admin/admin_order_details_screen.dart').readAsStringSync();

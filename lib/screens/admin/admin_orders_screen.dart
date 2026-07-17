@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:zyiarah/widgets/service_meta_view.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'package:zyiarah/screens/admin/admin_order_details_screen.dart';
@@ -129,6 +130,9 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
             (double.tryParse(rawAmount.toString()) ?? 0).toStringAsFixed(2);
         
         final code = data['code'] ?? docs[index].id.substring(0, 8).toUpperCase();
+        // نوع المكيف وعدد الوحدات / قطع الكنب بمساحاتها — في البطاقة نفسها، لا
+        // خلف نقرة تفاصيل (ملاحظة المالك: «أضف خانات مثل نوع المكيف وكم وحدة»).
+        final metaSummary = zyiarahServiceMetaSummary(data['service_meta']);
         
         return Card(
           elevation: 0,
@@ -154,6 +158,14 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(service, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF1E293B))),
+                        if (metaSummary != null) ...[
+                          const SizedBox(height: 2),
+                          Text(metaSummary,
+                              style: GoogleFonts.tajawal(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF5D1B5E))),
+                        ],
                         const SizedBox(height: 2),
                         Text("رقم الطلب: #$code", style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 4),
