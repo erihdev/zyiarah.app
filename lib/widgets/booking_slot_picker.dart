@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:zyiarah/utils/time_format.dart';
 
 /// منتقي التاريخ والوقت مع الإتاحة الحقيقية من الخادم — **مصدر «اللون الأخضر» الوحيد.**
 ///
@@ -51,6 +52,8 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
 
   Map<String, int> _dailyCounts = {};
   Map<String, int> _slotCounts = {};
+  Map<String, List<int>> _openHours = {}; // yyyy-MM-dd -> [فتح، إغلاق]
+  Set<String> _closedDates = {};          // أيام لا تُخدَم فيها المنطقة
   int _maxOrdersPerDay = 10;
   int _maxTeamsPerSlot = 0;
 
@@ -94,6 +97,8 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
           .call({
             'startDate': fmt.format(now),
             'endDate': fmt.format(now.add(const Duration(days: _horizonDays + 1))),
+            // المنطقة لجدول الفتح فقط (لا للسعة — السائقون بلا مناطق).
+            if (widget.zoneName != null) 'zoneName': widget.zoneName,
           })
           .timeout(const Duration(seconds: 20));
 
@@ -102,19 +107,28 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
           .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
       final slots = (data['slotCounts'] as Map? ?? {})
           .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
+      // جدول الفتح المرجعيّ من الخادم — يرسم منه العرض ويفرضه الدفع.
+      final openHours = (data['openHours'] as Map? ?? {}).map((k, v) =>
+          MapEntry(k.toString(),
+              (v as List).map((e) => (e as num).toInt()).toList()));
+      final closed = ((data['closedDates'] as List?) ?? [])
+          .map((e) => e.toString())
+          .toSet();
 
       if (!mounted) return;
       setState(() {
         _dailyCounts = daily;
         _slotCounts = slots;
+        _openHours = openHours;
+        _closedDates = closed;
         _maxOrdersPerDay = (data['maxOrdersPerDay'] as num?)?.toInt() ?? 10;
         _maxTeamsPerSlot = (data['maxTeamsPerSlot'] as num?)?.toInt() ?? 0;
         _loading = false;
-        // لو صار التاريخ المختار ممتلئاً، انتقل لأول يوم متاح بدل ترك اختيار ميّت.
-        if (_isDayFull(_selectedDate)) {
+        // لو صار التاريخ المختار ممتلئاً أو مغلقاً، انتقل لأول يوم صالح.
+        if (_isDayUnavailable(_selectedDate)) {
           for (int i = 1; i <= _horizonDays; i++) {
             final c = now.add(Duration(days: i));
-            if (!_isDayFull(c)) {
+            if (!_isDayUnavailable(c)) {
               _selectedDate = c;
               break;
             }
@@ -135,9 +149,21 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
 
   bool _isDayFull(DateTime d) => (_dailyCounts[_key(d)] ?? 0) >= _maxOrdersPerDay;
 
-  /// متاح فقط إن توفّر سائق حرّ في **كل ساعة** من ساعات المدة.
+  /// اليوم مغلق بجدول المنطقة (لا نخدمها هذا اليوم) — **سبب مختلف عن الامتلاء.**
+  bool _isDayClosed(DateTime d) => _closedDates.contains(_key(d));
+
+  bool _isDayUnavailable(DateTime d) => _isDayFull(d) || _isDayClosed(d);
+
+  /// ساعات فتح المنطقة في اليوم: من الجدول إن وُجد، وإلا 8..22 الافتراضية.
+  List<int> _openHoursFor(DateTime d) => _openHours[_key(d)] ?? [_workStart, _workEnd];
+
+  /// متاح فقط إن: (١) ضمن ساعات فتح المنطقة، و(٢) توفّر سائق حرّ **طوال المدة**.
   bool _isSlotFree(DateTime day, int startHour) {
     if (_maxTeamsPerSlot <= 0) return false; // لا سائق نشط أصلاً
+    if (_isDayClosed(day)) return false;
+    final open = _openHoursFor(day);
+    // المدة كلها يجب أن تقع داخل [فتح، إغلاق).
+    if (startHour < open[0] || startHour + widget.durationHours > open[1]) return false;
     final dateKey = _key(day);
     for (int h = startHour; h < startHour + widget.durationHours; h++) {
       final k = '${dateKey}_${h.toString().padLeft(2, '0')}:00';
@@ -146,10 +172,13 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
     return true;
   }
 
+  /// خانات البدء المحتملة لليوم المختار — محصورة بساعات فتح المنطقة.
   List<int> _startHours() {
-    final last = _workEnd - widget.durationHours;
-    if (last < _workStart) return const [];
-    return List.generate(last - _workStart + 1, (i) => _workStart + i);
+    final open = _openHoursFor(_selectedDate);
+    final first = open[0].clamp(_workStart, _workEnd);
+    final last = open[1] - widget.durationHours;
+    if (last < first) return const [];
+    return List.generate(last - first + 1, (i) => first + i);
   }
 
   bool _sameDay(DateTime a, DateTime b) =>
@@ -256,9 +285,41 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
         itemBuilder: (context, i) {
           final date = now.add(Duration(days: i + 1));
           final selected = _sameDay(_selectedDate, date);
-          final full = _isDayFull(date);
+          final closed = _isDayClosed(date); // لا نخدم المنطقة هذا اليوم (رمادي)
+          final full = !closed && _isDayFull(date); // محجوز بالكامل (أحمر)
+          // ثلاث حالات بألوان مختلفة: مغلق (رمادي) ≠ ممتلئ (أحمر) ≠ متاح (أخضر).
+          final Color bg = selected
+              ? _brand
+              : closed
+                  ? const Color(0xFFF1F5F9)
+                  : full
+                      ? const Color(0xFFFEF2F2)
+                      : const Color(0xFFECFDF5);
+          final Color border = selected
+              ? _brand
+              : closed
+                  ? const Color(0xFFE2E8F0)
+                  : full
+                      ? const Color(0xFFFECACA)
+                      : const Color(0xFFA7F3D0);
+          final Color dayColor = selected
+              ? Colors.white70
+              : closed
+                  ? const Color(0xFF94A3B8)
+                  : full
+                      ? const Color(0xFFDC2626)
+                      : const Color(0xFF059669);
           return GestureDetector(
             onTap: () {
+              if (closed) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text('لا نخدم منطقتك في هذا اليوم. اختاري يوماً متاحاً (الأخضر).',
+                      style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                  backgroundColor: const Color(0xFF64748B),
+                  duration: const Duration(seconds: 2),
+                ));
+                return;
+              }
               if (full) {
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: Text('هذا اليوم محجوز بالكامل، اختاري تاريخاً آخر.',
@@ -280,34 +341,16 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
               margin: const EdgeInsets.symmetric(horizontal: 5),
               width: 58,
               decoration: BoxDecoration(
-                color: selected
-                    ? _brand
-                    : full
-                        ? const Color(0xFFFEF2F2)
-                        : const Color(0xFFECFDF5),
+                color: bg,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: selected
-                      ? _brand
-                      : full
-                          ? const Color(0xFFFECACA)
-                          : const Color(0xFFA7F3D0),
-                  width: 1.5,
-                ),
+                border: Border.all(color: border, width: 1.5),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
                     dayNames[date.weekday % 7],
-                    style: GoogleFonts.tajawal(
-                      fontSize: 11,
-                      color: selected
-                          ? Colors.white70
-                          : full
-                              ? const Color(0xFFDC2626)
-                              : const Color(0xFF059669),
-                    ),
+                    style: GoogleFonts.tajawal(fontSize: 11, color: dayColor),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -315,7 +358,11 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
                     style: GoogleFonts.tajawal(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: selected ? Colors.white : const Color(0xFF1E293B),
+                      color: selected
+                          ? Colors.white
+                          : closed
+                              ? const Color(0xFF94A3B8)
+                              : const Color(0xFF1E293B),
                     ),
                   ),
                 ],
@@ -374,7 +421,8 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
               ),
             ),
             child: Text(
-              '${h.toString().padLeft(2, '0')}:00',
+              // عرض 12 ساعة — المخزَّن يبقى "HH:00" (الدالة الخادمية تحلّله للسعة).
+              formatHour12(h),
               style: GoogleFonts.tajawal(
                 fontWeight: FontWeight.bold,
                 color: selected

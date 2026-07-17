@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:zyiarah/utils/time_format.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -315,7 +316,9 @@ class ZyiarahPdfService {
         visitRows.add([
           'زيارة ${v['visit_index'] ?? '-'}/${v['total_visits'] ?? docs.length}',
           '${v['booking_date'] ?? '-'}',
-          '${v['booking_time_slot'] ?? '-'}',
+          formatSlot12(v['booking_time_slot'] as String?).isEmpty
+              ? '-'
+              : formatSlot12(v['booking_time_slot'] as String?),
         ]);
       }
     } catch (_) {/* إن تعذّر الجلب يبقى العقد بالتفاصيل الأساسية */}

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:zyiarah/utils/time_format.dart';
 import 'package:intl/intl.dart' as intl;
 
 /// طابور المسار الثاني: طلبات (الكنب/الزل، الصيانة، المتجر) بانتظار اعتماد الإدارة.
@@ -319,7 +320,7 @@ class _AssignSheetState extends State<_AssignSheet> {
                         ..sort())
                       .map((h) => DropdownMenuItem(
                             value: h,
-                            child: Text('${h.toString().padLeft(2, '0')}:00',
+                            child: Text(formatHour12(h),
                                 style: GoogleFonts.tajawal()),
                           ))
                       .toList(),

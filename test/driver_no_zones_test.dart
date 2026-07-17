@@ -16,6 +16,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+String _read(String path) => File(path).readAsStringSync();
+
 String _code(String path) => File(path)
     .readAsStringSync()
     .replaceAll(RegExp(r'/\*[\s\S]*?\*/'), '')
@@ -59,19 +61,21 @@ void main() {
     expect(body.contains('maxTeamsPerSlot: driverCount'), isTrue);
   });
 
-  test('العميلة لا تُرسل zoneName للسعة (لم تعد تعني شيئاً)', () {
-    for (final p in [
-      'lib/widgets/booking_slot_picker.dart',
-      'lib/screens/hourly_details_screen.dart',
-      'lib/screens/payment_summary_screen.dart',
-    ]) {
-      final s = _code(p);
-      final i = s.indexOf('getHourlyAvailability');
-      if (i == -1) continue;
-      final window = s.substring(i, (i + 420).clamp(0, s.length));
-      expect(window.contains("'zoneName'"), isFalse,
-          reason: '$p ما زال يمرّر zoneName لدالة تتجاهلها — بارامتر يكذب');
-    }
+  test('zoneName لا يُرشّح السائقين — لكنه مسموح لجلب جدول المنطقة', () {
+    // تحديث: صار العميل **يمرّر** zoneName ليجلب **جدول فتح المنطقة**
+    // (getHourlyAvailability يستعمله لذلك فقط، لا لعدّ السائقين). الثابت الحقيقي:
+    // المنطقة لا تصفّي السائقين — لا أن العميل يمتنع عن إرسالها.
+    final fn = _read('functions/index.js');
+    final i = fn.indexOf('exports.getHourlyAvailability');
+    final body = fn.substring(i, fn.indexOf('return {', i));
+    // تُستعمل لجلب schedule
+    expect(body.contains('zoneName'), isTrue);
+    expect(body.contains('.where("name", "==", zoneName)'), isTrue,
+        reason: 'zoneName يجلب مستند المنطقة لقراءة جدولها');
+    // لكن لا تُرشِّح السائقين بها
+    final driverBlock = body.substring(body.indexOf('drivers'));
+    expect(driverBlock.contains('zoneName'), isFalse,
+        reason: 'عدّ السائقين يجب أن يبقى عالميّاً — المنطقة للجدول لا للسعة');
   });
 
   test('السقف اليومي يبقى من الإعدادات — هو «السعة المتفق عليها مسبقاً»', () {

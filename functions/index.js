@@ -3252,19 +3252,74 @@ exports.checkHourlySlotAvailability = onCall({cpu: 0.25}, async (request) => {
 // Returns daily order counts + per-slot counts for the requested date range.
 // The client app uses these to colour date cells and slot buttons without
 // needing read access to other users' orders.
+// ── Zone opening schedule (server-authoritative) ─────────────────────────────
+// المنطقة قد تُفتح بجدول: أيام أسبوعية ثابتة + تواريخ فتح استثنائية (windows) +
+// تواريخ إغلاق (blackouts). الحساب هنا **مرجعيّ**: العميل يرسم منه، وبوابة الدفع
+// تفرضه — فلا يمكن حجز موعد خارج ساعات عمل المنطقة.
+//
+// الشكل المخزَّن على مستند المنطقة:
+//   schedule: {
+//     enabled: bool,                       // false/غائب => مفتوحة 8..22 كل يوم (توافق خلفي)
+//     weekly:  {"0":{open,start,end},...},  // 0=الأحد .. 6=السبت (يطابق getDay في JS و weekday%7 في Dart)
+//     blackouts: ["yyyy-MM-dd"],            // مغلقة كلياً
+//     windows:  [{from,to,start,end}]       // فتح استثنائي يتجاوز الأسبوعي
+//   }
+const DEFAULT_OPEN = [8, 22];
+
+/**
+ * ساعات فتح المنطقة في تاريخ محدد، أو null إن كانت مغلقة.
+ * @param {object|undefined} schedule
+ * @param {string} dateStr yyyy-MM-dd
+ * @return {number[]|null} [startHour, endHour] أو null (مغلق)
+ */
+function zoneOpenHoursForDate(schedule, dateStr) {
+  if (!schedule || schedule.enabled !== true) return DEFAULT_OPEN;
+
+  const blackouts = Array.isArray(schedule.blackouts) ? schedule.blackouts : [];
+  if (blackouts.includes(dateStr)) return null; // إغلاق صريح يتقدّم كل شيء
+
+  // فتح استثنائي: تاريخ ضمن نافذة يتجاوز الأسبوعي.
+  const windows = Array.isArray(schedule.windows) ? schedule.windows : [];
+  for (const w of windows) {
+    if (w && w.from && w.to && dateStr >= w.from && dateStr <= w.to) {
+      const s = Number(w.start); const e = Number(w.end);
+      if (Number.isInteger(s) && Number.isInteger(e) && e > s) return [s, e];
+    }
+  }
+
+  // الجدول الأسبوعي.
+  const weekday = new Date(`${dateStr}T00:00:00`).getDay(); // 0=الأحد..6=السبت
+  const wk = schedule.weekly && schedule.weekly[String(weekday)];
+  if (wk && wk.open === true) {
+    const s = Number(wk.start); const e = Number(wk.end);
+    if (Number.isInteger(s) && Number.isInteger(e) && e > s) return [s, e];
+  }
+  return null; // جدولٌ مُفعَّل وهذا اليوم غير مشمول => مغلق
+}
+
 exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
   }
 
-  // zoneName ما زالت تصل من النسخ المثبَّتة القديمة — نقبلها ونتجاهلها عمداً:
-  // السعة صارت رقماً واحداً للنشاط كلّه (السائقون بلا مناطق).
-  const {startDate, endDate} = request.data;
+  // zoneName تُستعمل **فقط** لجلب جدول فتح المنطقة (لا لترشيح السائقين — هم بلا
+  // مناطق). قد تصل غائبة من نسخ قديمة، فنتعامل معها اختيارياً.
+  const {startDate, endDate, zoneName} = request.data;
   if (!startDate || !endDate) {
     throw new HttpsError("invalid-argument", "startDate و endDate مطلوبان");
   }
 
   const db = admin.firestore();
+
+  // 0. جدول فتح المنطقة (إن وُجدت منطقة باسم zoneName ولها schedule).
+  let zoneSchedule = null;
+  if (zoneName) {
+    try {
+      const zq = await db.collection("service_zones")
+          .where("name", "==", zoneName).limit(1).get();
+      if (!zq.empty) zoneSchedule = zq.docs[0].data().schedule || null;
+    } catch (_) {}
+  }
 
   // 1. السعة الحقيقية للفترة = عدد السائقين النشطين. **بلا مناطق** (قرار المالك):
   // السائق يقبل أي طلب، فالسعة رقم واحد للنشاط كلّه لا لكل منطقة.
@@ -3316,8 +3371,27 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
     }
   }
 
+  // 4. اشتقاق جدول الفتح لكل يوم في المدى — مرجعيّ، يرسم منه العميل ويفرضه الدفع.
+  const openHours = {};   // "yyyy-MM-dd" -> [start, end]
+  const closedDates = []; // أيام مغلقة كلياً بالجدول
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const ds = `${y}-${m}-${day}`;
+    const hrs = zoneOpenHoursForDate(zoneSchedule, ds);
+    if (hrs === null) closedDates.push(ds);
+    else openHours[ds] = hrs;
+  }
+
   // maxTeamsPerSlot يعكس الآن عدد السائقين الحقيقي (لا قيمة ثابتة من الإعدادات)
-  return {dailyCounts, slotCounts, maxOrdersPerDay, maxTeamsPerSlot: driverCount};
+  return {
+    dailyCounts, slotCounts, maxOrdersPerDay, maxTeamsPerSlot: driverCount,
+    scheduleEnabled: !!(zoneSchedule && zoneSchedule.enabled === true),
+    openHours, closedDates, defaultOpen: DEFAULT_OPEN,
+  };
 });
 
 // Notify driver when they are assigned to an order

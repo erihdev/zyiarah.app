@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/utils/service_pricing_defaults.dart';
+import 'package:zyiarah/screens/admin/admin_zone_schedule_editor.dart';
 
 class AdminHourlyZonesScreen extends StatefulWidget {
   const AdminHourlyZonesScreen({super.key});
@@ -92,6 +93,10 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     int rank = data?['rank'] ?? 0;
     GeoPoint? selectedGeo = data?['centerLoc'] as GeoPoint?;
     bool isSaving = false;
+
+    // جدول فتح المنطقة — يبنيه المحرّر ويُكتب على المستند. null قبل أي تعديل =
+    // نُبقي القيمة الحالية كما هي (لا نكتب schedule إن لم يُلمَس).
+    Map<String, dynamic>? scheduleData = data?['schedule'] as Map<String, dynamic>?;
 
     showDialog(
       context: context,
@@ -216,6 +221,11 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                       ],
                     ),
 
+                    // جدول فتح المنطقة: أيام وساعات العمل + فتح/إغلاق تواريخ استثنائية.
+                    ZoneScheduleEditor(
+                      initial: scheduleData,
+                      onChanged: (s) => scheduleData = s,
+                    ),
                   ],
                 ),
               ),
@@ -252,6 +262,9 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                         'acWashSplitPrice': double.tryParse(pAcWashSplitCtrl.text) ?? 0,
                         'rank': rank,
                         'enabled': data?['enabled'] ?? true,
+                        // جدول الفتح — يُكتب متى لمس الأدمن المحرّر (scheduleData != null).
+                        // نُبقيه إن لم يُلمَس كي لا نمسح جدولاً قائماً بحفظٍ عابر.
+                        if (scheduleData != null) 'schedule': scheduleData,
                         'updated_at': FieldValue.serverTimestamp(),
                       };
 

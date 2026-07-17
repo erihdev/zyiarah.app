@@ -7,6 +7,7 @@ import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/services/app_update_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/widgets/service_meta_view.dart';
+import 'package:zyiarah/utils/time_format.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:zyiarah/services/order_service.dart';
@@ -683,11 +684,12 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
   Widget _buildManifestOrderCard(String orderId, Map<String, dynamic> data) {
     // Resolve time slot display
-    String timeSlot = data['booking_time_slot'] as String? ?? '';
+    // عرض 12 ساعة — المخزَّن يبقى "HH:00" لأن الدالة الخادمية تحلّله لحساب السعة.
+    String timeSlot = formatSlot12(data['booking_time_slot'] as String?);
     if (timeSlot.isEmpty) {
       final sd = (data['service_date'] as Timestamp?)?.toDate();
       if (sd != null) {
-        timeSlot = DateFormat('HH:mm').format(sd);
+        timeSlot = formatHour12(sd.hour);
       }
     }
 

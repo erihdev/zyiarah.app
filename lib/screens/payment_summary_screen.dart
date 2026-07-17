@@ -352,7 +352,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     try {
       final result = await FirebaseFunctions.instance
           .httpsCallable('getHourlyAvailability')
-          .call({'startDate': bookingDate, 'endDate': bookingDate})
+          // نمرّر المنطقة لجلب جدول فتحها (لا للسعة — السائقون بلا مناطق).
+          .call({
+            'startDate': bookingDate,
+            'endDate': bookingDate,
+            if (widget.zoneName != null) 'zoneName': widget.zoneName,
+          })
           .timeout(const Duration(seconds: 20));
       data = result.data as Map;
     } catch (e) {
@@ -370,14 +375,31 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       return 'لا يوجد فريق متاح حالياً. تواصل معنا لتحديد موعد.';
     }
 
+    // فرض جدول فتح المنطقة **خادميّاً**: العرض قد يُتجاوَز (نسخة قديمة، تلاعب)، فالبوابة
+    // هي الحدّ الأخير. اليوم مغلق أو الساعة خارج نطاق الفتح ⇒ يُمنع.
+    final int reqStart = widget.serviceDate!.hour;
+    final int reqEnd = reqStart + widget.hours!;
+    final closedDates =
+        ((data['closedDates'] as List?) ?? []).map((e) => e.toString()).toSet();
+    if (closedDates.contains(bookingDate)) {
+      return 'نعتذر، لا نخدم منطقتك في هذا اليوم. يرجى اختيار يوم آخر.';
+    }
+    final openHoursMap = data['openHours'] as Map? ?? {};
+    final open = openHoursMap[bookingDate];
+    if (open is List && open.length == 2) {
+      final int openStart = (open[0] as num).toInt();
+      final int openEnd = (open[1] as num).toInt();
+      if (reqStart < openStart || reqEnd > openEnd) {
+        return 'الوقت المختار خارج ساعات عمل منطقتك في هذا اليوم. يرجى اختيار وقت آخر.';
+      }
+    }
+
     if (((daily[bookingDate] as num?)?.toInt() ?? 0) >= maxOrdersPerDay) {
       return 'نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.';
     }
 
     // الطلب يشغل سائقاً طوال مدته، فنفحص **كل ساعة يشغلها** لا ساعة البدء وحدها —
     // الدالة تعدّ الطلب في كل ساعة من فترته للسبب نفسه.
-    final int reqStart = widget.serviceDate!.hour;
-    final int reqEnd = reqStart + widget.hours!;
     for (int h = reqStart; h < reqEnd; h++) {
       final key = '${bookingDate}_${h.toString().padLeft(2, '0')}:00';
       if (((slots[key] as num?)?.toInt() ?? 0) >= maxTeamsPerSlot) {

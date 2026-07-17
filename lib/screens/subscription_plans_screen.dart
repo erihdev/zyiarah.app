@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:zyiarah/utils/time_format.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -856,7 +857,7 @@ class _ZyiarahSubscriptionPlansScreenState
             final isBooked = _slotAvailability[h] == false;
             final isChecked = _slotAvailability.containsKey(h);
             final isSelected = _selectedStartHour == h;
-            final label = '${h.toString().padLeft(2, '0')}:00';
+            final label = formatHour12(h); // عرض 12 ساعة — التخزين يبقى 24
             return GestureDetector(
               onTap: (!isChecked || isBooked)
                   ? null

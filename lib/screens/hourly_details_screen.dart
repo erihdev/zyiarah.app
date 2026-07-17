@@ -6,6 +6,7 @@ import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/zone_locator_service.dart';
+import 'package:zyiarah/utils/time_format.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
 
 
@@ -30,6 +31,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   int _maxTeamsPerSlot = 5;
   Map<String, int> _dailyOrderCounts = {};   // "yyyy-MM-dd" → total orders
   Map<String, int> _slotCounts = {};          // "yyyy-MM-dd_HH:00" → orders in slot
+  Map<String, List<int>> _openHours = {};     // yyyy-MM-dd → [فتح، إغلاق] من جدول المنطقة
+  Set<String> _closedDates = {};              // أيام لا تُخدَم فيها المنطقة
   bool _loadingDailyCounts = true;
 
   /// تعذّر جلب الإتاحة من الخادم. **لا يجوز عرض تقويم أخضر في هذه الحالة**: الأعداد
@@ -68,11 +71,15 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       final startDate = intl.DateFormat('yyyy-MM-dd').format(now);
       final endDate = intl.DateFormat('yyyy-MM-dd').format(now.add(const Duration(days: 31)));
 
-      // بلا منطقة: السائقون يقبلون أي طلب (قرار المالك)، فالسعة رقم واحد للنشاط
-      // كلّه — عدد السائقين النشطين والسقف اليومي المتفق عليه.
+      // السعة رقم واحد للنشاط كلّه (السائقون بلا مناطق). المنطقة تُمرَّر لجلب **جدول
+      // فتحها** فقط — أيام وساعات عمل المنطقة، يفرضها الخادم وترسمها الشاشة.
       final result = await FirebaseFunctions.instance
           .httpsCallable('getHourlyAvailability')
-          .call({'startDate': startDate, 'endDate': endDate});
+          .call({
+            'startDate': startDate,
+            'endDate': endDate,
+            if (_selectedZoneName != null) 'zoneName': _selectedZoneName,
+          });
 
       final data = result.data as Map;
 
@@ -85,6 +92,12 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       final Map<String, int> slots = rawSlots.map(
         (k, v) => MapEntry(k.toString(), (v as num).toInt()),
       );
+      final Map<String, List<int>> openHours =
+          (data['openHours'] as Map? ?? {}).map((k, v) => MapEntry(
+              k.toString(), (v as List).map((e) => (e as num).toInt()).toList()));
+      final Set<String> closed = ((data['closedDates'] as List?) ?? [])
+          .map((e) => e.toString())
+          .toSet();
 
       final int maxPerDay = ((data['maxOrdersPerDay'] as num?)?.toInt()) ?? 10;
       final int maxPerSlot = ((data['maxTeamsPerSlot'] as num?)?.toInt()) ?? 5;
@@ -93,17 +106,21 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       setState(() {
         _dailyOrderCounts = daily;
         _slotCounts = slots;
+        _openHours = openHours;
+        _closedDates = closed;
         _maxOrdersPerDay = maxPerDay;
         _maxTeamsPerSlot = maxPerSlot;
         _loadingDailyCounts = false;
 
-        // انتقل تلقائياً لأول تاريخ متاح إذا كان المحدد ممتلئاً
-        final String selStr = intl.DateFormat('yyyy-MM-dd').format(_selectedDate);
-        if ((daily[selStr] ?? 0) >= maxPerDay) {
+        // انتقل تلقائياً لأول تاريخ متاح (غير ممتلئ وغير مغلق بالجدول).
+        bool unavailable(DateTime d) {
+          final s = intl.DateFormat('yyyy-MM-dd').format(d);
+          return closed.contains(s) || (daily[s] ?? 0) >= maxPerDay;
+        }
+        if (unavailable(_selectedDate)) {
           for (int i = 0; i < 30; i++) {
             final candidate = now.add(Duration(days: i + 1));
-            final candStr = intl.DateFormat('yyyy-MM-dd').format(candidate);
-            if ((daily[candStr] ?? 0) < maxPerDay) {
+            if (!unavailable(candidate)) {
               _selectedDate = candidate;
               break;
             }
@@ -273,11 +290,18 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   }
 
   // الفتحات الزمنية المتاحة (8ص حتى آخر وقت تنتهي فيه الخدمة قبل 10م)
+  /// ساعات فتح المنطقة في اليوم المختار (من الجدول، وإلا 8..22 الافتراضية).
+  List<int> _openHoursForSelected() {
+    final key = intl.DateFormat('yyyy-MM-dd').format(_selectedDate);
+    return _openHours[key] ?? const [8, 22];
+  }
+
   List<int> _getStartHours() {
-    const endHour = 22;
-    const startHour = 8;
-    final last = endHour - _selectedHours;
-    // احرس ضد الطول السالب (لو ضبط الأدمن ساعات كبيرة) → List.generate ينهار.
+    // خانات البدء محصورة بساعات فتح المنطقة لهذا اليوم — لا 8..22 دائماً.
+    final open = _openHoursForSelected();
+    final startHour = open[0];
+    final last = open[1] - _selectedHours;
+    // احرس ضد الطول السالب (مدة أطول من نافذة الفتح) → List.generate ينهار.
     if (last < startHour) return <int>[];
     return List.generate(last - startHour + 1, (i) => startHour + i);
   }
@@ -557,37 +581,53 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           
           final dateStr = intl.DateFormat('yyyy-MM-dd').format(date);
           final activeOrders = _dailyOrderCounts[dateStr] ?? 0;
-          final isFullyBooked = activeOrders >= _maxOrdersPerDay;
+          // مغلق بالجدول (رمادي) ≠ محجوز بالكامل (أحمر) — سببان مختلفان.
+          final isClosed = _closedDates.contains(dateStr);
+          final isFullyBooked = !isClosed && activeOrders >= _maxOrdersPerDay;
+          final unavailable = isClosed || isFullyBooked;
+          final Color availBg = isClosed
+              ? const Color(0xFFF1F5F9)
+              : isFullyBooked
+                  ? const Color(0xFFFEF2F2)
+                  : const Color(0xFFECFDF5);
+          final Color availBorder = isClosed
+              ? const Color(0xFFE2E8F0)
+              : isFullyBooked
+                  ? const Color(0xFFFECACA)
+                  : const Color(0xFFA7F3D0);
 
           return GestureDetector(
-            onTap: isFullyBooked ? () {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text("هذا اليوم محجوز بالكامل، يرجى اختيار تاريخ آخر.", style: TextStyle(fontWeight: FontWeight.bold)),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 2),
-              ));
-            } : () {
-              HapticFeedback.lightImpact();
-              setState(() => _selectedDate = date);
-              _buildSlotAvailabilityFromCache();
-            },
+            onTap: isClosed
+                ? () {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text("لا نخدم منطقتك في هذا اليوم. اختر يوماً متاحاً (الأخضر).",
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      backgroundColor: Color(0xFF64748B),
+                      duration: Duration(seconds: 2),
+                    ));
+                  }
+                : isFullyBooked
+                    ? () {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text("هذا اليوم محجوز بالكامل، يرجى اختيار تاريخ آخر.", style: TextStyle(fontWeight: FontWeight.bold)),
+                          backgroundColor: Colors.red,
+                          duration: Duration(seconds: 2),
+                        ));
+                      }
+                    : () {
+                        HapticFeedback.lightImpact();
+                        setState(() => _selectedDate = date);
+                        _buildSlotAvailabilityFromCache();
+                      },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               margin: const EdgeInsets.symmetric(horizontal: 5),
               width: 58,
               decoration: BoxDecoration(
-                color: isSelected
-                    ? const Color(0xFF5D1B5E)
-                    : isFullyBooked
-                        ? const Color(0xFFFEF2F2)
-                        : const Color(0xFFECFDF5),
+                color: isSelected ? const Color(0xFF5D1B5E) : availBg,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: isSelected
-                      ? const Color(0xFF5D1B5E)
-                      : isFullyBooked
-                          ? const Color(0xFFFECACA)
-                          : const Color(0xFFA7F3D0),
+                  color: isSelected ? const Color(0xFF5D1B5E) : availBorder,
                   width: 1.5,
                 ),
                 boxShadow: isSelected
@@ -600,11 +640,11 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                   Text(
                     dayNames[date.weekday % 7],
                     style: TextStyle(
-                      fontSize: 9, 
-                      color: isSelected 
-                          ? Colors.white70 
-                          : isFullyBooked 
-                              ? const Color(0xFFFCA5A5) 
+                      fontSize: 9,
+                      color: isSelected
+                          ? Colors.white70
+                          : unavailable
+                              ? const Color(0xFFFCA5A5)
                               : const Color(0xFF34D399),
                       fontWeight: FontWeight.bold,
                     ),
@@ -684,7 +724,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
             final isBooked = _slotAvailability[h] == false;
             final isChecked = _slotAvailability.containsKey(h);
             final isSelected = _selectedStartHour == h;
-            final label = '${h.toString().padLeft(2, '0')}:00';
+            final label = formatHour12(h); // عرض 12 ساعة — التخزين يبقى 24
             return GestureDetector(
               onTap: (!isChecked || isBooked) ? null : () {
                 HapticFeedback.lightImpact();
