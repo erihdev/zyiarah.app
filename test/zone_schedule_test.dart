@@ -152,7 +152,10 @@ void main() {
     expect(s.contains('DropdownButtonFormField<String>'), isTrue);
     // تعبئة نموذج فقط: الاختيار يكتب في المتحكّمات لا في Firestore.
     final i = s.indexOf('نسخ الأسعار من منطقة سابقة');
-    final region = s.substring(i, i + 2600);
+    // حتى نهاية onChanged — نافذة ثابتة (2600) كانت أقصر من الشيفرة فسقط الحارس
+    // على حقولٍ موجودة فعلاً عند 2879+.
+    final end = s.indexOf('const SizedBox(height: 12)', i);
+    final region = s.substring(i, end > i ? end : i + 5000);
     expect(region.contains('pSofaSqmCtrl.text ='), isTrue,
         reason: 'النسخ يملأ حقول م² لا الساعات فقط');
     expect(region.contains('pAcWashSplitCtrl.text ='), isTrue,
