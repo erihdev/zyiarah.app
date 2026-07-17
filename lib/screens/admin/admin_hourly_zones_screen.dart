@@ -136,7 +136,14 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
             child: AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               title: Text(doc == null ? "إضافة منطقة تغطية" : "تعديل المنطقة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-              content: SingleChildScrollView(
+              // عرض مضبوط (لا SingleChildScrollView عارية): AlertDialog يقيس محتواه
+              // بـ IntrinsicWidth، وخريطة المعاينة بداخله (FlutterMap = LayoutBuilder)
+              // «لا تدعم الأبعاد الذاتية» فترمي أثناء التخطيط — حوارٌ بلا مقاس، غير
+              // مرئي، يبتلع النقرات فيبدو زرّ التعديل ميتاً. العرض الصريح يُنهي
+              // القياس الذاتي عند هذا الحدّ فلا يصل الخريطة إطلاقاً.
+              content: SizedBox(
+                width: 380,
+                child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -256,6 +263,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     ),
                   ],
                 ),
+              ),
               ),
               actions: [
                 // تعميم الأسعار: يقرأ حقول الأسعار المُدخلة الآن ويكتبها لكل المناطق —

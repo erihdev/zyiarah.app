@@ -117,11 +117,18 @@ class _ZyiarahSplashScreenState extends State<ZyiarahSplashScreen>
   }
 
   Future<void> _startAnimation() async {
+    // حارس mounted بعد كل انتظار: السبلاش قصير العمر بطبيعته — AuthWrapper يستبدله
+    // فور جاهزية الدور، فقد يُتلَف قبل انقضاء المهلات. forward() بعد dispose()
+    // كانت ترمي «AnimationController.forward() called after dispose» عند كل إقلاع
+    // سريع (ظهرت في وحدة تحكم المتصفح لحظة الدخول).
     await Future.delayed(const Duration(milliseconds: 200));
+    if (!mounted) return;
     _logoController.forward();
     await Future.delayed(const Duration(milliseconds: 400));
+    if (!mounted) return;
     _pinController.forward();
     await Future.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
     _textController.forward();
   }
 

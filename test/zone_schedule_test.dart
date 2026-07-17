@@ -138,4 +138,28 @@ void main() {
     expect(s.contains('تطبيق على كل المناطق؟'), isTrue,
         reason: 'استبدال جماعي بلا تأكيد = ضغطة خاطئة تمسح أسعار كل المناطق');
   });
+
+  test('حوار المنطقة بعرض مضبوط — وإلا انفجر قياس IntrinsicWidth على الخريطة', () {
+    // AlertDialog يقيس محتواه بـ IntrinsicWidth، وخريطة المعاينة (FlutterMap =
+    // LayoutBuilder) لا تدعم الأبعاد الذاتية — فيُبنى الحوار بلا مقاس، غير مرئي،
+    // يبتلع النقرات ⇒ زرّ تعديل يبدو ميتاً (شوهد في وحدة تحكم متصفح المالك).
+    final s = File('lib/screens/admin/admin_hourly_zones_screen.dart').readAsStringSync();
+    final i = s.indexOf('content: SizedBox(');
+    expect(i, greaterThan(-1),
+        reason: 'محتوى الحوار يجب أن يبدأ بعرض صريح يوقف القياس الذاتي قبل الخريطة');
+    expect(s.substring(i, i + 80).contains('width:'), isTrue);
+  });
+
+  test('السبلاش لا يُحرّك متحكّماً بعد الإتلاف', () {
+    // AuthWrapper يستبدل السبلاش فور جاهزية الدور — قبل انقضاء مهلات الحركة.
+    final s = File('lib/screens/splash_screen.dart').readAsStringSync();
+    final i = s.indexOf('_startAnimation() async');
+    final body = s.substring(i, s.indexOf('  }', i));
+    final guards = RegExp(r'if \(!mounted\) return;').allMatches(body).length;
+    final forwards = RegExp(r'_\w+Controller\.forward').allMatches(body).length;
+    expect(forwards, greaterThan(0),
+        reason: 'صفر forward = الحارس يفحس نصاً خاطئاً وينجح كذباً (درس \\b السابق)');
+    expect(guards, forwards,
+        reason: 'كل forward بعد await يحتاج حارس mounted — وإلا رمى بعد dispose');
+  });
 }
