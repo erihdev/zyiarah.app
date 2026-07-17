@@ -6,6 +6,7 @@ import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/zone_locator_service.dart';
+import 'package:zyiarah/utils/firestore_maps.dart';
 import 'package:zyiarah/utils/time_format.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
 
@@ -279,7 +280,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     if (_allowedHours.isNotEmpty && !_allowedHours.contains(_selectedHours)) {
        _selectedHours = _allowedHours.first;
     }
-    final prices = zone['prices'] as Map<String, dynamic>? ?? {};
+    final prices = stringKeyedMap(zone['prices']) ?? {};
     double p = 0.0;
     if (prices.containsKey(_selectedHours.toString())) {
        p = (prices[_selectedHours.toString()] as num).toDouble();

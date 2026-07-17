@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/utils/service_pricing_defaults.dart';
+import 'package:zyiarah/utils/firestore_maps.dart';
 import 'package:zyiarah/screens/admin/admin_zone_schedule_editor.dart';
 
 class AdminHourlyZonesScreen extends StatefulWidget {
@@ -114,13 +115,16 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     final pAcWashWinCtrl = TextEditingController(text: (data?['acWashWindowPrice'] ?? kDefaultAcWashWindowPrice).toString());
     final pAcWashSplitCtrl = TextEditingController(text: (data?['acWashSplitPrice'] ?? kDefaultAcWashSplitPrice).toString());
 
-    int rank = data?['rank'] ?? 0;
+    // rank عبر num: لو خُزّن double يوماً (لوحة الويب) لا ينفجر الحوار.
+    int rank = (data?['rank'] as num?)?.toInt() ?? 0;
     GeoPoint? selectedGeo = data?['centerLoc'] as GeoPoint?;
     bool isSaving = false;
 
     // جدول فتح المنطقة — يبنيه المحرّر ويُكتب على المستند. null قبل أي تعديل =
     // نُبقي القيمة الحالية كما هي (لا نكتب schedule إن لم يُلمَس).
-    Map<String, dynamic>? scheduleData = data?['schedule'] as Map<String, dynamic>?;
+    // stringKeyedMap لا `as`: الخرائط المتداخلة تصل Map<Object?,Object?> والتحويل
+    // الصلب كان يرمي **قبل** showDialog — فيموت زرّ التعديل بصمت لأي منطقة لها جدول.
+    Map<String, dynamic>? scheduleData = stringKeyedMap(data?['schedule']);
 
     showDialog(
       context: context,
