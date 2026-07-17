@@ -37,10 +37,31 @@ void main() {
           reason: 'رسالتان متطابقتان لسببين مختلفين = العميلة لا تعرف ما تفعل');
     });
 
-    test('الرفض الدائم يقود للإعدادات لا لإعادة محاولة عقيمة', () {
-      expect(LocateFailure.permissionDeniedForever.needsSettings, isTrue);
+    test('الرفض الدائم لا يقبل إعادة محاولة عقيمة', () {
       expect(LocateFailure.permissionDeniedForever.canRetry, isFalse,
           reason: 'طلب الإذن لا يظهر بعد الرفض الدائم — إعادة المحاولة تفشل صامتة');
+    });
+
+    test('لا زرّ «إعدادات» على الويب — Geolocator.openAppSettings لا وجود لها هناك', () {
+      // الاختبارات تعمل بمنصّة VM (kIsWeb=false)، فنفحص المصدر: الزر يجب أن يكون
+      // محكوماً بـ !kIsWeb، والرسالة على الويب تشرح رفع الحظر من شريط العنوان.
+      final s = _code('lib/services/zone_locator_service.dart');
+      expect(s.contains('!kIsWeb && this == LocateFailure.permissionDeniedForever'), isTrue,
+          reason: 'زرّ يستدعي openAppSettings في المتصفّح = زرّ ميت يبدو حلّاً');
+      expect(s.contains('شريط') && s.contains('العنوان'), isTrue,
+          reason: 'على الويب يُرفع الحظر من شريط العنوان لا من إعدادات تطبيق');
+      final open = s.substring(s.indexOf('static Future<bool> openSettings'));
+      expect(open.contains('if (kIsWeb)'), isTrue,
+          reason: 'حارس صريح: الاستدعاء على الويب يرمي UnimplementedError');
+    });
+
+    test('needsSettings صحيح على الجوال (المنصّة الحقيقية للتطبيق)', () {
+      // kIsWeb=false في بيئة الاختبار — أي أن هذا يؤكّد سلوك iOS/Android.
+      expect(LocateFailure.permissionDeniedForever.needsSettings, isTrue);
+      for (final f in LocateFailure.values) {
+        if (f == LocateFailure.permissionDeniedForever) continue;
+        expect(f.needsSettings, isFalse, reason: '$f لا يحتاج الإعدادات');
+      }
     });
 
     test('بقية الأسباب قابلة لإعادة المحاولة', () {

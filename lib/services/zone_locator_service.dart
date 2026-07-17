@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:geolocator/geolocator.dart';
 
 /// سبب تعذّر التحديد التلقائي — **لكل حالة رسالة وإجراء**.
@@ -29,13 +29,20 @@ enum LocateFailure {
 
 extension LocateFailureX on LocateFailure {
   /// رسالة تُعرض للعميلة — تشرح السبب وتقترح الإجراء.
+  ///
+  /// **الرفض الدائم يختلف جذرياً بين الويب والجوال**: على الجوال يُفتح إعدادات
+  /// التطبيق، أما في المتصفّح فلا وجود لـ«إعدادات تطبيق» أصلاً — الحظر لكل موقع على
+  /// حدة ويُرفع من شريط العنوان. عرض «افتحي إعدادات التطبيق» في كروم إرشادٌ إلى
+  /// مكانٍ غير موجود، وزرٌّ يستدعي openAppSettings() هناك **زرٌّ ميت**.
   String get message => switch (this) {
         LocateFailure.serviceDisabled =>
           'خدمة الموقع مطفأة في جهازك. فعّليها ثم أعيدي المحاولة، أو حدّدي موقعك من الخريطة.',
         LocateFailure.permissionDenied =>
           'لم تُمنح صلاحية الموقع. اسمحي بها لتحديد منطقتك تلقائياً، أو حدّديها من الخريطة.',
-        LocateFailure.permissionDeniedForever =>
-          'صلاحية الموقع مرفوضة دائماً. فعّليها من إعدادات التطبيق، أو حدّدي موقعك من الخريطة.',
+        LocateFailure.permissionDeniedForever => kIsWeb
+            ? 'الموقع محظور لهذا الموقع في متصفّحك. اضغطي أيقونة القفل (أو ⓘ) يسار شريط '
+                'العنوان ← الموقع ← السماح، ثم حدّثي الصفحة. أو حدّدي موقعك من الخريطة.'
+            : 'صلاحية الموقع مرفوضة دائماً. فعّليها من إعدادات التطبيق، أو حدّدي موقعك من الخريطة.',
         LocateFailure.timeout =>
           'تعذّر تحديد موقعك (قد تكوني داخل مبنى). أعيدي المحاولة أو حدّديه من الخريطة.',
         LocateFailure.outOfServiceArea =>
@@ -44,11 +51,16 @@ extension LocateFailureX on LocateFailure {
           'تعذّر تحديد موقعك تلقائياً. حدّديه من الخريطة.',
       };
 
-  /// هل يُجدي زرّ «إعادة المحاولة»؟ (الرفض الدائم يحتاج الإعدادات لا إعادة محاولة)
+  /// هل يُجدي زرّ «إعادة المحاولة»؟ (الرفض الدائم يحتاج رفع الحظر لا إعادة محاولة)
   bool get canRetry => this != LocateFailure.permissionDeniedForever;
 
   /// هل نعرض زرّ «فتح الإعدادات»؟
-  bool get needsSettings => this == LocateFailure.permissionDeniedForever;
+  ///
+  /// **على الويب: أبداً.** `Geolocator.openAppSettings()` غير مدعومة في المتصفّح
+  /// (ترمي UnimplementedError) — فالزر يبدو حلّاً وهو لا يفعل شيئاً. النصّ أعلاه
+  /// يشرح للعميلة كيف ترفع الحظر من شريط العنوان بدلاً منه.
+  bool get needsSettings =>
+      !kIsWeb && this == LocateFailure.permissionDeniedForever;
 }
 
 class ZoneLocateResult {
@@ -157,6 +169,18 @@ class ZyiarahZoneLocator {
     }
   }
 
-  /// يفتح إعدادات التطبيق (للرفض الدائم).
-  static Future<void> openSettings() => Geolocator.openAppSettings();
+  /// يفتح إعدادات التطبيق (للرفض الدائم على الجوال فقط).
+  /// حارس صريح: الاستدعاء على الويب يرمي UnimplementedError — لا نتركه يفشل بصمت.
+  static Future<bool> openSettings() async {
+    if (kIsWeb) {
+      debugPrint('[ZoneLocator] openAppSettings unsupported on web — no-op');
+      return false;
+    }
+    try {
+      return await Geolocator.openAppSettings();
+    } catch (e) {
+      debugPrint('[ZoneLocator] openAppSettings failed: $e');
+      return false;
+    }
+  }
 }

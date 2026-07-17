@@ -106,7 +106,7 @@ class ZyiarahZoneLocationCard extends StatelessWidget {
               if (!located && failure?.needsSettings == true)
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: ZyiarahZoneLocator.openSettings,
+                    onPressed: () => ZyiarahZoneLocator.openSettings(),
                     icon: const Icon(Icons.settings_outlined, size: 18),
                     label: Text('الإعدادات', style: GoogleFonts.tajawal()),
                     style: ElevatedButton.styleFrom(
