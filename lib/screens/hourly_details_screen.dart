@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
+import 'package:zyiarah/services/zone_locator_service.dart';
+import 'package:zyiarah/widgets/zone_location_card.dart';
 
 
 class HourlyCleaningDetailsScreen extends StatefulWidget {
@@ -38,6 +39,10 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   double _hourlyBasePrice = 0.0;
   String? _selectedZoneName;
   GeoPoint? _selectedLocation;
+
+  /// حالة التحديد التلقائي — تُعرض للعميلة بدل الصمت.
+  bool _isLocating = false;
+  LocateFailure? _locateFailure;
 
   List<int> _allowedHours = [4, 5, 6, 8];
   int _maxAllowedWorkers = 5;
@@ -168,57 +173,48 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     }
   }
 
-  Future<void> _attemptAutoLocation() async {
-    try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) return;
+  /// تحديد تلقائي **يقول السبب عند الفشل**.
+  ///
+  /// كان كل مسار فشل هنا ينتهي بـ`return;` صامت أو `catch { /* Silent error */ }`،
+  /// فتبقى الشاشة على «لم يُحدَّد موقعك بعد» لكل الأسباب على السواء — والعميلة (ونحن)
+  /// لا نعرف: أالخدمة مطفأة؟ أم الإذن مرفوض؟ أم GPS لم يستجب؟ ولا سطر في السجلّ.
+  ///
+  /// [userInitiated] عند الفتح نحاول بلا إظهار مربّع الإذن إن كان مرفوضاً سلفاً؛
+  /// وعند ضغط «حدّد موقعي تلقائياً» نطلبه صراحةً.
+  Future<void> _attemptAutoLocation({bool userInitiated = false}) async {
+    if (!mounted || _zones.isEmpty) return;
+    setState(() {
+      _isLocating = true;
+      _locateFailure = null;
+    });
 
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) return;
-      }
-      
-      if (permission == LocationPermission.deniedForever) return;
+    final res = await ZyiarahZoneLocator.locate(_zones,
+        requestPermission: userInitiated);
+    if (!mounted) return;
 
-      Position pos = await Geolocator.getCurrentPosition();
-      if (!mounted) return;
-      GeoPoint loc = GeoPoint(pos.latitude, pos.longitude);
-
-      Map<String, dynamic>? matchedZone;
-      double minDistance = double.infinity;
-
-      for (var z in _zones) {
-        final center = z['centerLoc'];
-        if (center is GeoPoint) {
-          double radius = (z['radiusKm'] ?? 15.0) * 1000;
-          double distance = Geolocator.distanceBetween(loc.latitude, loc.longitude, center.latitude, center.longitude);
-          if (distance <= radius && distance < minDistance) {
-            minDistance = distance;
-            matchedZone = z;
-          }
-        }
-      }
-
-      if (matchedZone != null && mounted) {
-        setState(() {
-          _selectedLocation = loc;
-          _selectedZoneName = matchedZone!['name'];
-        });
-        _updatePriceForZone(matchedZone);
-        // إعادة تحميل البيانات من السيرفر عند تغيير الموقع (قد تتغير المنطقة)
-        await _loadAvailabilityFromServer();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text("تم تحديد موقعك تلقائياً: $_selectedZoneName"),
-            backgroundColor: const Color(0xFF5D1B5E),
-            duration: const Duration(seconds: 2),
-          ));
-        }
-      }
-    } catch (e) {
-      // Silent error, let user pick manually
+    if (!res.isSuccess) {
+      setState(() {
+        _isLocating = false;
+        _locateFailure = res.failure;
+        if (res.location != null) _selectedLocation = res.location; // خارج النطاق
+      });
+      return;
     }
+
+    setState(() {
+      _selectedLocation = res.location;
+      _selectedZoneName = res.zoneName;
+      _isLocating = false;
+      _locateFailure = null;
+    });
+    _updatePriceForZone(res.zone!);
+    await _loadAvailabilityFromServer();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text("تم تحديد موقعك تلقائياً: $_selectedZoneName"),
+      backgroundColor: const Color(0xFF5D1B5E),
+      duration: const Duration(seconds: 2),
+    ));
   }
 
   Future<void> _pickLocation() async {
@@ -235,27 +231,16 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     if (result == null || result is! GeoPoint) return;
     
     GeoPoint loc = result;
-    
-    Map<String, dynamic>? matchedZone;
-    double minDistance = double.infinity;
 
-    for (var z in _zones) {
-      final center = z['centerLoc'];
-      if (center is GeoPoint) {
-        double radius = (z['radiusKm'] ?? 15.0) * 1000;
-        double distance = Geolocator.distanceBetween(loc.latitude, loc.longitude, center.latitude, center.longitude);
-        if (distance <= radius && distance < minDistance) {
-          minDistance = distance;
-          matchedZone = z;
-        }
-      }
-    }
+    // مطابقة المنطقة من المصدر المشترك — كانت منسوخة حرفياً في ثلاث شاشات.
+    final matchedZone = ZyiarahZoneLocator.matchZone(loc, _zones);
 
     if (matchedZone != null) {
       if (mounted) {
         setState(() {
           _selectedLocation = loc;
-          _selectedZoneName = matchedZone!['name'];
+          _selectedZoneName = matchedZone['name'] as String?;
+          _locateFailure = null;
         });
         _updatePriceForZone(matchedZone);
         // حمّل بيانات الإتاحة من الـ CF ثم احسب الخانات من الـ cache
@@ -474,58 +459,12 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   }
 
   Widget _buildLocationPickerSection() {
-    bool isOutOfRange = _selectedLocation != null && _selectedZoneName == null;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isOutOfRange ? Colors.red.shade50 : const Color(0xFF5D1B5E).withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isOutOfRange ? Colors.red.shade200 : const Color(0xFF5D1B5E).withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text("تحديد موقع السكن:", style: TextStyle(fontWeight: FontWeight.bold, color: isOutOfRange ? Colors.red : const Color(0xFF5D1B5E))),
-          const SizedBox(height: 10),
-          if (_selectedLocation != null)
-            Row(
-              children: [
-                Icon(isOutOfRange ? Icons.error_outline : Icons.check_circle, color: isOutOfRange ? Colors.red : Colors.green, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    isOutOfRange ? "نعتذر، موقعك حالياً خارج نطاق الخدمة" : "المنطقة المدعومة: $_selectedZoneName", 
-                    style: TextStyle(color: isOutOfRange ? Colors.red : Colors.green, fontWeight: FontWeight.bold)
-                  ),
-                ),
-              ],
-            )
-          else
-            const Row(
-              children: [
-                Icon(Icons.location_off, color: Colors.orange, size: 20),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text("لم يُحدَّد موقعك بعد — اختره من الزر بالأسفل",
-                      style: TextStyle(color: Colors.orange)),
-                ),
-              ],
-            ),
-          const SizedBox(height: 15),
-          ElevatedButton.icon(
-            onPressed: _pickLocation, 
-            icon: const Icon(Icons.map_outlined), 
-            label: Text(_selectedLocation == null ? "تحديد من الخريطة يدوياً" : "تغيير الموقع"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isOutOfRange ? Colors.red : const Color(0xFF5D1B5E),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-        ],
-      ),
+    return ZyiarahZoneLocationCard(
+      isLocating: _isLocating,
+      zoneName: _selectedZoneName,
+      failure: _locateFailure,
+      onLocateMe: () => _attemptAutoLocation(userInitiated: true),
+      onPickManually: _pickLocation,
     );
   }
 

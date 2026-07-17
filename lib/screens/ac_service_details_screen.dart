@@ -1,12 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/models/ac_line.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
+import 'package:zyiarah/services/zone_locator_service.dart';
 import 'package:zyiarah/widgets/booking_slot_picker.dart';
+import 'package:zyiarah/widgets/zone_location_card.dart';
 
 /// صيانة وغسيل المكيفات — **طلب مباشر مسعّر**، لا طلب عرض سعر.
 ///
@@ -36,6 +37,10 @@ class _AcServiceDetailsScreenState extends State<AcServiceDetailsScreen> {
   GeoPoint? _selectedLocation;
   DateTime? _selectedSlot;
 
+  /// حالة التحديد التلقائي — تُعرض بدل الصمت.
+  bool _isLocating = false;
+  LocateFailure? _locateFailure;
+
   List<Map<String, dynamic>> _zones = [];
   final List<AcLine> _lines = [];
 
@@ -47,20 +52,15 @@ class _AcServiceDetailsScreenState extends State<AcServiceDetailsScreen> {
 
   Future<void> _fetchZones() async {
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('service_zones')
-          .where('enabled', isEqualTo: true)
-          .get();
+      final zones = await ZyiarahZoneLocator.fetchZones();
       if (!mounted) return;
-      final sorted = snapshot.docs.map((d) => d.data()).toList()
-        ..sort((a, b) =>
-            (a['rank'] as int? ?? 0).compareTo(b['rank'] as int? ?? 0));
       setState(() {
-        _zones = sorted;
+        _zones = zones;
         _isLoading = false;
       });
       _attemptAutoLocation();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[AcService] fetchZones failed: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -87,54 +87,42 @@ class _AcServiceDetailsScreenState extends State<AcServiceDetailsScreen> {
   bool get _anyEnabled => AcJob.values
       .any((j) => AcUnitType.values.any((t) => _isEnabled(j, t)));
 
-  Map<String, dynamic>? _matchZone(GeoPoint loc) {
-    Map<String, dynamic>? matched;
-    double minDistance = double.infinity;
-    for (final z in _zones) {
-      final center = z['centerLoc'];
-      if (center is! GeoPoint) continue;
-      final radius = ((z['radiusKm'] as num?)?.toDouble() ?? 15.0) * 1000;
-      final distance = Geolocator.distanceBetween(
-          loc.latitude, loc.longitude, center.latitude, center.longitude);
-      if (distance <= radius && distance < minDistance) {
-        minDistance = distance;
-        matched = z;
-      }
-    }
-    return matched;
-  }
+  /// تحديد تلقائي **يقول السبب عند الفشل** بدل `catch { /* silent */ }`.
+  Future<void> _attemptAutoLocation({bool userInitiated = false}) async {
+    if (!mounted || _zones.isEmpty) return;
+    setState(() {
+      _isLocating = true;
+      _locateFailure = null;
+    });
 
-  Future<void> _attemptAutoLocation() async {
-    try {
-      if (!await Geolocator.isLocationServiceEnabled()) return;
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) return;
-      }
-      if (permission == LocationPermission.deniedForever) return;
+    final res = await ZyiarahZoneLocator.locate(_zones,
+        requestPermission: userInitiated);
+    if (!mounted) return;
 
-      final pos = await Geolocator.getCurrentPosition();
-      if (!mounted) return;
-      final loc = GeoPoint(pos.latitude, pos.longitude);
-      final zone = _matchZone(loc);
-      if (zone == null || !mounted) return;
-
+    if (!res.isSuccess) {
       setState(() {
-        _selectedLocation = loc;
-        _selectedZoneName = zone['name'] as String?;
-        _applyZone(zone);
+        _isLocating = false;
+        _locateFailure = res.failure;
+        if (res.location != null) _selectedLocation = res.location;
       });
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('تم تحديد موقعك تلقائياً: $_selectedZoneName',
-            style: GoogleFonts.tajawal()),
-        backgroundColor: _brand,
-        duration: const Duration(seconds: 2),
-      ));
-    } catch (_) {
-      // التحديد اليدوي متاح دائماً.
+      return;
     }
+
+    setState(() {
+      _selectedLocation = res.location;
+      _selectedZoneName = res.zoneName;
+      _applyZone(res.zone!);
+      _selectedSlot = null;
+      _isLocating = false;
+      _locateFailure = null;
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('تم تحديد موقعك تلقائياً: $_selectedZoneName',
+          style: GoogleFonts.tajawal()),
+      backgroundColor: _brand,
+      duration: const Duration(seconds: 2),
+    ));
   }
 
   Future<void> _pickLocation() async {
@@ -148,7 +136,7 @@ class _AcServiceDetailsScreenState extends State<AcServiceDetailsScreen> {
     );
     if (!mounted || result is! GeoPoint) return;
 
-    final zone = _matchZone(result);
+    final zone = ZyiarahZoneLocator.matchZone(result, _zones);
     if (zone == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('نأسف، موقعك خارج نطاق خدماتنا حالياً',
@@ -161,7 +149,8 @@ class _AcServiceDetailsScreenState extends State<AcServiceDetailsScreen> {
       _selectedLocation = result;
       _selectedZoneName = zone['name'] as String?;
       _applyZone(zone);
-      _selectedSlot = null; // المنطقة تغيّرت ⇒ السعة تغيّرت
+      _selectedSlot = null;
+      _locateFailure = null;
     });
   }
 
@@ -321,48 +310,13 @@ class _AcServiceDetailsScreenState extends State<AcServiceDetailsScreen> {
         ),
       );
 
-  Widget _locationCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _brand.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _brand.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('موقع تقديم الخدمة',
-              style:
-                  GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: _brand)),
-          const SizedBox(height: 8),
-          if (_selectedLocation != null)
-            Text('المنطقة: $_selectedZoneName',
-                style: GoogleFonts.tajawal(
-                    color: const Color(0xFF059669), fontWeight: FontWeight.bold))
-          else
-            Text('لم يتم تحديد الموقع بعد',
-                style: GoogleFonts.tajawal(color: Colors.red)),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            onPressed: _pickLocation,
-            icon: const Icon(Icons.map_outlined, size: 18),
-            label: Text(
-                _selectedLocation == null ? 'تحديد الموقع' : 'تغيير الموقع',
-                style: GoogleFonts.tajawal()),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _brand,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape:
-                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _locationCard() => ZyiarahZoneLocationCard(
+        isLocating: _isLocating,
+        zoneName: _selectedZoneName,
+        failure: _locateFailure,
+        onLocateMe: () => _attemptAutoLocation(userInitiated: true),
+        onPickManually: _pickLocation,
+      );
 
   Widget _unpricedBanner() => Container(
         width: double.infinity,
