@@ -119,4 +119,23 @@ void main() {
       expect(zones.contains("'schedule': scheduleData"), isTrue);
     });
   });
+
+  test('«تطبيق على كل المناطق» يعمّم الأسعار فقط — لا الهوية ولا الجدول', () {
+    // زرّ التعميم يستبدل أسعار كل المناطق بضغطة. حصرُ حقوله في الأسعار هو الضمانة
+    // ألا يمسح تعميمٌ عابر أسماء المناطق أو مواقعها أو جداول فتحها.
+    final s = File('lib/screens/admin/admin_hourly_zones_screen.dart').readAsStringSync();
+    expect(s.contains('تطبيق على كل المناطق'), isTrue);
+    expect(s.contains('_applyPricesToAllZones'), isTrue);
+
+    final i = s.indexOf('Future<int> _applyPricesToAllZones');
+    expect(i, greaterThan(-1));
+    final body = s.substring(i, s.indexOf('\n  }', i));
+    for (final forbidden in ["'name'", "'centerLoc'", "'radiusKm'", "'enabled'", "'schedule'", "'rank'"]) {
+      expect(body.contains(forbidden), isFalse,
+          reason: 'التعميم كتب $forbidden — يجب أن يقتصر على الأسعار');
+    }
+    // والتأكيد الصريح قبل الاستبدال الجماعي.
+    expect(s.contains('تطبيق على كل المناطق؟'), isTrue,
+        reason: 'استبدال جماعي بلا تأكيد = ضغطة خاطئة تمسح أسعار كل المناطق');
+  });
 }

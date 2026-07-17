@@ -68,6 +68,30 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     }
   }
 
+  /// يطبّق أسعار الحوار الحالي على **كل** المناطق — الأسعار فقط.
+  ///
+  /// طلب المالك: تعديل واحد يعمّ الجميع بدل تكرار الإدخال منطقةً منطقة (ومع التوسّع
+  /// يصير التكرار نسياناً: منطقة تبقى بسعر قديم). الحقول المكتوبة محصورة عمداً في
+  /// الأسعار — لا اسم ولا إحداثيات ولا نصف قطر ولا تفعيل ولا جدول: تعميم الأسعار
+  /// يجب ألا يمسّ هويّة المنطقة ولا جدولها.
+  Future<int> _applyPricesToAllZones(Map<String, dynamic> priceFields) async {
+    final snap = await _db.collection('service_zones').get();
+    final batch = _db.batch();
+    for (final d in snap.docs) {
+      batch.update(d.reference, {
+        ...priceFields,
+        'updated_at': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
+    await ZyiarahAuditService().logAction(
+      action: 'APPLY_PRICES_ALL_ZONES',
+      details: {'zones': snap.size, ...priceFields},
+      targetId: 'service_zones',
+    );
+    return snap.size;
+  }
+
   void _showZoneDialog({DocumentSnapshot? doc}) {
     final Map<String, dynamic>? data = doc?.data() as Map<String, dynamic>?;
     final nameCtrl = TextEditingController(text: data?['name'] ?? '');
@@ -230,6 +254,68 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                 ),
               ),
               actions: [
+                // تعميم الأسعار: يقرأ حقول الأسعار المُدخلة الآن ويكتبها لكل المناطق —
+                // بتأكيد صريح، لأنه استبدال جماعي لا رجعة فيه بضغطة.
+                TextButton.icon(
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          final confirmed = await showDialog<bool>(
+                            context: ctx,
+                            builder: (c2) => Directionality(
+                              textDirection: TextDirection.rtl,
+                              child: AlertDialog(
+                                title: const Text('تطبيق على كل المناطق؟'),
+                                content: const Text(
+                                    'ستُستبدل أسعار الساعات والكنب والسجاد والمكيفات في كل المناطق '
+                                    'بالأسعار المُدخلة هنا.\n(الأسماء والمواقع والجداول لا تتأثر.)'),
+                                actions: [
+                                  TextButton(
+                                      onPressed: () => Navigator.pop(c2, false),
+                                      child: const Text('إلغاء')),
+                                  ElevatedButton(
+                                      onPressed: () => Navigator.pop(c2, true),
+                                      child: const Text('نعم، طبّق')),
+                                ],
+                              ),
+                            ),
+                          );
+                          if (confirmed != true) return;
+                          setDialogState(() => isSaving = true);
+                          try {
+                            final n = await _applyPricesToAllZones({
+                              'prices': {
+                                '1': double.tryParse(p1Ctrl.text) ?? 0,
+                                '4': double.tryParse(p4Ctrl.text) ?? 0,
+                                '5': double.tryParse(p5Ctrl.text) ?? 0,
+                                '6': double.tryParse(p6Ctrl.text) ?? 0,
+                                '8': double.tryParse(p8Ctrl.text) ?? 0,
+                              },
+                              'sofaSqmPrice': double.tryParse(pSofaSqmCtrl.text) ?? 0,
+                              'rugSqmPrice': double.tryParse(pRugSqmCtrl.text) ?? 0,
+                              'acMaintWindowPrice': double.tryParse(pAcMaintWinCtrl.text) ?? 0,
+                              'acMaintSplitPrice': double.tryParse(pAcMaintSplitCtrl.text) ?? 0,
+                              'acWashWindowPrice': double.tryParse(pAcWashWinCtrl.text) ?? 0,
+                              'acWashSplitPrice': double.tryParse(pAcWashSplitCtrl.text) ?? 0,
+                            });
+                            if (ctx.mounted) {
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                  content: Text('طُبّقت الأسعار على $n منطقة ✅'),
+                                  backgroundColor: Colors.green));
+                            }
+                          } catch (e) {
+                            setDialogState(() => isSaving = false);
+                            if (ctx.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                  content: Text('تعذّر التعميم: $e'),
+                                  backgroundColor: Colors.red));
+                            }
+                          }
+                        },
+                  icon: const Icon(Icons.copy_all_rounded, size: 18),
+                  label: const Text('تطبيق على كل المناطق'),
+                ),
                 TextButton(onPressed: isSaving ? null : () => Navigator.pop(ctx), child: const Text("إلغاء")),
                 ElevatedButton(
                   onPressed: isSaving ? null : () async {
