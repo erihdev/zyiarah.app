@@ -121,6 +121,20 @@ void main() {
       expect(s.contains('?? 0'), isTrue);
     });
 
+    test('الأسعار مرئية قبل أي لمسة — شبكة مباشرة لا بنود تُضاف', () {
+      // ملاحظة المالك («غيّر هذه الطريقة»): نمط «إضافة مكيف» ثم اختيار نوعه
+      // بتبديلات كان يُخفي الأسعار حتى يُقلَّب بينها. الآن كل تركيبة مسعّرة صفٌّ
+      // ظاهر بسعره وعدّاده من البداية.
+      final s = File('lib/screens/ac_service_details_screen.dart').readAsStringSync();
+      expect(s.contains('إضافة مكيف'), isFalse,
+          reason: 'لا زرّ إضافة — الأنواع كلها معروضة سلفاً');
+      expect(s.contains('ر.س للمكيف الواحد'), isTrue,
+          reason: 'سعر كل تركيبة ظاهر قبل اختيارها');
+      expect(s.contains('_comboRow'), isTrue);
+      expect(s.contains('final Map<String, int> _counts'), isTrue,
+          reason: 'عدّاد لكل تركيبة بدل قائمة بنود تُدار يدوياً');
+    });
+
     test('الشاشة تستعمل منتقي الموعد المشترك لا نسخة ثانية منه', () {
       final s = File('lib/screens/ac_service_details_screen.dart').readAsStringSync();
       expect(s.contains('ZyiarahBookingSlotPicker'), isTrue);

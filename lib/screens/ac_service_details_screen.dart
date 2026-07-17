@@ -42,7 +42,12 @@ class _AcServiceDetailsScreenState extends State<AcServiceDetailsScreen> {
   LocateFailure? _locateFailure;
 
   List<Map<String, dynamic>> _zones = [];
-  final List<AcLine> _lines = [];
+
+  /// عدد المكيفات لكل تركيبة (مفتاحها حقل السعر). حلّت محلّ قائمة بنود تُضاف
+  /// بزرّ ثم يُختار نوعها بتبديلات — بطلب المالك («غيّر هذه الطريقة»): الأنواع
+  /// الأربعة تُعرض مباشرةً بأسعارها، والعميلة تزيد العدد فقط. لا إضافة، لا
+  /// تبديل، لا حذف — كل الخيارات وأسعارها مرئية قبل أي لمسة.
+  final Map<String, int> _counts = {};
 
   @override
   void initState() {
@@ -75,14 +80,31 @@ class _AcServiceDetailsScreenState extends State<AcServiceDetailsScreen> {
         _prices[field] = (zone[field] as num?)?.toDouble() ?? 0;
       }
     }
-    // أبقِ فقط البنود التي ما زالت مسعّرة في المنطقة الجديدة.
-    _lines.removeWhere((l) => _priceOf(l) <= 0);
+    // صفّر عدّادات التركيبات التي فقدت سعرها في المنطقة الجديدة.
+    _counts.removeWhere((field, _) => (_prices[field] ?? 0) <= 0);
   }
-
-  double _priceOf(AcLine l) => _prices[acPriceField(l.job, l.type)] ?? 0;
 
   bool _isEnabled(AcJob job, AcUnitType type) =>
       (_prices[acPriceField(job, type)] ?? 0) > 0;
+
+  /// التركيبات بترتيب عرض ثابت: صيانة شباك، صيانة سبليت، غسيل شباك، غسيل سبليت.
+  static const List<(AcJob, AcUnitType)> _combos = [
+    (AcJob.maintenance, AcUnitType.window),
+    (AcJob.maintenance, AcUnitType.split),
+    (AcJob.wash, AcUnitType.window),
+    (AcJob.wash, AcUnitType.split),
+  ];
+
+  int _countOf(AcJob job, AcUnitType type) =>
+      _counts[acPriceField(job, type)] ?? 0;
+
+  void _setCount(AcJob job, AcUnitType type, int v) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _counts[acPriceField(job, type)] = v.clamp(0, 20);
+      _selectedSlot = null; // المدة تغيّرت ⇒ الخانات تُعاد
+    });
+  }
 
   bool get _anyEnabled => AcJob.values
       .any((j) => AcUnitType.values.any((t) => _isEnabled(j, t)));
@@ -154,30 +176,20 @@ class _AcServiceDetailsScreenState extends State<AcServiceDetailsScreen> {
     });
   }
 
-  double get totalAmount =>
-      _lines.fold(0.0, (acc, l) => acc + l.lineTotal(_priceOf(l)));
+  double get totalAmount => _combos.fold(0.0, (acc, c) {
+        final field = acPriceField(c.$1, c.$2);
+        return acc + (_counts[field] ?? 0) * (_prices[field] ?? 0);
+      });
 
   double get subTotal => totalAmount / 1.15;
   double get vat => totalAmount - subTotal;
 
-  int get totalUnits => _lines.fold(0, (acc, l) => acc + l.count);
+  int get totalUnits => _counts.values.fold(0, (a, v) => a + v);
 
   /// ساعة لكل مكيف، بحد أدنى ساعتين وسقف 8 (طول يوم العمل — وتجاوزه يُفرِغ خانات
   /// البدء 8→22 فلا تستطيع العميلة الحجز إطلاقاً).
   int get _durationHours => totalUnits.clamp(2, 8);
 
-  void _addLine() {
-    // أول تركيبة مسعّرة — لا نُضيف بنداً لا يمكن بيعه.
-    for (final job in AcJob.values) {
-      for (final type in AcUnitType.values) {
-        if (_isEnabled(job, type)) {
-          HapticFeedback.selectionClick();
-          setState(() => _lines.add(AcLine(job: job, type: type)));
-          return;
-        }
-      }
-    }
-  }
 
   void _handleNext() {
     if (_selectedLocation == null) {
@@ -196,7 +208,12 @@ class _AcServiceDetailsScreenState extends State<AcServiceDetailsScreen> {
     final meta = {
       'kind': 'ac_service',
       'total_units': totalUnits,
-      'lines': _lines.map((l) => l.toMap(_priceOf(l))).toList(),
+      'lines': [
+        for (final (job, type) in _combos)
+          if (_countOf(job, type) > 0)
+            AcLine(job: job, type: type, count: _countOf(job, type))
+                .toMap(_prices[acPriceField(job, type)] ?? 0),
+      ],
     };
 
     Navigator.push(
@@ -265,7 +282,7 @@ class _AcServiceDetailsScreenState extends State<AcServiceDetailsScreen> {
                             else ...[
                               _linesSection(),
                               const SizedBox(height: 26),
-                              if (_lines.isNotEmpty) ...[
+                              if (totalUnits > 0) ...[
                                 ZyiarahBookingSlotPicker(
                                   zoneName: _selectedZoneName,
                                   durationHours: _durationHours,
@@ -340,43 +357,37 @@ class _AcServiceDetailsScreenState extends State<AcServiceDetailsScreen> {
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
                 color: const Color(0xFF1E293B))),
-        Text('اختاري نوع العمل ونوع المكيف والعدد — ويمكنك إضافة أكثر من نوع.',
+        Text('كل خدمة بسعرها لكل مكيف — زيدي العدد أمام ما تحتاجينه.',
             style: GoogleFonts.tajawal(
                 fontSize: 12, color: const Color(0xFF94A3B8))),
         const SizedBox(height: 12),
-        ...List.generate(_lines.length, (i) => _lineCard(i)),
-        if (_lines.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text('لم تُضِف أي مكيف بعد.',
-                style: GoogleFonts.tajawal(
-                    fontSize: 12, color: const Color(0xFF94A3B8))),
-          ),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: _addLine,
-          icon: const Icon(Icons.add_rounded, size: 18),
-          label: Text('إضافة مكيف', style: GoogleFonts.tajawal()),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: _brand,
-            side: BorderSide(color: _brand.withValues(alpha: 0.4)),
-            minimumSize: const Size(double.infinity, 46),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
+        // الشبكة المباشرة: كل تركيبة مسعّرة صفٌّ بسعره وعدّاده. لا «إضافة بند» ثم
+        // اختيار نوعه بتبديلات — كانت تُخفي الأسعار حتى يُقلَّب بينها (ملاحظة المالك).
+        // غير المسعّرة في المنطقة لا تُعرض إطلاقاً: «بلا سعر ⇒ بلا بيع».
+        ...[
+          for (final (job, type) in _combos)
+            if (_isEnabled(job, type)) _comboRow(job, type),
+        ],
       ],
     );
   }
 
-  Widget _lineCard(int i) {
-    final line = _lines[i];
-    final unit = _priceOf(line);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+  Widget _comboRow(AcJob job, AcUnitType type) {
+    final field = acPriceField(job, type);
+    final price = _prices[field] ?? 0;
+    final count = _countOf(job, type);
+    final active = count > 0;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: active ? _brand : const Color(0xFFE2E8F0),
+          width: active ? 1.5 : 1,
+        ),
         boxShadow: [
           BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10)
         ],
@@ -385,153 +396,60 @@ class _AcServiceDetailsScreenState extends State<AcServiceDetailsScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.ac_unit_rounded, size: 18, color: _brand),
-              const SizedBox(width: 8),
-              Text('مكيف ${i + 1}',
-                  style: GoogleFonts.tajawal(
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF1E293B))),
-              const Spacer(),
-              IconButton(
-                onPressed: () {
-                  HapticFeedback.lightImpact();
-                  setState(() {
-                    _lines.removeAt(i);
-                    _selectedSlot = null; // المدة تغيّرت ⇒ الخانات تُعاد
-                  });
-                },
-                icon: const Icon(Icons.delete_outline_rounded,
-                    size: 20, color: Color(0xFFDC2626)),
-                visualDensity: VisualDensity.compact,
-                tooltip: 'حذف',
+              Icon(
+                job == AcJob.maintenance
+                    ? Icons.build_rounded
+                    : Icons.water_drop_rounded,
+                size: 18,
+                color: active ? _brand : const Color(0xFF94A3B8),
               ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          _segmented<AcJob>(
-            values: AcJob.values,
-            current: line.job,
-            labelOf: (v) => v.label,
-            enabledOf: (v) => _isEnabled(v, line.type),
-            onPick: (v) => setState(() {
-              _lines[i] = line.copyWith(job: v);
-              _selectedSlot = null;
-            }),
-          ),
-          const SizedBox(height: 8),
-          _segmented<AcUnitType>(
-            values: AcUnitType.values,
-            current: line.type,
-            labelOf: (v) => v.label,
-            enabledOf: (v) => _isEnabled(line.job, v),
-            onPick: (v) => setState(() {
-              _lines[i] = line.copyWith(type: v);
-              _selectedSlot = null;
-            }),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('${unit.toStringAsFixed(0)} ر.س للمكيف',
-                  style: GoogleFonts.tajawal(
-                      fontSize: 12, color: const Color(0xFF94A3B8))),
-              Row(
-                children: [
-                  _stepper(Icons.remove_rounded, line.count > 1, () {
-                    setState(() {
-                      _lines[i] = line.copyWith(count: line.count - 1);
-                      _selectedSlot = null;
-                    });
-                  }),
-                  Container(
-                    width: 44,
-                    alignment: Alignment.center,
-                    child: Text('${line.count}',
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${job.label} مكيف ${type.label}',
                         style: GoogleFonts.tajawal(
-                            fontSize: 18, fontWeight: FontWeight.bold)),
-                  ),
-                  _stepper(Icons.add_rounded, line.count < 20, () {
-                    setState(() {
-                      _lines[i] = line.copyWith(count: line.count + 1);
-                      _selectedSlot = null;
-                    });
-                  }),
-                ],
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: const Color(0xFF1E293B))),
+                    Text('${price.toStringAsFixed(0)} ر.س للمكيف الواحد',
+                        style: GoogleFonts.tajawal(
+                            fontSize: 12, color: const Color(0xFF64748B))),
+                  ],
+                ),
               ),
+              _stepper(Icons.remove_rounded, count > 0,
+                  () => _setCount(job, type, count - 1)),
+              Container(
+                width: 40,
+                alignment: Alignment.center,
+                child: Text('$count',
+                    style: GoogleFonts.tajawal(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: active ? _brand : const Color(0xFFCBD5E1))),
+              ),
+              _stepper(Icons.add_rounded, count < 20,
+                  () => _setCount(job, type, count + 1)),
             ],
           ),
-          const Divider(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(line.label,
-                  style: GoogleFonts.tajawal(
-                      fontSize: 12, color: const Color(0xFF64748B))),
-              Text('${line.lineTotal(unit).toStringAsFixed(2)} ر.س',
-                  style: GoogleFonts.tajawal(
-                      fontWeight: FontWeight.bold, color: _brand)),
-            ],
-          ),
+          if (active) ...[
+            const Divider(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('$count × ${price.toStringAsFixed(0)} ر.س',
+                    style: GoogleFonts.tajawal(
+                        fontSize: 12, color: const Color(0xFF64748B))),
+                Text('${(count * price).toStringAsFixed(2)} ر.س',
+                    style: GoogleFonts.tajawal(
+                        fontWeight: FontWeight.bold, color: _brand)),
+              ],
+            ),
+          ],
         ],
       ),
-    );
-  }
-
-  /// مُبدِّل خيارين. الخيار غير المسعّر في هذه المنطقة يظهر معطّلاً بدل أن يُختار
-  /// ثم يُفاجَأ به السعر صفراً.
-  Widget _segmented<T>({
-    required List<T> values,
-    required T current,
-    required String Function(T) labelOf,
-    required bool Function(T) enabledOf,
-    required void Function(T) onPick,
-  }) {
-    return Row(
-      children: values.map((v) {
-        final selected = v == current;
-        final enabled = enabledOf(v);
-        return Expanded(
-          child: GestureDetector(
-            onTap: enabled && !selected
-                ? () {
-                    HapticFeedback.selectionClick();
-                    onPick(v);
-                  }
-                : null,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              decoration: BoxDecoration(
-                color: selected
-                    ? _brand
-                    : enabled
-                        ? const Color(0xFFF8FAFC)
-                        : const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: selected ? _brand : const Color(0xFFE2E8F0),
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  enabled ? labelOf(v) : '${labelOf(v)} — غير متاح',
-                  style: GoogleFonts.tajawal(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: selected
-                        ? Colors.white
-                        : enabled
-                            ? const Color(0xFF475569)
-                            : const Color(0xFFCBD5E1),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      }).toList(),
     );
   }
 
