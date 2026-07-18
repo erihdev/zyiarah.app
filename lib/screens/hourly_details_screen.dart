@@ -78,46 +78,57 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
                   color: const Color(0xFF1E293B))),
-          content: Text('يشترط وجود سيدة في المنزل',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.tajawal(
-                  fontSize: 15,
-                  height: 1.6,
-                  color: const Color(0xFF5D1B5E),
-                  fontWeight: FontWeight.w600)),
-          actionsAlignment: MainAxisAlignment.spaceEvenly,
-          actions: [
-            Expanded(
-              child: TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                style: TextButton.styleFrom(
-                  backgroundColor: const Color(0xFFFDECEC),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                ),
-                child: Text('إلغاء',
-                    style: GoogleFonts.tajawal(
-                        color: Colors.red.shade400,
-                        fontWeight: FontWeight.bold)),
+          // الزرّان داخل content ضمن Row (وهي Flex تقبل Expanded). كانا في actions
+          // التي تُرسَم في OverflowBar (ليست Flex) فيرمي Expanded استثناء تخطيط —
+          // ويظهر كصندوق رمادي فارغ ضخم على الجهاز في نسخة الإصدار.
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('يشترط وجود سيدة في المنزل',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.tajawal(
+                      fontSize: 15,
+                      height: 1.6,
+                      color: const Color(0xFF5D1B5E),
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 22),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      style: TextButton.styleFrom(
+                        backgroundColor: const Color(0xFFFDECEC),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: Text('إلغاء',
+                          style: GoogleFonts.tajawal(
+                              color: Colors.red.shade400,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF5D1B5E),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: Text('نعم',
+                          style:
+                              GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF5D1B5E),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                ),
-                child: Text('نعم',
-                    style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
