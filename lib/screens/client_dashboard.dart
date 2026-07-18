@@ -66,6 +66,9 @@ class _ClientDashboardState extends State<ClientDashboard> {
       _openTab('/store');
     } else if (index == 3) {
       setState(() => _selectedNavIndex = 3);
+      _openTab('/offers');
+    } else if (index == 4) {
+      setState(() => _selectedNavIndex = 4);
       _openTab('/profile');
     }
   }
@@ -153,6 +156,11 @@ class _ClientDashboardState extends State<ClientDashboard> {
           icon: Icon(Icons.storefront_outlined),
           selectedIcon: Icon(Icons.storefront_rounded, color: Color(0xFF5D1B5E)),
           label: 'المتجر',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.local_offer_outlined),
+          selectedIcon: Icon(Icons.local_offer_rounded, color: Color(0xFF5D1B5E)),
+          label: 'العروض',
         ),
         NavigationDestination(
           icon: Icon(Icons.person_outline_rounded),
@@ -540,7 +548,14 @@ class _ClientDashboardState extends State<ClientDashboard> {
           return const SizedBox.shrink();
         }
 
-        final banners = snapshot.data!.docs;
+        // الرئيسية تعرض بانرات «الرئيسي» فقط؛ ما اختارت له الإدارة «قسم العروض»
+        // يظهر في شاشة العروض. الغياب = رئيسي (توافق مع البانرات القائمة).
+        // التصفية محلية: لا يمكن استعلام «الحقل غائب أو = main» في Firestore.
+        final banners = snapshot.data!.docs.where((d) {
+          final p = (d.data() as Map<String, dynamic>)['placement'];
+          return p == null || p == 'main';
+        }).toList();
+        if (banners.isEmpty) return const SizedBox.shrink();
 
         return Container(
           height: 160,

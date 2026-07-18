@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:intl/intl.dart' as intl;
@@ -57,6 +58,71 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     super.initState();
     _fetchConfigAndZones();
     _loadAvailabilityFromServer();
+    // شرط الخدمة: يجب أن تُقرّ العميلة بوجود سيدة في المنزل قبل طلب العاملات.
+    // «إلغاء» يعيدها للرئيسية فلا تُكمل الطلب؛ «نعم» يتيح المتابعة.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _confirmWomanPresent());
+  }
+
+  Future<void> _confirmWomanPresent() async {
+    if (!mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text('تنبيه',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.tajawal(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: const Color(0xFF1E293B))),
+          content: Text('يشترط وجود سيدة في المنزل',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.tajawal(
+                  fontSize: 15,
+                  height: 1.6,
+                  color: const Color(0xFF5D1B5E),
+                  fontWeight: FontWeight.w600)),
+          actionsAlignment: MainAxisAlignment.spaceEvenly,
+          actions: [
+            Expanded(
+              child: TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                style: TextButton.styleFrom(
+                  backgroundColor: const Color(0xFFFDECEC),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                child: Text('إلغاء',
+                    style: GoogleFonts.tajawal(
+                        color: Colors.red.shade400,
+                        fontWeight: FontWeight.bold)),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF5D1B5E),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                child: Text('نعم',
+                    style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    // لم توافق (أو أُغلقت) → لا يمكن إكمال الطلب: عودة للشاشة السابقة.
+    if (ok != true && mounted) Navigator.of(context).pop();
   }
 
   /// جلب بيانات الإتاحة عبر Cloud Function (Admin SDK — لا قيود صلاحيات).

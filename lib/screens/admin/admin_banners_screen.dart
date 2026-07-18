@@ -75,6 +75,9 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
     bool isActive = data?['isActive'] ?? true;
     int rank = data?['rank'] ?? 0;
     String selectedRoute = data?['routeType'] ?? 'whatsapp';
+    // مكان الظهور: 'main' = البانر الرئيسي على الرئيسية، 'offers' = قسم العروض.
+    // الغياب = 'main' كي تبقى كل البانرات القائمة على الرئيسية كما هي.
+    String placement = data?['placement'] ?? 'main';
     bool isSaving = false;
     bool isUploading = false;
 
@@ -187,6 +190,18 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                       const SizedBox(height: 15),
                       TextField(controller: actionUrlCtrl, decoration: const InputDecoration(labelText: 'رابط الواتساب (اختياري)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.link))),
                     ],
+                    const SizedBox(height: 15),
+                    // (تحكّم المالك) مكان ظهور البانر: الرئيسي أعلى الرئيسية أم قسم العروض.
+                    DropdownButtonFormField<String>(
+                      initialValue: placement,
+                      decoration: const InputDecoration(
+                          labelText: 'مكان الظهور', border: OutlineInputBorder()),
+                      items: const [
+                        DropdownMenuItem(value: 'main', child: Text('البانر الرئيسي')),
+                        DropdownMenuItem(value: 'offers', child: Text('قسم العروض')),
+                      ],
+                      onChanged: (val) => setDialogState(() => placement = val ?? 'main'),
+                    ),
                     const SizedBox(height: 10),
                     SwitchListTile(
                       title: const Text('نشط (يظهر للعملاء)'),
@@ -212,6 +227,7 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                         'routeType': selectedRoute,
                         'actionUrl': actionUrlCtrl.text.trim(),
                         'isActive': isActive,
+                        'placement': placement,
                         'rank': rank,
                         'updated_at': FieldValue.serverTimestamp(),
                       };
@@ -293,7 +309,21 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(isActive ? "✅ نشط" : "⚠️ مخفي", style: TextStyle(fontWeight: FontWeight.bold, color: isActive ? Colors.green : Colors.red, fontSize: 13)),
+                            Row(children: [
+                              Text(isActive ? "✅ نشط" : "⚠️ مخفي", style: TextStyle(fontWeight: FontWeight.bold, color: isActive ? Colors.green : Colors.red, fontSize: 13)),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF5D1B5E).withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  (data['placement'] ?? 'main') == 'offers' ? 'قسم العروض' : 'رئيسي',
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF5D1B5E)),
+                                ),
+                              ),
+                            ]),
                             Row(
                               children: [
                                 IconButton(icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20), onPressed: () => _showBannerDialog(doc: doc)),

@@ -14,6 +14,7 @@ import 'package:zyiarah/screens/admin/admin_dashboard_screen.dart';
 import 'package:zyiarah/screens/order_tracking_screen.dart';
 import 'package:zyiarah/screens/orders_list_screen.dart';
 import 'package:zyiarah/screens/store_screen.dart';
+import 'package:zyiarah/screens/offers_screen.dart';
 import 'package:zyiarah/screens/profile_screen.dart';
 import 'package:zyiarah/main.dart';
 
@@ -131,6 +132,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/store',
       pageBuilder: (context, state) => _slideFadePage(const ZyiarahStoreScreen(), state),
+    ),
+    GoRoute(
+      path: '/offers',
+      pageBuilder: (context, state) => _slideFadePage(const ZyiarahOffersScreen(), state),
     ),
     GoRoute(
       path: '/profile',
