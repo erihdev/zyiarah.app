@@ -1908,6 +1908,9 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
         const o = d.data();
         return o.is_paid === true && !o.driver_id && o.service_date;
       }).slice(0, 5);
+      // كل مسار يسجّل — الاختبار الحيّ الأول فشل صامتاً ولم نعرف أي فرع ابتلعه.
+      console.log(`onOrderWritten: driver freed by ${event.params.orderId} — ` +
+          `${snap.size} pending, ${waiting.length} paid+unassigned`);
       for (const doc of waiting) {
         const o = doc.data();
         const start = o.service_date.toDate();
@@ -1917,6 +1920,8 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
         if (driver) {
           await _assignDriverScheduled(db, doc.id, driver, start);
           console.log(`onOrderWritten: driver-freed assigned ${doc.id} -> ${driver.id}`);
+        } else {
+          console.warn(`onOrderWritten: driver freed but none free for ${doc.id}`);
         }
       }
     }
