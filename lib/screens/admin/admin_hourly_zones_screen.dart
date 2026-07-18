@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -178,6 +181,33 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     );
   }
 
+  /// يحوّل اسم المنطقة المكتوب إلى إحداثيات — «اكتب صبيا فتقفز الخريطة إلى صبيا».
+  ///
+  /// نفس محرّك بحث منتقي الموقع (Mapbox forward geocoding): مقيّد بالسعودية،
+  /// ومنحاز لمنطقة جازان (proximity) كي تتقدّم «صبيا جازان» على أي تشابه أبعد.
+  /// بمهلة، والفشل يُسجَّل ولا يُزعج — هذه مساعدة، والنقر على الخريطة يبقى سيّداً.
+  Future<GeoPoint?> _geocodeZoneName(String query) async {
+    final token = dotenv.env['MAPBOX_TOKEN'] ?? '';
+    if (token.isEmpty || query.trim().length < 2) return null;
+    try {
+      final url = Uri.parse(
+          'https://api.mapbox.com/search/geocode/v6/forward'
+          '?q=${Uri.encodeComponent(query.trim())}'
+          '&access_token=$token&language=ar&country=sa'
+          '&proximity=43.0505,17.3023&limit=1');
+      final res = await http.get(url).timeout(const Duration(seconds: 8));
+      if (res.statusCode != 200) return null;
+      final features = (json.decode(res.body)['features'] as List?) ?? [];
+      if (features.isEmpty) return null;
+      final coords = features.first['geometry']?['coordinates'];
+      if (coords is! List || coords.length < 2) return null;
+      return GeoPoint((coords[1] as num).toDouble(), (coords[0] as num).toDouble());
+    } catch (e) {
+      debugPrint('[ZoneGeocode] failed for "$query": $e');
+      return null;
+    }
+  }
+
   void _showZoneDialog({DocumentSnapshot? doc}) {
     final Map<String, dynamic>? data = doc?.data() as Map<String, dynamic>?;
     final nameCtrl = TextEditingController(text: data?['name'] ?? '');
@@ -205,6 +235,8 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     final Future<QuerySnapshot<Map<String, dynamic>>> zonesFuture =
         _db.collection('service_zones').get();
     String? copiedFromId;
+    // ترميز الاسم المكتوب إلى موقع — مؤجَّل كي لا نستعلم عند كل حرف.
+    Timer? nameDebounce;
 
     int rank = (data?['rank'] as num?)?.toInt() ?? 0;
     GeoPoint? selectedGeo = data?['centerLoc'] as GeoPoint?;
@@ -239,7 +271,23 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                   children: [
                     if (isSaving) const Padding(padding: EdgeInsets.only(bottom: 15), child: LinearProgressIndicator(color: Color(0xFF1E293B))),
 
-                    TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'اسم المنطقة (مثلاً: شمال الرياض)', border: OutlineInputBorder())),
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'اسم المنطقة (مثلاً: صبيا)',
+                          border: OutlineInputBorder()),
+                      // كتابة الاسم تنقل الخريطة إليه تلقائياً (طلب المالك):
+                      // «كتبت صبيا — المفترض ينقلني مباشرة إلى صبيا».
+                      onChanged: (q) {
+                        nameDebounce?.cancel();
+                        nameDebounce = Timer(const Duration(milliseconds: 700), () async {
+                          final g = await _geocodeZoneName(q);
+                          if (g == null) return;
+                          if (!ctx.mounted) return;
+                          setDialogState(() => selectedGeo = g);
+                        });
+                      },
+                    ),
                     const SizedBox(height: 15),
                     
                     // الخريطة الحيّة — ظاهرة دائماً تحت الاسم مباشرة (طلب المالك):
@@ -529,6 +577,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
         },
       ),
     ).whenComplete(() {
+      nameDebounce?.cancel();
       nameCtrl.dispose();
       radiusCtrl.dispose();
       p1Ctrl.dispose();

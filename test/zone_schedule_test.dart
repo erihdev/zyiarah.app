@@ -195,6 +195,23 @@ void main() {
     expect(s.contains('اضغط لوضع المركز هنا'), isTrue);
   });
 
+  test('كتابة اسم المنطقة تنقل الخريطة إليه تلقائياً', () {
+    // طلب المالك: «كتبت صبيا — المفترض ينقلني مباشرة إلى صبيا». الاسم يُرمَّز
+    // جغرافياً (مؤجَّلاً كي لا نستعلم عند كل حرف) ويضع المركز على الخريطة.
+    final s = File('lib/screens/admin/admin_hourly_zones_screen.dart').readAsStringSync();
+    expect(s.contains('_geocodeZoneName'), isTrue);
+    expect(s.contains('nameDebounce'), isTrue,
+        reason: 'بلا تأجيل نستعلم Mapbox عند كل حرف');
+    expect(s.contains('country=sa'), isTrue,
+        reason: 'التقييد بالسعودية يمنع القفز لتشابهات خارجها');
+    expect(s.contains('proximity=43.0505,17.3023'), isTrue,
+        reason: 'الانحياز لجازان يقدّم صبيا-جازان على أي تشابه أبعد');
+    expect(s.contains('.timeout(const Duration(seconds: 8))'), isTrue,
+        reason: 'استعلام معلّق يجب ألا يعلّق شيئاً');
+    // الفشل مساعدة صامتة مقصودة لكنه يُسجَّل — لا ابتلاع أعمى.
+    expect(s.contains('[ZoneGeocode] failed'), isTrue);
+  });
+
   test('السبلاش لا يُحرّك متحكّماً بعد الإتلاف', () {
     // AuthWrapper يستبدل السبلاش فور جاهزية الدور — قبل انقضاء مهلات الحركة.
     final s = File('lib/screens/splash_screen.dart').readAsStringSync();
