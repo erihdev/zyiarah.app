@@ -8,7 +8,6 @@ import 'package:zyiarah/screens/admin/admin_store_screen.dart';
 import 'package:zyiarah/screens/admin/admin_insights_screen.dart';
 import 'package:zyiarah/screens/admin/admin_search_screen.dart';
 import 'package:zyiarah/screens/splash_screen.dart';
-import 'package:lottie/lottie.dart';
 import 'package:zyiarah/utils/zyiarah_strings.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 
@@ -112,13 +111,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Lottie.network(
-                  'https://lottie.host/85cc1144-6729-4d64-88aa-3e753456c636/Hw4h8Pndr5.json', // Error anim
-                  width: 250,
-                  height: 250,
-                  errorBuilder: (c, e, s) =>
-                      const Icon(Icons.lock_outline, size: 120, color: Colors.grey),
-                ),
+                const Icon(Icons.lock_outline, size: 120, color: Colors.grey),
                 const SizedBox(height: 20),
                 const Text(
                   "عذراً، لا تمتلك صلاحيات الوصول",

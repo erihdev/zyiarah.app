@@ -18,7 +18,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:async';
-import 'package:lottie/lottie.dart' hide Marker;
 import 'package:go_router/go_router.dart';
 import 'package:zyiarah/screens/driver_tasks_screen.dart';
 import 'package:zyiarah/screens/driver_notifications_screen.dart';
@@ -1279,7 +1278,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Lottie.network('https://lottie.host/85cc1144-6729-4d64-88aa-3e753456c636/Hw4h8Pndr5.json', width: 200, height: 200, repeat: false),
+          const Icon(Icons.check_circle_rounded, size: 120, color: Colors.white),
           const SizedBox(height: 10),
           Text('تمت المهمة بنجاح', style: GoogleFonts.tajawal(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
         ]),

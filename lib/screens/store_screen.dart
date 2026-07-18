@@ -4,7 +4,6 @@ import 'package:zyiarah/services/store_service.dart';
 import 'package:zyiarah/widgets/shimmer_loading.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:lottie/lottie.dart';
 import 'package:zyiarah/screens/store_payment_screen.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
 
@@ -263,10 +262,9 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Lottie.network(
-            'https://lottie.host/9972352b-4780-4545-8f65-021199346747/XJzQitkR2f.json', // Search/Empty anim
-            height: 200,
-          ),
+          // كان Lottie.network؛ صار lottie.host يرجع 403 فيُطبع نص الاستثناء أحمر.
+          Icon(Icons.storefront_outlined,
+              size: 96, color: Colors.grey.withValues(alpha: 0.4)),
           const SizedBox(height: 10),
           Text('المتجر قيد التعبئة، سيتم توفير المنتجات قريباً', style: GoogleFonts.tajawal(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.bold)),
         ],

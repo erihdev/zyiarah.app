@@ -6,7 +6,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:lottie/lottie.dart' hide Marker;
 import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/widgets/rating_dialog.dart';
 
@@ -197,10 +196,10 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                     ],
                   ),
                   if (status == 'in_progress')
-                    Lottie.network(
-                      'https://lottie.host/6429f55e-a61d-4519-94b2-0545cf026131/V088G0M8hS.json',
-                      width: 50,
-                      height: 50,
+                    const SizedBox(
+                      width: 28, height: 28,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 3, color: Color(0xFF5D1B5E)),
                     ),
                   IconButton(
                     onPressed: () {
