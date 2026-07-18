@@ -44,6 +44,20 @@ void main() {
         reason: 'بلا الاستبعاد تظهر المهمة الحالية في القائمتين معاً');
   });
 
+  test('تأكيد المهمة بضغط مطوّل لا بسحب — يعمل على الويب والجوال', () {
+    // السحب كان عتبته 82% من عرض الشريط: سحبة طبيعية على الجوال (~350px) لكن
+    // ~950px بالفأرة على سطح المكتب (شبه مستحيلة) — «الزر لا يعمل». الضغط
+    // المطوّل مستقلٌّ عن العرض تماماً.
+    expect(code.contains('_SwipeToActButton'), isFalse,
+        reason: 'السحب بعتبة العرض يعطّل الزر على الشاشات العريضة');
+    expect(code.contains('onHorizontalDragUpdate'), isFalse);
+    expect(code.contains('_HoldToActButton'), isTrue);
+    // يُطلق الفعل عند اكتمال الضغط لا عند مجرد لمسة (منع الفعل العرضي).
+    expect(code.contains('AnimationStatus.completed'), isTrue,
+        reason: 'الإطلاق يجب أن يكون بعد ضغطٍ متعمّد لا بلمسة واحدة');
+    expect(code.contains('onTapDown'), isTrue);
+  });
+
   test('تسلسل واجهة الرئيسية: المهام أولاً ثم الإحصاءات', () {
     final main = code.indexOf('_buildMainSection(),');
     final stats = code.indexOf('_buildStatsRow(),');

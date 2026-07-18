@@ -869,7 +869,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     switch (status) {
       case 'scheduled':
         stateTitle = "مهمة مجدولة — جاهز للانطلاق";
-        actionLabel = "اسحب للتأكيد — أنا في الطريق";
+        actionLabel = "اضغط مطولاً — أنا في الطريق";
         nextStatus = "on_the_way";
         stateColor = const Color(0xFF5D1B5E);
         stateIcon = Icons.event_available;
@@ -877,14 +877,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
       case 'on_the_way':
       case 'accepted': // توافق مع الطلبات الجارية أثناء الانتقال
         stateTitle = "في الطريق للعميل";
-        actionLabel = "اسحب للتأكيد — وصلت، بدء الخدمة";
+        actionLabel = "اضغط مطولاً — وصلت، بدء الخدمة";
         nextStatus = "in_progress";
         stateColor = Colors.blue;
         stateIcon = Icons.map;
         break;
       case 'in_progress':
         stateTitle = "الخدمة قيد التنفيذ";
-        actionLabel = "اسحب للتأكيد — إتمام المهمة";
+        actionLabel = "اضغط مطولاً — إتمام المهمة";
         nextStatus = "completed";
         stateColor = Colors.green;
         stateIcon = Icons.timer;
@@ -951,7 +951,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
           if (status == 'in_progress') _buildTimer(int.tryParse('${data['hours_contracted'] ?? 4}') ?? 4),
           const SizedBox(height: 8),
           // DRIVER-001/008: swipe-to-confirm replaces tap button — prevents accidental triggers
-          _SwipeToActButton(
+          _HoldToActButton(
             label: actionLabel,
             color: stateColor,
             isLoading: _isUpdatingStatus,
@@ -1291,15 +1291,17 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 }
 
-/// Swipe-to-confirm button — prevents accidental taps on critical field actions.
-/// RTL layout: thumb starts at right edge, user drags left to confirm (82% threshold).
-class _SwipeToActButton extends StatefulWidget {
+/// Hold-to-confirm button — deliberate action that works identically on touch
+/// and on mouse/web. Replaces a swipe whose 82%-of-track threshold became an
+/// ~950px mouse drag on a wide desktop track (the "button does nothing" report):
+/// hold-to-confirm is width-independent — press and hold ~0.7s to fire.
+class _HoldToActButton extends StatefulWidget {
   final String label;
   final Color color;
   final VoidCallback onConfirmed;
   final bool isLoading;
 
-  const _SwipeToActButton({
+  const _HoldToActButton({
     required this.label,
     required this.color,
     required this.onConfirmed,
@@ -1307,110 +1309,118 @@ class _SwipeToActButton extends StatefulWidget {
   });
 
   @override
-  State<_SwipeToActButton> createState() => _SwipeToActButtonState();
+  State<_HoldToActButton> createState() => _HoldToActButtonState();
 }
 
-class _SwipeToActButtonState extends State<_SwipeToActButton> {
-  double _dragX = 0;
-  bool _triggered = false;
-  static const double _thumbSize = 52.0;
+class _HoldToActButtonState extends State<_HoldToActButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 700),
+  )..addStatusListener((st) {
+      if (st == AnimationStatus.completed && !_fired) {
+        _fired = true;
+        HapticFeedback.heavyImpact();
+        widget.onConfirmed();
+      }
+    });
+  bool _fired = false;
 
   @override
-  void didUpdateWidget(_SwipeToActButton old) {
+  void didUpdateWidget(_HoldToActButton old) {
     super.didUpdateWidget(old);
-    // Reset drag state after the operation completes (success or failure)
+    // بعد انتهاء العملية (نجاح/فشل) أعد الزر لوضع السكون.
     if (old.isLoading && !widget.isLoading) {
-      setState(() {
-        _dragX = 0;
-        _triggered = false;
-      });
+      _fired = false;
+      _c.reset();
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final trackWidth = constraints.maxWidth;
-        final maxDrag = (trackWidth - _thumbSize - 8).clamp(0.0, double.infinity);
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
 
-        return SizedBox(
-          height: 60,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // Track background
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: widget.color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: widget.color.withValues(alpha: 0.3)),
-                  ),
-                ),
-              ),
-              // Progress fill — grows from right leftward as user drags (RTL)
-              Positioned(
-                right: 0,
-                top: 0,
-                bottom: 0,
-                child: Container(
-                  width: (_thumbSize + 8 + _dragX).clamp(0.0, trackWidth),
-                  decoration: BoxDecoration(
-                    color: widget.color.withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-              ),
-              // Label / spinner
-              widget.isLoading
-                  ? SizedBox(
-                      width: 26,
-                      height: 26,
-                      child: CircularProgressIndicator(color: widget.color, strokeWidth: 2.5),
-                    )
-                  : Text(
-                      widget.label,
-                      style: GoogleFonts.tajawal(color: widget.color, fontWeight: FontWeight.bold, fontSize: 14),
-                      textAlign: TextAlign.center,
+  void _startHold() {
+    if (widget.isLoading || _fired) return;
+    _c.forward();
+  }
+
+  void _cancelHold() {
+    if (_fired) return;
+    _c.reverse();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // onTapDown/Up (لا سحب) — يعمل بنفس السلوك على الفأرة واللمس، ولا يتنازعه
+    // تمرير القائمة العمودي كما كان السحب الأفقي على الويب.
+    return GestureDetector(
+      onTapDown: (_) => _startHold(),
+      onTapUp: (_) => _cancelHold(),
+      onTapCancel: _cancelHold,
+      child: SizedBox(
+        height: 60,
+        child: AnimatedBuilder(
+          animation: _c,
+          builder: (context, _) {
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: widget.color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                      border:
+                          Border.all(color: widget.color.withValues(alpha: 0.3)),
                     ),
-              // Draggable thumb (RTL: right=4 at rest, moves left as _dragX grows)
-              if (!widget.isLoading)
-                Positioned(
-                  right: (4 + maxDrag - _dragX).clamp(4.0, 4 + maxDrag),
-                  top: 4,
-                  bottom: 4,
-                  child: GestureDetector(
-                    onHorizontalDragUpdate: (d) {
-                      if (_triggered) return;
-                      setState(() {
-                        // RTL: dragging left → negative delta.dx → increase _dragX
-                        _dragX = (_dragX - d.delta.dx).clamp(0.0, maxDrag);
-                      });
-                      if (_dragX >= maxDrag * 0.82 && !_triggered) {
-                        _triggered = true;
-                        HapticFeedback.heavyImpact();
-                        widget.onConfirmed();
-                      }
-                    },
-                    onHorizontalDragEnd: (_) {
-                      if (!_triggered) setState(() => _dragX = 0);
-                    },
+                  ),
+                ),
+                // تعبئة تنمو من جهة البداية (يمين في RTL) مع تقدّم الضغط المطوّل.
+                Positioned.fill(
+                  child: FractionallySizedBox(
+                    alignment: AlignmentDirectional.centerStart,
+                    widthFactor: _c.value.clamp(0.0, 1.0),
                     child: Container(
-                      width: _thumbSize,
                       decoration: BoxDecoration(
-                        color: widget.color,
-                        borderRadius: BorderRadius.circular(13),
-                        boxShadow: [BoxShadow(color: widget.color.withValues(alpha: 0.45), blurRadius: 10, offset: const Offset(0, 3))],
+                        color: widget.color.withValues(alpha: 0.30),
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      child: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
                     ),
                   ),
                 ),
-            ],
-          ),
-        );
-      },
+                widget.isLoading
+                    ? SizedBox(
+                        width: 26,
+                        height: 26,
+                        child: CircularProgressIndicator(
+                            color: widget.color, strokeWidth: 2.5),
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.touch_app_rounded,
+                              color: widget.color, size: 20),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              widget.label,
+                              style: GoogleFonts.tajawal(
+                                  color: widget.color,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 }
