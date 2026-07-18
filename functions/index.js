@@ -1212,7 +1212,7 @@ exports.redeemQatratPoints = onCall({cpu: 0.083}, async (request) => {
  * @param {object} data Extra data payload.
  * @return {Promise<void>}
  */
-async function queuePush(toUid, title, body, type, data, targetRoles) {
+async function queuePush(toUid, title, body, type, data, targetRoles, recipientEmail) {
   await admin.firestore().collection("notification_triggers").add({
     toUid: toUid,
     title: title,
@@ -1221,6 +1221,9 @@ async function queuePush(toUid, title, body, type, data, targetRoles) {
     data: data || {},
     // توجيه إشعارات الإدارة حسب الدور الفرعي (يُستخدم فقط مع ADMIN_BROADCAST).
     ...(Array.isArray(targetRoles) && targetRoles.length ? {targetRoles} : {}),
+    // عنوان مستلم صريح للبريد (السائق مثلاً). بدونه يقع البريد على customerEmail
+    // ثم على بريد الإدارة الافتراضي.
+    ...(recipientEmail ? {recipientEmail} : {}),
     createdBy: "server",
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     processed: false,
@@ -2797,29 +2800,8 @@ exports.freeDriverOnOrderCancel = onDocumentUpdated(
     },
 );
 
-/**
- * (2c) إرسال Push لمستخدم عبر توكنه في fcm_tokens.
- * @param {string} uid
- * @param {string} title
- * @param {string} body
- * @param {object} data
- */
-async function _pushToUid(uid, title, body, data) {
-  if (!uid) return;
-  try {
-    const tokenDoc = await admin.firestore().collection("fcm_tokens").doc(uid).get();
-    if (!tokenDoc.exists) return;
-    const token = tokenDoc.data()?.fcmToken || tokenDoc.data()?.token;
-    if (!token) return;
-    await admin.messaging().send({
-      notification: {title, body},
-      data: {click_action: "FLUTTER_NOTIFICATION_CLICK", ...data},
-      token,
-    });
-  } catch (e) {
-    console.error("_pushToUid error:", e);
-  }
-}
+// (أُزيلت _pushToUid: صارت بلا مستدعٍ بعد تحويل كل الإشعارات إلى queuePush التي
+//  تكتب صندوق الوارد دائماً — _pushToUid كانت تتخطّى بصمت من لا توكن له.)
 
 // ════════════════════════════════════════════════════════════════════════
 // حارس ملكية رمز FCM — رمز الجهاز يخصّ حساباً واحداً فقط (آخر من سجّل به).
@@ -3610,6 +3592,34 @@ exports.notifyDriverOnAssignment = onDocumentUpdated({document: "orders/{orderId
               console.error("Error sending assignment FCM to driver:", error);
             }
           }
+        }
+
+        // 3. بريد للسائق (طلب المالك) — منفصل عن الوارد/الدفع أعلاه كي لا يتكرّرا:
+        //    نوع "email" + toUid=null ⇒ بريد فقط (لا وارد لأن toUid فارغ، ولا دفع
+        //    لأن النوع email). لا نُرسله إلا إن كان للسائق عنوانٌ مسجَّل — وإلّا لوقع
+        //    البريد على العنوان الإداري الافتراضي بالخطأ.
+        try {
+          let driverEmail = "";
+          const dv = await admin.firestore().collection("drivers").doc(driverId).get();
+          if (dv.exists && dv.data()?.email) {
+            driverEmail = String(dv.data().email).trim();
+          } else {
+            const uv = await admin.firestore().collection("users").doc(driverId).get();
+            if (uv.exists && uv.data()?.email) driverEmail = String(uv.data().email).trim();
+          }
+          if (driverEmail) {
+            await queuePush(
+                null,
+                title,
+                `تم تعيينك للطلب #${displayCode}. افتح تطبيق زيارة لعرض تفاصيل ` +
+                `الرحلة والموعد والموقع والتواصل مع العميل.`,
+                "email",
+                {orderId: orderId},
+                null,
+                driverEmail);
+          }
+        } catch (e) {
+          console.error("Error queueing driver assignment email:", e.message);
         }
       }
 
