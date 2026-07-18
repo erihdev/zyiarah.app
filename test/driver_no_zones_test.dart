@@ -78,6 +78,23 @@ void main() {
         reason: 'عدّ السائقين يجب أن يبقى عالميّاً — المنطقة للجدول لا للسعة');
   });
 
+  test('لا طلب مدفوع بلا سائق: الإسناد يُطلق خادمياً لحظة انقلاب is_paid', () {
+    // مبدأ المالك: «لا طلب بدون سائق متاح». كان الإسناد بيد تطبيق العميل بعد
+    // الدفع والمكنسة كل 15 دقيقة ضماناً — فموت التطبيق لحظة النجاح يترك طلباً
+    // مدفوعاً بلا سائق ربع ساعة. المشغّل الخادمي يقلّصها لثوانٍ.
+    final i = fn.indexOf('exports.onOrderWritten');
+    expect(i, greaterThan(-1));
+    final body = fn.substring(i, fn.indexOf('exports.', i + 10));
+    expect(body.contains('paidFlipped'), isTrue);
+    expect(body.contains('_findFreeDriverForSlot'), isTrue);
+    expect(body.contains('_assignDriverScheduled'), isTrue);
+    // شرط عدم إعادة الإطلاق: لا إسناد إن وُجد سائق أصلاً.
+    expect(body.contains('!afterData.driver_id'), isTrue,
+        reason: 'بدونها تعيد كتابتُنا إطلاقَ المشغّل بلا نهاية');
+    // والمكنسة الدورية تبقى الضمان الأخير — لا تُحذف.
+    expect(fn.contains('sweepUnassignedPaidOrders'), isTrue);
+  });
+
   test('السقف اليومي يبقى من الإعدادات — هو «السعة المتفق عليها مسبقاً»', () {
     final i = fn.indexOf('exports.getHourlyAvailability');
     final body = fn.substring(i, fn.indexOf('\n});', i));

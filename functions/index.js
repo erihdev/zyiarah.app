@@ -1857,6 +1857,34 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
   const beforeData = change.before ? change.before.data() : null;
   const afterData = change.after ? change.after.data() : null;
 
+  // (لا طلب مدفوع بلا سائق — قرار المالك) الإسناد يُطلق خادمياً لحظةَ انقلاب is_paid.
+  // كان الإسناد بيد تطبيق العميل بعد الدفع، والمكنسة الدورية (كل 15 دقيقة) ضماناً؛
+  // فإن مات التطبيق لحظة نجاح الدفع (سيناريو Apple Pay المعروف) بقي الطلب المدفوع
+  // بلا سائق حتى ربع ساعة. الآن النافذة ثوانٍ: قلْب is_paid (webhook/verify) يُسنِد
+  // فوراً. آمنٌ من التكرار: كتابتنا تضع driver_id فيبطل الشرط، و_assignDriverScheduled
+  // يعيد فحص حرّية السائق ذرّياً داخل معاملة فلا يُسنَد سائق مشغول ولو تسابقت المسارات.
+  try {
+    const paidFlipped = afterData && afterData.is_paid === true &&
+        (!beforeData || beforeData.is_paid !== true);
+    if (paidFlipped && !afterData.driver_id &&
+        afterData.status === "pending" && afterData.service_date) {
+      const db = admin.firestore();
+      const start = afterData.service_date.toDate();
+      const hours = Number(afterData.hours_contracted || 4);
+      const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
+      const driver = await _findFreeDriverForSlot(db, {startDateTime: start, endDateTime: end});
+      if (driver) {
+        await _assignDriverScheduled(db, event.params.orderId, driver, start);
+        console.log(`onOrderWritten: paid-flip assigned ${event.params.orderId} -> ${driver.id}`);
+      } else {
+        // نادر (سباق آخر خانة): تبقى المكنسة الدورية تعيد المحاولة.
+        console.warn(`onOrderWritten: no free driver at paid-flip for ${event.params.orderId}`);
+      }
+    }
+  } catch (e) {
+    console.error("onOrderWritten paid-flip assign failed:", e.message);
+  }
+
   let deltaRevenue = 0;
   let deltaActive = 0;
   let deltaCompleted = 0;
