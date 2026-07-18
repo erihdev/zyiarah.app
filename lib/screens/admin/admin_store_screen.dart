@@ -222,7 +222,7 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                     const SizedBox(height: 15),
                     // (قرار المالك) متجر واحد والمنتج يختار جمهوره — لا مجموعة ثانية.
                     DropdownButtonFormField<String>(
-                      value: audience,
+                      initialValue: audience,
                       decoration: const InputDecoration(
                           labelText: "يظهر في", border: OutlineInputBorder()),
                       items: const [
