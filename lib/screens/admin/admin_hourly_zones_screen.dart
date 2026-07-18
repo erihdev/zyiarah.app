@@ -242,7 +242,26 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'اسم المنطقة (مثلاً: شمال الرياض)', border: OutlineInputBorder())),
                     const SizedBox(height: 15),
                     
-                    // Map Selection
+                    // الخريطة الحيّة — ظاهرة دائماً تحت الاسم مباشرة (طلب المالك):
+                    // قبل التحديد تفتح على منطقة جازان، والنقر عليها يضع المركز،
+                    // وتغيير نصف القطر يُكبّر/يُصغّر الدائرة حيّاً.
+                    _ZoneCoveragePreview(
+                      center: selectedGeo,
+                      radiusKm: double.tryParse(radiusCtrl.text) ?? 15.0,
+                      onPick: (g) => setDialogState(() => selectedGeo = g),
+                    ),
+                    const SizedBox(height: 12),
+
+                    TextField(
+                      controller: radiusCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'نصف القطر للتغطية (كم)', border: OutlineInputBorder()),
+                      // إعادة الرسم عند كل تغيير كي تتحدث دائرة التغطية حيّاً.
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // خريطة كاملة للتحديد الأدق (بحث بالاسم + سحب) — مكمّلة للنقر السريع.
                     InkWell(
                       onTap: () async {
                         final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => LocationPickerScreen(
@@ -253,37 +272,15 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                           setDialogState(() => selectedGeo = result);
                         }
                       },
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.blue.shade200)),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.map_outlined, color: Colors.blue),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text(selectedGeo == null ? "اضغط لتحديد مركز المنطقة من الخريطة" : "تم تحديد الإحداثيات بنجاح ✅", style: TextStyle(fontSize: 12, color: Colors.blue.shade900))),
-                          ],
-                        ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.open_in_full_rounded, size: 15, color: Colors.blue.shade700),
+                          const SizedBox(width: 6),
+                          Text('فتح خريطة كاملة لتحديدٍ أدق',
+                              style: TextStyle(fontSize: 12, color: Colors.blue.shade700)),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 15),
-
-                    TextField(
-                      controller: radiusCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'نصف القطر للتغطية (كم)', border: OutlineInputBorder()),
-                      // إعادة الرسم عند كل تغيير كي تتحدث دائرة التغطية في المعاينة حيّاً.
-                      onChanged: (_) => setDialogState(() {}),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // معاينة حيّة لنطاق التغطية: تُظهر للإدارة ما الذي يغطيه نصف القطر فعلاً
-                    // على الخريطة قبل الحفظ — وتتحدث فور تغيير الرقم أو المركز.
-                    if (selectedGeo != null)
-                      _ZoneCoveragePreview(
-                        center: selectedGeo!,
-                        radiusKm: double.tryParse(radiusCtrl.text) ?? 15.0,
-                      ),
-                    if (selectedGeo != null) const SizedBox(height: 15),
 
                     const Divider(height: 30),
                     // «نسخ الأسعار من منطقة سابقة» (طلب المالك): عند إضافة مدينة
@@ -639,28 +636,44 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
 /// المختار تتحدث فور تغيير الرقم. بدونها كان على الأدمن فتح الخريطة والرجوع لكل تجربة،
 /// ولا يرى أثر تغيير نصف القطر إطلاقاً بعد اختيار المركز.
 class _ZoneCoveragePreview extends StatelessWidget {
-  final GeoPoint center;
+  /// null قبل التحديد — تُعرض الخريطة على مركز جازان الافتراضي بانتظار نقرة.
+  final GeoPoint? center;
   final double radiusKm;
+  final ValueChanged<GeoPoint> onPick;
 
-  const _ZoneCoveragePreview({required this.center, required this.radiusKm});
+  const _ZoneCoveragePreview({
+    required this.center,
+    required this.radiusKm,
+    required this.onPick,
+  });
+
+  /// مركز منطقة جازان — نقطة بداية معقولة لنشاطٍ كل مناطقه هناك.
+  static const LatLng _fallbackCenter = LatLng(17.3023, 43.0505);
 
   @override
   Widget build(BuildContext context) {
     final token = dotenv.env['MAPBOX_TOKEN'] ?? '';
-    final latLng = LatLng(center.latitude, center.longitude);
-    // كل تغيير في نصف القطر يعيد بناء الخريطة بمفتاح جديد فتُعاد المركزة بالزوم المناسب.
-    final zoom = _zoomForRadius(radiusKm);
+    final picked = center != null;
+    final latLng = picked
+        ? LatLng(center!.latitude, center!.longitude)
+        : _fallbackCenter;
+    // قبل التحديد: زوم واسع يُظهر المنطقة كلها؛ بعده: زوم يناسب نصف القطر.
+    final zoom = picked ? _zoomForRadius(radiusKm) : 9.3;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const Icon(Icons.travel_explore_rounded, size: 16, color: Colors.blue),
+            Icon(picked ? Icons.travel_explore_rounded : Icons.touch_app_rounded,
+                size: 16, color: Colors.blue),
             const SizedBox(width: 6),
             Text(
-              'نطاق التغطية — ${radiusKm.toStringAsFixed(radiusKm % 1 == 0 ? 0 : 1)} كم',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue),
+              picked
+                  ? 'نطاق التغطية — ${radiusKm.toStringAsFixed(radiusKm % 1 == 0 ? 0 : 1)} كم'
+                  : 'اضغط على الخريطة لتحديد مركز المنطقة',
+              style: const TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue),
             ),
           ],
         ),
@@ -672,12 +685,18 @@ class _ZoneCoveragePreview extends StatelessWidget {
             child: Stack(
               children: [
                 FlutterMap(
-                  key: ValueKey('zone_preview_${center.latitude}_${center.longitude}_$radiusKm'),
+                  key: ValueKey(picked
+                      ? 'zp_${center!.latitude.toStringAsFixed(5)}_${center!.longitude.toStringAsFixed(5)}_$radiusKm'
+                      : 'zp_unpicked'),
                   options: MapOptions(
                     initialCenter: latLng,
                     initialZoom: zoom,
-                    // معاينة فقط — لا تفاعل كي لا تبتلع تمرير النافذة.
-                    interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
+                    // النقر يحدّد المركز؛ بقية الإيماءات معطّلة كي لا تبتلع
+                    // الخريطةُ تمريرَ الحوار.
+                    interactionOptions:
+                        const InteractionOptions(flags: InteractiveFlag.none),
+                    onTap: (tapPos, ll) =>
+                        onPick(GeoPoint(ll.latitude, ll.longitude)),
                   ),
                   children: [
                     TileLayer(
@@ -686,35 +705,50 @@ class _ZoneCoveragePreview extends StatelessWidget {
                       additionalOptions: {'accessToken': token},
                       userAgentPackageName: 'com.zyiarah.zyiarah',
                     ),
-                    CircleLayer(
-                      circles: [
-                        CircleMarker(
-                          point: latLng,
-                          radius: radiusKm * 1000,
-                          useRadiusInMeter: true,
-                          color: Colors.blue.withValues(alpha: 0.22),
-                          borderColor: Colors.blue,
-                          borderStrokeWidth: 2,
-                        ),
-                      ],
-                    ),
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: latLng,
-                          child: const Icon(Icons.location_on, color: Color(0xFF50B498), size: 34),
-                        ),
-                      ],
-                    ),
+                    if (picked)
+                      CircleLayer(
+                        circles: [
+                          CircleMarker(
+                            point: latLng,
+                            radius: radiusKm * 1000,
+                            useRadiusInMeter: true,
+                            color: Colors.blue.withValues(alpha: 0.22),
+                            borderColor: Colors.blue,
+                            borderStrokeWidth: 2,
+                          ),
+                        ],
+                      ),
+                    if (picked)
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: latLng,
+                            width: 34,
+                            height: 34,
+                            child: const Icon(Icons.location_on,
+                                color: Color(0xFF5D1B5E), size: 34),
+                          ),
+                        ],
+                      ),
                   ],
                 ),
-                // تعذّر تحميل الخريطة (توكن مفقود مثلاً) لا يترك مربعاً أسود غامضاً.
-                if (token.isEmpty)
-                  Container(
-                    color: Colors.grey.shade200,
-                    alignment: Alignment.center,
-                    child: const Text('تعذّر عرض الخريطة (رمز Mapbox غير مضبوط)',
-                        style: TextStyle(fontSize: 11, color: Colors.grey)),
+                if (!picked)
+                  IgnorePointer(
+                    child: Container(
+                      alignment: Alignment.bottomCenter,
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Text('اضغط لوضع المركز هنا',
+                            style:
+                                TextStyle(color: Colors.white, fontSize: 11)),
+                      ),
+                    ),
                   ),
               ],
             ),
@@ -723,14 +757,14 @@ class _ZoneCoveragePreview extends StatelessWidget {
       ],
     );
   }
+}
 
-  /// زوم يجعل الدائرة كاملةً ظاهرة في المعاينة مهما كان نصف القطر.
-  static double _zoomForRadius(double km) {
-    if (km <= 2) return 12.5;
-    if (km <= 5) return 11.3;
-    if (km <= 10) return 10.3;
-    if (km <= 20) return 9.3;
-    if (km <= 40) return 8.3;
-    return 7.3;
-  }
+/// زوم يجعل دائرة نصف القطر مرئية كاملة في معاينة 190px.
+double _zoomForRadius(double km) {
+  if (km <= 2) return 12.5;
+  if (km <= 5) return 11.3;
+  if (km <= 10) return 10.3;
+  if (km <= 20) return 9.3;
+  if (km <= 40) return 8.3;
+  return 7.3;
 }

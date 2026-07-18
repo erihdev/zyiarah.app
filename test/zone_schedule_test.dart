@@ -177,6 +177,24 @@ void main() {
     expect(s.substring(i, i + 80).contains('width:'), isTrue);
   });
 
+  test('خريطة المنطقة حيّة: ظاهرة دائماً، نقرة تحدّد المركز، والدائرة تتبع نصف القطر', () {
+    // طلب المالك: عند إضافة مدينة تظهر الخريطة تحت الاسم مباشرة بمركزها وقطرها،
+    // وتغيير نصف القطر يُصغّر/يُكبّر الدائرة حيّاً — لا خريطة مخفيّة خلف زرّ.
+    final s = File('lib/screens/admin/admin_hourly_zones_screen.dart').readAsStringSync();
+    // ليست مشروطة بتحديد سابق: المركز nullable مع مركز افتراضي لجازان.
+    expect(s.contains('final GeoPoint? center;'), isTrue);
+    expect(s.contains('_fallbackCenter'), isTrue);
+    // النقر على الخريطة يضع المركز.
+    expect(s.contains('onTap: (tapPos, ll) =>'), isTrue);
+    expect(s.contains('onPick(GeoPoint(ll.latitude, ll.longitude))'), isTrue);
+    // الدائرة تقرأ نصف القطر من الحقل حيّاً (الحقل يعيد الرسم عند كل تغيير).
+    expect(s.contains('onChanged: (_) => setDialogState(() {})'), isTrue,
+        reason: 'بدونها لا تتحدث الدائرة أثناء الكتابة');
+    expect(s.contains('radius: radiusKm * 1000'), isTrue);
+    // إرشاد ظاهر قبل التحديد بدل خريطة صامتة.
+    expect(s.contains('اضغط لوضع المركز هنا'), isTrue);
+  });
+
   test('السبلاش لا يُحرّك متحكّماً بعد الإتلاف', () {
     // AuthWrapper يستبدل السبلاش فور جاهزية الدور — قبل انقضاء مهلات الحركة.
     final s = File('lib/screens/splash_screen.dart').readAsStringSync();
