@@ -136,11 +136,11 @@ void main() {
     final fs = File('lib/services/firebase_service.dart').readAsStringSync();
     expect(fs.contains('Future<String?> getUserRole'), isTrue);
     // القدرة على تمييز «خطأ» عن «عميل فعلاً» — كان يرجع client دائماً.
-    final ci = fs.indexOf('catch (e) {');
-    // أول catch بعد توقيع getUserRole
+    // نفحص جسم getUserRole تحديداً (لا الملف كله) كي لا يمرّ الحارس على return
+    // null في دالةٍ أخرى.
     final gi = fs.indexOf('getUserRole');
-    final after = fs.substring(gi);
-    expect(after.contains('return null;'), isTrue,
+    final body = fs.substring(gi, fs.indexOf('uploadWorkerPhoto'));
+    expect(body.contains('return null;'), isTrue,
         reason: 'إرجاع client عند الخطأ يصل السائق لوحة العميل بصمت');
   });
 
