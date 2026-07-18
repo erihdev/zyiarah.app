@@ -16,7 +16,7 @@ import 'package:zyiarah/screens/moyasar_card_screen.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
 
-/// شاشة دفع طلب المتجر — تُفتح فقط بعد موافقة الإدارة على الطلب.
+/// شاشة دفع طلب المتجر — تُفتح فور إنشاء الطلب (طلب مباشر، لا موافقة مسبقة).
 /// طرق الدفع المعتمدة: ميسر (بطاقة) + تمارا. لا دفع عند الاستلام — أُزيل من الجذور.
 /// لا تُنشئ طلباً جديداً؛ بل تُحدّث طلب المتجر القائم وتولّد طلب التوصيل والفاتورة.
 class StorePaymentScreen extends StatefulWidget {
@@ -226,8 +226,6 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
 
   /// تحديث طلب المتجر بعد نجاح الدفع + توليد طلب التوصيل والفاتورة.
   Future<void> _finalizeStorePayment(String method, {required bool isPaid, String? paymentId}) async {
-    final user = FirebaseAuth.instance.currentUser;
-
     try {
     // 1) تحديث طلب المتجر القائم (is_paid=false — القاعدة تمنع العميل من كتابة true)
     await FirebaseFirestore.instance
@@ -237,7 +235,10 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
       'payment_method': method,
       'is_paid': isPaid,
       'payment_status': isPaid ? 'paid' : 'awaiting_confirmation',
-      'status': 'processing',
+      'status': 'under_review',
+      // عنوان التوصيل على طلب المتجر نفسه — كان يعيش على طلب توصيل مرتبط
+      // في orders أُلغي (طلب المتجر هو السجل الوحيد الآن).
+      'delivery_location': _deliveryLocation,
       'paid_at': FieldValue.serverTimestamp(),
     });
 
@@ -253,27 +254,9 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
     }
     isPaid = isPaid || serverConfirmed;
 
-    // 2) توليد طلب توصيل مرتبط (Direct Dispatch) — non-fatal
-    try {
-      await FirebaseFirestore.instance.collection('orders').doc().set({
-        'code': widget.orderCode,
-        'client_id': user?.uid,
-        'client_name': widget.customerName,
-        'client_phone': widget.customerPhone,
-        'service_type': 'توصيل طلب متجر',
-        'service_name': 'توصيل منتجات المتجر',
-        'amount': widget.total,
-        // طلب التوصيل يُنشأ is_paid=false (حالة الدفع الحقيقية على store_orders) — يوافق
-        // قاعدة Stage-C (العميل لا يكتب is_paid=true على orders).
-        'is_paid': false,
-        'payment_method': method,
-        'status': 'pending',
-        'source_collection': 'store_orders',
-        'store_order_id': widget.storeOrderId,
-        'location': _deliveryLocation ?? const GeoPoint(24.7136, 46.6753),
-        'created_at': FieldValue.serverTimestamp(),
-      });
-    } catch (_) {}
+    // (المتجر المباشر) أُلغي طلب التوصيل المرتبط في orders: كان يُنتج بطاقتين
+    // للعميل وسجلّين على الإدارة مزامنتهما يدوية. طلب المتجر هو السجل الوحيد،
+    // والإدارة تديره من شاشة طلبات المتجر: under_review ⇒ delivering ⇒ delivered.
 
     // 3) فاتورة ZATCA (المبلغ شامل الضريبة) — non-fatal
     try {
@@ -315,8 +298,8 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
           // دفعت بالبطاقة للتوّ. بقيّة من الدفع عند الاستلام، وقد حُذف من الجذور.
           title: isPaid ? 'تم تأكيد الدفع! 🎉' : 'تم استلام طلبك!',
           subtitle: isPaid
-              ? 'تم استلام دفعتك بنجاح، سنجهّز منتجاتك ونتواصل معك للتوصيل.'
-              : 'جارٍ تأكيد دفعتك. سنجهّز منتجاتك ونتواصل معك للتوصيل.',
+              ? 'طلبك الآن تحت المراجعة — ستصلك إشعارات التوصيل أولاً بأول.'
+              : 'جارٍ تأكيد دفعتك — بعد التأكيد يصبح طلبك تحت المراجعة وتصلك الإشعارات أولاً بأول.',
         ),
       ),
       (route) => route.isFirst,

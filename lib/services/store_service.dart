@@ -77,7 +77,7 @@ class ZyiarahStoreService {
   /// إنشاء طلب متجر بانتظار موافقة الإدارة (بدون دفع).
   /// الدفع وتوليد طلب التوصيل والفاتورة تتم لاحقاً عبر [StorePaymentScreen]
   /// بعد اعتماد الإدارة للطلب.
-  Future<String?> createStoreOrder({
+  Future<Map<String, dynamic>?> createStoreOrder({
     required List<Map<String, dynamic>> items,
     required double totalAmount,
   }) async {
@@ -151,8 +151,11 @@ class ZyiarahStoreService {
         'total_amount': serverCalculatedTotal,
         'payment_method': 'pending',
         'is_paid': false,
-        'payment_status': 'awaiting_approval',
-        'status': 'pending',
+        // (المتجر المباشر — قرار المالك) لا موافقة قبل الدفع: يُنشأ بانتظار
+        // الدفع مباشرةً، وبعد تأكيده تديره الإدارة نقرةً نقرة:
+        // under_review ⇒ delivering ⇒ delivered — والعميل يُشعَر بكل نقلة.
+        'payment_status': 'awaiting_payment',
+        'status': 'awaiting_payment',
         'created_at': FieldValue.serverTimestamp(),
       });
     });
@@ -169,10 +172,16 @@ class ZyiarahStoreService {
       targetId: docRef.id,
     );
 
-    // ملاحظة: لا يُولَّد طلب التوصيل ولا الفاتورة الضريبية في هذه المرحلة.
-    // يتمّ ذلك بعد موافقة الإدارة وإتمام العميل للدفع عبر StorePaymentScreen.
+    // الفاتورة الضريبية تُولَّد بعد الدفع في StorePaymentScreen (يفتحها
+    // التطبيق فوراً بعد هذا الإنشاء — لا موافقة إدارية قبل الدفع).
 
-    return orderCode;
+    return {
+      'id': docRef.id,
+      'code': orderCode,
+      'total': serverCalculatedTotal,
+      'client_name': clientName,
+      'client_phone': clientPhone,
+    };
   }
 
   // Seeding method to be called once or by admin

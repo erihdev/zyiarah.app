@@ -248,7 +248,10 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     final status = data['status'] ?? 'pending';
     final code = data['code'] ?? 'ORD-000';
     final double total = _asDouble(data['total_amount']);
-    final bool awaitingPayment = status == 'approved';
+    // المتجر المباشر يُنشئ awaiting_payment؛ 'approved' إرث مسار الموافقة القديم.
+    final bool awaitingPayment =
+        (status == 'awaiting_payment' || status == 'approved') &&
+            data['is_paid'] != true;
     // المبلغ الذي يدفعه العميل = السعر المعتمد من الإدارة إن وُجد، وإلا مجموع السلة
     final double payAmount =
         (data['final_amount'] as num?)?.toDouble() ?? total;
@@ -257,7 +260,9 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     String statusText = "قيد المعالجة";
 
     if (status == 'pending') { statusColor = Colors.orange; statusText = "بانتظار موافقة الإدارة"; }
-    else if (status == 'approved') { statusColor = Colors.deepOrange; statusText = "بانتظار الدفع"; }
+    else if (status == 'awaiting_payment' || status == 'approved') { statusColor = Colors.deepOrange; statusText = "بانتظار الدفع"; }
+    else if (status == 'under_review') { statusColor = Colors.orange; statusText = "تحت المراجعة"; }
+    else if (status == 'delivering') { statusColor = Colors.indigo; statusText = "جاري التوصيل"; }
     else if (status == 'processing') { statusColor = Colors.blue; statusText = "قيد التجهيز"; }
     else if (status == 'shipped') { statusColor = Colors.indigo; statusText = "تم الشحن"; }
     else if (status == 'delivered' || status == 'completed') { statusColor = Colors.green; statusText = "تم التوصيل"; }

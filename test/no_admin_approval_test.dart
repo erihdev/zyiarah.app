@@ -59,10 +59,13 @@ void main() {
     expect(RegExp(r"'status':\s*'pending',").allMatches(pay).length,
         greaterThanOrEqualTo(2),
         reason: 'مسارا الدفع في ملخّص الدفع يجب أن يكتبا pending');
+    // (تحديث لاحق بنفس اليوم) أُلغي طلب التوصيل المرتبط في orders كلياً —
+    // المتجر المباشر يدير طلب المتجر نفسه (store_direct_flow_test يغطيه)،
+    // فلا يجوز أن تُنشئ شاشة دفع المتجر أي مستند في orders.
     final store =
         File('lib/screens/store_payment_screen.dart').readAsStringSync();
-    expect(store.contains("'status': 'pending',"), isTrue,
-        reason: 'طلب توصيل المتجر يجب أن يبدأ pending ليُدار من الطلبات');
+    expect(store.contains("collection('orders').doc().set"), isFalse,
+        reason: 'عودة طلب التوصيل المرتبط تعيد بطاقتين للعميل وسجلّين للإدارة');
   });
 
   test('إيقاعات الكرون في مواضعها الصحيحة (درس الأنكور غير الفريد)', () {

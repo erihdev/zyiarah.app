@@ -1,4 +1,3 @@
-import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:zyiarah/services/store_service.dart';
@@ -6,8 +5,7 @@ import 'package:zyiarah/widgets/shimmer_loading.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:lottie/lottie.dart';
-import 'package:zyiarah/screens/order_success_screen.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zyiarah/screens/store_payment_screen.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
 
 
@@ -49,16 +47,21 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
       builder: (ctx) => _CartSheet(
         cart: _cart,
         storeService: _storeService,
-        onSubmitted: (orderCode) {
+        onSubmitted: (result) {
           setState(() => _cart.clear());
+          // (المتجر المباشر) إلى الدفع فوراً — لا موافقة إدارية قبل الدفع.
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (_) => ZyiarahOrderSuccessScreen(
-                orderCode: orderCode,
-                title: 'تم إرسال طلبك للإدارة!',
-                subtitle:
-                    'طلبك الآن بانتظار موافقة الإدارة. سنُشعرك فور اعتماده لإتمام الدفع وتجهيز منتجاتك.',
+              builder: (_) => StorePaymentScreen(
+                storeOrderId: result['id'] as String,
+                orderCode: result['code'] as String,
+                items: (result['items'] as List)
+                    .map((e) => Map<String, dynamic>.from(e as Map))
+                    .toList(),
+                total: (result['total'] as num).toDouble(),
+                customerName: result['client_name'] as String,
+                customerPhone: result['client_phone'] as String,
               ),
             ),
           );
@@ -350,7 +353,7 @@ class _ProductCard extends StatelessWidget {
 class _CartSheet extends StatefulWidget {
   final Map<String, int> cart;
   final ZyiarahStoreService storeService;
-  final void Function(String orderCode) onSubmitted;
+  final void Function(Map<String, dynamic> result) onSubmitted;
 
   const _CartSheet({
     required this.cart,
@@ -406,42 +409,27 @@ class _CartSheetState extends State<_CartSheet> {
       final double total = items.fold(
         0.0, (acc, item) => acc + (item['price'] as double) * (item['quantity'] as int));
 
-      // ─────────────────────────────────────────────────────────
-      // المتجر: إرسال الطلب لموافقة الإدارة أولاً (بدون دفع).
-      // بعد الاعتماد، يُتمّ العميل الدفع عبر StorePaymentScreen.
-      // ─────────────────────────────────────────────────────────
-      final orderCode = await widget.storeService.createStoreOrder(
+      // (المتجر المباشر — قرار المالك) لا موافقة قبل الدفع: أنشئ الطلب
+      // بانتظار الدفع وافتح شاشة الدفع فوراً. إشعار الإدارة يصلها خادمياً
+      // عند الإنشاء (مشغّل) وعند الدفع (notifyAdminOfPayment).
+      final result = await widget.storeService.createStoreOrder(
         items: items,
         totalAmount: total,
       );
 
       if (!mounted) return;
-      if (orderCode == null) {
+      if (result == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('يجب تسجيل الدخول لإتمام الطلب')),
         );
         setState(() => _isSubmitting = false);
         return;
       }
+      result['items'] = items;
 
-      final user = FirebaseAuth.instance.currentUser;
-      // إشعار الإدارة بطلب جديد بانتظار الموافقة — non-fatal
-      ZyiarahMessagingService().notifyNewOrder({
-        'code': orderCode,
-        'client_name': user?.displayName ?? 'عميل زيارة',
-        'client_phone': user?.phoneNumber ?? 'غير متوفر',
-        'service_type': 'طلب متجر (بانتظار الموافقة)',
-        'amount': total,
-        'zone': 'طلب عبر المتجر',
-        'date_time': DateTime.now().toString().split('.')[0],
-        'worker_count': 0,
-        'coupon': 'لا يوجد',
-      }, customerEmail: user?.email).catchError((_) {});
-
-      if (!mounted) return;
       // أغلق الـ Sheet ثم نقّل عبر callback الـ parent
       Navigator.pop(context);
-      widget.onSubmitted(orderCode);
+      widget.onSubmitted(result);
 
     } catch (e) {
       GlobalErrorHandler.handleError(e);

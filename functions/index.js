@@ -251,6 +251,17 @@ exports.notifyClientOnStoreOrderStatus = onDocumentUpdated({document: "store_ord
       if (!change) return null;
       const before = change.before.data() || {};
       const after = change.after.data() || {};
+      // (المتجر المباشر) أكّد الخادم الدفع (webhook/verify/reconcile) بينما مات
+      // تطبيق العميل قبل كتابة under_review؟ رقِّ الحالة خادمياً كي لا يبقى طلب
+      // مدفوع بمظهر «بانتظار الدفع» — وكتابتنا تعيد إطلاق المشغّل فيُشعَر العميل.
+      if (after.is_paid === true && before.is_paid !== true &&
+          after.status === "awaiting_payment") {
+        await change.after.ref.update({
+          status: "under_review",
+          updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return null;
+      }
       if (before.status === after.status) return null;
       const clientId = after.client_id;
       if (!clientId) return null;
@@ -258,6 +269,8 @@ exports.notifyClientOnStoreOrderStatus = onDocumentUpdated({document: "store_ord
         // اعتماد الطلب (من تطبيق الأدمن أو لوحة الويب) → اطلب من العميل إتمام الدفع.
         // المصدر الوحيد للإشعار: كانت لوحة الويب تعتمد بصمت بلا تنبيه للعميل.
         approved: {t: "تم اعتماد طلبكِ 💳", b: "اعتمدت الإدارة طلبكِ من المتجر — يرجى إتمام الدفع لتجهيزه."},
+        under_review: {t: "تم استلام طلبكِ 🧾", b: "دفعتكِ مؤكّدة وطلبكِ الآن تحت مراجعة الإدارة."},
+        delivering: {t: "طلبكِ في الطريق 🚚", b: "جاري توصيل طلبكِ من المتجر إليكِ."},
         processing: {t: "جارٍ تجهيز طلبكِ 📦", b: "بدأنا تجهيز طلبكِ من المتجر."},
         preparing: {t: "جارٍ تجهيز طلبكِ 📦", b: "بدأنا تجهيز طلبكِ من المتجر."},
         shipped: {t: "طلبكِ في الطريق 🚚", b: "شُحن طلبكِ من المتجر وهو في طريقه إليكِ."},

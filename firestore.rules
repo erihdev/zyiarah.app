@@ -399,8 +399,9 @@ service cloud.firestore {
         (isLoggedIn() && request.auth.uid == resource.data.client_id &&
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(
            ['payment_method', 'is_paid', 'payment_status', 'status',
-            'paid_at', 'invoice_pdf_url']) &&
-         request.resource.data.status == 'processing' &&
+            'paid_at', 'invoice_pdf_url', 'delivery_location']) &&
+         // المتجر المباشر: بعد الدفع يكتب العميل under_review (كانت processing).
+         request.resource.data.status == 'under_review' &&
          // العميل لا يؤكّد الدفع بنفسه — is_paid يقلبه الـ webhook خادمياً.
          request.resource.data.is_paid == false);
       allow delete: if isOrdersManager();

@@ -2,99 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/audit_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class AdminStoreOrdersScreen extends StatelessWidget {
   const AdminStoreOrdersScreen({super.key});
 
-  /// نافذة اعتماد الطلب مع تحديد السعر النهائي (يشمل أي رسوم توصيل/تعديلات).
-  /// السعر مبدئياً = مجموع السلة، وقابل للتعديل من الإدارة.
-  void _showApprovalDialog(BuildContext context, String orderId, Map<String, dynamic> order) {
-    final double cartTotal = (order['total_amount'] as num?)?.toDouble() ?? 0;
-    final controller = TextEditingController(text: cartTotal.toStringAsFixed(2));
-    showDialog(
-      context: context,
-      builder: (ctx) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text('اعتماد الطلب وتحديد السعر',
-              style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('سعر المنتجات في السلة: ${cartTotal.toStringAsFixed(2)} ر.س',
-                  style: GoogleFonts.tajawal(fontSize: 13, color: Colors.grey[700])),
-              const SizedBox(height: 14),
-              TextField(
-                controller: controller,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold),
-                decoration: InputDecoration(
-                  labelText: 'المبلغ النهائي المعتمد (ر.س)',
-                  helperText: 'يُضاف إليه التوصيل أو أي تعديلات — هذا ما سيدفعه العميل',
-                  helperMaxLines: 2,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('إلغاء'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green, foregroundColor: Colors.white),
-              onPressed: () {
-                final val = double.tryParse(controller.text.trim());
-                if (val == null || val <= 0) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(content: Text('يرجى إدخال مبلغ صحيح')),
-                  );
-                  return;
-                }
-                Navigator.pop(ctx);
-                _approveOrder(context, orderId, order, val);
-              },
-              child: const Text('اعتماد وإشعار العميل'),
-            ),
-          ],
-        ),
-      ),
-    ).whenComplete(() => controller.dispose());
-  }
-
-  /// الموافقة على الطلب بالسعر النهائي [finalAmount]: تنتقل حالته إلى
-  /// approved/بانتظار الدفع، ويُشعَر العميل لإتمام الدفع عبر شاشة طلباته.
-  void _approveOrder(BuildContext context, String orderId, Map<String, dynamic> order,
-      double finalAmount) async {
-    try {
-      await FirebaseFirestore.instance.collection('store_orders').doc(orderId).update({
-        'status': 'approved',
-        'payment_status': 'awaiting_payment',
-        'final_amount': finalAmount,
-        'updated_at': FieldValue.serverTimestamp(),
-      });
-      await ZyiarahAuditService().logAction(
-        action: 'APPROVE_STORE_ORDER',
-        details: {'code': order['code'], 'final_amount': finalAmount},
-        targetId: orderId,
-      );
-      // إشعار العميل يتولّاه الآن مُشغّل notifyClientOnStoreOrderStatus خادميّاً عند
-      // status→approved (يعمل للوحة الويب أيضاً). أزلنا النداء المباشر لمنع التكرار.
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("تمت الموافقة وإشعار العميل لإتمام الدفع")),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("حدث خطأ أثناء الموافقة")));
-      }
-    }
-  }
+  // (المتجر المباشر — قرار المالك) حُذف مسار «الموافقة والتسعير النهائي»:
+  // العميل يدفع فوراً، والإدارة تدير التوصيل نقرةً نقرة أدناه.
 
   void _updateOrderStatus(BuildContext context, String orderId, String newStatus) async {
     try {
@@ -198,6 +112,9 @@ class AdminStoreOrdersScreen extends StatelessWidget {
   String _translateStatus(String status) {
     switch (status) {
       case 'pending': return 'جديد (بانتظار الموافقة)';
+      case 'awaiting_payment': return 'بانتظار دفع العميل';
+      case 'under_review': return 'مدفوع — تحت المراجعة';
+      case 'delivering': return 'جاري التوصيل';
       case 'approved': return 'تمت الموافقة (بانتظار دفع العميل)';
       case 'processing': return 'مدفوع (جاري التجهيز)';
       case 'shipped': return 'تم التسليم للمندوب / الشحن';
@@ -212,6 +129,9 @@ class AdminStoreOrdersScreen extends StatelessWidget {
   Color _getStatusColor(String status) {
     switch (status) {
       case 'pending': return Colors.orange;
+      case 'awaiting_payment': return Colors.deepOrange;
+      case 'under_review': return Colors.orange;
+      case 'delivering': return Colors.indigo;
       case 'approved': return Colors.blue;
       case 'processing': return Colors.teal;
       case 'shipped': return Colors.purple;
@@ -307,28 +227,38 @@ class AdminStoreOrdersScreen extends StatelessWidget {
                               style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF5D1B5E)),
                               onPressed: () => _showOrderItems(context, order),
                             ),
-                            if (status == 'pending')
+                            // سلسلة الإدارة: تحت المراجعة ⇒ جاري التوصيل ⇒
+                            // تم التوصيل — كل نقرة تصل العميل حيّاً بإشعار خادمي.
+                            // 'processing' إرث المسار القديم يُعامل كتحت المراجعة.
+                            if (status == 'under_review' || status == 'processing')
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.local_shipping_outlined, size: 18),
+                                label: const Text('بدء التوصيل'),
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+                                onPressed: () => _updateOrderStatus(context, orderDoc.id, 'delivering'),
+                              ),
+                            if (status == 'delivering' || status == 'shipped')
                               ElevatedButton.icon(
                                 icon: const Icon(Icons.check_circle_outline, size: 18),
-                                label: const Text('الموافقة على الطلب'),
+                                label: const Text('تم التوصيل'),
                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                                onPressed: () => _showApprovalDialog(context, orderDoc.id, order),
-                              ),
-                             if (status == 'processing' || status == 'shipped')
-                              ElevatedButton.icon(
-                                icon: const Icon(Icons.local_shipping, size: 18),
-                                label: const Text('تم الشحن / اكتمل'),
-                                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
                                 onPressed: () => _updateOrderStatus(context, orderDoc.id, 'delivered'),
                               ),
                           ],
                         ),
-                        if (status == 'pending')
+                        if (order['delivery_location'] is GeoPoint)
                           Align(
                             alignment: Alignment.centerLeft,
-                            child: TextButton(
-                              onPressed: () => _updateOrderStatus(context, orderDoc.id, 'rejected'),
-                              child: const Text('رفض الطلب', style: TextStyle(color: Colors.red)),
+                            child: TextButton.icon(
+                              icon: const Icon(Icons.location_on_outlined, size: 18),
+                              label: const Text('عنوان التوصيل على الخريطة'),
+                              onPressed: () {
+                                final gp = order['delivery_location'] as GeoPoint;
+                                launchUrl(
+                                    Uri.parse(
+                                        'https://maps.google.com/?q=${gp.latitude},${gp.longitude}'),
+                                    mode: LaunchMode.externalApplication);
+                              },
                             ),
                           )
                       ],
