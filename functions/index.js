@@ -1212,6 +1212,23 @@ exports.redeemQatratPoints = onCall({cpu: 0.083}, async (request) => {
  * @param {object} data Extra data payload.
  * @return {Promise<void>}
  */
+/**
+ * يفكّ service_meta_json من بيانات دفعة Apple/Google/Samsung Pay بأمان.
+ * الـ metadata نصوصٌ فقط، فنحمل service_meta كنصّ JSON ونعيد بناءه هنا — وإلّا
+ * فُقِد تفصيل الخدمة (المكيفات/الكنب/السيارة) على الطلبات المُنشأة خادميّاً.
+ * @param {string} s نصّ JSON.
+ * @return {object|null}
+ */
+function _parseServiceMeta(s) {
+  if (!s || typeof s !== "string") return null;
+  try {
+    const o = JSON.parse(s);
+    return (o && typeof o === "object" && !Array.isArray(o)) ? o : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 async function queuePush(toUid, title, body, type, data, targetRoles, recipientEmail) {
   await admin.firestore().collection("notification_triggers").add({
     toUid: toUid,
@@ -1738,6 +1755,9 @@ exports.verifyMoyasarPayment = onCall(
               new admin.firestore.GeoPoint(24.7136, 46.6753),
             created_at: FieldValue.serverTimestamp(),
             server_created_from_payment: true,
+            // أعِد بناء تفصيل الخدمة من الـ metadata (وإلّا فُقِد على طلب Apple Pay).
+            ...(_parseServiceMeta(md.service_meta_json) ?
+              {service_meta: _parseServiceMeta(md.service_meta_json)} : {}),
           };
           if (md.service_date) {
             const sd = new Date(md.service_date);
@@ -3135,6 +3155,9 @@ exports.reconcileOrphanPayments = onSchedule(
               new admin.firestore.GeoPoint(lat, lng) : new admin.firestore.GeoPoint(24.7136, 46.6753),
             created_at: admin.firestore.FieldValue.serverTimestamp(),
             server_created_from_payment: true, reconciled: true,
+            // أعِد بناء تفصيل الخدمة من الـ metadata (وإلّا فُقِد على طلب Apple Pay).
+            ...(_parseServiceMeta(md.service_meta_json) ?
+              {service_meta: _parseServiceMeta(md.service_meta_json)} : {}),
           };
           if (md.service_date) {
             const sd = new Date(md.service_date);

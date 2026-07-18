@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -739,6 +741,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       'lng': (widget.location?.longitude ?? 46.6753).toStringAsFixed(6),
       'service_date': widget.serviceDate?.toIso8601String() ?? '',
       'client_phone': _phoneController.text.trim(),
+      // (تفصيل الخدمة عبر Apple/Google/Samsung Pay) نحمله كنصّ JSON كي يعيد الخادم
+      // بناءه إن أنشأ الطلب من الـ metadata (سيناريو خلفية Apple Pay) — وإلّا ضاع
+      // تفصيل المكيفات/الكنب/السيارة على الطلب المدفوع أصلياً، فلا تراه الإدارة/السائق.
+      if (widget.serviceMeta != null)
+        'service_meta_json': jsonEncode(widget.serviceMeta),
     };
   }
 
