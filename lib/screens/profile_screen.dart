@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/screens/support_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
+import 'package:zyiarah/screens/store_screen.dart';
 import 'package:zyiarah/services/zyiarah_wallet_service.dart';
 import 'package:zyiarah/services/zyiarah_referral_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -1153,6 +1154,14 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                 context,
                 MaterialPageRoute(
                     builder: (_) => const ZyiarahContractsListScreen()));
+          }),
+          _divider(),
+          _menuRow(Icons.business_center_outlined, 'متجر الشركات', _brand, () {
+            HapticFeedback.lightImpact();
+            Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const ZyiarahStoreScreen(companies: true)));
           }),
           _divider(),
           _menuRow(Icons.support_agent_rounded, 'الدعم الفني', _brand, () {

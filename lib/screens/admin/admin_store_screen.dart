@@ -85,6 +85,7 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
     final priceCtrl = TextEditingController(text: (pData?['price'] ?? '').toString());
     final descCtrl = TextEditingController(text: pData?['description'] ?? '');
     String? imageUrl = pData?['image_url'];
+    String audience = pData?['store_audience'] ?? 'client';
     bool isSaving = false;
     bool isUploading = false;
 
@@ -218,6 +219,20 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                       maxLines: 3,
                       decoration: const InputDecoration(labelText: "وصف المنتج (اختياري)", border: OutlineInputBorder()),
                     ),
+                    const SizedBox(height: 15),
+                    // (قرار المالك) متجر واحد والمنتج يختار جمهوره — لا مجموعة ثانية.
+                    DropdownButtonFormField<String>(
+                      value: audience,
+                      decoration: const InputDecoration(
+                          labelText: "يظهر في", border: OutlineInputBorder()),
+                      items: const [
+                        DropdownMenuItem(value: 'client', child: Text('متجر العميل')),
+                        DropdownMenuItem(value: 'companies', child: Text('متجر الشركات')),
+                      ],
+                      onChanged: isSaving || isUploading
+                          ? null
+                          : (v) => setDialogState(() => audience = v ?? 'client'),
+                    ),
                   ],
                 ),
               ),
@@ -241,6 +256,7 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                         'description': descCtrl.text.trim(),
                         'image_url': imageUrl,
                         'is_hidden': pData?['is_hidden'] ?? false,
+                        'store_audience': audience,
                         'updated_at': FieldValue.serverTimestamp(),
                         if (product == null) 'created_at': FieldValue.serverTimestamp(),
                       };
@@ -372,6 +388,22 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                                 "${data['price']} ر.س",
                                 style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
                               ),
+                              if ((data['store_audience'] ?? 'client') == 'companies')
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF5D1B5E).withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text('متجر الشركات',
+                                        style: GoogleFonts.tajawal(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: const Color(0xFF5D1B5E))),
+                                  ),
+                                ),
                               if ((data['description'] ?? '').isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 4),

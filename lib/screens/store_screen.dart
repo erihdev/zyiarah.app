@@ -12,7 +12,10 @@ import 'package:zyiarah/utils/global_error_handler.dart';
 
 
 class ZyiarahStoreScreen extends StatefulWidget {
-  const ZyiarahStoreScreen({super.key});
+  const ZyiarahStoreScreen({super.key, this.companies = false});
+
+  /// true = متجر الشركات (منتجات store_audience == 'companies' فقط).
+  final bool companies;
 
   @override
   State<ZyiarahStoreScreen> createState() => _ZyiarahStoreScreenState();
@@ -73,7 +76,8 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
-          title: Text('متجر الأدوات والتنظيف', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+          title: Text(widget.companies ? 'متجر الشركات' : 'متجر الأدوات والتنظيف',
+              style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
           backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
           actions: [
@@ -162,7 +166,8 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
             ),
             Expanded(
               child: StreamBuilder<List<StoreProduct>>(
-                stream: _storeService.streamProducts(),
+                stream: _storeService.streamProducts(
+                    audience: widget.companies ? 'companies' : 'client'),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return GridView.builder(
@@ -450,7 +455,7 @@ class _CartSheetState extends State<_CartSheet> {
     return Padding(
       padding: const EdgeInsets.all(24),
       child: StreamBuilder<List<StoreProduct>>(
-          stream: widget.storeService.streamProducts(),
+          stream: widget.storeService.streamProducts(audience: null),
           builder: (context, snapshot) {
             if (snapshot.hasError) return const Center(child: Text('تعذّر تحميل السلة، تحقّق من الاتصال'));
             if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());

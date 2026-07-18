@@ -12,6 +12,10 @@ class StoreProduct {
   final String description;
   final bool isHidden;
 
+  /// جمهور المنتج: 'client' (المتجر العادي) أو 'companies' (متجر الشركات).
+  /// الغياب = 'client' كي يبقى كل القديم في متجر العميل كما هو حرفياً.
+  final String audience;
+
   StoreProduct({
     required this.id,
     required this.name,
@@ -19,6 +23,7 @@ class StoreProduct {
     required this.imageUrl,
     this.description = "",
     this.isHidden = false,
+    this.audience = 'client',
   });
 
   factory StoreProduct.fromFirestore(DocumentSnapshot doc) {
@@ -30,6 +35,7 @@ class StoreProduct {
       imageUrl: data['image_url'] ?? '',
       description: data['description'] ?? '',
       isHidden: data['is_hidden'] ?? false,
+      audience: data['store_audience'] ?? 'client',
     );
   }
 }
@@ -55,12 +61,16 @@ class StoreOrder {
 class ZyiarahStoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  Stream<List<StoreProduct>> streamProducts() {
+  /// [audience] يصفّي محلياً ('client'/'companies')؛ null = الكل — تستعمله
+  /// ورقة السلة لتحلّ أسماء منتجاتها أياً كان جمهورها. التصفية محلية لأن
+  /// المستندات القديمة بلا حقل store_audience ولا يمكن استعلام «غائب أو يساوي».
+  Stream<List<StoreProduct>> streamProducts({String? audience}) {
     return _db.collection('products')
         .where('is_hidden', isEqualTo: false)
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => StoreProduct.fromFirestore(doc))
+            .where((p) => audience == null || p.audience == audience)
             .toList());
   }
 
