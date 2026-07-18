@@ -191,10 +191,12 @@ service cloud.firestore {
       allow update: if isLoggedIn() &&
         request.auth.uid == resource.data.driver_id &&
         resource.data.status in ['scheduled', 'on_the_way', 'in_progress', 'accepted'] &&
-        // كتابة الموقع/القرب تُبقي الحالة كما هي: طلبٌ في 'accepted' يكتب موقعه
-        // فتبقى الحالة 'accepted' — وكانت مستبعَدة من القائمة الهدف، فتُرفَض
-        // **المعاملة كاملة** بصمت وتتجمّد خريطة العميل الحيّة. أُضيفت 'accepted'.
-        request.resource.data.status in ['accepted', 'on_the_way', 'in_progress', 'completed'] &&
+        // إمّا تبقى الحالة كما هي (كتابة موقع/قرب لا تغيّرها — كان طلب 'accepted'
+        // يُرفَض صامتاً فتتجمّد خريطة العميل)، أو تتقدّم للأمام فقط. صياغة «البقاء
+        // أو التقدّم» أدقّ من قائمةٍ ثابتة: تغطّي كتابة الموقع في أي حالة نشطة،
+        // وتمنع الرجوع للخلف (in_progress → accepted) الذي تسمح به قائمةٌ صرفة.
+        (request.resource.data.status == resource.data.status ||
+         request.resource.data.status in ['on_the_way', 'in_progress', 'completed']) &&
         // 'rewards_handled_by' مسموح: تكتبه عند الإكمال ليعالج الخادم الجوائز (onOrderRewards)
         // 'completed_distance_m' مسموح: يكتبه driver_dashboard عند الإكمال متى توفّر GPS.
         //   كان غائباً عن هذه القائمة، و hasOnly ترفض **المعاملة كاملة** لأي مفتاح خارجها —

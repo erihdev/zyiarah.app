@@ -23,13 +23,20 @@ void main() {
       File('lib/screens/driver_profile_screen.dart').readAsStringSync();
   final orderSvc = File('lib/services/order_service.dart').readAsStringSync();
 
-  test('القاعدة تسمح ببقاء الحالة accepted لكتابة الموقع/القرب (تجميد التتبّع)', () {
-    // كتابة الموقع تُبقي الحالة؛ طلبٌ accepted كان يُرفَض صامتاً فتتجمّد خريطة العميل.
+  test('القاعدة: بقاء الحالة (كتابة موقع) أو التقدّم فقط — لا رجوع للخلف', () {
+    // كتابة الموقع تُبقي الحالة (كان طلب accepted يُرفَض صامتاً فتتجمّد الخريطة)،
+    // وصياغة «البقاء أو التقدّم» تمنع الرجوع (in_progress → accepted) الذي تسمح
+    // به قائمةٌ صرفة — كان انحداراً في الإصلاح الأول صحّحته المراجعة الثانية.
     expect(
         rules.contains(
-            "request.resource.data.status in ['accepted', 'on_the_way', 'in_progress', 'completed']"),
+            'request.resource.data.status == resource.data.status ||'),
         isTrue,
-        reason: 'بدون accepted في القائمة الهدف تُرفض كل كتابة موقع أثناء accepted');
+        reason: 'بقاء الحالة يجب أن يكون مسموحاً لكتابة الموقع في أي حالة نشطة');
+    expect(
+        rules.contains(
+            "request.resource.data.status in ['on_the_way', 'in_progress', 'completed']"),
+        isTrue,
+        reason: 'التقدّم للأمام فقط — لا رجوع للخلف');
   });
 
   test('نوافذ الإسناد الخادمية موحّدة −24س (تلتقط العابر لمنتصف الليل والطويل)', () {
