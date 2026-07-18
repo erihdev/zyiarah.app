@@ -37,7 +37,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   int _currentIndex = 0;
-  bool _isOnline = true;
   String? _currentDriverId;
   String? _activeOrderId;
   String _driverName = 'السائق';
@@ -49,7 +48,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
   void initState() {
     super.initState();
     _currentDriverId = _auth.currentUser?.uid;
-    _syncOnlineStatus();
+    _ensureAlwaysAvailable();
     // إشعار توفّر تحديث — حرج للسائقين لإغلاق فجوة الإصدار (حالة scheduled لا تظهر بالنسخة القديمة)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ZyiarahAppUpdateService.checkAndPrompt(context);
@@ -88,15 +87,21 @@ class _DriverDashboardState extends State<DriverDashboard> {
     }
   }
 
-  Future<void> _syncOnlineStatus() async {
+  /// السائق **متصل دائماً** (أُزيل مفتاح الاتصال/الفصل بقرار المالك: كان يوقف
+  /// نفسه بالخطأ فتتوقّف عنه الطلبات والإشعارات). نحمّل اسمه ونضمن توفّره
+  /// خادمياً كي تصله كل المهام بلا حالة «أوفلاين» تغلقها.
+  Future<void> _ensureAlwaysAvailable() async {
     if (_currentDriverId == null) return;
-    final doc = await FirebaseFirestore.instance.collection('drivers').doc(_currentDriverId).get();
+    final ref = FirebaseFirestore.instance.collection('drivers').doc(_currentDriverId);
+    final doc = await ref.get();
     if (!mounted) return;
     final data = doc.data();
-    setState(() {
-      _isOnline = data?['is_available'] as bool? ?? true;
-      _driverName = data?['name'] as String? ?? 'السائق';
-    });
+    setState(() => _driverName = data?['name'] as String? ?? 'السائق');
+    if (data?['is_available'] != true || (data?['status'] as String?) == 'off') {
+      try {
+        await ref.update({'is_available': true, 'status': 'idle'});
+      } catch (_) {}
+    }
   }
 
   StreamSubscription<Position>? _syncSub;
@@ -237,9 +242,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _buildStatsRow(),
-                              const SizedBox(height: 25),
                               _buildMainSection(),
+                              const SizedBox(height: 25),
+                              _buildStatsRow(),
                             ],
                           ),
                         ),
@@ -271,7 +276,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
       flexibleSpace: FlexibleSpaceBar(
         titlePadding: const EdgeInsets.only(right: 20, bottom: 16),
         title: Text(
-          "لوحة التحكم",
+          "مرحباً، $_driverName",
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         background: Container(
@@ -285,40 +292,29 @@ class _DriverDashboardState extends State<DriverDashboard> {
         ),
       ),
       actions: [
-        Padding(
-          padding: const EdgeInsets.only(left: 16),
+        // مؤشّر ثابت — السائق متصل دائماً (لا مفتاح فصل يوقف الطلبات بالخطأ).
+        Container(
+          margin: const EdgeInsets.only(left: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(20),
+          ),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                _isOnline ? "متصل" : "أوفلاين",
-                style: const TextStyle(fontSize: 12, color: Colors.white70),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                    color: Color(0xFF34D399), shape: BoxShape.circle),
               ),
-              Switch(
-                value: _isOnline,
-                onChanged: (val) async {
-                  setState(() => _isOnline = val);
-                  // DRIVER-004: cancel sync timer immediately when going offline
-                  if (!val) _stopSync();
-                  if (_currentDriverId != null) {
-                    try {
-                      await FirebaseFirestore.instance.collection('drivers').doc(_currentDriverId).update({
-                        'is_available': val,
-                        'status': val ? 'idle' : 'off',
-                      });
-                    } catch (_) {
-                      // فشلت الكتابة → أعد الحالة المحلية وأبلغ السائق، وإلا يظنّ
-                      // نفسه متصلاً بينما الخادم يبقيه غير متاح فلا تصله مهام.
-                      if (mounted) {
-                        setState(() => _isOnline = !val);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text('تعذّر تحديث الحالة — تحقّق من الاتصال')));
-                      }
-                    }
-                  }
-                },
-                activeThumbColor: Colors.greenAccent,
-                inactiveThumbColor: Colors.grey[400],
-              ),
+              const SizedBox(width: 6),
+              Text('متصل',
+                  style: GoogleFonts.tajawal(
+                      fontSize: 12,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold)),
             ],
           ),
         ),
@@ -485,54 +481,65 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   Widget _buildMainSection() {
-    if (!_isOnline) {
-      return Column(
-        children: [
-          _buildUpcomingSchedule(),
-          const SizedBox(height: 20),
-          _buildStatusPlaceholder(Icons.cloud_off, "أنت حالياً غير متصل", "قم بتغيير حالتك للأعلى لاستقبال المهام"),
-        ],
-      );
-    }
+    // مصدر واحد لكل مهام السائق: المهمة الحالية بالأعلى (بطاقة التركيز) ثم
+    // القادمة أسفلها — بلا تكرار. كان جدولٌ كامل + بطاقة نشطة منفصلة يعرضان
+    // المهمة نفسها مرتين بشكلين مختلفين (لخبطة السائق)، ومفتاح «أوفلاين» يُخفي
+    // كل شيء. الآن: تسلسلٌ واضح، والسائق متصل دائماً.
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('orders')
+          .where('driver_id', isEqualTo: _currentDriverId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _buildStatusPlaceholder(Icons.error_outline,
+              "تعذّر تحميل مهامك", "تحقّق من الاتصال وحاول مجدداً");
+        }
+        if (!snapshot.hasData) {
+          return _buildStatusPlaceholder(
+              Icons.hourglass_empty, "جارٍ تحميل مهامك", "لحظات من فضلك");
+        }
+        final active = snapshot.data!.docs.where((d) {
+          final st = (d.data() as Map<String, dynamic>)['status'] as String? ?? '';
+          return st != 'completed' && st != 'cancelled' && st != 'rejected';
+        }).toList();
 
-    return Column(
-      children: [
-        // جدول المهام القادمة مقسّماً حسب الأيام (يظهر دائماً بالأعلى)
-        _buildUpcomingSchedule(),
-        const SizedBox(height: 20),
-        // بطاقة المهمة محل التركيز — تحديث الحالة فقط (لا قبول/رفض)
-        StreamBuilder<QuerySnapshot>(
-          stream: _orderService.streamDriverActiveOrders(_currentDriverId!),
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return _buildStatusPlaceholder(
-                Icons.error_outline,
-                "تعذّر تحميل مهامك",
-                "تحقّق من الاتصال وحاول مجدداً",
-              );
-            }
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-              WidgetsBinding.instance.addPostFrameCallback((_) => _stopSync());
-              return _buildStatusPlaceholder(
-                Icons.event_available,
-                "لا توجد مهمة نشطة الآن",
-                "ستظهر مهامك فور إسنادها إليك في الجدول أعلاه",
-              );
-            }
-            // المهمة محل التركيز: الأكثر تقدّماً (قيد التنفيذ ← في الطريق ← مجدولة)
-            final docs = [...snapshot.data!.docs];
-            docs.sort((a, b) => _focusRank(a).compareTo(_focusRank(b)));
-            final orderDoc = docs.first;
-            final status = orderDoc.get('status') as String? ?? '';
-            if (status == 'on_the_way' || status == 'in_progress' || status == 'accepted') {
-              WidgetsBinding.instance.addPostFrameCallback((_) => _startSync(orderDoc.id));
-            } else {
-              WidgetsBinding.instance.addPostFrameCallback((_) => _stopSync());
-            }
-            return _buildActivePipeline(orderDoc);
-          },
-        ),
-      ],
+        if (active.isEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _stopSync());
+          return _buildStatusPlaceholder(
+              Icons.event_available,
+              "لا توجد مهام حالياً",
+              "ستصلك المهمة فور إسنادها — ويصلك إشعار بكل طلب جديد");
+        }
+
+        // المهمة محل التركيز: الأكثر تقدّماً (قيد التنفيذ ← في الطريق ← مجدولة)
+        final sorted = [...active]
+          ..sort((a, b) => _focusRank(a).compareTo(_focusRank(b)));
+        final focus = sorted.first;
+        final focusStatus =
+            (focus.data() as Map<String, dynamic>)['status'] as String? ?? '';
+        if (focusStatus == 'on_the_way' ||
+            focusStatus == 'in_progress' ||
+            focusStatus == 'accepted') {
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => _startSync(focus.id));
+        } else {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _stopSync());
+        }
+
+        final upcoming = active.where((d) => d.id != focus.id).toList();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildActivePipeline(focus),
+            if (upcoming.isNotEmpty) ...[
+              const SizedBox(height: 26),
+              _buildUpcomingList(upcoming),
+            ],
+          ],
+        );
+      },
     );
   }
 
@@ -547,118 +554,101 @@ class _DriverDashboardState extends State<DriverDashboard> {
   // DAILY ROUTE MANIFEST (جدول الرحلات اليومي)
   // ─────────────────────────────────────────────
   // جدول المهام القادمة للسائق مقسّماً حسب الأيام (Upcoming Tasks)
-  Widget _buildUpcomingSchedule() {
+  /// المهام القادمة (باستثناء المهمة الحالية المعروضة بالأعلى) مجمّعة بالأيام.
+  /// عرضٌ خالص بلا تيار — يستقبل القائمة من [_buildMainSection] (مصدر واحد).
+  Widget _buildUpcomingList(List<QueryDocumentSnapshot> docs) {
     final now = DateTime.now();
     final todayKey = DateFormat('yyyy-MM-dd').format(now);
-    final tomorrowKey = DateFormat('yyyy-MM-dd').format(now.add(const Duration(days: 1)));
+    final tomorrowKey =
+        DateFormat('yyyy-MM-dd').format(now.add(const Duration(days: 1)));
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('orders')
-          .where('driver_id', isEqualTo: _currentDriverId)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox.shrink();
+    final tasks = <Map<String, dynamic>>[];
+    for (final doc in docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      String dayKey = data['booking_date'] as String? ?? '';
+      if (dayKey.isEmpty) {
+        final sd = (data['service_date'] as Timestamp?)?.toDate();
+        if (sd != null) dayKey = DateFormat('yyyy-MM-dd').format(sd);
+      }
+      if (dayKey.isEmpty) dayKey = todayKey; // افتراضي عند غياب التاريخ
+      tasks.add({'id': doc.id, 'data': data, 'dayKey': dayKey});
+    }
+    if (tasks.isEmpty) return const SizedBox.shrink();
 
-        // المهام غير المنتهية فقط، مع استخراج مفتاح اليوم لكل مهمة
-        final tasks = <Map<String, dynamic>>[];
-        for (final doc in snapshot.data!.docs) {
-          final data = doc.data() as Map<String, dynamic>;
-          final status = data['status'] as String? ?? '';
-          if (status == 'completed' || status == 'cancelled' || status == 'rejected') {
-            continue;
-          }
-          String dayKey = data['booking_date'] as String? ?? '';
-          if (dayKey.isEmpty) {
-            final sd = (data['service_date'] as Timestamp?)?.toDate();
-            if (sd != null) dayKey = DateFormat('yyyy-MM-dd').format(sd);
-          }
-          if (dayKey.isEmpty) dayKey = todayKey; // افتراضي عند غياب التاريخ
-          tasks.add({'id': doc.id, 'data': data, 'dayKey': dayKey});
-        }
+    final Map<String, List<Map<String, dynamic>>> byDay = {};
+    for (final t in tasks) {
+      byDay.putIfAbsent(t['dayKey'] as String, () => []).add(t);
+    }
+    final sortedDays = byDay.keys.toList()..sort();
 
-        if (tasks.isEmpty) {
-          return Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey.shade100),
+    String slotOf(Map<String, dynamic> d) =>
+        d['booking_time_slot'] as String? ??
+        (d['service_date'] as Timestamp?)?.toDate().toIso8601String() ??
+        '';
+    String dayLabel(String key) {
+      if (key == todayKey) return 'اليوم';
+      if (key == tomorrowKey) return 'غداً';
+      return key;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.calendar_month_rounded,
+                color: Color(0xFF5D1B5E), size: 20),
+            const SizedBox(width: 8),
+            Text('مهامك القادمة',
+                style: GoogleFonts.tajawal(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: const Color(0xFF1E293B))),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF5D1B5E).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text('${tasks.length}',
+                  style: GoogleFonts.tajawal(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF5D1B5E))),
             ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        for (final day in sortedDays) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8, top: 4),
             child: Row(
               children: [
-                Icon(Icons.event_available, color: Colors.grey.shade300, size: 28),
-                const SizedBox(width: 12),
-                Text('لا توجد مهام مجدولة حالياً',
-                    style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 13)),
-              ],
-            ),
-          );
-        }
-
-        // التجميع حسب اليوم وترتيب الأيام تصاعدياً
-        final Map<String, List<Map<String, dynamic>>> byDay = {};
-        for (final t in tasks) {
-          byDay.putIfAbsent(t['dayKey'] as String, () => []).add(t);
-        }
-        final sortedDays = byDay.keys.toList()..sort();
-
-        String slotOf(Map<String, dynamic> d) =>
-            d['booking_time_slot'] as String? ??
-            (d['service_date'] as Timestamp?)?.toDate().toIso8601String() ??
-            '';
-        String dayLabel(String key) {
-          if (key == todayKey) return 'اليوم';
-          if (key == tomorrowKey) return 'غداً';
-          return key;
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.calendar_month_rounded, color: Color(0xFF5D1B5E), size: 20),
-                const SizedBox(width: 8),
-                Text('جدول مهامي',
-                    style: GoogleFonts.tajawal(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: const Color(0xFF1E293B))),
-                const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  width: 4,
+                  height: 14,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF5D1B5E).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
+                    color: const Color(0xFF5D1B5E),
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                  child: Text('${tasks.length} مهمة',
-                      style: GoogleFonts.tajawal(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF5D1B5E))),
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            for (final day in sortedDays) ...[
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8, top: 4),
-                child: Text(dayLabel(day),
+                const SizedBox(width: 8),
+                Text(dayLabel(day),
                     style: GoogleFonts.tajawal(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
                         color: const Color(0xFF5D1B5E))),
-              ),
-              ...(byDay[day]!
-                    ..sort((a, b) => slotOf(a['data'] as Map<String, dynamic>)
-                        .compareTo(slotOf(b['data'] as Map<String, dynamic>))))
-                  .map((t) => _buildManifestOrderCard(
-                      t['id'] as String, t['data'] as Map<String, dynamic>)),
-            ],
-          ],
-        );
-      },
+              ],
+            ),
+          ),
+          ...(byDay[day]!
+                ..sort((a, b) => slotOf(a['data'] as Map<String, dynamic>)
+                    .compareTo(slotOf(b['data'] as Map<String, dynamic>))))
+              .map((t) => _buildManifestOrderCard(
+                  t['id'] as String, t['data'] as Map<String, dynamic>)),
+        ],
+      ],
     );
   }
 
