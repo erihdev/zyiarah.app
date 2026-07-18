@@ -2182,18 +2182,21 @@ exports.findNearestDrivers = onCall({cpu: 0.25}, async (request) => {
  * @return {Promise<FirebaseFirestore.QueryDocumentSnapshot|null>}
  */
 async function _findFreeDriverForSlot(db, {startDateTime, endDateTime}) {
-  const dayStart = new Date(
-      startDateTime.getFullYear(), startDateTime.getMonth(), startDateTime.getDate());
-  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+  // نافذة الانشغال [البداية−24س، النهاية): تلتقط أي مهمة قد تتقاطع زمنياً، بما
+  // فيها العابرة لمنتصف ليل UTC. كانت حدود اليوم التقويمي (getFullYear/Month/Date
+  // بتوقيت UTC للخادم) تُفوّت مهمة سائقٍ في اليوم السابق UTC (سلوت الرياض
+  // 00:00–02:59 = اليوم UTC السابق)، فيُعاد اختيار السائق نفسه ويرفضه الفحص الذرّي
+  // فيبقى الطلب المدفوع عالقاً بلا سائق أبداً. (24س تغطي أي مدة مهمة ≤ يوم.)
+  const winStart = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
 
   const driversSnap = await db.collection("drivers").get();
   const eligible = driversSnap.docs.filter((doc) => doc.data().is_active !== false);
   if (eligible.length === 0) return null;
 
-  // بناء مجموعة السائقين المشغولين بطلبات متقاطعة في نفس اليوم
+  // بناء مجموعة السائقين المشغولين بطلبات متقاطعة زمنياً
   const ordersSnap = await db.collection("orders")
-      .where("service_date", ">=", admin.firestore.Timestamp.fromDate(dayStart))
-      .where("service_date", "<", admin.firestore.Timestamp.fromDate(dayEnd))
+      .where("service_date", ">=", admin.firestore.Timestamp.fromDate(winStart))
+      .where("service_date", "<", admin.firestore.Timestamp.fromDate(endDateTime))
       .where("status", "in", ["scheduled", "on_the_way", "in_progress", "accepted"])
       .get();
 
@@ -2231,13 +2234,12 @@ async function _findFreeDriverForSlot(db, {startDateTime, endDateTime}) {
  * @return {Promise<boolean>}
  */
 async function _isDriverFreeForSlot(db, driverId, startDateTime, endDateTime) {
-  const dayStart = new Date(
-      startDateTime.getFullYear(), startDateTime.getMonth(), startDateTime.getDate());
-  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+  // نفس نافذة _findFreeDriverForSlot: [البداية−24س، النهاية) تلتقط العابر لمنتصف الليل.
+  const winStart = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
 
   const ordersSnap = await db.collection("orders")
-      .where("service_date", ">=", admin.firestore.Timestamp.fromDate(dayStart))
-      .where("service_date", "<", admin.firestore.Timestamp.fromDate(dayEnd))
+      .where("service_date", ">=", admin.firestore.Timestamp.fromDate(winStart))
+      .where("service_date", "<", admin.firestore.Timestamp.fromDate(endDateTime))
       .where("status", "in", ["scheduled", "on_the_way", "in_progress", "accepted"])
       .get();
 
@@ -2289,9 +2291,9 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
     // فلا تُحجَز زيارة تتعارض مع موعد اختاره عميل آخر مسبقاً.
     const slotHours = Number(cur.hours_contracted || 4);
     const slotEnd = new Date(startDateTime.getTime() + slotHours * 60 * 60 * 1000);
-    // نافذة [البداية−8س، النهاية): تلتقط مهمّة تبدأ قبل منتصف ليل UTC وتمتدّ للفترة
-    // (حدود اليوم الثابتة كانت تُفوّت تعارض المهام العابرة لمنتصف الليل).
-    const winStart = new Date(startDateTime.getTime() - 8 * 60 * 60 * 1000);
+    // نافذة [البداية−24س، النهاية): تلتقط مهمّة عابرة لمنتصف ليل UTC، وأيضاً مهمة
+    // طويلة (hours_contracted > 8) تبدأ قبل السلوت بأكثر من 8 ساعات (كانت −8 تُفوّتها).
+    const winStart = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
     const dayQ = db.collection("orders")
         .where("service_date", ">=", admin.firestore.Timestamp.fromDate(winStart))
         .where("service_date", "<", admin.firestore.Timestamp.fromDate(slotEnd))
@@ -2777,8 +2779,20 @@ exports.freeDriverOnOrderCancel = onDocumentUpdated(
         });
       });
 
+      // إشعار السائق بإلغاء مهمته — مصدر واحد خادميّ لكل الإلغاءات. كان تطبيق
+      // العميل يُشعره عند إلغائه هو/الإدارة عبر cancelOrder، لكنّ الإلغاء المباشر
+      // (قائمة حالة الأدمن، أو أي كتابة status='cancelled') يحرّر السائق هنا بلا
+      // إشعار — فتختفي المهمة من لوحته فجأة. queuePush تكتب الوارد وتدفع.
+      await queuePush(
+          driverId,
+          "أُلغيت مهمة 🚫",
+          `أُلغيت المهمة #${after.code || event.params.orderId} وأُزيلت من قائمتك.`,
+          "driver_task_removed",
+          {orderId: event.params.orderId, code: after.code || event.params.orderId},
+      );
+
       console.log(
-          `freeDriverOnOrderCancel: freed driver ${driverId} ` +
+          `freeDriverOnOrderCancel: freed+notified driver ${driverId} ` +
           `(order ${event.params.orderId} cancelled)`);
     },
 );
@@ -2862,11 +2876,15 @@ exports.remindDriversUpcomingTasks = onSchedule(
         const d = doc.data();
         if (d.reminder_sent === true || !d.driver_id) continue;
         const code = d.code || doc.id;
-        await _pushToUid(
+        // queuePush لا _pushToUid: الأخير يتخطّى بصمت السائق بلا توكن FCM (ويب/جهاز
+        // جديد/إذن مرفوض) فلا يصله شيء رغم reminder_sent=true. queuePush تكتب صندوق
+        // الوارد داخل التطبيق **دائماً** (processNotificationTriggers) ثم تدفع إن توفّر توكن.
+        await queuePush(
             d.driver_id,
             "تذكير: مهمتك بعد ساعة ⏰",
             `لديك مهمة (#${code}) تبدأ خلال ساعة تقريباً — استعد للانطلاق.`,
-            {type: "task_reminder", orderId: doc.id},
+            "task_reminder",
+            {orderId: doc.id, code: code},
         );
         await doc.ref.update({reminder_sent: true});
         sent++;
@@ -2997,6 +3015,32 @@ exports.sweepUnassignedPaidOrders = onSchedule(
         }
       }
       console.log(`sweepUnassignedPaidOrders: assigned ${assigned} order(s)`);
+
+      // (تصعيد الطلب العالق) طلبٌ مدفوع بلا سائق فات موعده بأكثر من ساعة يخرج من
+      // نافذة إعادة المحاولة أعلاه فلا يُسنَد ولا يُرى خادميّاً أبداً — مالٌ مقبوض
+      // بلا خدمة. ننبّه الإدارة مرّة واحدة (علم stranded_alerted) لتتدخّل يدويّاً.
+      const strandFloor = admin.firestore.Timestamp.fromDate(
+          new Date(now - 24 * 60 * 60 * 1000));
+      const strandCeil = admin.firestore.Timestamp.fromDate(
+          new Date(now - 60 * 60 * 1000));
+      const strandSnap = await db.collection("orders")
+          .where("status", "==", "pending")
+          .where("service_date", ">=", strandFloor)
+          .where("service_date", "<", strandCeil).get();
+      let alerted = 0;
+      for (const doc of strandSnap.docs) {
+        const d = doc.data();
+        if (d.driver_id || d.is_paid !== true || d.stranded_alerted === true) continue;
+        await queuePush(
+            "ADMIN_BROADCAST",
+            "طلب مدفوع بلا سائق ⚠️",
+            `الطلب #${d.code || doc.id} مدفوع وفات موعده بلا إسناد سائق — يلزم تدخّل يدوي.`,
+            "admin_order_alert",
+            {orderId: doc.id, code: d.code || doc.id});
+        await doc.ref.update({stranded_alerted: true});
+        alerted++;
+      }
+      if (alerted) console.warn(`sweepUnassignedPaidOrders: ${alerted} stranded paid order(s) escalated to admin`);
     },
 );
 

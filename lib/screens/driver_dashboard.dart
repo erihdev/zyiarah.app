@@ -12,7 +12,7 @@ import 'package:intl/intl.dart' hide TextDirection;
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:zyiarah/services/order_service.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:zyiarah/services/location_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -79,8 +79,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
       messenger.showSnackBar(SnackBar(
         content: const Text('يحتاج التطبيق إذن الموقع لاستقبال المهام وتتبّع التوصيل.'),
         action: SnackBarAction(
+          // Geolocator.openAppSettings() ترمي UnimplementedError على الويب.
           label: 'الإعدادات',
-          onPressed: () => Geolocator.openAppSettings(),
+          onPressed: kIsWeb ? () {} : () => Geolocator.openAppSettings(),
         ),
         duration: const Duration(seconds: 8),
       ));
@@ -105,6 +106,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   StreamSubscription<Position>? _syncSub;
+
+  // ناقلٌ يعيد بثّ مواقع تدفّق المزامنة إلى واجهة المسافة/الخريطة المصغّرة، كي لا
+  // يُفتَح تدفّق GPS ثانٍ للطلب النشط نفسه (كان تدفّقان متزامنان يضاعفان استهلاك
+  // البطارية). عند نشاط المزامنة تقرأ الواجهة من هنا؛ وإلا من _locationStream.
+  final StreamController<Position> _posHub = StreamController<Position>.broadcast();
 
   // DRIVER-005/007: يُنشأ بعد منح إذن الموقع (null قبله) ويُعاد استخدامه عبر إعادة البناء.
   Stream<Position>? _locationStream;
@@ -145,6 +151,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
     _activeOrderId = orderId;
     _syncSub = Geolocator.getPositionStream(locationSettings: _trackingSettings())
         .listen((pos) async {
+      // أعد بثّ الموقع للواجهة (المسافة/الخريطة) — مصدرٌ واحد بدل تدفّق ثانٍ.
+      if (!_posHub.isClosed) _posHub.add(pos);
       try {
         await _orderService.updateDriverLocation(
             orderId, GeoPoint(pos.latitude, pos.longitude));
@@ -179,6 +187,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
   @override
   void dispose() {
     _stopSync();
+    _posHub.close();
     super.dispose();
   }
 
@@ -412,7 +421,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
-    final weekStart = now.subtract(Duration(days: now.weekday - 1));
+    // يُقتطع لمنتصف الليل أولاً — بدونه يبدأ الأسبوع من ساعة اللحظة الحالية،
+    // فتُحتسب إكمالات الصباح الباكر من اليوم نفسه ناقصةً.
+    final weekStart = todayStart.subtract(Duration(days: now.weekday - 1));
     final monthStart = DateTime(now.year, now.month, 1);
 
     return StreamBuilder<QuerySnapshot>(
@@ -1041,7 +1052,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
       );
     }
     return StreamBuilder<Position>(
-      stream: _locationStream,
+      // أثناء مزامنة الطلب النشط اقرأ من ناقل مواقع المزامنة (تدفّق واحد)؛ خارجها
+      // (مثلاً مهمة مجدولة قبل الانطلاق) اقرأ من تدفّق الواجهة الخفيف.
+      stream: _syncSub != null ? _posHub.stream : _locationStream,
       builder: (context, snapshot) {
         // DRIVER-006: GPS permission revoked — visible alert, not silent collapse
         if (snapshot.hasError) {

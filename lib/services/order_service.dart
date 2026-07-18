@@ -64,7 +64,6 @@ class ZyiarahOrderService {
   Future<void> cancelOrder(String orderId, {String cancelledBy = 'client'}) async {
     String? orderCode;
     bool needsRefund = false;
-    String? cancelledDriverId;
 
     await _db.runTransaction((transaction) async {
       final orderRef = _db.collection('orders').doc(orderId);
@@ -85,8 +84,6 @@ class ZyiarahOrderService {
 
       orderCode = orderData['code'] as String?;
       needsRefund = orderData['is_paid'] == true;
-      final driverId = orderData['driver_id'] as String?;
-      cancelledDriverId = driverId;
 
       transaction.update(orderRef, {
         'status': 'cancelled',
@@ -115,16 +112,9 @@ class ZyiarahOrderService {
     // (يقرأ needs_refund + is_paid + amount من مستند الطلب) — منعاً لتزوير الرصيد.
     // -------------------------------------------------------------------------
 
-    // إشعار السائق إذا كان مُسنَّداً
-    if (cancelledDriverId != null) {
-      ZyiarahMessagingService().triggerNotification(
-        toUid: cancelledDriverId!,
-        title: "تم إلغاء الطلب",
-        body: "تم إلغاء الطلب #${orderCode ?? orderId} بواسطة ${cancelledBy == 'client' ? 'العميل' : 'الإدارة'}.",
-        type: 'driver_order_cancelled',
-        data: {'orderId': orderId, 'code': orderCode ?? orderId},
-      ).catchError((_) {});
-    }
+    // إشعار السائق بالإلغاء صار **خادميّاً** (freeDriverOnOrderCancel): مصدر واحد
+    // يغطي إلغاء العميل والإدارة والإلغاء المباشر معاً بلا ازدواج. كان هنا نداءٌ
+    // من العميل يُضاعف الإشعار عند إلغاء العميل/الإدارة، ويغيب عن الإلغاء المباشر.
 
     // إشعار الإدارة
     await ZyiarahMessagingService().triggerNotification(

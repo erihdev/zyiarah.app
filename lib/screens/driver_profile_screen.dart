@@ -57,12 +57,12 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                       _auth.currentUser?.phoneNumber ??
                       'غير محدد';
                   final email = _auth.currentUser?.email ?? 'غير محدد';
-                  // «مهمة منجزة» = عدد الطلبات المكتملة فعلاً (completed_orders_count)،
-                  // لا عدد التقييمات (rating_count) ولا حقل البذرة (rides).
+                  // «مهمة منجزة» = عدد الطلبات المكتملة فعلاً (completed_orders_count).
+                  // كان يسقط على rating_count (عدد التقييمات) أو rides (بذرة) عند غيابه،
+                  // فيعرض رقماً لا علاقة له بالإنجاز. سائق قديم بلا العدّاد يعرض 0 —
+                  // مطابقاً لشاشة أداء الكوادر (admin_staff_performance).
                   final totalTasks =
-                      (data['completed_orders_count'] as num?)?.toInt() ??
-                      (data['rating_count'] as num?)?.toInt() ??
-                      (data['rides'] as num?)?.toInt() ?? 0;
+                      (data['completed_orders_count'] as num?)?.toInt() ?? 0;
 
                   return SingleChildScrollView(
                     padding: const EdgeInsets.all(16),
@@ -317,8 +317,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
             icon: Icons.shield_outlined,
             label: 'سياسة الخصوصية',
             color: Colors.teal,
-            onTap: () => launchUrl(Uri.parse('https://zyiarah.com/privacy'),
-                mode: LaunchMode.externalApplication),
+            onTap: () => _openUrl('https://zyiarah.com/privacy'),
           ),
         ],
       ),
@@ -416,8 +415,24 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     } catch (_) {}
     final url =
         'https://wa.me/$adminPhone?text=${Uri.encodeComponent("استفسار من سائق زيارة")}';
-    if (await canLaunchUrl(Uri.parse(url))) {
-      await launchUrl(Uri.parse(url));
+    await _openUrl(url, failMessage: 'تعذّر فتح واتساب — تأكد من تثبيته');
+  }
+
+  /// فتح رابط خارجي مع إبلاغ مرئي عند الفشل (كان الفشل صامتاً: لا شيء يحدث
+  /// ولا رسالة، فيظنّ السائق الزرّ معطّلاً).
+  Future<void> _openUrl(String url, {String? failMessage}) async {
+    final uri = Uri.parse(url);
+    bool ok = false;
+    try {
+      ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      ok = false;
+    }
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(failMessage ?? 'تعذّر فتح الرابط',
+            style: GoogleFonts.tajawal()),
+      ));
     }
   }
 }

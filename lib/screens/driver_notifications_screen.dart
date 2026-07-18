@@ -29,6 +29,10 @@ class DriverNotificationsScreen extends StatelessWidget {
                 stream: FirebaseFirestore.instance
                     .collection('notifications')
                     .where('userId', isEqualTo: uid)
+                    // بلا orderBy كان limit(50) يُرجع أقدم 50 مستنداً بترتيب المعرّف
+                    // (لا الأحدث)، فتختفي إشعارات الإسناد الجديدة بعد تجاوز 50. كل
+                    // مستندات وارد السائق تُكتب بحقل sentAt خادميّاً.
+                    .orderBy('sentAt', descending: true)
                     .limit(50)
                     .snapshots(),
                 builder: (context, snapshot) {
@@ -134,13 +138,25 @@ class _NotifCard extends StatelessWidget {
     Color iconColor;
 
     switch (type) {
+      // الأنواع الفعلية لإشعارات السائق (كانت كلها تسقط على الأيقونة الافتراضية):
       case 'new_order':
-        icon = Icons.add_task_rounded;
+      case 'order_assignment':
+        icon = Icons.local_shipping_rounded;
         iconColor = Colors.green;
         break;
       case 'order_cancelled':
-        icon = Icons.cancel_outlined;
+      case 'driver_order_cancelled':
+      case 'driver_task_removed':
+        icon = Icons.remove_circle_outline;
         iconColor = Colors.red;
+        break;
+      case 'task_reminder':
+        icon = Icons.alarm_rounded;
+        iconColor = Colors.orange;
+        break;
+      case 'order_update':
+        icon = Icons.autorenew_rounded;
+        iconColor = const Color(0xFF5D1B5E);
         break;
       case 'driver_near':
       case 'driver_status':

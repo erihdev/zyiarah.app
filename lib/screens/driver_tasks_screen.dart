@@ -171,9 +171,15 @@ class _DriverTasksScreenState extends State<DriverTasksScreen>
         statusLabel = 'قيد التنفيذ';
         statusIcon = Icons.timer_outlined;
         break;
+      case 'scheduled':
+        statusColor = const Color(0xFF5D1B5E);
+        statusLabel = 'مجدولة';
+        statusIcon = Icons.event_available_outlined;
+        break;
+      case 'on_the_way':
       case 'accepted':
         statusColor = Colors.orange;
-        statusLabel = 'مقبولة';
+        statusLabel = status == 'on_the_way' ? 'في الطريق' : 'مقبولة';
         statusIcon = Icons.directions_car_outlined;
         break;
       default:
