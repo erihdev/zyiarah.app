@@ -24,3 +24,8 @@ const double kDefaultAcWashWindowPrice = 80.0;
 
 /// سعر غسيل مكيف سبليت — لكل مكيف (ر.س).
 const double kDefaultAcWashSplitPrice = 120.0;
+
+/// تنظيف داخلية السيارة (مراتب وأسقف) — لكل سيارة حسب حجمها (ر.س).
+const double kDefaultCarSmallPrice = 100.0;
+const double kDefaultCarMediumPrice = 150.0;
+const double kDefaultCarLargePrice = 200.0;

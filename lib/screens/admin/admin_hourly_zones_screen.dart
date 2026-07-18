@@ -244,6 +244,9 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     final pAcMaintSplitCtrl = TextEditingController(text: (data?['acMaintSplitPrice'] ?? kDefaultAcMaintSplitPrice).toString());
     final pAcWashWinCtrl = TextEditingController(text: (data?['acWashWindowPrice'] ?? kDefaultAcWashWindowPrice).toString());
     final pAcWashSplitCtrl = TextEditingController(text: (data?['acWashSplitPrice'] ?? kDefaultAcWashSplitPrice).toString());
+    final pCarSmallCtrl = TextEditingController(text: (data?['carSmallPrice'] ?? kDefaultCarSmallPrice).toString());
+    final pCarMediumCtrl = TextEditingController(text: (data?['carMediumPrice'] ?? kDefaultCarMediumPrice).toString());
+    final pCarLargeCtrl = TextEditingController(text: (data?['carLargePrice'] ?? kDefaultCarLargePrice).toString());
 
     // rank عبر num: لو خُزّن double يوماً (لوحة الويب) لا ينفجر الحوار.
     // مصدر القائمة المنسدلة «نسخ الأسعار من»: يُجلب مرة عند فتح الحوار.
@@ -414,6 +417,12 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                                         n(src['acWashWindowPrice']);
                                     pAcWashSplitCtrl.text =
                                         n(src['acWashSplitPrice']);
+                                    pCarSmallCtrl.text =
+                                        n(src['carSmallPrice']);
+                                    pCarMediumCtrl.text =
+                                        n(src['carMediumPrice']);
+                                    pCarLargeCtrl.text =
+                                        n(src['carLargePrice']);
                                   });
                                 },
                         );
@@ -475,6 +484,21 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                       ],
                     ),
 
+                    const Divider(height: 30),
+                    const Text("تنظيف داخلية السيارة — لكل سيارة (ر.س):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Text("مراتب وأسقف السيارة. اتركه فارغاً لتعطيل الحجم في هذه المنطقة.",
+                        style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(child: TextField(controller: pCarSmallCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'صغيرة', border: OutlineInputBorder()))),
+                        const SizedBox(width: 8),
+                        Expanded(child: TextField(controller: pCarMediumCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'وسط', border: OutlineInputBorder()))),
+                        const SizedBox(width: 8),
+                        Expanded(child: TextField(controller: pCarLargeCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'كبيرة', border: OutlineInputBorder()))),
+                      ],
+                    ),
+
                     // جدول فتح المنطقة: أيام وساعات العمل + فتح/إغلاق تواريخ استثنائية.
                     ZoneScheduleEditor(
                       initial: scheduleData,
@@ -506,6 +530,9 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                               'acMaintSplitPrice': double.tryParse(pAcMaintSplitCtrl.text) ?? 0,
                               'acWashWindowPrice': double.tryParse(pAcWashWinCtrl.text) ?? 0,
                               'acWashSplitPrice': double.tryParse(pAcWashSplitCtrl.text) ?? 0,
+                              'carSmallPrice': double.tryParse(pCarSmallCtrl.text) ?? 0,
+                              'carMediumPrice': double.tryParse(pCarMediumCtrl.text) ?? 0,
+                              'carLargePrice': double.tryParse(pCarLargeCtrl.text) ?? 0,
                             });
                             if (ctx.mounted) {
                               Navigator.pop(ctx);
@@ -552,6 +579,9 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                         'acMaintSplitPrice': double.tryParse(pAcMaintSplitCtrl.text) ?? 0,
                         'acWashWindowPrice': double.tryParse(pAcWashWinCtrl.text) ?? 0,
                         'acWashSplitPrice': double.tryParse(pAcWashSplitCtrl.text) ?? 0,
+                        'carSmallPrice': double.tryParse(pCarSmallCtrl.text) ?? 0,
+                        'carMediumPrice': double.tryParse(pCarMediumCtrl.text) ?? 0,
+                        'carLargePrice': double.tryParse(pCarLargeCtrl.text) ?? 0,
                         'rank': rank,
                         'enabled': data?['enabled'] ?? true,
                         // جدول الفتح — يُكتب متى لمس الأدمن المحرّر (scheduleData != null).
@@ -602,6 +632,9 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
       pAcMaintSplitCtrl.dispose();
       pAcWashWinCtrl.dispose();
       pAcWashSplitCtrl.dispose();
+      pCarSmallCtrl.dispose();
+      pCarMediumCtrl.dispose();
+      pCarLargeCtrl.dispose();
     });
   }
 

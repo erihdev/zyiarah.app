@@ -71,6 +71,7 @@ flutter:
     - assets/images/monthly_cleaning.png
     - assets/images/sofa_cleaning.png
     - assets/images/company_cleaning.png
+    - assets/images/car_cleaning.png
     - assets/images/store.png
     - assets/payment/
     # خطوط الـ PDF — مضمّنة محلياً. تنزيلها من الشبكة (PdfGoogleFonts) كان يعلّق

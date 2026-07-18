@@ -47,6 +47,15 @@ class GuestExploreScreen extends StatelessWidget {
       imagePath: 'assets/images/company_cleaning.png',
     ),
     _ServiceItem(
+      title: 'تنظيف داخلية السيارة',
+      subtitle: 'مراتب وأسقف السيارة',
+      price: 'حسب حجم السيارة',
+      themeColor: Color(0xFF0E7490),
+      iconBgColor: Color(0xFFE0F2FE),
+      icon: Icons.directions_car_filled_rounded,
+      imagePath: 'assets/images/car_cleaning.png',
+    ),
+    _ServiceItem(
       title: 'متجر المنظفات',
       subtitle: 'أدوات احترافية',
       price: 'عروض حصرية',

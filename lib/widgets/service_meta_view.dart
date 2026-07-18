@@ -21,6 +21,8 @@ String? zyiarahServiceMetaSummary(dynamic meta) {
   if (meta is! Map) return null;
   final parts = <String>[];
   switch (meta['kind']) {
+    // السيارات والمكيفات بنية بنود واحدة (label/count) — نفس الملخّص.
+    case 'car_interior':
     case 'ac_service':
       final lines = meta['lines'];
       if (lines is! List) return null;
@@ -66,6 +68,8 @@ class ZyiarahServiceMetaView extends StatelessWidget {
     final rows = switch (m['kind']) {
       'sofa_rug_sqm' => _sofaRugRows(m),
       'ac_service' => _acRows(m),
+      'car_interior' => _acRows(m), // بنود label/count/unit_price نفسها
+
       _ => const <_MetaRow>[],
     };
     if (rows.isEmpty) return const SizedBox.shrink();
@@ -125,6 +129,9 @@ class ZyiarahServiceMetaView extends StatelessWidget {
     }
     if (m['kind'] == 'ac_service') {
       return '${_num(m['total_units']).toInt()} مكيف';
+    }
+    if (m['kind'] == 'car_interior') {
+      return '${_num(m['total_cars']).toInt()} سيارة';
     }
     return '';
   }

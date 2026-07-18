@@ -16,6 +16,7 @@ import 'package:zyiarah/screens/store_screen.dart';
 import 'package:zyiarah/screens/sofa_rug_details_screen.dart';
 import 'package:zyiarah/screens/subscription_plans_screen.dart';
 import 'package:zyiarah/screens/ac_service_details_screen.dart';
+import 'package:zyiarah/screens/car_interior_details_screen.dart';
 import 'package:zyiarah/widgets/support_fab.dart';
 import 'package:zyiarah/screens/client_notifications_screen.dart';
 
@@ -681,6 +682,17 @@ class _ClientDashboardState extends State<ClientDashboard> {
           imagePath: 'assets/images/company_cleaning.png',
           // صارت طلباً مباشراً مسعّراً بدل طلب عرض سعر ينتظر تسعير الإدارة.
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AcServiceDetailsScreen())),
+        ),
+        _buildWebStyleServiceCard(
+          title: "تنظيف داخلية السيارة",
+          subtitle: "مراتب وأسقف السيارة",
+          price: "حسب حجم السيارة",
+          numericPrice: 0.0,
+          themeColor: const Color(0xFF0E7490),
+          icon: Icons.directions_car_filled_rounded,
+          iconBgColor: const Color(0xFFE0F2FE),
+          imagePath: 'assets/images/car_cleaning.png',
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CarInteriorDetailsScreen())),
         ),
         _buildWebStyleServiceCard(
           title: "متجر المنظفات",

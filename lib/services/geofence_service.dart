@@ -103,6 +103,9 @@ class GeofenceService {
         'acMaintSplitPrice': 0,
         'acWashWindowPrice': 0,
         'acWashSplitPrice': 0,
+        'carSmallPrice': 0,
+        'carMediumPrice': 0,
+        'carLargePrice': 0,
         'updated_at': FieldValue.serverTimestamp(),
       });
     }
