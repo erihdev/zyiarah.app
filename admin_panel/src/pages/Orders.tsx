@@ -40,6 +40,9 @@ const StatusBadge = ({ status }: { status: string }) => {
         case 'completed': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-100 text-xs"><CheckCircle2 size={14} />مكتمل</span>;
         case 'pending':   return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-100 text-xs"><Clock size={14} />بانتظار سائق</span>;
         case 'pending_admin_approval': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-orange-700 font-bold border border-orange-100 text-xs"><Clock size={14} />بانتظار موافقة الإدارة</span>;
+        case 'awaiting_payment': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-100 text-xs"><Clock size={14} />بانتظار الدفع</span>;
+        case 'under_review': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-orange-700 font-bold border border-orange-100 text-xs"><Clock size={14} />تحت المراجعة</span>;
+        case 'delivering': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 text-xs"><Package size={14} />جاري التنفيذ</span>;
         case 'scheduled': case 'assigned': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-50 text-teal-700 font-bold border border-teal-100 text-xs"><UserCheck size={14} />تم تعيين السائق</span>;
         case 'accepted':  return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-100 text-xs"><UserCheck size={14} />تم القبول</span>;
         case 'on_the_way': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-50 text-cyan-700 font-bold border border-cyan-100 text-xs"><Package size={14} />في الطريق</span>;
@@ -118,6 +121,24 @@ export default function Orders() {
             toast.error((err as { message?: string })?.message || 'حدث خطأ أثناء التعيين');
         } finally {
             setIsAssigning(false);
+        }
+    };
+
+    // الخدمات المُدارة إدارياً بلا سائق (تنظيف داخلية السيارة، وأي طلب مدفوع بلا
+    // موعد): تحت المراجعة ⇒ جاري التنفيذ ⇒ تم التنفيذ — نفس سلسلة تطبيق الأدمن
+    // (_advanceManagedOrder). كانت اللوحة تعرض حالتها بالإنجليزية بلا زر تقدّم.
+    const handleAdvanceManaged = async (order: OrderRecord, next: 'in_progress' | 'completed') => {
+        try {
+            await updateDoc(doc(db, 'orders', order.id), {
+                status: next,
+                ...(next === 'completed' ? { completed_at: Timestamp.now() } : {}),
+                updated_at: Timestamp.now(),
+            });
+        } catch (err) {
+            console.error('Error advancing order:', err);
+            toast.error('تعذّر تحديث الحالة');
+        } finally {
+            setActionMenuId(null);
         }
     };
 
@@ -251,6 +272,24 @@ export default function Orders() {
                                                             className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors text-right"
                                                         >
                                                             <UserCheck size={16} />{order.status === 'pending_admin_approval' ? 'اعتماد وتعيين' : 'تعيين سائق'}
+                                                        </button>
+                                                    )}
+                                                    {order.status === 'under_review' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleAdvanceManaged(order, 'in_progress')}
+                                                            className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-right"
+                                                        >
+                                                            <Package size={16} />بدء التنفيذ
+                                                        </button>
+                                                    )}
+                                                    {order.status === 'in_progress' && !order.driver_id && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleAdvanceManaged(order, 'completed')}
+                                                            className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors text-right"
+                                                        >
+                                                            <CheckCircle2 size={16} />تم التنفيذ
                                                         </button>
                                                     )}
                                                     <button

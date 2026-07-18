@@ -554,6 +554,31 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                 )
+              else if (status == 'under_review' ||
+                  (status == 'in_progress' && order['driver_id'] == null))
+                // خدمة مُدارة إدارياً بلا سائق (تنظيف داخلية السيارة): لا تتبّع —
+                // كان زرّ «تتبع السائق» يظهر ويقول «لم يُعيَّن سائق بعد» للأبد.
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF5D1B5E).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.verified_outlined,
+                        size: 15, color: Color(0xFF5D1B5E)),
+                    const SizedBox(width: 6),
+                    Text(
+                        status == 'under_review'
+                            ? 'تحت المراجعة — تصلك الإشعارات'
+                            : 'جاري التنفيذ',
+                        style: GoogleFonts.tajawal(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF5D1B5E))),
+                  ]),
+                )
               else
                 ElevatedButton.icon(
                   onPressed: () {

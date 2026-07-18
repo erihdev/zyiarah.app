@@ -9,13 +9,12 @@ import {
   Timestamp 
 } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
-import { 
-  ShoppingBag, 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  User, 
-  ChevronDown, 
+import {
+  ShoppingBag,
+  CheckCircle,
+  Clock,
+  User,
+  ChevronDown,
   ChevronUp,
   Package,
   Loader2
@@ -34,7 +33,7 @@ interface StoreOrder {
   client_name?: string;
   items: OrderItem[];
   total_amount: number;
-  status: 'pending' | 'approved' | 'rejected' | 'processing' | 'shipped' | 'delivered' | 'completed' | 'pending_admin_approval';
+  status: 'pending' | 'awaiting_payment' | 'under_review' | 'delivering' | 'approved' | 'rejected' | 'processing' | 'shipped' | 'delivered' | 'completed' | 'pending_admin_approval';
   is_paid?: boolean;
   created_at: Timestamp;
 }
@@ -44,6 +43,9 @@ const PAID_STATUSES = ['processing', 'shipped', 'delivered', 'completed'];
 const STATUS_LABELS: Record<string, string> = {
   pending: 'قيد الانتظار',
   pending_admin_approval: 'بانتظار الموافقة',
+  awaiting_payment: 'بانتظار الدفع',
+  under_review: 'مدفوع — تحت المراجعة',
+  delivering: 'جاري التوصيل',
   approved: 'مقبول',
   rejected: 'مرفوض',
   processing: 'مدفوع — قيد التجهيز',
@@ -76,7 +78,7 @@ export default function StoreOrders() {
     return () => unsubscribe();
   }, []);
 
-  const handleStatusUpdate = async (id: string, newStatus: 'approved' | 'rejected') => {
+  const handleStatusUpdate = async (id: string, newStatus: string) => {
     try {
       await updateDoc(doc(db, 'store_orders', id), {
         status: newStatus,
@@ -206,25 +208,28 @@ export default function StoreOrders() {
                         </div>
                       </div>
 
-                      {order.status === 'pending' && (
-                        <div className="flex gap-3">
-                          <button 
-                            type="button"
-                            onClick={() => handleStatusUpdate(order.id, 'approved')}
-                            className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white py-3 rounded-2xl font-bold transition-all shadow-lg shadow-green-100"
-                          >
-                            <CheckCircle size={18} />
-                            <span>موافقة على الطلب</span>
-                          </button>
-                          <button 
-                            type="button"
-                            onClick={() => handleStatusUpdate(order.id, 'rejected')}
-                            className="flex-1 flex items-center justify-center gap-2 bg-white hover:bg-red-50 text-red-600 border border-red-100 py-3 rounded-2xl font-bold transition-all"
-                          >
-                            <XCircle size={18} />
-                            <span>رفض الطلب</span>
-                          </button>
-                        </div>
+                      {/* المتجر المباشر: العميل يدفع فوراً ثم تحت المراجعة ⇒ جاري
+                          التوصيل ⇒ تم التوصيل. (مسار الموافقة/الرفض القديم أُلغي في
+                          تطبيق الأدمن؛ حُدّثت اللوحة لتقود نفس السلسلة.) */}
+                      {(order.status === 'under_review' || order.status === 'processing') && (
+                        <button
+                          type="button"
+                          onClick={() => handleStatusUpdate(order.id, 'delivering')}
+                          className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-2xl font-bold transition-all shadow-lg shadow-indigo-100"
+                        >
+                          <CheckCircle size={18} />
+                          <span>بدء التوصيل</span>
+                        </button>
+                      )}
+                      {(order.status === 'delivering' || order.status === 'shipped') && (
+                        <button
+                          type="button"
+                          onClick={() => handleStatusUpdate(order.id, 'delivered')}
+                          className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white py-3 rounded-2xl font-bold transition-all shadow-lg shadow-green-100"
+                        >
+                          <CheckCircle size={18} />
+                          <span>تم التوصيل</span>
+                        </button>
                       )}
                     </div>
                   </div>

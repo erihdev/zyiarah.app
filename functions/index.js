@@ -2949,21 +2949,25 @@ exports.remindClientsUpcomingAppointments = onSchedule(
         const dayLabel = dDiff <= 0 ? "اليوم" : dDiff === 1 ? "غداً" : `بعد ${dDiff} أيام`;
 
         if (hoursUntil > 2.5 && d.client_reminder_24h_sent !== true) {
-          await _pushToUid(
+          // queuePush: يكتب صندوق الوارد دائماً — كان _pushToUid يضبط علم الإرسال
+          // ثم يتخطّى بصمت العميل بلا توكن، فيفقد التذكير للأبد ولا يُعاد.
+          await queuePush(
               d.client_id,
               "موعد زيارتكِ اقترب 🏡",
               `${greet}موعد «${serviceName}» ${dayLabel} الساعة ${timeStr}. بانتظاركِ 🌿`,
-              {type: "appointment_reminder", orderId: doc.id},
+              "appointment_reminder",
+              {orderId: doc.id},
           );
           await doc.ref.update({client_reminder_24h_sent: true});
           sent++;
         } else if (hoursUntil > 0 && hoursUntil <= 2.5 &&
                    d.client_reminder_soon_sent !== true) {
-          await _pushToUid(
+          await queuePush(
               d.client_id,
               "اقترب موعد زيارتكِ ⏰",
               `${greet}«${serviceName}» بعد ساعتين (الساعة ${timeStr}). فريقنا في الطريق إليكِ 🚗`,
-              {type: "appointment_reminder", orderId: doc.id},
+              "appointment_reminder",
+              {orderId: doc.id},
           );
           await doc.ref.update({client_reminder_soon_sent: true});
           sent++;
@@ -3265,11 +3269,15 @@ exports.notifyClientOnDriverDeparture = onDocumentUpdated(
       const rawName = (after.client_name || "").trim();
       const greet = ["", "عميل", "عميلة", "عميل زيارة", "عميلة زيارة"]
           .includes(rawName) ? "" : `${rawName}، `;
-      await _pushToUid(
+      // queuePush لا _pushToUid: الأخير يتخطّى العميل بلا توكن FCM بلا أثر في
+      // صندوق الوارد — عميل الويب لا يُخبَر بانطلاق سائقه إطلاقاً. queuePush تكتب
+      // الوارد دائماً ثم تدفع.
+      await queuePush(
           after.client_id,
           "سائقكِ في الطريق إليكِ 🚗",
           `${greet}انطلق فريق زيارة لتنفيذ خدمتكِ — يسعدنا استقبالكِ ✨`,
-          {type: "order_update", orderId: event.params.orderId},
+          "order_update",
+          {orderId: event.params.orderId},
       );
     },
 );
