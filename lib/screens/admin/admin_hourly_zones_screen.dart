@@ -21,6 +21,10 @@ class AdminHourlyZonesScreen extends StatefulWidget {
 }
 
 class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
+  /// مجموعة الساعات المعروضة كحقول أسعار — يجب أن تحتوي كل خيارات «الساعات
+  /// المتاحة للعميل» في إعدادات النظام (يفرضه اختبار zone_schedule_test).
+  static const List<int> kZoneHourOptions = [1, 2, 4, 5, 6, 7, 8];
+
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   Future<void> _toggleZoneEnabled(String id, bool currentValue) async {
@@ -213,11 +217,22 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     final nameCtrl = TextEditingController(text: data?['name'] ?? '');
     final radiusCtrl = TextEditingController(text: data?['radiusKm']?.toString() ?? '15');
     
-    final p1Ctrl = TextEditingController(text: data?['prices']?['1']?.toString() ?? '');
-    final p4Ctrl = TextEditingController(text: data?['prices']?['4']?.toString() ?? '');
-    final p5Ctrl = TextEditingController(text: data?['prices']?['5']?.toString() ?? '');
-    final p6Ctrl = TextEditingController(text: data?['prices']?['6']?.toString() ?? '');
-    final p8Ctrl = TextEditingController(text: data?['prices']?['8']?.toString() ?? '');
+    // حقول أسعار الساعات **تتولّد من مجموعة الساعات** لا من قائمة يدوية.
+    // كانت مثبّتة (1،4،5،6،8) بينما شرائح العميل من الإعدادات — فلما فعّل المالك
+    // «ساعتين» صارت شريحةً بلا حقل سعر: تُقرأ صفراً ⇒ «غير مسعّرة» ولا يمكن بيعها،
+    // ولا يملك الأدمن مكاناً يسعّرها منه أصلاً. الاتحاد مع مفاتيح المنطقة القائمة
+    // يُبقي أي ساعة مسعّرة تاريخياً قابلةً للتعديل.
+    final Map<String, dynamic> existingPrices =
+        stringKeyedMap(data?['prices']) ?? {};
+    final hourSet = <int>{
+      ...kZoneHourOptions,
+      ...existingPrices.keys.map((k) => int.tryParse(k) ?? -1).where((h) => h > 0),
+    }.toList()
+      ..sort();
+    final Map<int, TextEditingController> hourCtrls = {
+      for (final h in hourSet)
+        h: TextEditingController(text: existingPrices['$h']?.toString() ?? ''),
+    };
 
     // sofaPrice/rugPrice (المتر الطولي) أُزيلا بقرار المالك: «المتر الطولي يختفي».
     // لم يعد لهما حقلٌ هنا ولا قارئ في التطبيق — نظام تسعير واحد فقط، بالمتر المربع.
@@ -376,11 +391,19 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                                           : v.toString());
                                   setDialogState(() {
                                     copiedFromId = id;
-                                    p1Ctrl.text = n(prices['1']);
-                                    p4Ctrl.text = n(prices['4']);
-                                    p5Ctrl.text = n(prices['5']);
-                                    p6Ctrl.text = n(prices['6']);
-                                    p8Ctrl.text = n(prices['8']);
+                                    for (final e in prices.entries) {
+                                      final h = int.tryParse(e.key);
+                                      if (h == null) continue;
+                                      hourCtrls
+                                          .putIfAbsent(h,
+                                              () => TextEditingController())
+                                          .text = n(e.value);
+                                      if (!hourSet.contains(h)) {
+                                        hourSet
+                                          ..add(h)
+                                          ..sort();
+                                      }
+                                    }
                                     pSofaSqmCtrl.text = n(src['sofaSqmPrice']);
                                     pRugSqmCtrl.text = n(src['rugSqmPrice']);
                                     pAcMaintWinCtrl.text =
@@ -399,30 +422,25 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     const SizedBox(height: 12),
                     const Text("أسعار النظافة بالساعة (ر.س):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     const SizedBox(height: 10),
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
-                        Expanded(child: TextField(controller: p1Ctrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'ساعة', border: OutlineInputBorder()))),
-                        const SizedBox(width: 8),
-                        Expanded(child: TextField(controller: p4Ctrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '4 ساعات', border: OutlineInputBorder()))),
+                        for (final h in hourSet)
+                          SizedBox(
+                            width: 168,
+                            child: TextField(
+                              controller: hourCtrls[h],
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                  labelText: h == 1 ? 'ساعة' : '$h ساعات',
+                                  border: const OutlineInputBorder(),
+                                  isDense: true),
+                            ),
+                          ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(child: TextField(controller: p5Ctrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '5 ساعات', border: OutlineInputBorder()))),
-                        const SizedBox(width: 8),
-                        Expanded(child: TextField(controller: p6Ctrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '6 ساعات', border: OutlineInputBorder()))),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Spacer(),
-                        Expanded(child: TextField(controller: p8Ctrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '8 ساعات', border: OutlineInputBorder()))),
-                        const Spacer(),
-                      ],
-                    ),
-                    
+
                     const Divider(height: 30),
                     const Text("أسعار الكنب والسجاد — بالمتر المربع (ر.س/م²):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     const Text("العميلة تُدخل طول وعرض كل قطعة ويُحسب السعر آلياً. صفر = تعطيل الخدمة في هذه المنطقة.",
@@ -479,11 +497,8 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                           try {
                             final n = await _applyPricesToZones(targets, {
                               'prices': {
-                                '1': double.tryParse(p1Ctrl.text) ?? 0,
-                                '4': double.tryParse(p4Ctrl.text) ?? 0,
-                                '5': double.tryParse(p5Ctrl.text) ?? 0,
-                                '6': double.tryParse(p6Ctrl.text) ?? 0,
-                                '8': double.tryParse(p8Ctrl.text) ?? 0,
+                                for (final e in hourCtrls.entries)
+                                  '${e.key}': double.tryParse(e.value.text) ?? 0,
                               },
                               'sofaSqmPrice': double.tryParse(pSofaSqmCtrl.text) ?? 0,
                               'rugSqmPrice': double.tryParse(pRugSqmCtrl.text) ?? 0,
@@ -524,11 +539,8 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                         'centerLoc': selectedGeo,
                         'radiusKm': double.tryParse(radiusCtrl.text) ?? 15.0,
                         'prices': {
-                          '1': double.tryParse(p1Ctrl.text) ?? 0,
-                          '4': double.tryParse(p4Ctrl.text) ?? 0,
-                          '5': double.tryParse(p5Ctrl.text) ?? 0,
-                          '6': double.tryParse(p6Ctrl.text) ?? 0,
-                          '8': double.tryParse(p8Ctrl.text) ?? 0,
+                          for (final e in hourCtrls.entries)
+                            '${e.key}': double.tryParse(e.value.text) ?? 0,
                         },
                         // صفر = «غير مسعّرة» فتُعطَّل الخدمة بدل بيعها بسعر افتراضي.
                         // (sofaPrice/rugPrice الطوليان لم يعودا يُكتبان — النظام أُلغي.
@@ -580,11 +592,9 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
       nameDebounce?.cancel();
       nameCtrl.dispose();
       radiusCtrl.dispose();
-      p1Ctrl.dispose();
-      p4Ctrl.dispose();
-      p5Ctrl.dispose();
-      p6Ctrl.dispose();
-      p8Ctrl.dispose();
+      for (final c in hourCtrls.values) {
+        c.dispose();
+      }
       // الستة الجديدة كانت تُسرَّب في كل فتح/إغلاق للحوار — أُضيفت الحقول ونُسي التخلّص.
       pSofaSqmCtrl.dispose();
       pRugSqmCtrl.dispose();

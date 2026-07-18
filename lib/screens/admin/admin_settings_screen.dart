@@ -486,7 +486,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   }
 
   Widget _buildHoursToggles() {
-    final allHours = [1, 2, 4, 5, 6, 8];
+    final allHours = [1, 2, 4, 5, 6, 7, 8];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
