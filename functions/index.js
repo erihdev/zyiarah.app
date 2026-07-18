@@ -1885,6 +1885,45 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
     console.error("onOrderWritten paid-flip assign failed:", e.message);
   }
 
+  // (تكملة «لا طلب مدفوع بلا سائق») الضمان صار **حدثياً** لا مؤقّتاً فقط:
+  // سباقُ آخر خانة يترك طلباً مدفوعاً بلا سائق، والسائق لا يتحرّر بمرور الوقت بل
+  // بإلغاء/إكمال طلبٍ آخر — فلحظةَ التحرُّر نُعيد محاولة الإسناد فوراً بدل انتظار
+  // المكنسة. آمنٌ من التسلسل: الطلب المُسنَد هنا مدفوع سلفاً (paidFlipped=false)
+  // وdriver_id يمتلئ، فلا يعيد إطلاق أيٍّ من الكتلتين.
+  try {
+    const ACTIVE_WITH_DRIVER = ["scheduled", "accepted", "on_the_way", "in_progress"];
+    const driverFreed = beforeData && afterData &&
+        beforeData.driver_id && ACTIVE_WITH_DRIVER.includes(beforeData.status) &&
+        (afterData.status === "cancelled" || afterData.status === "completed");
+    if (driverFreed) {
+      const db = admin.firestore();
+      const cutoff = admin.firestore.Timestamp.fromDate(
+          new Date(Date.now() - 60 * 60 * 1000));
+      // نفس شكل استعلام المكنسة (فهرس status+service_date قائم).
+      const snap = await db.collection("orders")
+          .where("status", "==", "pending")
+          .where("service_date", ">=", cutoff)
+          .limit(25).get();
+      const waiting = snap.docs.filter((d) => {
+        const o = d.data();
+        return o.is_paid === true && !o.driver_id && o.service_date;
+      }).slice(0, 5);
+      for (const doc of waiting) {
+        const o = doc.data();
+        const start = o.service_date.toDate();
+        const hours = Number(o.hours_contracted || 4);
+        const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
+        const driver = await _findFreeDriverForSlot(db, {startDateTime: start, endDateTime: end});
+        if (driver) {
+          await _assignDriverScheduled(db, doc.id, driver, start);
+          console.log(`onOrderWritten: driver-freed assigned ${doc.id} -> ${driver.id}`);
+        }
+      }
+    }
+  } catch (e) {
+    console.error("onOrderWritten driver-freed reassign failed:", e.message);
+  }
+
   let deltaRevenue = 0;
   let deltaActive = 0;
   let deltaCompleted = 0;
@@ -2753,7 +2792,7 @@ exports.dedupeFcmToken = onDocumentWritten(
 // (2c) تذكير السائق — Cron كل 15 دقيقة بالمهام التي تبدأ بعد ساعة تقريباً
 // ════════════════════════════════════════════════════════════════════════
 exports.remindDriversUpcomingTasks = onSchedule(
-    {schedule: "every 15 minutes", timeZone: "Asia/Riyadh"},
+    {schedule: "every 5 minutes", timeZone: "Asia/Riyadh"},
     async () => {
       const db = admin.firestore();
       const now = Date.now();
