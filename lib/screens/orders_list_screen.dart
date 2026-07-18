@@ -152,7 +152,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
         // Filter based on phase
         // كل حالات المسار النشط بما فيها لهجة الإرسال المباشر (Direct Dispatch)
         final List<String> activeStatuses = [
-          'pending', 'awaiting_payment',
+          'pending', 'awaiting_payment', 'under_review',
           'assigned', 'scheduled', 'accepted', 'on_the_way', 'in_progress',
         ];
         final List<String> historyStatuses = ['completed', 'cancelled'];

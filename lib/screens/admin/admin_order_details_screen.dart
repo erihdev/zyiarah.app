@@ -37,7 +37,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   // from the Direct Dispatch flow) is always merged in below so the dropdown never
   // throws an assertion when the value isn't in this base list.
   final List<String> _baseStatuses = [
-    'pending', 'scheduled', 'assigned', 'accepted',
+    'pending', 'under_review', 'scheduled', 'assigned', 'accepted',
     'on_the_way', 'in_progress', 'completed', 'cancelled',
   ];
 

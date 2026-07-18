@@ -29,6 +29,8 @@ class ZyiarahStatus {
         return {'text': 'قيد الانتظار', 'color': Colors.orange};
       case 'awaiting_payment':
         return {'text': 'بانتظار الدفع', 'color': Colors.amber};
+      case 'under_review':
+        return {'text': 'تحت المراجعة', 'color': Colors.deepOrange};
       case 'assigned':
         return {'text': 'تم التعيين', 'color': Colors.blue};
       case 'scheduled':

@@ -51,11 +51,32 @@ void main() {
           reason: 'حجم بلا سعر يجب ألا يُرسم له صف إطلاقاً');
     });
 
-    test('طلب مباشر: hours + serviceDate إلى ملخص الدفع', () {
-      expect(carScreen.contains('hours: _durationHours'), isTrue);
-      expect(carScreen.contains('serviceDate: _selectedSlot'), isTrue,
-          reason: 'بدونهما يسلك الطلب مسار «بلا موعد» اليدوي');
+    test('نمط المتجر: بلا موعد وبلا سائق — الإدارة تقود بعد الدفع', () {
+      // قرار المالك (نفس يوم الإطلاق): «نفس طريقة المتجر — يدفع ثم للمراجعة
+      // وجاري التنفيذ وتم التنفيذ». لا منتقي موعد ولا hours/serviceDate.
+      expect(carScreen.contains('ZyiarahBookingSlotPicker'), isFalse,
+          reason: 'عودة منتقي الموعد تعيد السيارات لمسار إسناد السائقين');
+      expect(carScreen.contains('serviceDate:'), isFalse);
+      expect(carScreen.contains('hours:'), isFalse);
       expect(carScreen.contains("'kind': 'car_interior'"), isTrue);
+    });
+
+    test('الخادم يرقّي المدفوع بلا موعد لتحت المراجعة والإدارة تقوده', () {
+      final fn = File('functions/index.js').readAsStringSync();
+      final i = fn.indexOf('exports.onOrderWritten');
+      final body = fn.substring(i, fn.indexOf('exports.', i + 10));
+      expect(body.contains('!afterData.service_date'), isTrue,
+          reason: 'بدون فرع «بلا موعد» يبقى طلب السيارة pending صامتاً للأبد');
+      expect(body.contains('status: "under_review"'), isTrue);
+      final adminOrders =
+          File('lib/screens/admin/admin_orders_screen.dart')
+              .readAsStringSync();
+      expect(adminOrders.contains('_advanceManagedOrder'), isTrue);
+      expect(adminOrders.contains("'جاري التنفيذ'"), isTrue);
+      expect(adminOrders.contains("'تم التنفيذ'"), isTrue);
+      final notify = File('functions/index.js').readAsStringSync();
+      expect(notify.contains('"under_review"'), isTrue,
+          reason: 'العميل يجب أن يُشعَر لحظة دخول طلبه المراجعة');
     });
 
     test('التعريف الذي طلبه المالك ظاهر: مراتب وأسقف السيارة', () {

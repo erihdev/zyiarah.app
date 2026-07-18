@@ -172,6 +172,10 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated({document: "orde
         targetUserId = afterData.client_id;
         title = "وصل فريقكِ 🏠";
         body = `${greet}فريق زيارة عند بابكِ الآن — يسعدنا استقبالكِ ✨`;
+      } else if (afterData.status === "under_review") {
+        targetUserId = afterData.client_id;
+        title = "تم استلام طلبكِ 🧾";
+        body = `${greet}دفعتكِ مؤكّدة وطلبكِ الآن تحت مراجعة الإدارة.`;
       } else if (afterData.status === "in_progress") {
         targetUserId = afterData.client_id;
         title = "بدأت خدمتكِ 🧽";
@@ -1893,6 +1897,17 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
         // نادر (سباق آخر خانة): تبقى المكنسة الدورية تعيد المحاولة.
         console.warn(`onOrderWritten: no free driver at paid-flip for ${event.params.orderId}`);
       }
+    } else if (paidFlipped && !afterData.driver_id &&
+        afterData.status === "pending" && !afterData.service_date) {
+      // (نمط المتجر — قرار المالك) طلب مدفوع **بلا موعد** = خدمة مُدارة إدارياً
+      // (تنظيف داخلية السيارة): لا إسناد سائق — يُرقّى لتحت المراجعة فور تأكيد
+      // الدفع، والإدارة تقودها: under_review ⇒ in_progress ⇒ completed بإشعار
+      // خادمي لكل نقلة (sendNotificationOnOrderStatusChange).
+      await change.after.ref.update({
+        status: "under_review",
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      console.log(`onOrderWritten: dateless paid order ${event.params.orderId} -> under_review`);
     }
   } catch (e) {
     console.error("onOrderWritten paid-flip assign failed:", e.message);

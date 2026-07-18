@@ -7,6 +7,7 @@ import 'package:zyiarah/screens/admin/admin_order_details_screen.dart';
 import 'package:zyiarah/widgets/zyiarah_shimmer.dart';
 import 'package:zyiarah/utils/csv_export_util.dart';
 import 'package:zyiarah/utils/status_util.dart';
+import 'package:zyiarah/services/audit_service.dart';
 
 
 class AdminOrdersScreen extends StatefulWidget {
@@ -145,7 +146,9 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
             borderRadius: BorderRadius.circular(24),
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Row(
+              child: Column(
+                children: [
+                  Row(
                 children: [
                   Container(
                     width: 48, height: 48,
@@ -200,11 +203,69 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                   ),
                 ],
               ),
+                  // (نمط المتجر — قرار المالك) الخدمات المُدارة إدارياً بلا سائق
+                  // (تنظيف السيارات): تحت المراجعة ⇒ جاري التنفيذ ⇒ تم التنفيذ.
+                  // كل نقرة تصل العميل حيّاً بإشعار خادمي.
+                  if (status == 'under_review' ||
+                      (status == 'in_progress' &&
+                          '${data['driver_id'] ?? ''}'.isEmpty)) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: Icon(
+                            status == 'under_review'
+                                ? Icons.play_arrow_rounded
+                                : Icons.check_circle_outline,
+                            size: 18),
+                        label: Text(status == 'under_review'
+                            ? 'جاري التنفيذ'
+                            : 'تم التنفيذ'),
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: status == 'under_review'
+                                ? Colors.indigo
+                                : Colors.green,
+                            foregroundColor: Colors.white),
+                        onPressed: () =>
+                            _advanceManagedOrder(docs[index].id, status),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         );
       },
     );
+  }
+
+  /// نقلة الخدمات المُدارة إدارياً: under_review ⇒ in_progress ⇒ completed.
+  Future<void> _advanceManagedOrder(String orderId, String status) async {
+    final next = status == 'under_review' ? 'in_progress' : 'completed';
+    try {
+      await _db.collection('orders').doc(orderId).update({
+        'status': next,
+        if (next == 'completed') 'completed_at': FieldValue.serverTimestamp(),
+        'updated_at': FieldValue.serverTimestamp(),
+      });
+      await ZyiarahAuditService().logAction(
+        action: 'ADVANCE_MANAGED_ORDER',
+        details: {'new_status': next},
+        targetId: orderId,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(next == 'in_progress'
+                ? 'بدأ التنفيذ — أُشعر العميل'
+                : 'اكتمل الطلب — أُشعر العميل')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('تعذّر تحديث الحالة')));
+      }
+    }
   }
 
   Widget _buildShimmerLoading() {
