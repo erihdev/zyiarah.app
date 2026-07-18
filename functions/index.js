@@ -172,6 +172,12 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated({document: "orde
         targetUserId = afterData.client_id;
         title = "وصل فريقكِ 🏠";
         body = `${greet}فريق زيارة عند بابكِ الآن — يسعدنا استقبالكِ ✨`;
+      } else if (afterData.status === "scheduled") {
+        // المسرحية (18 طلباً): 12 طلباً أُسنِدت والعميل لم يسمع حرفاً — لا فرع
+        // لتأكيد الحجز إطلاقاً. السائق يُشعَر (notifyDriverOnAssignment) والعميل لا.
+        targetUserId = afterData.client_id;
+        title = "تم تأكيد حجزكِ 🎉";
+        body = `${greet}دفعتكِ مؤكّدة وحُدِّد موعد خدمتكِ — فريق زيارة سيصلكِ في وقته.`;
       } else if (afterData.status === "under_review") {
         targetUserId = afterData.client_id;
         title = "تم استلام طلبكِ 🧾";
@@ -191,6 +197,19 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated({document: "orde
       }
 
       if (!targetUserId) return null;
+
+      // سجلّ الإشعارات داخل التطبيق يُكتب **دائماً وأولاً** — كان بعد فحص التوكن
+      // وداخل try الإرسال: عميل بلا توكن FCM (ويب/جهاز جديد/رفض الإذن) لم يكن
+      // يفقد الدفعة فحسب بل حتى أثرها في صندوق إشعاراته (كشفته المسرحية: صفر
+      // إشعارات سيارات لدى عميل الويب).
+      await admin.firestore().collection("notifications").add({
+        userId: targetUserId,
+        title: title,
+        body: body,
+        type: "order_update",
+        relatedId: orderId,
+        sentAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
 
       const tokenDoc = await admin.firestore().collection("fcm_tokens")
           .doc(targetUserId).get();
@@ -215,16 +234,6 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated({document: "orde
       try {
         await admin.messaging().send(payload);
         console.log(`Notification sent to ${targetUserId} for order ${orderId}`);
-
-        // Save to notifications collection for in-app history
-        await admin.firestore().collection("notifications").add({
-          userId: targetUserId,
-          title: title,
-          body: body,
-          type: "order_update",
-          relatedId: orderId,
-          sentAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
       } catch (error) {
         console.error("Error sending order notification:", error);
       }
@@ -1891,8 +1900,14 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
       const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
       const driver = await _findFreeDriverForSlot(db, {startDateTime: start, endDateTime: end});
       if (driver) {
-        await _assignDriverScheduled(db, event.params.orderId, driver, start);
-        console.log(`onOrderWritten: paid-flip assigned ${event.params.orderId} -> ${driver.id}`);
+        // المسرحية (18 طلباً بثانية) كشفت أن السطر هنا كان يقول «assigned» حتى حين
+        // ترفض المعاملة (سباق حجز مزدوج صدّه القفل الذرّي) — احترم قيمة الإرجاع.
+        const res = await _assignDriverScheduled(db, event.params.orderId, driver, start);
+        if (res.assigned) {
+          console.log(`onOrderWritten: paid-flip assigned ${event.params.orderId} -> ${driver.id}`);
+        } else {
+          console.warn(`onOrderWritten: paid-flip REFUSED by atomic re-check (race) for ${event.params.orderId} — sweep will retry`);
+        }
       } else {
         // نادر (سباق آخر خانة): تبقى المكنسة الدورية تعيد المحاولة.
         console.warn(`onOrderWritten: no free driver at paid-flip for ${event.params.orderId}`);
@@ -1946,8 +1961,12 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
         const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
         const driver = await _findFreeDriverForSlot(db, {startDateTime: start, endDateTime: end});
         if (driver) {
-          await _assignDriverScheduled(db, doc.id, driver, start);
-          console.log(`onOrderWritten: driver-freed assigned ${doc.id} -> ${driver.id}`);
+          const res = await _assignDriverScheduled(db, doc.id, driver, start);
+          if (res.assigned) {
+            console.log(`onOrderWritten: driver-freed assigned ${doc.id} -> ${driver.id}`);
+          } else {
+            console.warn(`onOrderWritten: driver-freed REFUSED by atomic re-check for ${doc.id}`);
+          }
         } else {
           console.warn(`onOrderWritten: driver freed but none free for ${doc.id}`);
         }

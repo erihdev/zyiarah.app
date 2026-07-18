@@ -77,6 +77,17 @@ void main() {
       final notify = File('functions/index.js').readAsStringSync();
       expect(notify.contains('"under_review"'), isTrue,
           reason: 'العميل يجب أن يُشعَر لحظة دخول طلبه المراجعة');
+      // مسرحية 18 طلباً: العميل لم يسمع شيئاً عند تأكيد 12 حجزاً — فرع scheduled
+      // كان غائباً، وسجلّ الصندوق كان رهينة توكن FCM (يُكتب الآن دائماً وأولاً).
+      final j = notify.indexOf('exports.sendNotificationOnOrderStatusChange');
+      final nbody = notify.substring(j, notify.indexOf('exports.', j + 10));
+      expect(nbody.contains('=== "scheduled"'), isTrue,
+          reason: 'بلا فرع scheduled يبقى تأكيد الحجز صامتاً للعميل');
+      expect(
+          nbody.indexOf('collection("notifications").add') <
+              nbody.indexOf('collection("fcm_tokens")'),
+          isTrue,
+          reason: 'صندوق الإشعارات يُكتب قبل فحص التوكن — لا يكون رهينته');
     });
 
     test('التعريف الذي طلبه المالك ظاهر: مراتب وأسقف السيارة', () {

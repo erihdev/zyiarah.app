@@ -88,6 +88,11 @@ void main() {
     expect(body.contains('paidFlipped'), isTrue);
     expect(body.contains('_findFreeDriverForSlot'), isTrue);
     expect(body.contains('_assignDriverScheduled'), isTrue);
+    // مسرحية 18 طلباً: السطر كان يقول «assigned» حتى حين ترفض المعاملة —
+    // التسجيل يجب أن يحترم قيمة الإرجاع (res.assigned) في الكتلتين.
+    expect(RegExp(r'res\.assigned').allMatches(body).length,
+        greaterThanOrEqualTo(2),
+        reason: 'سجلّ كاذب يخفي سباقات الحجز المزدوج المصدودة');
     // شرط عدم إعادة الإطلاق: لا إسناد إن وُجد سائق أصلاً.
     expect(body.contains('!afterData.driver_id'), isTrue,
         reason: 'بدونها تعيد كتابتُنا إطلاقَ المشغّل بلا نهاية');
