@@ -27,8 +27,6 @@ class ZyiarahStatus {
     switch (status) {
       case 'pending':
         return {'text': 'قيد الانتظار', 'color': Colors.orange};
-      case 'pending_admin_approval':
-        return {'text': 'بانتظار موافقة الإدارة', 'color': Colors.deepOrange};
       case 'awaiting_payment':
         return {'text': 'بانتظار الدفع', 'color': Colors.amber};
       case 'assigned':

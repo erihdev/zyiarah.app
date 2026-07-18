@@ -185,9 +185,9 @@ void _metaGuards() {
     });
 
     test('قوائم الإدارة تعرض الملخّص فعلاً (لا دالة بلا قارئ)', () {
+      // (كانت شاشة الاعتماد هنا أيضاً — حُذفت مع نظام الاعتمادات بقرار المالك.)
       for (final p in [
         'lib/screens/admin/admin_orders_screen.dart',
-        'lib/screens/admin/admin_approval_screen.dart',
       ]) {
         expect(File(p).readAsStringSync().contains('zyiarahServiceMetaSummary'),
             isTrue, reason: '$p — الملخّص يُعرض في البطاقة لا خلف نقرة');

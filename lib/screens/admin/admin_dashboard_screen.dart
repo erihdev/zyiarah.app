@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/screens/admin/admin_services_screen.dart';
 import 'package:zyiarah/screens/admin/admin_orders_screen.dart';
-import 'package:zyiarah/screens/admin/admin_approval_screen.dart';
 import 'package:zyiarah/screens/admin/admin_more_screen.dart';
 import 'package:zyiarah/screens/admin/admin_store_screen.dart';
 import 'package:zyiarah/screens/admin/admin_insights_screen.dart';
@@ -63,7 +62,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       {'page': const AdminInsightsScreen(), 'label': ZyiarahStrings.dashboardTitle, 'icon': Icons.insights_rounded, 'roles': ['super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin']},
       {'page': const AdminServicesScreen(), 'label': ZyiarahStrings.servicesHeader, 'icon': Icons.design_services, 'roles': ['super_admin', 'orders_manager']},
       {'page': const AdminOrdersScreen(), 'label': ZyiarahStrings.ordersManagement, 'icon': Icons.list_alt, 'roles': ['super_admin', 'orders_manager']},
-      {'page': const AdminApprovalScreen(), 'label': 'الاعتماد', 'icon': Icons.how_to_reg, 'roles': ['super_admin', 'orders_manager']},
       {'page': const AdminStoreScreen(), 'label': ZyiarahStrings.storeManagement, 'icon': Icons.storefront, 'roles': ['super_admin', 'accountant_admin']},
       {'page': AdminMoreScreen(role: _role), 'label': ZyiarahStrings.systemSettings, 'icon': Icons.grid_view_rounded, 'roles': ['super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin']},
     ];

@@ -37,7 +37,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   // from the Direct Dispatch flow) is always merged in below so the dropdown never
   // throws an assertion when the value isn't in this base list.
   final List<String> _baseStatuses = [
-    'pending', 'pending_admin_approval', 'scheduled', 'assigned', 'accepted',
+    'pending', 'scheduled', 'assigned', 'accepted',
     'on_the_way', 'in_progress', 'completed', 'cancelled',
   ];
 
@@ -180,7 +180,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
           if (sd is Timestamp) updatePayload['scheduled_at'] = sd;
           // Promote to 'scheduled' (a state the driver CAN advance and which shows in
           // the driver's active-orders stream) — not the dead-end 'assigned'.
-          if (_currentStatus == 'pending' || _currentStatus == 'pending_admin_approval') {
+          if (_currentStatus == 'pending') {
             updatePayload['status'] = 'scheduled';
             setState(() => _currentStatus = 'scheduled');
           }

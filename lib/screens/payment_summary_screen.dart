@@ -696,7 +696,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         'service_name': widget.serviceName,
         'amount': totalWithVat,
         'is_paid': false,
-        'status': isHourly ? 'pending' : 'pending_admin_approval',
+        'status': 'pending',
         'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
         'payment_method': method,
         'created_at': FieldValue.serverTimestamp(),
@@ -794,8 +794,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           'is_paid': false,
           // (Direct Dispatch) كل خدمة تصل بموعد (hours + serviceDate) تمرّ مباشرةً:
           // pending ⇒ فحص سعة ⇒ إسناد تلقائي ⇒ scheduled. وهذا يشمل الآن الكنب/السجاد
-          // بعد أن صار يختار يوماً ووقتاً. ما يصل بلا موعد يبقى على موافقة الإدارة.
-          'status': isHourly ? 'pending' : 'pending_admin_approval',
+          // بعد أن صار يختار يوماً ووقتاً. ما يصل بلا موعد يبقى pending ويُسنَد يدوياً
+          // من إدارة الطلبات (نظام الاعتمادات حُذف من الجذور — قرار المالك).
+          'status': 'pending',
           'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
           'payment_method': method,
           'created_at': FieldValue.serverTimestamp(),

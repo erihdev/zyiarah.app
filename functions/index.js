@@ -1699,7 +1699,7 @@ exports.verifyMoyasarPayment = onCall(
             service_name: md.service_name || "خدمة زيارة",
             amount: amountSar,
             is_paid: false, // يُقلب أدناه ذرّياً
-            status: isHourly ? "pending" : "pending_admin_approval",
+            status: "pending",
             payment_method: (paymentData.source && paymentData.source.type) || "native_pay",
             hours_contracted: Number(md.hours || 4),
             worker_count: Number(md.worker_count || 1),
@@ -2232,7 +2232,7 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
     if (!snap.exists) return false;
     const cur = snap.data();
     if (cur.driver_id) return false; // مُسنَد سلفاً — لا تكتب فوقه
-    if (!["pending", "pending_admin_approval", "scheduled"].includes(cur.status)) {
+    if (!["pending", "scheduled"].includes(cur.status)) {
       return false; // حالة غير قابلة للإسناد
     }
 
@@ -2376,7 +2376,7 @@ exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
       amount: 0, // مدفوعة ضمن العقد
       is_paid: true,
       payment_method: "subscription",
-      status: "pending_admin_approval", // تُرفَع إلى scheduled عند توفّر سائق
+      status: "pending", // إسنادها لحظيّ (paid-flip في onOrderWritten) والمكنسة ضمان
       location: location,
       zone_name: zoneName,
       hours_contracted: hours,
@@ -2460,7 +2460,7 @@ async function _generateContractVisits(db, contractRef, c) {
       amount: 0,
       is_paid: true,
       payment_method: "subscription",
-      status: "pending_admin_approval",
+      status: "pending",
       location: location,
       zone_name: zoneName,
       hours_contracted: hours,
@@ -2626,7 +2626,7 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   if (!driverSnap.exists) throw new HttpsError("not-found", "السائق غير موجود");
 
   const orderData = orderSnap.data();
-  if (orderData.status !== "pending_admin_approval" && orderData.status !== "pending") {
+  if (orderData.status !== "pending") {
     throw new HttpsError("failed-precondition", "لا يمكن اعتماد الطلب بحالته الحالية");
   }
   if (driverSnap.data().is_active === false) {
@@ -2657,7 +2657,7 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   await db.runTransaction(async (tx) => {
     const fresh = await tx.get(orderRef);
     const st = fresh.data()?.status;
-    if (st !== "pending_admin_approval" && st !== "pending") {
+    if (st !== "pending") {
       throw new HttpsError("failed-precondition", "تم اعتماد الطلب بالفعل من مدير آخر");
     }
     // (منع الحجز المزدوج) إعادة فحص حرّية السائق ذرّياً داخل المعاملة — الفحص أعلاه
@@ -2797,7 +2797,7 @@ exports.dedupeFcmToken = onDocumentWritten(
 // (2c) تذكير السائق — Cron كل 15 دقيقة بالمهام التي تبدأ بعد ساعة تقريباً
 // ════════════════════════════════════════════════════════════════════════
 exports.remindDriversUpcomingTasks = onSchedule(
-    {schedule: "every 5 minutes", timeZone: "Asia/Riyadh"},
+    {schedule: "every 15 minutes", timeZone: "Asia/Riyadh"},
     async () => {
       const db = admin.firestore();
       const now = Date.now();
@@ -2914,25 +2914,18 @@ exports.remindClientsUpcomingAppointments = onSchedule(
 // يبقى الطلب pending بلا سائق. هذا المسح يضمن إسناده خادمياً.
 // ════════════════════════════════════════════════════════════════════════
 exports.sweepUnassignedPaidOrders = onSchedule(
-    {schedule: "every 15 minutes", timeZone: "Asia/Riyadh"},
+    {schedule: "every 5 minutes", timeZone: "Asia/Riyadh"},
     async () => {
       const db = admin.firestore();
       const now = Date.now();
       const cutoff = admin.firestore.Timestamp.fromDate(new Date(now - 60 * 60 * 1000));
-      // استعلامان بمساواة على status (كلاهما يغطيه فهرس (status,service_date)):
-      // pending العادية + زيارات الاشتراك المعلّقة (pending_admin_approval + contract_id).
-      // طلبات الخدمة العادية بحالة pending_admin_approval تنتظر مراجعة الإدارة عمداً،
-      // فلا نُسنِدها آلياً — نقتصر على زيارات الاشتراك المدفوعة مسبقاً.
-      const [snapPending, snapSub] = await Promise.all([
-        db.collection("orders").where("status", "==", "pending")
-            .where("service_date", ">=", cutoff).get(),
-        db.collection("orders").where("status", "==", "pending_admin_approval")
-            .where("service_date", ">=", cutoff).get(),
-      ]);
-      const docs = [
-        ...snapPending.docs,
-        ...snapSub.docs.filter((doc) => !!doc.data().contract_id),
-      ];
+      // (حذف الاعتمادات — قرار المالك) كان هنا استعلام ثانٍ على حالة
+      // pending_admin_approval لزيارات الاشتراك؛ حُذفت الحالة من الجذور وكل
+      // المنتجين يكتبون pending، فيغطيها هذا الاستعلام الواحد.
+      const snapPending = await db.collection("orders")
+          .where("status", "==", "pending")
+          .where("service_date", ">=", cutoff).get();
+      const docs = snapPending.docs;
 
       let assigned = 0;
       for (const doc of docs) {
@@ -3057,7 +3050,7 @@ exports.reconcileOrphanPayments = onSchedule(
             service_type: md.service_name || "خدمة زيارة", service_name: md.service_name || "خدمة زيارة",
             amount: amountSar, is_paid: true, payment_status: "paid",
             moyasar_payment_id: p.id, moyasar_status: "paid",
-            status: isHourly ? "pending" : "pending_admin_approval",
+            status: "pending",
             payment_method: (p.source && p.source.type) || "applepay",
             hours_contracted: Number(md.hours || 4), worker_count: Number(md.worker_count || 1),
             zone_name: md.zone_name || null,

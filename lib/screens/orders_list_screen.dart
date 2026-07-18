@@ -152,7 +152,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
         // Filter based on phase
         // كل حالات المسار النشط بما فيها لهجة الإرسال المباشر (Direct Dispatch)
         final List<String> activeStatuses = [
-          'pending', 'pending_admin_approval', 'awaiting_payment',
+          'pending', 'awaiting_payment',
           'assigned', 'scheduled', 'accepted', 'on_the_way', 'in_progress',
         ];
         final List<String> historyStatuses = ['completed', 'cancelled'];
@@ -533,7 +533,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                   label: Text('أعد الطلب', style: GoogleFonts.tajawal(fontSize: 12)),
                   style: TextButton.styleFrom(foregroundColor: const Color(0xFF5D1B5E)),
                 )
-              else if (['pending', 'pending_admin_approval', 'waiting_payment_cod',
+              else if (['pending', 'waiting_payment_cod',
                 'scheduled', 'accepted'].contains(status))
                 // كان الإلغاء متاحاً لـ pending فقط، فالطلبات المدفوعة غير الساعية
                 // (كنب/صيانة/اشتراك = pending_admin_approval) لا يستطيع العميل إلغاءها

@@ -267,7 +267,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
         // قاعدة Stage-C (العميل لا يكتب is_paid=true على orders).
         'is_paid': false,
         'payment_method': method,
-        'status': 'pending_admin_approval',
+        'status': 'pending',
         'source_collection': 'store_orders',
         'store_order_id': widget.storeOrderId,
         'location': _deliveryLocation ?? const GeoPoint(24.7136, 46.6753),

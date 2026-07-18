@@ -675,8 +675,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
         return 'قيد التنفيذ';
       case 'completed':
         return 'مكتملة';
-      case 'pending_admin_approval':
-        return 'بانتظار الإدارة';
       default:
         return status;
     }

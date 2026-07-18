@@ -173,7 +173,7 @@ service cloud.firestore {
       allow create: if isLoggedIn() &&
         request.resource.data.client_id == request.auth.uid &&
         request.resource.data.get('status', 'pending') in
-          ['pending', 'awaiting_payment', 'pending_admin_approval'] &&
+          ['pending', 'awaiting_payment'] &&
         request.resource.data.get('is_paid', false) == false &&
         !request.resource.data.keys().hasAny([
           'needs_refund', 'refund_credited', 'rewards_handled_by',
@@ -208,7 +208,7 @@ service cloud.firestore {
         request.auth.uid == resource.data.client_id &&
         (
           // 1. Cancellation flow — only before the task is dispatched to a driver
-          (resource.data.status in ['pending', 'awaiting_payment', 'pending_admin_approval'] &&
+          (resource.data.status in ['pending', 'awaiting_payment'] &&
            request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['status', 'cancelled_at', 'cancelled_by', 'needs_refund', 'rewards_handled_by']) &&
            request.resource.data.status == 'cancelled')
