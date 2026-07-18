@@ -6,14 +6,13 @@ import 'package:zyiarah/models/car_line.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/zone_locator_service.dart';
+import 'package:zyiarah/widgets/booking_slot_picker.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
 
-/// تنظيف داخلية السيارة — عرضٌ على نمط المكيفات، ودورة حياة على نمط المتجر:
-/// تنظيف عميق لمراتب السيارة وأسقفها من الداخل. الإدارة تسعّر ثلاثة أحجام
-/// (صغيرة/وسط/كبيرة) لكل منطقة، والعميل يختار الحجم والعدد ويدفع فوراً —
-/// **بلا موعد وبلا سائق**: بعد تأكيد الدفع يرقّيه الخادم لتحت المراجعة
-/// والإدارة تقوده (جاري التنفيذ ⇒ تم التنفيذ) بإشعار لكل نقلة.
-/// «بلا سعر ⇒ بلا بيع»: الحجم غير المسعَّر لا يُعرض.
+/// تنظيف داخلية السيارة — **خدمة مجدولة مسعّرة** على نمط المكيفات: تنظيف عميق
+/// لمراتب السيارة وأسقفها. الإدارة تسعّر ثلاثة أحجام (صغيرة/وسط/كبيرة) لكل منطقة،
+/// والعميل يختار الحجم والعدد **ويحدّد يوماً ووقتاً** ويدفع فوراً ويُسنَد السائق
+/// تلقائياً — مثل بقية الخدمات (قرار المالك). «بلا سعر ⇒ بلا بيع».
 class CarInteriorDetailsScreen extends StatefulWidget {
   final String serviceName;
   const CarInteriorDetailsScreen(
@@ -34,6 +33,7 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
 
   String? _selectedZoneName;
   GeoPoint? _selectedLocation;
+  DateTime? _selectedSlot;
 
   bool _isLocating = false;
   LocateFailure? _locateFailure;
@@ -81,7 +81,10 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
 
   void _setCount(CarSize size, int v) {
     HapticFeedback.selectionClick();
-    setState(() => _counts[carPriceField(size)] = v.clamp(0, 10));
+    setState(() {
+      _counts[carPriceField(size)] = v.clamp(0, 10);
+      _selectedSlot = null; // المدة تغيّرت ⇒ خانات البدء تُعاد
+    });
   }
 
   bool get _anyEnabled => CarSize.values.any(_isEnabled);
@@ -110,6 +113,7 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
       _selectedLocation = res.location;
       _selectedZoneName = res.zoneName;
       _applyZone(res.zone!);
+      _selectedSlot = null;
       _isLocating = false;
       _locateFailure = null;
     });
@@ -146,6 +150,7 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
       _selectedLocation = result;
       _selectedZoneName = zone['name'] as String?;
       _applyZone(zone);
+      _selectedSlot = null;
       _locateFailure = null;
     });
   }
@@ -160,6 +165,10 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
 
   int get totalCars => _counts.values.fold(0, (a, v) => a + v);
 
+  /// ساعة لكل سيارة، بحدٍّ أدنى ساعتين وسقف 8 (نفس منطق المكيفات — تجاوز 8 يُفرغ
+  /// خانات البدء 8→22 فلا يستطيع العميل الحجز).
+  int get _durationHours => totalCars.clamp(2, 8);
+
   void _handleNext() {
     if (_selectedLocation == null) {
       _snack('يرجى تحديد موقعك أولاً');
@@ -167,6 +176,10 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
     }
     if (totalAmount <= 0) {
       _snack('أضف سيارة واحدة على الأقل');
+      return;
+    }
+    if (_selectedSlot == null) {
+      _snack('اختر اليوم ووقت البدء');
       return;
     }
 
@@ -189,9 +202,10 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
           amount: totalAmount,
           location: _selectedLocation!,
           zoneName: _selectedZoneName,
-          // (نمط المتجر — قرار المالك) بلا موعد وبلا سائق: بعد تأكيد الدفع يرقّيه
-          // الخادم لتحت المراجعة، والإدارة تقوده: جاري التنفيذ ⇒ تم التنفيذ،
-          // وتتواصل مع العميل للتنسيق. لا hours/serviceDate = لا مسار إسناد.
+          // hours + serviceDate = طلب مباشر مجدول: فحص سعة ⇒ pending ⇒ إسناد
+          // تلقائي ⇒ scheduled (مثل بقية الخدمات).
+          hours: _durationHours,
+          serviceDate: _selectedSlot,
           serviceMeta: meta,
         ),
       ),
@@ -250,6 +264,13 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
                               _linesSection(),
                               const SizedBox(height: 26),
                               if (totalCars > 0) ...[
+                                ZyiarahBookingSlotPicker(
+                                  zoneName: _selectedZoneName,
+                                  durationHours: _durationHours,
+                                  onSlotSelected: (dt) =>
+                                      setState(() => _selectedSlot = dt),
+                                ),
+                                const SizedBox(height: 26),
                                 _summaryCard(),
                                 const SizedBox(height: 24),
                                 _nextButton(),
@@ -521,7 +542,7 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
       );
 
   Widget _nextButton() {
-    final ready = totalAmount > 0;
+    final ready = totalAmount > 0 && _selectedSlot != null;
     return SizedBox(
       width: double.infinity,
       height: 56,

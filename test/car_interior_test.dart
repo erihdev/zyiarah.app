@@ -51,38 +51,28 @@ void main() {
           reason: 'حجم بلا سعر يجب ألا يُرسم له صف إطلاقاً');
     });
 
-    test('نمط المتجر: بلا موعد وبلا سائق — الإدارة تقود بعد الدفع', () {
-      // قرار المالك (نفس يوم الإطلاق): «نفس طريقة المتجر — يدفع ثم للمراجعة
-      // وجاري التنفيذ وتم التنفيذ». لا منتقي موعد ولا hours/serviceDate.
-      expect(carScreen.contains('ZyiarahBookingSlotPicker'), isFalse,
-          reason: 'عودة منتقي الموعد تعيد السيارات لمسار إسناد السائقين');
-      expect(carScreen.contains('serviceDate:'), isFalse);
-      expect(carScreen.contains('hours:'), isFalse);
+    test('خدمة مجدولة: منتقي موعد + hours/serviceDate ⇒ إسناد تلقائي', () {
+      // قرار المالك (رجوع): «مثل بقية الخدمات — مرتبط بتاريخ ووقت». فالسيارة
+      // خدمة مجدولة كالمكيفات: منتقي موعد + hours/serviceDate ⇒ سائق مُسنَد.
+      expect(carScreen.contains('ZyiarahBookingSlotPicker'), isTrue,
+          reason: 'السيارة خدمة مجدولة — منتقي الموعد إلزامي');
+      expect(carScreen.contains('serviceDate: _selectedSlot'), isTrue);
+      expect(carScreen.contains('hours: _durationHours'), isTrue);
       expect(carScreen.contains("'kind': 'car_interior'"), isTrue);
+      // بلا موعد لا يُتاح الدفع (زر المتابعة يتطلّب _selectedSlot).
+      expect(
+          carScreen.contains('totalAmount > 0 && _selectedSlot != null'),
+          isTrue);
     });
 
-    test('الخادم يرقّي المدفوع بلا موعد لتحت المراجعة والإدارة تقوده', () {
+    test('الخادم: مسار السيارة المجدول يُشعر العميل بتأكيد الحجز', () {
+      // السيارة الآن بموعد ⇒ إسناد لحظي (paid-flip) وإشعار «تم تأكيد حجزكِ» عند
+      // scheduled — كبقية الخدمات المجدولة، لا مسار «تحت المراجعة» المُدار.
       final fn = File('functions/index.js').readAsStringSync();
-      final i = fn.indexOf('exports.onOrderWritten');
-      final body = fn.substring(i, fn.indexOf('exports.', i + 10));
-      expect(body.contains('!afterData.service_date'), isTrue,
-          reason: 'بدون فرع «بلا موعد» يبقى طلب السيارة pending صامتاً للأبد');
-      expect(body.contains('status: "under_review"'), isTrue);
-      final adminOrders =
-          File('lib/screens/admin/admin_orders_screen.dart')
-              .readAsStringSync();
-      expect(adminOrders.contains('_advanceManagedOrder'), isTrue);
-      expect(adminOrders.contains("'جاري التنفيذ'"), isTrue);
-      expect(adminOrders.contains("'تم التنفيذ'"), isTrue);
-      final notify = File('functions/index.js').readAsStringSync();
-      expect(notify.contains('"under_review"'), isTrue,
-          reason: 'العميل يجب أن يُشعَر لحظة دخول طلبه المراجعة');
-      // مسرحية 18 طلباً: العميل لم يسمع شيئاً عند تأكيد 12 حجزاً — فرع scheduled
-      // كان غائباً، وسجلّ الصندوق كان رهينة توكن FCM (يُكتب الآن دائماً وأولاً).
-      final j = notify.indexOf('exports.sendNotificationOnOrderStatusChange');
-      final nbody = notify.substring(j, notify.indexOf('exports.', j + 10));
+      final j = fn.indexOf('exports.sendNotificationOnOrderStatusChange');
+      final nbody = fn.substring(j, fn.indexOf('exports.', j + 10));
       expect(nbody.contains('=== "scheduled"'), isTrue,
-          reason: 'بلا فرع scheduled يبقى تأكيد الحجز صامتاً للعميل');
+          reason: 'تأكيد الحجز للعميل عند الجدولة');
       expect(
           nbody.indexOf('collection("notifications").add') <
               nbody.indexOf('collection("fcm_tokens")'),
