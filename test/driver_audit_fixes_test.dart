@@ -100,11 +100,16 @@ void main() {
         reason: 'openAppSettings ترمي UnimplementedError على الويب');
   });
 
-  test('تدفّق GPS واحد للطلب النشط (ناقل مواقع المزامنة)', () {
+  test('تدفّق GPS واحد للطلب النشط (ناقل مواقع المزامنة) بلا تعطّل إعادة الاشتراك', () {
     expect(dash.contains('_posHub'), isTrue);
     expect(dash.contains('_syncSub != null ? _posHub.stream : _locationStream'),
         isTrue,
         reason: 'تدفّقا GPS متزامنان يضاعفان استهلاك البطارية');
+    // asBroadcastStream إلزامي: تدفّق getPositionStream أحادي الاشتراك، وإعادة
+    // بناء بطاقة التركيز تعيد الاشتراك ⇒ «Stream has already been listened to»
+    // (شاشة حمراء ظاهرة). البثّ يسمح بإعادة الاشتراك بأمان.
+    expect(dash.contains('.asBroadcastStream()'), isTrue,
+        reason: 'بدون البثّ يتعطّل تدفّق الموقع بإعادة الاشتراك ويعرض شاشة حمراء');
   });
 
   test('بدء الأسبوع في الإحصاءات مُقتطع لمنتصف الليل', () {

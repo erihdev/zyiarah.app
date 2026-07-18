@@ -66,12 +66,16 @@ class _DriverDashboardState extends State<DriverDashboard> {
       setState(() {
         _locationDenied = false;
         // (DRIVER-005/007) تيار مستقر بإعدادات موفّرة للبطارية — يُنشأ بعد منح الإذن.
+        // asBroadcastStream: تدفّق getPositionStream **أحادي الاشتراك**؛ وبناءَ
+        // بطاقة التركيز يعيد بناء StreamBuilder فيعيد الاشتراك بعد الإلغاء ⇒
+        // «Stream has already been listened to» (شاشة حمراء). البثّ يسمح بإعادة
+        // الاشتراك بأمان.
         _locationStream = Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.high,
             distanceFilter: 10,
           ),
-        );
+        ).asBroadcastStream();
       });
     } else {
       setState(() => _locationDenied = true);
