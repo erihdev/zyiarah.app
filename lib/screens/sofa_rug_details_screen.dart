@@ -553,7 +553,7 @@ class _SofaRugCleaningDetailsScreenState
                 Text(
                   '${piece.priceWith(price).toStringAsFixed(2)} ر.س',
                   style: GoogleFonts.tajawal(
-                      fontWeight: FontWeight.bold, color: _brand),
+                      fontSize: 18, fontWeight: FontWeight.w900, color: _brand),
                 ),
               ],
             ),
