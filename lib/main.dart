@@ -87,6 +87,33 @@ class ZyiarahApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: messengerKey,
       theme: ZyiarahTheme.light,
+      // توافق iPad/الشاشات الكبيرة: التطبيق مُصمَّم للهواتف، وعلى الشاشة الكبيرة
+      // كان يتمدّد لكامل العرض فيبدو مشوّهاً وغير متوازن (بطاقات وأزرار ممطوطة).
+      // نحصر الواجهة كلها في عمودٍ موسّط بعرض هاتفٍ مريح على خلفية محايدة — الهواتف
+      // (عرض ≤ الحدّ) لا تتأثر إطلاقاً، وiPad يعرض واجهة نظيفة كما صُمِّمت تماماً.
+      builder: (context, child) {
+        if (child == null) return const SizedBox.shrink();
+        final mq = MediaQuery.of(context);
+        const maxWidth = 600.0;
+        if (mq.size.width <= maxWidth) return child; // هاتف: بلا حصر
+        return ColoredBox(
+          color: const Color(0xFFE6E7EE),
+          child: Center(
+            child: ClipRect(
+              child: SizedBox(
+                width: maxWidth,
+                height: mq.size.height,
+                // نُحدِّث MediaQuery أيضاً كي ترى الشاشات العرض المحصور (600) لا
+                // الكامل — وإلّا تجاوزت أي شاشة تحسب أبعادها من MediaQuery.size.
+                child: MediaQuery(
+                  data: mq.copyWith(size: Size(maxWidth, mq.size.height)),
+                  child: child,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
       // تعريب كامل: منتقيات التاريخ/الوقت والحوارات تظهر بالعربية RTL بدل الإنجليزية.
       locale: const Locale('ar'),
       supportedLocales: const [Locale('ar'), Locale('en')],
