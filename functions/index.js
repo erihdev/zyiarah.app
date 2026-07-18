@@ -74,26 +74,32 @@ exports.sendNotificationToAdminsOnNewTicket = onDocumentCreated({document: "supp
     });
 
 // 1.5 Notify Admins on New Order (Services)
-exports.sendNotificationToAdminsOnNewOrder = onDocumentCreated({document: "orders/{orderId}", cpu: 0.083},
+exports.sendNotificationToAdminsOnNewOrder = onDocumentWritten({document: "orders/{orderId}", cpu: 0.083},
     async (event) => {
-      const snap = event.data;
-      if (!snap) return null;
+      const change = event.data;
+      if (!change) return null;
+      const before = change.before && change.before.exists ? change.before.data() : null;
+      const after = change.after && change.after.exists ? change.after.data() : null;
+      if (!after) return null; // حذف
+
+      // نُشعِر الإدارة عند **تأكيد الدفع** لا عند الإنشاء. طلبات البطاقة تُنشأ
+      // is_paid=false ثم يفتح العميل شاشة البطاقة — فكان التنبيه يصل الإدارة والعميل
+      // لم يدفع بعد (وقد يهجر الدفع)، فتُغرَق بطلبات وهمية. الآن: طلبٌ مدفوع فعلاً فقط.
+      const becamePaid =
+        after.is_paid === true && (!before || before.is_paid !== true);
+      if (!becamePaid) return null;
 
       const orderId = event.params.orderId;
-      const orderData = snap.data();
-      const displayCode = orderData.code || orderId.substring(0, 6);
+      // زيارات الاشتراك تُنشأ دفعةً واحدة (باقة = عدة طلبات) فتُغرِق الإدارة؛ إشعار
+      // «عقد اشتراك جديد» عند إنشاء العقد يكفي — نكتم إشعار كل زيارة على حدة.
+      if (after.contract_id) return null;
 
-      // زيارات الاشتراك تُنشأ دفعةً واحدة (باقة 4 زيارات = 4 طلبات) فتُغرِق الإدارة بـ4
-      // إشعارات «طلب جديد». الإدارة تُشعَر أصلاً بإشعار «عقد اشتراك جديد» عند إنشاء العقد،
-      // فنكتم إشعار كل زيارة على حدة. الطلبات العادية (بلا contract_id) تبقى تُشعِر طبيعياً.
-      if (orderData.contract_id) return null;
-
-      // عبر ADMIN_BROADCAST: يكتب admin_notifications (لوحة الويب) + FCM حسب الدور —
-      // بدل موضوع "admins" وحده الذي لا يصل لوحة الويب.
+      const displayCode = after.code || orderId.substring(0, 6);
+      // عبر ADMIN_BROADCAST: يكتب admin_notifications (لوحة الويب) + FCM حسب الدور.
       await queuePush(
           "ADMIN_BROADCAST",
           "طلب خدمات جديد! 🚨",
-          `وصلك طلب تنظيف جديد من العميل. رقم الطلب: ${displayCode}`,
+          `وصلك طلب تنظيف جديد مدفوع من العميل. رقم الطلب: ${displayCode}`,
           "new_order_admin", {orderId: orderId}, ["orders_manager"]);
       return null;
     });
