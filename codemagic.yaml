@@ -238,6 +238,9 @@ workflows:
                                 # ANDROID_KEY_ALIAS, ANDROID_KEYSTORE_BASE64, MAPBOX_TOKEN
         - payment_keys         # MOYASAR_PUBLISHABLE_KEY, MOYASAR_SECRET_KEY,
                                 # TABBY_PUBLIC_KEY, SAMSUNG_PAY_SERVICE_ID
+        - google_play          # ⚠️ يجب إنشاؤها: GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+                                # (محتوى JSON لحساب خدمة Google Play — مؤمَّن). بدونها
+                                # يفشل رفع versionCode والنشر التلقائي.
       vars:
         PACKAGE_NAME: "com.zyiarah.zyiarah"
     scripts:
@@ -263,7 +266,25 @@ workflows:
         script: flutter pub get
 
       - name: Build Android App Bundle (AAB)
-        script: flutter build appbundle --release
+        script: |
+          set -e
+          # versionCode تلقائي = آخر رقم منشور على Google Play (+1) — يمنع رفض
+          # «versionCode مستخدم مسبقاً» ويُغني عن تعديل pubspec يدوياً كل إصدار
+          # (نظير منطق iOS). يحتاج GCLOUD_SERVICE_ACCOUNT_CREDENTIALS.
+          LATEST=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME" 2>/dev/null || echo "")
+          if [ -z "$LATEST" ]; then LATEST=246; fi
+          NEW_CODE=$((LATEST + 1))
+          echo "Auto versionCode: $NEW_CODE (latest on Play: $LATEST)"
+          flutter build appbundle --release --build-number=$NEW_CODE
+          echo "✓ AAB built successfully (versionCode $NEW_CODE)"
 
     artifacts:
       - build/app/outputs/bundle/release/*.aab
+
+    publishing:
+      # نشر تلقائي إلى مسار «الاختبار الداخلي» (نظير TestFlight لـ iOS) — يظهر لمختبريك
+      # فوراً بلا مراجعة. للنشر المباشر للجمهور غيّر track إلى production (مراجعة ~7 أيام).
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
+        submit_as_draft: false
