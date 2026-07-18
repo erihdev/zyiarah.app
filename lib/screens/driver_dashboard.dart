@@ -689,6 +689,74 @@ class _DriverDashboardState extends State<DriverDashboard> {
     }
   }
 
+  /// تفصيل طلب العميل كما يحتاجه السائق: الموقع + عدد العاملات (للساعية) أو
+  /// تفصيل الخدمة (نوع/عدد للمكيفات/الكنب/السيارة). في بطاقة التركيز (compact=false)
+  /// يُضاف اسم الخدمة نفسه. مصدرٌ واحد لكل بطاقات السائق كي لا يخلط أو ينسى.
+  Widget _orderDetailStrip(Map<String, dynamic> data, {bool compact = false}) {
+    final rows = <Widget>[];
+    if (!compact) {
+      final service =
+          (data['service_name'] ?? data['service_type'] ?? 'خدمة زيارة')
+              .toString();
+      rows.add(_detailRow(Icons.cleaning_services_rounded, service,
+          const Color(0xFF1E293B),
+          bold: true));
+    }
+    final zone = data['zone_name'];
+    if (zone is String && zone.trim().isNotEmpty) {
+      rows.add(_detailRow(
+          Icons.location_on_outlined, zone, const Color(0xFF475569)));
+    }
+    // خدمةٌ ذات تفصيل (مكيفات/كنب/سيارة): اعرض ملخّصه. وإلّا (ساعية): عدد العاملات.
+    if (data['service_meta'] != null) {
+      final m = zyiarahServiceMetaSummary(data['service_meta']);
+      if (m != null) {
+        rows.add(
+            _detailRow(Icons.list_alt_rounded, m, const Color(0xFF5D1B5E)));
+      }
+    } else {
+      final w = _workersLabel(data['worker_count']);
+      if (w.isNotEmpty) {
+        rows.add(_detailRow(
+            Icons.groups_2_outlined, w, const Color(0xFF475569)));
+      }
+    }
+    if (rows.isEmpty) return const SizedBox.shrink();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
+  }
+
+  Widget _detailRow(IconData icon, String text, Color color,
+          {bool bold = false}) =>
+      Padding(
+        padding: const EdgeInsets.only(top: 3),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 5),
+            Expanded(
+              child: Text(text,
+                  style: GoogleFonts.tajawal(
+                      fontSize: 12,
+                      color: color,
+                      fontWeight: bold ? FontWeight.bold : FontWeight.w600),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
+      );
+
+  /// عدد العاملات بصيغة عربية سليمة (مفرد/مثنّى/جمع).
+  String _workersLabel(dynamic wc) {
+    final n = (wc is num) ? wc.toInt() : int.tryParse('${wc ?? ''}') ?? 0;
+    if (n <= 0) return '';
+    if (n == 1) return 'عاملة واحدة';
+    if (n == 2) return 'عاملتان';
+    if (n <= 10) return '$n عاملات';
+    return '$n عاملة';
+  }
+
   Widget _buildManifestOrderCard(String orderId, Map<String, dynamic> data) {
     // Resolve time slot display
     // عرض 12 ساعة — المخزَّن يبقى "HH:00" لأن الدالة الخادمية تحلّله لحساب السعة.
@@ -780,14 +848,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
                     color: Colors.grey.shade600,
                   ),
                 ),
-                if (data['zone_name'] != null)
-                  Text(
-                    data['zone_name'] as String,
-                    style: GoogleFonts.tajawal(
-                      fontSize: 10,
-                      color: Colors.grey.shade400,
-                    ),
-                  ),
+                const SizedBox(height: 4),
+                // تفصيل الطلب على البطاقة نفسها كي لا يخلط السائق أو ينسى:
+                // الموقع + عدد العاملات (للساعية) أو تفصيل الخدمة (نوع/عدد).
+                _orderDetailStrip(data, compact: true),
                 const SizedBox(height: 5),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -987,6 +1051,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
             ],
           ),
           const Divider(height: 28),
+          // شريط تفصيل الطلب: الخدمة + الموقع + عدد العاملات — كي يستوعب السائق
+          // طلب العميل ولا يخلط أو ينسى. (بطاقة التركيز كانت تُظهر اسم العميل
+          // والحالة فقط، بلا أي ذكر لأيّ خدمةٍ هي ولا أين.)
+          _orderDetailStrip(data),
+          const SizedBox(height: 12),
           // تفصيل الخدمة: كم قطعة ومقاسها / كم مكيفاً ونوعه. كان السائق يصل ولا يعرف
           // ما يحمل من عُدّة — الطلب يحمل مبلغاً واسم خدمة فقط.
           ZyiarahServiceMetaView(meta: data['service_meta']),

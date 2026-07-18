@@ -146,9 +146,24 @@ void main() {
 
   test('بطاقة التركيز تعرض موعد المهمة للسائق', () {
     final i = dash.indexOf('_buildStateGuidedCard');
-    final body = dash.substring(i, i + 4000);
+    final body = dash.substring(i, i + 4600);
     expect(body.contains("formatSlot12(data['booking_time_slot']"), isTrue,
         reason: 'كان الموعد يظهر على بطاقات القائمة لا على بطاقة التركيز');
+  });
+
+  test('كل بطاقات السائق تعرض تفصيل الطلب (موقع/عاملات/تفصيل الخدمة)', () {
+    // طلب المالك: السائق يستوعب طلب العميل ولا يخلط أو ينسى — الموقع وعدد
+    // العاملات وتفصيل الخدمة على البطاقة نفسها لا خلف نقرة.
+    expect(dash.contains('_orderDetailStrip(data)'), isTrue,
+        reason: 'بطاقة التركيز يجب أن تعرض شريط التفصيل الكامل');
+    expect(dash.contains('_orderDetailStrip(data, compact: true)'), isTrue,
+        reason: 'بطاقة القائمة يجب أن تعرض شريط التفصيل المختصر');
+    // عدد العاملات للساعية، وملخّص service_meta للمكيفات/الكنب/السيارة.
+    expect(dash.contains('_workersLabel(data['), isTrue);
+    expect(dash.contains("zyiarahServiceMetaSummary(data['service_meta'])"),
+        isTrue);
+    // الموقع (المنطقة) بأيقونة على كل بطاقة.
+    expect(dash.contains("data['zone_name']"), isTrue);
   });
 
   test('بدء الأسبوع في الإحصاءات مُقتطع لمنتصف الليل', () {
