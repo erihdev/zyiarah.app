@@ -77,7 +77,7 @@ final GoRouter appRouter = GoRouter(
         final role = userProvider.role ?? 'client';
         final isAdmin = _adminRoles.contains(role);
         if (path == '/client' && role != 'client') return '/';
-        if (path == '/driver' && role != 'driver') return '/';
+        if (path == '/driver' && role != 'driver' && role != 'worker') return '/';
         if (path == '/admin' && !isAdmin) return '/';
       }
     }

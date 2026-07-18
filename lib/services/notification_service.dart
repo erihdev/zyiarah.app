@@ -58,6 +58,16 @@ class ZyiarahNotificationService {
         // Check auth state for specific topics
         _authStateSub = FirebaseAuth.instance.authStateChanges().listen((User? user) async {
           if (user != null) {
+            // احفظ توكن هذا المستخدم عند كل دخول. كان يُحفظ فقط في initialize()
+            // (بدء التطبيق) أو عند تدوير التوكن — فمن يفتح التطبيق مسجَّلاً خروجه ثم
+            // يسجّل الدخول دون إعادة تشغيل لا يُكتب له مستند fcm_tokens إطلاقاً،
+            // فلا تصله إشعارات الإسناد المباشرة (banner) حتى يُعيد تشغيل التطبيق.
+            // cleanupOnSignOut يحذف التوكن، فكل تبديل حساب يعيد الفجوة بلا هذا.
+            try {
+              final t = await _fcm.getToken();
+              if (t != null) await _saveTokenToFirestore(t);
+            } catch (_) {}
+
             // أعِد الاشتراك في all_users عند كل دخول — الخروج يُلغيه، وكان يُعاد فقط في
             // initialize() (عند تشغيل التطبيق). فمن يخرج ويدخل بحساب آخر دون إعادة
             // تشغيل كان يبقى خارج all_users فلا يصله بثّ «الكل» كإشعار Push.
@@ -71,7 +81,7 @@ class ZyiarahNotificationService {
                 await _fcm.subscribeToTopic('admins');
                 await _fcm.unsubscribeFromTopic('clients');
                 await _fcm.unsubscribeFromTopic('drivers');
-              } else if (role == 'driver') {
+              } else if (role == 'driver' || role == 'worker') {
                 await _fcm.subscribeToTopic('drivers');
                 await _fcm.unsubscribeFromTopic('clients');
                 await _fcm.unsubscribeFromTopic('admins');

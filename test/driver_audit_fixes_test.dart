@@ -100,16 +100,55 @@ void main() {
         reason: 'openAppSettings ترمي UnimplementedError على الويب');
   });
 
-  test('تدفّق GPS واحد للطلب النشط (ناقل مواقع المزامنة) بلا تعطّل إعادة الاشتراك', () {
-    expect(dash.contains('_posHub'), isTrue);
-    expect(dash.contains('_syncSub != null ? _posHub.stream : _locationStream'),
-        isTrue,
-        reason: 'تدفّقا GPS متزامنان يضاعفان استهلاك البطارية');
-    // asBroadcastStream إلزامي: تدفّق getPositionStream أحادي الاشتراك، وإعادة
-    // بناء بطاقة التركيز تعيد الاشتراك ⇒ «Stream has already been listened to»
-    // (شاشة حمراء ظاهرة). البثّ يسمح بإعادة الاشتراك بأمان.
-    expect(dash.contains('.asBroadcastStream()'), isTrue,
-        reason: 'بدون البثّ يتعطّل تدفّق الموقع بإعادة الاشتراك ويعرض شاشة حمراء');
+  test('تدفّق GPS واحد فعليّ (geolocator يسمح بواحد ويتجاهل إعدادات اللاحق)', () {
+    // تدفّقان (خفيف للواجهة + تتبّع للرفع) = إعدادات الخدمة الأمامية لا تُطبَّق
+    // فيتجمّد تتبّع العميل عند تصغير التطبيق. مصدرٌ واحد يُلغى ويُعاد إنشاؤه.
+    expect(dash.contains('_startPositionStream'), isTrue);
+    expect(dash.contains('_syncSub'), isFalse,
+        reason: 'تدفّق ثانٍ يبطل إعدادات التتبّع الخلفي');
+    expect(dash.contains('_locationStream'), isFalse,
+        reason: 'التدفّق الثاني للواجهة أُزيل — الكل عبر _posHub');
+    // الإلغاء قبل إعادة الإنشاء إلزامي كي تُطبَّق الإعدادات الجديدة فعلاً.
+    expect(dash.contains('await _posSub?.cancel()'), isTrue,
+        reason: 'بلا إلغاء يعيد geolocator استخدام إعدادات التدفّق القديم');
+    // الواجهة تقرأ من البثّ دائماً (لا تدفّق أحادي الاشتراك يتعطّل بإعادة البناء).
+    expect(dash.contains('stream: _posHub.stream'), isTrue);
+    expect(dash.contains('.asBroadcastStream()'), isFalse);
+  });
+
+  test('توكن FCM يُحفظ عند تسجيل الدخول (لا فجوة لأول إسناد)', () {
+    final ns = File('lib/services/notification_service.dart').readAsStringSync();
+    final i = ns.indexOf('authStateChanges().listen');
+    final region = ns.substring(i, i + 900);
+    expect(region.contains('_saveTokenToFirestore'), isTrue,
+        reason: 'من يسجّل الدخول دون إعادة تشغيل لا يُكتب توكنه فلا تصله بانرات');
+  });
+
+  test('كادر التنظيف (worker) كادرٌ ميداني لا عميل', () {
+    final main = File('lib/main.dart').readAsStringSync();
+    expect(main.contains("role == 'driver' || role == 'worker'"), isTrue,
+        reason: 'worker كان يصل لوحة العميل (يُنشأ بدور = نوعه)');
+    final router = File('lib/router.dart').readAsStringSync();
+    expect(router.contains("role != 'driver' && role != 'worker'"), isTrue);
+  });
+
+  test('getUserRole يرجع null عند خطأ صلب (تفعيل شاشة إعادة المحاولة)', () {
+    final fs = File('lib/services/firebase_service.dart').readAsStringSync();
+    expect(fs.contains('Future<String?> getUserRole'), isTrue);
+    // القدرة على تمييز «خطأ» عن «عميل فعلاً» — كان يرجع client دائماً.
+    final ci = fs.indexOf('catch (e) {');
+    // أول catch بعد توقيع getUserRole
+    final gi = fs.indexOf('getUserRole');
+    final after = fs.substring(gi);
+    expect(after.contains('return null;'), isTrue,
+        reason: 'إرجاع client عند الخطأ يصل السائق لوحة العميل بصمت');
+  });
+
+  test('بطاقة التركيز تعرض موعد المهمة للسائق', () {
+    final i = dash.indexOf('_buildStateGuidedCard');
+    final body = dash.substring(i, i + 4000);
+    expect(body.contains("formatSlot12(data['booking_time_slot']"), isTrue,
+        reason: 'كان الموعد يظهر على بطاقات القائمة لا على بطاقة التركيز');
   });
 
   test('بدء الأسبوع في الإحصاءات مُقتطع لمنتصف الليل', () {

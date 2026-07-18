@@ -74,7 +74,7 @@ class ZyiarahDeepLinkService {
     if (user == null) return;
 
     final ZyiarahFirebaseService firebaseService = ZyiarahFirebaseService();
-    final String role = await firebaseService.getUserRole(user.uid);
+    final String role = await firebaseService.getUserRole(user.uid) ?? 'client';
     final bool isAdmin = ['super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin', 'admin'].contains(role);
     final bool isDriver = role == 'driver';
 

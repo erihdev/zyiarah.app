@@ -122,7 +122,10 @@ class AuthWrapper extends StatelessWidget {
         return _RoleUnavailableScreen(provider: userProvider);
       }
 
-      if (role == 'driver') {
+      if (role == 'driver' || role == 'worker') {
+        // كادر التنظيف (worker) كادرٌ ميداني مثل السائق (يُنشأ عبر
+        // createDriverAccountViaAdmin بدور = نوعه). بلا هذا يصل لوحة العميل ويرى
+        // شاشة حجز الخدمات بدل مهامه.
         return const DriverDashboard();
       } else if (['admin', 'super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin'].contains(role)) {
         return const AdminDashboardScreen();

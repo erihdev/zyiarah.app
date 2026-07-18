@@ -63,20 +63,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
     final granted = await ZyiarahLocationService().requestPermission();
     if (!mounted) return;
     if (granted) {
-      setState(() {
-        _locationDenied = false;
-        // (DRIVER-005/007) تيار مستقر بإعدادات موفّرة للبطارية — يُنشأ بعد منح الإذن.
-        // asBroadcastStream: تدفّق getPositionStream **أحادي الاشتراك**؛ وبناءَ
-        // بطاقة التركيز يعيد بناء StreamBuilder فيعيد الاشتراك بعد الإلغاء ⇒
-        // «Stream has already been listened to» (شاشة حمراء). البثّ يسمح بإعادة
-        // الاشتراك بأمان.
-        _locationStream = Geolocator.getPositionStream(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 10,
-          ),
-        ).asBroadcastStream();
-      });
+      if (mounted) setState(() => _locationDenied = false);
+      // (DRIVER-005/007) تدفّق الموقع الوحيد بوضع خفيف — يبدّله _startSync لوضع
+      // التتبّع عند المهمة النشطة. الواجهة تقرأ من _posHub (بثّ) فلا تعطّل إعادة اشتراك.
+      _startPositionStream(tracking: false);
     } else {
       setState(() => _locationDenied = true);
       final messenger = ScaffoldMessenger.of(context);
@@ -109,15 +99,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
     }
   }
 
-  StreamSubscription<Position>? _syncSub;
-
-  // ناقلٌ يعيد بثّ مواقع تدفّق المزامنة إلى واجهة المسافة/الخريطة المصغّرة، كي لا
-  // يُفتَح تدفّق GPS ثانٍ للطلب النشط نفسه (كان تدفّقان متزامنان يضاعفان استهلاك
-  // البطارية). عند نشاط المزامنة تقرأ الواجهة من هنا؛ وإلا من _locationStream.
+  // تدفّق موقع **واحد** يغذّي الواجهة (عبر _posHub) والرفع الخادمي معاً. geolocator
+  // يسمح بتدفّق موقع حيّ واحد فقط، ويُعيد استخدام إعدادات النداء الأول متجاهلاً
+  // اللاحقة — فتدفّقان (خفيف للواجهة + تتبّع للرفع) يعني أن إعدادات الخدمة الأمامية
+  // لا تُطبَّق أبداً، فيتجمّد تتبّع العميل حين يصغّر السائق التطبيق (فتح خرائط جوجل).
+  // لذا: مصدرٌ واحد، نُلغيه ونُعيد إنشاءه عند تبديل الوضع كي تُطبَّق الإعدادات فعلاً.
+  StreamSubscription<Position>? _posSub;
+  bool _posTracking = false;
+  bool _hasLocationStream = false;
   final StreamController<Position> _posHub = StreamController<Position>.broadcast();
-
-  // DRIVER-005/007: يُنشأ بعد منح إذن الموقع (null قبله) ويُعاد استخدامه عبر إعادة البناء.
-  Stream<Position>? _locationStream;
   bool _locationDenied = false;
 
   // إعدادات موقع تستمرّ في الخلفية: خدمة أمامية بإشعار على أندرويد، وتحديثات
@@ -149,23 +139,31 @@ class _DriverDashboardState extends State<DriverDashboard> {
         accuracy: LocationAccuracy.high, distanceFilter: 20);
   }
 
-  void _startSync(String orderId) {
-    if (_syncSub != null && _activeOrderId == orderId) return;
-    _stopSync();
-    _activeOrderId = orderId;
-    _syncSub = Geolocator.getPositionStream(locationSettings: _trackingSettings())
-        .listen((pos) async {
-      // أعد بثّ الموقع للواجهة (المسافة/الخريطة) — مصدرٌ واحد بدل تدفّق ثانٍ.
+  LocationSettings _lightSettings() => const LocationSettings(
+      accuracy: LocationAccuracy.high, distanceFilter: 10);
+
+  /// يبدأ/يبدّل تدفّق الموقع الوحيد. tracking=true أثناء مهمة نشطة (خدمة أمامية/
+  /// تحديثات خلفية للرفع المستمر)، false لعرض المسافة قبل الانطلاق. الإلغاء ثم
+  /// إعادة الإنشاء إلزامي: geolocator يتجاهل إعدادات تدفّق قائم.
+  Future<void> _startPositionStream({required bool tracking}) async {
+    if (_posSub != null && _posTracking == tracking) return;
+    await _posSub?.cancel();
+    _posSub = null;
+    _posTracking = tracking;
+    _hasLocationStream = true;
+    _posSub = Geolocator.getPositionStream(
+      locationSettings: tracking ? _trackingSettings() : _lightSettings(),
+    ).listen((pos) {
       if (!_posHub.isClosed) _posHub.add(pos);
-      try {
-        await _orderService.updateDriverLocation(
-            orderId, GeoPoint(pos.latitude, pos.longitude));
-      } catch (e) {
-        debugPrint("Location sync write error: $e");
+      final oid = _activeOrderId;
+      if (oid != null) {
+        _orderService
+            .updateDriverLocation(oid, GeoPoint(pos.latitude, pos.longitude))
+            .catchError((e) => debugPrint("Location sync write error: $e"));
       }
     }, onError: (e) {
       if (e is PermissionDeniedException) {
-        // DRIVER-006: GPS permission revoked mid-session — stop and alert driver
+        // DRIVER-006: إذن الموقع سُحب أثناء الجلسة — أوقف وأبلغ السائق.
         _stopSync();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -177,20 +175,27 @@ class _DriverDashboardState extends State<DriverDashboard> {
           );
         }
       } else {
-        debugPrint("Location sync error: $e");
+        debugPrint("Location stream error: $e");
       }
     });
   }
 
+  void _startSync(String orderId) {
+    if (_activeOrderId == orderId && _posTracking) return;
+    _activeOrderId = orderId;
+    _startPositionStream(tracking: true); // خدمة أمامية للرفع المستمر
+  }
+
   void _stopSync() {
-    _syncSub?.cancel();
-    _syncSub = null;
     _activeOrderId = null;
+    // ارجع للتدفّق الخفيف (بلا خدمة أمامية) — تبقى المسافة تعمل لمهمة مجدولة قادمة.
+    if (_hasLocationStream) _startPositionStream(tracking: false);
   }
 
   @override
   void dispose() {
-    _stopSync();
+    _posSub?.cancel();
+    _activeOrderId = null;
     _posHub.close();
     super.dispose();
   }
@@ -937,6 +942,30 @@ class _DriverDashboardState extends State<DriverDashboard> {
                     const SizedBox(height: 3),
                     // Large client name for field readability
                     Text(clientName, style: GoogleFonts.tajawal(fontWeight: FontWeight.w900, fontSize: 22, color: Colors.black87)),
+                    // موعد المهمة — كان يظهر فقط على بطاقات القائمة لا على بطاقة
+                    // التركيز، فالسائق يرى «مهمة مجدولة» بلا وقتها. نعرضه هنا صراحةً.
+                    Builder(builder: (_) {
+                      String t = formatSlot12(data['booking_time_slot'] as String?);
+                      if (t.isEmpty) {
+                        final sd = (data['service_date'] as Timestamp?)?.toDate();
+                        if (sd != null) t = formatHour12(sd.hour);
+                      }
+                      final bd = data['booking_date'] as String?;
+                      final parts = [if (bd != null) bd, if (t.isNotEmpty) t];
+                      if (parts.isEmpty) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.schedule, size: 14, color: stateColor),
+                          const SizedBox(width: 5),
+                          Text(parts.join('  •  '),
+                              style: GoogleFonts.tajawal(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: stateColor)),
+                        ]),
+                      );
+                    }),
                     if ((status == 'accepted' || status == 'on_the_way' || status == 'scheduled') && data['location'] is GeoPoint)
                       _buildDistanceInfo(data['location'] as GeoPoint),
                   ],
@@ -1044,7 +1073,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
   Widget _buildDistanceInfo(GeoPoint clientLoc) {
     // قبل منح الإذن (أو عند رفضه) اعرض زر تفعيل بدل الصمت/الانهيار.
-    if (_locationStream == null) {
+    if (!_hasLocationStream) {
       return TextButton.icon(
         onPressed: _ensureLocationPermission,
         style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 0)),
@@ -1056,9 +1085,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
       );
     }
     return StreamBuilder<Position>(
-      // أثناء مزامنة الطلب النشط اقرأ من ناقل مواقع المزامنة (تدفّق واحد)؛ خارجها
-      // (مثلاً مهمة مجدولة قبل الانطلاق) اقرأ من تدفّق الواجهة الخفيف.
-      stream: _syncSub != null ? _posHub.stream : _locationStream,
+      // مصدرٌ واحد دائماً: ناقل بثّ يغذّيه تدفّق الموقع الوحيد (خفيف أو تتبّع).
+      stream: _posHub.stream,
       builder: (context, snapshot) {
         // DRIVER-006: GPS permission revoked — visible alert, not silent collapse
         if (snapshot.hasError) {
@@ -1089,7 +1117,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
+  // حارس محلي ضد التكرار: تُستدعى الدالة من داخل build عند كل موقع بينما المسافة
+  // ≤ 2كم، وعلم المستند (proximity_notified) يُكتب بعد قراءةٍ غير متزامنة فتنطلق
+  // عدة نداءات قبل ضبطه. المجموعة تمنع التكرار فوراً في هذه الجلسة.
+  final Set<String> _proximityChecked = {};
+
   Future<void> _checkAndNotifyProximity(String orderId, GeoPoint target) async {
+    if (_proximityChecked.contains(orderId)) return;
+    _proximityChecked.add(orderId);
     try {
       final docRef = FirebaseFirestore.instance.collection('orders').doc(orderId);
       final doc = await docRef.get();

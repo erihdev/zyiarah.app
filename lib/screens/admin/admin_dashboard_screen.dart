@@ -35,7 +35,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       if (user != null) {
         // Use the centralized service to fetch the role (UID-based)
         final ZyiarahFirebaseService firebaseService = ZyiarahFirebaseService();
-        String role = await firebaseService.getUserRole(user.uid);
+        // getUserRole يرجع null عند خطأ قراءةٍ صلب — نُبقي سلوك هذه الشاشة كما كان.
+        String role = await firebaseService.getUserRole(user.uid) ?? 'client';
         
         if (mounted) {
           setState(() {

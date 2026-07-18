@@ -206,7 +206,7 @@ class ZyiarahFirebaseService {
     });
   }
   // --- استرجاع دور المستخدم وتوجيهه ---
-  Future<String> getUserRole(String uid, {String? phone}) async {
+  Future<String?> getUserRole(String uid, {String? phone}) async {
     try {
       // 1. التحقق أولاً من مجموعة المديرين (UID-based)
       DocumentSnapshot adminDoc = await _db.collection('admins').doc(uid).get();
@@ -264,11 +264,14 @@ class ZyiarahFirebaseService {
         }
       }
     } catch (e) {
-      // A transient Firestore error must not log the user out — fall back to
-      // the client role so an authenticated user still reaches the app.
+      // خطأ قراءةٍ صلب (شبكة): **لا نُخمّن الدور**. كان يرجع 'client' فيصل السائق/
+      // الأدمن لوحة العميل بصمت، ويُبطِل شاشة إعادة المحاولة (RoleUnavailable) في
+      // main.dart التي تنتظر null. نرجع null: المستخدم لا يُسجَّل خروجه (يرى إعادة
+      // محاولة)، ومستمع اللقطة في UserProvider يعافي الدور فور تحميل المستند.
       debugPrint("Error fetching role: $e");
-      return 'client';
+      return null;
     }
+    // قراءةٌ ناجحة بلا مستند مطابق: عميل فعلاً (افتراضي مشروع).
     return 'client';
   }
 
