@@ -274,6 +274,10 @@ workflows:
           LATEST=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME" 2>/dev/null || echo "")
           if [ -z "$LATEST" ]; then LATEST=246; fi
           NEW_CODE=$((LATEST + 1))
+          # حارس لمرّة واحدة: بناء سابق رفع versionCode=191 إلى Google Play قبل أن يفشل
+          # النشر (إقرار موقع الخلفية)، وقد لا يعيده get-latest — فلا نعيد استخدام ≤191
+          # تفادياً لرفض «versionCode مستخدم مسبقاً». يصبح خاملاً تلقائياً بعد تجاوز 191.
+          if [ "$NEW_CODE" -le 191 ]; then NEW_CODE=192; fi
           echo "Auto versionCode: $NEW_CODE (latest on Play: $LATEST)"
           flutter build appbundle --release --build-number=$NEW_CODE
           echo "✓ AAB built successfully (versionCode $NEW_CODE)"

@@ -2,8 +2,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <!-- تتبّع موقع السائق أثناء التوصيل عبر خدمة أمامية (يستمر عند تصغير التطبيق) -->
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!-- تتبّع موقع السائق أثناء التوصيل عبر خدمة أمامية (يستمر عند تصغير التطبيق).
+         لا نطلب ACCESS_BACKGROUND_LOCATION عمداً: الخدمة الأمامية (FOREGROUND_SERVICE_LOCATION)
+         تكفي على أندرويد لمواصلة التتبّع بعد التصغير، وطلب إذن الخلفية يُفعّل بوّابة إقرار
+         Google Play (فيديو + مراجعة) ويمنع نشر الإصدار بلا داعٍ. الكود لا يستدعيه على أندرويد. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
