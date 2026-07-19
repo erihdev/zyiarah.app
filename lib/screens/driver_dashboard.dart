@@ -115,15 +115,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
   // لفتح خرائط جوجل أثناء التوصيل).
   LocationSettings _trackingSettings() {
     if (defaultTargetPlatform == TargetPlatform.android) {
+      // مؤقّتاً بلا foregroundNotificationConfig (خدمة أمامية): يُبقي أندرويد التتبّع
+      // أثناء فتح التطبيق فقط، لتفادي إقرار «الخدمة الأمامية» في Google Play وإطلاق
+      // النسخة فوراً. لاستعادة الاستمرار عند تصغير التطبيق: أعِد foregroundNotificationConfig
+      // هنا + أذني FOREGROUND_SERVICE(_LOCATION) في AndroidManifest + إقرار FGS. (2026-07-19)
       return AndroidSettings(
         accuracy: LocationAccuracy.high,
         distanceFilter: 20,
         intervalDuration: const Duration(seconds: 15),
-        foregroundNotificationConfig: const ForegroundNotificationConfig(
-          notificationTitle: 'زيارة — تتبّع التوصيل',
-          notificationText: 'يُشارَك موقعك مع العميل أثناء تنفيذ المهمة.',
-          enableWakeLock: true,
-        ),
       );
     }
     if (defaultTargetPlatform == TargetPlatform.iOS) {

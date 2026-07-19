@@ -2,12 +2,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <!-- تتبّع موقع السائق أثناء التوصيل عبر خدمة أمامية (يستمر عند تصغير التطبيق).
-         لا نطلب ACCESS_BACKGROUND_LOCATION عمداً: الخدمة الأمامية (FOREGROUND_SERVICE_LOCATION)
-         تكفي على أندرويد لمواصلة التتبّع بعد التصغير، وطلب إذن الخلفية يُفعّل بوّابة إقرار
-         Google Play (فيديو + مراجعة) ويمنع نشر الإصدار بلا داعٍ. الكود لا يستدعيه على أندرويد. -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- تتبّع موقع السائق أثناء التوصيل. مؤقّتاً بلا خدمة أمامية ولا أذون
+         FOREGROUND_SERVICE(_LOCATION) ولا ACCESS_BACKGROUND_LOCATION: كلٌّ منها يُفعّل
+         بوّابة إقرار سياسة في Google Play تمنع النشر. النتيجة: التتبّع يعمل والتطبيق مفتوح
+         فقط ويتوقّف عند تصغيره — مقبول للإطلاق التجريبي. لاستعادة الاستمرار في الخلفية:
+         أعِد هذين الإذنين + foregroundNotificationConfig في driver_dashboard.dart
+         وأكمل إقرار «Foreground service permissions» في Play Console. (2026-07-19) -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
