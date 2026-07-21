@@ -43,6 +43,12 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
     exportBackgroundColor: Colors.white,
   );
 
+  // سعر الباقة الذي تُدخله الإدارة أساسٌ تُضاف عليه ضريبة 15% (قرار المالك). نُخزّن
+  // ونشحن ونعرض هذا الإجمالي شامل الضريبة، وهو نفسه ما يطابقه الخادم (planPrice =
+  // الإجمالي المدفوع)، فلا حاجة لتغيير أي دالة تحقّق خادمية.
+  double get _grossedPlanPrice =>
+      ((widget.planPrice * 1.15) * 100).roundToDouble() / 100;
+
   final Color brandPurple = const Color(0xFF5D1B5E);
   bool _isSubmitting = false;
   String _userName = "...";
@@ -127,7 +133,8 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
         'userName': finalName,
         'clientName': finalName, // consistency with admin screen
         'planName': widget.planName,
-        'planPrice': widget.planPrice,
+        // شامل الضريبة (الأساس + 15%) — ما يدفعه العميل ويطابقه الخادم.
+        'planPrice': _grossedPlanPrice,
         'planVisits': widget.planVisits,
         // مدة الزيارة — يقرؤها _generateContractVisits/generateSubscriptionVisits (c.hours)
         // بدل القيمة الافتراضية 4 دائماً.
@@ -168,7 +175,7 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
         MaterialPageRoute(
           builder: (_) => PaymentSummaryScreen(
             serviceName: widget.planName,
-            amount: widget.planPrice,
+            amount: _grossedPlanPrice, // الأساس + 15% (شامل الضريبة)
             contractId: docRef.id,
             planVisits: widget.planVisits,
           ),
@@ -247,7 +254,7 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
             'رقم الجوال: $_userPhone'),
           const SizedBox(height: 20),
           _buildContractSection('موضوع الاتفاقية:', 
-            'وافق الطرف الثاني على الاشتراك في "${widget.planName}" المقدمة من الطرف الأول مقابل مبلغ إجمالي قدره (${widget.planPrice} ر.س) تشمل ضريبة القيمة المضافة، وتتضمن الباقة عدد (${widget.planVisits}) زيارة.'),
+            'وافق الطرف الثاني على الاشتراك في "${widget.planName}" المقدمة من الطرف الأول مقابل مبلغ إجمالي قدره (${_grossedPlanPrice.toStringAsFixed(2)} ر.س) تشمل ضريبة القيمة المضافة، وتتضمن الباقة عدد (${widget.planVisits}) زيارة.'),
           const SizedBox(height: 20),
           _buildContractSection('أهم البنود والشروط:', _contractTerms),
           const SizedBox(height: 30),
