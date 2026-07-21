@@ -186,9 +186,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     // كان يفرض دفعاً زائداً + يجعل الخادم يرفض تطابق المبلغ فلا يُفعَّل العقد/الصيانة.
     final bool fixedPrice = widget.contractId != null;
     final double surge = fixedPrice ? 1.0 : _surgeFactor;
-    // نحدّ الخصم بألا يتجاوز المبلغ (كوبون قيمته أكبر من الطلب كان يجعل المبلغ
-    // سالباً → دفعة/محفظة بمبلغ سالب).
-    final raw = (widget.amount * surge) - _discountAmount;
+    // الخصم (الكوبون) لا يُطبَّق على السعر الثابت (الاشتراك): الخادم يطابق planPrice
+    // بلا خصم بالضبط، فأي خصم يجعل المشحون ≠ planPrice → يُرفض الدفع ولا يُفعَّل العقد
+    // رغم خصم المال. ونحدّ الخصم بألا يتجاوز المبلغ (كوبون أكبر من الطلب = مبلغ سالب).
+    final double discount = fixedPrice ? 0.0 : _discountAmount;
+    final raw = (widget.amount * surge) - discount;
     final clamped = raw < 0 ? 0.0 : raw;
     return (clamped * 100).roundToDouble() / 100;
   }
@@ -1072,8 +1074,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                         const SizedBox(height: 20),
                         _buildOrderDetailsCard(),
                         const SizedBox(height: 20),
-                        _buildCouponSection(),
-                        const SizedBox(height: 20),
+                        // الكوبونات للطلبات فقط لا الاشتراكات — خصمُ اشتراكٍ يكسر
+                        // تطابق planPrice الخادمي فلا يُفعَّل العقد رغم الدفع.
+                        if (widget.contractId == null) ...[
+                          _buildCouponSection(),
+                          const SizedBox(height: 20),
+                        ],
                         // الموافقة على الشروط تحت كود الخصم مباشرةً (بدل أسفل الصفحة).
                         _buildTermsAndConditions(),
                         const SizedBox(height: 20),

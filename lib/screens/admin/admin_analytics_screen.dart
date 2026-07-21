@@ -504,7 +504,9 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
             final double totalRevenue = (docData['total_revenue'] ?? 0.0).toDouble();
             final int activeOrders = (docData['active_orders'] ?? 0).toInt();
             final int completedOrders = (docData['completed_orders'] ?? 0).toInt();
-            final double vatAmount = totalRevenue * 0.15;
+            // الإيراد المخزَّن شامل الضريبة (المبلغ المشحون = الأساس×1.15)، فالضريبة
+            // تُستخرج منه قسمةً لا تُضاف عليه ثانيةً (كانت تُضخَّم 15% زيادة).
+            final double vatAmount = totalRevenue - (totalRevenue / 1.15);
 
             return SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),

@@ -597,6 +597,15 @@ exports.createTamaraCheckout = onCall(
           // final_amount = السعر النهائي بعد تعديل الإدارة (رسوم توصيل مثلاً). كان
           // Tamara تشحن total_amount (سعر السلة) فتُحصّل مبلغاً مختلفاً عمّا وافق عليه العميل.
           trueAmount = Number(info.final_amount ?? info.total_amount);
+        } else {
+          // العقد/الاشتراك: يُمرَّر معرّفه كـ orderId ويعيش في contracts (planPrice شامل
+          // الضريبة). بدون هذا الفرع كان دفع الاشتراك عبر تمارا يفشل بـ not-found — بينما
+          // verifyMoyasarPayment و tamaraWebhook يعالجان العقود أصلاً (كان تناقضاً).
+          const contractDoc = await admin.firestore().collection("contracts").doc(orderId).get();
+          if (contractDoc.exists) {
+            info = contractDoc.data();
+            trueAmount = Number(info.planPrice);
+          }
         }
       }
 

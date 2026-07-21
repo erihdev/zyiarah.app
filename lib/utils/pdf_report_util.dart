@@ -100,7 +100,7 @@ class ZyiarahPdfReportUtil {
           _buildStatItem('Total Revenue', '${revenue.toStringAsFixed(2)} SAR'),
           _buildStatItem('Active Orders', active.toString()),
           _buildStatItem('Completed Orders', (total - active).toString()),
-          _buildStatItem('Estimated VAT (15%)', '${(revenue * 0.15).toStringAsFixed(2)} SAR'),
+          _buildStatItem('Estimated VAT (15%)', '${(revenue - revenue / 1.15).toStringAsFixed(2)} SAR'),
         ],
       ),
     );
