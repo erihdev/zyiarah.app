@@ -32,6 +32,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   final TextEditingController _updateMsgCtrl = TextEditingController();
   bool _updateEnabled = false;
   bool _updateForce = false;
+  bool _maintenanceMode = false;
   List<int> _selectedHours = [4, 5, 6, 8];
 
   @override
@@ -60,6 +61,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                 "3. يتعهد الطرف الأول بتقديم الخدمة بجودة مهنية معتمدة وفقاً للمعايير والأنظمة.\n"
                 "4. يلتزم الطرف الثاني بتوفير بيئة عمل مناسبة وآمنة لمقدم الخدمة.";
             _privacyPolicyCtrl.text = data['privacy_policy'] ?? '';
+            _maintenanceMode = data['maintenance_mode'] == true;
             _isLoading = false;
           });
           
@@ -128,6 +130,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
             (double.tryParse(_surgePercentCtrl.text.trim()) ?? 0).clamp(0, 100),
         'contract_terms': _contractTermsCtrl.text.trim(),
         'privacy_policy': _privacyPolicyCtrl.text.trim(),
+        'maintenance_mode': _maintenanceMode,
       }, SetOptions(merge: true));
 
       List<int> validHours = List<int>.from(_selectedHours)..sort();
@@ -371,6 +374,24 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                                 ),
                               ],
                             ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // (دمج من لوحة الويب) وضع الصيانة — يُقفل التطبيق للعملاء فقط.
+                      _buildSectionCard(
+                        title: "وضع الصيانة",
+                        icon: Icons.engineering_rounded,
+                        color: const Color(0xFFDC2626),
+                        children: [
+                          _buildToggle(
+                            "إغلاق التطبيق للعملاء (صيانة)",
+                            "عند التفعيل يرى العملاء شاشة صيانة ولا يستطيعون الطلب. الإدارة والسائقون لا يتأثّرون.",
+                            _maintenanceMode,
+                            (v) => setState(() => _maintenanceMode = v),
+                            const Color(0xFFDC2626),
                           ),
                         ],
                       ),

@@ -157,12 +157,77 @@ class AuthWrapper extends StatelessWidget {
       } else if (['admin', 'super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin'].contains(role)) {
         return const AdminDashboardScreen();
       } else {
-        return const ClientDashboard();
+        // (دمج من لوحة الويب) وضع الصيانة — يُقفل التطبيق **للعملاء فقط** (الإدارة
+        // والسائقون يبقون للعمل/الإيقاف). fail-open: تعذّر القراءة أو غياب العلم ⇒
+        // التطبيق يعمل عادياً؛ maintenance_mode==true فقط يُظهر شاشة الصيانة.
+        return StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('system_configs')
+              .doc('main_settings')
+              .snapshots(),
+          builder: (context, snap) {
+            final data = snap.data?.data() as Map<String, dynamic>?;
+            if (data != null && data['maintenance_mode'] == true) {
+              return const _MaintenanceScreen();
+            }
+            return const ClientDashboard();
+          },
+        );
       }
     }
 
     // إذا لم يكن مسجلاً دخوله، نعرض شاشة الترحيب
     return const OnboardingScreen();
+  }
+}
+
+/// (دمج من لوحة الويب) شاشة الصيانة — تُعرض للعميل حين maintenance_mode=true
+/// (تضبطه الإدارة من إعدادات التطبيق). الإدارة والسائقون لا يتأثّرون.
+class _MaintenanceScreen extends StatelessWidget {
+  const _MaintenanceScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF5D1B5E),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.build_circle_outlined,
+                      size: 72, color: Colors.white),
+                ),
+                const SizedBox(height: 28),
+                const Text(
+                  'التطبيق قيد الصيانة',
+                  style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'نُجري تحسينات سريعة على زيارة.\nنعود إليكِ قريباً — شكراً لصبركِ 🌿',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 15, color: Colors.white70, height: 1.7),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
