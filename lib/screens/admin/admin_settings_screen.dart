@@ -26,6 +26,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   // نسبة سعر الذروة يدوياً — 0 = بلا ذروة. تحلّ محلّ الحساب الآلي من حالة السائقين.
   final TextEditingController _surgePercentCtrl = TextEditingController();
   final TextEditingController _contractTermsCtrl = TextEditingController();
+  // (دمج من لوحة الويب) سياسة الخصوصية + التحكم بالتحديث الإجباري (يقرؤه app_update_service).
+  final TextEditingController _privacyPolicyCtrl = TextEditingController();
+  final TextEditingController _latestBuildCtrl = TextEditingController();
+  final TextEditingController _updateMsgCtrl = TextEditingController();
+  bool _updateEnabled = false;
+  bool _updateForce = false;
   List<int> _selectedHours = [4, 5, 6, 8];
 
   @override
@@ -53,6 +59,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                 "2. يحق للعميل طلب الخدمة عبر التطبيق ضمن نطاق الباقة.\n"
                 "3. يتعهد الطرف الأول بتقديم الخدمة بجودة مهنية معتمدة وفقاً للمعايير والأنظمة.\n"
                 "4. يلتزم الطرف الثاني بتوفير بيئة عمل مناسبة وآمنة لمقدم الخدمة.";
+            _privacyPolicyCtrl.text = data['privacy_policy'] ?? '';
             _isLoading = false;
           });
           
@@ -76,6 +83,22 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
              _maxWorkerCtrl.text = '5';
              _maxOrdersPerDayCtrl.text = '10';
           }
+
+          // (دمج من الويب) إعداد التحديث الإجباري — system_configs/app_update
+          // (يقرؤه app_update_service.dart لإجبار المستخدمين على التحديث).
+          try {
+            final updDoc =
+                await _db.collection('system_configs').doc('app_update').get();
+            if (updDoc.exists && updDoc.data() != null && mounted) {
+              final u = updDoc.data()!;
+              setState(() {
+                _updateEnabled = u['enabled'] == true;
+                _updateForce = u['force'] == true;
+                _latestBuildCtrl.text = (u['latest_build'] ?? 0).toString();
+                _updateMsgCtrl.text = u['message'] ?? '';
+              });
+            }
+          } catch (_) {}
           _fadeController.forward();
         }
       } else {
@@ -104,6 +127,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         'surge_percent':
             (double.tryParse(_surgePercentCtrl.text.trim()) ?? 0).clamp(0, 100),
         'contract_terms': _contractTermsCtrl.text.trim(),
+        'privacy_policy': _privacyPolicyCtrl.text.trim(),
       }, SetOptions(merge: true));
 
       List<int> validHours = List<int>.from(_selectedHours)..sort();
@@ -114,7 +138,21 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         'max_workers': int.tryParse(_maxWorkerCtrl.text) ?? 5,
         'max_orders_per_day': int.tryParse(_maxOrdersPerDayCtrl.text) ?? 10,
       }, SetOptions(merge: true));
-      
+
+      // (دمج من الويب) نشر سياسة الخصوصية لمستند عام تقرأه zyiarah.com/privacy بلا دخول.
+      await _db.collection('public_content').doc('privacy').set({
+        'content': _privacyPolicyCtrl.text.trim(),
+        'updated_at': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // (دمج من الويب) إعداد التحديث الإجباري — يقرؤه app_update_service.dart.
+      await _db.collection('system_configs').doc('app_update').set({
+        'enabled': _updateEnabled,
+        'latest_build': int.tryParse(_latestBuildCtrl.text.trim()) ?? 0,
+        'force': _updateForce,
+        'message': _updateMsgCtrl.text.trim(),
+      }, SetOptions(merge: true));
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Row(
@@ -153,6 +191,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
     _adminEmailCtrl.dispose();
     _surgePercentCtrl.dispose();
     _contractTermsCtrl.dispose();
+    _privacyPolicyCtrl.dispose();
+    _latestBuildCtrl.dispose();
+    _updateMsgCtrl.dispose();
     super.dispose();
   }
 
@@ -334,8 +375,49 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                         ],
                       ),
 
+                      const SizedBox(height: 24),
+
+                      // (دمج من لوحة الويب) التحكم بالتحديث الإجباري — يقرؤه التطبيق فعلاً.
+                      _buildSectionCard(
+                        title: "التحديث الإجباري للتطبيق",
+                        icon: Icons.system_update_rounded,
+                        color: const Color(0xFF5D1B5E),
+                        children: [
+                          _buildPremiumField("أحدث رقم بناء منشور (Latest Build)", "مثال 210", _latestBuildCtrl, Icons.numbers_rounded),
+                          const Padding(
+                            padding: EdgeInsets.only(top: 6, bottom: 4),
+                            child: Text(
+                              "يظهر إشعار التحديث لكل مستخدم رقم بنائه أقدم من هذا الرقم فقط.",
+                              style: TextStyle(fontSize: 11, color: Colors.grey, height: 1.5),
+                            ),
+                          ),
+                          const Divider(),
+                          _buildToggle("تفعيل إشعار التحديث", "", _updateEnabled, (v) => setState(() => _updateEnabled = v), const Color(0xFF10B981)),
+                          _buildToggle("إجباري (لا يمكن تجاهله)", "يمنع المستخدم من استخدام التطبيق حتى يُحدّث.", _updateForce, (v) => setState(() => _updateForce = v), const Color(0xFF5D1B5E)),
+                          const SizedBox(height: 12),
+                          _buildPremiumField("رسالة التحديث (اختياري)", "نص", _updateMsgCtrl, Icons.message_rounded, keyboardType: TextInputType.text),
+                        ],
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // (دمج من لوحة الويب) سياسة الخصوصية — تُنشَر لصفحة zyiarah.com/privacy.
+                      _buildSectionCard(
+                        title: "سياسة الخصوصية",
+                        icon: Icons.privacy_tip_rounded,
+                        color: const Color(0xFF0EA5E9),
+                        children: [
+                          const Text(
+                            "تُنشَر للعملاء وعلى صفحة zyiarah.com/privacy العامة فور الحفظ. اترك سطراً فارغاً بين الفقرات.",
+                            style: TextStyle(fontSize: 12, color: Colors.grey, height: 1.5),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildPremiumMultilineField("نص سياسة الخصوصية", "اكتب سياسة الخصوصية هنا...", _privacyPolicyCtrl, Icons.shield_outlined),
+                        ],
+                      ),
+
                       const SizedBox(height: 36),
-                      
+
                       // Save Button
                       Container(
                         height: 60,
@@ -526,6 +608,36 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
           }).toList(),
         ),
       ],
+    );
+  }
+
+  Widget _buildToggle(String label, String subtitle, bool value,
+      ValueChanged<bool> onChanged, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E293B))),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(subtitle,
+                      style: const TextStyle(
+                          fontSize: 11, color: Color(0xFF94A3B8), height: 1.4)),
+                ],
+              ],
+            ),
+          ),
+          Switch(value: value, activeThumbColor: color, onChanged: onChanged),
+        ],
+      ),
     );
   }
 
