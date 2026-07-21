@@ -571,21 +571,6 @@ export default function Settings() {
                                             </div>
                                         </div>
 
-                                        <div className="bg-white border border-blue-100 p-8 rounded-[2rem] shadow-sm relative overflow-hidden group hover:border-blue-300 hover:shadow-md transition-all">
-                                            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Activity size={64} /></div>
-                                            <label htmlFor="commission-rate" className="block text-sm font-bold text-slate-800 mb-2 relative z-10">نسبة عمولة المنصة</label>
-                                            <p className="text-xs text-slate-500 font-medium mb-4 h-8 relative z-10">النسبة التي تأخذها المنصة من كل طلب مكتمل.</p>
-                                            <div className="relative z-10 flex items-center">
-                                                <input
-                                                    id="commission-rate"
-                                                    type="number" value={settings.commission_rate} onChange={(e) => handleChange('commission_rate', Number(e.target.value))}
-                                                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 font-black text-2xl rounded-xl px-5 py-4 outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-center"
-                                                    dir="ltr"
-                                                />
-                                                <span className="absolute left-6 text-slate-400 font-black text-xl pointer-events-none">%</span>
-                                            </div>
-                                        </div>
-
                                         <div className="bg-white border border-red-100 p-8 rounded-[2rem] shadow-sm relative overflow-hidden group hover:border-red-300 hover:shadow-md transition-all">
                                             <div className="absolute top-0 right-0 p-4 text-red-500 opacity-5 group-hover:opacity-10 transition-opacity"><ArrowRight size={64} className="rotate-90" /></div>
                                             <label htmlFor="min-wallet" className="block text-sm font-bold text-slate-800 mb-2 relative z-10">الحد الأدنى للمحفظة</label>

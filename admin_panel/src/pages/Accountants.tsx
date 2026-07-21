@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
-import { DollarSign, ArrowUpRight, TrendingUp, Download, Users, Banknote, ShoppingBag, CreditCard, Wallet } from 'lucide-react';
+import { DollarSign, ArrowUpRight, TrendingUp, Users, Banknote, ShoppingBag, CreditCard, Wallet } from 'lucide-react';
 
 interface Order {
     id: string;
@@ -114,10 +114,6 @@ export default function Accountants() {
                     <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">الإدارة المالية والمحاسبة</h2>
                     <p className="text-slate-500 font-medium text-sm mt-1">إيرادات وتكاليف شهر {monthName} — بيانات حية من قاعدة البيانات</p>
                 </div>
-                <button type="button" className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 text-slate-800 rounded-xl font-bold hover:bg-slate-50 transition-colors shadow-sm">
-                    <Download size={18} className="text-blue-600" />
-                    تصدير التقرير (Excel)
-                </button>
             </div>
 
             {/* KPI Cards */}

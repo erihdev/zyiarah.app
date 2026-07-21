@@ -357,10 +357,6 @@ export default function Dashboard() {
                     <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">نظرة عامة على الأداء</h2>
                     <p className="text-slate-500 font-medium text-sm mt-1">إحصائيات المنصة حتى اليوم</p>
                 </div>
-                <button type="button" className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-bold py-2.5 px-5 rounded-xl transition-all shadow-sm flex items-center space-x-2 space-x-reverse text-sm">
-                    <span>تصدير التقرير</span>
-                    <ArrowUpRight size={18} />
-                </button>
             </div>
 
             {/* Services Stats Grid */}

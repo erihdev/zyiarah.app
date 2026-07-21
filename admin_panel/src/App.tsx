@@ -21,7 +21,6 @@ import AccountDeletion from './pages/AccountDeletion.tsx';
 import Contracts from './pages/Contracts.tsx';
 import StoreProducts from './pages/StoreProducts.tsx';
 import StoreOrders from './pages/StoreOrders.tsx';
-import Services from './pages/Services.tsx';
 import Payroll from './pages/Payroll.tsx';
 import { canAccess } from './config/access.ts';
 
@@ -68,7 +67,7 @@ function App() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50" dir="rtl">
         <div className="flex flex-col items-center">
-          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <div className="w-12 h-12 border-4 border-[#5D1B5E] border-t-transparent rounded-full animate-spin mb-4"></div>
           <p className="text-slate-600 font-bold">جاري التحقق من الهوية...</p>
         </div>
       </div>
@@ -128,7 +127,6 @@ function App() {
           <Route path="store-products" element={guard('/store-products', <StoreProducts />)} />
           <Route path="store-orders" element={guard('/store-orders', <StoreOrders />)} />
           <Route path="settings" element={guard('/settings', <Settings />)} />
-          <Route path="services" element={guard('/services', <Services />)} />
           <Route path="payroll" element={guard('/payroll', <Payroll />)} />
         </Route>
       </Routes>
