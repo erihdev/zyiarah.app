@@ -150,7 +150,17 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       final data = doc.data() as Map<String, dynamic>;
       final status = data['status'] ?? 'pending';
       if (status != 'cancelled') {
-        cleaningRevenue += d(data['final_amount'] ?? data['amount']);
+        final amount = d(data['final_amount'] ?? data['amount']);
+        // طلبات متجر الأدوات والتنظيف تعيش الآن في `orders` (صارت مجدولة كالخدمات)
+        // لكنها مبيعات متجر — ننسبها لإيراد المتجر لا التنظيف كي تبقى بطاقة «إيرادات
+        // المتجر» دقيقة ولا يتضخّم إيراد التنظيف. (متجر الشركات ما زال في store_orders.)
+        final meta = data['service_meta'];
+        final bool isStore = meta is Map && meta['kind'] == 'store_products';
+        if (isStore) {
+          storeRevenue += amount;
+        } else {
+          cleaningRevenue += amount;
+        }
       }
       if (status == 'pending' || status == 'assigned' || status == 'in_progress') {
         activeOrders++;

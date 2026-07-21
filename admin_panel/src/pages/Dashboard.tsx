@@ -99,6 +99,9 @@ export default function Dashboard() {
     const [availableDrivers, setAvailableDrivers] = useState('...');
     const [totalRevenue, setTotalRevenue] = useState(0);
     const [storeRevenue, setStoreRevenue] = useState(0);
+    // إيراد متجر الأدوات والتنظيف صار في `orders` (طلبات مجدولة) — نجمعه منفصلاً كي
+    // يُنسب لإيراد المتجر لا الخدمات. متجر الشركات يبقى في store_orders (storeRevenue).
+    const [clientStoreRevenue, setClientStoreRevenue] = useState(0);
     const [pendingStoreOrders, setPendingStoreOrders] = useState('...');
     const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
     
@@ -145,20 +148,28 @@ export default function Dashboard() {
         const unsubCompletedOrders = onSnapshot(
             query(collection(db, 'orders'), where('status', '==', 'completed')),
             (snap: QuerySnapshot<DocumentData>) => {
-                let revenue = 0, thisMonthRev = 0, lastMonthRev = 0;
+                let revenue = 0, clientStoreRev = 0, thisMonthRev = 0, lastMonthRev = 0;
                 let thisMonthOrders = 0, lastMonthOrders = 0;
                 snap.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
-                    const d = doc.data() as { amount?: number; created_at?: Timestamp };
-                    revenue += d.amount || 0;
+                    const d = doc.data() as { amount?: number; created_at?: Timestamp; service_meta?: { kind?: string } };
+                    const amt = d.amount || 0;
+                    // طلبات متجر الأدوات (service_meta.kind == 'store_products') مبيعات متجر لا
+                    // خدمات — تُنسب لإيراد المتجر ولا تدخل بطاقة/اتجاه إيرادات الخدمات.
+                    if (d.service_meta?.kind === 'store_products') {
+                        clientStoreRev += amt;
+                        return;
+                    }
+                    revenue += amt;
                     if (d.created_at && d.created_at >= thisMonthTs) {
-                        thisMonthRev += d.amount || 0;
+                        thisMonthRev += amt;
                         thisMonthOrders++;
                     } else if (d.created_at && d.created_at >= lastMonthTs) {
-                        lastMonthRev += d.amount || 0;
+                        lastMonthRev += amt;
                         lastMonthOrders++;
                     }
                 });
                 setTotalRevenue(revenue);
+                setClientStoreRevenue(clientStoreRev);
                 if (lastMonthRev > 0) setRevenueTrend((((thisMonthRev - lastMonthRev) / lastMonthRev) * 100).toFixed(1));
                 if (lastMonthOrders > 0) setOrdersTrend((((thisMonthOrders - lastMonthOrders) / lastMonthOrders) * 100).toFixed(1));
             }
@@ -366,9 +377,9 @@ export default function Dashboard() {
                     إحصائيات متجر الأدوات
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <StatCard title="إيرادات المتجر" value={`${storeRevenue.toFixed(0)} ر.س`} icon={TrendingUp} trend="100" trendUp colorScheme="blue" />
+                    <StatCard title="إيرادات المتجر" value={`${(storeRevenue + clientStoreRevenue).toFixed(0)} ر.س`} icon={TrendingUp} trend="100" trendUp colorScheme="blue" />
                     <StatCard title="طلبات بانتظار الموافقة" value={pendingStoreOrders} icon={Clock} trend="0" trendUp colorScheme="orange" />
-                    <StatCard title="إجمالي الدخل الكلي" value={`${(totalRevenue + storeRevenue).toFixed(0)} ر.س`} icon={TrendingUp} trend="+" trendUp colorScheme="emerald" />
+                    <StatCard title="إجمالي الدخل الكلي" value={`${(totalRevenue + storeRevenue + clientStoreRevenue).toFixed(0)} ر.س`} icon={TrendingUp} trend="+" trendUp colorScheme="emerald" />
                 </div>
             </div>
 

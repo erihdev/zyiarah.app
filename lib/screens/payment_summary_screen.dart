@@ -195,6 +195,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   double get subtotal => totalWithVat / 1.15;
   double get vatAmount => totalWithVat - subtotal;
 
+  /// طلب متجر (توصيل منتجات) — نخفي «المدة» و«عدد العاملات» فهما مضلّلان هنا،
+  /// ونعرض «عدد المنتجات» بدلاً منهما. يُكتشف من نوع service_meta.
+  bool get _isStoreOrder =>
+      widget.serviceMeta != null &&
+      widget.serviceMeta!['kind'] == 'store_products';
+
   /// سبب منع الدفع الأصلي (Apple/Google/Samsung) — نفس فحوص _handlePayment
   /// المتزامنة (الشروط/الهاتف/المستخدم). لولاها تتجاوز الأزرار الأصلية الفحوص
   /// لأنها تستدعي النجاح مباشرةً.
@@ -1203,10 +1209,15 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           Text('تفاصيل الفاتورة', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),
           const Divider(height: 30),
           _buildRowDetail('الخدمة', widget.serviceName),
-          if (widget.hours != null) _buildRowDetail('المدة', '${widget.hours} ساعات'),
-          _buildRowDetail('عدد العاملات', widget.workerCount == 1 ? "عاملة واحدة" : "عاملتين"),
-          if (widget.serviceDate != null) 
-            _buildRowDetail('التاريخ', intl.DateFormat('yyyy-MM-dd').format(widget.serviceDate!)),
+          if (_isStoreOrder)
+            _buildRowDetail('عدد المنتجات', '${widget.serviceMeta!['total_qty'] ?? ''}'),
+          if (widget.hours != null && !_isStoreOrder)
+            _buildRowDetail('المدة', '${widget.hours} ساعات'),
+          if (!_isStoreOrder)
+            _buildRowDetail('عدد العاملات', widget.workerCount == 1 ? "عاملة واحدة" : "عاملتين"),
+          if (widget.serviceDate != null)
+            _buildRowDetail(_isStoreOrder ? 'موعد التوصيل' : 'التاريخ',
+                intl.DateFormat('yyyy-MM-dd').format(widget.serviceDate!)),
           if (widget.zoneName != null) _buildRowDetail('المنطقة', widget.zoneName!),
           const Divider(height: 30),
           _buildRowDetail('المبلغ الأساسي', '${subtotal.toStringAsFixed(2)} ر.س'),

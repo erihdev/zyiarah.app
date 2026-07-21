@@ -45,6 +45,13 @@ String? zyiarahServiceMetaSummary(dynamic meta) {
         parts.add(
             '$label ×${count[label]} (${area[label]!.toStringAsFixed(2)} م²)');
       }
+    case 'store_products':
+      final items = meta['items'];
+      if (items is! List) return null;
+      for (final it in items.whereType<Map>()) {
+        final q = ZyiarahServiceMetaView._num(it['quantity']).toInt();
+        if (q > 0) parts.add('${it['name'] ?? '-'} ×$q');
+      }
     default:
       return null;
   }
@@ -69,6 +76,7 @@ class ZyiarahServiceMetaView extends StatelessWidget {
       'sofa_rug_sqm' => _sofaRugRows(m),
       'ac_service' => _acRows(m),
       'car_interior' => _acRows(m), // بنود label/count/unit_price نفسها
+      'store_products' => _storeRows(m),
 
       _ => const <_MetaRow>[],
     };
@@ -133,6 +141,9 @@ class ZyiarahServiceMetaView extends StatelessWidget {
     if (m['kind'] == 'car_interior') {
       return '${_num(m['total_cars']).toInt()} سيارة';
     }
+    if (m['kind'] == 'store_products') {
+      return '${_num(m['total_qty']).toInt()} منتج';
+    }
     return '';
   }
 
@@ -162,6 +173,21 @@ class ZyiarahServiceMetaView extends StatelessWidget {
         label: '${l['label'] ?? '-'}',
         detail: '$count × ${_t(unit)} ر.س',
         total: '${_num(l['line_total']).toStringAsFixed(2)} ر.س',
+      );
+    }).toList();
+  }
+
+  /// أصناف طلب المتجر: [{name, quantity, unit_price, line_total}].
+  List<_MetaRow> _storeRows(Map m) {
+    final items = m['items'];
+    if (items is! List) return const [];
+    return items.whereType<Map>().map((it) {
+      final qty = _num(it['quantity']).toInt();
+      final unit = _num(it['unit_price']);
+      return _MetaRow(
+        label: '${it['name'] ?? '-'}',
+        detail: '$qty × ${_t(unit)} ر.س',
+        total: '${_num(it['line_total']).toStringAsFixed(2)} ر.س',
       );
     }).toList();
   }

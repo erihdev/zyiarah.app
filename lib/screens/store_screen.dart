@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/store_service.dart';
 import 'package:zyiarah/widgets/shimmer_loading.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:zyiarah/screens/store_payment_screen.dart';
+import 'package:zyiarah/screens/store_schedule_screen.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
 
 
@@ -46,24 +48,40 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
       builder: (ctx) => _CartSheet(
         cart: _cart,
         storeService: _storeService,
+        companies: widget.companies,
         onSubmitted: (result) {
           setState(() => _cart.clear());
-          // (المتجر المباشر) إلى الدفع فوراً — لا موافقة إدارية قبل الدفع.
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => StorePaymentScreen(
-                storeOrderId: result['id'] as String,
-                orderCode: result['code'] as String,
-                items: (result['items'] as List)
-                    .map((e) => Map<String, dynamic>.from(e as Map))
-                    .toList(),
-                total: (result['total'] as num).toDouble(),
-                customerName: result['client_name'] as String,
-                customerPhone: result['client_phone'] as String,
+          final items = (result['items'] as List)
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+          if (widget.companies) {
+            // متجر الشركات: طلب مباشر — إلى الدفع فوراً (store_orders).
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => StorePaymentScreen(
+                  storeOrderId: result['id'] as String,
+                  orderCode: result['code'] as String,
+                  items: items,
+                  total: (result['total'] as num).toDouble(),
+                  customerName: result['client_name'] as String,
+                  customerPhone: result['client_phone'] as String,
+                ),
               ),
-            ),
-          );
+            );
+          } else {
+            // متجر الأدوات والتنظيف: طلب مجدول — إلى تحديد العنوان والموعد ثم الدفع
+            // (يُنشأ طلب `orders` عند الدفع مثل بقية الخدمات، ويُسنَد سائق تلقائياً).
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => StoreScheduleScreen(
+                  items: items,
+                  total: (result['total'] as num).toDouble(),
+                ),
+              ),
+            );
+          }
         },
       ),
     );
@@ -351,11 +369,15 @@ class _ProductCard extends StatelessWidget {
 class _CartSheet extends StatefulWidget {
   final Map<String, int> cart;
   final ZyiarahStoreService storeService;
+
+  /// true = متجر الشركات (طلب مباشر). false = متجر الأدوات والتنظيف (مجدول).
+  final bool companies;
   final void Function(Map<String, dynamic> result) onSubmitted;
 
   const _CartSheet({
     required this.cart,
     required this.storeService,
+    required this.companies,
     required this.onSubmitted,
   });
 
@@ -407,27 +429,42 @@ class _CartSheetState extends State<_CartSheet> {
       final double total = items.fold(
         0.0, (acc, item) => acc + (item['price'] as double) * (item['quantity'] as int));
 
-      // (المتجر المباشر — قرار المالك) لا موافقة قبل الدفع: أنشئ الطلب
-      // بانتظار الدفع وافتح شاشة الدفع فوراً. إشعار الإدارة يصلها خادمياً
-      // عند الإنشاء (مشغّل) وعند الدفع (notifyAdminOfPayment).
-      final result = await widget.storeService.createStoreOrder(
-        items: items,
-        totalAmount: total,
-      );
-
-      if (!mounted) return;
-      if (result == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('يجب تسجيل الدخول لإتمام الطلب')),
+      if (widget.companies) {
+        // متجر الشركات (طلب مباشر — قرار المالك): أنشئ طلب store_orders بانتظار
+        // الدفع وافتح شاشة الدفع فوراً. إشعار الإدارة خادمي عند الإنشاء وعند الدفع.
+        final result = await widget.storeService.createStoreOrder(
+          items: items,
+          totalAmount: total,
         );
-        setState(() => _isSubmitting = false);
-        return;
-      }
-      result['items'] = items;
 
-      // أغلق الـ Sheet ثم نقّل عبر callback الـ parent
-      Navigator.pop(context);
-      widget.onSubmitted(result);
+        if (!mounted) return;
+        if (result == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('يجب تسجيل الدخول لإتمام الطلب')),
+          );
+          setState(() => _isSubmitting = false);
+          return;
+        }
+        result['items'] = items;
+
+        // أغلق الـ Sheet ثم نقّل عبر callback الـ parent (إلى الدفع المباشر).
+        Navigator.pop(context);
+        widget.onSubmitted(result);
+      } else {
+        // متجر الأدوات والتنظيف (طلب مجدول — قرار المالك 2026-07-21): لا سجلّ
+        // store_orders؛ نمرّر الأصناف والإجمالي لشاشة الجدولة، ويُنشأ طلب `orders`
+        // عند الدفع (فحص سعة ⇒ إسناد سائق ⇒ scheduled) مثل بقية الخدمات.
+        if (FirebaseAuth.instance.currentUser == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('يجب تسجيل الدخول لإتمام الطلب')),
+          );
+          setState(() => _isSubmitting = false);
+          return;
+        }
+        if (!mounted) return;
+        Navigator.pop(context);
+        widget.onSubmitted({'items': items, 'total': total});
+      }
 
     } catch (e) {
       GlobalErrorHandler.handleError(e);
@@ -500,7 +537,9 @@ class _CartSheetState extends State<_CartSheet> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'سيُراجع طلبك من قِبل الإدارة، وفور الموافقة سنُشعرك لإتمام الدفع بالطريقة التي تناسبك (بطاقة / تمارا).',
+                          widget.companies
+                              ? 'ستنتقل لإتمام الدفع مباشرةً (بطاقة / تمارا)، ويصلك طلبك بعد تأكيد الدفع.'
+                              : 'ستحدّد عنوان التوصيل وموعده في الخطوة التالية، ثم تدفع ويصلك سائق بطلبك في الموعد.',
                           style: GoogleFonts.tajawal(fontSize: 12, height: 1.5, color: const Color(0xFF5D1B5E), fontWeight: FontWeight.w600),
                         ),
                       ),
@@ -519,7 +558,11 @@ class _CartSheetState extends State<_CartSheet> {
                       backgroundColor: _agreeToTerms ? const Color(0xFF5D1B5E) : Colors.grey.shade300,
                       foregroundColor: Colors.white,
                     ),
-                    child: _isSubmitting ? const CircularProgressIndicator(color: Colors.white) : const Text('إرسال طلب للموافقة الإدارة'),
+                    child: _isSubmitting
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : Text(widget.companies
+                            ? 'متابعة للدفع'
+                            : 'متابعة لتحديد الموعد'),
                   ),
                 ),
               ],
