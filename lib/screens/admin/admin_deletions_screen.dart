@@ -5,6 +5,58 @@ import 'package:google_fonts/google_fonts.dart';
 class AdminDeletionsScreen extends StatelessWidget {
   const AdminDeletionsScreen({super.key});
 
+  // (دمج من لوحة الويب) رفض طلب حذف الحساب — بدل إجبار الأدمن على الحذف أو تركه معلّقاً.
+  // يضبط status='rejected' (الشاشة تعرضه أصلاً). لا يُحذف الحساب.
+  Widget _rejectButton(BuildContext context, String docId) {
+    return OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFF64748B),
+        side: const BorderSide(color: Color(0xFFCBD5E1)),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+      ),
+      onPressed: () async {
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => Directionality(
+            textDirection: TextDirection.rtl,
+            child: AlertDialog(
+              title: Text("رفض طلب الحذف",
+                  style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+              content: const Text(
+                  "رفض طلب حذف هذا الحساب؟ لن يُحذف الحساب — سيُعلَّم الطلب كمرفوض فقط."),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text("إلغاء")),
+                ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text("رفض")),
+              ],
+            ),
+          ),
+        );
+        if (ok == true) {
+          try {
+            await FirebaseFirestore.instance
+                .collection('account_deletions')
+                .doc(docId)
+                .update({'status': 'rejected'});
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("تم رفض طلب الحذف.")));
+            }
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(SnackBar(content: Text("فشل: $e")));
+            }
+          }
+        }
+      },
+      child: const Text("رفض"),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -69,7 +121,12 @@ class AdminDeletionsScreen extends StatelessWidget {
                               fontWeight: FontWeight.bold,
                             ),
                           )
-                        : ElevatedButton(
+                        : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _rejectButton(context, doc.id),
+                              const SizedBox(width: 4),
+                              ElevatedButton(
                             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
                             onPressed: () async {
                               final confirm = await showDialog<bool>(
@@ -111,6 +168,8 @@ class AdminDeletionsScreen extends StatelessWidget {
                               }
                             },
                             child: const Text("حذف"),
+                              ),
+                            ],
                           ),
                   ),
                 );

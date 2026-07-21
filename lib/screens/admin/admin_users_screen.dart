@@ -73,6 +73,79 @@ class AdminUsersScreen extends StatelessWidget {
     }
   }
 
+  // (دمج من لوحة الويب) حظر/رفع حظر مستخدم دون حذفه. يفرضه التطبيق فعلاً:
+  // user_provider يفحص status=='banned' فيُسجّل خروجه ويمنعه من الاستخدام.
+  Future<void> _toggleBan(
+      BuildContext context, String uid, String name, bool isBanned) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(isBanned ? Icons.lock_open_rounded : Icons.block_rounded,
+                color: isBanned ? Colors.green : Colors.orange.shade700),
+            const SizedBox(width: 8),
+            Text(isBanned ? 'رفع الحظر' : 'حظر المستخدم',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text(
+          isBanned
+              ? 'رفع الحظر عن "$name"؟ سيتمكّن من استخدام التطبيق مجدداً.'
+              : 'حظر "$name"؟ سيُسجَّل خروجه فوراً ويُمنع من استخدام التطبيق '
+                  '(دون حذف بياناته — يمكن رفع الحظر لاحقاً).',
+          style: const TextStyle(height: 1.6),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor:
+                  isBanned ? Colors.green.shade600 : Colors.orange.shade700,
+              foregroundColor: Colors.white,
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text(isBanned ? 'رفع الحظر' : 'حظر'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(uid).update({
+          'status': isBanned ? 'active' : 'banned',
+        });
+        await ZyiarahAuditService().logAction(
+          action: isBanned ? 'UNBAN_USER' : 'BAN_USER',
+          details: {'name': name},
+          targetId: uid,
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isBanned ? 'تم رفع الحظر ✅' : 'تم حظر المستخدم 🚫'),
+            backgroundColor: isBanned ? Colors.green : Colors.orange.shade800,
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('حدث خطأ: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -161,6 +234,8 @@ class AdminUsersScreen extends StatelessWidget {
                       final user = doc.data() as Map<String, dynamic>;
                       final String name = user['name'] ?? 'مستخدم';
                       final String contact = user['phone'] ?? user['email'] ?? 'لا يوجد رقم';
+                      final bool isBanned =
+                          user['status'] == 'banned' || user['is_blocked'] == true;
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),
@@ -201,21 +276,46 @@ class AdminUsersScreen extends StatelessWidget {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                                  color: (isBanned ? Colors.red : const Color(0xFF10B981)).withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: const Text(
-                                  'عميل نشط',
-                                  style: TextStyle(fontSize: 11, color: Color(0xFF10B981), fontWeight: FontWeight.bold),
+                                child: Text(
+                                  isBanned ? 'محظور 🚫' : 'عميل نشط',
+                                  style: TextStyle(fontSize: 11, color: isBanned ? Colors.red : const Color(0xFF10B981), fontWeight: FontWeight.bold),
                                 ),
                               ),
                             ],
                           ),
                           isThreeLine: true,
-                          trailing: IconButton(
-                            icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade400, size: 22),
-                            tooltip: 'حذف المستخدم',
-                            onPressed: () => _deleteUser(context, doc.id, name),
+                          trailing: PopupMenuButton<String>(
+                            icon: const Icon(Icons.more_vert_rounded, color: Color(0xFF64748B)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            onSelected: (v) {
+                              if (v == 'ban') {
+                                _toggleBan(context, doc.id, name, isBanned);
+                              } else if (v == 'delete') {
+                                _deleteUser(context, doc.id, name);
+                              }
+                            },
+                            itemBuilder: (ctx) => [
+                              PopupMenuItem<String>(
+                                value: 'ban',
+                                child: Row(children: [
+                                  Icon(isBanned ? Icons.lock_open_rounded : Icons.block_rounded,
+                                      color: isBanned ? Colors.green : Colors.orange.shade700, size: 20),
+                                  const SizedBox(width: 10),
+                                  Text(isBanned ? 'رفع الحظر' : 'حظر المستخدم'),
+                                ]),
+                              ),
+                              PopupMenuItem<String>(
+                                value: 'delete',
+                                child: Row(children: [
+                                  Icon(Icons.delete_outline_rounded, color: Colors.red.shade400, size: 20),
+                                  const SizedBox(width: 10),
+                                  const Text('حذف نهائي'),
+                                ]),
+                              ),
+                            ],
                           ),
                         ),
                       );
