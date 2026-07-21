@@ -335,8 +335,7 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-                'تنظيف عميق لداخلية السيارة: المراتب (المقاعد) وأسقف السيارة '
-                'بالبخار والتعقيم — في موقعك.',
+                'تنظيف عميق لداخلية السيارة: المراتب (المقاعد) — في موقعك.',
                 style: GoogleFonts.tajawal(
                     fontSize: 12.5,
                     height: 1.7,

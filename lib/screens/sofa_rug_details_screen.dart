@@ -163,13 +163,19 @@ class _SofaRugCleaningDetailsScreenState
   double get subTotal => totalAmount / 1.15;
   double get vat => totalAmount - subTotal;
 
+  /// مساحة السجاد الإجمالية (م²) — للإحصاء فقط؛ الكنب يُسعَّر بالطول فلا يدخلها.
   double get totalArea =>
       _pieces.where((p) => p.isComplete).fold(0.0, (s, p) => s + p.area);
 
-  /// مدة انشغال السائق. تكبر مع المساحة كي لا يُسنَد له عملُ يومٍ في ساعتين:
-  /// ساعتان لأي عمل دون 10 م²، ثم ساعة إضافية لكل 10 م² كاملة، بسقف 8 ساعات
+  /// حِمل العمل: مساحة للسجاد، طول للكنب — أساس تقدير مدة انشغال السائق.
+  double get _totalWork => _pieces
+      .where((p) => p.isComplete)
+      .fold(0.0, (s, p) => s + p.billedMeasure);
+
+  /// مدة انشغال السائق. تكبر مع حجم العمل كي لا يُسنَد له عملُ يومٍ في ساعتين:
+  /// ساعتان لأي عمل صغير، ثم ساعة إضافية لكل 10 وحدات، بسقف 8 ساعات
   /// (طول يوم العمل — وتجاوزه يُفرِغ قائمة خانات البدء 8→22).
-  int get _durationHours => (2 + (totalArea / 10).floor()).clamp(2, 8);
+  int get _durationHours => (2 + (_totalWork / 10).floor()).clamp(2, 8);
 
   void _addPiece(SqmPieceKind kind) {
     HapticFeedback.selectionClick();
@@ -187,7 +193,7 @@ class _SofaRugCleaningDetailsScreenState
       return;
     }
     if (totalAmount <= 0) {
-      _snack('أدخلي طول وعرض قطعة واحدة على الأقل');
+      _snack('أدخلي مقاسات قطعة واحدة على الأقل');
       return;
     }
     if (_selectedSlot == null) {
@@ -351,8 +357,8 @@ class _SofaRugCleaningDetailsScreenState
   /// بأرقام منطقتها لا أرقام افتراضية — يجيب «كيف؟» قبل أن تُسأل.
   Widget _pricingExplainer() {
     final rows = <Widget>[];
-    void addRow(String label, double perSqm) {
-      if (perSqm <= 0) return;
+    void addRow(String label, double rate, String unit) {
+      if (rate <= 0) return;
       rows.add(Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(
@@ -361,7 +367,7 @@ class _SofaRugCleaningDetailsScreenState
             Text(label,
                 style: GoogleFonts.tajawal(
                     fontSize: 13, color: const Color(0xFF1E293B))),
-            Text('${_trim(perSqm)} ر.س لكل متر مربع',
+            Text('${_trim(rate)} ر.س لكل $unit',
                 style: GoogleFonts.tajawal(
                     fontSize: 13, fontWeight: FontWeight.bold, color: _brand)),
           ],
@@ -369,13 +375,23 @@ class _SofaRugCleaningDetailsScreenState
       ));
     }
 
-    addRow('الكنب', _sofaSqmPrice);
-    addRow('السجاد', _rugSqmPrice);
+    // الكنب بالمتر الطولي (الطول فقط)، السجاد بالمتر المربع (الطول × العرض).
+    addRow('الكنب', _sofaSqmPrice, 'متر طولي');
+    addRow('السجاد', _rugSqmPrice, 'متر مربع');
 
-    // المثال بسعر منطقتها الفعلي: كنبة 2م × 1.5م.
-    final examplePrice = _sofaSqmPrice > 0 ? _sofaSqmPrice : _rugSqmPrice;
-    final exampleKind = _sofaSqmPrice > 0 ? 'كنبة' : 'سجادة';
-    final exampleTotal = (3 * examplePrice).toStringAsFixed(0);
+    // قاعدة الحساب لكل نوع.
+    final formulas = <String>[];
+    if (_sofaSqmPrice > 0) {
+      formulas.add('الكنب: الطول (م) × سعر المتر الطولي');
+    }
+    if (_rugSqmPrice > 0) {
+      formulas.add('السجاد: الطول × العرض (م²) × سعر المتر المربع');
+    }
+
+    // مثال حيّ بسعر منطقتها الفعلي — يُقدَّم الكنب إن كان مسعَّراً وإلا السجاد.
+    final String example = _sofaSqmPrice > 0
+        ? 'مثال: كنبة بطول 2م = 2 متر طولي × ${_trim(_sofaSqmPrice)} = ${(2 * _sofaSqmPrice).toStringAsFixed(0)} ر.س'
+        : 'مثال: سجادة 2م × 1.5م = 3 م² × ${_trim(_rugSqmPrice)} = ${(3 * _rugSqmPrice).toStringAsFixed(0)} ر.س';
 
     return Container(
       width: double.infinity,
@@ -404,14 +420,17 @@ class _SofaRugCleaningDetailsScreenState
           const SizedBox(height: 8),
           ...rows,
           const Divider(height: 16, color: Color(0xFFBBF7D0)),
-          Text('السعر = الطول × العرض × سعر المتر المربع',
-              style: GoogleFonts.tajawal(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF166534))),
+          ...formulas.map((f) => Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Text(f,
+                    style: GoogleFonts.tajawal(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF166534))),
+              )),
           const SizedBox(height: 3),
           Text(
-            'مثال: $exampleKind بطول 2م وعرض 1.5م = 3 م² × ${_trim(examplePrice)} = $exampleTotal ر.س',
+            example,
             style: GoogleFonts.tajawal(
                 fontSize: 12, color: const Color(0xFF166534), height: 1.6),
           ),
@@ -430,7 +449,7 @@ class _SofaRugCleaningDetailsScreenState
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
                 color: const Color(0xFF1E293B))),
-        Text('أدخلي طول وعرض كل قطعة — لا يوجد حد أدنى.',
+        Text('أدخلي مقاسات كل قطعة — لا يوجد حد أدنى.',
             style: GoogleFonts.tajawal(
                 fontSize: 12, color: const Color(0xFF94A3B8))),
         const SizedBox(height: 12),
@@ -465,6 +484,7 @@ class _SofaRugCleaningDetailsScreenState
   Widget _pieceCard(int i) {
     final piece = _pieces[i];
     final price = _priceFor(piece.kind);
+    final usesArea = piece.kind.usesArea;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
@@ -492,7 +512,7 @@ class _SofaRugCleaningDetailsScreenState
                       fontWeight: FontWeight.bold,
                       color: const Color(0xFF1E293B))),
               const SizedBox(width: 8),
-              Text('(${price.toStringAsFixed(0)} ر.س/م²)',
+              Text('(${price.toStringAsFixed(0)} ر.س/${piece.kind.unitShort})',
                   style: GoogleFonts.tajawal(
                       fontSize: 12, color: const Color(0xFF94A3B8))),
               const Spacer(),
@@ -507,45 +527,56 @@ class _SofaRugCleaningDetailsScreenState
             ],
           ),
           const SizedBox(height: 6),
-          Row(
-            children: [
-              Expanded(
-                child: _dimField(
-                  label: 'الطول (م)',
-                  value: piece.length,
-                  onChanged: (v) => setState(
-                      () => _pieces[i] = piece.copyWith(length: v)),
+          // الكنب بالطول وحده (متر طولي)؛ السجاد بالطول × العرض (متر مربع).
+          if (usesArea)
+            Row(
+              children: [
+                Expanded(
+                  child: _dimField(
+                    label: 'الطول (م)',
+                    value: piece.length,
+                    onChanged: (v) => setState(
+                        () => _pieces[i] = piece.copyWith(length: v)),
+                  ),
                 ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 10),
-                child: Text('×',
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF94A3B8))),
-              ),
-              Expanded(
-                child: _dimField(
-                  label: 'العرض (م)',
-                  value: piece.width,
-                  onChanged: (v) =>
-                      setState(() => _pieces[i] = piece.copyWith(width: v)),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 10),
+                  child: Text('×',
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF94A3B8))),
                 ),
-              ),
-            ],
-          ),
+                Expanded(
+                  child: _dimField(
+                    label: 'العرض (م)',
+                    value: piece.width,
+                    onChanged: (v) =>
+                        setState(() => _pieces[i] = piece.copyWith(width: v)),
+                  ),
+                ),
+              ],
+            )
+          else
+            _dimField(
+              label: 'الطول (متر طولي)',
+              value: piece.length,
+              onChanged: (v) =>
+                  setState(() => _pieces[i] = piece.copyWith(length: v)),
+            ),
           if (piece.isComplete) ...[
             const SizedBox(height: 10),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // المعادلة كاملة لا الناتج وحده: «3.00 م²» المجرّدة لا تقول للعميلة
-                // كيف صارت 105 ر.س — فتظنّ الرقم اعتباطياً. الحساب المرئي يبني الثقة.
+                // المعادلة كاملة لا الناتج وحده: الرقم المجرّد لا يقول للعميلة كيف
+                // صار السعر — فتظنّه اعتباطياً. الحساب المرئي يبني الثقة.
                 Expanded(
                   child: Text(
-                    '${_trim(piece.length)}م × ${_trim(piece.width)}م'
-                    ' = ${piece.area.toStringAsFixed(2)} م² × ${_trim(price)} ر.س',
+                    usesArea
+                        ? '${_trim(piece.length)}م × ${_trim(piece.width)}م'
+                            ' = ${piece.area.toStringAsFixed(2)} م² × ${_trim(price)} ر.س'
+                        : '${_trim(piece.length)} متر طولي × ${_trim(price)} ر.س',
                     style: GoogleFonts.tajawal(
                         fontSize: 12, color: const Color(0xFF64748B)),
                   ),
@@ -614,8 +645,6 @@ class _SofaRugCleaningDetailsScreenState
       child: Column(
         children: [
           _row('عدد القطع:', '$complete'),
-          const SizedBox(height: 8),
-          _row('المساحة الإجمالية:', '${totalArea.toStringAsFixed(2)} م²'),
           const Divider(height: 22),
           _row('المجموع الفرعي:', '${subTotal.toStringAsFixed(2)} ر.س'),
           const SizedBox(height: 8),

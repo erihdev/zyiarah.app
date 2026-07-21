@@ -451,13 +451,13 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     ),
 
                     const Divider(height: 30),
-                    const Text("أسعار الكنب والسجاد — بالمتر المربع (ر.س/م²):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    const Text("العميلة تُدخل طول وعرض كل قطعة ويُحسب السعر آلياً. صفر = تعطيل الخدمة في هذه المنطقة.",
+                    const Text("أسعار الكنب (بالمتر الطولي) والسجاد (بالمتر المربع):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Text("الكنب يُحسب بالطول فقط (متر طولي)، والسجاد بالطول × العرض (متر مربع). صفر = تعطيل الخدمة في هذه المنطقة.",
                         style: TextStyle(fontSize: 11, color: Colors.grey)),
                     const SizedBox(height: 10),
                     Row(
                       children: [
-                        Expanded(child: TextField(controller: pSofaSqmCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'الكنب (ر.س/م²)', border: OutlineInputBorder()))),
+                        Expanded(child: TextField(controller: pSofaSqmCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'الكنب (ر.س/م.ط)', border: OutlineInputBorder()))),
                         const SizedBox(width: 8),
                         Expanded(child: TextField(controller: pRugSqmCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'السجاد (ر.س/م²)', border: OutlineInputBorder()))),
                       ],

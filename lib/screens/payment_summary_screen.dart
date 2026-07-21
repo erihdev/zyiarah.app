@@ -1099,64 +1099,35 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   Widget _buildInvoiceHeader() {
-    // يجب أن يطابق المبلغ المشحون فعلاً (totalWithVat) — يشمل surge والخصم.
-    final double total = totalWithVat;
-    final double vat = vatAmount;
-    final double basePrice = total - vat;
-
+    // رأس مبسّط — زر الرجوع وعنوان فقط. حُذف ملخّص «الفاتورة التقديرية»
+    // (المجموع/الضريبة/الإجمالي) بطلب المالك؛ التفصيل الكامل يظهر أسفل الشاشة في
+    // بطاقة «تفاصيل الفاتورة» فلا داعي لتكراره هنا. (الشاشة مدفوعة بلا AppBar،
+    // فزر الرجوع ضروري كي لا يعلق المستخدم في صفحة الدفع.)
     return Container(
-      padding: const EdgeInsets.all(30),
+      padding: const EdgeInsets.fromLTRB(8, 8, 16, 16),
       decoration: const BoxDecoration(
         color: Color(0xFF5D1B5E),
         borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(40),
-          bottomRight: Radius.circular(40),
+          bottomLeft: Radius.circular(32),
+          bottomRight: Radius.circular(32),
         ),
       ),
-      child: Column(
+      child: Row(
         children: [
-          // زر رجوع — الشاشة مدفوعة بلا AppBar، فبدونه يعلق المستخدم في صفحة الدفع.
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: IconButton(
-              padding: EdgeInsets.zero,
-              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-              onPressed: () => Navigator.of(context).maybePop(),
-              tooltip: 'رجوع',
-            ),
+          IconButton(
+            padding: EdgeInsets.zero,
+            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+            onPressed: () => Navigator.of(context).maybePop(),
+            tooltip: 'رجوع',
           ),
-          const SizedBox(height: 8),
-          const Icon(Icons.receipt_long_rounded, color: Colors.white, size: 48),
-          const SizedBox(height: 16),
+          const SizedBox(width: 4),
           Text(
-            'فاتورة الطلب التقديرية',
-            style: GoogleFonts.tajawal(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildInvoiceStat('المجموع', '${basePrice.toStringAsFixed(2)} ر.س'),
-              _buildInvoiceStat('الضريبة (15%)', '${vat.toStringAsFixed(2)} ر.س'),
-              _buildInvoiceStat('الإجمالي', '${total.toStringAsFixed(2)} ر.س', isBold: true),
-            ],
+            'إتمام الطلب',
+            style: GoogleFonts.tajawal(
+                color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildInvoiceStat(String label, String value, {bool isBold = false}) {
-    return Column(
-      children: [
-        Text(label, style: GoogleFonts.tajawal(color: Colors.white70, fontSize: 12)),
-        const SizedBox(height: 4),
-        Text(value, style: GoogleFonts.tajawal(
-          color: Colors.white, 
-          fontSize: 16, 
-          fontWeight: isBold ? FontWeight.w900 : FontWeight.bold
-        )),
-      ],
     );
   }
 

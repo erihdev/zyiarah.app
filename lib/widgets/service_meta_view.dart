@@ -33,17 +33,22 @@ String? zyiarahServiceMetaSummary(dynamic meta) {
     case 'sofa_rug_sqm':
       final pieces = meta['pieces'];
       if (pieces is! List) return null;
-      // تجميع القطع حسب النوع: العدد والمساحة الإجمالية.
+      // تجميع القطع حسب النوع: العدد والمقدار المسعَّر (م² للسجاد، م.ط للكنب).
       final count = <String, int>{};
-      final area = <String, double>{};
+      final measure = <String, double>{};
+      final unit = <String, String>{};
       for (final p in pieces.whereType<Map>()) {
         final label = '${p['label'] ?? '-'}'.split(' ').first; // «كنب 1» → «كنب»
         count[label] = (count[label] ?? 0) + 1;
-        area[label] = (area[label] ?? 0) + ZyiarahServiceMetaView._num(p['area_sqm']);
+        // الطلبات القديمة (بلا billed_measure/uses_area) كانت كلها بالمساحة.
+        final m = ZyiarahServiceMetaView._num(
+            p['billed_measure'] ?? p['area_sqm']);
+        measure[label] = (measure[label] ?? 0) + m;
+        unit[label] = p['uses_area'] == false ? 'م.ط' : 'م²';
       }
       for (final label in count.keys) {
         parts.add(
-            '$label ×${count[label]} (${area[label]!.toStringAsFixed(2)} م²)');
+            '$label ×${count[label]} (${measure[label]!.toStringAsFixed(2)} ${unit[label]})');
       }
     case 'store_products':
       final items = meta['items'];
@@ -132,8 +137,9 @@ class ZyiarahServiceMetaView extends StatelessWidget {
 
   String _headline(Map m) {
     if (m['kind'] == 'sofa_rug_sqm') {
-      final area = _num(m['total_area_sqm']);
-      return '${area.toStringAsFixed(2)} م² إجمالاً';
+      final pieces = m['pieces'];
+      final n = pieces is List ? pieces.length : 0;
+      return '$n قطعة';
     }
     if (m['kind'] == 'ac_service') {
       return '${_num(m['total_units']).toInt()} مكيف';
@@ -154,10 +160,14 @@ class ZyiarahServiceMetaView extends StatelessWidget {
       final l = _num(p['length_m']);
       final w = _num(p['width_m']);
       final a = _num(p['area_sqm']);
-      final rate = _num(p['price_per_sqm']);
+      final rate = _num(p['price_per_unit'] ?? p['price_per_sqm']);
+      // الطلبات القديمة (بلا uses_area) كانت كلها بالمساحة؛ الجديدة توسم الكنب طولياً.
+      final usesArea = p['uses_area'] != false && w > 0;
       return _MetaRow(
         label: '${p['label'] ?? '-'}',
-        detail: '${_t(l)}م × ${_t(w)}م = ${a.toStringAsFixed(2)} م² × ${_t(rate)}',
+        detail: usesArea
+            ? '${_t(l)}م × ${_t(w)}م = ${a.toStringAsFixed(2)} م² × ${_t(rate)}'
+            : '${_t(l)} م.ط × ${_t(rate)}',
         total: '${_num(p['line_total']).toStringAsFixed(2)} ر.س',
       );
     }).toList();
