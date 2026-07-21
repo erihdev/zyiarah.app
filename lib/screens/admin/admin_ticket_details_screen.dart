@@ -35,6 +35,8 @@ class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
       await _db.collection('support_tickets').doc(widget.ticketId).collection('messages').add({
         'text': text,
         'senderRole': 'admin',
+        // (تحسين من الويب) اسم المُرسِل يظهر للعميل بدل «إدارة» مجهّلة.
+        'senderName': 'فريق زيارة',
         'sentAt': FieldValue.serverTimestamp(),
       });
 

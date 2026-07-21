@@ -64,6 +64,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
     bool isSaving = false;
     List<String> restrictedZones = List<String>.from(data?['restricted_zones'] ?? []);
     bool codeEmpty = false;
+    bool codeDup = false; // (تحسين من الويب) الكود مكرّر.
     bool valueEmpty = false;
 
     showDialog(
@@ -99,11 +100,16 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                                       hintText: 'مثال: ZYIARAH20',
                                       filled: true,
                                       fillColor: Colors.white,
-                                      errorText: codeEmpty ? 'هذا الحقل مطلوب' : null,
+                                      errorText: codeEmpty
+                                          ? 'هذا الحقل مطلوب'
+                                          : (codeDup ? 'هذا الكود موجود مسبقاً — اختر غيره' : null),
                                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
                                     ),
                                     textCapitalization: TextCapitalization.characters,
-                                    onChanged: (v) => setDialogState(() => codeEmpty = v.trim().isEmpty),
+                                    onChanged: (v) => setDialogState(() {
+                                      codeEmpty = v.trim().isEmpty;
+                                      codeDup = false;
+                                    }),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
@@ -330,6 +336,20 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                         };
 
                         if (doc == null) {
+                          // (تحسين من الويب) منع تكرار الكود: كوبونان بنفس الكود
+                          // يكسران تحقّق العميل من الكود. نرفض الإضافة إن وُجد مطابق.
+                          final dup = await _db
+                              .collection('promo_codes')
+                              .where('code', isEqualTo: newData['code'] as String)
+                              .limit(1)
+                              .get();
+                          if (dup.docs.isNotEmpty) {
+                            setDialogState(() {
+                              isSaving = false;
+                              codeDup = true;
+                            });
+                            return;
+                          }
                           await _db.collection('promo_codes').add(newData);
                           await _audit.logAction(
                             action: ZyiarahAuditService.actionCreateCoupon,
