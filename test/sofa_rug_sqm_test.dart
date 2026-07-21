@@ -62,12 +62,12 @@ void main() {
     expect(total, 153.0);
   });
 
-  test('الضريبة متضمَّنة (15%) لا مضافة — موحّد مع ZATCA', () {
+  test('سعر القطعة أساسٌ قبل الضريبة — الضريبة تُضاف 15% عند الدفع', () {
     const p = SqmPiece(kind: SqmPieceKind.rug, length: 3, width: 2);
-    final total = p.priceWith(12); // 72 شاملة
-    final sub = total / 1.15;
-    expect(sub + (total - sub), closeTo(total, 0.0001),
-        reason: 'الإجمالي هو ما تدفعه العميلة؛ الضريبة تُستخرج منه قسمةً');
+    final base = p.priceWith(12); // 72 أساس (قبل الضريبة)
+    final withVat = base * 1.15; // ما يدفعه العميل بعد إضافة الضريبة
+    expect(base, 72.0);
+    expect(withVat, closeTo(82.8, 0.0001));
   });
 
   group('toMap يحمل التفصيل الذي تحتاجه الإدارة والسائق', () {

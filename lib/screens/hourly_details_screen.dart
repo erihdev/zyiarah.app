@@ -413,6 +413,9 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
 
   double get totalAmount => _hourlyBasePrice * _workerCount;
 
+  // الأساس = سعر الساعات × عدد العاملات؛ الضريبة 15% تُضاف فوقه (قرار المالك).
+  double get grandTotal => totalAmount * 1.15; // ما يدفعه العميل (شامل الضريبة)
+
   bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
@@ -441,7 +444,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
         MaterialPageRoute(
           builder: (context) => PaymentSummaryScreen(
             serviceName: widget.serviceName,
-            amount: totalAmount,
+            amount: grandTotal, // الأساس + 15% — شاشة الدفع تعامله كإجمالي
             location: _selectedLocation!,
             hours: _selectedHours,
             serviceDate: serviceDateTime,
@@ -928,7 +931,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text("الإجمالي المطلوب:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-              Text("${totalAmount.toStringAsFixed(2)} ر.س", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF6366F1))),
+              Text("${grandTotal.toStringAsFixed(2)} ر.س", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF6366F1))),
             ],
           )
         ],

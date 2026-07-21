@@ -139,7 +139,9 @@ class ZyiarahStoreService {
         });
       }
 
-      serverCalculatedTotal = tempTotal;
+      // الضريبة 15% تُضاف فوق مجموع أسعار المنتجات (قرار المالك). total_amount هو
+      // الإجمالي شامل الضريبة = ما يدفعه العميل، وهو ما تطابقه verifyMoyasarPayment.
+      serverCalculatedTotal = ((tempTotal * 1.15) * 100).roundToDouble() / 100;
 
       // ─── 2) العدّاد (قراءة ثم كتابة) — بعد كل قراءات المنتجات ───
       final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);

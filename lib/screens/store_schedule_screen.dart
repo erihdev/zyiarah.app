@@ -19,7 +19,7 @@ class StoreScheduleScreen extends StatefulWidget {
   /// أصناف السلة: [{id, name, quantity, price}] كما بنتها ورقة السلة.
   final List<Map<String, dynamic>> items;
 
-  /// الإجمالي شامل الضريبة (أسعار المتجر شاملة كالخدمات).
+  /// أسعار المتجر أساسٌ تُضاف عليها ضريبة 15% (كباقي الخدمات)؛ _grandTotal ما يدفعه العميل.
   final double total;
 
   const StoreScheduleScreen({
@@ -49,8 +49,9 @@ class _StoreScheduleScreenState extends State<StoreScheduleScreen> {
   bool _isLocating = false;
   LocateFailure? _locateFailure;
 
-  double get _subTotal => widget.total / 1.15;
-  double get _vat => widget.total - _subTotal;
+  double get _subTotal => widget.total; // الأساس
+  double get _vat => widget.total * 0.15; // 15% مضافة فوق الأساس
+  double get _grandTotal => widget.total + _vat; // ما يدفعه العميل (شامل الضريبة)
   int get _totalQty =>
       widget.items.fold(0, (a, it) => a + ((it['quantity'] as num?)?.toInt() ?? 0));
 
@@ -170,7 +171,7 @@ class _StoreScheduleScreenState extends State<StoreScheduleScreen> {
       MaterialPageRoute(
         builder: (_) => PaymentSummaryScreen(
           serviceName: 'طلب من المتجر',
-          amount: widget.total,
+          amount: _grandTotal, // الأساس + 15% — شاشة الدفع تعامله كإجمالي
           location: _selectedLocation!,
           zoneName: _selectedZoneName,
           // hours + serviceDate = طلب مجدول: فحص سعة ⇒ pending ⇒ إسناد سائق تلقائي.
@@ -331,7 +332,7 @@ class _StoreScheduleScreenState extends State<StoreScheduleScreen> {
                       fontSize: 17,
                       fontWeight: FontWeight.bold,
                       color: const Color(0xFF1E293B))),
-              Text('${widget.total.toStringAsFixed(2)} ر.س',
+              Text('${_grandTotal.toStringAsFixed(2)} ر.س',
                   style: GoogleFonts.tajawal(
                       fontSize: 21, fontWeight: FontWeight.w900, color: _brand)),
             ],

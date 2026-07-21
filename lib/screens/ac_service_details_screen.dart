@@ -181,8 +181,10 @@ class _AcServiceDetailsScreenState extends State<AcServiceDetailsScreen> {
         return acc + (_counts[field] ?? 0) * (_prices[field] ?? 0);
       });
 
-  double get subTotal => totalAmount / 1.15;
-  double get vat => totalAmount - subTotal;
+  // الأساس = مجموع الأسعار المُدخلة؛ الضريبة 15% **تُضاف** فوقه (قرار المالك).
+  double get subTotal => totalAmount; // الأساس
+  double get vat => totalAmount * 0.15; // 15% مضافة فوق الأساس
+  double get grandTotal => totalAmount + vat; // ما يدفعه العميل (شامل الضريبة)
 
   int get totalUnits => _counts.values.fold(0, (a, v) => a + v);
 
@@ -221,7 +223,7 @@ class _AcServiceDetailsScreenState extends State<AcServiceDetailsScreen> {
       MaterialPageRoute(
         builder: (_) => PaymentSummaryScreen(
           serviceName: '${widget.serviceName} (${_selectedZoneName ?? ''})',
-          amount: totalAmount,
+          amount: grandTotal, // الأساس + 15% — شاشة الدفع تعامله كإجمالي
           location: _selectedLocation!,
           zoneName: _selectedZoneName,
           // hours + serviceDate = طلب مباشر: فحص سعة ⇒ pending ⇒ إسناد تلقائي.
@@ -497,7 +499,7 @@ class _AcServiceDetailsScreenState extends State<AcServiceDetailsScreen> {
                       fontSize: 17,
                       fontWeight: FontWeight.bold,
                       color: const Color(0xFF1E293B))),
-              Text('${totalAmount.toStringAsFixed(2)} ر.س',
+              Text('${grandTotal.toStringAsFixed(2)} ر.س',
                   style: GoogleFonts.tajawal(
                       fontSize: 21, fontWeight: FontWeight.w900, color: _brand)),
             ],

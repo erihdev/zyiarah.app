@@ -154,14 +154,15 @@ class _SofaRugCleaningDetailsScreenState
   bool get _anyKindEnabled =>
       _kindEnabled(SqmPieceKind.sofa) || _kindEnabled(SqmPieceKind.rug);
 
-  /// شامل ضريبة القيمة المضافة — موحّد مع باقي الخدمات و ZATCA: المبلغ المُدخل من
-  /// الإدارة هو ما يدفعه العميل، والضريبة تُحتسب قسمةً (متضمَّنة) لا إضافةً.
+  /// الأساس (قبل الضريبة) = مجموع أسعار القطع كما تُدخلها الإدارة. الضريبة **تُضاف**
+  /// فوقه 15% (قرار المالك) لا تُستخرج منه — والإجمالي `grandTotal` هو ما يدفعه العميل.
   double get totalAmount => _pieces
       .where((p) => p.isComplete)
       .fold(0.0, (acc, p) => acc + p.priceWith(_priceFor(p.kind)));
 
-  double get subTotal => totalAmount / 1.15;
-  double get vat => totalAmount - subTotal;
+  double get subTotal => totalAmount; // الأساس
+  double get vat => totalAmount * 0.15; // 15% مضافة فوق الأساس
+  double get grandTotal => totalAmount + vat; // ما يدفعه العميل (شامل الضريبة)
 
   /// مساحة السجاد الإجمالية (م²) — للإحصاء فقط؛ الكنب يُسعَّر بالطول فلا يدخلها.
   double get totalArea =>
@@ -217,7 +218,8 @@ class _SofaRugCleaningDetailsScreenState
       MaterialPageRoute(
         builder: (_) => PaymentSummaryScreen(
           serviceName: '${widget.serviceName} (${_selectedZoneName ?? ''})',
-          amount: totalAmount,
+          // نمرّر الإجمالي شامل الضريبة (الأساس + 15%) — شاشة الدفع تعامله كإجمالي.
+          amount: grandTotal,
           location: _selectedLocation!,
           zoneName: _selectedZoneName,
           // hours + serviceDate = طلب مباشر: فحص سعة، status 'pending'، إسناد تلقائي.
@@ -659,7 +661,7 @@ class _SofaRugCleaningDetailsScreenState
                       fontSize: 17,
                       fontWeight: FontWeight.bold,
                       color: const Color(0xFF1E293B))),
-              Text('${totalAmount.toStringAsFixed(2)} ر.س',
+              Text('${grandTotal.toStringAsFixed(2)} ر.س',
                   style: GoogleFonts.tajawal(
                       fontSize: 21,
                       fontWeight: FontWeight.w900,
