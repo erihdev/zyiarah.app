@@ -206,6 +206,12 @@ export default function Settings() {
                     force: appUpdate.force,
                     message: appUpdate.message || '',
                 }, { merge: true }),
+                // نشر سياسة الخصوصية لمستند **عام** تقرأه صفحة zyiarah.com/privacy بلا
+                // تسجيل دخول (system_configs يتطلّب مصادقة فلا تصلح للصفحة العامة).
+                setDoc(doc(db, 'public_content', 'privacy'), {
+                    content: settings.privacy_policy || '',
+                    updated_at: new Date(),
+                }, { merge: true }),
             ]);
 
             // Show brief success indication
@@ -482,9 +488,10 @@ export default function Settings() {
                                                     />
                                                 </div>
                                                 <div className="md:col-span-2 space-y-2">
-                                                    <label htmlFor="privacy-policy" className="block text-sm font-bold text-slate-700">نص سياسة الخصوصية داخل التطبيق</label>
+                                                    <label htmlFor="privacy-policy" className="block text-sm font-bold text-slate-700">سياسة الخصوصية</label>
+                                                    <p className="text-xs text-slate-500 font-medium">تُنشَر للعملاء داخل التطبيق <span className="font-bold">وعلى صفحة <a href="https://zyiarah.com/privacy" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline">zyiarah.com/privacy</a> العامة</span> فور الحفظ. اترك سطراً فارغاً بين الفقرات.</p>
                                                     <textarea
-                                                        id="privacy-policy" rows={4} value={settings.privacy_policy} onChange={(e) => handleChange('privacy_policy', e.target.value)}
+                                                        id="privacy-policy" rows={12} value={settings.privacy_policy} onChange={(e) => handleChange('privacy_policy', e.target.value)}
                                                         className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 text-slate-700 text-sm rounded-xl px-5 py-4 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all resize-y leading-loose"
                                                         placeholder="اكتب سياسة الخصوصية هنا..."
                                                     />

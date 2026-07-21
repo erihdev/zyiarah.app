@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>سياسة الخصوصية — زيارة</title>
+  <meta name="description" content="سياسة الخصوصية لتطبيق زيارة لخدمات التنظيف المنزلي." />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root { --purple: #5D1B5E; --purple-l: #8a4a8c; --text: #1e293b; --muted: #64748b; --gray: #f8fafc; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      color: var(--text); background: var(--gray); line-height: 1.9;
+    }
+    .top {
+      background: linear-gradient(135deg, var(--purple) 0%, var(--purple-l) 100%);
+      color: #fff; padding: 48px 24px 40px; text-align: center;
+    }
+    .top .logo {
+      width: 84px; height: 84px; background: #fff; border-radius: 22px;
+      display: inline-flex; align-items: center; justify-content: center;
+      margin-bottom: 20px; box-shadow: 0 16px 40px rgba(0,0,0,0.3); overflow: hidden;
+    }
+    .top .logo img { width: 100%; height: 100%; object-fit: contain; }
+    .top h1 { font-size: clamp(1.6rem, 4vw, 2.4rem); font-weight: 800; }
+    .top .updated { margin-top: 10px; color: rgba(255,255,255,0.8); font-size: 0.9rem; }
+    .wrap { max-width: 820px; margin: -24px auto 0; padding: 0 20px 60px; }
+    .card {
+      background: #fff; border-radius: 24px; padding: clamp(24px, 5vw, 48px);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.06);
+    }
+    #content {
+      white-space: pre-wrap;          /* يحفظ فقرات وأسطر الإدارة كما كتبتها */
+      word-wrap: break-word;
+      font-size: 1.02rem; color: #334155;
+    }
+    #content.state { color: var(--muted); text-align: center; padding: 40px 0; font-weight: 600; }
+    .spinner {
+      width: 34px; height: 34px; border: 3px solid #e2e8f0; border-top-color: var(--purple);
+      border-radius: 50%; margin: 30px auto; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .back {
+      display: inline-flex; align-items: center; gap: 6px; margin-top: 28px;
+      color: var(--purple); font-weight: 700; text-decoration: none; font-size: 0.95rem;
+    }
+    footer { text-align: center; color: var(--muted); padding: 0 24px 40px; font-size: 0.85rem; }
+    footer a { color: var(--purple); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="logo"><img src="logo.png" alt="زيارة"
+      onerror="this.style.display='none';this.parentElement.innerHTML='<span style=\'font-size:2.4rem;font-weight:900;color:#5D1B5E\'>ز</span>'" /></div>
+    <h1>سياسة الخصوصية</h1>
+    <div class="updated" id="updated"></div>
+  </header>
+
+  <main class="wrap">
+    <div class="card">
+      <div id="content" class="state"><div class="spinner"></div></div>
+      <a href="/" class="back">→ العودة للصفحة الرئيسية</a>
+    </div>
+  </main>
+
+  <footer>
+    © 2026 زيارة — مؤسسة معاذ يحي محمد المالكي ·
+    <a href="mailto:support@zyiarah.com">تواصل معنا</a>
+  </footer>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+    import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+    const app = initializeApp({
+      apiKey: "AIzaSyCwyG5_yH1rKd-CBQGwQylw2n8jrPbn17o",
+      authDomain: "zyiarah-app.firebaseapp.com",
+      projectId: "zyiarah-app",
+      storageBucket: "zyiarah-app.firebasestorage.app",
+      messagingSenderId: "275681992607",
+      appId: "1:275681992607:web:6dc4a0042fab5b69b127aa"
+    });
+    const db = getFirestore(app);
+    const el = document.getElementById('content');
+    const updatedEl = document.getElementById('updated');
+
+    try {
+      const snap = await getDoc(doc(db, 'public_content', 'privacy'));
+      const data = snap.exists() ? snap.data() : null;
+      const content = (data && data.content ? String(data.content) : '').trim();
+      if (content) {
+        el.classList.remove('state');
+        el.textContent = content;               // textContent: آمن من XSS، وpre-wrap يحفظ الأسطر
+        const ts = data.updated_at;
+        if (ts && ts.toDate) {
+          const d = ts.toDate();
+          updatedEl.textContent = 'آخر تحديث: ' +
+            new Intl.DateTimeFormat('ar-SA', { year: 'numeric', month: 'long', day: 'numeric' }).format(d);
+        }
+      } else {
+        el.textContent = 'سيتم نشر سياسة الخصوصية قريباً.';
+      }
+    } catch (e) {
+      el.textContent = 'تعذّر تحميل سياسة الخصوصية حالياً. يرجى المحاولة لاحقاً.';
+    }
+  </script>
+</body>
+</html>

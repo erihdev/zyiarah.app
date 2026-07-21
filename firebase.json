@@ -25,6 +25,7 @@
     {
       "target": "web",
       "public": "landing_page",
+      "cleanUrls": true,
       "ignore": [
         "firebase.json",
         "**/.*",

@@ -360,6 +360,14 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
+    // ─── Public content (privacy policy, …) ───────────────────────────────
+    // القراءة عامة عمداً: صفحة zyiarah.com/privacy تقرأها **بلا تسجيل دخول**.
+    // الكتابة للإدارة فقط — تُنشَر من لوحة التحكم عند حفظ سياسة الخصوصية.
+    match /public_content/{docId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
     // SECURITY: order/maintenance counters — read-only for users; write locked to increment-only.
     // Admins may also read aggregate docs (e.g. analytics_summary) written server-side.
     match /metadata/{docId} {
