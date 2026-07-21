@@ -151,7 +151,7 @@ export default function Notifications() {
                     <p className="text-slate-500 font-medium text-sm mt-1">أرسل إشعارات Push أو إعلانات منبثقة — فورية أو مجدولة</p>
                 </div>
                 {history.length > 0 && (
-                    <span className="px-4 py-2 bg-indigo-50 text-indigo-700 font-bold rounded-xl border border-indigo-100 text-sm">
+                    <span className="px-4 py-2 bg-[#f7f0f8] text-[#4a1149] font-bold rounded-xl border border-[#f0e2f1] text-sm">
                         {history.length} إشعار مسجّل
                     </span>
                 )}
@@ -170,16 +170,16 @@ export default function Notifications() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* ── Form ── */}
                 <div className="bg-white rounded-[24px] shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-slate-100/60 p-8 space-y-6 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-40 h-40 bg-indigo-50/50 rounded-bl-full -z-10"></div>
+                    <div className="absolute top-0 right-0 w-40 h-40 bg-[#f7f0f8]/50 rounded-bl-full -z-10"></div>
 
                     {/* Header + type toggle */}
                     <div className="flex items-center justify-between">
                         <h3 className="text-xl font-extrabold text-slate-800 flex items-center gap-2">
-                            <BellRing className="text-indigo-600" /> رسالة جديدة
+                            <BellRing className="text-[#5D1B5E]" /> رسالة جديدة
                         </h3>
                         <div className="flex bg-slate-100 p-1 rounded-xl">
-                            <button type="button" onClick={() => setNotifType('push')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${notifType === 'push' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>Push Notif</button>
-                            <button type="button" onClick={() => setNotifType('popup')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${notifType === 'popup' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>In-App Pop-up</button>
+                            <button type="button" onClick={() => setNotifType('push')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${notifType === 'push' ? 'bg-white shadow-sm text-[#5D1B5E]' : 'text-slate-500'}`}>Push Notif</button>
+                            <button type="button" onClick={() => setNotifType('popup')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${notifType === 'popup' ? 'bg-white shadow-sm text-[#5D1B5E]' : 'text-slate-500'}`}>In-App Pop-up</button>
                         </div>
                     </div>
 
@@ -192,7 +192,7 @@ export default function Notifications() {
                                 { val: 'clients', label: 'العملاء فقط', icon: Users },
                                 { val: 'drivers', label: 'السائقين فقط', icon: UserRound },
                             ].map(({ val, label, icon: Icon }) => (
-                                <label key={val} className={`cursor-pointer border-2 rounded-xl p-3 flex flex-col items-center justify-center gap-2 transition-all ${target === val ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 hover:border-slate-300 text-slate-500'}`}>
+                                <label key={val} className={`cursor-pointer border-2 rounded-xl p-3 flex flex-col items-center justify-center gap-2 transition-all ${target === val ? 'border-[#5D1B5E] bg-[#f7f0f8] text-[#4a1149]' : 'border-slate-100 hover:border-slate-300 text-slate-500'}`}>
                                     <input type="radio" name="target" className="hidden" checked={target === val} onChange={() => setTarget(val)} />
                                     <Icon size={22} strokeWidth={target === val ? 2.5 : 2} />
                                     <span className="text-xs font-bold">{label}</span>
@@ -204,13 +204,13 @@ export default function Notifications() {
                     {/* Title */}
                     <div>
                         <label className="block text-sm font-extrabold text-slate-700 mb-2">{notifType === 'push' ? 'عنوان الإشعار' : 'عنوان الإعلان المتنقل'}</label>
-                        <input type="text" placeholder={notifType === 'push' ? 'مثال: عرض خاص بمناسبة العيد! 🎊' : 'مثال: ما رأيك في خدماتنا؟'} className="w-full bg-[#f8fafc] border border-slate-200 text-slate-700 text-sm rounded-xl px-4 py-3.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all font-bold" value={title} onChange={e => setTitle(e.target.value)} />
+                        <input type="text" placeholder={notifType === 'push' ? 'مثال: عرض خاص بمناسبة العيد! 🎊' : 'مثال: ما رأيك في خدماتنا؟'} className="w-full bg-[#f8fafc] border border-slate-200 text-slate-700 text-sm rounded-xl px-4 py-3.5 outline-none focus:border-[#7a3a7c] focus:ring-2 focus:ring-[#7a3a7c]/20 transition-all font-bold" value={title} onChange={e => setTitle(e.target.value)} />
                     </div>
 
                     {/* Body */}
                     <div>
                         <label className="block text-sm font-extrabold text-slate-700 mb-2">{notifType === 'push' ? 'محتوى الإشعار' : 'رسالة الترحيب / السؤال'}</label>
-                        <textarea rows={3} placeholder={notifType === 'push' ? 'اكتب هنا تفاصيل الإشعار الذي سيظهر في شاشة الجوال...' : 'اكتب هنا الرسالة التي ستظهر داخل الصندوق المنبثق...'} className="w-full bg-[#f8fafc] border border-slate-200 text-slate-700 text-sm rounded-xl px-4 py-3.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all resize-none leading-relaxed font-medium" value={body} onChange={e => setBody(e.target.value)} />
+                        <textarea rows={3} placeholder={notifType === 'push' ? 'اكتب هنا تفاصيل الإشعار الذي سيظهر في شاشة الجوال...' : 'اكتب هنا الرسالة التي ستظهر داخل الصندوق المنبثق...'} className="w-full bg-[#f8fafc] border border-slate-200 text-slate-700 text-sm rounded-xl px-4 py-3.5 outline-none focus:border-[#7a3a7c] focus:ring-2 focus:ring-[#7a3a7c]/20 transition-all resize-none leading-relaxed font-medium" value={body} onChange={e => setBody(e.target.value)} />
                     </div>
 
                     {/* Popup extras */}
@@ -219,11 +219,11 @@ export default function Notifications() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-extrabold text-slate-700 mb-2">رابط الصورة (اختياري)</label>
-                                    <input type="text" placeholder="https://example.com/image.png" className="w-full bg-[#f8fafc] border border-slate-200 text-slate-700 text-xs rounded-xl px-4 py-3 outline-none focus:border-indigo-500 font-medium" value={popupImage} onChange={e => setPopupImage(e.target.value)} />
+                                    <input type="text" placeholder="https://example.com/image.png" className="w-full bg-[#f8fafc] border border-slate-200 text-slate-700 text-xs rounded-xl px-4 py-3 outline-none focus:border-[#7a3a7c] font-medium" value={popupImage} onChange={e => setPopupImage(e.target.value)} />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-extrabold text-slate-700 mb-2">القسم المستهدف عند الضغط</label>
-                                    <select title="القسم المستهدف" className="w-full bg-[#f8fafc] border border-slate-200 text-slate-700 text-xs rounded-xl px-4 py-3 outline-none focus:border-indigo-500 font-bold" value={targetSection} onChange={e => setTargetSection(e.target.value)}>
+                                    <select title="القسم المستهدف" className="w-full bg-[#f8fafc] border border-slate-200 text-slate-700 text-xs rounded-xl px-4 py-3 outline-none focus:border-[#7a3a7c] font-bold" value={targetSection} onChange={e => setTargetSection(e.target.value)}>
                                         <option value="home">الرئيسية</option>
                                         <option value="hourly">التنظيف بالساعة</option>
                                         <option value="family_basket">سلة العائلة (الباقات)</option>
@@ -235,7 +235,7 @@ export default function Notifications() {
                             <div>
                                 <div className="flex items-center justify-between mb-3">
                                     <label className="block text-sm font-extrabold text-slate-700">أزرار التفاعل</label>
-                                    <button type="button" onClick={addButton} className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:underline"><Plus size={14} /> إضافة خيار</button>
+                                    <button type="button" onClick={addButton} className="text-xs font-bold text-[#5D1B5E] flex items-center gap-1 hover:underline"><Plus size={14} /> إضافة خيار</button>
                                 </div>
                                 <div className="space-y-3">
                                     {buttons.map((btn, i) => (
@@ -291,7 +291,7 @@ export default function Notifications() {
                         type="button"
                         onClick={handleSend}
                         disabled={sending || !title.trim() || !body.trim()}
-                        className={`w-full flex items-center justify-center gap-2 px-6 py-4 text-white rounded-xl font-bold transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 ${isScheduled ? 'bg-gradient-to-r from-violet-600 to-purple-600 shadow-violet-500/30 hover:from-violet-700 hover:to-purple-700' : 'bg-gradient-to-r from-indigo-600 to-violet-600 shadow-indigo-500/30 hover:from-indigo-700 hover:to-violet-700'}`}
+                        className={`w-full flex items-center justify-center gap-2 px-6 py-4 text-white rounded-xl font-bold transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 ${isScheduled ? 'bg-gradient-to-r from-violet-600 to-purple-600 shadow-violet-500/30 hover:from-violet-700 hover:to-purple-700' : 'bg-gradient-to-r from-[#5D1B5E] to-violet-600 shadow-[#7a3a7c]/30 hover:from-[#4a1149] hover:to-violet-700'}`}
                     >
                         {sending
                             ? <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
@@ -332,7 +332,7 @@ export default function Notifications() {
                                         ? <CalendarClock size={16} className="text-amber-500" />
                                         : notif.type === 'popup'
                                             ? <MessageSquare size={16} className="text-violet-500" />
-                                            : <BellRing size={16} className="text-indigo-500" />
+                                            : <BellRing size={16} className="text-[#7a3a7c]" />
                                     }
                                     {notif.title}
                                 </h4>
@@ -348,7 +348,7 @@ export default function Notifications() {
                             <p className="text-sm text-slate-500 line-clamp-2 mb-3">{notif.body}</p>
 
                             <div className="flex items-center gap-2 flex-wrap">
-                                <span className={`inline-block px-2 py-1 text-[10px] font-bold rounded ${notif.target === 'all' ? 'bg-slate-100 text-slate-600' : notif.target === 'drivers' ? 'bg-blue-50 text-blue-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                                <span className={`inline-block px-2 py-1 text-[10px] font-bold rounded ${notif.target === 'all' ? 'bg-slate-100 text-slate-600' : notif.target === 'drivers' ? 'bg-[#f7f0f8] text-[#5D1B5E]' : 'bg-[#f7f0f8] text-[#5D1B5E]'}`}>
                                     📢 {targetLabel(notif.target)}
                                 </span>
                                 {notif.type === 'popup' && (

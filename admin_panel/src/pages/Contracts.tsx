@@ -21,7 +21,7 @@ const StatusBadge = ({ status }: { status: string }) => {
         case 'active':
             return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-100 text-[10px]"><CheckCircle2 size={12} />نشط</span>;
         case 'approved_waiting_payment':
-            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-100 text-[10px]"><CreditCard size={12} />بانتظار الدفع</span>;
+            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f7f0f8] text-[#4a1149] font-bold border border-[#f0e2f1] text-[10px]"><CreditCard size={12} />بانتظار الدفع</span>;
         case 'pending':
             return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-100 text-[10px]"><Clock size={12} />قيد المراجعة</span>;
         case 'rejected':
@@ -99,7 +99,7 @@ export default function Contracts() {
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10" dir="rtl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                    <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-200">
+                    <div className="p-3 bg-[#5D1B5E] text-white rounded-2xl shadow-lg shadow-[#d9b8db]">
                         <FileSignature size={28} />
                     </div>
                     <div>
@@ -110,11 +110,11 @@ export default function Contracts() {
             </div>
 
             <div className="relative group">
-                <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={20} />
+                <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#5D1B5E] transition-colors" size={20} />
                 <input
                     type="text"
                     placeholder="ابحث باسم العميل، الباقة، أو رقم العقد..."
-                    className="w-full pl-6 pr-12 py-4 bg-white border-2 border-slate-100 rounded-[20px] text-base outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-slate-700 shadow-sm"
+                    className="w-full pl-6 pr-12 py-4 bg-white border-2 border-slate-100 rounded-[20px] text-base outline-none focus:ring-4 focus:ring-[#5D1B5E]/10 focus:border-[#5D1B5E] transition-all font-bold text-slate-700 shadow-sm"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -122,7 +122,7 @@ export default function Contracts() {
 
             {loading ? (
                 <div className="flex flex-col items-center justify-center h-64 bg-white rounded-[32px] border-2 border-dashed border-slate-100">
-                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent shadow-md"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#5D1B5E] border-t-transparent shadow-md"></div>
                     <p className="text-slate-500 mt-6 font-black text-lg">جاري جرد العقود...</p>
                 </div>
             ) : filtered.length === 0 ? (
@@ -136,7 +136,7 @@ export default function Contracts() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filtered.map((contract) => (
-                        <div key={contract.id} className="group bg-white rounded-[28px] border-2 border-slate-50 overflow-hidden hover:border-blue-100/50 hover:shadow-2xl hover:shadow-blue-50 transition-all duration-500">
+                        <div key={contract.id} className="group bg-white rounded-[28px] border-2 border-slate-50 overflow-hidden hover:border-[#f0e2f1]/50 hover:shadow-2xl hover:shadow-[#f7f0f8] transition-all duration-500">
                             <div className="p-6">
                                 <div className="flex items-center justify-between mb-6">
                                     <StatusBadge status={contract.status} />
@@ -147,7 +147,7 @@ export default function Contracts() {
                                 </div>
 
                                 <div className="flex items-start gap-4 mb-6">
-                                    <div className="p-4 bg-slate-50 text-slate-400 rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-all duration-500">
+                                    <div className="p-4 bg-slate-50 text-slate-400 rounded-2xl group-hover:bg-[#5D1B5E] group-hover:text-white transition-all duration-500">
                                         <FileSignature size={24} />
                                     </div>
                                     <div className="flex-1 min-w-0">
@@ -165,7 +165,7 @@ export default function Contracts() {
                                     </div>
                                     <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100/50">
                                         <span className="text-[11px] font-bold text-slate-400">قيمة التعاقد</span>
-                                        <span className="text-sm font-black text-blue-600">{contract.planPrice || 0} ر.س</span>
+                                        <span className="text-sm font-black text-[#5D1B5E]">{contract.planPrice || 0} ر.س</span>
                                     </div>
                                 </div>
 
@@ -174,7 +174,7 @@ export default function Contracts() {
                                         <button 
                                             type="button"
                                             onClick={() => handleApprove(contract.id, contract.planName, contract.userId)}
-                                            className="flex-1 py-3.5 bg-blue-600 text-white text-sm font-black rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95"
+                                            className="flex-1 py-3.5 bg-[#5D1B5E] text-white text-sm font-black rounded-2xl hover:bg-[#4a1149] transition-all shadow-lg shadow-[#f0e2f1] active:scale-95"
                                         >
                                             اعتماد الباقة
                                         </button>

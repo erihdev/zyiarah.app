@@ -233,10 +233,10 @@ export default function Settings() {
         return (
             <div className="flex flex-col h-[70vh] items-center justify-center space-y-4">
                 <div className="relative w-20 h-20">
-                    <div className="absolute inset-0 rounded-full border-t-4 border-indigo-600 animate-spin"></div>
+                    <div className="absolute inset-0 rounded-full border-t-4 border-[#5D1B5E] animate-spin"></div>
                     <div className="absolute inset-2 rounded-full border-t-4 border-fuchsia-500 animate-spin opacity-50 animation-delay-150"></div>
                 </div>
-                <div className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-fuchsia-600 animate-pulse">
+                <div className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#5D1B5E] to-fuchsia-600 animate-pulse">
                     تهيئة الإعدادات...
                 </div>
             </div>
@@ -244,7 +244,7 @@ export default function Settings() {
     }
 
     const tabs = [
-        { id: 'general', label: 'عام وأمان', icon: Shield, color: 'from-blue-600 to-indigo-600', bg: 'bg-blue-50/50', border: 'border-blue-100', text: 'text-blue-700' },
+        { id: 'general', label: 'عام وأمان', icon: Shield, color: 'from-[#5D1B5E] to-[#5D1B5E]', bg: 'bg-[#f7f0f8]/50', border: 'border-[#f0e2f1]', text: 'text-[#4a1149]' },
         { id: 'payments', label: 'المدفوعات', icon: Wallet, color: 'from-emerald-500 to-green-600', bg: 'bg-emerald-50/50', border: 'border-emerald-100', text: 'text-emerald-700' },
         { id: 'notifications', label: 'الإشعارات', icon: Bell, color: 'from-orange-500 to-amber-600', bg: 'bg-orange-50/50', border: 'border-orange-100', text: 'text-orange-700' },
         { id: 'coverage', label: 'التغطية', icon: MapPin, color: 'from-purple-500 to-fuchsia-600', bg: 'bg-purple-50/50', border: 'border-purple-100', text: 'text-purple-700' },
@@ -261,7 +261,7 @@ export default function Settings() {
                 <div className={`absolute bottom-0 left-0 w-80 h-80 bg-gradient-to-tr ${currentTabColor} rounded-full opacity-[0.03] blur-3xl translate-y-1/3 -translate-x-1/3 transition-colors duration-500`}></div>
                 
                 <div className="relative z-10 flex items-center gap-6">
-                    <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${currentTabColor} p-0.5 shadow-lg shadow-indigo-500/20 transition-colors duration-500`}>
+                    <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${currentTabColor} p-0.5 shadow-lg shadow-[#7a3a7c]/20 transition-colors duration-500`}>
                         <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center">
                             <SettingsIcon activeTab={activeTab} />
                         </div>
@@ -283,7 +283,7 @@ export default function Settings() {
                         className={`w-full md:w-auto relative group overflow-hidden flex items-center justify-center gap-3 px-8 py-4 rounded-2xl font-bold text-white transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none shadow-xl
                             ${saveSuccess 
                                 ? 'bg-emerald-500 shadow-emerald-500/30' 
-                                : `bg-gradient-to-r ${currentTabColor} shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:-translate-y-1 hover:scale-[1.02]`
+                                : `bg-gradient-to-r ${currentTabColor} shadow-[#7a3a7c]/25 hover:shadow-[#7a3a7c]/40 hover:-translate-y-1 hover:scale-[1.02]`
                             }`}
                     >
                         <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></div>
@@ -308,12 +308,12 @@ export default function Settings() {
                         <div className="p-2 mb-2">
                             <div className="relative group">
                                 <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
-                                    <Search size={18} className="text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                                    <Search size={18} className="text-slate-400 group-focus-within:text-[#7a3a7c] transition-colors" />
                                 </div>
                                 <input
                                     type="text"
                                     placeholder="بحث سريع..."
-                                    className="w-full bg-slate-50/50 border border-slate-200 text-sm rounded-xl py-3 pr-11 pl-4 outline-none focus:bg-white focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10 transition-all text-slate-700 font-medium placeholder-slate-400"
+                                    className="w-full bg-slate-50/50 border border-slate-200 text-sm rounded-xl py-3 pr-11 pl-4 outline-none focus:bg-white focus:border-[#a86faa] focus:ring-4 focus:ring-[#7a3a7c]/10 transition-all text-slate-700 font-medium placeholder-slate-400"
                                 />
                             </div>
                         </div>
@@ -358,11 +358,11 @@ export default function Settings() {
                     </div>
                     
                     {/* Compact Help Box */}
-                    <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-[2rem] p-6 text-white shadow-xl shadow-indigo-600/20 relative overflow-hidden hidden lg:block">
+                    <div className="bg-gradient-to-br from-[#5D1B5E] to-[#4a1149] rounded-[2rem] p-6 text-white shadow-xl shadow-[#5D1B5E]/20 relative overflow-hidden hidden lg:block">
                         <div className="absolute -right-8 -top-8 w-32 h-32 bg-white opacity-10 rounded-full blur-2xl"></div>
                         <div className="relative z-10">
                             <h3 className="font-bold text-lg mb-2">هل تحتاج مساعدة؟</h3>
-                            <p className="text-blue-100 text-sm mb-4 leading-relaxed font-medium">وثائق النظام تحتوي على تفاصيل كاملة لجميع الإعدادات المبينة هنا.</p>
+                            <p className="text-[#f0e2f1] text-sm mb-4 leading-relaxed font-medium">وثائق النظام تحتوي على تفاصيل كاملة لجميع الإعدادات المبينة هنا.</p>
                             <a href={settings.support_url || 'https://zyiarah.com/support'} target="_blank" rel="noopener noreferrer" className="bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white text-sm font-bold py-2.5 px-4 rounded-xl transition-colors inline-flex items-center gap-2">
                                 تصفح الدليل <ArrowRight size={16} />
                             </a>
@@ -379,7 +379,7 @@ export default function Settings() {
                             <div className="flex flex-col h-full">
                                 <div className="px-10 py-8 border-b border-slate-50 bg-white/80 backdrop-blur-xl sticky top-0 z-20">
                                     <div className="flex items-center gap-4">
-                                        <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
+                                        <div className="p-3 bg-[#f7f0f8] text-[#5D1B5E] rounded-2xl">
                                             <Shield size={28} strokeWidth={2.5} />
                                         </div>
                                         <div>
@@ -394,21 +394,21 @@ export default function Settings() {
                                     {/* API Keys Section */}
                                     <section>
                                         <h4 className="flex items-center gap-2 text-lg font-bold text-slate-800 mb-6">
-                                            <KeyRound size={20} className="text-blue-500" /> المفاتيح الأمنية السحابية
+                                            <KeyRound size={20} className="text-[#5D1B5E]" /> المفاتيح الأمنية السحابية
                                         </h4>
                                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 transition-all hover:shadow-md hover:border-blue-200 group">
+                                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 transition-all hover:shadow-md hover:border-[#d9b8db] group">
                                                 <label htmlFor="zatca-key" className="block text-sm font-bold text-slate-700 mb-3">مفتاح ZATCA (هيئة الزكاة والدخل)</label>
                                                 <div className="relative">
-                                                    <input id="zatca-key" type="password" value="••••••••••••••••••••••••" disabled className="w-full bg-white border border-slate-200 text-slate-400 text-sm rounded-xl px-4 py-3.5 outline-none font-mono tracking-widest cursor-not-allowed group-hover:border-blue-300 transition-colors shadow-inner" />
-                                                    <button type="button" onClick={() => toast.info('لأسباب أمنية، لا يمكن عرض أو تعديل مفتاح الزكاة والدخل من هنا. يرجى التواصل مع الإدارة الفنية.')} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white px-4 py-2 rounded-lg transition-all shadow-sm">مراجعة</button>
+                                                    <input id="zatca-key" type="password" value="••••••••••••••••••••••••" disabled className="w-full bg-white border border-slate-200 text-slate-400 text-sm rounded-xl px-4 py-3.5 outline-none font-mono tracking-widest cursor-not-allowed group-hover:border-[#a86faa] transition-colors shadow-inner" />
+                                                    <button type="button" onClick={() => toast.info('لأسباب أمنية، لا يمكن عرض أو تعديل مفتاح الزكاة والدخل من هنا. يرجى التواصل مع الإدارة الفنية.')} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-[#5D1B5E] bg-[#f7f0f8] hover:bg-[#5D1B5E] hover:text-white px-4 py-2 rounded-lg transition-all shadow-sm">مراجعة</button>
                                                 </div>
                                             </div>
-                                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 transition-all hover:shadow-md hover:border-blue-200 group">
+                                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 transition-all hover:shadow-md hover:border-[#d9b8db] group">
                                                 <label htmlFor="firebase-key" className="block text-sm font-bold text-slate-700 mb-3">مفتاح Firebase Admin</label>
                                                 <div className="relative">
-                                                    <input id="firebase-key" type="password" value="••••••••••••••••••••••••" disabled className="w-full bg-white border border-slate-200 text-slate-400 text-sm rounded-xl px-4 py-3.5 outline-none font-mono tracking-widest cursor-not-allowed group-hover:border-blue-300 transition-colors shadow-inner" />
-                                                    <button type="button" onClick={() => toast.info('لأسباب أمنية، لا يمكن عرض أو تعديل مفتاح Firebase من هنا. يرجى التواصل مع الإدارة الفنية.')} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white px-4 py-2 rounded-lg transition-all shadow-sm">مراجعة</button>
+                                                    <input id="firebase-key" type="password" value="••••••••••••••••••••••••" disabled className="w-full bg-white border border-slate-200 text-slate-400 text-sm rounded-xl px-4 py-3.5 outline-none font-mono tracking-widest cursor-not-allowed group-hover:border-[#a86faa] transition-colors shadow-inner" />
+                                                    <button type="button" onClick={() => toast.info('لأسباب أمنية، لا يمكن عرض أو تعديل مفتاح Firebase من هنا. يرجى التواصل مع الإدارة الفنية.')} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-[#5D1B5E] bg-[#f7f0f8] hover:bg-[#5D1B5E] hover:text-white px-4 py-2 rounded-lg transition-all shadow-sm">مراجعة</button>
                                                 </div>
                                             </div>
                                         </div>
@@ -419,13 +419,13 @@ export default function Settings() {
                                     {/* App Versioning & Legal */}
                                     <section>
                                         <h4 className="flex items-center gap-2 text-lg font-bold text-slate-800 mb-6">
-                                            <Smartphone size={20} className="text-indigo-500" /> توافق المتاجر والنصوص القانونية
+                                            <Smartphone size={20} className="text-[#7a3a7c]" /> توافق المتاجر والنصوص القانونية
                                         </h4>
                                         <div className="bg-white border border-slate-200 shadow-sm rounded-[2rem] p-8 relative overflow-hidden">
-                                            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full blur-3xl -translate-y-10 translate-x-10 pointer-events-none"></div>
+                                            <div className="absolute top-0 right-0 w-32 h-32 bg-[#f7f0f8] rounded-full blur-3xl -translate-y-10 translate-x-10 pointer-events-none"></div>
                                             
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
-                                                <div className="md:col-span-2 flex flex-col gap-5 p-5 bg-indigo-50/50 border border-indigo-100/50 rounded-2xl">
+                                                <div className="md:col-span-2 flex flex-col gap-5 p-5 bg-[#f7f0f8]/50 border border-[#f0e2f1]/50 rounded-2xl">
                                                     <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
                                                         <div className="flex-1 w-full">
                                                             <label htmlFor="latest-build" className="block text-sm font-bold text-slate-800 mb-2">أحدث رقم بناء منشور (Latest Build)</label>
@@ -436,7 +436,7 @@ export default function Settings() {
                                                                 min={0}
                                                                 value={appUpdate.latest_build}
                                                                 onChange={(e) => setAppUpdate(p => ({ ...p, latest_build: parseInt(e.target.value) || 0 }))}
-                                                                className="w-full md:w-64 bg-white border border-slate-300 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 text-slate-800 font-bold text-sm rounded-xl px-5 py-3.5 outline-none transition-all shadow-sm text-left font-mono"
+                                                                className="w-full md:w-64 bg-white border border-slate-300 focus:border-[#7a3a7c] focus:ring-4 focus:ring-[#7a3a7c]/20 text-slate-800 font-bold text-sm rounded-xl px-5 py-3.5 outline-none transition-all shadow-sm text-left font-mono"
                                                                 dir="ltr"
                                                                 placeholder="209"
                                                             />
@@ -453,7 +453,7 @@ export default function Settings() {
                                                                 <span className="text-sm font-bold text-slate-700">إجباري (لا يمكن تجاهله)</span>
                                                                 <label className="relative inline-flex items-center cursor-pointer">
                                                                     <input type="checkbox" aria-label="تحديث إجباري" className="sr-only peer" checked={appUpdate.force} onChange={(e) => setAppUpdate(p => ({ ...p, force: e.target.checked }))} />
-                                                                    <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all after:shadow-sm peer-checked:bg-indigo-600"></div>
+                                                                    <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all after:shadow-sm peer-checked:bg-[#5D1B5E]"></div>
                                                                 </label>
                                                             </div>
                                                         </div>
@@ -465,7 +465,7 @@ export default function Settings() {
                                                             type="text"
                                                             value={appUpdate.message}
                                                             onChange={(e) => setAppUpdate(p => ({ ...p, message: e.target.value }))}
-                                                            className="w-full bg-white border border-slate-300 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 text-slate-800 font-medium text-sm rounded-xl px-5 py-3.5 outline-none transition-all shadow-sm"
+                                                            className="w-full bg-white border border-slate-300 focus:border-[#7a3a7c] focus:ring-4 focus:ring-[#7a3a7c]/20 text-slate-800 font-medium text-sm rounded-xl px-5 py-3.5 outline-none transition-all shadow-sm"
                                                             placeholder="يتوفّر إصدار جديد بمزايا وتحسينات مهمة..."
                                                         />
                                                     </div>
@@ -475,7 +475,7 @@ export default function Settings() {
                                                     <label htmlFor="terms-url" className="block text-sm font-bold text-slate-700">رابط الشروط والأحكام</label>
                                                     <input
                                                         id="terms-url" type="url" value={settings.terms_url} onChange={(e) => handleChange('terms_url', e.target.value)}
-                                                        className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 text-slate-700 text-sm rounded-xl px-5 py-3.5 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all text-left"
+                                                        className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 text-slate-700 text-sm rounded-xl px-5 py-3.5 outline-none focus:border-[#7a3a7c] focus:ring-4 focus:ring-[#7a3a7c]/10 transition-all text-left"
                                                         dir="ltr" placeholder="https://example.com/terms"
                                                     />
                                                 </div>
@@ -483,16 +483,16 @@ export default function Settings() {
                                                     <label htmlFor="support-url" className="block text-sm font-bold text-slate-700">رابط الدعم الفني</label>
                                                     <input
                                                         id="support-url" type="url" value={settings.support_url} onChange={(e) => handleChange('support_url', e.target.value)}
-                                                        className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 text-slate-700 text-sm rounded-xl px-5 py-3.5 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all text-left"
+                                                        className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 text-slate-700 text-sm rounded-xl px-5 py-3.5 outline-none focus:border-[#7a3a7c] focus:ring-4 focus:ring-[#7a3a7c]/10 transition-all text-left"
                                                         dir="ltr" placeholder="https://example.com/support"
                                                     />
                                                 </div>
                                                 <div className="md:col-span-2 space-y-2">
                                                     <label htmlFor="privacy-policy" className="block text-sm font-bold text-slate-700">سياسة الخصوصية</label>
-                                                    <p className="text-xs text-slate-500 font-medium">تُنشَر للعملاء داخل التطبيق <span className="font-bold">وعلى صفحة <a href="https://zyiarah.com/privacy" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline">zyiarah.com/privacy</a> العامة</span> فور الحفظ. اترك سطراً فارغاً بين الفقرات.</p>
+                                                    <p className="text-xs text-slate-500 font-medium">تُنشَر للعملاء داخل التطبيق <span className="font-bold">وعلى صفحة <a href="https://zyiarah.com/privacy" target="_blank" rel="noopener noreferrer" className="text-[#5D1B5E] underline">zyiarah.com/privacy</a> العامة</span> فور الحفظ. اترك سطراً فارغاً بين الفقرات.</p>
                                                     <textarea
                                                         id="privacy-policy" rows={12} value={settings.privacy_policy} onChange={(e) => handleChange('privacy_policy', e.target.value)}
-                                                        className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 text-slate-700 text-sm rounded-xl px-5 py-4 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all resize-y leading-loose"
+                                                        className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 text-slate-700 text-sm rounded-xl px-5 py-4 outline-none focus:border-[#7a3a7c] focus:ring-4 focus:ring-[#7a3a7c]/10 transition-all resize-y leading-loose"
                                                         placeholder="اكتب سياسة الخصوصية هنا..."
                                                     />
                                                 </div>
@@ -633,7 +633,7 @@ export default function Settings() {
                                             desc="تفعيل إرسال رسالة SMS للعميل تتضمن رابط الفاتورة وحالة الطلب."
                                             checked={settings.sms_on_order}
                                             onChange={(val) => handleChange('sms_on_order', val)}
-                                            icon={<Smartphone className="text-blue-500" />}
+                                            icon={<Smartphone className="text-[#5D1B5E]" />}
                                             colorTheme="blue"
                                         />
                                         <NotificationRow 
@@ -743,7 +743,7 @@ export default function Settings() {
                                                     href={`https://www.google.com/maps/search/${encodeURIComponent(newZone.name || 'جازان')}`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="flex items-center gap-2 text-sm font-bold text-blue-600 hover:text-blue-800 underline"
+                                                    className="flex items-center gap-2 text-sm font-bold text-[#5D1B5E] hover:text-[#4a1149] underline"
                                                 >
                                                     <Navigation size={14} />
                                                     ابحث في خرائط Google عن الإحداثيات
@@ -837,11 +837,11 @@ export default function Settings() {
 // Helper Components
 function SettingsIcon({ activeTab }: { activeTab: TabType }) {
     switch (activeTab) {
-        case 'general': return <Shield size={32} className="text-blue-600" strokeWidth={2} />;
+        case 'general': return <Shield size={32} className="text-[#5D1B5E]" strokeWidth={2} />;
         case 'payments': return <Wallet size={32} className="text-emerald-500" strokeWidth={2} />;
         case 'notifications': return <Bell size={32} className="text-orange-500" strokeWidth={2} />;
         case 'coverage': return <MapPin size={32} className="text-purple-600" strokeWidth={2} />;
-        default: return <Shield size={32} className="text-blue-600" strokeWidth={2} />;
+        default: return <Shield size={32} className="text-[#5D1B5E]" strokeWidth={2} />;
     }
 }
 

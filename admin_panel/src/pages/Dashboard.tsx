@@ -38,10 +38,10 @@ interface StatCardProps {
 
 const colorMaps = {
     blue: {
-        bg: 'bg-blue-50/80',
-        text: 'text-blue-600',
+        bg: 'bg-[#f7f0f8]/80',
+        text: 'text-[#5D1B5E]',
         iconBg: 'bg-white',
-        shadow: 'shadow-blue-500/10'
+        shadow: 'shadow-[#5D1B5E]/10'
     },
     orange: {
         bg: 'bg-orange-50/80',
@@ -50,10 +50,10 @@ const colorMaps = {
         shadow: 'shadow-orange-500/10'
     },
     indigo: {
-        bg: 'bg-indigo-50/80',
-        text: 'text-indigo-600',
+        bg: 'bg-[#f7f0f8]/80',
+        text: 'text-[#5D1B5E]',
         iconBg: 'bg-white',
-        shadow: 'shadow-indigo-500/10'
+        shadow: 'shadow-[#7a3a7c]/10'
     },
     emerald: {
         bg: 'bg-emerald-50/80',
@@ -343,7 +343,7 @@ export default function Dashboard() {
     const getStatusBadge = (status: string) => {
         switch (status) {
             case 'completed': return <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-600 text-xs font-bold flex items-center w-fit border border-emerald-100"><CheckCircle2 size={14} strokeWidth={2.5} className="ml-1.5" /> مكتمل</span>;
-            case 'active': return <span className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-600 text-xs font-bold flex items-center w-fit border border-blue-100"><Clock size={14} strokeWidth={2.5} className="ml-1.5" /> جاري التنفيذ</span>;
+            case 'active': return <span className="px-3 py-1.5 rounded-xl bg-[#f7f0f8] text-[#5D1B5E] text-xs font-bold flex items-center w-fit border border-[#f0e2f1]"><Clock size={14} strokeWidth={2.5} className="ml-1.5" /> جاري التنفيذ</span>;
             case 'pending': return <span className="px-3 py-1.5 rounded-xl bg-orange-50 text-orange-600 text-xs font-bold flex items-center w-fit border border-orange-100"><Clock size={14} strokeWidth={2.5} className="ml-1.5" /> قيد الانتظار</span>;
             default: return null;
         }
@@ -369,7 +369,7 @@ export default function Dashboard() {
 
             <div className="pt-4">
                 <h3 className="text-lg font-extrabold text-slate-800 mb-4 flex items-center gap-2">
-                    <ArrowUpRight className="text-blue-600" size={20} />
+                    <ArrowUpRight className="text-[#5D1B5E]" size={20} />
                     إحصائيات متجر الأدوات
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -388,7 +388,7 @@ export default function Dashboard() {
                             <h3 className="text-lg font-extrabold text-slate-800">أحدث الطلبات</h3>
                             <p className="text-sm font-medium text-slate-400 mt-1">آخر 5 طلبات مسجلة في النظام</p>
                         </div>
-                        <button type="button" onClick={() => navigate('/orders')} className="text-blue-600 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center">
+                        <button type="button" onClick={() => navigate('/orders')} className="text-[#5D1B5E] bg-[#f7f0f8] hover:bg-[#f0e2f1] px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center">
                             <span>عرض الكل</span>
                             <ChevronLeft size={16} className="mr-1" />
                         </button>
@@ -416,7 +416,7 @@ export default function Dashboard() {
                                                     {order.avatar}
                                                 </div>
                                                 <div>
-                                                    <p className="font-bold text-slate-800 group-hover:text-blue-600 transition-colors">{order.client}</p>
+                                                    <p className="font-bold text-slate-800 group-hover:text-[#5D1B5E] transition-colors">{order.client}</p>
                                                     <p className="text-xs font-semibold text-slate-400 mt-0.5">{order.time}</p>
                                                 </div>
                                             </div>
@@ -437,7 +437,7 @@ export default function Dashboard() {
 
                 {/* Tracking Map Widget Placeholder */}
                 <div className="bg-slate-900 rounded-[24px] p-8 text-white relative overflow-hidden group shadow-xl shadow-slate-900/10 flex flex-col h-full min-h-[400px]">
-                    <div className="absolute inset-0 opacity-40 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/40 via-slate-900 to-slate-900 mix-blend-overlay pointer-events-none"></div>
+                    <div className="absolute inset-0 opacity-40 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-[#5D1B5E]/40 via-slate-900 to-slate-900 mix-blend-overlay pointer-events-none"></div>
 
                     {/* Animated grid background */}
                     <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[length:20px_20px] opacity-20"></div>
@@ -445,7 +445,7 @@ export default function Dashboard() {
                     <div className="relative z-10 flex flex-col h-full w-full">
                         <div className="flex items-start justify-between mb-2">
                             <div>
-                                <h3 className="text-xl font-extrabold tracking-tight flex items-center gap-2"><MapIcon size={20} className="text-blue-400" /> تتبع السائقين الحصري</h3>
+                                <h3 className="text-xl font-extrabold tracking-tight flex items-center gap-2"><MapIcon size={20} className="text-[#8a4a8c]" /> تتبع السائقين الحصري</h3>
                                 <p className="text-slate-400 text-sm font-medium mt-1">اضغط على السائق للتتبع المباشر</p>
                             </div>
                             <div className="bg-emerald-500/20 p-2 rounded-xl flex items-center gap-2">
