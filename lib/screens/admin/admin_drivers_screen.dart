@@ -18,6 +18,15 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
   final ZyiarahFirebaseService _firebaseService = ZyiarahFirebaseService();
   final ZyiarahAuditService _audit = ZyiarahAuditService();
 
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _search = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   void _showDriverDialog({String? docId, Map<String, dynamic>? currentData}) {
     final TextEditingController nameCtrl = TextEditingController(text: currentData?['name'] ?? '');
     final TextEditingController phoneCtrl = TextEditingController(text: currentData?['phone'] ?? '');
@@ -407,23 +416,85 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
             final docs = snapshot.data!.docs;
             final stats = _calculateQuickStats(docs);
 
+            final String q = _search.trim().toLowerCase();
+            final filteredDocs = q.isEmpty
+                ? docs
+                : docs.where((doc) {
+                    final driver = doc.data() as Map<String, dynamic>;
+                    final name = (driver['name'] ?? '').toString().toLowerCase();
+                    final phone = (driver['phone'] ?? '').toString().toLowerCase();
+                    final idNumber = (driver['id_number'] ?? '').toString().toLowerCase();
+                    return name.contains(q) || phone.contains(q) || idNumber.contains(q);
+                  }).toList();
+
             return Column(
               children: [
                 _buildStatsHeader(stats),
+                _buildSearchField(),
                 Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    itemCount: docs.length,
-                    itemBuilder: (context, index) {
-                      final doc = docs[index];
-                      final driver = doc.data() as Map<String, dynamic>;
-                      return _buildPremiumDriverCard(doc.id, driver);
-                    },
-                  ),
+                  child: filteredDocs.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.search_off_rounded, size: 48, color: Colors.grey[400]),
+                                const SizedBox(height: 12),
+                                Text(
+                                  "لا نتائج للبحث «${_search.trim()}»",
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.tajawal(color: Colors.grey[600], fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          itemCount: filteredDocs.length,
+                          itemBuilder: (context, index) {
+                            final doc = filteredDocs[index];
+                            final driver = doc.data() as Map<String, dynamic>;
+                            return _buildPremiumDriverCard(doc.id, driver);
+                          },
+                        ),
                 ),
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchField() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: TextField(
+        controller: _searchCtrl,
+        onChanged: (val) => setState(() => _search = val),
+        textDirection: TextDirection.rtl,
+        style: GoogleFonts.tajawal(fontSize: 14, color: const Color(0xFF1E293B)),
+        decoration: InputDecoration(
+          hintText: "بحث بالاسم أو الجوال أو رقم الهوية",
+          hintStyle: GoogleFonts.tajawal(color: Colors.grey[500], fontSize: 13),
+          prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF5D1B5E), size: 22),
+          suffixIcon: _search.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.close_rounded, color: Colors.grey, size: 20),
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    setState(() => _search = '');
+                  },
+                )
+              : null,
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.grey.shade200)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: Colors.grey.shade200)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: Color(0xFF5D1B5E), width: 1.5)),
         ),
       ),
     );

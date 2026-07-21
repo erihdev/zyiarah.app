@@ -20,6 +20,16 @@ class AdminOrdersScreen extends StatefulWidget {
 class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  // بحث حيّ داخل القائمة المحمّلة (بلا تغيير استعلام Firestore).
+  final TextEditingController _searchController = TextEditingController();
+  String _search = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Color _getStatusColor(String status) {
     return ZyiarahStatus.getOrderStatus(status)['color'];
   }
@@ -114,6 +124,83 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
       );
     }
 
+    // فلترة القائمة المحمّلة محلياً: رقم الطلب / اسم العميل / نوع الخدمة.
+    final query = _search.trim().toLowerCase();
+    final filtered = query.isEmpty
+        ? docs
+        : docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final code =
+                (data['code'] ?? doc.id.substring(0, 8)).toString().toLowerCase();
+            final clientName =
+                (data['client_name'] ?? data['userName'] ?? '').toString().toLowerCase();
+            final service = (data['service_name'] ??
+                    data['service_type'] ??
+                    data['service_name_ar'] ??
+                    '')
+                .toString()
+                .toLowerCase();
+            return code.contains(query) ||
+                clientName.contains(query) ||
+                service.contains(query);
+          }).toList();
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: TextField(
+            controller: _searchController,
+            onChanged: (value) => setState(() => _search = value),
+            style: GoogleFonts.tajawal(fontSize: 14),
+            decoration: InputDecoration(
+              hintText: "ابحث برقم الطلب أو اسم العميل أو الخدمة",
+              hintStyle: GoogleFonts.tajawal(color: Colors.grey, fontSize: 13),
+              prefixIcon: const Icon(Icons.search, color: Color(0xFF5D1B5E)),
+              suffixIcon: _search.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.close, color: Colors.grey),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _search = '');
+                      },
+                    ),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Color(0xFF5D1B5E), width: 1.5),
+              ),
+            ),
+          ),
+        ),
+        Expanded(
+          child: filtered.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.search_off, size: 64, color: Colors.grey[300]),
+                      const SizedBox(height: 16),
+                      Text("لا نتائج للبحث «${_search.trim()}»",
+                          style: GoogleFonts.tajawal(color: Colors.grey)),
+                    ],
+                  ),
+                )
+              : _buildOrdersList(filtered),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOrdersList(List<QueryDocumentSnapshot> docs) {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: docs.length,

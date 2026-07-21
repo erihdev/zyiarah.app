@@ -15,6 +15,65 @@ class AdminContractsScreen extends StatefulWidget {
 class _AdminContractsScreenState extends State<AdminContractsScreen> {
   final Color primaryNavy = const Color(0xFF1E293B);
   final Color brandBlue = const Color(0xFF2563EB);
+  final Color brandPurple = const Color(0xFF5D1B5E);
+
+  final TextEditingController _searchController = TextEditingController();
+  String _search = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  bool _matchesSearch(DocumentSnapshot doc) {
+    final query = _search.trim().toLowerCase();
+    if (query.isEmpty) return true;
+    final data = doc.data() as Map<String, dynamic>;
+    final String planName = (data['planName'] ?? '').toString().toLowerCase();
+    final String clientName =
+        (data['userName'] ?? data['clientName'] ?? '').toString().toLowerCase();
+    final String contractCode = doc.id.substring(0, 8).toLowerCase();
+    return planName.contains(query) ||
+        clientName.contains(query) ||
+        contractCode.contains(query);
+  }
+
+  Widget _buildSearchField() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: TextField(
+        controller: _searchController,
+        onChanged: (value) => setState(() => _search = value),
+        style: GoogleFonts.tajawal(fontWeight: FontWeight.bold),
+        decoration: InputDecoration(
+          hintText: "ابحث بالاسم أو الباقة أو رقم العقد",
+          hintStyle: GoogleFonts.tajawal(color: Colors.grey, fontSize: 13),
+          prefixIcon: Icon(Icons.search, color: brandPurple),
+          suffixIcon: _search.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.close, color: Colors.grey),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _search = '');
+                  },
+                ),
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: Colors.blueGrey.shade100, width: 2),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: brandPurple, width: 2),
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,26 +88,39 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
           elevation: 0,
           centerTitle: true,
         ),
-        body: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('contracts').orderBy('createdAt', descending: true).limit(100).snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
+        body: Column(
+          children: [
+            _buildSearchField(),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection('contracts').orderBy('createdAt', descending: true).limit(100).snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-              return _buildEmptyState();
-            }
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return _buildEmptyState();
+                  }
 
-            return ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: snapshot.data!.docs.length,
-              itemBuilder: (context, index) {
-                final doc = snapshot.data!.docs[index];
-                return _buildContractCard(doc);
-              },
-            );
-          },
+                  final filteredDocs = snapshot.data!.docs.where(_matchesSearch).toList();
+
+                  if (filteredDocs.isEmpty) {
+                    return _buildNoResultsState();
+                  }
+
+                  return ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: filteredDocs.length,
+                    itemBuilder: (context, index) {
+                      final doc = filteredDocs[index];
+                      return _buildContractCard(doc);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -377,6 +449,23 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
           Icon(Icons.description_outlined, size: 80, color: Colors.grey[200]),
           const SizedBox(height: 16),
           Text("لا توجد عقود حالياً", style: GoogleFonts.tajawal(fontSize: 18, color: Colors.grey, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoResultsState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.search_off_rounded, size: 80, color: Colors.grey[200]),
+          const SizedBox(height: 16),
+          Text(
+            "لا نتائج للبحث «${_search.trim()}»",
+            textAlign: TextAlign.center,
+            style: GoogleFonts.tajawal(fontSize: 18, color: Colors.grey, fontWeight: FontWeight.bold),
+          ),
         ],
       ),
     );

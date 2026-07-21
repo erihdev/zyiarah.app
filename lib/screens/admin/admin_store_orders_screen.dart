@@ -4,11 +4,25 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class AdminStoreOrdersScreen extends StatelessWidget {
+class AdminStoreOrdersScreen extends StatefulWidget {
   const AdminStoreOrdersScreen({super.key});
 
+  @override
+  State<AdminStoreOrdersScreen> createState() => _AdminStoreOrdersScreenState();
+}
+
+class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
   // (المتجر المباشر — قرار المالك) حُذف مسار «الموافقة والتسعير النهائي»:
   // العميل يدفع فوراً، والإدارة تدير التوصيل نقرةً نقرة أدناه.
+
+  final TextEditingController _searchController = TextEditingController();
+  String _search = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   void _updateOrderStatus(BuildContext context, String orderId, String newStatus) async {
     try {
@@ -154,20 +168,72 @@ class AdminStoreOrdersScreen extends StatelessWidget {
           backgroundColor: const Color(0xFF5D1B5E),
           foregroundColor: Colors.white,
         ),
-        body: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('store_orders').orderBy('created_at', descending: true).limit(100).snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-            if (snapshot.hasError) return const Center(child: Text("تعذّر تحميل الطلبات، تحقّق من الاتصال"));
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("لا توجد طلبات في المتجر حتى الآن"));
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              child: TextField(
+                controller: _searchController,
+                onChanged: (value) => setState(() => _search = value),
+                decoration: InputDecoration(
+                  hintText: 'ابحث برقم الطلب أو اسم العميل',
+                  prefixIcon: const Icon(Icons.search, color: Color(0xFF5D1B5E)),
+                  suffixIcon: _search.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _search = '');
+                          },
+                        ),
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: Color(0xFF5D1B5E), width: 1.5),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection('store_orders').orderBy('created_at', descending: true).limit(100).snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                  if (snapshot.hasError) return const Center(child: Text("تعذّر تحميل الطلبات، تحقّق من الاتصال"));
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("لا توجد طلبات في المتجر حتى الآن"));
 
-            return ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: snapshot.data!.docs.length,
-              itemBuilder: (context, index) {
-                final orderDoc = snapshot.data!.docs[index];
-                final order = orderDoc.data() as Map<String, dynamic>;
-                final status = order['status'] ?? 'pending';
+                  final query = _search.trim().toLowerCase();
+                  final docs = query.isEmpty
+                      ? snapshot.data!.docs
+                      : snapshot.data!.docs.where((doc) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          final code = doc.id.substring(0, 6).toLowerCase();
+                          final clientName = (data['client_name'] ?? '').toString().toLowerCase();
+                          return code.contains(query) || clientName.contains(query);
+                        }).toList();
+
+                  if (docs.isEmpty) {
+                    return Center(child: Text('لا نتائج للبحث «${_search.trim()}»'));
+                  }
+
+                  return ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: docs.length,
+                    itemBuilder: (context, index) {
+                      final orderDoc = docs[index];
+                      final order = orderDoc.data() as Map<String, dynamic>;
+                      final status = order['status'] ?? 'pending';
 
                 return Card(
                   elevation: 2,
@@ -264,10 +330,13 @@ class AdminStoreOrdersScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-                );
-              },
-            );
-          },
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );

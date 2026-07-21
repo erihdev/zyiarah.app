@@ -4,8 +4,22 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/screens/admin/admin_ticket_details_screen.dart';
 import 'package:zyiarah/widgets/zyiarah_shimmer.dart';
 
-class AdminSupportScreen extends StatelessWidget {
+class AdminSupportScreen extends StatefulWidget {
   const AdminSupportScreen({super.key});
+
+  @override
+  State<AdminSupportScreen> createState() => _AdminSupportScreenState();
+}
+
+class _AdminSupportScreenState extends State<AdminSupportScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _search = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -64,24 +78,106 @@ class AdminSupportScreen extends StatelessWidget {
           return bDate.compareTo(aDate);
         });
 
-        if (sortedDocs.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.support_agent_rounded, size: 60, color: Colors.grey[300]),
-                const SizedBox(height: 16),
-                Text("لا توجد تذاكر في هذا القسم", style: GoogleFonts.tajawal(color: Colors.grey)),
-              ],
-            ),
-          );
-        }
+        // فلترة محلية على القائمة المحمّلة (بحث حي في الموضوع/اسم العميل/بريده)
+        final query = _search.trim().toLowerCase();
+        final filteredDocs = query.isEmpty
+            ? sortedDocs
+            : sortedDocs.where((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                final subject = (data['subject'] ?? '').toString().toLowerCase();
+                final email = (data['userEmail'] ?? '').toString().toLowerCase();
+                final name = (data['userName'] ?? '').toString().toLowerCase();
+                return subject.contains(query) ||
+                    email.contains(query) ||
+                    name.contains(query);
+              }).toList();
 
-        return ListView.builder(
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: TextField(
+                controller: _searchController,
+                onChanged: (value) => setState(() => _search = value),
+                style: GoogleFonts.tajawal(),
+                decoration: InputDecoration(
+                  hintText: "ابحث بالموضوع أو اسم العميل أو البريد",
+                  hintStyle: GoogleFonts.tajawal(color: Colors.grey, fontSize: 13),
+                  prefixIcon: const Icon(Icons.search, color: Color(0xFF5D1B5E)),
+                  suffixIcon: _search.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close, color: Colors.grey),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _search = '');
+                          },
+                        ),
+                  filled: true,
+                  fillColor: Colors.grey.shade50,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: Color(0xFF5D1B5E)),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(child: _buildResults(context, sortedDocs, filteredDocs)),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildResults(
+    BuildContext context,
+    List<QueryDocumentSnapshot> sortedDocs,
+    List<QueryDocumentSnapshot> filteredDocs,
+  ) {
+    if (sortedDocs.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.support_agent_rounded, size: 60, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text("لا توجد تذاكر في هذا القسم", style: GoogleFonts.tajawal(color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+
+    if (filteredDocs.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_off_rounded, size: 60, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text(
+              "لا نتائج للبحث «${_search.trim()}»",
+              style: GoogleFonts.tajawal(color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
           padding: const EdgeInsets.all(16),
-          itemCount: sortedDocs.length,
+          itemCount: filteredDocs.length,
           itemBuilder: (context, index) {
-            final ticket = sortedDocs[index].data() as Map<String, dynamic>;
+            final ticket = filteredDocs[index].data() as Map<String, dynamic>;
             String status = ticket['status'] ?? 'open';
             
             Color statusColor = Colors.orange;
@@ -151,7 +247,7 @@ class AdminSupportScreen extends StatelessWidget {
                   Navigator.push(
                     context, 
                     MaterialPageRoute(
-                      builder: (_) => AdminTicketDetailsScreen(ticketId: sortedDocs[index].id)
+                      builder: (_) => AdminTicketDetailsScreen(ticketId: filteredDocs[index].id)
                     )
                   );
                 },
@@ -159,7 +255,5 @@ class AdminSupportScreen extends StatelessWidget {
             );
           },
         );
-      },
-    );
   }
 }

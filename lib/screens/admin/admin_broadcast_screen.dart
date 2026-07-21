@@ -18,7 +18,12 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
   final TextEditingController _bodyCtrl = TextEditingController();
   String _target = 'all_users'; // all_users, drivers, clients
   bool _isSending = false;
-  
+
+  // (دمج من لوحة الويب) نوع الرسالة: 'push' (إشعار) أو 'popup' (إعلان منبثق داخل
+  // التطبيق يعرضه popup_service عبر type=='popup').
+  String _notifType = 'push';
+  final TextEditingController _imageCtrl = TextEditingController();
+
   bool _isScheduled = false;
   DateTime? _scheduledTime;
 
@@ -26,6 +31,7 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
   void dispose() {
     _titleCtrl.dispose();
     _bodyCtrl.dispose();
+    _imageCtrl.dispose();
     super.dispose();
   }
 
@@ -55,19 +61,33 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
               Text("الفئة المستهدفة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
               const SizedBox(height: 12),
               _buildTargetSelector(),
-              
+
+              const SizedBox(height: 30),
+              Text("نوع الرسالة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+              const SizedBox(height: 12),
+              _buildTypeSelector(),
+
               const SizedBox(height: 30),
               _buildLuxuryField(controller: _titleCtrl, label: "عنوان الرسالة (مثلاً: تنبيه هام، عرض جديد)", icon: Icons.title_rounded),
               const SizedBox(height: 30),
               _buildLuxuryField(
-                controller: _bodyCtrl, 
-                label: "محتوى الرسالة...", 
+                controller: _bodyCtrl,
+                label: "محتوى الرسالة...",
                 icon: Icons.chat_bubble_outline_rounded,
                 maxLines: 5,
               ),
-              
-              const SizedBox(height: 30),
-              _buildSchedulingSection(),
+
+              // (دمج من الويب) الإعلان المنبثق يقبل صورة اختيارية يعرضها popup_service.
+              if (_notifType == 'popup') ...[
+                const SizedBox(height: 30),
+                _buildLuxuryField(controller: _imageCtrl, label: "رابط صورة الإعلان (اختياري)", icon: Icons.image_outlined),
+              ],
+
+              // الجدولة للإشعار (Push) فقط — الإعلان المنبثق يظهر عند فتح العميل للتطبيق.
+              if (_notifType == 'push') ...[
+                const SizedBox(height: 30),
+                _buildSchedulingSection(),
+              ],
               
               const SizedBox(height: 40),
               _buildSendButton(),
@@ -337,6 +357,53 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
     );
   }
 
+  Widget _buildTypeSelector() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(15)),
+      child: Row(
+        children: [
+          _buildTypeOption("إشعار Push", 'push', Icons.notifications_active_rounded),
+          _buildTypeOption("إعلان منبثق", 'popup', Icons.web_asset_rounded),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTypeOption(String label, String value, IconData icon) {
+    final bool isSelected = _notifType == value;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() {
+          _notifType = value;
+          if (value == 'popup') {
+            _isScheduled = false; // الإعلان المنبثق فوري (يظهر عند فتح التطبيق).
+            _scheduledTime = null;
+          }
+        }),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFF5D1B5E) : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: isSelected ? Colors.white : Colors.grey[600]),
+              const SizedBox(width: 6),
+              Text(label,
+                  style: GoogleFonts.tajawal(
+                      color: isSelected ? Colors.white : Colors.grey[600],
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildLuxuryField({required TextEditingController controller, required String label, required IconData icon, int maxLines = 1}) {
     return Container(
       decoration: BoxDecoration(
@@ -376,8 +443,14 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
             elevation: 5,
             shadowColor: const Color(0xFF1E293B).withValues(alpha: 0.4),
           ),
-          icon: Icon(_isScheduled ? Icons.calendar_today_rounded : Icons.send_rounded),
-          label: Text(_isScheduled ? "جدولة عملية البث" : "إطلاق البث الموحد الآن", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),
+          icon: Icon(_notifType == 'popup'
+              ? Icons.web_asset_rounded
+              : (_isScheduled ? Icons.calendar_today_rounded : Icons.send_rounded)),
+          label: Text(
+              _notifType == 'popup'
+                  ? "نشر الإعلان المنبثق"
+                  : (_isScheduled ? "جدولة عملية البث" : "إطلاق البث الموحد الآن"),
+              style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),
         ),
     );
   }
@@ -396,7 +469,28 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
     setState(() => _isSending = true);
 
     try {
-      if (_isScheduled) {
+      if (_notifType == 'popup') {
+        // (دمج من الويب) إعلان منبثق — يعرضه popup_service للعميل (type=='popup'،
+        // يرتّبه بـ sent_at ويعرضه خلال 24 ساعة عند فتح التطبيق).
+        await FirebaseFirestore.instance.collection('notifications_log').add({
+          'title': _titleCtrl.text.trim(),
+          'body': _bodyCtrl.text.trim(),
+          'type': 'popup',
+          'target': _target == 'all_users' ? 'all' : _target,
+          if (_imageCtrl.text.trim().isNotEmpty)
+            'popup_image': _imageCtrl.text.trim(),
+          'sent_at': FieldValue.serverTimestamp(),
+        });
+        // سجلّ للتاريخ في broadcasts.
+        await FirebaseFirestore.instance.collection('broadcasts').add({
+          'title': _titleCtrl.text.trim(),
+          'body': _bodyCtrl.text.trim(),
+          'target': _target,
+          'timestamp': FieldValue.serverTimestamp(),
+          'sent_by': 'Admin',
+          'kind': 'popup',
+        });
+      } else if (_isScheduled) {
         await ZyiarahMessagingService().scheduleBroadcast(
           title: _titleCtrl.text.trim(),
           body: _bodyCtrl.text.trim(),
@@ -438,17 +532,23 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
       if (mounted) {
         ZyiarahCoreService.triggerHapticSuccess();
         final wasScheduled = _isScheduled;
+        final wasPopup = _notifType == 'popup';
         setState(() {
           _isSending = false;
           if (!_isScheduled) {
             _titleCtrl.clear();
             _bodyCtrl.clear();
+            _imageCtrl.clear();
           }
           _isScheduled = false;
           _scheduledTime = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(wasScheduled ? "تم جدولة البث بنجاح" : "تم إطلاق البث بنجاح 🚀"),
+          content: Text(wasScheduled
+              ? "تم جدولة البث بنجاح"
+              : wasPopup
+                  ? "تم نشر الإعلان المنبثق ✅"
+                  : "تم إطلاق البث بنجاح 🚀"),
           backgroundColor: Colors.green,
         ));
       }

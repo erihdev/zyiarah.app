@@ -3,8 +3,22 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/audit_service.dart';
 
-class AdminUsersScreen extends StatelessWidget {
+class AdminUsersScreen extends StatefulWidget {
   const AdminUsersScreen({super.key});
+
+  @override
+  State<AdminUsersScreen> createState() => _AdminUsersScreenState();
+}
+
+class _AdminUsersScreenState extends State<AdminUsersScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _search = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   Future<void> _deleteUser(BuildContext context, String uid, String name) async {
     final confirm = await showDialog<bool>(
@@ -190,23 +204,21 @@ class AdminUsersScreen extends StatelessWidget {
               );
             }
 
-            final docs = snapshot.data!.docs;
+            final allDocs = snapshot.data!.docs;
 
-            if (docs.isEmpty) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.person_search, size: 64, color: Colors.grey.shade300),
-                    const SizedBox(height: 16),
-                    Text(
-                      'لا يوجد عملاء مسجلون بعد',
-                      style: GoogleFonts.tajawal(fontSize: 18, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              );
-            }
+            // تصفية محليّة على القائمة المحمَّلة فقط (لا نغيّر استعلام Firestore)
+            final String query = _search.trim().toLowerCase();
+            final docs = query.isEmpty
+                ? allDocs
+                : allDocs.where((d) {
+                    final u = d.data() as Map<String, dynamic>;
+                    final name = (u['name'] ?? '').toString().toLowerCase();
+                    final phone = (u['phone'] ?? '').toString().toLowerCase();
+                    final email = (u['email'] ?? '').toString().toLowerCase();
+                    return name.contains(query) ||
+                        phone.contains(query) ||
+                        email.contains(query);
+                  }).toList();
 
             return Column(
               children: [
@@ -225,6 +237,71 @@ class AdminUsersScreen extends StatelessWidget {
                     ],
                   ),
                 ),
+                // شريط البحث الحيّ — يصفّي القائمة المعروضة فقط
+                Container(
+                  color: Colors.white,
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (v) => setState(() => _search = v),
+                    textInputAction: TextInputAction.search,
+                    style: GoogleFonts.tajawal(fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: 'ابحث بالاسم أو الجوال أو البريد',
+                      hintStyle: GoogleFonts.tajawal(
+                          fontSize: 14, color: Colors.grey.shade400),
+                      prefixIcon: const Icon(Icons.search_rounded,
+                          color: Color(0xFF5D1B5E)),
+                      suffixIcon: _search.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.close_rounded,
+                                  color: Color(0xFF64748B)),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _search = '');
+                              },
+                            ),
+                      isDense: true,
+                      filled: true,
+                      fillColor: const Color(0xFFF1F5F9),
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(
+                            color: Color(0xFF5D1B5E), width: 1.5),
+                      ),
+                    ),
+                  ),
+                ),
+                if (docs.isEmpty)
+                  Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.search_off_rounded,
+                              size: 64, color: Colors.grey.shade300),
+                          const SizedBox(height: 16),
+                          Text(
+                            'لا نتائج للبحث «${_search.trim()}»',
+                            style: GoogleFonts.tajawal(
+                                fontSize: 18, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
