@@ -29,6 +29,8 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   String _currentStatus = 'pending';
   String? _selectedDriverId;
   String? _selectedDriverName;
+  // موعد الزيارة القابل للتعديل من قِبل الأدمن — مبدئياً من service_date للطلب.
+  DateTime? _editedSchedule;
   List<Map<String, dynamic>> _drivers = [];
   bool _isLoadingDrivers = true;
 
@@ -98,6 +100,8 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
           _currentStatus = _orderData?['status'] ?? 'pending';
           _selectedDriverId = _orderData?['driver_id'];
           _selectedDriverName = _orderData?['assigned_driver'];
+          final sd0 = _orderData?['service_date'];
+          _editedSchedule = sd0 is Timestamp ? sd0.toDate() : null;
           _isLoading = false;
         });
         _fetchDrivers();
@@ -177,7 +181,17 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
           // scheduled_at لازم لتذكير الساعة (remindDriversUpcomingTasks يستعلم به).
           // كان مفقوداً في هذا المسار فتفوت الطلبات المُسندة يدوياً تذكيرَ السائق.
           final sd = _orderData?['service_date'];
-          if (sd is Timestamp) updatePayload['scheduled_at'] = sd;
+          final DateTime? originalSchedule = sd is Timestamp ? sd.toDate() : null;
+          if (_editedSchedule != null &&
+              _editedSchedule != originalSchedule) {
+            // الأدمن غيّر الموعد → اكتب التاريخ الجديد في الحقلين معاً كي يراه كامل
+            // النظام (تذكيرات السائق + العميل) لا scheduled_at فقط.
+            final ts = Timestamp.fromDate(_editedSchedule!);
+            updatePayload['service_date'] = ts;
+            updatePayload['scheduled_at'] = ts;
+          } else if (sd is Timestamp) {
+            updatePayload['scheduled_at'] = sd;
+          }
           // Promote to 'scheduled' (a state the driver CAN advance and which shows in
           // the driver's active-orders stream) — not the dead-end 'assigned'.
           if (_currentStatus == 'pending') {
@@ -243,7 +257,48 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
     }
   }
 
-  
+  /// يفتح منتقي التاريخ ثم الوقت (بثيم العلامة #5D1B5E) لتعديل موعد الزيارة.
+  Future<void> _pickSchedule() async {
+    final DateTime base = _editedSchedule ?? DateTime.now();
+    const brand = Color(0xFF5D1B5E);
+
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: base,
+      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: Theme.of(ctx).colorScheme.copyWith(primary: brand),
+        ),
+        child: Directionality(textDirection: TextDirection.rtl, child: child!),
+      ),
+    );
+    if (pickedDate == null || !mounted) return;
+
+    final TimeOfDay? pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(base),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: Theme.of(ctx).colorScheme.copyWith(primary: brand),
+        ),
+        child: Directionality(textDirection: TextDirection.rtl, child: child!),
+      ),
+    );
+    if (pickedTime == null || !mounted) return;
+
+    setState(() {
+      _editedSchedule = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      );
+    });
+  }
+
   /// Calls a Moyasar admin Cloud Function (refund / void / capture).
   Future<void> _moyasarOperation({
     required String functionName,
@@ -705,6 +760,35 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                         },
                         decoration: const InputDecoration(border: OutlineInputBorder()),
                       ),
+                    const SizedBox(height: 20),
+                    const Text("موعد الزيارة"),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: _pickSchedule,
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade500),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.event, color: Color(0xFF5D1B5E), size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _editedSchedule != null
+                                    ? DateFormat('yyyy-MM-dd  •  HH:mm').format(_editedSchedule!)
+                                    : 'لم يُحدَّد موعد — اضغط للتعيين',
+                                style: GoogleFonts.tajawal(fontSize: 14),
+                              ),
+                            ),
+                            const Icon(Icons.edit_calendar, color: Color(0xFF5D1B5E), size: 20),
+                          ],
+                        ),
+                      ),
+                    ),
                     const SizedBox(height: 20),
                     SizedBox(
                       width: double.infinity,
