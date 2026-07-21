@@ -11,7 +11,6 @@ import 'package:zyiarah/services/tamara_service.dart';
 import 'package:zyiarah/services/moyasar_service.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
-import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:zyiarah/screens/moyasar_card_screen.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
@@ -275,15 +274,10 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
       );
     } catch (_) {}
 
-    // 4) إشعار الإدارة بالدفعة — non-fatal
-    ZyiarahMessagingService()
-        .notifyAdminOfPayment(
-          orderCode: widget.orderCode,
-          amount: widget.total,
-          type: 'store',
-          clientName: widget.customerName,
-        )
-        .catchError((_) {});
+    // 4) إشعار الإدارة بالطلب المدفوع + بياناته يتم الآن **خادمياً** عند قلب is_paid
+    //    (sendNotificationToAdminsOnNewStoreOrder): إيميل لبريد الإدارة + إشعار لوحة
+    //    الويب مع الأصناف والمبلغ. أُزيل نداء notifyAdminOfPayment العميلي لتفادي تنبيه
+    //    إداري مكرّر (كان بلا إيميل)، والخادمي أوثق (لا يعتمد على بقاء التطبيق حيّاً).
 
     if (!mounted) return;
     setState(() => _isLoading = false);

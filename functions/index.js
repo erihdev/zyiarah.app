@@ -105,20 +105,38 @@ exports.sendNotificationToAdminsOnNewOrder = onDocumentWritten({document: "order
     });
 
 // 1.6 Notify Admins on New Store Order
-exports.sendNotificationToAdminsOnNewStoreOrder = onDocumentCreated({document: "store_orders/{orderId}", cpu: 0.083},
+exports.sendNotificationToAdminsOnNewStoreOrder = onDocumentWritten({document: "store_orders/{orderId}", cpu: 0.083},
     async (event) => {
-      const snap = event.data;
-      if (!snap) return null;
+      const change = event.data;
+      if (!change) return null;
+      const before = change.before && change.before.exists ? change.before.data() : null;
+      const after = change.after && change.after.exists ? change.after.data() : null;
+      if (!after) return null; // حذف
 
-      const orderData = snap.data();
-      const displayCode = orderData.code || event.params.orderId.substring(0, 6);
+      // نُشعِر الإدارة عند **تأكيد الدفع** لا عند الإنشاء (كطلبات الخدمات — 490e166):
+      // طلب متجر الشركات يُنشأ awaiting_payment قبل الدفع، فكان الإشعار والإيميل يصلان
+      // الإدارة قبل أن يدفع العميل (وقد يهجر). الآن: طلبٌ مدفوع فعلاً فقط.
+      const becamePaid =
+        after.is_paid === true && (!before || before.is_paid !== true);
+      if (!becamePaid) return null;
 
-      // عبر ADMIN_BROADCAST: يكتب admin_notifications (تراها لوحة الويب لحظيّاً) + يرسل FCM
-      // حسب الدور. كان يرسل لموضوع "admins" فقط فلا يصل لوحة الويب إطلاقاً.
+      const displayCode = after.code || event.params.orderId.substring(0, 6);
+      // بيانات الطلب في الإيميل والإشعار (طلبها المالك): العميل، المبلغ، الأصناف.
+      const items = Array.isArray(after.items) ? after.items : [];
+      const itemsLine = items
+          .map((it) => `${(it && it.name) || "منتج"} ×${(it && it.quantity) || 1}`)
+          .join("، ");
+      const total = Number(after.total_amount || after.final_amount || 0);
+      const clientName = after.client_name || "عميل";
+      const body = `طلب متجر مدفوع من ${clientName} بقيمة ${total.toFixed(2)} ر.س` +
+        `${items.length ? ` — ${items.length} صنف: ${itemsLine}` : ""}. رقم الطلب: ${displayCode}`;
+
+      // عبر ADMIN_BROADCAST: يكتب admin_notifications (تراها لوحة الويب لحظيّاً) + FCM
+      // حسب الدور + إيميل لبريد الإدارة (نوع new_store_order_admin ضمن wantsEmail).
       await queuePush(
           "ADMIN_BROADCAST",
-          "طلب متجر جديد! 🛒",
-          `وصلك طلب منتجات من المتجر. رقم الطلب: ${displayCode}`,
+          "طلب متجر مدفوع! 🛒",
+          body,
           "new_store_order_admin", {orderId: event.params.orderId}, ["orders_manager"]);
       return null;
     });
@@ -301,8 +319,18 @@ exports.notifyClientOnStoreOrderStatus = onDocumentUpdated({document: "store_ord
       const m = map[after.status];
       if (!m) return null;
       const code = after.code || event.params.orderId.substring(0, 6);
+      // إيميل + إشعار لكل نقلة (طلبها المالك): تحت المراجعة ⇒ جاري التوصيل ⇒ تم التسليم.
+      // بريد العميل من الطلب (يُكتب عند الإنشاء) أو من users كاحتياط للطلبات القديمة؛
+      // النوع store_update ضمن wantsEmail فيُرسَل الإيميل مع الإشعار.
+      let clientEmail = after.client_email;
+      if (!clientEmail) {
+        try {
+          const u = await admin.firestore().collection("users").doc(clientId).get();
+          clientEmail = u.exists ? (u.data() && u.data().email) : null;
+        } catch (_) { clientEmail = null; }
+      }
       await queuePush(clientId, m.t, `${m.b} (#${code})`, "store_update",
-          {orderId: event.params.orderId});
+          {orderId: event.params.orderId}, null, clientEmail || undefined);
       return null;
     });
 
@@ -979,10 +1007,19 @@ exports.processNotificationTriggers = onDocumentCreated(
         // كل تنبيهات الإدارة للكيانات الجديدة تُرسل بريداً لبريد الإدارة المُهيّأ: طلب خدمة
         // (new_order_admin) + متجر + صيانة + عقد. كان البريد يصل للمتجر فقط لأن بقية
         // الأنواع لم تكن مُدرَجة هنا.
-        const wantsEmail = (type === "email" || type === "hybrid" ||
+        const wantsEmailByType = (type === "email" || type === "hybrid" ||
           type === "admin_order_alert" || type === "new_store_order_admin" ||
           type === "new_order_admin" || type === "new_maintenance_admin" ||
-          type === "new_contract_admin");
+          type === "new_contract_admin" ||
+          // تحديثات طلب المتجر للعميل تصله إيميلاً أيضاً (طلبها المالك): تحت المراجعة/
+          // جاري التوصيل/تم التسليم — recipientEmail = بريد العميل يمرّره المُشغّل.
+          type === "store_update");
+        // إشعار عميل (لا ADMIN_BROADCAST) بلا بريد صريح: لا نُرسِل إيميلاً إطلاقاً —
+        // وإلا وقع recipientEmail على بريد الإدارة الافتراضي فيصل تحديثُ العميل للإدارة
+        // (خصوصاً عملاء مصادقة الهاتف بلا بريد). الإدارة لها بريدها المُهيّأ فتُستثنى.
+        const clientWithoutEmail = toUid !== "ADMIN_BROADCAST" &&
+          !(trigger.recipientEmail || data.customerEmail);
+        const wantsEmail = wantsEmailByType && !clientWithoutEmail;
         // SECURITY: notification_triggers is client-writable; refuse to relay
         // email to any address that isn't a registered user/driver/admin.
         const emailAllowed = wantsEmail ? await isAllowedEmailRecipient(recipientEmail) : false;

@@ -86,11 +86,15 @@ class ZyiarahStoreService {
 
     String clientName = 'عميل زيارة';
     String clientPhone = '000000000';
+    // بريد العميل يُحفظ على الطلب كي يُرسل المُشغّل الخادمي إيميل تحديث الحالة إليه
+    // (تحت المراجعة/جاري التوصيل/تم التسليم) بلا جلبٍ إضافي.
+    String? clientEmail = user.email;
     try {
       final userDoc = await _db.collection('users').doc(user.uid).get();
       if (userDoc.exists) {
         clientName = userDoc.data()?['name'] ?? 'عميل زيارة';
         clientPhone = userDoc.data()?['phone'] ?? '000000000';
+        clientEmail = userDoc.data()?['email'] ?? user.email;
       }
     } catch (e) {
       // Fallback
@@ -147,6 +151,7 @@ class ZyiarahStoreService {
         'client_id': user.uid,
         'client_name': clientName,
         'client_phone': clientPhone,
+        'client_email': clientEmail,
         'items': verifiedItems,
         'total_amount': serverCalculatedTotal,
         'payment_method': 'pending',
