@@ -45,7 +45,8 @@ class _SofaRugCleaningDetailsScreenState
   LocateFailure? _locateFailure;
 
   List<Map<String, dynamic>> _zones = [];
-  final List<SqmPiece> _pieces = [const SqmPiece(kind: SqmPieceKind.sofa)];
+  // تبدأ فارغة: العميل يختار «إضافة كنب» أو «إضافة سجاد» أولاً فتظهر الحقول تحتها.
+  final List<SqmPiece> _pieces = [];
 
   @override
   void initState() {
@@ -191,6 +192,10 @@ class _SofaRugCleaningDetailsScreenState
   void _handleNext() {
     if (_selectedLocation == null) {
       _snack('يرجى تحديد موقعك أولاً');
+      return;
+    }
+    if (_pieces.isEmpty) {
+      _snack('أضيفي كنباً أو سجاداً أولاً');
       return;
     }
     if (totalAmount <= 0) {
@@ -451,7 +456,10 @@ class _SofaRugCleaningDetailsScreenState
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
                 color: const Color(0xFF1E293B))),
-        Text('أدخلي مقاسات كل قطعة — لا يوجد حد أدنى.',
+        Text(
+            _pieces.isEmpty
+                ? 'اختاري نوع القطعة (كنب أو سجاد) لإضافتها ثم أدخلي مقاسها.'
+                : 'أدخلي مقاسات كل قطعة — لا يوجد حد أدنى.',
             style: GoogleFonts.tajawal(
                 fontSize: 12, color: const Color(0xFF94A3B8))),
         const SizedBox(height: 12),
@@ -518,14 +526,14 @@ class _SofaRugCleaningDetailsScreenState
                   style: GoogleFonts.tajawal(
                       fontSize: 12, color: const Color(0xFF94A3B8))),
               const Spacer(),
-              if (_pieces.length > 1)
-                IconButton(
-                  onPressed: () => _removePiece(i),
-                  icon: const Icon(Icons.delete_outline_rounded,
-                      size: 20, color: Color(0xFFDC2626)),
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'حذف',
-                ),
+              // تُحذَف أي قطعة (حتى الأخيرة) — القائمة تبدأ فارغة فلا داعي لإبقاء واحدة.
+              IconButton(
+                onPressed: () => _removePiece(i),
+                icon: const Icon(Icons.delete_outline_rounded,
+                    size: 20, color: Color(0xFFDC2626)),
+                visualDensity: VisualDensity.compact,
+                tooltip: 'حذف',
+              ),
             ],
           ),
           const SizedBox(height: 6),
