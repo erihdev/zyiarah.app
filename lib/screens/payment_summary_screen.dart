@@ -1110,7 +1110,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     // بطاقة «تفاصيل الفاتورة» فلا داعي لتكراره هنا. (الشاشة مدفوعة بلا AppBar،
     // فزر الرجوع ضروري كي لا يعلق المستخدم في صفحة الدفع.)
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 8, 16, 16),
+      // نضيف ارتفاع شريط الحالة/النوتش للبادينغ العلوي (الشاشة مدفوعة بلا AppBar،
+      // فبدونه يقع زر الرجوع والعنوان خلف الشريط في أعلى الشاشة).
+      padding: EdgeInsets.fromLTRB(8, MediaQuery.of(context).padding.top + 10, 16, 16),
       decoration: const BoxDecoration(
         color: Color(0xFF5D1B5E),
         borderRadius: BorderRadius.only(
