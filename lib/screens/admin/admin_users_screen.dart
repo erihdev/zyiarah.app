@@ -56,7 +56,14 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
     if (confirm == true) {
       try {
-        await FirebaseFirestore.instance.collection('users').doc(uid).delete();
+        // نوجّه الحذف عبر account_deletions ليحذف الخادمُ (processAccountDeletion) حساب
+        // Auth + مستند users + رموز FCM. حذف مستند users وحده كان يترك حساب Auth حيّاً
+        // قابلاً للدخول (وبيانات مالية يتيمة + تجاوز التزام الحذف القانوني).
+        await FirebaseFirestore.instance.collection('account_deletions').doc(uid).set({
+          'status': 'deleted',
+          'deleted_by_admin': true,
+          'requested_at': FieldValue.serverTimestamp(),
+        });
         await ZyiarahAuditService().logAction(
           action: 'DELETE_USER',
           details: {'name': name},

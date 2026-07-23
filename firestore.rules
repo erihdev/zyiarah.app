@@ -126,7 +126,10 @@ service cloud.firestore {
     // request deletion of their OWN account — otherwise any user could wipe any other
     // account (including admins) by writing account_deletions/{victimUid}.
     match /account_deletions/{deletionId} {
-      allow create: if isOwner(deletionId);
+      // super admin يحذف مستخدماً آخر عبر كتابة الطلب هنا → processAccountDeletion يحذف
+      // حساب Auth + مستند users + رموز FCM. كان حذف الأدمن يمسح مستند users فقط ويترك
+      // حساب Auth حيّاً قابلاً للدخول. (العميل يحذف حسابه هو فقط — isOwner.)
+      allow create: if isOwner(deletionId) || isSuperAdmin();
       allow read, update, delete: if isSuperAdmin();
     }
 

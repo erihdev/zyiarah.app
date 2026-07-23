@@ -97,14 +97,14 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                           textDirection: TextDirection.rtl,
                                           child: AlertDialog(
                                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                            title: const Text("تأكيد الحذف"),
-                                            content: const Text("هل أنت متأكد من حذف هذا الكادر نهائياً؟"),
+                                            title: const Text("تأكيد التعطيل"),
+                                            content: const Text("سيُعطَّل هذا الكادر ويُمنع من الدخول للتطبيق. (لا يُحذف حسابه — يمكن إعادة تفعيله لاحقاً.)"),
                                             actions: [
                                               TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("إلغاء")),
                                               ElevatedButton(
                                                 onPressed: () => Navigator.pop(ctx, true),
                                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                                                child: const Text("حذف", style: TextStyle(color: Colors.white)),
+                                                child: const Text("تعطيل", style: TextStyle(color: Colors.white)),
                                               ),
                                             ],
                                           ),
@@ -114,7 +114,13 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                       if (confirm == true) {
                                         setDialogState(() => isSaving = true);
                                         try {
-                                          await FirebaseFirestore.instance.collection('drivers').doc(docId).delete();
+                                          // تعطيل بدل حذف: حذف مستند drivers كان يترك حساب Auth
+                                          // حيّاً ويُعطّل بوّابة الطرد (تشترط وجود المستند). is_active=false
+                                          // يُبقي المستند فتطرده بوّابة driver_dashboard.
+                                          await FirebaseFirestore.instance.collection('drivers').doc(docId).update({
+                                            'is_active': false,
+                                            'disabled_at': FieldValue.serverTimestamp(),
+                                          });
                                           await _audit.logAction(
                                             action: ZyiarahAuditService.actionDeleteDriver,
                                             details: {'id': docId},
@@ -122,7 +128,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                           );
                                           if (context.mounted) {
                                             Navigator.pop(ctx);
-                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الكادر بنجاح")));
+                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم تعطيل الكادر — لن يستطيع الدخول")));
                                           }
                                         } catch (e) {
                                           setDialogState(() => isSaving = false);
