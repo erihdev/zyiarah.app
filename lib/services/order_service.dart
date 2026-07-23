@@ -124,14 +124,10 @@ class ZyiarahOrderService {
     // يغطي إلغاء العميل والإدارة والإلغاء المباشر معاً بلا ازدواج. كان هنا نداءٌ
     // من العميل يُضاعف الإشعار عند إلغاء العميل/الإدارة، ويغيب عن الإلغاء المباشر.
 
-    // إشعار الإدارة
-    await ZyiarahMessagingService().triggerNotification(
-      toUid: 'ADMIN_BROADCAST',
-      title: "تم إلغاء طلب ⚠️",
-      body: "تم إلغاء الطلب #${orderCode ?? orderId} بواسطة ${cancelledBy == 'client' ? 'العميل' : 'الإدارة'}.",
-      type: 'admin_order_alert',
-      data: {'orderId': orderId, 'code': orderCode ?? orderId, 'needs_refund': needsRefund.toString()},
-    );
+    // (#3) إشعار الإدارة بالإلغاء صار **خادميّاً** (notifyClientOnOrderCancellation):
+    // مصدر واحد لكل إلغاء بلا ازدواج، ولا يُحجَب بحارس ADMIN_BROADCAST (createdBy='server').
+    // نداء العميل هنا كان يُحقن عبر notification_triggers القابلة للكتابة من العميل، وكان
+    // يُضاعف تنبيه الإدارة عند إلغاء الأدمن (createdBy موثوق يمرّ + المُشغّل الخادمي).
   }
 
   // تحديث حالة الطلب باستخدام Transaction لضمان سلامة البيانات ومنع التعارض

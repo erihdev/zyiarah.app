@@ -278,8 +278,54 @@ exports.notifyAvailableDriversOnNewOrder = onDocumentCreated({document: "orders/
 // ملغاة عمداً: إلغاء الطلب صار يُشعِر العميل عبر sendNotificationOnOrderStatusChange
 // (نص مؤنّث + سجل داخل التطبيق). إبقاء هذا المُشغّل كان يرسل إشعاراً ثانياً مذكّراً
 // ("طلبك") بلا سجل — تكرار وتعارض مع معيار التأنيث. أُبقيَ كـ no-op لتفادي حذف الدالة.
-exports.notifyClientOnOrderCancellation = onDocumentUpdated({document: "orders/{orderId}", cpu: 0.083},
-    async () => null);
+exports.notifyClientOnOrderCancellation = onDocumentUpdated(
+    {document: "orders/{orderId}", cpu: 0.083},
+    async (event) => {
+      const change = event.data;
+      if (!change) return null;
+      const before = change.before.data() || {};
+      const after = change.after.data() || {};
+      if (before.status === "cancelled" || after.status !== "cancelled") return null;
+      const code = after.code || event.params.orderId;
+      const by = after.cancelled_by === "client" ? "العميل" : "الإدارة";
+      // (#3) تنبيه الإدارة خادميّاً (createdBy='server') — يحلّ محلّ نداء العميل
+      // ADMIN_BROADCAST الذي صار يُحجَب بحارس المُرسِل. مصدر واحد لكل إلغاء (لا ازدواج).
+      await queuePush("ADMIN_BROADCAST", "تم إلغاء طلب ⚠️",
+          `أُلغي الطلب #${code} بواسطة ${by}.`,
+          "admin_order_alert",
+          {orderId: event.params.orderId, needs_refund: String(after.needs_refund === true)},
+          ["orders_manager"]).catch(() => {});
+      // إشعار العميل (إن لم يكن هو من ألغى) — لم يكن يصله أي إشعار إلغاء خادميّاً.
+      if (after.client_id && after.cancelled_by !== "client") {
+        const refundMsg = after.needs_refund === true ?
+          " سيُعاد المبلغ المدفوع إلى محفظتك." : "";
+        await queuePush(after.client_id, "تم إلغاء طلبك ⚠️",
+            `أُلغي طلبك #${code}.${refundMsg}`,
+            "order_cancelled", {orderId: event.params.orderId}).catch(() => {});
+      }
+      return null;
+    });
+
+// (#3) تنبيه الإدارة بالتقييم المنخفض خادميّاً — كان يُرسله العميل عبر ADMIN_BROADCAST
+// (يُحجَب الآن بالحارس). يُطلَق مرّة واحدة عند ظهور تقييم <= 2 (before.rating غائب).
+exports.notifyAdminOnLowRating = onDocumentUpdated(
+    {document: "orders/{orderId}", cpu: 0.083},
+    async (event) => {
+      const change = event.data;
+      if (!change) return null;
+      const before = change.before.data() || {};
+      const after = change.after.data() || {};
+      const r = Number(after.rating);
+      if (isNaN(r) || r > 2) return null;
+      if (before.rating != null) return null; // سبق التقييم — لا تكرار
+      const code = after.code || event.params.orderId;
+      const reason = after.rating_reason ? ` — ${after.rating_reason}` : "";
+      await queuePush("ADMIN_BROADCAST", "تحذير: تقييم منخفض ⚠️",
+          `تقييم ${r} نجوم على الطلب #${code}${reason}. يرجى المراجعة.`,
+          "admin_low_rating", {orderId: event.params.orderId},
+          ["orders_manager"]).catch(() => {});
+      return null;
+    });
 
 // إشعار عميل المتجر بتغيّر حالة طلبه (تحضير/شحن/تسليم) — كانت التغييرات صامتة،
 // فلا يعرف العميل مصير طلبه بعد الدفع حتى يصله.
@@ -1006,9 +1052,13 @@ exports.processNotificationTriggers = onDocumentCreated(
         }
         const targetsOtherUser = toUid && toUid !== "ADMIN_BROADCAST" &&
           toUid !== trigger.createdBy;
-        if (!senderIsTrusted && targetsOtherUser) {
+        // (#3) عميلٌ غير موثوق لا يبثّ للإدارة أيضاً — كان يحقن تنبيهاً إدارياً مزيّفاً
+        // + Push لكل الموظّفين. الآن تُولَّد تنبيهات الإلغاء/الدفع/التقييم/الاشتراك/الصيانة
+        // خادميّاً (createdBy='server') فتمرّ، وأي بثٍّ من عميل يُرفَض.
+        const targetsAdmins = toUid === "ADMIN_BROADCAST";
+        if (!senderIsTrusted && (targetsOtherUser || targetsAdmins)) {
           console.warn(`[NOTIF] Refused untrusted trigger from ${trigger.createdBy} to ${toUid}`);
-          await snap.ref.update({processed: true, status: "refused_untrusted_recipient"});
+          await snap.ref.update({processed: true, status: "refused_untrusted_sender"});
           return;
         }
 
