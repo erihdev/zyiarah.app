@@ -7,6 +7,7 @@ const {getFunctions} = require("firebase-admin/functions");
 const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const geofire = require("geofire-common");
+const {computeExpectedBasePrice} = require("./pricing");
 admin.initializeApp();
 
 // Secrets — stored in Firebase Secret Manager, never in source code
@@ -1881,6 +1882,41 @@ exports.verifyMoyasarPayment = onCall(
       if (paidAmountHalalas !== trueAmountHalalas) {
         console.error(`Amount mismatch. Paid: ${paidAmountHalalas}, expected: ${trueAmountHalalas}`);
         throw new HttpsError("failed-precondition", "مبلغ الدفع لا يتطابق مع مبلغ الطلب");
+      }
+
+      // ── تسعير خادمي مرجعي (طور الظلّ — يُسجّل ولا يرفض) ───────────────────────────
+      // يكشف الدفع الناقص (تلاعب العميل بحقل amount) بإعادة حساب السعر الحقيقي من تسعير
+      // المنطقة الموثوق ومقارنته بالمخزَّن. **لا نرفض أي دفعة الآن** كي لا نكسر دفعات
+      // شرعية قبل التأكّد من مطابقة الحساب لكل الحالات؛ نضع price_mismatch للمراجعة، ثم
+      // نُشدّد لاحقاً (نُحوّله رفضاً) بعد ملاحظة أن الطلبات الشرعية تُطابِق.
+      if (orderRef.parent.id === "orders") {
+        try {
+          const od = orderDoc.data();
+          if (od.zone_name) {
+            const zq = await db.collection("service_zones")
+                .where("name", "==", od.zone_name).limit(1).get();
+            if (!zq.empty) {
+              const base = computeExpectedBasePrice(od, zq.docs[0].data());
+              if (base && base > 0) {
+                const expected = Math.round(base * 1.15 * 100) / 100;
+                const paid = Number(od.amount) || 0;
+                const ratio = expected > 0 ? paid / expected : 1;
+                // عتبة متساهلة (نصف المتوقَّع): تلتقط التلاعب الصارخ (دفع 1 ر.س لخدمة
+                // 500) دون تعليم الخصومات/التسعير الديناميكي الشرعي زوراً في طور الظلّ.
+                if (ratio < 0.5) {
+                  console.warn(`[price-shadow] UNDERPAID ${orderId}: paid=${paid} expected=${expected} ratio=${ratio.toFixed(3)} kind=${(od.service_meta && od.service_meta.kind) || "hourly"}`);
+                  await orderRef.update({
+                    price_mismatch: true,
+                    price_expected: expected,
+                    price_shadow_ratio: Math.round(ratio * 1000) / 1000,
+                  }).catch(() => {});
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error(`[price-shadow] ${orderId}:`, e.message);
+        }
       }
 
       // قلب is_paid داخل معامَلة: إشعار مرّة واحدة عند الانتقال false→true.
