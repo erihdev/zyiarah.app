@@ -33,19 +33,28 @@ class ZyiarahFirebaseService {
     );
 
     if (userCredential.user != null) {
-      await saveUserToRegistry(
-        uid: userCredential.user!.uid,
-        name: name,
-        role: 'client',
-      );
-      // حفظ بيانات الجوال والإيميل
-      await _db.collection('users').doc(userCredential.user!.uid).update({
-        'phone': phone,
-        'email': email,
-      });
-
-      // Send Welcome Email via Resend
-      await _commService.sendWelcomeEmail(recipient: email, name: name);
+      final user = userCredential.user!;
+      try {
+        await saveUserToRegistry(uid: user.uid, name: name, role: 'client');
+        // حفظ بيانات الجوال والإيميل
+        await _db.collection('users').doc(user.uid).update({
+          'phone': phone,
+          'email': email,
+        });
+      } catch (e) {
+        // فشل كتابة المستند بعد إنشاء حساب Auth → نحذف الحساب اليتيم كي لا يعلق المستخدم
+        // بـ email-already-in-use بمستندٍ ناقص، فتنجح إعادة المحاولة نظيفةً.
+        try {
+          await user.delete();
+        } catch (_) {}
+        rethrow;
+      }
+      // بريد الترحيب ليس حرجاً لإنشاء الحساب — فشله (شبكة/طابور) لا يُجهض التسجيل.
+      try {
+        await _commService.sendWelcomeEmail(recipient: email, name: name);
+      } catch (e) {
+        debugPrint('sendWelcomeEmail failed (non-fatal): $e');
+      }
     }
     return userCredential;
   }
@@ -84,20 +93,28 @@ class ZyiarahFirebaseService {
     );
 
     if (userCredential.user != null) {
-      await saveUserToRegistry(
-        uid: userCredential.user!.uid,
-        name: name,
-        role: 'client',
-      );
-      // حفظ بيانات إضافية
-      await _db.collection('users').doc(userCredential.user!.uid).update({
-        'phone': phone,
-        'real_email': email,
-      });
-
-      // Send Welcome Email if email is provided
+      final user = userCredential.user!;
+      try {
+        await saveUserToRegistry(uid: user.uid, name: name, role: 'client');
+        // حفظ بيانات إضافية
+        await _db.collection('users').doc(user.uid).update({
+          'phone': phone,
+          'real_email': email,
+        });
+      } catch (e) {
+        // فشل كتابة المستند بعد إنشاء Auth → احذف الحساب اليتيم (كنسخة البريد أعلاه).
+        try {
+          await user.delete();
+        } catch (_) {}
+        rethrow;
+      }
+      // Send Welcome Email if email is provided — غير مُجهِض.
       if (email.isNotEmpty && email.contains('@')) {
-        await _commService.sendWelcomeEmail(recipient: email, name: name);
+        try {
+          await _commService.sendWelcomeEmail(recipient: email, name: name);
+        } catch (e) {
+          debugPrint('sendWelcomeEmail failed (non-fatal): $e');
+        }
       }
     }
     return userCredential;

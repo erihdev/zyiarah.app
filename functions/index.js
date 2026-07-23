@@ -1078,7 +1078,14 @@ exports.processNotificationTriggers = onDocumentCreated(
             try {
               const cu = await admin.firestore().collection("users").doc(String(cb)).get();
               const r = cu.exists ? cu.data().role : null;
-              emailSenderOk = r != null && r !== "client";
+              const cuEmail = cu.exists ?
+                (cu.data().email || cu.data().real_email) : null;
+              // موظّف (إدارة/سائق) مسموح؛ أو عميلٌ يُرسل لبريده المسجَّل هو نفسه (تأكيد
+              // ذاتي كتأكيد الطلب — لا تصيّد). كان بريد تأكيد العميل يُرفَض دائماً.
+              emailSenderOk = (r != null && r !== "client") ||
+                (!!cuEmail && !!recipientEmail &&
+                  String(cuEmail).toLowerCase() ===
+                    String(recipientEmail).toLowerCase());
             } catch (_) {
               emailSenderOk = false;
             }

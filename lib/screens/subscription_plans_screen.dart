@@ -229,8 +229,9 @@ class _ZyiarahSubscriptionPlansScreenState
     for (final h in slots) {
       final slotKey = '${dateKey}_${h.toString().padLeft(2, '0')}:00';
       final count = _slotCounts[slotKey] ?? 0;
-      // عند غياب بيانات السعة/السائقين (<=0) لا نحجب كل الخانات — وإلا نحجب الممتلئة.
-      result[h] = _maxTeamsPerSlot <= 0 ? true : count < _maxTeamsPerSlot;
+      // لا فريق متاح (<=0) ⇒ **تُحجَب** كل الخانات (كان الحارس معكوساً يعرضها متاحةً
+      // فيوقّع العميل باقة بلا سائق)؛ وإلا نحجب الممتلئة فقط.
+      result[h] = _maxTeamsPerSlot <= 0 ? false : count < _maxTeamsPerSlot;
     }
     setState(() {
       _slotAvailability = result;
