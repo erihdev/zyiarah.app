@@ -93,6 +93,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
     final data = doc.data();
     setState(() => _driverName = data?['name'] as String? ?? 'السائق');
     if (data?['is_available'] != true || (data?['status'] as String?) == 'off') {
+      // لا نُعِد الضبط أثناء مهمة نشطة (current_order_id قائم) — كان يكتب حالة متناقضة
+      // (خامل/متاح مع طلب حيّ) تُظهر السائق متاحاً في لوحة الإدارة وهو مشغول.
+      if (data?['current_order_id'] != null) return;
       try {
         await ref.update({'is_available': true, 'status': 'idle'});
       } catch (_) {}
@@ -1311,7 +1314,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
             ).timeout(const Duration(seconds: 8));
             completionDistanceM = Geolocator.distanceBetween(
                 pos.latitude, pos.longitude, loc.latitude, loc.longitude);
-            if (completionDistanceM > 1000) {
+            if (completionDistanceM > 1000 && pos.accuracy <= 100) {
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: Text(

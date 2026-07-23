@@ -227,14 +227,10 @@ class ZyiarahMessagingService {
       data: {'code': orderCode, 'type': type, if (orderId != null) 'orderId': orderId},
     );
 
-    // 2. تنبيه الإدارة (سيتم معالجتها في الـ Cloud Function لإرسالها لجميع المشرفين)
-    await triggerNotification(
-      toUid: 'ADMIN_BROADCAST', // معرف خاص تلتقطه الـ Cloud Function
-      title: "طلب جديد وارد 🔔",
-      body: "وصل طلب $serviceName جديد برقم #$orderCode. اضغط للمراجعة.",
-      type: 'admin_order_alert',
-      data: {'code': orderCode, 'type': type, if (orderId != null) 'orderId': orderId},
-    );
+    // (2) تنبيه الإدارة يتولّاه المُشغّل الخادمي sendNotificationToAdminsOnNewOrder عند
+    // تأكيد الدفع (مرّة واحدة). أُزيل تنبيه العميل المكرّر (admin_order_alert) الذي كان
+    // يُنتج تنبيهاً إدارياً ثانياً لكل طلب — والخادمي أوثق (لا يعتمد بقاء التطبيق حيّاً)،
+    // ويقلّل كتابة العميل لـ ADMIN_BROADCAST عبر notification_triggers.
   }
 
   /// تنبيه الإدارة عند استلام دفعة مالية

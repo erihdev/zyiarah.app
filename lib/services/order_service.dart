@@ -1,6 +1,7 @@
 import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -51,6 +52,13 @@ class ZyiarahOrderService {
         if (currentUserZone == null || !restrictedZones.contains(currentUserZone)) {
           return null; // الكوبون غير متاح في هذه المنطقة
         }
+      }
+
+      // كوبون موجَّه لمستخدم بعينه (إحالة/هدية) لا يستخدمه غيره — كان يُقبل لأي أحد.
+      final target = data['target_user_id'];
+      if (target != null &&
+          target != FirebaseAuth.instance.currentUser?.uid) {
+        return null;
       }
 
       return data;
@@ -430,14 +438,26 @@ class ZyiarahOrderService {
       }
     }
 
-    // 1. تحديث الطلب بالتقييم
-    await _db.collection('orders').doc(orderId).update({
-      'rating': rating,
-      'rating_comment': comment,
-      'rating_reason': reason,
-      'rating_evidence_url': evidenceUrl,
-      'rated_at': FieldValue.serverTimestamp(),
+    // 1. كتابة التقييم **ذرّياً**: نقرأ الحالة داخل المعاملة ونتخطّى إن سبق التقييم —
+    //    يمنع التقييم المزدوج (ضغطتان سريعتان/شاشتان) الذي كان يُفسد تجميعة السائق
+    //    (rating_count يقفز 2) ويكرّر تنبيه الإدارة، لأن القراءة والكتابة كانتا منفصلتين.
+    final orderRef = _db.collection('orders').doc(orderId);
+    final bool didWrite = await _db.runTransaction<bool>((transaction) async {
+      final snap = await transaction.get(orderRef);
+      if (!snap.exists ||
+          (snap.data() as Map<String, dynamic>)['rating'] != null) {
+        return false;
+      }
+      transaction.update(orderRef, {
+        'rating': rating,
+        'rating_comment': comment,
+        'rating_reason': reason,
+        'rating_evidence_url': evidenceUrl,
+        'rated_at': FieldValue.serverTimestamp(),
+      });
+      return true;
     });
+    if (!didWrite) return; // سبق تقييمه — لا تنبيه ولا تحديث تجميعة مكرّر.
 
     // 2. إطلاق رادار حماية السمعة الفاخر إذا كان التقييم منخفضاً
     if (rating <= 2.0) {
