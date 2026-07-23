@@ -73,6 +73,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
         final loc = d.data()['location'];
         if (loc is GeoPoint) {
           if (mounted) setState(() => _deliveryLocation = loc);
+          _persistDeliveryLocation(loc);
           return;
         }
       }
@@ -92,7 +93,20 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
     } else if (result is Map && result['location'] is GeoPoint) {
       loc = result['location'] as GeoPoint;
     }
-    if (loc != null && mounted) setState(() => _deliveryLocation = loc);
+    if (loc != null && mounted) {
+      setState(() => _deliveryLocation = loc);
+      _persistDeliveryLocation(loc);
+    }
+  }
+
+  /// اكتب عنوان التوصيل على الطلب فور اختياره — كي لا يُفقَد إن تعثّر التحديث النهائي بعد
+  /// الدفع (كان يُكتب فقط داخل _finalizeStorePayment، فيضيع مع أي فشل، فيبقى الطلب المدفوع
+  /// بلا عنوان توصيل ويختفي زر الخريطة في لوحة الإدارة).
+  void _persistDeliveryLocation(GeoPoint loc) {
+    FirebaseFirestore.instance
+        .collection('store_orders')
+        .doc(widget.storeOrderId)
+        .update({'delivery_location': loc}).catchError((_) {});
   }
 
   Future<void> _loadConfig() async {

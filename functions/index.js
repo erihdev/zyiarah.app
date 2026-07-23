@@ -1642,11 +1642,66 @@ exports.countCouponUseOnOrderCreate = onDocumentUpdated({document: "orders/{orde
         await db.runTransaction(async (t) => {
           const oSnap = await t.get(orderRef);
           if (oSnap.get("coupon_counted") === true) return; // already counted
+          // نعلّم تجاوز الحدّ (maxUses) عند الاستهلاك: TOCTOU يسمح لطلبين متزامنين بتجاوز
+          // الحدّ (الخصم طُبِّق عميلياً سلفاً فلا يُلغى هنا). العلَم للمراجعة الإدارية —
+          // والمنع النهائي جزء من التسعير الخادمي (طور التشديد Phase 2).
+          const pSnap = await t.get(promoRef);
+          const uses = Number(pSnap.get("uses") || 0);
+          const maxUses = Number(pSnap.get("maxUses") || 0);
+          const overLimit = maxUses > 0 && uses >= maxUses;
           t.update(promoRef, {uses: admin.firestore.FieldValue.increment(1)});
-          t.update(orderRef, {coupon_counted: true});
+          t.update(orderRef, overLimit ?
+            {coupon_counted: true, coupon_overlimit: true} :
+            {coupon_counted: true});
         });
       } catch (e) {
         console.error(`[coupon] use-count failed for order ${event.params.orderId}:`, e.message);
+      }
+      return null;
+    });
+
+// 6c-ter. إشعار العميل والسائق عند **تغيير موعد الزيارة** لطلب مُسنَد نشط — كان تعديل
+// الموعد من لوحة الإدارة يُكتب بصمت (لا مُشغّل يرصد service_date)، فيذهب السائق للموعد
+// القديم أو ينتظر العميل في وقت خاطئ. لا نُشعر عند الإسناد الجديد (يغطّيه مُشغّل الإسناد).
+exports.notifyOnAppointmentChange = onDocumentUpdated(
+    {document: "orders/{orderId}", cpu: 0.083},
+    async (event) => {
+      const change = event.data;
+      if (!change) return null;
+      const before = change.before.data() || {};
+      const after = change.after.data() || {};
+      const bSd = before.service_date;
+      const aSd = after.service_date;
+      const changed = bSd && aSd &&
+        typeof bSd.toMillis === "function" &&
+        typeof aSd.toMillis === "function" &&
+        bSd.toMillis() !== aSd.toMillis();
+      if (!changed) return null;
+      if (after.is_paid !== true) return null;
+      const activeStatuses = ["scheduled", "accepted", "assigned",
+        "on_the_way", "in_progress"];
+      if (!activeStatuses.includes(after.status)) return null;
+      // إسناد جديد (تغيّر السائق) يغطّيه notifyDriverOnAssignment — نتجنّب الازدواج.
+      if ((before.driver_id || null) !== (after.driver_id || null)) return null;
+
+      const when = aSd.toDate();
+      const pad = (n) => String(n).padStart(2, "0");
+      const dateStr = `${when.getFullYear()}-${pad(when.getMonth() + 1)}-` +
+        `${pad(when.getDate())} ${pad(when.getHours())}:00`;
+      const code = after.code || event.params.orderId;
+      const oid = event.params.orderId;
+
+      if (after.client_id) {
+        await queuePush(after.client_id, "تم تغيير موعد زيارتك 🗓️",
+            `موعد طلبك #${code} أصبح ${dateStr}.`,
+            "appointment_changed", {orderId: oid}).catch((e) =>
+          console.error("notifyOnAppointmentChange client:", e.message));
+      }
+      if (after.driver_id) {
+        await queuePush(after.driver_id, "تم تغيير موعد مهمة 🗓️",
+            `موعد الطلب #${code} أصبح ${dateStr}.`,
+            "appointment_changed", {orderId: oid}).catch((e) =>
+          console.error("notifyOnAppointmentChange driver:", e.message));
       }
       return null;
     });
