@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -85,7 +86,9 @@ class _ZyiarahRatingDialogState extends State<ZyiarahRatingDialog> {
                   onTap: () async {
                     final picker = ImagePicker();
                     final picked = await picker.pickImage(source: ImageSource.camera, imageQuality: 50);
-                    if (picked != null) {
+                    // File(dart:io) يرمي UnsupportedError على الويب — نحرسه بـ kIsWeb.
+                    // (الدليل اختياري، والإرسال يبقى ممكناً بدونه على الويب.)
+                    if (picked != null && !kIsWeb) {
                       setState(() => _evidenceImage = File(picked.path));
                     }
                   },

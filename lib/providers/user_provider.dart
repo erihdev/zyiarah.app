@@ -93,7 +93,9 @@ class ZyiarahUserProvider extends ChangeNotifier {
           // يغطي كلا العلمين: is_blocked (القاعدة) و status:'banned' (لوحة React).
           if (data['is_blocked'] == true || data['status'] == 'banned') {
             debugPrint('User $uid is blocked — signing out');
-            FirebaseAuth.instance.signOut();
+            // خروج مركزي: يحذف رمز FCM ويلغي اشتراكات topics قبل إنهاء الجلسة — كان
+            // signOut المباشر يترك الجهاز مشتركاً فيستقبل إشعارات/بثوث الدور بعد الحظر.
+            ZyiarahFirebaseService().signOut();
             return;
           }
           _user = ZyiarahUser.fromMap(uid, data);

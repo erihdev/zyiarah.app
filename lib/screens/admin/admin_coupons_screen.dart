@@ -356,6 +356,19 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                             details: {'code': codeCtrl.text, 'value': valueCtrl.text, 'type': type},
                           );
                         } else {
+                          // نفس فحص التكرار في التعديل: قد يُغيَّر الكود ليطابق كوبوناً آخر،
+                          // فيلتقط تحقّق العميل (limit 1) أحدهما بشكل غير محدَّد. نستبعد المستند الحالي.
+                          final dup = await _db
+                              .collection('promo_codes')
+                              .where('code', isEqualTo: newData['code'] as String)
+                              .get();
+                          if (dup.docs.any((d) => d.id != doc.id)) {
+                            setDialogState(() {
+                              isSaving = false;
+                              codeDup = true;
+                            });
+                            return;
+                          }
                           await _db.collection('promo_codes').doc(doc.id).update(newData);
                           await _audit.logAction(
                             action: ZyiarahAuditService.actionUpdateCoupon,

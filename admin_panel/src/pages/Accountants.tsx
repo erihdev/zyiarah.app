@@ -82,7 +82,10 @@ export default function Accountants() {
 
     const totalRevenue = orders.reduce((sum, o) => sum + (o.amount || 0), 0);
     const totalPayroll = drivers.reduce((sum, d) => sum + (d.monthly_salary || 0), 0);
-    const netProfit = totalRevenue - totalPayroll;
+    // amount شامل ضريبة 15% (مستحقة لهيئة الزكاة، ليست إيراداً) — نصفّيها قبل حساب الربح
+    // كي لا يتضخّم «صافي الربح». متّسق مع الفاتورة/ZATCA/التحليلات.
+    const netRevenue = totalRevenue - totalRevenue / 1.15;
+    const netProfit = netRevenue - totalPayroll;
 
     const paymentBreakdown: Record<string, number> = {};
     orders.forEach(o => {

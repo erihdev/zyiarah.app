@@ -71,8 +71,13 @@ export default function StoreOrders() {
       const ords: StoreOrder[] = [];
       snapshot.forEach((doc) => {
         ords.push({ id: doc.id, ...doc.data() } as StoreOrder);
-      }, (e: unknown) => { console.error("StoreOrders listener error:", e); setLoading(false); });
+      });
       setOrders(ords);
+      setLoading(false);
+    }, (e: unknown) => {
+      // كان معالج الخطأ يُمرَّر خطأً كوسيط ثانٍ لـ forEach (thisArg) فلا يُستدعى أبداً،
+      // فيعلق الدوّار عند فشل المستمع. مكانه الصحيح الوسيط الثالث لـ onSnapshot.
+      console.error("StoreOrders listener error:", e);
       setLoading(false);
     });
     return () => unsubscribe();
