@@ -12,8 +12,10 @@ void main() {
         reason: 'بلا builder يبقى التطبيق ممتدّاً لكامل عرض الـ iPad');
     expect(main.contains('const maxWidth = 600.0;'), isTrue);
     // الهواتف (عرض ≤ الحدّ) لا تتأثر إطلاقاً.
-    expect(main.contains('if (mq.size.width <= maxWidth) return child;'), isTrue,
-        reason: 'الهاتف يجب أن يمرّ بلا حصر');
+    // (#16) صار يمرّر gated (= child أو شاشة الصيانة عبر بوّابة الصيانة الشاملة) — لا
+    // يضيف أيّ قيد عرض، فالهاتف يبقى بلا حصر تماماً كما كان مع child.
+    expect(main.contains('if (mq.size.width <= maxWidth) return gated;'), isTrue,
+        reason: 'الهاتف يجب أن يمرّ بلا حصر عرض');
   });
 
   test('MediaQuery يُحدَّث للعرض المحصور (منع تجاوز الشاشات)', () {

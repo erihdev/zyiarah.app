@@ -93,9 +93,13 @@ class ZyiarahApp extends StatelessWidget {
       // (عرض ≤ الحدّ) لا تتأثر إطلاقاً، وiPad يعرض واجهة نظيفة كما صُمِّمت تماماً.
       builder: (context, child) {
         if (child == null) return const SizedBox.shrink();
+        // (#16) بوّابة الصيانة الشاملة: في MaterialApp.builder فوق كل المسارات
+        // **والروابط العميقة** المدفوعة على الـ navigator الجذري — بدل حصرها في فرع
+        // '/' داخل AuthWrapper (الذي كان يُتجاوَز برابط عميق أو URL مباشر على الويب).
+        final gated = _maintenanceGate(context, child);
         final mq = MediaQuery.of(context);
         const maxWidth = 600.0;
-        if (mq.size.width <= maxWidth) return child; // هاتف: بلا حصر
+        if (mq.size.width <= maxWidth) return gated; // هاتف: بلا حصر
         return ColoredBox(
           color: const Color(0xFFE6E7EE),
           child: Center(
@@ -107,7 +111,7 @@ class ZyiarahApp extends StatelessWidget {
                 // الكامل — وإلّا تجاوزت أي شاشة تحسب أبعادها من MediaQuery.size.
                 child: MediaQuery(
                   data: mq.copyWith(size: Size(maxWidth, mq.size.height)),
-                  child: child,
+                  child: gated,
                 ),
               ),
             ),
@@ -124,6 +128,38 @@ class ZyiarahApp extends StatelessWidget {
       ],
     );
   }
+}
+
+/// (#16) بوّابة الصيانة الشاملة — تُعرض شاشة الصيانة للعملاء/الضيوف حين
+/// maintenance_mode=true، فوق كل الشاشات (لأنها في MaterialApp.builder). الإدارة
+/// والسائقون معفَوْن؛ fail-open: تعذّر القراءة/غياب العلم/أثناء تحميل الدور ⇒ التطبيق طبيعي.
+Widget _maintenanceGate(BuildContext context, Widget child) {
+  Stream<DocumentSnapshot>? stream;
+  try {
+    stream = FirebaseFirestore.instance
+        .collection('system_configs')
+        .doc('main_settings')
+        .snapshots();
+  } catch (_) {
+    return child; // Firebase غير مهيّأ (نادر/اختبار) ⇒ لا بوّابة، لا نُسقط التطبيق
+  }
+  return StreamBuilder<DocumentSnapshot>(
+    stream: stream,
+    builder: (context, snap) {
+      final data = snap.data?.data() as Map<String, dynamic>?;
+      final maintenance = data != null && data['maintenance_mode'] == true;
+      if (!maintenance) return child;
+      ZyiarahUserProvider? up;
+      try {
+        up = Provider.of<ZyiarahUserProvider>(context);
+      } catch (_) {}
+      // غير المسجّل يصل شاشات الدخول/التسجيل (وإلّا تعذّر على الإدارة/السائق الدخول
+      // أثناء الصيانة = جمود). وأثناء تحميل الدور لا نقفل. نقفل **العميل المسجَّل فقط**.
+      if (up == null || !up.isAuthenticated || up.isLoading) return child;
+      if (up.role == 'client') return const _MaintenanceScreen();
+      return child; // إدارة/سائق/دور غير معروف ⇒ لا يُقفل (fail-open)
+    },
+  );
 }
 
 class AuthWrapper extends StatelessWidget {
