@@ -171,40 +171,52 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
           adminOverride: true, // إكمال يدوي إداري — يتجاوز فرض التسلسل
         );
       } else {
-        // Non-terminal: assignment / manual status override written directly.
-        final Map<String, dynamic> updatePayload = {'status': _currentStatus};
-
-        // تعديل الموعد يُطبَّق **بصرف النظر عن وجود سائق** — كان محبوساً داخل شرط
-        // السائق فيُفقَد بصمت لأي طلب بلا سائق مُسنَد رغم أن منتقي الموعد ظاهر دائماً.
         final sd = _orderData?['service_date'];
         final DateTime? originalSchedule = sd is Timestamp ? sd.toDate() : null;
         final bool scheduleChanged =
             _editedSchedule != null && _editedSchedule != originalSchedule;
-        if (scheduleChanged) {
-          // اكتب التاريخ الجديد في الحقلين معاً كي يراه كامل النظام (تذكيرات السائق + العميل).
-          final ts = Timestamp.fromDate(_editedSchedule!);
-          updatePayload['service_date'] = ts;
-          updatePayload['scheduled_at'] = ts;
-        }
+        final DateTime? effectiveSchedule = _editedSchedule ?? originalSchedule;
 
-        if (_selectedDriverId != null) {
-          updatePayload['driver_id'] = _selectedDriverId!;
-          updatePayload['driver_name'] = _selectedDriverName ?? '';
-          updatePayload['assigned_driver'] = _selectedDriverName ?? '';
-          updatePayload['assigned_at'] = FieldValue.serverTimestamp();
-          // scheduled_at لازم لتذكير الساعة (remindDriversUpcomingTasks يستعلم به)؛
-          // إن لم يتغيّر الموعد نضبطه من الأصل كي لا تفوت التذكيرات الإسناد اليدوي.
-          if (!scheduleChanged && sd is Timestamp) {
-            updatePayload['scheduled_at'] = sd;
+        // (#22) الإسناد الابتدائي (طلب pending + سائق + موعد) يمرّ عبر approveAndAssignOrder
+        // الذي يعيد فحص التعارض **داخل معاملة** فيمنع الحجز المزدوج عند إسناد مديرَين نفس
+        // السائق لفترتين متداخلتين معاً — بدل كتابة driver_id مباشرةً بلا فحص ذرّي. الدالة
+        // تكتب status/driver/service_date/scheduled_at/booking من scheduledIso (أكمل من المباشر).
+        if (_selectedDriverId != null &&
+            _currentStatus == 'pending' &&
+            effectiveSchedule != null) {
+          await FirebaseFunctions.instance
+              .httpsCallable('approveAndAssignOrder')
+              .call({
+            'orderId': widget.orderId,
+            'driverId': _selectedDriverId,
+            'scheduledIso': effectiveSchedule.toIso8601String(),
+          });
+          if (mounted) setState(() => _currentStatus = 'scheduled');
+        } else {
+          // المسار المباشر: تغيير حالة، أو تعديل موعد بلا سائق، أو إعادة إسناد/جدولة لطلب
+          // غير pending. تعديل الموعد يُطبَّق بصرف النظر عن السائق (كان محبوساً بشرطه).
+          // (التعارض الذرّي لإعادة الجدولة لطلب مُسنَد = بند منفصل #23.)
+          final Map<String, dynamic> updatePayload = {'status': _currentStatus};
+          if (scheduleChanged) {
+            final ts = Timestamp.fromDate(_editedSchedule!);
+            updatePayload['service_date'] = ts;
+            updatePayload['scheduled_at'] = ts;
           }
-          // Promote to 'scheduled' (a state the driver CAN advance and which shows in
-          // the driver's active-orders stream) — not the dead-end 'assigned'.
-          if (_currentStatus == 'pending') {
-            updatePayload['status'] = 'scheduled';
-            setState(() => _currentStatus = 'scheduled');
+          if (_selectedDriverId != null) {
+            updatePayload['driver_id'] = _selectedDriverId!;
+            updatePayload['driver_name'] = _selectedDriverName ?? '';
+            updatePayload['assigned_driver'] = _selectedDriverName ?? '';
+            updatePayload['assigned_at'] = FieldValue.serverTimestamp();
+            if (!scheduleChanged && sd is Timestamp) {
+              updatePayload['scheduled_at'] = sd;
+            }
+            if (_currentStatus == 'pending') {
+              updatePayload['status'] = 'scheduled';
+              if (mounted) setState(() => _currentStatus = 'scheduled');
+            }
           }
+          await _db.collection('orders').doc(widget.orderId).update(updatePayload);
         }
-        await _db.collection('orders').doc(widget.orderId).update(updatePayload);
       }
 
       // 3. Audit: dedicated assignment entry when driver changes
@@ -252,8 +264,13 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('فشل تحديث الطلب — تحقق من اتصالك بالإنترنت'),
+        // رسالة الخادم عند رفض الإسناد الذرّي (السائق مشغول/اعتُمد من مدير آخر) بدل رسالة عامة.
+        final msg = e is FirebaseFunctionsException &&
+                (e.message ?? '').trim().isNotEmpty
+            ? e.message!.trim()
+            : 'فشل تحديث الطلب — تحقق من اتصالك بالإنترنت';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(msg),
           backgroundColor: Colors.red,
         ));
       }
