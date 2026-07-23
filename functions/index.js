@@ -1494,7 +1494,12 @@ exports.onOrderRewards = onDocumentUpdated({document: "orders/{orderId}", cpu: 0
           try {
             await db.runTransaction(async (t) => {
               const oSnap = await t.get(orderRef);
-              if (oSnap.get("refund_credited") === true) return;
+              // قراءة طازجة داخل المعاملة: إن سبق إيداع المحفظة أو ردّت البوابة الدفعة
+              // (payment_status='refunded')، لا نودِع ثانيةً — يمنع استرداداً مزدوجاً
+              // (بطاقة + محفظة) حين يسبق ردُّ البوابة تنفيذَ هذه المعاملة. الفحص الخارجي
+              // كان يعتمد لقطة حدثٍ قديمة قد تسبق كتابة payment_status='refunded'.
+              if (oSnap.get("refund_credited") === true ||
+                  oSnap.get("payment_status") === "refunded") return;
               t.set(walletRef, {
                 balance: admin.firestore.FieldValue.increment(amount),
                 last_updated: admin.firestore.FieldValue.serverTimestamp(),
@@ -3306,8 +3311,12 @@ exports.confirmPendingTamaraOrders = onSchedule(
             await _tamaraFlipPaid(db, doc.id, "order_" + st);
             justConfirmed = true;
           } else if (["declined", "expired", "canceled"].includes(st)) {
+            // نُلغي الطلب (لا نتركه pending) كي يحرّر خانة الحجز ويُصحّح العدّاد — كان
+            // يبقى pending فيستهلك السعة أبداً رغم فشل الدفع.
             await doc.ref.update({
+              status: "cancelled",
               payment_status: "failed",
+              cancel_reason: "tamara_" + st,
               tamara_status: "order_" + st,
               updated_at: admin.firestore.FieldValue.serverTimestamp(),
             });
@@ -3334,9 +3343,90 @@ exports.confirmPendingTamaraOrders = onSchedule(
           console.error(`confirmPendingTamaraOrders ${doc.id}:`, e.message);
         }
       }
+
+      // اشتراكات تمارا: يُمرَّر معرّف العقد كمرجع تمارا ويعيش في contracts (لا orders)،
+      // فالحلقة أعلاه (تمسح orders فقط) لا تؤكّدها — والويب هوك محجوب. نمسح العقود غير
+      // المؤكّدة الحديثة. العقد يستخدم createdAt (camelCase) وبلا payment_method، فنمرّ
+      // على غير المدفوعة ونستعلم تمارا بمعرّفها (تعيد 404 لغير تمارا فنتخطّاه).
+      try {
+        const sinceC = admin.firestore.Timestamp.fromDate(
+            new Date(Date.now() - 6 * 60 * 60 * 1000));
+        const csnap = await db.collection("contracts")
+            .where("createdAt", ">=", sinceC).get();
+        for (const cdoc of csnap.docs) {
+          const cd = cdoc.data();
+          if (cd.is_paid === true) continue;
+          try {
+            const r = await fetch(
+                `https://api.tamara.co/merchants/orders/reference-id/${cdoc.id}`,
+                {headers: {Authorization: `Bearer ${apiToken}`}});
+            if (!r.ok) continue;
+            const to = await r.json();
+            const st = to.status;
+            if (st === "approved") {
+              const a = await fetch(
+                  `https://api.tamara.co/orders/${to.order_id}/authorise`,
+                  {method: "POST", headers: {
+                    Authorization: `Bearer ${apiToken}`,
+                    "Content-Type": "application/json",
+                  }});
+              if (a.ok) {
+                await _tamaraFlipPaid(db, cdoc.id, "order_authorised");
+                confirmed++;
+              }
+            } else if (["authorised", "captured", "fully_captured",
+              "partially_captured"].includes(st)) {
+              await _tamaraFlipPaid(db, cdoc.id, "order_" + st);
+              confirmed++;
+            }
+          } catch (e) {
+            console.error(`confirmPendingTamaraOrders contract ${cdoc.id}:`, e.message);
+          }
+        }
+      } catch (e) {
+        console.error("confirmPendingTamaraOrders contracts scan:", e.message);
+      }
+
       console.log(`confirmPendingTamaraOrders: confirmed ${confirmed}`);
     },
 );
+
+// ════════════════════════════════════════════════════════════════════════
+// تنظيف الطلبات المهجورة: يُنشأ الطلب is_paid=false status='pending' قبل بوابة الدفع،
+// والمهجور منه (لم يُكمَل دفعه) كان يبقى أبداً فيستهلك سعة الحجز ويضخّم عدّاد الإيراد/
+// النشط (onOrderWritten). نلغيه بعد 30 دقيقة → الانتقال إلى cancelled يُصحّح العدّاد
+// (طرح تلقائي) ويحرّر الخانة. لا يمسّ المدفوع (is_paid===true) إطلاقاً.
+// ════════════════════════════════════════════════════════════════════════
+exports.cancelStaleUnpaidOrders = onSchedule(
+    {schedule: "every 15 minutes", cpu: 0.083},
+    async () => {
+      const db = admin.firestore();
+      const cutoffMs = Date.now() - 30 * 60 * 1000;
+      // استعلام أحادي الحقل (status) تفادياً لفهرس مركّب؛ نُرشّح is_paid+created_at كوداً.
+      const snap = await db.collection("orders")
+          .where("status", "==", "pending").get();
+      let cancelled = 0;
+      for (const doc of snap.docs) {
+        const d = doc.data();
+        if (d.is_paid === true) continue;
+        const c = d.created_at;
+        if (!c || typeof c.toMillis !== "function") continue;
+        if (c.toMillis() > cutoffMs) continue; // أحدث من 30 دقيقة — قد يكون دفعاً جارياً
+        try {
+          await doc.ref.update({
+            status: "cancelled",
+            cancel_reason: "unpaid_expired",
+            cancelled_at: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          cancelled++;
+        } catch (e) {
+          console.error(`cancelStaleUnpaidOrders ${doc.id}:`, e.message);
+        }
+      }
+      if (cancelled) {
+        console.log(`cancelStaleUnpaidOrders: cancelled ${cancelled} stale unpaid order(s).`);
+      }
+    });
 
 // ════════════════════════════════════════════════════════════════════════
 // (2c) تذكير العميل عند انطلاق السائق (on_the_way) — Event-driven
@@ -4007,6 +4097,9 @@ exports.moyasarRefundPayment = onCall(
       if (order) {
         await order.ref.update({
           payment_status: "refunded",
+          // نختم refund_credited أيضاً كي يمنع حارسُ onOrderRewards (refund_credited)
+          // إيداعاً ثانياً في المحفظة — الطرفان الآن متماثلان ضدّ الاسترداد المزدوج.
+          refund_credited: true,
           moyasar_status: result.status,
           refunded_at: admin.firestore.FieldValue.serverTimestamp(),
           // المبلغ الحقيقي يختلف بالمجموعة: store=total_amount، عقد=planPrice، غيرها=amount.
