@@ -192,10 +192,31 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
             'scheduledIso': effectiveSchedule.toIso8601String(),
           });
           if (mounted) setState(() => _currentStatus = 'scheduled');
+        } else if (scheduleChanged &&
+            (_orderData?['driver_id'] ?? '').toString().isNotEmpty &&
+            ['scheduled', 'accepted', 'on_the_way', 'in_progress']
+                .contains(_orderData?['status']) &&
+            (_selectedDriverId == null ||
+                _selectedDriverId == _orderData?['driver_id'])) {
+          // (#23) إعادة جدولة طلب مُسنَد نشط (نفس السائق) تمرّ عبر rescheduleAssignedOrder
+          // الذرّي الذي يعيد فحص تعارض السائق **داخل معاملة** (مستثنياً هذا الطلب) — بدل
+          // كتابة service_date مباشرةً بلا فحص فيصير السائق محجوزاً لمهمتين متداخلتين.
+          await FirebaseFunctions.instance
+              .httpsCallable('rescheduleAssignedOrder')
+              .call({
+            'orderId': widget.orderId,
+            'scheduledIso': _editedSchedule!.toIso8601String(),
+          });
+          // تغيّر الحالة (إن وُجد) يُكتب مباشرةً — لا يمسّ الموعد/السائق.
+          if (_currentStatus != (_orderData?['status'] ?? '')) {
+            await _db
+                .collection('orders')
+                .doc(widget.orderId)
+                .update({'status': _currentStatus});
+          }
         } else {
-          // المسار المباشر: تغيير حالة، أو تعديل موعد بلا سائق، أو إعادة إسناد/جدولة لطلب
+          // المسار المباشر: تغيير حالة، أو تعديل موعد بلا سائق، أو إعادة إسناد لطلب
           // غير pending. تعديل الموعد يُطبَّق بصرف النظر عن السائق (كان محبوساً بشرطه).
-          // (التعارض الذرّي لإعادة الجدولة لطلب مُسنَد = بند منفصل #23.)
           final Map<String, dynamic> updatePayload = {'status': _currentStatus};
           if (scheduleChanged) {
             final ts = Timestamp.fromDate(_editedSchedule!);

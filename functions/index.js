@@ -3003,6 +3003,69 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   return {assigned: true, driverId: driverId, driverName: d.name || "سائق"};
 });
 
+// (#23) إعادة جدولة طلب مُسنَد نشط ذرّياً — يعيد فحص تعارض السائق **داخل معاملة**
+// (مستثنياً هذا الطلب نفسه) قبل كتابة الموعد الجديد. المسار المباشر في تطبيق الأدمن كان
+// يكتب service_date بلا فحص، فيصير السائق محجوزاً لمهمتين متداخلتين. (الإسناد الابتدائي
+// على pending يغطّيه approveAndAssignOrder؛ هذه للطلب المُسنَد فعلاً.)
+exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
+  await _assertAdmin(request);
+  const {orderId, scheduledIso} = request.data;
+  if (!orderId || !scheduledIso) {
+    throw new HttpsError("invalid-argument", "البيانات ناقصة (الطلب/الموعد)");
+  }
+  const startDateTime = new Date(scheduledIso);
+  if (isNaN(startDateTime.getTime())) {
+    throw new HttpsError("invalid-argument", "موعد غير صالح");
+  }
+  const db = admin.firestore();
+  const orderRef = db.collection("orders").doc(orderId);
+  const active = ["scheduled", "accepted", "on_the_way", "in_progress"];
+
+  return await db.runTransaction(async (tx) => {
+    const snap = await tx.get(orderRef);
+    if (!snap.exists) throw new HttpsError("not-found", "الطلب غير موجود");
+    const o = snap.data();
+    const driverId = o.driver_id;
+    if (!driverId || !active.includes(o.status)) {
+      throw new HttpsError("failed-precondition",
+          "الطلب غير مُسنَد نشط — لا يمكن إعادة جدولته بهذا المسار");
+    }
+    const hours = Number(o.hours_contracted || 4);
+    const slotEnd = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
+    const winStart = new Date(startDateTime.getTime() - 8 * 60 * 60 * 1000);
+    const conflictQ = db.collection("orders")
+        .where("service_date", ">=", admin.firestore.Timestamp.fromDate(winStart))
+        .where("service_date", "<", admin.firestore.Timestamp.fromDate(slotEnd))
+        .where("status", "in", active);
+    const conflictSnap = await tx.get(conflictQ);
+    for (const d2 of conflictSnap.docs) {
+      if (d2.id === orderId) continue; // استثناء الطلب الحالي
+      const od = d2.data();
+      if (od.driver_id !== driverId || !od.service_date) continue;
+      const oStart = od.service_date.toDate();
+      const oEnd = new Date(oStart.getTime() +
+        Number(od.hours_contracted || 4) * 60 * 60 * 1000);
+      if (startDateTime < oEnd && oStart < slotEnd) {
+        throw new HttpsError("failed-precondition",
+            "السائق مشغول بمهمة أخرى في هذا الوقت — اختر موعداً آخر");
+      }
+    }
+    const riyadh = new Date(startDateTime.getTime() + 3 * 60 * 60 * 1000);
+    const bookingDate = `${riyadh.getUTCFullYear()}-` +
+      `${String(riyadh.getUTCMonth() + 1).padStart(2, "0")}-` +
+      `${String(riyadh.getUTCDate()).padStart(2, "0")}`;
+    const timeSlot = `${String(riyadh.getUTCHours()).padStart(2, "0")}:00`;
+    tx.update(orderRef, {
+      service_date: admin.firestore.Timestamp.fromDate(startDateTime),
+      scheduled_at: admin.firestore.Timestamp.fromDate(startDateTime),
+      booking_date: bookingDate,
+      booking_time_slot: timeSlot,
+      rescheduled_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return {rescheduled: true};
+  });
+});
+
 // ════════════════════════════════════════════════════════════════════════
 // (الثغرة #1) تحرير السائق آلياً عند إلغاء الطلب — يمنع بقاء السائق "عالقاً"
 // ════════════════════════════════════════════════════════════════════════
