@@ -196,11 +196,30 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                     ],
                   ),
                   if (status == 'in_progress')
-                    const SizedBox(
-                      width: 28, height: 28,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 3, color: Color(0xFF5D1B5E)),
-                    ),
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      // (#43) المدّة المنقضية الحيّة من مرساة البدء الخادميّة start_time.
+                      if (data['start_time'] is Timestamp)
+                        StreamBuilder<Duration>(
+                          stream: ZyiarahCoreService().elapsedSinceStream(
+                              (data['start_time'] as Timestamp).toDate()),
+                          builder: (context, snap) => Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: Text(
+                              ZyiarahCoreService.formatElapsed(
+                                  snap.data ?? Duration.zero),
+                              style: GoogleFonts.tajawal(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: const Color(0xFF5D1B5E)),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(
+                        width: 28, height: 28,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 3, color: Color(0xFF5D1B5E)),
+                      ),
+                    ]),
                   IconButton(
                     onPressed: () {
                       final phone = data['driver_phone'] as String?;

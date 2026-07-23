@@ -20,6 +20,12 @@ const moyasarSecretKey = defineSecret("MOYASAR_SECRET_KEY");
 const moyasarWebhookSecret = defineSecret("MOYASAR_WEBHOOK_SECRET");
 const tabbyWebhookSecret = defineSecret("TABBY_WEBHOOK_SECRET");
 
+// (#1 Phase 2) بوّابة إنفاذ التسعير الخادمي (Tier B): استرداد/إلغاء آليّ عند دفعٍ ناقص
+// صارخ. **مطفأة افتراضياً** — نُشغّل أوّلاً Tier A (تعليم + تنبيه إداري مع خدمة العميل)
+// ونراقب سجلّات [price-shadow] حتى نتأكّد ألّا طلبَ شرعيّاً يبلغ ratio<0.2، ثم نُفعّلها.
+// تفعيلها بحركة مالٍ آلية قبل إثبات التكافؤ في السجلّات = خطر ردّ عميلٍ شرعي.
+const ENFORCE_PRICE_TIER_B = false;
+
 // 1. Notify user when admin replies to a support ticket
 exports.sendNotificationOnTicketReply = onDocumentCreated({document: "support_tickets/{ticketId}/messages/{messageId}", cpu: 0.083},
     async (event) => {
@@ -225,6 +231,28 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated({document: "orde
           title = "تم إلغاء طلبكِ ⚠️";
           body = `${greet}أُلغي طلبكِ. لأي استفسار نحن بخدمتكِ.`;
         }
+      }
+
+      // (#43) مرساة زمنية خادميّة: نضمن start_time عند بدء الخدمة وend_time عند الإكمال
+      // حتى للمسارات التي تكتب الحالة مباشرةً بلا مرساة (تغيير حالة إداري مباشر). كتابةٌ
+      // مرّة واحدة فقط (لا نطمس القيمة الأولى الحقيقية). حارس الحالة الثابتة (السطر ~181)
+      // يمنع إعادة إطلاق المُشغّل من كتابتنا (لا تُغيّر الحالة)، وبقية مُشغّلات orders
+      // مشروطة بتغيّر status/is_paid/driver_id فلا يوقظها تحديث زمني صرف. قبل الخروج
+      // المبكر لـ targetUserId كي تُرسى الطلبات الإدارية بلا عميل. try/catch: فشل الإرساء
+      // لا يُسقط إشعار «بدأت خدمتكِ».
+      try {
+        if (afterData.status === "in_progress" &&
+            !afterData.start_time && !afterData.end_time) {
+          await change.after.ref.update({
+            start_time: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        } else if (afterData.status === "completed" && !afterData.end_time) {
+          await change.after.ref.update({
+            end_time: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+      } catch (e) {
+        console.error("anchor backfill failed", orderId, e.message);
       }
 
       if (!targetUserId) return null;
@@ -1561,7 +1589,10 @@ exports.onOrderRewards = onDocumentUpdated({document: "orders/{orderId}", cpu: 0
               // (بطاقة + محفظة) حين يسبق ردُّ البوابة تنفيذَ هذه المعاملة. الفحص الخارجي
               // كان يعتمد لقطة حدثٍ قديمة قد تسبق كتابة payment_status='refunded'.
               if (oSnap.get("refund_credited") === true ||
-                  oSnap.get("payment_status") === "refunded") return;
+                  oSnap.get("payment_status") === "refunded" ||
+                  // (#18) الاسترداد الآلي طالبَ الطلب سلفاً — لا نودِع المحفظة ثانيةً
+                  // (يمنع دفعاً مزدوجاً: بطاقة + محفظة عند إلغاء العميل أثناء نافذة البوابة).
+                  oSnap.get("auto_refund_processed") === true) return;
               t.set(walletRef, {
                 balance: admin.firestore.FieldValue.increment(amount),
                 last_updated: admin.firestore.FieldValue.serverTimestamp(),
@@ -1866,6 +1897,97 @@ function _reopenFieldsIfSystemCancelled(data) {
   return {};
 }
 
+// (#1) عامل الذروة الخادمي — يعكس getSurgePricingFactor حرفياً (system_configs.surge_percent).
+async function _readSurgeFactor(db) {
+  try {
+    const cfg = await db.collection("system_configs").doc("main_settings").get();
+    const pct = Number(cfg.exists ? cfg.data().surge_percent : 0);
+    if (!Number.isFinite(pct) || pct <= 0) return 1.0;
+    const capped = Math.min(pct, 100);
+    return Math.round((1 + capped / 100) * 100) / 100;
+  } catch (_) {
+    return 1.0;
+  }
+}
+
+// (#1) الخصم **الموثوق** — يُعاد حسابه من مستند الكوبون (promo_codes)، لا من حقل
+// discount_amount الذي يكتبه العميل (وإلّا ضخّمه فألغى الإنفاذ). نأخذ الأصغر بين خصم
+// العميل والخصم الخادمي: لا يستطيع تجاوز القيمة الخادمية، ونحترم خصمه الأقل.
+async function _computeTrustedDiscount(db, od, expectedGross, surge) {
+  const code = (od.coupon_code || "").toString().trim();
+  if (!code) return 0;
+  try {
+    const q = await db.collection("promo_codes")
+        .where("code", "==", code.toUpperCase()).limit(1).get();
+    if (q.empty) return 0; // لا كوبون خادمي → لا خصم موثوق (الطلب يدّعي خصماً وهميّاً)
+    const c = q.docs[0].data();
+    if (c.status && c.status !== "active") return 0;
+    if (c.expiry && typeof c.expiry.toMillis === "function" &&
+        c.expiry.toMillis() < Date.now()) return 0;
+    const value = Number(c.value) || 0;
+    let serverDiscount = c.type === "percentage" ?
+      expectedGross * surge * (value / 100) : value; // نسبة على المشحون المُذرَّى، أو ثابت
+    if (c.max_discount) {
+      serverDiscount = Math.min(serverDiscount, Number(c.max_discount) || serverDiscount);
+    }
+    const clientDiscount = Number(od.discount_amount) || 0;
+    const trusted = clientDiscount > 0 ?
+      Math.min(clientDiscount, serverDiscount) : serverDiscount;
+    return Math.max(0, trusted);
+  } catch (e) {
+    console.error("[price-shadow] discount recompute failed:", e.message);
+    return 0;
+  }
+}
+
+// (#1) هل الطلب من نوعٍ يُعاد تسعيره خادميّاً؟ (بالساعة أو كنب/مكيّف/سيارة). نستعمله
+// لتعليم «تعذّر التحقّق» حين يبدو الطلب قابلاً للتسعير لكن غابت منطقته/تعذّر حسابه.
+function _isPriceableKind(od) {
+  const kind = od.service_meta && od.service_meta.kind;
+  if (["sofa_rug_sqm", "ac_service", "car_interior"].includes(kind)) return true;
+  if (od.hours_contracted && !kind) return true; // بالساعة
+  return false;
+}
+
+// (#1 Tier B) استرداد/إلغاء آليّ لطلبٍ ثبت دفعُه الناقص الصارخ. idempotent عبر مطالبة
+// tamper_handled ذرّياً، مصالحة الحالة الحيّة (void غير المقبوض / refund المقبوض)، وحجب
+// إعادة الفتح. يُعيد {done, action}. لا يُنفَّذ إلّا خلف ENFORCE_PRICE_TIER_B.
+async function _moyasarVoidOrRefund(db, secret, paymentId, orderRef) {
+  const claimed = await db.runTransaction(async (tx) => {
+    const s = await tx.get(orderRef);
+    const d = s.data() || {};
+    if (d.tamper_handled === true || d.payment_status === "voided" ||
+        d.payment_status === "refunded") return false;
+    tx.update(orderRef, {tamper_handled: true, payment_status: "refunding"});
+    return true;
+  });
+  if (!claimed) return {done: true, action: "already"};
+  const live = await _moyasarGetPayment(secret, paymentId);
+  if (live.ok && (live.status === "refunded" || live.status === "voided")) {
+    await orderRef.update({payment_status: live.status, is_paid: false,
+      tamper_blocked: true, refund_credited: true}).catch(() => {});
+    return {done: true, action: live.status};
+  }
+  const authorized = live.ok &&
+    (live.status === "authorized" || live.status === "initiated");
+  const res = authorized ? await _moyasarVoidCore(secret, paymentId) :
+    await _moyasarRefundCore(secret, paymentId, undefined);
+  if (!res.ok) {
+    // لم يُعَد المال: **لا نقلب is_paid ولا نرمي** — نترك الطلب للمراجعة اليدوية.
+    await orderRef.update({payment_status: "payment_review",
+      tamper_gateway_failed: true}).catch(() => {});
+    return {done: false, action: "gateway_error"};
+  }
+  await orderRef.update({
+    payment_status: authorized ? "voided" : "refunded",
+    moyasar_status: res.status, is_paid: false,
+    tamper_blocked: true, refund_credited: true,
+    [authorized ? "voided_at" : "refunded_at"]:
+      admin.firestore.FieldValue.serverTimestamp(),
+  }).catch(() => {});
+  return {done: true, action: authorized ? "voided" : "refunded"};
+}
+
 // 7. Secure Moyasar payment verification on Call function
 exports.verifyMoyasarPayment = onCall(
     {secrets: ["MOYASAR_SECRET_KEY"], cpu: 0.25},
@@ -2018,38 +2140,77 @@ exports.verifyMoyasarPayment = onCall(
         throw new HttpsError("failed-precondition", "مبلغ الدفع لا يتطابق مع مبلغ الطلب");
       }
 
-      // ── تسعير خادمي مرجعي (طور الظلّ — يُسجّل ولا يرفض) ───────────────────────────
-      // يكشف الدفع الناقص (تلاعب العميل بحقل amount) بإعادة حساب السعر الحقيقي من تسعير
-      // المنطقة الموثوق ومقارنته بالمخزَّن. **لا نرفض أي دفعة الآن** كي لا نكسر دفعات
-      // شرعية قبل التأكّد من مطابقة الحساب لكل الحالات؛ نضع price_mismatch للمراجعة، ثم
-      // نُشدّد لاحقاً (نُحوّله رفضاً) بعد ملاحظة أن الطلبات الشرعية تُطابِق.
+      // ── تسعير خادمي مرجعي (#1 Phase 2) ─────────────────────────────────────────
+      // يكشف الدفع الناقص (تلاعب العميل بحقل amount أو تضخيم الخصم) بإعادة حساب السعر من
+      // تسعير المنطقة الموثوق + الخصم المُعاد حسابه من الكوبون (لا نثق بـ discount_amount).
+      // Tier A: تعليم + تنبيه إداري **مع خدمة العميل** (يعمل دائماً). Tier B: استرداد/إلغاء
+      // آليّ للدفع الناقص الصارخ — **خلف ENFORCE_PRICE_TIER_B فقط** (مطفأة حتى تُثبِت السجلّات
+      // ألّا طلبَ شرعيّاً يبلغ ratio<0.2).
+      let tierBReason = null;
       if (orderRef.parent.id === "orders") {
         try {
           const od = orderDoc.data();
-          if (od.zone_name) {
-            const zq = await db.collection("service_zones")
-                .where("name", "==", od.zone_name).limit(1).get();
-            if (!zq.empty) {
-              const base = computeExpectedBasePrice(od, zq.docs[0].data());
-              if (base && base > 0) {
-                const expected = Math.round(base * 1.15 * 100) / 100;
-                // نطرح الخصم الموثوق المخزَّن قبل المقارنة — وإلا عُلِّم كل طلب بكوبون >50%
-                // زوراً (المشحون = الأساس×1.15 − الخصم). surge يرفع النسبة فلا يُدخِل إيجابية كاذبة.
-                const discount = Number(od.discount_amount) || 0;
-                const expectedNet = Math.max(0, expected - discount);
-                const paid = Number(od.amount) || 0;
-                const ratio = expectedNet > 0 ? paid / expectedNet : 1;
-                // عتبة متساهلة (نصف المتوقَّع): تلتقط التلاعب الصارخ (دفع 1 ر.س لخدمة
-                // 500) دون تعليم الخصومات/التسعير الديناميكي الشرعي زوراً في طور الظلّ.
-                if (ratio < 0.5) {
-                  console.warn(`[price-shadow] UNDERPAID ${orderId}: paid=${paid} expected=${expected} ratio=${ratio.toFixed(3)} kind=${(od.service_meta && od.service_meta.kind) || "hourly"}`);
-                  await orderRef.update({
-                    price_mismatch: true,
-                    price_expected: expected,
-                    price_shadow_ratio: Math.round(ratio * 1000) / 1000,
-                  }).catch(() => {});
-                }
+          const method = od.payment_method || "";
+          const paid = Number(paymentData.amount) / 100; // الشحن الفعلي من البوابة (لا od.amount)
+          const nonMoyasar = ["wallet", "subscription", "tamara", "tabby"]
+              .includes(method);
+          // الدفع الأصلي (Apple/Google/Samsung) يُنشأ خادميّاً بالكوبون مضمَّناً وبلا
+          // discount_amount — استثناؤه صريحٌ وإلزاميّ يمنع ردّ كل عميل native-pay بكوبون.
+          const skip = od.server_created_from_payment === true || nonMoyasar || !(paid > 0);
+          if (!skip) {
+            // حلّ المنطقة: نُفضّل zone_id الثابت إن وُجد، وإلّا الاسم (قابل لإعادة التسمية).
+            let zoneData = null;
+            if (od.zone_id) {
+              const zd = await db.collection("service_zones").doc(od.zone_id).get();
+              if (zd.exists) zoneData = zd.data();
+            }
+            if (!zoneData && od.zone_name) {
+              const zq = await db.collection("service_zones")
+                  .where("name", "==", od.zone_name).limit(1).get();
+              if (!zq.empty) zoneData = zq.docs[0].data();
+            }
+            const base = zoneData ? computeExpectedBasePrice(od, zoneData) : null;
+            if (base && base > 0) {
+              const surge = await _readSurgeFactor(db);
+              const expected = Math.round(base * 1.15 * surge * 100) / 100;
+              const trustedDiscount =
+                  await _computeTrustedDiscount(db, od, base * 1.15, surge);
+              const expectedNet = Math.max(0, expected - trustedDiscount);
+              // expectedNet<=0 مع دفعٍ موجب = مريب (خصم يفوق السعر) → Tier A، لا نفترض ratio=1.
+              const suspiciousZero = expectedNet <= 0 && paid > 0;
+              const ratio = expectedNet > 0 ? paid / expectedNet : (suspiciousZero ? 0 : 1);
+              const fresh = od.created_at &&
+                  typeof od.created_at.toMillis === "function" &&
+                  (Date.now() - od.created_at.toMillis()) < 2 * 60 * 60 * 1000;
+              const kind = (od.service_meta && od.service_meta.kind) || "hourly";
+              if (ratio < 0.5 || suspiciousZero) {
+                console.warn(`[price-shadow] UNDERPAID ${orderId}: paid=${paid} expected=${expected} net=${expectedNet} ratio=${ratio.toFixed(3)} kind=${kind}`);
+                await orderRef.update({
+                  price_mismatch: true,
+                  price_expected: expected,
+                  price_expected_net: expectedNet,
+                  price_shadow_ratio: Math.round(ratio * 1000) / 1000,
+                }).catch(() => {});
+                await queuePush("ADMIN_BROADCAST", "مراجعة سعر طلب ⚠️",
+                    `الطلب #${od.code || orderId} مدفوع ${paid} ر.س مقابل ${expectedNet} متوقَّع (${kind}) — يُرجى المراجعة.`,
+                    "admin_price_review",
+                    {orderId, ratio: String(Math.round(ratio * 1000) / 1000)},
+                    ["super_admin", "orders_manager", "accountant_admin"]).catch(() => {});
+                // Tier B: أقل من خُمس المتوقَّع، على طلبٍ حديث موثوق الحساب، بمخرجٍ ≥ 5 ر.س
+                // (أرضية تمنع إيجابيةً كاذبة من التقريب على مقامٍ ضئيل عند كوبون ~100%).
+                const egregious = ratio < 0.2 && expectedNet >= 5 && fresh &&
+                    od.server_created_from_payment !== true;
+                if (egregious && ENFORCE_PRICE_TIER_B) tierBReason = "price_review";
               }
+            } else if (_isPriceableKind(od)) {
+              // نوعٌ قابل للتسعير لكن تعذّر حسابه (منطقة غائبة/غير محلولة) → لا نُمرّره
+              // بصمت؛ نُعلّم وننبّه (Tier A) — يسدّ ثغرة إسقاط zone_name للتهرّب من التحقّق.
+              console.warn(`[price-shadow] UNVERIFIABLE ${orderId}: priceable kind but no zone/base`);
+              await orderRef.update({price_unverifiable: true}).catch(() => {});
+              await queuePush("ADMIN_BROADCAST", "طلب تعذّر التحقّق من سعره ⚠️",
+                  `الطلب #${od.code || orderId} من نوعٍ قابل للتسعير لكن تعذّر التحقّق من مبلغه — يُرجى المراجعة.`,
+                  "admin_price_review", {orderId},
+                  ["super_admin", "orders_manager", "accountant_admin"]).catch(() => {});
             }
           }
         } catch (e) {
@@ -2057,10 +2218,27 @@ exports.verifyMoyasarPayment = onCall(
         }
       }
 
+      // (#1 Tier B) دفعٌ ناقص صارخ مؤكَّد + البوّابة مُفعَّلة → استردّ/ألغِ **قبل** قلب is_paid،
+      // ثم أعِد {blocked} للعميل. طلبٌ ثبت تلاعبه لا يُقلَب مدفوعاً حتى لو فشلت البوابة (يبقى
+      // payment_review للمراجعة اليدوية) — فلا عميلٌ مخصومٌ بلا خدمة يُخدَم بالخطأ.
+      if (tierBReason && paymentId) {
+        const secret = moyasarSecretKey.value();
+        const r = await _moyasarVoidOrRefund(db, secret, paymentId, orderRef);
+        await queuePush("ADMIN_BROADCAST", "حُجب طلبٌ لدفعٍ ناقص صارخ 🛑",
+            `الطلب #${orderId} حُجب (${r.done ? r.action : "بانتظار استرداد يدوي"}) لدفعٍ أقل من خُمس المتوقَّع.`,
+            "admin_price_tamper", {orderId},
+            ["super_admin", "orders_manager", "accountant_admin"]).catch(() => {});
+        return {success: false, blocked: true,
+          reason: r.done ? tierBReason : "payment_review"};
+      }
+
       // قلب is_paid داخل معامَلة: إشعار مرّة واحدة عند الانتقال false→true.
       const flipped = await db.runTransaction(async (tx) => {
         const snap = await tx.get(orderRef);
-        if (snap.data()?.is_paid === true) return false;
+        const cur = snap.data() || {};
+        if (cur.is_paid === true) return false;
+        // (#1) لا نُحيي طلباً حُجب لتلاعبٍ سعري (Tier B) واستُرد مبلغه.
+        if (cur.tamper_blocked === true) return false;
         tx.update(orderRef, {
           payment_status: "paid",
           is_paid: true,
@@ -3389,7 +3567,8 @@ exports.remindClientsUpcomingAppointments = onSchedule(
 // يبقى الطلب pending بلا سائق. هذا المسح يضمن إسناده خادمياً.
 // ════════════════════════════════════════════════════════════════════════
 exports.sweepUnassignedPaidOrders = onSchedule(
-    {schedule: "every 5 minutes", timeZone: "Asia/Riyadh"},
+    {schedule: "every 5 minutes", timeZone: "Asia/Riyadh",
+      secrets: ["MOYASAR_SECRET_KEY"]},
     async () => {
       const db = admin.firestore();
       const now = Date.now();
@@ -3437,10 +3616,31 @@ exports.sweepUnassignedPaidOrders = onSchedule(
           .where("status", "==", "pending")
           .where("service_date", ">=", strandFloor)
           .where("service_date", "<", strandCeil).get();
-      let alerted = 0;
+      // (#18) استرداد آليّ للطلب المدفوع الذي **انتهى** موعده بمهلة ولم يُسنَد قط —
+      // مالٌ مقبوض بلا خدمة. نبوّابه على **نهاية** الموعد (لا بدايته) + مهلة ساعتين كي
+      // لا نصادر مالَ حجزٍ طويل/متأخّر ما زال قابلاً للخدمة أو في طابور إسناد إداري.
+      const secret = moyasarSecretKey.value();
+      const GRACE_MS = 2 * 60 * 60 * 1000;
+      let alerted = 0; let autoResolved = 0;
       for (const doc of strandSnap.docs) {
         const d = doc.data();
-        if (d.driver_id || d.is_paid !== true || d.stranded_alerted === true) continue;
+        if (d.driver_id || d.is_paid !== true) continue;
+        if (!d.service_date || typeof d.service_date.toDate !== "function") continue;
+        const startMs = d.service_date.toDate().getTime();
+        const endMs = startMs + Number(d.hours_contracted || 4) * 60 * 60 * 1000;
+        if (endMs >= now - GRACE_MS) continue; // لم ينتهِ الموعد + المهلة بعد
+        const method = d.payment_method || "";
+        const autoRefundable = secret &&
+          !["subscription", "tamara", "tabby"].includes(method);
+        if (autoRefundable) {
+          const r = await _autoResolveUnfulfilledPaidOrder(db, secret, doc);
+          if (r.handled) { autoResolved++; continue; }
+          // خطأ/تعذّر بعد بدء المعالجة → المعالج ضبط stranded_alerted؛ لا نُكرّر التنبيه.
+          if (["gateway_error", "wallet_error", "no_amount", "no_payment_id"]
+              .includes(r.reason)) continue;
+        }
+        // اشتراك/BNPL/مفتاح مفقود → تنبيه إداري مرّة واحدة فقط.
+        if (d.stranded_alerted === true) continue;
         await queuePush(
             "ADMIN_BROADCAST",
             "طلب مدفوع بلا سائق ⚠️",
@@ -3450,6 +3650,7 @@ exports.sweepUnassignedPaidOrders = onSchedule(
         await doc.ref.update({stranded_alerted: true});
         alerted++;
       }
+      if (autoResolved) console.warn(`sweepUnassignedPaidOrders: auto-resolved ${autoResolved} unfulfillable paid order(s)`);
       if (alerted) console.warn(`sweepUnassignedPaidOrders: ${alerted} stranded paid order(s) escalated to admin`);
     },
 );
@@ -3500,7 +3701,10 @@ exports.reconcileOrphanPayments = onSchedule(
           // السجلّ موجود لكنه غير مدفوع (قُتل التطبيق قبل verify) → أكّده إن غطّى المبلغ
           // المدفوع المستحقَّ. flip is_paid يُشغّل مُشغّلاته (activateContractOnPaid للعقود…).
           if (foundRef) {
-            if (foundData.is_paid !== true) {
+            // (#1) لا نؤكّد طلباً حُجب لتلاعبٍ سعري أو استُرد/أُلغيت دفعته.
+            if (foundData.is_paid !== true && foundData.tamper_blocked !== true &&
+                !["voided", "refunded", "payment_review"]
+                    .includes(foundData.payment_status)) {
               const paidH = Math.round(Number(p.amount));
               const expected = Number(
                   foundData.amount ?? foundData.final_amount ??
@@ -4263,7 +4467,14 @@ exports.moyasarWebhook = onRequest(
                 // (سباق) فحص + تحديث داخل Transaction لمنع معالجة الدفعة مرتين
                 const flipped = await admin.firestore().runTransaction(async (tx) => {
                   const snap = await tx.get(ref);
-                  if (snap.data()?.is_paid) return false;
+                  const cur = snap.data() || {};
+                  if (cur.is_paid) return false;
+                  // (#1) لا يُحيي الويب هوك طلباً حُجب لتلاعبٍ سعري أو استُرد/أُلغي.
+                  if (cur.tamper_blocked === true ||
+                      ["voided", "refunded", "payment_review"]
+                          .includes(cur.payment_status)) {
+                    return false;
+                  }
                   tx.update(ref, {
                     payment_status: "paid",
                     is_paid: true,
@@ -4334,6 +4545,192 @@ exports.moyasarWebhook = onRequest(
 /** Helper: build Moyasar auth header from secret */
 function _moyasarAuthHeader(secret) {
   return `Basic ${Buffer.from(secret + ":").toString("base64")}`;
+}
+
+// ── Moyasar gateway cores (raw HTTP, reusable by admin onCall + automated flows) ──
+// نفصل نداء البوابة الخام عن أغلفة onCall الإدارية كي تستدعيه المسارات الآلية (كرون
+// #18، ومسار التسعير #1) بلا اشتراط صلاحية إدارية.
+async function _moyasarGetPayment(secret, paymentId) {
+  try {
+    const r = await fetch(`https://api.moyasar.com/v1/payments/${paymentId}`, {
+      method: "GET", headers: {"Authorization": _moyasarAuthHeader(secret)},
+    });
+    const j = await r.json().catch(() => ({}));
+    return {ok: r.ok, status: j && j.status, raw: j};
+  } catch (e) {
+    return {ok: false, status: null, error: e.message};
+  }
+}
+
+async function _moyasarRefundCore(secret, paymentId, amountHalalas) {
+  const body = amountHalalas ? JSON.stringify({amount: amountHalalas}) : undefined;
+  const r = await fetch(`https://api.moyasar.com/v1/payments/${paymentId}/refund`, {
+    method: "POST",
+    headers: {"Authorization": _moyasarAuthHeader(secret),
+      ...(body ? {"Content-Type": "application/json"} : {})},
+    ...(body ? {body} : {}),
+  });
+  const result = await r.json().catch(() => ({}));
+  return {ok: r.ok, httpStatus: r.status, status: result && result.status, result};
+}
+
+async function _moyasarVoidCore(secret, paymentId) {
+  const r = await fetch(`https://api.moyasar.com/v1/payments/${paymentId}/void`, {
+    method: "POST", headers: {"Authorization": _moyasarAuthHeader(secret)},
+  });
+  const result = await r.json().catch(() => ({}));
+  return {ok: r.ok, httpStatus: r.status, status: result && result.status, result};
+}
+
+// (#18) استرداد/إلغاء آليّ لطلبٍ مدفوع تعذّر تنفيذه (فات موعده بلا سائق). idempotent:
+// مطالبة ذرّية بعلَم auto_refund_processed + مؤشّر payment_status='refunding' الدائم
+// قبل أي نداء بوابة، مصالحة الحالة الحيّة (void غير المقبوض / refund المقبوض)، وإعادة
+// قراءة driver_id في الكتابة النهائية كي لا نستردّ طلباً أُسنِد أثناء العملية.
+async function _autoResolveUnfulfilledPaidOrder(db, secret, orderDoc) {
+  const orderRef = orderDoc.ref;
+  const d0 = orderDoc.data();
+  const method = d0.payment_method || "";
+  // طرق لا تُسترَد آلياً: الاشتراك (مبلغ 0، مدفوع بالعقد)، وتمارا/تابي (لا API استرداد
+  // خادمي هنا، وإلغاؤها قد يُطلق إيداعاً بينما الأقساط قائمة).
+  if (method === "subscription") return {handled: false, reason: "subscription"};
+  if (method === "tamara" || method === "tabby") return {handled: false, reason: "bnpl"};
+
+  // (1) مطالبة ذرّية تمنع كرونَين متزامنَين من ضرب البوابة لنفس الطلب.
+  const claimed = await db.runTransaction(async (tx) => {
+    const s = await tx.get(orderRef);
+    const d = s.data() || {};
+    if (d.driver_id || d.status !== "pending" || d.is_paid !== true) return false;
+    if (d.auto_refund_processed === true || d.refund_credited === true ||
+        d.payment_status === "refunded" || d.payment_status === "voided") return false;
+    tx.update(orderRef, {
+      auto_refund_processed: true,
+      payment_status: "refunding", // مؤشّر دائم قابل للمصالحة عند تعافي عطل
+    });
+    return true;
+  });
+  if (!claimed) return {handled: false, reason: "claimed_or_ineligible"};
+
+  const clientId = d0.client_id || d0.userId || null;
+  const code = d0.code || orderDoc.id;
+  // نفس تدرّج المبلغ المستعمَل في مسار الاسترداد الإداري (store=total_amount، عقد=planPrice…).
+  const refundAmount = Number(d0.final_amount ?? d0.total_amount ??
+    d0.planPrice ?? d0.amount ?? 0);
+  const hasGatewayPayment = !!d0.moyasar_payment_id;
+
+  // مسار المحفظة: نُعيد للرصيد مباشرةً داخل معاملة واحدة (لا نعتمد على onOrderRewards
+  // الذي يخرج مبكراً ما لم يُوسَم rewards_handled_by='server').
+  if (method === "wallet") {
+    if (!clientId || !(refundAmount > 0)) {
+      await orderRef.update({auto_refund_failed: true, stranded_alerted: true,
+        payment_status: "paid"}).catch(() => {});
+      return {handled: false, reason: "no_amount"};
+    }
+    const walletRef = db.collection("wallets").doc(clientId);
+    const txRef = walletRef.collection("transactions").doc(`refund_${orderDoc.id}`);
+    try {
+      await db.runTransaction(async (t) => {
+        const s = await t.get(orderRef);
+        if (s.get("driver_id")) throw new Error("assigned_midway");
+        t.set(walletRef, {
+          balance: admin.firestore.FieldValue.increment(refundAmount),
+          last_updated: admin.firestore.FieldValue.serverTimestamp(),
+        }, {merge: true});
+        t.create(txRef, {
+          amount: refundAmount, points: 0, type: "refund",
+          description: `استرداد طلبٍ تعذّر تنفيذه #${code}`,
+          order_id: orderDoc.id,
+          created_at: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        t.update(orderRef, {
+          status: "cancelled", cancelled_by: "system",
+          cancel_reason: "unfulfilled_no_driver",
+          cancelled_at: admin.firestore.FieldValue.serverTimestamp(),
+          refund_credited: true, needs_refund: false,
+          rewards_handled_by: "server", payment_status: "refunded", is_paid: false,
+        });
+      });
+    } catch (e) {
+      if (e.message === "assigned_midway") {
+        await orderRef.update({auto_refund_processed: false,
+          payment_status: "paid"}).catch(() => {});
+        return {handled: false, reason: "assigned_midway"};
+      }
+      await orderRef.update({auto_refund_failed: true, stranded_alerted: true})
+          .catch(() => {});
+      return {handled: false, reason: "wallet_error"};
+    }
+    await _notifyAutoRefund(clientId, code, orderDoc.id, refundAmount, "محفظتكِ", "محفظة");
+    return {handled: true, action: "wallet_refund"};
+  }
+
+  // بطاقة/دفع أصلي بلا معرّف بوابة: يتعذّر الاسترداد الآلي — تصعيد إداري.
+  if (!hasGatewayPayment) {
+    await orderRef.update({auto_refund_failed: true, stranded_alerted: true,
+      payment_status: "paid"}).catch(() => {});
+    return {handled: false, reason: "no_payment_id"};
+  }
+
+  // مسار البطاقة/الدفع الأصلي: مصالحة الحالة الحيّة ثم void (غير مقبوض) أو refund كامل.
+  const paymentId = d0.moyasar_payment_id;
+  const live = await _moyasarGetPayment(secret, paymentId);
+  let gatewayOk = false; let finalStatus = null; let action = null;
+  if (live.ok && (live.status === "refunded" || live.status === "voided")) {
+    gatewayOk = true; finalStatus = live.status; action = live.status; // مستردّ سلفاً
+  } else {
+    const authorized = live.ok &&
+      (live.status === "authorized" || live.status === "initiated");
+    const res = authorized ? await _moyasarVoidCore(secret, paymentId) :
+      await _moyasarRefundCore(secret, paymentId, undefined); // استرداد كامل
+    gatewayOk = res.ok; finalStatus = res.status;
+    action = authorized ? "voided" : "refunded";
+  }
+  if (!gatewayOk) {
+    // لا نُعيد ضبط العلَم (قد يكون نجح ثم انقطع الاتصال) — نُثبّت الفشل وننبّه للمصالحة.
+    await orderRef.update({auto_refund_failed: true, stranded_alerted: true})
+        .catch(() => {});
+    return {handled: false, reason: "gateway_error"};
+  }
+  try {
+    await db.runTransaction(async (t) => {
+      const s = await t.get(orderRef);
+      if (s.get("driver_id")) throw new Error("assigned_midway");
+      t.update(orderRef, {
+        status: "cancelled", cancelled_by: "system",
+        cancel_reason: "unfulfilled_no_driver",
+        cancelled_at: admin.firestore.FieldValue.serverTimestamp(),
+        payment_status: action === "voided" ? "voided" : "refunded",
+        moyasar_status: finalStatus, refund_credited: true, needs_refund: false,
+        rewards_handled_by: "server", is_paid: false,
+        refunded_amount: refundAmount,
+        [action === "voided" ? "voided_at" : "refunded_at"]:
+          admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+  } catch (e) {
+    // البوابة نجحت لكن أُسنِد سائق لحظتها (نادر جداً): المال أُعيد فعلاً فنُكمل الإلغاء
+    // (لا نُبقي طلباً «مدفوعاً» بلا مال) ونُعلّم التعارض للمراجعة.
+    await orderRef.update({
+      status: "cancelled", cancelled_by: "system",
+      cancel_reason: "unfulfilled_no_driver_refunded",
+      payment_status: action === "voided" ? "voided" : "refunded",
+      refund_credited: true, is_paid: false, refund_after_assign_conflict: true,
+    }).catch(() => {});
+  }
+  await _notifyAutoRefund(clientId, code, orderDoc.id, refundAmount, "بطاقتكِ",
+      action === "voided" ? "إلغاء تفويض" : "استرداد");
+  return {handled: true, action};
+}
+
+// إشعار موحّد: العميل + بثّ إداري عند الاسترداد الآلي.
+async function _notifyAutoRefund(clientId, code, orderId, amount, dest, adminTag) {
+  if (clientId) {
+    await queuePush(clientId, "تعذّر تنفيذ طلبكِ — أُعيد المبلغ 💳",
+        `تعذّر إيجاد فريق لطلبكِ #${code} فأُعيد ${amount} ر.س إلى ${dest}.`,
+        "order_refunded", {orderId}).catch(() => {});
+  }
+  await queuePush("ADMIN_BROADCAST", "استُرد طلب مدفوع تعذّر تنفيذه ↩️",
+      `أُعيد الطلب #${code} (${adminTag}، ${amount} ر.س) — لا سائق حتى بعد فوات الموعد.`,
+      "admin_order_alert", {orderId}).catch(() => {});
 }
 
 /** Helper: verify caller is admin (super_admin or orders_manager) */

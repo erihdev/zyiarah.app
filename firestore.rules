@@ -209,7 +209,14 @@ service cloud.firestore {
           'driver_location', 'last_location_update', 'updated_at',
           'completed_distance_m',
           'rewards_handled_by', 'proximity_notified'
-        ]);
+        ]) &&
+        // (#43) مرساة زمنية موثوقة: إن كُتب start_time/end_time فيجب أن يساوي request.time.
+        // كتابة FieldValue.serverTimestamp() تُحلّ إلى request.time فتمرّ؛ أي قيمة حرفية
+        // مزوَّرة تُرفَض — فلا يزوّر السائق مدّة الخدمة (يعتمد عليها لون التخطّي وشارات الإدارة).
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['start_time']) ||
+          request.resource.data.start_time == request.time) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['end_time']) ||
+          request.resource.data.end_time == request.time);
 
       // Client: cancel own pending order, update invoice URL, or submit rating
       allow update: if isLoggedIn() &&

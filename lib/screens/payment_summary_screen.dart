@@ -771,10 +771,24 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     // الخلفية على iOS). بهذا يظهر الطلب مؤكّداً لحظةَ نجاح الدفع دون انتظار المُصالِح الدوري.
     if (!isFree && paymentId != null && method != 'wallet') {
       try {
-        await FirebaseFunctions.instance.httpsCallable('verifyMoyasarPayment').call({
+        final vres = await FirebaseFunctions.instance
+            .httpsCallable('verifyMoyasarPayment').call({
           'paymentId': paymentId,
           'orderId': widget.contractId ?? id,
         });
+        // (#1) الخادم حجب الطلب لدفعٍ ناقص صارخ (Tier B) وأعاد المبلغ — لا نتابع للنجاح.
+        // مطفأ فعليّاً ما دام ENFORCE_PRICE_TIER_B=false خادميّاً، لكنه العقد الجاهز للتفعيل.
+        final vdata = vres.data;
+        if (vdata is Map && vdata['blocked'] == true) {
+          if (mounted) {
+            setState(() => _isLoading = false);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('تعذّر تأكيد الدفع — طلبكِ قيد المراجعة، وسيُعاد مبلغكِ إن لزم.'),
+              backgroundColor: Colors.orange,
+            ));
+          }
+          return;
+        }
       } catch (e) {
         // لا نرمي: المُصالِح الخادمي الدوري يضمن الطلب احتياطاً خلال دقائق.
         debugPrint('[verify-first non-fatal] $e');

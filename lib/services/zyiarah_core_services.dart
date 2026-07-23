@@ -6,15 +6,27 @@ import 'package:flutter/services.dart';
 /// تم التطوير بواسطة: إرث (erihdev.com)
 class ZyiarahCoreService {
   
-  // --- 1. نظام قفل الوقت (Time Lock) ---
-  
-  /// دالة إنشاء تيار زمني للمهمة (Countdown)
-  /// تمنع هذه الدالة إنهاء المهمة برمجياً قبل انتهاء العقد
-  Stream<Duration> taskTimerStream(int hours) {
-    int totalSeconds = hours * 3600;
-    return Stream.periodic(const Duration(seconds: 1), (count) {
-      return Duration(seconds: totalSeconds - count);
-    }).take(totalSeconds + 1);
+  // --- 1. مؤقّت المدّة المنقضية (Elapsed timer) ---
+
+  /// تيار «المدّة المنقضية» منذ لحظة بدءٍ **خادميّة** (start_time). عدٌّ تصاعديّ حقيقي
+  /// بدل العدّ التنازلي القديم الذي كان يفترض ساعات العقد بلا مرساة زمنية فعلية.
+  /// يُطلق قيمةً فوراً ثم كل ثانية، ويُثبّت السالب على صفر (ساعة الجهاز قد تتخلّف عن
+  /// الخادم فتُنتج فرقاً سالباً يعرضه المنسّق كقمامة).
+  Stream<Duration> elapsedSinceStream(DateTime startedAt) async* {
+    while (true) {
+      final d = DateTime.now().difference(startedAt);
+      yield d.isNegative ? Duration.zero : d;
+      await Future.delayed(const Duration(seconds: 1));
+    }
+  }
+
+  /// منسّق مشترك HH:MM:SS مع تثبيت السالب على صفر — يُستعمَل في شاشات السائق/العميل/الإدارة.
+  static String formatElapsed(Duration d) {
+    final x = d.isNegative ? Duration.zero : d;
+    final h = x.inHours.toString().padLeft(2, '0');
+    final m = (x.inMinutes % 60).toString().padLeft(2, '0');
+    final s = (x.inSeconds % 60).toString().padLeft(2, '0');
+    return '$h:$m:$s';
   }
 
   // --- 2. نظام الجيوفنسينج (Geofencing) ---

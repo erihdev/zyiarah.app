@@ -7,6 +7,7 @@ import 'package:intl/intl.dart' hide TextDirection;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/order_service.dart';
+import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:zyiarah/utils/status_util.dart';
 import 'package:zyiarah/screens/map_screen.dart';
 
@@ -697,6 +698,35 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                       subtitle: Text("${data['final_amount'] ?? data['amount'] ?? data['totalAmountPaid'] ?? data['quotePrice'] ?? 0} ر.س"),
                     ),
                     ListTile(title: const Text("تاريخ إنشاء الطلب"), subtitle: Text(DateFormat('yyyy-MM-dd HH:mm').format(date))),
+                    // (#43) مدّة الخدمة من مرساتَي start_time/end_time الخادميّتين: حيّة أثناء
+                    // التنفيذ، ونهائية عند الإكمال. «—» إن غابت مرساة أو انعكس ترتيبها (طلب قديم).
+                    Builder(builder: (context) {
+                      final st = data['start_time'];
+                      final et = data['end_time'];
+                      final orderStatus = (data['status'] ?? '').toString();
+                      if (orderStatus == 'in_progress' && st is Timestamp) {
+                        return ListTile(
+                          title: const Text("مدة الخدمة المنقضية"),
+                          subtitle: StreamBuilder<Duration>(
+                            stream: ZyiarahCoreService()
+                                .elapsedSinceStream(st.toDate()),
+                            builder: (context, snap) => Text(
+                                ZyiarahCoreService.formatElapsed(
+                                    snap.data ?? Duration.zero)),
+                          ),
+                        );
+                      }
+                      if (st is Timestamp &&
+                          et is Timestamp &&
+                          !et.toDate().isBefore(st.toDate())) {
+                        return ListTile(
+                          title: const Text("مدة الخدمة"),
+                          subtitle: Text(ZyiarahCoreService.formatElapsed(
+                              et.toDate().difference(st.toDate()))),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    }),
                   ],
                 ),
               ),

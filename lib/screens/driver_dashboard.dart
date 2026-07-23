@@ -508,9 +508,16 @@ class _DriverDashboardState extends State<DriverDashboard> {
     // المهمة نفسها مرتين بشكلين مختلفين (لخبطة السائق)، ومفتاح «أوفلاين» يُخفي
     // كل شيء. الآن: تسلسلٌ واضح، والسائق متصل دائماً.
     return StreamBuilder<QuerySnapshot>(
+      // (#42) فلترة الحالة على الخادم بدل جلب كل تاريخ طلبات السائق (مكتملة/ملغاة/
+      // مرفوضة مدى الحياة) ثم تصفيتها محلياً. المجموعة الخماسية هي مجموعة الحالات
+      // النشطة المعتمَدة في التطبيق كله. لا orderBy (يُسقط ما لا يحمل service_date؛
+      // الترتيب محلي عبر _focusRank/slotOf). يخدمها فهرس (driver_id, status) القائم.
       stream: FirebaseFirestore.instance
           .collection('orders')
           .where('driver_id', isEqualTo: _currentDriverId)
+          .where('status', whereIn: const [
+            'assigned', 'scheduled', 'accepted', 'on_the_way', 'in_progress',
+          ])
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
@@ -521,6 +528,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
           return _buildStatusPlaceholder(
               Icons.hourglass_empty, "جارٍ تحميل مهامك", "لحظات من فضلك");
         }
+        // مع فلتر whereIn الخادمي أعلاه صار هذا لا-عمليّة غير ضارّة (الحالات الخمس
+        // المسموحة لا تتقاطع مع المنتهية الثلاث) — نُبقيه ليبقى المعروض برهاناً مجموعةً
+        // جزئيةً من السابق، لا كشبكة أمان (تصفية بعد الاستعلام تُزيل فقط، لا تُعيد).
         final active = snapshot.data!.docs.where((d) {
           final st = (d.data() as Map<String, dynamic>)['status'] as String? ?? '';
           return st != 'completed' && st != 'cancelled' && st != 'rejected';
@@ -1063,7 +1073,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
           ZyiarahServiceMetaView(meta: data['service_meta']),
           if (data['client_id'] != null) _buildHouseRulesAlert(data['client_id']),
           if (data['client_id'] != null) const Divider(height: 28),
-          if (status == 'in_progress') _buildTimer(int.tryParse('${data['hours_contracted'] ?? 4}') ?? 4),
+          if (status == 'in_progress' && data['start_time'] is Timestamp)
+            _buildTimer((data['start_time'] as Timestamp).toDate(),
+                int.tryParse('${data['hours_contracted'] ?? 4}') ?? 4),
           const SizedBox(height: 8),
           // DRIVER-001/008: swipe-to-confirm replaces tap button — prevents accidental triggers
           _HoldToActButton(
@@ -1260,19 +1272,19 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
-  Widget _buildTimer(int hours) {
+  Widget _buildTimer(DateTime startedAt, int hours) {
     return Column(children: [
-      const Text("وقت بدء المهمة", style: TextStyle(fontSize: 10, color: Colors.grey)),
+      const Text("مدة الخدمة المنقضية", style: TextStyle(fontSize: 10, color: Colors.grey)),
       StreamBuilder<Duration>(
-        stream: _coreService.taskTimerStream(hours),
+        stream: _coreService.elapsedSinceStream(startedAt),
         builder: (context, snapshot) {
-          String time = "--:--:--";
-          Color timerColor = const Color(0xFF5D1B5E);
-          if (snapshot.hasData) {
-            final d = snapshot.data!;
-            time = "${d.inHours.toString().padLeft(2, '0')}:${(d.inMinutes % 60).toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}";
-            if (d.inMinutes < 15) timerColor = Colors.redAccent;
-          }
+          final d = snapshot.data ?? Duration.zero;
+          final time = ZyiarahCoreService.formatElapsed(d);
+          // عدٌّ تصاعديّ: نُلوّن أحمر عند تجاوز مدّة العقد (تخطٍّ للوقت المتوقَّع) —
+          // موثوق لأن مرساة البدء صارت خادميّة (start_time == request.time بالقواعد).
+          final timerColor = d.inSeconds > hours * 3600
+              ? Colors.redAccent
+              : const Color(0xFF5D1B5E);
           return Text(time, style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: timerColor));
         },
       ),
