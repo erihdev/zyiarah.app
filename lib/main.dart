@@ -134,6 +134,10 @@ class ZyiarahApp extends StatelessWidget {
 /// maintenance_mode=true، فوق كل الشاشات (لأنها في MaterialApp.builder). الإدارة
 /// والسائقون معفَوْن؛ fail-open: تعذّر القراءة/غياب العلم/أثناء تحميل الدور ⇒ التطبيق طبيعي.
 Widget _maintenanceGate(BuildContext context, Widget child) {
+  // الضيف غير المسجَّل يصل شاشات الدخول/التسجيل دائماً (لا نقفله)، وقاعدة system_configs
+  // تشترط تسجيل الدخول للقراءة — فاشتراكه هنا = PERMISSION_DENIED متكرّر بلا فائدة.
+  // نخرج مبكراً قبل إنشاء التيار (نتيجة مطابقة: الضيف يرى child على أي حال).
+  if (FirebaseAuth.instance.currentUser == null) return child;
   Stream<DocumentSnapshot>? stream;
   try {
     stream = FirebaseFirestore.instance

@@ -192,20 +192,20 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
             'scheduledIso': effectiveSchedule.toIso8601String(),
           });
           if (mounted) setState(() => _currentStatus = 'scheduled');
-        } else if (scheduleChanged &&
-            (_orderData?['driver_id'] ?? '').toString().isNotEmpty &&
+        } else if ((_orderData?['driver_id'] ?? '').toString().isNotEmpty &&
             ['scheduled', 'accepted', 'on_the_way', 'in_progress']
                 .contains(_orderData?['status']) &&
-            (_selectedDriverId == null ||
-                _selectedDriverId == _orderData?['driver_id'])) {
-          // (#23) إعادة جدولة طلب مُسنَد نشط (نفس السائق) تمرّ عبر rescheduleAssignedOrder
-          // الذرّي الذي يعيد فحص تعارض السائق **داخل معاملة** (مستثنياً هذا الطلب) — بدل
-          // كتابة service_date مباشرةً بلا فحص فيصير السائق محجوزاً لمهمتين متداخلتين.
+            (scheduleChanged || isNewAssignment)) {
+          // (#23/D) طلب مُسنَد نشط: إعادة جدولة و/أو إعادة إسناد لسائق آخر — كلاهما عبر
+          // rescheduleAssignedOrder الذرّي (يعيد فحص تعارض السائق **المستهدَف** داخل معاملة،
+          // مستثنياً هذا الطلب) بدل كتابة service_date/driver_id مباشرةً بلا فحص فيُحجَز
+          // السائق لمهمتين متداخلتين. السائق القديم عند التبديل يحرّره freeOldDriverOnReassign.
           await FirebaseFunctions.instance
               .httpsCallable('rescheduleAssignedOrder')
               .call({
             'orderId': widget.orderId,
-            'scheduledIso': _editedSchedule!.toIso8601String(),
+            if (scheduleChanged) 'scheduledIso': _editedSchedule!.toIso8601String(),
+            if (isNewAssignment) 'newDriverId': _selectedDriverId,
           });
           // تغيّر الحالة (إن وُجد) يُكتب مباشرةً — لا يمسّ الموعد/السائق.
           if (_currentStatus != (_orderData?['status'] ?? '')) {

@@ -216,9 +216,15 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated({document: "orde
         title = "اكتملت خدمتكِ ✨";
         body = `${greet}نتمنّى أن ينال منزلكِ إعجابكِ 🌿 يسعدنا تقييمكِ.`;
       } else if (afterData.status === "cancelled") {
-        targetUserId = afterData.client_id;
-        title = "تم إلغاء طلبكِ ⚠️";
-        body = `${greet}أُلغي طلبكِ. لأي استفسار نحن بخدمتكِ.`;
+        // لا نُشعر عن إلغاء طلب **غير مدفوع** (سلّة مهجورة يلغيها كرون cancelStaleUnpaidOrders،
+        // أو إلغاء لطلب لم يُدفَع) — يبقى targetUserId=null فلا دفعة. يُشعَر فقط عند إلغاء مدفوع.
+        if (afterData.cancel_reason !== "unpaid_expired" &&
+            afterData.cancelled_by !== "system" &&
+            afterData.is_paid === true) {
+          targetUserId = afterData.client_id;
+          title = "تم إلغاء طلبكِ ⚠️";
+          body = `${greet}أُلغي طلبكِ. لأي استفسار نحن بخدمتكِ.`;
+        }
       }
 
       if (!targetUserId) return null;
@@ -286,23 +292,21 @@ exports.notifyClientOnOrderCancellation = onDocumentUpdated(
       const before = change.before.data() || {};
       const after = change.after.data() || {};
       if (before.status === "cancelled" || after.status !== "cancelled") return null;
+      // لا تنبيه عن إلغاء طلب **غير مدفوع** (سلّة مهجورة يلغيها كرون cancelStaleUnpaidOrders
+      // بـ cancelled_by='system'، أو إلغاء إداري لطلب لم يُدفَع) — لا مال ولا قيمة للتنبيه،
+      // ويمنع سبام الكرون لكل سلّة مهجورة (تنبيه إدارة + دفعتَي عميل كل 15 دقيقة).
+      if (after.cancel_reason === "unpaid_expired" ||
+          after.cancelled_by === "system" || after.is_paid !== true) return null;
       const code = after.code || event.params.orderId;
       const by = after.cancelled_by === "client" ? "العميل" : "الإدارة";
-      // (#3) تنبيه الإدارة خادميّاً (createdBy='server') — يحلّ محلّ نداء العميل
-      // ADMIN_BROADCAST الذي صار يُحجَب بحارس المُرسِل. مصدر واحد لكل إلغاء (لا ازدواج).
+      // تنبيه الإدارة **فقط** (خادميّاً — يحلّ محلّ نداء العميل ADMIN_BROADCAST المحجوب بالحارس).
+      // إشعار العميل بالإلغاء يتكفّل به sendNotificationOnOrderStatusChange (مصدر واحد) —
+      // أزلنا الدفعة الثانية المكرّرة (كان هذا المُشغّل no-op سابقاً تحديداً لتفاديها).
       await queuePush("ADMIN_BROADCAST", "تم إلغاء طلب ⚠️",
           `أُلغي الطلب #${code} بواسطة ${by}.`,
           "admin_order_alert",
           {orderId: event.params.orderId, needs_refund: String(after.needs_refund === true)},
           ["orders_manager"]).catch(() => {});
-      // إشعار العميل (إن لم يكن هو من ألغى) — لم يكن يصله أي إشعار إلغاء خادميّاً.
-      if (after.client_id && after.cancelled_by !== "client") {
-        const refundMsg = after.needs_refund === true ?
-          " سيُعاد المبلغ المدفوع إلى محفظتك." : "";
-        await queuePush(after.client_id, "تم إلغاء طلبك ⚠️",
-            `أُلغي طلبك #${code}.${refundMsg}`,
-            "order_cancelled", {orderId: event.params.orderId}).catch(() => {});
-      }
       return null;
     });
 
@@ -1844,6 +1848,24 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
   return result;
 });
 
+// دفاع في العمق لسباق cancelStaleUnpaidOrders: إن تأكّد دفعُ طلبٍ سبق أن ألغاه الكرون
+// آلياً (cancel_reason='unpaid_expired' — سباق نادر: بطاقة/Apple Pay تأكّدت بعد نافذة
+// الـ30 دقيقة عبر verify/webhook/reconcile)، نُعيد فتحه (pending) بدل تركه ملغى مدفوعاً
+// بلا خدمة. يُدمج داخل نفس معامَلة قلب is_paid فلا سباق. تمارا/تابي مستثناة أصلاً بالكرون.
+function _reopenFieldsIfSystemCancelled(data) {
+  if (data && data.status === "cancelled" &&
+      data.cancel_reason === "unpaid_expired") {
+    return {
+      status: "pending",
+      cancel_reason: admin.firestore.FieldValue.delete(),
+      cancelled_by: admin.firestore.FieldValue.delete(),
+      cancelled_at: admin.firestore.FieldValue.delete(),
+      reopened_after_late_payment: true,
+    };
+  }
+  return {};
+}
+
 // 7. Secure Moyasar payment verification on Call function
 exports.verifyMoyasarPayment = onCall(
     {secrets: ["MOYASAR_SECRET_KEY"], cpu: 0.25},
@@ -2011,8 +2033,12 @@ exports.verifyMoyasarPayment = onCall(
               const base = computeExpectedBasePrice(od, zq.docs[0].data());
               if (base && base > 0) {
                 const expected = Math.round(base * 1.15 * 100) / 100;
+                // نطرح الخصم الموثوق المخزَّن قبل المقارنة — وإلا عُلِّم كل طلب بكوبون >50%
+                // زوراً (المشحون = الأساس×1.15 − الخصم). surge يرفع النسبة فلا يُدخِل إيجابية كاذبة.
+                const discount = Number(od.discount_amount) || 0;
+                const expectedNet = Math.max(0, expected - discount);
                 const paid = Number(od.amount) || 0;
-                const ratio = expected > 0 ? paid / expected : 1;
+                const ratio = expectedNet > 0 ? paid / expectedNet : 1;
                 // عتبة متساهلة (نصف المتوقَّع): تلتقط التلاعب الصارخ (دفع 1 ر.س لخدمة
                 // 500) دون تعليم الخصومات/التسعير الديناميكي الشرعي زوراً في طور الظلّ.
                 if (ratio < 0.5) {
@@ -2041,6 +2067,7 @@ exports.verifyMoyasarPayment = onCall(
           moyasar_payment_id: paymentId,
           moyasar_status: paymentData.status,
           updated_at: FieldValue.serverTimestamp(),
+          ..._reopenFieldsIfSystemCancelled(snap.data()),
         });
         return true;
       });
@@ -3007,28 +3034,55 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
 // (مستثنياً هذا الطلب نفسه) قبل كتابة الموعد الجديد. المسار المباشر في تطبيق الأدمن كان
 // يكتب service_date بلا فحص، فيصير السائق محجوزاً لمهمتين متداخلتين. (الإسناد الابتدائي
 // على pending يغطّيه approveAndAssignOrder؛ هذه للطلب المُسنَد فعلاً.)
+// يعالج طلباً مُسنَداً نشطاً: **إعادة جدولة** (scheduledIso) و/أو **إعادة إسناد لسائق
+// آخر** (newDriverId) — كلاهما بفحص تعارض ذرّي على السائق **المستهدَف** داخل معاملة
+// (مستثنياً هذا الطلب). السائق القديم عند التبديل يحرّره مُشغّل freeOldDriverOnReassign.
 exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
   await _assertAdmin(request);
-  const {orderId, scheduledIso} = request.data;
-  if (!orderId || !scheduledIso) {
-    throw new HttpsError("invalid-argument", "البيانات ناقصة (الطلب/الموعد)");
+  const {orderId, scheduledIso, newDriverId} = request.data;
+  if (!orderId) {
+    throw new HttpsError("invalid-argument", "البيانات ناقصة (الطلب)");
   }
-  const startDateTime = new Date(scheduledIso);
-  if (isNaN(startDateTime.getTime())) {
-    throw new HttpsError("invalid-argument", "موعد غير صالح");
+  if (!scheduledIso && !newDriverId) {
+    throw new HttpsError("invalid-argument", "لا تغيير مطلوب (موعد أو سائق)");
+  }
+  let parsedStart = null;
+  if (scheduledIso) {
+    parsedStart = new Date(scheduledIso);
+    if (isNaN(parsedStart.getTime())) {
+      throw new HttpsError("invalid-argument", "موعد غير صالح");
+    }
   }
   const db = admin.firestore();
   const orderRef = db.collection("orders").doc(orderId);
   const active = ["scheduled", "accepted", "on_the_way", "in_progress"];
 
+  // إعادة الإسناد لسائق آخر: تأكّد أنه موجود ونشط (قراءة قبل المعاملة كافية).
+  let newDriverName = null;
+  if (newDriverId) {
+    const dSnap = await db.collection("drivers").doc(newDriverId).get();
+    if (!dSnap.exists) throw new HttpsError("not-found", "السائق غير موجود");
+    if (dSnap.data().is_active === false) {
+      throw new HttpsError("failed-precondition", "السائق غير نشط");
+    }
+    newDriverName = dSnap.data().name || "سائق";
+  }
+
   return await db.runTransaction(async (tx) => {
     const snap = await tx.get(orderRef);
     if (!snap.exists) throw new HttpsError("not-found", "الطلب غير موجود");
     const o = snap.data();
-    const driverId = o.driver_id;
-    if (!driverId || !active.includes(o.status)) {
+    if (!o.driver_id || !active.includes(o.status)) {
       throw new HttpsError("failed-precondition",
           "الطلب غير مُسنَد نشط — لا يمكن إعادة جدولته بهذا المسار");
+    }
+    const reassign = !!(newDriverId && newDriverId !== o.driver_id);
+    const targetDriver = reassign ? newDriverId : o.driver_id;
+    // الموعد الفعّال: الجديد إن وُجد، وإلّا الحالي (لفحص التعارض عند تبديل السائق فقط).
+    const startDateTime = parsedStart ||
+      (o.service_date && o.service_date.toDate ? o.service_date.toDate() : null);
+    if (!startDateTime) {
+      throw new HttpsError("failed-precondition", "لا موعد للطلب لإعادة الفحص");
     }
     const hours = Number(o.hours_contracted || 4);
     const slotEnd = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
@@ -3041,28 +3095,35 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
     for (const d2 of conflictSnap.docs) {
       if (d2.id === orderId) continue; // استثناء الطلب الحالي
       const od = d2.data();
-      if (od.driver_id !== driverId || !od.service_date) continue;
+      if (od.driver_id !== targetDriver || !od.service_date) continue;
       const oStart = od.service_date.toDate();
       const oEnd = new Date(oStart.getTime() +
         Number(od.hours_contracted || 4) * 60 * 60 * 1000);
       if (startDateTime < oEnd && oStart < slotEnd) {
         throw new HttpsError("failed-precondition",
-            "السائق مشغول بمهمة أخرى في هذا الوقت — اختر موعداً آخر");
+            "السائق مشغول بمهمة أخرى في هذا الوقت — اختر موعداً أو سائقاً آخر");
       }
     }
-    const riyadh = new Date(startDateTime.getTime() + 3 * 60 * 60 * 1000);
-    const bookingDate = `${riyadh.getUTCFullYear()}-` +
-      `${String(riyadh.getUTCMonth() + 1).padStart(2, "0")}-` +
-      `${String(riyadh.getUTCDate()).padStart(2, "0")}`;
-    const timeSlot = `${String(riyadh.getUTCHours()).padStart(2, "0")}:00`;
-    tx.update(orderRef, {
-      service_date: admin.firestore.Timestamp.fromDate(startDateTime),
-      scheduled_at: admin.firestore.Timestamp.fromDate(startDateTime),
-      booking_date: bookingDate,
-      booking_time_slot: timeSlot,
-      rescheduled_at: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    return {rescheduled: true};
+    const upd = {rescheduled_at: admin.firestore.FieldValue.serverTimestamp()};
+    if (parsedStart) {
+      const riyadh = new Date(startDateTime.getTime() + 3 * 60 * 60 * 1000);
+      upd.service_date = admin.firestore.Timestamp.fromDate(startDateTime);
+      upd.scheduled_at = admin.firestore.Timestamp.fromDate(startDateTime);
+      upd.booking_date = `${riyadh.getUTCFullYear()}-` +
+        `${String(riyadh.getUTCMonth() + 1).padStart(2, "0")}-` +
+        `${String(riyadh.getUTCDate()).padStart(2, "0")}`;
+      upd.booking_time_slot = `${String(riyadh.getUTCHours()).padStart(2, "0")}:00`;
+    }
+    if (reassign) {
+      upd.driver_id = newDriverId;
+      upd.driver_name = newDriverName;
+      upd.assigned_driver = newDriverName;
+      upd.assigned_at = admin.firestore.FieldValue.serverTimestamp();
+      // status يبقى نشطاً؛ إشعار السائق الجديد يُطلقه notifyDriverOnAssignment،
+      // وتحرير السائق القديم يتكفّل به freeOldDriverOnReassign.
+    }
+    tx.update(orderRef, upd);
+    return {rescheduled: true, reassigned: reassign};
   });
 });
 
@@ -3112,6 +3173,54 @@ exports.freeDriverOnOrderCancel = onDocumentUpdated(
       console.log(
           `freeDriverOnOrderCancel: freed+notified driver ${driverId} ` +
           `(order ${event.params.orderId} cancelled)`);
+    },
+);
+
+// ════════════════════════════════════════════════════════════════════════
+// تحرير السائق **السابق** آلياً عند إعادة إسناد الطلب لسائق آخر. إعادة الإسناد
+// تكتب driver_id الجديد فقط ولا تلمس مستند السائق القديم، فيبقى current_order_id
+// لديه مشيراً لطلبٍ لم يعد له — وحارس _ensureAlwaysAvailable في لوحة السائق يرى
+// current_order_id != null فيقفله «مشغولاً» للأبد (is_available لا يعود true).
+// ════════════════════════════════════════════════════════════════════════
+exports.freeOldDriverOnReassign = onDocumentUpdated(
+    {document: "orders/{orderId}", cpu: 0.083},
+    async (event) => {
+      const before = event.data.before.data();
+      const after = event.data.after.data();
+      if (!before || !after) return;
+      const oldDriver = before.driver_id || null;
+      const newDriver = after.driver_id || null;
+      // فقط عند تغيّر السائق فعلاً وكان هناك سائق سابق مختلف (null→A إسنادٌ جديد لا يعنينا).
+      if (!oldDriver || oldDriver === newDriver) return;
+
+      const db = admin.firestore();
+      const driverRef = db.collection("drivers").doc(oldDriver);
+      const freed = await db.runTransaction(async (tx) => {
+        const ds = await tx.get(driverRef);
+        if (!ds.exists) return false;
+        // حرّره فقط إن كان لا يزال منشغلاً بهذا الطلب تحديداً (لا نلمس مهمة جديدة بدأها).
+        if (ds.data().current_order_id !== event.params.orderId) return false;
+        tx.update(driverRef, {
+          status: "available",
+          current_order_id: null,
+          is_available: true,
+        });
+        return true;
+      });
+      if (!freed) return;
+
+      // إشعار السائق القديم أن المهمة أُعيد إسنادها (اختفت من قائمته) — مصدر خادمي واحد.
+      await queuePush(
+          oldDriver,
+          "أُعيد إسناد مهمة 🔄",
+          `أُعيد إسناد المهمة #${after.code || event.params.orderId} إلى زميلٍ آخر وأُزيلت من قائمتك.`,
+          "driver_task_removed",
+          {orderId: event.params.orderId, code: after.code || event.params.orderId},
+      ).catch(() => {});
+
+      console.log(
+          `freeOldDriverOnReassign: freed old driver ${oldDriver} ` +
+          `(order ${event.params.orderId} reassigned to ${newDriver || "none"})`);
     },
 );
 
@@ -3402,6 +3511,7 @@ exports.reconcileOrphanPayments = onSchedule(
                   is_paid: true, payment_status: "paid",
                   moyasar_payment_id: p.id, moyasar_status: "paid",
                   updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                  ..._reopenFieldsIfSystemCancelled(foundData),
                 });
                 console.log(`[reconcile] CONFIRMED existing ${oid} (paid ${paidH}/${expectedH})`);
                 recovered++;
@@ -3620,6 +3730,11 @@ exports.cancelStaleUnpaidOrders = onSchedule(
       for (const doc of snap.docs) {
         const d = doc.data();
         if (d.is_paid === true) continue;
+        // **لا نلغي طرق الدفع المؤجَّلة** (تمارا/تابي): تأكيدها يستغرق ساعات (نافذة
+        // confirmPendingTamaraOrders 6س)، فإلغاؤها بعد 30د ثم تأكيدها لاحقاً = العميل
+        // مخصوم لطلبٍ ملغى بلا خدمة ولا استرداد. وكذلك ما يحمل معرّف دفعة ميسر (قد يكون خُصم).
+        if (["tamara", "tabby"].includes(d.payment_method)) continue;
+        if (d.moyasar_payment_id) continue;
         const c = d.created_at;
         if (!c || typeof c.toMillis !== "function") continue;
         if (c.toMillis() > cutoffMs) continue; // أحدث من 30 دقيقة — قد يكون دفعاً جارياً
@@ -3627,6 +3742,7 @@ exports.cancelStaleUnpaidOrders = onSchedule(
           await doc.ref.update({
             status: "cancelled",
             cancel_reason: "unpaid_expired",
+            cancelled_by: "system", // إلغاء آلي — يُسكِت مُشغّلات تنبيه الإلغاء
             cancelled_at: admin.firestore.FieldValue.serverTimestamp(),
           });
           cancelled++;
@@ -4154,6 +4270,7 @@ exports.moyasarWebhook = onRequest(
                     moyasar_payment_id: payment.id,
                     moyasar_status: verifiedPayment.status,
                     updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                    ..._reopenFieldsIfSystemCancelled(snap.data()),
                   });
                   return true;
                 });
