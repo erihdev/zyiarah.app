@@ -70,7 +70,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
             final List<dynamic>? hoursList = hourlyDoc.data()?['allowed_hours'];
             if (hoursList != null && mounted) {
               setState(() {
-                _selectedHours = hoursList.cast<int>();
+                // تحويل دفاعي: القيم قد تصل double/نصّاً (كتابة قديمة/من الويب)، و cast<int>
+                // كان يرمي TypeError عند القراءة فيُسقط شاشة الإعدادات كلّها.
+                _selectedHours = hoursList
+                    .map((e) => int.tryParse('$e') ?? 0)
+                    .where((h) => h > 0)
+                    .toList();
               });
             }
             if (mounted) {

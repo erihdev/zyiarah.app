@@ -32,10 +32,22 @@ export default function Marketing() {
 
     useEffect(() => {
         const unsubscribe = onSnapshot(collection(db, 'promo_codes'), (snapshot) => {
-            const fetchedCoupons = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            } as PromoCode));
+            const fetchedCoupons = snapshot.docs.map(doc => {
+                const raw = doc.data() as Record<string, unknown>;
+                // تطبيق الأدمن (Flutter) يخزّن expiry ككائن Timestamp؛ تصييره خاماً في JSX
+                // كان يرمي «Objects are not valid as a React child» فينهار جذر الصفحة.
+                const rawExpiry = raw.expiry as { toDate?: () => Date } | string | undefined;
+                const expiryDate = rawExpiry && typeof rawExpiry === 'object' && rawExpiry.toDate
+                    ? rawExpiry.toDate()
+                    : (rawExpiry ? new Date(rawExpiry as string) : null);
+                return {
+                    id: doc.id,
+                    ...raw,
+                    expiry: expiryDate && !isNaN(expiryDate.getTime())
+                        ? expiryDate.toISOString().slice(0, 10)
+                        : '',
+                } as PromoCode;
+            });
 
             // Sort by creation date or expiry
             fetchedCoupons.sort((a, b) => new Date(b.expiry).getTime() - new Date(a.expiry).getTime());
@@ -207,7 +219,7 @@ export default function Marketing() {
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-1.5 text-sm font-medium text-slate-500">
-                                            <Calendar size={14} /> {coupon.expiry}
+                                            <Calendar size={14} /> {coupon.expiry || '—'}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">

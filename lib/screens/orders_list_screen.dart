@@ -210,7 +210,12 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           return const Center(child: Text('تعذّر تحميل البيانات، تحقّق من الاتصال'));
         }
         
-        final List<String> activeStatuses = ['pending', 'approved', 'processing', 'shipped'];
+        // دورة المتجر الحقيقية: awaiting_payment ⇒ under_review ⇒ delivering ⇒ delivered.
+        // بدون الثلاث الأولى كان الطلب المدفوع يختفي من التبويبين معاً حتى «delivered».
+        final List<String> activeStatuses = [
+          'awaiting_payment', 'under_review', 'delivering',
+          'pending', 'approved', 'processing', 'shipped',
+        ];
         final List<String> historyStatuses = ['delivered', 'completed', 'cancelled', 'rejected'];
         
         final allDocs = snapshot.data!.docs;

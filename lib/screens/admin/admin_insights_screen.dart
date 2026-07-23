@@ -449,8 +449,10 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     }
 
     activities.sort((a, b) {
-      final aTime = a['time'] as Timestamp?;
-      final bTime = b['time'] as Timestamp?;
+      // تحويل آمن: قيمة time قد تكون نصّية (بيانات قديمة)، والتحويل الصلب as Timestamp
+      // كان يرمي TypeError فيُسقط شاشة الرؤى بالكامل.
+      final aTime = a['time'] is Timestamp ? a['time'] as Timestamp : null;
+      final bTime = b['time'] is Timestamp ? b['time'] as Timestamp : null;
       return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
     });
 
@@ -483,7 +485,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
                 title: Text(act['title'], style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 14)),
                 subtitle: Text(act['subtitle'], style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey)),
                 trailing: Text(
-                  act['time'] != null ? intl.DateFormat('HH:mm').format((act['time'] as Timestamp).toDate()) : '-',
+                  act['time'] is Timestamp ? intl.DateFormat('HH:mm').format((act['time'] as Timestamp).toDate()) : '-',
                   style: GoogleFonts.tajawal(fontSize: 10, color: Colors.grey),
                 ),
               );

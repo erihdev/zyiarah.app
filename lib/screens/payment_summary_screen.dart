@@ -608,7 +608,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               : (_currentUser?.phone ?? '0500000000'),
           customerName: _currentUser?.name ?? 'عميل زيارة',
           customerEmail: _currentUser?.email ?? 'customer@zyiarah.com',
-          orderId: finalOrderId,
+          // للعقد: مرجع تابي = معرّف العقد كي يقلب الـ webhook is_paid عليه فيُفعّله (كتمارا).
+          orderId: widget.contractId ?? finalOrderId,
         );
 
         if (webUrl == null) {
@@ -1193,7 +1194,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           if (widget.hours != null && !_isStoreOrder)
             _buildRowDetail('المدة', '${widget.hours} ساعات'),
           if (!_isStoreOrder)
-            _buildRowDetail('عدد العاملات', widget.workerCount == 1 ? "عاملة واحدة" : "عاملتين"),
+            _buildRowDetail('عدد العاملات',
+                widget.workerCount == 1
+                    ? 'عاملة واحدة'
+                    : widget.workerCount == 2
+                        ? 'عاملتان'
+                        : '${widget.workerCount} عاملات'),
           if (widget.serviceDate != null)
             _buildRowDetail(_isStoreOrder ? 'موعد التوصيل' : 'التاريخ',
                 intl.DateFormat('yyyy-MM-dd').format(widget.serviceDate!)),

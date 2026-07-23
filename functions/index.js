@@ -458,6 +458,11 @@ exports.onNotificationCreated = onDocumentCreated({document: "notifications_log/
         return;
       }
 
+      // المنبثق (popup) نافذة داخل التطبيق فقط (يعرضها popup_service عند فتح التطبيق) —
+      // لا يُبثّ Push ولا يملأ مركز التنبيهات. بدون هذا الحارس كان بثّ «إعلان منبثق»
+      // يُطلق ثلاث قنوات دفعةً واحدة (push + مركز تنبيهات + منبثق).
+      if (newValue.type === "popup") return;
+
       const sched = newValue.scheduled_at;
       const isFuture = sched && typeof sched.toMillis === "function" &&
         sched.toMillis() > Date.now();
@@ -984,6 +989,28 @@ exports.processNotificationTriggers = onDocumentCreated(
       console.log(`Processing trigger ${event.params.id}`);
 
       try {
+        // SECURITY: notification_triggers قابلة للكتابة من أي عميل (firestore.rules).
+        // العميل غير الموثوق لا يجوز أن يخاطب **مستخدماً آخر** — كان بإمكانه انتحال إشعار
+        // Push + سجلّ داخل التطبيق باسم زيارة لأي ضحية (تصيّد). نحسب ثقة المُرسِل مرّة
+        // (server أو موظّف بدور != client) ونرفض أي trigger موجَّه لغير مُنشئه.
+        // (تصلّب ADMIN_BROADCAST يُعالَج على حدة — تدفّقات إدارية شرعية تكتبه.)
+        let senderIsTrusted = trigger.createdBy === "server";
+        if (!senderIsTrusted && trigger.createdBy) {
+          try {
+            const cu = await admin.firestore().collection("users")
+                .doc(String(trigger.createdBy)).get();
+            const r = cu.exists ? cu.data().role : null;
+            senderIsTrusted = r != null && r !== "client";
+          } catch (_) { senderIsTrusted = false; }
+        }
+        const targetsOtherUser = toUid && toUid !== "ADMIN_BROADCAST" &&
+          toUid !== trigger.createdBy;
+        if (!senderIsTrusted && targetsOtherUser) {
+          console.warn(`[NOTIF] Refused untrusted trigger from ${trigger.createdBy} to ${toUid}`);
+          await snap.ref.update({processed: true, status: "refused_untrusted_recipient"});
+          return;
+        }
+
         // 1. Sync to In-App Notification History
         if (toUid && toUid !== "ADMIN_BROADCAST") {
           await admin.firestore().collection("notifications")
@@ -3569,6 +3596,10 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
   for (const doc of snap.docs) {
     const d = doc.data();
     if (d.status === "cancelled" || d.status === "rejected") continue;
+    // لا نعدّ الطلبات غير المدفوعة: يُنشأ الطلب is_paid=false قبل بوابة الدفع، والمهجور
+    // منها (لم يُكمَل دفعه) كان يبقى pending أبداً فيستهلك سعة الخانة/اليوم ويحجب عملاء
+    // حقيقيين بلا خدمة فعلية. نعدّ فقط ما أكّده الخادم (is_paid===true).
+    if (d.is_paid !== true) continue;
     // **نعدّ طلبات كل المناطق.** كان العدّ مقصوراً على منطقة الطلب بينما driverCount
     // يشمل كل السائقين (لأنهم بلا مناطق) — فيُقاس بسطٌ منطقةٍ واحدة على مقامٍ عالمي:
     // سائقان مشغولان بطلبَي «الدائر» الساعة 10، وعميلة «أبو السلع» ترى عدّادها صفراً

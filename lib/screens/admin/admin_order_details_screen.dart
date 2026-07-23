@@ -173,23 +173,28 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
       } else {
         // Non-terminal: assignment / manual status override written directly.
         final Map<String, dynamic> updatePayload = {'status': _currentStatus};
+
+        // تعديل الموعد يُطبَّق **بصرف النظر عن وجود سائق** — كان محبوساً داخل شرط
+        // السائق فيُفقَد بصمت لأي طلب بلا سائق مُسنَد رغم أن منتقي الموعد ظاهر دائماً.
+        final sd = _orderData?['service_date'];
+        final DateTime? originalSchedule = sd is Timestamp ? sd.toDate() : null;
+        final bool scheduleChanged =
+            _editedSchedule != null && _editedSchedule != originalSchedule;
+        if (scheduleChanged) {
+          // اكتب التاريخ الجديد في الحقلين معاً كي يراه كامل النظام (تذكيرات السائق + العميل).
+          final ts = Timestamp.fromDate(_editedSchedule!);
+          updatePayload['service_date'] = ts;
+          updatePayload['scheduled_at'] = ts;
+        }
+
         if (_selectedDriverId != null) {
           updatePayload['driver_id'] = _selectedDriverId!;
           updatePayload['driver_name'] = _selectedDriverName ?? '';
           updatePayload['assigned_driver'] = _selectedDriverName ?? '';
           updatePayload['assigned_at'] = FieldValue.serverTimestamp();
-          // scheduled_at لازم لتذكير الساعة (remindDriversUpcomingTasks يستعلم به).
-          // كان مفقوداً في هذا المسار فتفوت الطلبات المُسندة يدوياً تذكيرَ السائق.
-          final sd = _orderData?['service_date'];
-          final DateTime? originalSchedule = sd is Timestamp ? sd.toDate() : null;
-          if (_editedSchedule != null &&
-              _editedSchedule != originalSchedule) {
-            // الأدمن غيّر الموعد → اكتب التاريخ الجديد في الحقلين معاً كي يراه كامل
-            // النظام (تذكيرات السائق + العميل) لا scheduled_at فقط.
-            final ts = Timestamp.fromDate(_editedSchedule!);
-            updatePayload['service_date'] = ts;
-            updatePayload['scheduled_at'] = ts;
-          } else if (sd is Timestamp) {
+          // scheduled_at لازم لتذكير الساعة (remindDriversUpcomingTasks يستعلم به)؛
+          // إن لم يتغيّر الموعد نضبطه من الأصل كي لا تفوت التذكيرات الإسناد اليدوي.
+          if (!scheduleChanged && sd is Timestamp) {
             updatePayload['scheduled_at'] = sd;
           }
           // Promote to 'scheduled' (a state the driver CAN advance and which shows in

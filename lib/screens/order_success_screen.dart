@@ -161,8 +161,12 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
-                  // go لا push: شاشة النجاح نهاية رحلة الطلب، فلا معنى للرجوع إليها.
-                  onPressed: () => context.go('/orders'),
+                  // شاشة النجاح route مدفوع عبر Navigator فوق صفحة go_router؛ فـ context.go
+                  // وحده لا يزيله (يبقى فوق المكدّس). نُزيله أولاً ثم نفتح /orders.
+                  onPressed: () {
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                    context.push('/orders');
+                  },
                   child: Text("تتبع الطلب الآن", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.white)),
                 ),
               ),
