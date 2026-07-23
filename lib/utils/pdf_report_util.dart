@@ -25,6 +25,11 @@ class ZyiarahPdfReportUtil {
     required double totalRevenue,
     required int activeOrders,
   }) async {
+    // «المكتملة» الحقيقية — كان يُشتق بـ (total − active) فيَعُدّ الملغاة ضمن المكتملة.
+    final int completedOrders = orders.where((o) {
+      final data = o.data() as Map<String, dynamic>?;
+      return (data == null ? '' : (data['status'] ?? '')) == 'completed';
+    }).length;
     final pdf = pw.Document();
     final f = await _fonts();
     final ttf = f.base;
@@ -46,7 +51,7 @@ class ZyiarahPdfReportUtil {
               children: [
                 _buildHeader(),
                 pw.SizedBox(height: 30),
-                _buildSummaryTable(totalRevenue, activeOrders, orders.length),
+                _buildSummaryTable(totalRevenue, activeOrders, completedOrders),
                 pw.SizedBox(height: 40),
                 _buildOrderList(orders),
                 pw.Spacer(),
@@ -88,7 +93,7 @@ class ZyiarahPdfReportUtil {
     );
   }
 
-  static pw.Widget _buildSummaryTable(double revenue, int active, int total) {
+  static pw.Widget _buildSummaryTable(double revenue, int active, int completed) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(16),
       decoration: const pw.BoxDecoration(
@@ -99,7 +104,7 @@ class ZyiarahPdfReportUtil {
         children: [
           _buildStatItem('Total Revenue', '${revenue.toStringAsFixed(2)} SAR'),
           _buildStatItem('Active Orders', active.toString()),
-          _buildStatItem('Completed Orders', (total - active).toString()),
+          _buildStatItem('Completed Orders', completed.toString()),
           _buildStatItem('Estimated VAT (15%)', '${(revenue - revenue / 1.15).toStringAsFixed(2)} SAR'),
         ],
       ),

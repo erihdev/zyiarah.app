@@ -44,7 +44,9 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       // Fire all 5 requests in parallel; limit keeps memory and cost bounded.
       final ordersF     = db.collection('orders').orderBy('created_at', descending: true).limit(500).get();
       final maintenanceF = db.collection('maintenance_requests').orderBy('createdAt', descending: true).limit(500).get();
-      final usersF      = db.collection('users').count().get();
+      // عملاء فقط: مجموعة users تضمّ سائقين وإداريين (يُكتبون فيها أيضاً)، فعدّها كاملةً
+      // كان يضخّم «إجمالي العملاء». (حسابات العملاء تُكتب بـ role='client'.)
+      final usersF      = db.collection('users').where('role', isEqualTo: 'client').count().get();
       final driversF    = db.collection('drivers').limit(200).get();
       final storeF      = db.collection('store_orders').orderBy('created_at', descending: true).limit(500).get();
 
