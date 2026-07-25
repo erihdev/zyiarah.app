@@ -36,9 +36,9 @@ const PAYMENT_LABELS: Record<string, string> = {
 };
 
 const PAYMENT_COLORS: Record<string, string> = {
-    card: 'bg-[#EDF5FC] text-[#00578F]',
+    card: 'bg-[#FAF1F6] text-[#4D0026]',
     cash: 'bg-emerald-50 text-emerald-700',
-    tamara: 'bg-blue-50 text-blue-700',
+    tamara: 'bg-rose-50 text-rose-700',
     wallet: 'bg-amber-50 text-amber-700',
 };
 
@@ -143,9 +143,9 @@ export default function Accountants() {
                 </div>
 
                 {/* Net Profit */}
-                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group hover:border-[#A9D2EF] transition-colors">
+                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group hover:border-[#E5C3D5] transition-colors">
                     <div className="flex justify-between items-start mb-4">
-                        <div className="p-3 bg-[#EDF5FC] text-[#006FBA] rounded-2xl group-hover:scale-110 transition-transform">
+                        <div className="p-3 bg-[#FAF1F6] text-[#660033] rounded-2xl group-hover:scale-110 transition-transform">
                             <TrendingUp size={22} strokeWidth={2.5} />
                         </div>
                     </div>
@@ -176,9 +176,9 @@ export default function Accountants() {
                 </div>
 
                 {/* Order Count */}
-                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group hover:border-blue-200 transition-colors">
+                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group hover:border-rose-200 transition-colors">
                     <div className="flex justify-between items-start mb-4">
-                        <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl group-hover:scale-110 transition-transform">
+                        <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl group-hover:scale-110 transition-transform">
                             <ShoppingBag size={22} strokeWidth={2.5} />
                         </div>
                     </div>
@@ -198,7 +198,7 @@ export default function Accountants() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm lg:col-span-1">
                     <h3 className="text-base font-extrabold text-slate-800 mb-5 flex items-center gap-2">
-                        <CreditCard size={18} className="text-[#006FBA]" /> توزيع طرق الدفع
+                        <CreditCard size={18} className="text-[#660033]" /> توزيع طرق الدفع
                     </h3>
                     {loading ? (
                         <div className="space-y-3">

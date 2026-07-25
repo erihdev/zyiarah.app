@@ -197,7 +197,7 @@ class _ZyiarahSplashScreenState extends State<ZyiarahSplashScreen>
               style: GoogleFonts.tajawal(
                 fontSize: 72,
                 fontWeight: FontWeight.w900,
-                color: const Color(0xFF006FBA),
+                color: const Color(0xFF660033),
                 height: 1.0,
               ),
             ),
@@ -345,7 +345,7 @@ class _LocationPinPainter extends CustomPainter {
 
     // Inner purple dot — like a water drop
     final dotPaint = Paint()
-      ..color = const Color(0xFF006FBA).withValues(alpha: 0.5)
+      ..color = const Color(0xFF660033).withValues(alpha: 0.5)
       ..style = PaintingStyle.fill;
     canvas.drawCircle(Offset(cx, r), r * 0.2, dotPaint);
   }

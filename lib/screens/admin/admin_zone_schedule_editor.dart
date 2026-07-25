@@ -22,7 +22,7 @@ class ZoneScheduleEditor extends StatefulWidget {
 }
 
 class _ZoneScheduleEditorState extends State<ZoneScheduleEditor> {
-  static const Color _brand = Color(0xFF006FBA);
+  static const Color _brand = Color(0xFF660033);
   static const _dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
   bool _enabled = false;

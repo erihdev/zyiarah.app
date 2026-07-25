@@ -72,7 +72,7 @@ class _AdminStaffPerformanceScreenState extends State<AdminStaffPerformanceScree
         backgroundColor: const Color(0xFFF1F5F9),
         appBar: AppBar(
           title: Text("كفاءة وأداء الكوادر", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
-          backgroundColor: const Color(0xFF006FBA),
+          backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,
           elevation: 0,
         ),
@@ -99,9 +99,9 @@ class _AdminStaffPerformanceScreenState extends State<AdminStaffPerformanceScree
     return Container(
       padding: const EdgeInsets.all(25),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF006FBA), Color(0xFF2E86C8)]),
+        gradient: const LinearGradient(colors: [Color(0xFF660033), Color(0xFF8E2B5C)]),
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: const Color(0xFF006FBA).withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 8))],
+        boxShadow: [BoxShadow(color: const Color(0xFF660033).withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 8))],
       ),
       child: Column(
         children: [

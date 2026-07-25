@@ -168,7 +168,7 @@ class _AdminAccountantsScreenState extends State<AdminAccountantsScreen> {
                     child: const Text("حذف", style: TextStyle(color: Colors.red)),
                   ),
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF006FBA)),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF660033)),
                   onPressed: isSaving ? null : onSave,
                   child: isSaving
                       ? const SizedBox(
@@ -196,7 +196,7 @@ class _AdminAccountantsScreenState extends State<AdminAccountantsScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text("المحاسبون والمالية", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF006FBA),
+          backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,
         ),
         floatingActionButton: FloatingActionButton.extended(

@@ -251,7 +251,7 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                       setDialogState(() => isSaving = false);
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF006FBA), foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF660033), foregroundColor: Colors.white),
                   child: Text(isSaving ? "جاري الحفظ..." : "حفظ ونشر"),
                 ),
               ],
@@ -270,12 +270,12 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: Text('إدارة البنرات الإعلانية', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF006FBA),
+          backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: () => _showBannerDialog(),
-          backgroundColor: const Color(0xFF006FBA),
+          backgroundColor: const Color(0xFF660033),
           child: const Icon(Icons.add, color: Colors.white),
         ),
         body: StreamBuilder<QuerySnapshot>(
@@ -315,12 +315,12 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF006FBA).withValues(alpha: 0.08),
+                                  color: const Color(0xFF660033).withValues(alpha: 0.08),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
                                   (data['placement'] ?? 'main') == 'offers' ? 'قسم العروض' : 'رئيسي',
-                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF006FBA)),
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF660033)),
                                 ),
                               ),
                             ]),

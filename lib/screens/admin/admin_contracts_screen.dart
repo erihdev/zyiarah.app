@@ -15,7 +15,7 @@ class AdminContractsScreen extends StatefulWidget {
 class _AdminContractsScreenState extends State<AdminContractsScreen> {
   final Color primaryNavy = const Color(0xFF1E293B);
   final Color brandBlue = const Color(0xFF2563EB);
-  final Color brandPurple = const Color(0xFF006FBA);
+  final Color brandPurple = const Color(0xFF660033);
 
   final TextEditingController _searchController = TextEditingController();
   String _search = '';

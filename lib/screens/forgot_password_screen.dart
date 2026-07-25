@@ -12,7 +12,7 @@ class ZyiarahForgotPasswordScreen extends StatefulWidget {
 class _ZyiarahForgotPasswordScreenState extends State<ZyiarahForgotPasswordScreen> {
   final TextEditingController _emailController = TextEditingController();
   bool _isLoading = false;
-  final Color brandColor = const Color(0xFF006FBA);
+  final Color brandColor = const Color(0xFF660033);
 
   void _resetPassword() async {
     final email = _emailController.text.trim();

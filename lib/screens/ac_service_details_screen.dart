@@ -26,7 +26,7 @@ class AcServiceDetailsScreen extends StatefulWidget {
 }
 
 class _AcServiceDetailsScreenState extends State<AcServiceDetailsScreen> {
-  static const Color _brand = Color(0xFF006FBA);
+  static const Color _brand = Color(0xFF660033);
 
   bool _isLoading = true;
 

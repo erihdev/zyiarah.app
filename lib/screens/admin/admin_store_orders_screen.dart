@@ -91,7 +91,7 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF006FBA), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF660033), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
                   onPressed: () => Navigator.pop(context),
                   child: const Text('إغلاق التفاصيل'),
                 ),
@@ -165,7 +165,7 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
         backgroundColor: Colors.grey[50],
         appBar: AppBar(
           title: Text("مبيعات المتجر الإلكتروني", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF006FBA),
+          backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,
         ),
         body: Column(
@@ -177,7 +177,7 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
                 onChanged: (value) => setState(() => _search = value),
                 decoration: InputDecoration(
                   hintText: 'ابحث برقم الطلب أو اسم العميل',
-                  prefixIcon: const Icon(Icons.search, color: Color(0xFF006FBA)),
+                  prefixIcon: const Icon(Icons.search, color: Color(0xFF660033)),
                   suffixIcon: _search.isEmpty
                       ? null
                       : IconButton(
@@ -200,7 +200,7 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: const BorderSide(color: Color(0xFF006FBA), width: 1.5),
+                    borderSide: const BorderSide(color: Color(0xFF660033), width: 1.5),
                   ),
                 ),
               ),
@@ -290,7 +290,7 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
                             OutlinedButton.icon(
                               icon: const Icon(Icons.visibility, size: 18),
                               label: const Text('عرض المشتريات'),
-                              style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF006FBA)),
+                              style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF660033)),
                               onPressed: () => _showOrderItems(context, order),
                             ),
                             // سلسلة الإدارة: تحت المراجعة ⇒ جاري التوصيل ⇒

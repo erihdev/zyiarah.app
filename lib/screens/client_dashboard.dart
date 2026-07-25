@@ -103,7 +103,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           child: isLoading
               ? _buildShimmerLoading()
               : RefreshIndicator(
-                  color: const Color(0xFF006FBA),
+                  color: const Color(0xFF660033),
                   onRefresh: () async {
                     await Future.delayed(const Duration(milliseconds: 600));
                     if (mounted) setState(() {});
@@ -139,32 +139,32 @@ class _ClientDashboardState extends State<ClientDashboard> {
       surfaceTintColor: Colors.transparent,
       shadowColor: Colors.black.withValues(alpha: 0.08),
       elevation: 8,
-      indicatorColor: const Color(0xFF006FBA).withValues(alpha: 0.12),
+      indicatorColor: const Color(0xFF660033).withValues(alpha: 0.12),
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       destinations: const [
         NavigationDestination(
           icon: Icon(Icons.home_outlined),
-          selectedIcon: Icon(Icons.home_rounded, color: Color(0xFF006FBA)),
+          selectedIcon: Icon(Icons.home_rounded, color: Color(0xFF660033)),
           label: 'الرئيسية',
         ),
         NavigationDestination(
           icon: Icon(Icons.calendar_today_outlined),
-          selectedIcon: Icon(Icons.calendar_today_rounded, color: Color(0xFF006FBA)),
+          selectedIcon: Icon(Icons.calendar_today_rounded, color: Color(0xFF660033)),
           label: 'طلباتي',
         ),
         NavigationDestination(
           icon: Icon(Icons.storefront_outlined),
-          selectedIcon: Icon(Icons.storefront_rounded, color: Color(0xFF006FBA)),
+          selectedIcon: Icon(Icons.storefront_rounded, color: Color(0xFF660033)),
           label: 'المتجر',
         ),
         NavigationDestination(
           icon: Icon(Icons.local_offer_outlined),
-          selectedIcon: Icon(Icons.local_offer_rounded, color: Color(0xFF006FBA)),
+          selectedIcon: Icon(Icons.local_offer_rounded, color: Color(0xFF660033)),
           label: 'العروض',
         ),
         NavigationDestination(
           icon: Icon(Icons.person_outline_rounded),
-          selectedIcon: Icon(Icons.person_rounded, color: Color(0xFF006FBA)),
+          selectedIcon: Icon(Icons.person_rounded, color: Color(0xFF660033)),
           label: 'حسابي',
         ),
       ],
@@ -302,13 +302,13 @@ class _ClientDashboardState extends State<ClientDashboard> {
           margin: const EdgeInsets.only(bottom: 20),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFF006FBA), Color(0xFF8B3D8C)],
+              colors: [Color(0xFF660033), Color(0xFF8B3D8C)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
-              BoxShadow(color: const Color(0xFF006FBA).withValues(alpha: 0.25), blurRadius: 16, offset: const Offset(0, 6)),
+              BoxShadow(color: const Color(0xFF660033).withValues(alpha: 0.25), blurRadius: 16, offset: const Offset(0, 6)),
             ],
           ),
           child: Material(
@@ -376,7 +376,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: const Color(0xFF006FBA),
+              color: const Color(0xFF660033),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.maps_home_work_rounded, color: Colors.white, size: 18),
@@ -466,14 +466,14 @@ class _ClientDashboardState extends State<ClientDashboard> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF3D1040), Color(0xFF006FBA), Color(0xFF8B3D8C)],
+          colors: [Color(0xFF3D1040), Color(0xFF660033), Color(0xFF8B3D8C)],
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF006FBA).withValues(alpha: 0.35),
+            color: const Color(0xFF660033).withValues(alpha: 0.35),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -714,7 +714,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           subtitle: "أدوات احترافية",
           price: "عروض حصرية",
           numericPrice: 0.0,
-          themeColor: const Color(0xFF006FBA),
+          themeColor: const Color(0xFF660033),
           icon: Icons.storefront,
           iconBgColor: const Color(0xFFFCEEFA),
           imagePath: 'assets/images/store.png',
@@ -893,7 +893,7 @@ class _NotifBell extends StatelessWidget {
                   width: 8,
                   height: 8,
                   decoration: const BoxDecoration(
-                    color: Color(0xFF006FBA),
+                    color: Color(0xFF660033),
                     shape: BoxShape.circle,
                   ),
                 ),

@@ -18,7 +18,7 @@ class ClientNotificationsScreen extends StatelessWidget {
         appBar: AppBar(
           title: Text('الإشعارات',
               style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF006FBA),
+          backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,
           elevation: 0,
         ),
@@ -34,7 +34,7 @@ class ClientNotificationsScreen extends StatelessWidget {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(
                         child: CircularProgressIndicator(
-                            color: Color(0xFF006FBA)));
+                            color: Color(0xFF660033)));
                   }
 
                   if (snapshot.hasError) {
@@ -158,7 +158,7 @@ class _ClientNotifCard extends StatelessWidget {
         break;
       default:
         icon = Icons.notifications_outlined;
-        iconColor = const Color(0xFF006FBA);
+        iconColor = const Color(0xFF660033);
     }
 
     return Container(
@@ -169,7 +169,7 @@ class _ClientNotifCard extends StatelessWidget {
         border: Border.all(
           color: isRead
               ? Colors.grey.shade100
-              : const Color(0xFF006FBA).withValues(alpha: 0.2),
+              : const Color(0xFF660033).withValues(alpha: 0.2),
         ),
         boxShadow: [
           BoxShadow(
@@ -222,7 +222,7 @@ class _ClientNotifCard extends StatelessWidget {
               height: 8,
               margin: const EdgeInsets.only(top: 4),
               decoration: const BoxDecoration(
-                color: Color(0xFF006FBA),
+                color: Color(0xFF660033),
                 shape: BoxShape.circle,
               ),
             ),

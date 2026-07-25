@@ -44,7 +44,7 @@ class ZyiarahSupportFab extends StatelessWidget {
             _buildOption(
               icon: Icons.support_agent_rounded,
               title: "فتح تذكرة دعم فني",
-              color: const Color(0xFF006FBA),
+              color: const Color(0xFF660033),
               onTap: () {
                 Navigator.pop(ctx);
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahSupportScreen()));
@@ -88,7 +88,7 @@ class ZyiarahSupportFab extends StatelessWidget {
   Widget build(BuildContext context) {
     return FloatingActionButton.extended(
       onPressed: () => _showSupportOptions(context),
-      backgroundColor: const Color(0xFF006FBA),
+      backgroundColor: const Color(0xFF660033),
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       icon: const Icon(Icons.support_agent_rounded, color: Colors.white),

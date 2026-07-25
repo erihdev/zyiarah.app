@@ -1110,7 +1110,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             if (_isLoading)
               Container(
                 color: Colors.black.withValues(alpha: 0.3),
-                child: const Center(child: CircularProgressIndicator(color: Color(0xFF006FBA))),
+                child: const Center(child: CircularProgressIndicator(color: Color(0xFF660033))),
               ),
           ],
         ),
@@ -1129,7 +1129,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       // فبدونه يقع زر الرجوع والعنوان خلف الشريط في أعلى الشاشة).
       padding: EdgeInsets.fromLTRB(8, MediaQuery.of(context).padding.top + 10, 16, 16),
       decoration: const BoxDecoration(
-        color: Color(0xFF006FBA),
+        color: Color(0xFF660033),
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(32),
           bottomRight: Radius.circular(32),
@@ -1235,7 +1235,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             children: [
               Text('الإجمالي المستحق', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
               Text('${totalWithVat.toStringAsFixed(2)} ر.س', 
-                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF006FBA))),
+                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF660033))),
             ],
           ),
         ],
@@ -1298,7 +1298,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               ElevatedButton(
                 onPressed: _isValidatingCoupon ? null : _validateCoupon,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF006FBA),
+                  backgroundColor: const Color(0xFF660033),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
@@ -1541,7 +1541,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           color: isSelected ? const Color(0xFFF3E8F4) : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? const Color(0xFF006FBA) : Colors.grey.shade200,
+            color: isSelected ? const Color(0xFF660033) : Colors.grey.shade200,
             width: 2,
           ),
         ),
@@ -1561,7 +1561,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 'assets/logo.png',
                 fit: BoxFit.contain,
                 errorBuilder: (_, __, ___) => const Icon(
-                    Icons.account_balance_wallet_rounded, color: Color(0xFF006FBA)),
+                    Icons.account_balance_wallet_rounded, color: Color(0xFF660033)),
               ),
             ),
             const SizedBox(width: 15),
@@ -1593,7 +1593,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 ],
               ),
             ),
-            if (isSelected) const Icon(Icons.check_circle, color: Color(0xFF006FBA)),
+            if (isSelected) const Icon(Icons.check_circle, color: Color(0xFF660033)),
           ],
         ),
       ),
@@ -1616,7 +1616,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFFF3E8F4) : Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: isSelected ? const Color(0xFF006FBA) : Colors.grey.shade200, width: 2),
+          border: Border.all(color: isSelected ? const Color(0xFF660033) : Colors.grey.shade200, width: 2),
         ),
         child: Row(
           children: [
@@ -1634,16 +1634,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                       logoAsset,
                       fit: BoxFit.contain,
                       errorBuilder: (_, __, ___) =>
-                          Icon(icon, color: color ?? const Color(0xFF006FBA)),
+                          Icon(icon, color: color ?? const Color(0xFF660033)),
                     ),
                   )
                 : Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: isSelected ? const Color(0xFF006FBA).withValues(alpha: 0.1) : Colors.grey.shade50,
+                      color: isSelected ? const Color(0xFF660033).withValues(alpha: 0.1) : Colors.grey.shade50,
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(icon, color: color ?? const Color(0xFF006FBA)),
+                    child: Icon(icon, color: color ?? const Color(0xFF660033)),
                   ),
             const SizedBox(width: 15),
             Expanded(
@@ -1655,7 +1655,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 ],
               ),
             ),
-            if (isSelected) const Icon(Icons.check_circle, color: Color(0xFF006FBA)),
+            if (isSelected) const Icon(Icons.check_circle, color: Color(0xFF660033)),
           ],
         ),
       ),
@@ -1668,12 +1668,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _agreeToTerms ? const Color(0xFF006FBA) : Colors.grey.shade200),
+        border: Border.all(color: _agreeToTerms ? const Color(0xFF660033) : Colors.grey.shade200),
       ),
       child: CheckboxListTile(
         value: _agreeToTerms,
         onChanged: (val) => setState(() => _agreeToTerms = val ?? false),
-        activeColor: const Color(0xFF006FBA),
+        activeColor: const Color(0xFF660033),
         title: Text(
           "أوافق على شروط الخدمة وسياسة الخصوصية الخاصة بزيارة",
           style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold),

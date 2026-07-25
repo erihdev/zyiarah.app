@@ -387,7 +387,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل الحفظ: $e")));
                       }
                     },
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF006FBA)),
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF660033)),
                     child: Text(isSaving ? "جاري الحفظ..." : 'حفظ الكود', style: GoogleFonts.tajawal(color: Colors.white)),
                   ),
                 ],
@@ -447,7 +447,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Text('إدارة أكواد الخصم', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF006FBA),
+        backgroundColor: const Color(0xFF660033),
         foregroundColor: Colors.white,
       ),
       body: Directionality(
@@ -558,7 +558,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCouponDialog(),
-        backgroundColor: const Color(0xFF006FBA),
+        backgroundColor: const Color(0xFF660033),
         child: const Icon(Icons.add, color: Colors.white),
       ),
     );

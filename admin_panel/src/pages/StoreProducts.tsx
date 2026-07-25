@@ -137,7 +137,7 @@ export default function StoreProducts() {
         <button 
           type="button"
           onClick={() => handleOpenModal()}
-          className="flex items-center justify-center space-x-2 space-x-reverse bg-[#006FBA] hover:bg-[#00578F] text-white px-6 py-3 rounded-2xl font-bold transition-all shadow-lg shadow-[#A9D2EF]"
+          className="flex items-center justify-center space-x-2 space-x-reverse bg-[#660033] hover:bg-[#4D0026] text-white px-6 py-3 rounded-2xl font-bold transition-all shadow-lg shadow-[#E5C3D5]"
         >
           <Plus size={20} />
           <span>إضافة منتج جديد</span>
@@ -147,11 +147,11 @@ export default function StoreProducts() {
       {/* Search & Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="md:col-span-3 relative group">
-          <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#006FBA] transition-colors" size={20} />
+          <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#660033] transition-colors" size={20} />
           <input 
             type="text" 
             placeholder="البحث عن منتج..."
-            className="w-full bg-white border border-slate-200 rounded-2xl py-3.5 pr-12 pl-4 outline-none focus:ring-4 focus:ring-[#EDF5FC] focus:border-[#006FBA] transition-all font-medium"
+            className="w-full bg-white border border-slate-200 rounded-2xl py-3.5 pr-12 pl-4 outline-none focus:ring-4 focus:ring-[#FAF1F6] focus:border-[#660033] transition-all font-medium"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -161,7 +161,7 @@ export default function StoreProducts() {
             <p className="text-xs font-bold text-slate-400 uppercase">إجمالي المنتجات</p>
             <p className="text-2xl font-black text-slate-800">{products.length}</p>
           </div>
-          <div className="p-3 bg-[#EDF5FC] text-[#006FBA] rounded-xl">
+          <div className="p-3 bg-[#FAF1F6] text-[#660033] rounded-xl">
             <Package size={24} />
           </div>
         </div>
@@ -170,7 +170,7 @@ export default function StoreProducts() {
       {/* Products Grid */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20">
-          <Loader2 className="animate-spin text-[#006FBA] mb-4" size={40} />
+          <Loader2 className="animate-spin text-[#660033] mb-4" size={40} />
           <p className="text-slate-500 font-bold">جاري تحميل المنتجات...</p>
         </div>
       ) : (
@@ -196,7 +196,7 @@ export default function StoreProducts() {
               
               <div className="p-5 flex-1 flex flex-col">
                 <h3 className="font-bold text-slate-800 line-clamp-2 min-h-[3rem] mb-2">{product.name}</h3>
-                <p className="text-2xl font-black text-[#006FBA] mb-4">{product.price} <span className="text-xs font-bold text-slate-400">ر.س</span></p>
+                <p className="text-2xl font-black text-[#660033] mb-4">{product.price} <span className="text-xs font-bold text-slate-400">ر.س</span></p>
                 
                 <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between gap-3">
                   <button 
@@ -247,7 +247,7 @@ export default function StoreProducts() {
                   id="prod-name"
                   type="text" 
                   required
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 outline-none focus:ring-4 focus:ring-[#EDF5FC] focus:border-[#006FBA] transition-all font-medium"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 outline-none focus:ring-4 focus:ring-[#FAF1F6] focus:border-[#660033] transition-all font-medium"
                   value={formData.name}
                   onChange={(e) => setFormData({...formData, name: e.target.value})}
                 />
@@ -261,7 +261,7 @@ export default function StoreProducts() {
                     type="number" 
                     step="0.01"
                     required
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 outline-none focus:ring-4 focus:ring-[#EDF5FC] focus:border-[#006FBA] transition-all font-medium"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 outline-none focus:ring-4 focus:ring-[#FAF1F6] focus:border-[#660033] transition-all font-medium"
                     value={formData.price}
                     onChange={(e) => setFormData({...formData, price: parseFloat(e.target.value) || 0})}
                   />
@@ -272,7 +272,7 @@ export default function StoreProducts() {
                     id="prod-image"
                     type="url" 
                     required
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 outline-none focus:ring-4 focus:ring-[#EDF5FC] focus:border-[#006FBA] transition-all font-medium"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 outline-none focus:ring-4 focus:ring-[#FAF1F6] focus:border-[#660033] transition-all font-medium"
                     value={formData.image_url}
                     onChange={(e) => setFormData({...formData, image_url: e.target.value})}
                   />
@@ -284,7 +284,7 @@ export default function StoreProducts() {
                 <textarea 
                   id="prod-desc"
                   rows={3}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 outline-none focus:ring-4 focus:ring-[#EDF5FC] focus:border-[#006FBA] transition-all font-medium resize-none"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 outline-none focus:ring-4 focus:ring-[#FAF1F6] focus:border-[#660033] transition-all font-medium resize-none"
                   value={formData.description}
                   onChange={(e) => setFormData({...formData, description: e.target.value})}
                 />
@@ -301,7 +301,7 @@ export default function StoreProducts() {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="flex items-center space-x-2 space-x-reverse bg-[#006FBA] hover:bg-[#00578F] disabled:opacity-60 text-white px-10 py-3 rounded-2xl font-bold transition-all shadow-lg shadow-[#D4E8F7]"
+                  className="flex items-center space-x-2 space-x-reverse bg-[#660033] hover:bg-[#4D0026] disabled:opacity-60 text-white px-10 py-3 rounded-2xl font-bold transition-all shadow-lg shadow-[#F2DEE9]"
                 >
                   <Save size={20} />
                   <span>{isSaving ? 'جارٍ الحفظ...' : (editingProduct ? 'حفظ التعديلات' : 'نشر المنتج')}</span>

@@ -14,7 +14,7 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _controller = PageController();
   int _currentPage = 0;
-  static const Color _brand = Color(0xFF006FBA);
+  static const Color _brand = Color(0xFF660033);
 
   // أيقونات محلّية مميّزة لكل شريحة — بديل موثوق عن Lottie عبر الإنترنت الذي كان
   // يفشل فيسقط للمكنسة نفسها في الشرائح الثلاث.

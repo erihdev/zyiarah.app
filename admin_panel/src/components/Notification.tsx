@@ -70,13 +70,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     const toastStyles: Record<ToastType, string> = {
         success: 'bg-emerald-50 border-emerald-200 text-emerald-800',
         error:   'bg-red-50 border-red-200 text-red-800',
-        info:    'bg-[#EDF5FC] border-[#A9D2EF] text-[#00578F]',
+        info:    'bg-[#FAF1F6] border-[#E5C3D5] text-[#4D0026]',
     };
 
     const ToastIcon = ({ type }: { type: ToastType }) => {
         if (type === 'success') return <CheckCircle2 size={17} className="text-emerald-600 shrink-0" />;
         if (type === 'error')   return <XCircle      size={17} className="text-red-600 shrink-0" />;
-        return <Info size={17} className="text-[#006FBA] shrink-0" />;
+        return <Info size={17} className="text-[#660033] shrink-0" />;
     };
 
     return (

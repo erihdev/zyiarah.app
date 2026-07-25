@@ -33,7 +33,7 @@ class StoreScheduleScreen extends StatefulWidget {
 }
 
 class _StoreScheduleScreenState extends State<StoreScheduleScreen> {
-  static const Color _brand = Color(0xFF006FBA);
+  static const Color _brand = Color(0xFF660033);
 
   /// نافذة انشغال السائق بالتوصيل — تُحدّد الخانات الصالحة والسعة المشغولة. التوصيل
   /// أقصر من خدمة تنظيف، فساعتان نافذة معقولة (والحد الأدنى للخدمات ساعتان أيضاً).

@@ -36,7 +36,7 @@ const emptyPkgForm = {
     features: '', isPremium: false,
 };
 
-const pkgInputCls = 'w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all';
+const pkgInputCls = 'w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 transition-all';
 
 function PackagesSection() {
     const { toast, confirm } = useNotification();
@@ -126,7 +126,7 @@ function PackagesSection() {
                 <button
                     type="button"
                     onClick={() => { if (showForm) { setShowForm(false); setEditingId(null); } else openForm(); }}
-                    className="flex items-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all"
+                    className="flex items-center gap-2 px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl transition-all"
                 >
                     <Plus size={16} />
                     {showForm ? 'إغلاق النموذج' : 'إضافة باقة'}
@@ -134,7 +134,7 @@ function PackagesSection() {
             </div>
 
             {showForm && (
-                <div className="bg-blue-50 border-2 border-blue-200 rounded-[2rem] p-6 space-y-4">
+                <div className="bg-rose-50 border-2 border-rose-200 rounded-[2rem] p-6 space-y-4">
                     <h4 className="font-black text-slate-800 text-lg">{editingId ? 'تعديل الباقة' : 'بيانات الباقة الجديدة'}</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
@@ -190,7 +190,7 @@ function PackagesSection() {
                             type="button"
                             onClick={handleSave}
                             disabled={saving}
-                            className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold rounded-xl transition-all"
+                            className="flex items-center gap-2 px-6 py-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white font-bold rounded-xl transition-all"
                         >
                             {saving ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
                             {editingId ? 'حفظ التعديلات' : 'حفظ الباقة'}
@@ -208,7 +208,7 @@ function PackagesSection() {
 
             {loading ? (
                 <div className="flex flex-col items-center justify-center h-48 bg-white rounded-[32px] border-2 border-dashed border-slate-100">
-                    <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#006FBA] border-t-transparent"></div>
+                    <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#660033] border-t-transparent"></div>
                     <p className="text-slate-500 mt-4 font-black">جاري تحميل الباقات...</p>
                 </div>
             ) : packages.length === 0 ? (
@@ -225,7 +225,7 @@ function PackagesSection() {
                             <div className="p-6 space-y-4">
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="min-w-0">
-                                        <h4 className="text-lg font-black text-[#006FBA] truncate flex items-center gap-2">
+                                        <h4 className="text-lg font-black text-[#660033] truncate flex items-center gap-2">
                                             {pkg.isPremium && <Star size={16} className="text-amber-400 shrink-0" fill="currentColor" />}
                                             {pkg.title}
                                         </h4>
@@ -233,7 +233,7 @@ function PackagesSection() {
                                     </div>
                                     <div className="flex gap-1 shrink-0">
                                         <button type="button" onClick={() => openForm(pkg)}
-                                            className="p-2.5 bg-slate-50 text-blue-500 hover:bg-blue-50 rounded-xl transition-all" title="تعديل">
+                                            className="p-2.5 bg-slate-50 text-rose-500 hover:bg-rose-50 rounded-xl transition-all" title="تعديل">
                                             <Pencil size={16} />
                                         </button>
                                         <button type="button" onClick={() => handleDelete(pkg)}
@@ -245,15 +245,15 @@ function PackagesSection() {
                                 <div className="flex items-center justify-between">
                                     <span className="text-2xl font-black text-slate-800">{pkg.price} <span className="text-sm">ر.س</span></span>
                                     <div className="flex gap-2">
-                                        <span className="px-3 py-1 bg-[#006FBA]/10 text-[#006FBA] text-[11px] font-bold rounded-lg">{pkg.visits || 0} زيارة</span>
-                                        <span className="px-3 py-1 bg-[#006FBA]/10 text-[#006FBA] text-[11px] font-bold rounded-lg">{pkg.hours || 4} ساعات/زيارة</span>
+                                        <span className="px-3 py-1 bg-[#660033]/10 text-[#660033] text-[11px] font-bold rounded-lg">{pkg.visits || 0} زيارة</span>
+                                        <span className="px-3 py-1 bg-[#660033]/10 text-[#660033] text-[11px] font-bold rounded-lg">{pkg.hours || 4} ساعات/زيارة</span>
                                     </div>
                                 </div>
                                 {(pkg.features || []).length > 0 && (
                                     <div className="border-t border-slate-100 pt-3 space-y-1.5">
                                         {(pkg.features || []).map((f, i) => (
                                             <div key={i} className="flex items-center gap-2 text-xs font-bold text-slate-600">
-                                                <CheckCircle2 size={14} className={pkg.isPremium ? 'text-amber-400' : 'text-[#006FBA]'} />
+                                                <CheckCircle2 size={14} className={pkg.isPremium ? 'text-amber-400' : 'text-[#660033]'} />
                                                 {f}
                                             </div>
                                         ))}
@@ -273,7 +273,7 @@ const StatusBadge = ({ status }: { status: string }) => {
         case 'active':
             return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-100 text-[10px]"><CheckCircle2 size={12} />نشط</span>;
         case 'approved_waiting_payment':
-            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EDF5FC] text-[#00578F] font-bold border border-[#D4E8F7] text-[10px]"><CreditCard size={12} />بانتظار الدفع</span>;
+            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAF1F6] text-[#4D0026] font-bold border border-[#F2DEE9] text-[10px]"><CreditCard size={12} />بانتظار الدفع</span>;
         case 'pending':
             return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-100 text-[10px]"><Clock size={12} />قيد المراجعة</span>;
         case 'rejected':
@@ -352,7 +352,7 @@ export default function Contracts() {
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10" dir="rtl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                    <div className="p-3 bg-[#006FBA] text-white rounded-2xl shadow-lg shadow-[#A9D2EF]">
+                    <div className="p-3 bg-[#660033] text-white rounded-2xl shadow-lg shadow-[#E5C3D5]">
                         <FileSignature size={28} />
                     </div>
                     <div>
@@ -367,7 +367,7 @@ export default function Contracts() {
                 <button
                     type="button"
                     onClick={() => setActiveTab('contracts')}
-                    className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'contracts' ? 'bg-[#006FBA] text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
+                    className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'contracts' ? 'bg-[#660033] text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
                 >
                     <FileSignature size={16} />
                     العقود
@@ -375,7 +375,7 @@ export default function Contracts() {
                 <button
                     type="button"
                     onClick={() => setActiveTab('packages')}
-                    className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'packages' ? 'bg-[#006FBA] text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
+                    className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'packages' ? 'bg-[#660033] text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
                 >
                     <Package size={16} />
                     باقات الاشتراك
@@ -386,11 +386,11 @@ export default function Contracts() {
 
             {activeTab === 'contracts' && (<>
             <div className="relative group">
-                <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#006FBA] transition-colors" size={20} />
+                <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#660033] transition-colors" size={20} />
                 <input
                     type="text"
                     placeholder="ابحث باسم العميل، الباقة، أو رقم العقد..."
-                    className="w-full pl-6 pr-12 py-4 bg-white border-2 border-slate-100 rounded-[20px] text-base outline-none focus:ring-4 focus:ring-[#006FBA]/10 focus:border-[#006FBA] transition-all font-bold text-slate-700 shadow-sm"
+                    className="w-full pl-6 pr-12 py-4 bg-white border-2 border-slate-100 rounded-[20px] text-base outline-none focus:ring-4 focus:ring-[#660033]/10 focus:border-[#660033] transition-all font-bold text-slate-700 shadow-sm"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -398,7 +398,7 @@ export default function Contracts() {
 
             {loading ? (
                 <div className="flex flex-col items-center justify-center h-64 bg-white rounded-[32px] border-2 border-dashed border-slate-100">
-                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#006FBA] border-t-transparent shadow-md"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#660033] border-t-transparent shadow-md"></div>
                     <p className="text-slate-500 mt-6 font-black text-lg">جاري جرد العقود...</p>
                 </div>
             ) : filtered.length === 0 ? (
@@ -412,7 +412,7 @@ export default function Contracts() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filtered.map((contract) => (
-                        <div key={contract.id} className="group bg-white rounded-[28px] border-2 border-slate-50 overflow-hidden hover:border-[#D4E8F7]/50 hover:shadow-2xl hover:shadow-[#EDF5FC] transition-all duration-500">
+                        <div key={contract.id} className="group bg-white rounded-[28px] border-2 border-slate-50 overflow-hidden hover:border-[#F2DEE9]/50 hover:shadow-2xl hover:shadow-[#FAF1F6] transition-all duration-500">
                             <div className="p-6">
                                 <div className="flex items-center justify-between mb-6">
                                     <StatusBadge status={contract.status} />
@@ -423,7 +423,7 @@ export default function Contracts() {
                                 </div>
 
                                 <div className="flex items-start gap-4 mb-6">
-                                    <div className="p-4 bg-slate-50 text-slate-400 rounded-2xl group-hover:bg-[#006FBA] group-hover:text-white transition-all duration-500">
+                                    <div className="p-4 bg-slate-50 text-slate-400 rounded-2xl group-hover:bg-[#660033] group-hover:text-white transition-all duration-500">
                                         <FileSignature size={24} />
                                     </div>
                                     <div className="flex-1 min-w-0">
@@ -441,7 +441,7 @@ export default function Contracts() {
                                     </div>
                                     <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100/50">
                                         <span className="text-[11px] font-bold text-slate-400">قيمة التعاقد</span>
-                                        <span className="text-sm font-black text-[#006FBA]">{contract.planPrice || 0} ر.س</span>
+                                        <span className="text-sm font-black text-[#660033]">{contract.planPrice || 0} ر.س</span>
                                     </div>
                                 </div>
 
@@ -450,7 +450,7 @@ export default function Contracts() {
                                         <button 
                                             type="button"
                                             onClick={() => handleApprove(contract.id, contract.planName, contract.userId)}
-                                            className="flex-1 py-3.5 bg-[#006FBA] text-white text-sm font-black rounded-2xl hover:bg-[#00578F] transition-all shadow-lg shadow-[#D4E8F7] active:scale-95"
+                                            className="flex-1 py-3.5 bg-[#660033] text-white text-sm font-black rounded-2xl hover:bg-[#4D0026] transition-all shadow-lg shadow-[#F2DEE9] active:scale-95"
                                         >
                                             اعتماد الباقة
                                         </button>

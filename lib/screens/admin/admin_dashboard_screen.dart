@@ -130,7 +130,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   icon: const Icon(Icons.logout),
                   label: Text(ZyiarahStrings.logout),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF006FBA),
+                    backgroundColor: const Color(0xFF660033),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -152,7 +152,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(ZyiarahStrings.adminPanel, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-          backgroundColor: const Color(0xFF006FBA),
+          backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,
           centerTitle: true,
           elevation: 0,
@@ -185,10 +185,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           surfaceTintColor: Colors.transparent,
           shadowColor: Colors.black.withValues(alpha: 0.08),
           elevation: 8,
-          indicatorColor: const Color(0xFF006FBA).withValues(alpha: 0.12),
+          indicatorColor: const Color(0xFF660033).withValues(alpha: 0.12),
           destinations: filteredTabs.map((t) => NavigationDestination(
             icon: Icon(t['icon'] as IconData),
-            selectedIcon: Icon(t['icon'] as IconData, color: const Color(0xFF006FBA)),
+            selectedIcon: Icon(t['icon'] as IconData, color: const Color(0xFF660033)),
             label: t['label'] as String,
           )).toList(),
         ),

@@ -31,11 +31,11 @@ const RoleBadge = ({ role }: { role: string }) => {
         case 'Accountant':
             return <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-xs font-bold">محاسب مالية</span>;
         case 'Marketer':
-            return <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg text-xs font-bold">مسؤول تسويق</span>;
+            return <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 text-rose-700 border border-rose-100 rounded-lg text-xs font-bold">مسؤول تسويق</span>;
         case 'Orders Manager':
             return <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-orange-50 text-orange-700 border border-orange-100 rounded-lg text-xs font-bold">مدير الطلبات</span>;
         default:
-            return <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#EDF5FC] text-[#00578F] border border-[#D4E8F7] rounded-lg text-xs font-bold">موظف دعم فني</span>;
+            return <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#FAF1F6] text-[#4D0026] border border-[#F2DEE9] rounded-lg text-xs font-bold">موظف دعم فني</span>;
     }
 };
 
@@ -167,7 +167,7 @@ export default function Admins() {
                                                 <div className="flex items-center justify-center gap-2">
                                                     {!isSuperAdmin && (
                                                         <>
-                                                            <button type="button" title="تعديل" onClick={manageInApp} className="p-2 text-slate-400 hover:text-[#006FBA] hover:bg-[#EDF5FC] rounded-lg transition-colors">
+                                                            <button type="button" title="تعديل" onClick={manageInApp} className="p-2 text-slate-400 hover:text-[#660033] hover:bg-[#FAF1F6] rounded-lg transition-colors">
                                                                 <Edit size={16} />
                                                             </button>
                                                             <button

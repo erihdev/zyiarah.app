@@ -104,7 +104,7 @@ export default function Support() {
     const statusLabel = (s: string) => s === 'open' ? 'مفتوحة' : s === 'replied' ? 'تم الرد' : s === 'resolved' ? 'تم الحل' : s === 'closed' ? 'مغلقة' : s;
     const statusClasses = (s: string) => s === 'open' ? 'text-rose-600 bg-rose-50 border-rose-100'
         : s === 'resolved' || s === 'closed' ? 'text-emerald-600 bg-emerald-50 border-emerald-100'
-        : 'text-[#006FBA] bg-[#EDF5FC] border-[#D4E8F7]';
+        : 'text-[#660033] bg-[#FAF1F6] border-[#F2DEE9]';
 
     const relativeTime = (ts?: Timestamp) => {
         if (!ts) return '';
@@ -121,7 +121,7 @@ export default function Support() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-6">
                 <div>
                     <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
-                        <LifeBuoy className="text-[#006FBA]" />
+                        <LifeBuoy className="text-[#660033]" />
                         الدعم الفني والشكاوى (حي)
                     </h2>
                     <p className="text-slate-500 font-medium text-sm mt-1">إدارة تذاكر الدعم والمنازعات لحظة بلحظة من الفايربيس</p>
@@ -138,9 +138,9 @@ export default function Support() {
                     <p className="text-sm font-bold text-slate-500 mb-1">تذاكر مفتوحة</p>
                     <h3 className="text-3xl font-extrabold text-slate-800">{loading ? '...' : openCount}</h3>
                 </div>
-                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] flex flex-col border-l-4 border-l-[#006FBA]">
+                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] flex flex-col border-l-4 border-l-[#660033]">
                     <div className="flex justify-between items-start mb-4">
-                        <div className="w-10 h-10 bg-[#EDF5FC] text-[#006FBA] rounded-xl flex items-center justify-center"><MessageSquare size={20} /></div>
+                        <div className="w-10 h-10 bg-[#FAF1F6] text-[#660033] rounded-xl flex items-center justify-center"><MessageSquare size={20} /></div>
                         <Clock size={16} className="text-slate-300 mt-2" />
                     </div>
                     <p className="text-sm font-bold text-slate-500 mb-1">تم الرد عليها</p>
@@ -162,25 +162,25 @@ export default function Support() {
                         <div className="relative w-full">
                             <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                             <input type="text" placeholder="ابحث في التذاكر..."
-                                className="w-full pl-3 pr-9 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#006FBA]/20 focus:border-[#006FBA] transition-all"
+                                className="w-full pl-3 pr-9 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#660033]/20 focus:border-[#660033] transition-all"
                                 value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                         </div>
                     </div>
                     <div className="flex-1 overflow-y-auto p-2">
                         {loading ? (
                             <div className="flex items-center justify-center h-40">
-                                <div className="animate-spin rounded-full h-8 w-8 border-4 border-[#006FBA] border-t-transparent" />
+                                <div className="animate-spin rounded-full h-8 w-8 border-4 border-[#660033] border-t-transparent" />
                             </div>
                         ) : filteredTickets.length === 0 ? (
                             <p className="text-center text-slate-400 text-sm py-10 font-bold">لا توجد تذاكر دعم حالياً</p>
                         ) : filteredTickets.map((ticket) => (
                             <div key={ticket.id}
                                 onClick={() => setSelected(ticket)}
-                                className={`p-4 rounded-xl cursor-pointer transition-colors mb-2 ${selected?.id === ticket.id ? 'bg-[#EDF5FC] border border-[#A9D2EF]' : 'hover:bg-slate-50 border border-transparent hover:border-slate-100'}`}>
+                                className={`p-4 rounded-xl cursor-pointer transition-colors mb-2 ${selected?.id === ticket.id ? 'bg-[#FAF1F6] border border-[#E5C3D5]' : 'hover:bg-slate-50 border border-transparent hover:border-slate-100'}`}>
                                 <div className="flex justify-between items-center mb-1">
                                     <span className="text-xs font-bold text-slate-400 font-mono">#{ticket.id.substring(0, 6).toUpperCase()}</span>
                                     {ticket.status === 'open' && <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />}
-                                    {ticket.status === 'replied' && <span className="w-2 h-2 rounded-full bg-[#006FBA]" />}
+                                    {ticket.status === 'replied' && <span className="w-2 h-2 rounded-full bg-[#660033]" />}
                                 </div>
                                 <h4 className="font-bold text-slate-800 text-sm mb-1 line-clamp-2">{ticket.subject || 'مشكلة غير محددة'}</h4>
                                 <div className="flex justify-between items-center text-xs text-slate-500">
@@ -227,11 +227,11 @@ export default function Support() {
                                     const admin = isAdminMsg(msg);
                                     return (
                                     <div key={msg.id} className={`flex gap-4 max-w-2xl ${admin ? 'mr-auto flex-row-reverse' : ''}`}>
-                                        <div className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-sm font-bold mt-1 ${admin ? 'bg-gradient-to-br from-[#006FBA] to-[#006FBA] text-white' : 'bg-slate-100 border border-slate-200 text-slate-600'}`}>
+                                        <div className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-sm font-bold mt-1 ${admin ? 'bg-gradient-to-br from-[#660033] to-[#660033] text-white' : 'bg-slate-100 border border-slate-200 text-slate-600'}`}>
                                             {admin ? 'Z' : (selected.userEmail || 'U')[0]}
                                         </div>
                                         <div className={admin ? 'text-left' : ''}>
-                                            <div className={`rounded-2xl p-4 text-sm leading-relaxed ${admin ? 'bg-[#006FBA] text-white rounded-tl-sm text-right' : 'bg-slate-50 border border-slate-100 text-slate-700 rounded-tr-sm'}`}>
+                                            <div className={`rounded-2xl p-4 text-sm leading-relaxed ${admin ? 'bg-[#660033] text-white rounded-tl-sm text-right' : 'bg-slate-50 border border-slate-100 text-slate-700 rounded-tr-sm'}`}>
                                                 {msg.text}
                                             </div>
                                             <span className="text-xs text-slate-400 mt-1 inline-block">
@@ -259,7 +259,7 @@ export default function Support() {
                                             value={reply}
                                             onChange={(e) => setReply(e.target.value)}
                                             onKeyDown={(e) => { if (e.key === 'Enter' && e.ctrlKey) handleSend(); }}
-                                            className="w-full bg-[#f8fafc] border border-slate-200 text-slate-700 text-sm rounded-xl px-4 py-3 outline-none focus:border-[#006FBA] focus:ring-2 focus:ring-[#006FBA]/20 transition-all resize-none block pr-14"
+                                            className="w-full bg-[#f8fafc] border border-slate-200 text-slate-700 text-sm rounded-xl px-4 py-3 outline-none focus:border-[#660033] focus:ring-2 focus:ring-[#660033]/20 transition-all resize-none block pr-14"
                                             placeholder="اكتب ردك هنا... (Ctrl+Enter للإرسال)"
                                         />
                                           <button
@@ -267,7 +267,7 @@ export default function Support() {
                                             title="إرسال رسالة"
                                             onClick={handleSend}
                                             disabled={sending || !reply.trim()}
-                                            className="absolute left-3 bottom-3 w-10 h-10 bg-[#006FBA] disabled:bg-slate-300 text-white flex items-center justify-center rounded-lg hover:bg-[#00578F] transition-colors shadow-sm">
+                                            className="absolute left-3 bottom-3 w-10 h-10 bg-[#660033] disabled:bg-slate-300 text-white flex items-center justify-center rounded-lg hover:bg-[#4D0026] transition-colors shadow-sm">
                                             {sending ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" /> : <Send size={18} />}
                                         </button>
                                     </div>

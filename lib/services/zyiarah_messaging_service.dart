@@ -55,7 +55,7 @@ class ZyiarahMessagingService {
   }) async {
     final emailHtml = '''
 <div dir="rtl" style="font-family:Tajawal,Arial,sans-serif;max-width:600px;margin:auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0">
-  <div style="background:linear-gradient(135deg,#006FBA,#2E86C8);padding:32px;text-align:center">
+  <div style="background:linear-gradient(135deg,#660033,#8E2B5C);padding:32px;text-align:center">
     <h1 style="color:#fff;margin:0;font-size:24px">مهمة جديدة مسندة إليك 🚀</h1>
     <p style="color:#e9d5ea;margin:8px 0 0">تطبيق زيارة للخدمات المنزلية</p>
   </div>
@@ -70,7 +70,7 @@ class ZyiarahMessagingService {
       </table>
     </div>
     <div style="text-align:center;margin-top:24px">
-      <a href="zyiarah://app/order/$orderId" style="background:#006FBA;color:#fff;padding:14px 32px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:15px;display:inline-block">افتح التطبيق الآن</a>
+      <a href="zyiarah://app/order/$orderId" style="background:#660033;color:#fff;padding:14px 32px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:15px;display:inline-block">افتح التطبيق الآن</a>
     </div>
   </div>
   <div style="background:#f8fafc;padding:16px;text-align:center;color:#94a3b8;font-size:12px">
@@ -529,12 +529,12 @@ class ZyiarahMessagingService {
     <style>
         body { font-family: 'Arial', sans-serif; background-color: #f1f5f9; margin: 0; padding: 0; }
         .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 24px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
-        .header { background: #006fba; padding: 40px 20px; text-align: center; }
+        .header { background: #660033; padding: 40px 20px; text-align: center; }
         .header h1 { color: #ffffff; margin: 0; font-size: 24px; }
         .content { padding: 40px 30px; line-height: 1.8; color: #1e293b; text-align: right; }
         .greeting { font-size: 18px; font-weight: bold; margin-bottom: 20px; }
         .footer { background: #f8fafc; padding: 20px; text-align: center; color: #64748b; font-size: 12px; }
-        .btn { display: inline-block; padding: 12px 24px; background: #006fba; color: white; text-decoration: none; border-radius: 12px; margin-top: 20px; }
+        .btn { display: inline-block; padding: 12px 24px; background: #660033; color: white; text-decoration: none; border-radius: 12px; margin-top: 20px; }
     </style>
 </head>
 <body>
@@ -544,7 +544,7 @@ class ZyiarahMessagingService {
         </div>
         <div class="content">
             <div class="greeting">$greeting</div>
-            <h2 style="color: #006fba;">$title</h2>
+            <h2 style="color: #660033;">$title</h2>
             $contentHtml
         </div>
         <div class="footer">

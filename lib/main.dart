@@ -231,7 +231,7 @@ class _MaintenanceScreen extends StatelessWidget {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: const Color(0xFF006FBA),
+        backgroundColor: const Color(0xFF660033),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
@@ -313,7 +313,7 @@ class _RoleUnavailableScreen extends StatelessWidget {
                   icon: const Icon(Icons.refresh_rounded),
                   label: const Text('إعادة المحاولة'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF006FBA),
+                    backgroundColor: const Color(0xFF660033),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

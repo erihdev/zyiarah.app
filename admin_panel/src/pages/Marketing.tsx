@@ -141,7 +141,7 @@ export default function Marketing() {
                 </div>
                 <button
                     onClick={() => setIsAddModalOpen(true)}
-                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-pink-600 text-white rounded-xl font-bold hover:from-blue-700 hover:to-pink-700 transition-all shadow-lg shadow-blue-500/20 hover:shadow-xl hover:-translate-y-0.5"
+                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-rose-600 to-pink-600 text-white rounded-xl font-bold hover:from-rose-700 hover:to-pink-700 transition-all shadow-lg shadow-rose-500/20 hover:shadow-xl hover:-translate-y-0.5"
                 >
                     <PlusCircle size={20} />
                     إنشاء كوبون جديد
@@ -154,7 +154,7 @@ export default function Marketing() {
                         <p className="text-sm font-bold text-slate-500 mb-1">الكوبونات النشطة</p>
                         <h3 className="text-3xl font-extrabold text-slate-800">{activeCouponsCount}</h3>
                     </div>
-                    <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
                         <Tag size={28} strokeWidth={2.5} />
                     </div>
                 </div>
@@ -193,14 +193,14 @@ export default function Marketing() {
                                     <td colSpan={6} className="px-6 py-12 text-center text-slate-400 font-medium">لا توجد كوبونات خصم حالياً.</td>
                                 </tr>
                             ) : coupons.map((coupon) => (
-                                <tr key={coupon.id} className={`transition-colors group ${coupon.status === 'expired' ? 'bg-slate-50/50 opacity-75' : 'hover:bg-blue-50/30'}`}>
+                                <tr key={coupon.id} className={`transition-colors group ${coupon.status === 'expired' ? 'bg-slate-50/50 opacity-75' : 'hover:bg-rose-50/30'}`}>
                                     <td className="px-6 py-4">
                                         <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg border border-slate-200">
                                             <Tag size={14} className="text-slate-400" />
                                             <span className="font-mono font-bold text-slate-700 tracking-wider text-sm">{coupon.code}</span>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 font-extrabold text-blue-600">
+                                    <td className="px-6 py-4 font-extrabold text-rose-600">
                                         {coupon.type === 'percentage' ? `${coupon.value}%` : `${coupon.value} ر.س`}
                                     </td>
                                     <td className="px-6 py-4">
@@ -211,7 +211,7 @@ export default function Marketing() {
                                             </div>
                                             <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                                                 <div
-                                                    className={`h-full rounded-full transition-all duration-500 ${coupon.uses >= coupon.maxUses ? 'bg-rose-500' : 'bg-blue-500'}`}
+                                                    className={`h-full rounded-full transition-all duration-500 ${coupon.uses >= coupon.maxUses ? 'bg-rose-500' : 'bg-rose-500'}`}
                                                     style={{ width: `${Math.min((coupon.uses / coupon.maxUses) * 100, 100)}%` }}
                                                 ></div>
                                             </div>
@@ -260,7 +260,7 @@ export default function Marketing() {
                     <div className="relative bg-white w-full max-w-md rounded-[24px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
                         <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                             <h3 className="text-xl font-extrabold text-slate-800 flex items-center gap-2">
-                                <Tag size={20} className="text-blue-600" />
+                                <Tag size={20} className="text-rose-600" />
                                 إضافة كوبون خصم
                             </h3>
                             <button type="button" title="إغلاق" onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-slate-100 p-2 rounded-full transition-colors">
@@ -276,7 +276,7 @@ export default function Marketing() {
                                     required
                                     value={newCode}
                                     onChange={(e) => setNewCode(e.target.value)}
-                                    className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all font-mono uppercase"
+                                    className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-xl px-4 py-3 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 transition-all font-mono uppercase"
                                     placeholder="مثال: WELCOME20"
                                     dir="ltr"
                                 />
@@ -289,7 +289,7 @@ export default function Marketing() {
                                         aria-label="نوع الخصم"
                                         value={newType}
                                         onChange={(e) => setNewType(e.target.value as 'percentage' | 'fixed')}
-                                        className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                                        className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-xl px-4 py-3 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 transition-all"
                                     >
                                         <option value="percentage">نسبة مئوية (%)</option>
                                         <option value="fixed">مبلغ ثابت (ر.س)</option>
@@ -304,7 +304,7 @@ export default function Marketing() {
                                         min="1"
                                         value={newValue}
                                         onChange={(e) => setNewValue(Number(e.target.value))}
-                                        className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all text-left"
+                                        className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-xl px-4 py-3 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 transition-all text-left"
                                         dir="ltr"
                                     />
                                 </div>
@@ -319,7 +319,7 @@ export default function Marketing() {
                                         required
                                         value={newExpiry}
                                         onChange={(e) => setNewExpiry(e.target.value)}
-                                        className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer"
+                                        className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-xl px-4 py-3 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 transition-all cursor-pointer"
                                     />
                                 </div>
                                 <div className="space-y-2">
@@ -330,7 +330,7 @@ export default function Marketing() {
                                         min="1"
                                         value={newMaxUses}
                                         onChange={(e) => setNewMaxUses(Number(e.target.value))}
-                                        className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all text-left"
+                                        className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-xl px-4 py-3 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 transition-all text-left"
                                         dir="ltr"
                                         placeholder="1000"
                                     />
@@ -348,7 +348,7 @@ export default function Marketing() {
                                 <button
                                     type="submit"
                                     disabled={isSubmitting}
-                                    className="flex-[2] flex items-center justify-center gap-2 px-4 py-3.5 bg-gradient-to-r from-blue-600 to-pink-600 text-white font-extrabold rounded-xl hover:shadow-lg hover:shadow-blue-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex-[2] flex items-center justify-center gap-2 px-4 py-3.5 bg-gradient-to-r from-rose-600 to-pink-600 text-white font-extrabold rounded-xl hover:shadow-lg hover:shadow-rose-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : 'حفظ الكوبون'}
                                 </button>

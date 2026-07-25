@@ -49,7 +49,7 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
   double get _grossedPlanPrice =>
       ((widget.planPrice * 1.15) * 100).roundToDouble() / 100;
 
-  final Color brandPurple = const Color(0xFF006FBA);
+  final Color brandPurple = const Color(0xFF660033);
   bool _isSubmitting = false;
   String _userName = "...";
   String _userPhone = "...";

@@ -149,7 +149,7 @@ export default function AccountDeletion() {
                                 {filtered.map((req) => (
                                     <tr key={req.id} className="hover:bg-rose-50/20 transition-colors group">
                                         <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 text-xs font-bold rounded-md ${req.type === 'driver' || req.type === 'سائق' ? 'bg-[#EDF5FC] text-[#00578F]' : 'bg-teal-50 text-teal-700'}`}>
+                                            <span className={`px-2 py-1 text-xs font-bold rounded-md ${req.type === 'driver' || req.type === 'سائق' ? 'bg-[#FAF1F6] text-[#4D0026]' : 'bg-teal-50 text-teal-700'}`}>
                                                 {req.type === 'driver' ? 'سائق' : 'عميل'}
                                             </span>
                                         </td>

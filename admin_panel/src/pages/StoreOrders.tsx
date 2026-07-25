@@ -110,7 +110,7 @@ export default function StoreOrders() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <Loader2 className="animate-spin text-[#006FBA] mb-4" size={40} />
+        <Loader2 className="animate-spin text-[#660033] mb-4" size={40} />
         <p className="text-slate-500 font-bold">جاري تحميل الطلبات...</p>
       </div>
     );
@@ -143,7 +143,7 @@ export default function StoreOrders() {
                   <div className={`p-3 rounded-2xl ${
                     statusTone(order.status) === 'green' ? 'bg-green-50 text-green-600' :
                     statusTone(order.status) === 'red' ? 'bg-red-50 text-red-600' :
-                    statusTone(order.status) === 'blue' ? 'bg-[#EDF5FC] text-[#006FBA]' :
+                    statusTone(order.status) === 'blue' ? 'bg-[#FAF1F6] text-[#660033]' :
                     'bg-amber-50 text-amber-600'
                   }`}>
                     <Package size={24} />
@@ -161,7 +161,7 @@ export default function StoreOrders() {
                   <div className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase ${
                     statusTone(order.status) === 'green' ? 'bg-green-100 text-green-700' :
                     statusTone(order.status) === 'red' ? 'bg-red-100 text-red-700' :
-                    statusTone(order.status) === 'blue' ? 'bg-[#D4E8F7] text-[#00578F]' :
+                    statusTone(order.status) === 'blue' ? 'bg-[#F2DEE9] text-[#4D0026]' :
                     'bg-amber-100 text-amber-700'
                   }`}>
                     {STATUS_LABELS[order.status] ?? order.status}
@@ -195,7 +195,7 @@ export default function StoreOrders() {
                         ))}
                         <div className="pt-3 border-t border-slate-100 flex items-center justify-between font-black">
                           <span className="text-slate-800">الإجمالي الأساسي</span>
-                          <span className="text-[#006FBA] text-lg">{order.total_amount} ر.س</span>
+                          <span className="text-[#660033] text-lg">{order.total_amount} ر.س</span>
                         </div>
                       </div>
                     </div>
@@ -220,7 +220,7 @@ export default function StoreOrders() {
                         <button
                           type="button"
                           onClick={() => handleStatusUpdate(order.id, 'delivering')}
-                          className="w-full flex items-center justify-center gap-2 bg-[#006FBA] hover:bg-[#00578F] text-white py-3 rounded-2xl font-bold transition-all shadow-lg shadow-[#D4E8F7]"
+                          className="w-full flex items-center justify-center gap-2 bg-[#660033] hover:bg-[#4D0026] text-white py-3 rounded-2xl font-bold transition-all shadow-lg shadow-[#F2DEE9]"
                         >
                           <CheckCircle size={18} />
                           <span>بدء التوصيل</span>

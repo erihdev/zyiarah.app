@@ -78,7 +78,7 @@ class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text("محادثة التذكرة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF006FBA),
+          backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,
           actions: [
             TextButton.icon(

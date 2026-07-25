@@ -63,7 +63,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
             backgroundColor: const Color(0xFFF8FAFC),
             appBar: AppBar(
               title: Text("سجل الطلبات الشامل", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
-              backgroundColor: const Color(0xFF006FBA),
+              backgroundColor: const Color(0xFF660033),
               foregroundColor: Colors.white,
               elevation: 0,
               actions: [
@@ -156,7 +156,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
             decoration: InputDecoration(
               hintText: "ابحث برقم الطلب أو اسم العميل أو الخدمة",
               hintStyle: GoogleFonts.tajawal(color: Colors.grey, fontSize: 13),
-              prefixIcon: const Icon(Icons.search, color: Color(0xFF006FBA)),
+              prefixIcon: const Icon(Icons.search, color: Color(0xFF660033)),
               suffixIcon: _search.isEmpty
                   ? null
                   : IconButton(
@@ -176,7 +176,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: Color(0xFF006FBA), width: 1.5),
+                borderSide: const BorderSide(color: Color(0xFF660033), width: 1.5),
               ),
             ),
           ),
@@ -254,7 +254,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                               style: GoogleFonts.tajawal(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
-                                  color: const Color(0xFF006FBA))),
+                                  color: const Color(0xFF660033))),
                         ],
                         const SizedBox(height: 2),
                         Text("رقم الطلب: #$code", style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),

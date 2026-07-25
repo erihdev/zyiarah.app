@@ -43,11 +43,11 @@ const StatusBadge = ({ status }: { status: string }) => {
         case 'pending_admin_approval': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-orange-700 font-bold border border-orange-100 text-xs"><Clock size={14} />بانتظار موافقة الإدارة</span>;
         case 'awaiting_payment': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-100 text-xs"><Clock size={14} />بانتظار الدفع</span>;
         case 'under_review': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-orange-700 font-bold border border-orange-100 text-xs"><Clock size={14} />تحت المراجعة</span>;
-        case 'delivering': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EDF5FC] text-[#00578F] font-bold border border-[#D4E8F7] text-xs"><Package size={14} />جاري التنفيذ</span>;
+        case 'delivering': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAF1F6] text-[#4D0026] font-bold border border-[#F2DEE9] text-xs"><Package size={14} />جاري التنفيذ</span>;
         case 'scheduled': case 'assigned': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-50 text-teal-700 font-bold border border-teal-100 text-xs"><UserCheck size={14} />تم تعيين السائق</span>;
-        case 'accepted':  return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EDF5FC] text-[#00578F] font-bold border border-[#D4E8F7] text-xs"><UserCheck size={14} />تم القبول</span>;
+        case 'accepted':  return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAF1F6] text-[#4D0026] font-bold border border-[#F2DEE9] text-xs"><UserCheck size={14} />تم القبول</span>;
         case 'on_the_way': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-50 text-cyan-700 font-bold border border-cyan-100 text-xs"><Package size={14} />في الطريق</span>;
-        case 'in_progress': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EDF5FC] text-[#00578F] font-bold border border-[#D4E8F7] text-xs"><Package size={14} />جاري التنفيذ</span>;
+        case 'in_progress': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAF1F6] text-[#4D0026] font-bold border border-[#F2DEE9] text-xs"><Package size={14} />جاري التنفيذ</span>;
         case 'cancelled': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-700 font-bold border border-rose-100 text-xs"><XCircle size={14} />ملغي</span>;
         default: return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 text-slate-700 font-bold border border-slate-200 text-xs">{status}</span>;
     }
@@ -248,13 +248,13 @@ export default function Orders() {
                         <input
                             type="text"
                             placeholder="ابحث برقم الطلب، اسم العميل..."
-                            className="w-full pl-4 pr-11 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#006FBA]/20 focus:border-[#006FBA] transition-all text-slate-700"
+                            className="w-full pl-4 pr-11 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#660033]/20 focus:border-[#660033] transition-all text-slate-700"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
                     <div className="flex gap-2 text-sm">
-                        <button type="button" className="px-4 py-2 bg-[#EDF5FC] text-[#00578F] font-bold rounded-lg border border-[#D4E8F7]">الكل ({orders.length})</button>
+                        <button type="button" className="px-4 py-2 bg-[#FAF1F6] text-[#4D0026] font-bold rounded-lg border border-[#F2DEE9]">الكل ({orders.length})</button>
                         <button type="button" className="px-4 py-2 bg-amber-50 text-amber-700 font-bold rounded-lg border border-amber-100">انتظار ({orders.filter(o => o.status === 'pending').length})</button>
                     </div>
                 </div>
@@ -262,7 +262,7 @@ export default function Orders() {
                 <div className="overflow-x-auto min-h-[400px]">
                     {loading ? (
                         <div className="flex flex-col items-center justify-center h-64">
-                            <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#006FBA] border-t-transparent"></div>
+                            <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#660033] border-t-transparent"></div>
                             <p className="text-slate-500 mt-4 font-bold">جاري جلب الطلبات...</p>
                         </div>
                     ) : (
@@ -283,11 +283,11 @@ export default function Orders() {
                                 {filteredOrders.length === 0 ? (
                                     <tr><td colSpan={8} className="text-center py-12 text-slate-500 font-bold">لا توجد طلبات</td></tr>
                                 ) : filteredOrders.map((order) => (
-                                    <tr key={order.id} className="hover:bg-[#EDF5FC]/30 transition-colors group">
+                                    <tr key={order.id} className="hover:bg-[#FAF1F6]/30 transition-colors group">
                                         <td className="px-6 py-4"><span className="font-bold text-slate-800">#{order.code || order.id.substring(0, 6).toUpperCase()}</span></td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#D4E8F7] to-blue-100 flex items-center justify-center text-[#00578F] font-bold text-xs border border-[#A9D2EF]">
+                                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#F2DEE9] to-rose-100 flex items-center justify-center text-[#4D0026] font-bold text-xs border border-[#E5C3D5]">
                                                     {order.customer.substring(0, 1)}
                                                 </div>
                                                 <span className="font-bold text-slate-700">{order.customer}</span>
@@ -306,7 +306,7 @@ export default function Orders() {
                                                     type="button"
                                                     title="الإجراءات"
                                                     onClick={() => setActionMenuId(actionMenuId === order.id ? null : order.id)}
-                                                    className="p-2 text-slate-400 hover:text-[#006FBA] hover:bg-[#EDF5FC] rounded-lg transition-colors"
+                                                    className="p-2 text-slate-400 hover:text-[#660033] hover:bg-[#FAF1F6] rounded-lg transition-colors"
                                                 >
                                                     <MoreVertical size={18} />
                                                 </button>
@@ -323,7 +323,7 @@ export default function Orders() {
                                                                 setSelectedDriverId('');
                                                                 setActionMenuId(null);
                                                             }}
-                                                            className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-[#EDF5FC] hover:text-[#00578F] transition-colors text-right"
+                                                            className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-[#FAF1F6] hover:text-[#4D0026] transition-colors text-right"
                                                         >
                                                             <UserCheck size={16} />{order.status === 'pending_admin_approval' ? 'اعتماد وتعيين' : 'تعيين سائق'}
                                                         </button>
@@ -332,7 +332,7 @@ export default function Orders() {
                                                         <button
                                                             type="button"
                                                             onClick={() => handleAdvanceManaged(order, 'in_progress')}
-                                                            className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-[#EDF5FC] hover:text-[#00578F] transition-colors text-right"
+                                                            className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-[#FAF1F6] hover:text-[#4D0026] transition-colors text-right"
                                                         >
                                                             <Package size={16} />بدء التنفيذ
                                                         </button>
@@ -355,7 +355,7 @@ export default function Orders() {
                                                             setEditDriverId(order.driver_id || '');
                                                             setActionMenuId(null);
                                                         }}
-                                                        className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-[#EDF5FC] hover:text-[#00578F] transition-colors text-right"
+                                                        className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-[#FAF1F6] hover:text-[#4D0026] transition-colors text-right"
                                                     >
                                                         <CalendarClock size={16} />تعديل الزيارة
                                                     </button>
@@ -401,7 +401,7 @@ export default function Orders() {
                                         title="اختر سائقاً"
                                         value={selectedDriverId}
                                         onChange={e => setSelectedDriverId(e.target.value)}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#006FBA] focus:ring-2 focus:ring-[#006FBA]/20 font-medium"
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#660033] focus:ring-2 focus:ring-[#660033]/20 font-medium"
                                     >
                                         <option value="">-- اختر سائقاً --</option>
                                         {availableDrivers.map(d => (
@@ -417,7 +417,7 @@ export default function Orders() {
                                     title="موعد الخدمة"
                                     value={scheduledAt}
                                     onChange={e => setScheduledAt(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#006FBA] focus:ring-2 focus:ring-[#006FBA]/20 font-medium"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#660033] focus:ring-2 focus:ring-[#660033]/20 font-medium"
                                 />
                             </div>
                             <div className="flex gap-3 pt-2">
@@ -426,7 +426,7 @@ export default function Orders() {
                                     type="button"
                                     disabled={!selectedDriverId || !scheduledAt || isAssigning}
                                     onClick={handleAssignDriver}
-                                    className="flex-1 px-4 py-3 bg-[#006FBA] text-white rounded-xl font-bold hover:bg-[#00578F] transition-colors flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex-1 px-4 py-3 bg-[#660033] text-white rounded-xl font-bold hover:bg-[#4D0026] transition-colors flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isAssigning ? <Loader2 className="animate-spin" size={20} /> : 'تعيين السائق'}
                                 </button>
@@ -456,7 +456,7 @@ export default function Orders() {
                                     title="موعد الزيارة"
                                     value={editScheduledAt}
                                     onChange={e => setEditScheduledAt(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#006FBA] focus:ring-2 focus:ring-[#006FBA]/20 font-medium"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#660033] focus:ring-2 focus:ring-[#660033]/20 font-medium"
                                 />
                             </div>
                             {editModal.driver_id && ACTIVE_ASSIGNED.includes(editModal.status) && (
@@ -466,7 +466,7 @@ export default function Orders() {
                                         title="السائق"
                                         value={editDriverId}
                                         onChange={e => setEditDriverId(e.target.value)}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#006FBA] focus:ring-2 focus:ring-[#006FBA]/20 font-medium"
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#660033] focus:ring-2 focus:ring-[#660033]/20 font-medium"
                                     >
                                         {availableDrivers.map(d => (
                                             <option key={d.id} value={d.id}>{d.name}{d.id === editModal.driver_id ? ' (الحالي)' : ''}</option>
@@ -483,7 +483,7 @@ export default function Orders() {
                                     type="button"
                                     disabled={isEditing}
                                     onClick={handleEditVisit}
-                                    className="flex-1 px-4 py-3 bg-[#006FBA] text-white rounded-xl font-bold hover:bg-[#00578F] transition-colors flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex-1 px-4 py-3 bg-[#660033] text-white rounded-xl font-bold hover:bg-[#4D0026] transition-colors flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isEditing ? <Loader2 className="animate-spin" size={20} /> : 'حفظ التعديل'}
                                 </button>

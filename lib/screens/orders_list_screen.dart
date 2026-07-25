@@ -51,7 +51,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: Text('حجوزاتي والطلبات', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF006FBA),
+          backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,
           elevation: 0,
           bottom: TabBar(
@@ -114,14 +114,14 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 16, color: isSelected ? const Color(0xFF006FBA) : Colors.grey),
+              Icon(icon, size: 16, color: isSelected ? const Color(0xFF660033) : Colors.grey),
               const SizedBox(width: 8),
               Text(
                 title,
                 style: GoogleFonts.tajawal(
                   fontSize: 13,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? const Color(0xFF006FBA) : Colors.grey,
+                  color: isSelected ? const Color(0xFF660033) : Colors.grey,
                 ),
               ),
             ],
@@ -308,7 +308,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text("المجموع: ${total % 1 == 0 ? total.toStringAsFixed(0) : total.toStringAsFixed(2)} ر.س", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF006FBA))),
+                Text("المجموع: ${total % 1 == 0 ? total.toStringAsFixed(0) : total.toStringAsFixed(2)} ر.س", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF660033))),
                 Text("${(data['items'] as List?)?.length ?? 0} منتجات", style: const TextStyle(fontSize: 12, color: Colors.grey)),
               ],
             ),
@@ -325,7 +325,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                   "المبلغ المعتمد للدفع: ${payAmount.toStringAsFixed(2)} ر.س",
                   textAlign: TextAlign.center,
                   style: GoogleFonts.tajawal(
-                      fontWeight: FontWeight.bold, color: const Color(0xFF006FBA)),
+                      fontWeight: FontWeight.bold, color: const Color(0xFF660033)),
                 ),
               ),
               const SizedBox(height: 12),
@@ -335,7 +335,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                   icon: const Icon(Icons.payment, size: 18),
                   label: Text("ادفع الآن", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF006FBA),
+                    backgroundColor: const Color(0xFF660033),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -378,10 +378,10 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
             Container(
               padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
-                color: const Color(0xFF006FBA).withValues(alpha: 0.06),
+                color: const Color(0xFF660033).withValues(alpha: 0.06),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.calendar_today_rounded, size: 52, color: Color(0xFF006FBA)),
+              child: const Icon(Icons.calendar_today_rounded, size: 52, color: Color(0xFF660033)),
             ),
             const SizedBox(height: 24),
             Text(
@@ -408,7 +408,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
               icon: const Icon(Icons.home_rounded),
               label: Text('العودة للرئيسية', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF006FBA),
+                backgroundColor: const Color(0xFF660033),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -529,7 +529,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('${_asDouble(order['amount']).toStringAsFixed(2)} ر.س',
-                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF006FBA))),
+                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF660033))),
               if (status == 'completed')
                 TextButton.icon(
                   onPressed: () {
@@ -541,7 +541,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                   },
                   icon: const Icon(Icons.replay, size: 16),
                   label: Text('أعد الطلب', style: GoogleFonts.tajawal(fontSize: 12)),
-                  style: TextButton.styleFrom(foregroundColor: const Color(0xFF006FBA)),
+                  style: TextButton.styleFrom(foregroundColor: const Color(0xFF660033)),
                 )
               else if (['pending', 'waiting_payment_cod',
                 'scheduled', 'accepted'].contains(status))
@@ -567,12 +567,12 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF006FBA).withValues(alpha: 0.08),
+                    color: const Color(0xFF660033).withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
                     const Icon(Icons.verified_outlined,
-                        size: 15, color: Color(0xFF006FBA)),
+                        size: 15, color: Color(0xFF660033)),
                     const SizedBox(width: 6),
                     Text(
                         status == 'under_review'
@@ -581,7 +581,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                         style: GoogleFonts.tajawal(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: const Color(0xFF006FBA))),
+                            color: const Color(0xFF660033))),
                   ]),
                 )
               else
@@ -599,7 +599,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                   icon: const Icon(Icons.map_outlined, size: 16),
                   label: Text('تتبع السائق', style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF006FBA),
+                    backgroundColor: const Color(0xFF660033),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -639,7 +639,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     final apptDay = DateTime(appt.year, appt.month, appt.day);
     final diffDays = apptDay.difference(today).inDays;
     String rel;
-    Color relColor = const Color(0xFF006FBA);
+    Color relColor = const Color(0xFF660033);
     if (diffDays < 0) {
       rel = 'انتهى الموعد';
       relColor = Colors.grey;
@@ -653,7 +653,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
       rel = 'بعد $diffDays أيام';
     }
 
-    const purple = Color(0xFF006FBA);
+    const purple = Color(0xFF660033);
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Container(

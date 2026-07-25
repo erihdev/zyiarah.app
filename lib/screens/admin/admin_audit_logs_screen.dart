@@ -30,7 +30,7 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: Text("سجل العمليات الإدارية", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
-          backgroundColor: const Color(0xFF006FBA),
+          backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,
           elevation: 0,
         ),

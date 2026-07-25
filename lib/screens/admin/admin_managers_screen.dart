@@ -39,7 +39,7 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: Text(ZyiarahStrings.unifiedStaffManagement, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF006FBA),
+          backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,
           elevation: 0,
           actions: [
@@ -57,7 +57,7 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
         ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => _showManagerDialog(),
-          backgroundColor: const Color(0xFF006FBA),
+          backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,
           icon: const Icon(Icons.person_add_alt_1_rounded),
           label: Text("إضافة منسوب", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13)),
@@ -315,7 +315,7 @@ class _ManagerFormSheetState extends State<_ManagerFormSheet> {
                   const SizedBox(width: 15),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF006FBA),
+                      backgroundColor: const Color(0xFF660033),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))

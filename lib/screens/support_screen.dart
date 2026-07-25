@@ -44,7 +44,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text("تذاكر الدعم الفني", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF006FBA),
+          backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,
           systemOverlayStyle: SystemUiOverlayStyle.light,
           bottom: const TabBar(
@@ -70,7 +70,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
           onPressed: () => _showNewTicketDialog(context),
           label: const Text("تذكرة جديدة"),
           icon: const Icon(Icons.add),
-          backgroundColor: const Color(0xFF006FBA),
+          backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,
         ),
       ),
@@ -228,7 +228,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
                       padding: const EdgeInsets.all(12),
                       constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
                       decoration: BoxDecoration(
-                        color: isAdmin ? const Color(0xFFF1F5F9) : const Color(0xFF006FBA),
+                        color: isAdmin ? const Color(0xFFF1F5F9) : const Color(0xFF660033),
                         borderRadius: BorderRadius.circular(16).copyWith(
                           topLeft: isAdmin ? const Radius.circular(0) : const Radius.circular(16),
                           topRight: isAdmin ? const Radius.circular(16) : const Radius.circular(0),
@@ -271,7 +271,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
                     isSendingReply 
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                       : IconButton(
-                          icon: const Icon(Icons.send, color: Color(0xFF006FBA)),
+                          icon: const Icon(Icons.send, color: Color(0xFF660033)),
                           onPressed: () async {
                             final text = replyCtrl.text.trim();
                             if (text.isEmpty) return;
@@ -366,7 +366,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
                     width: double.infinity,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF006FBA),
+                        backgroundColor: const Color(0xFF660033),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 15),
                       ),

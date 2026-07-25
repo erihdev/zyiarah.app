@@ -48,7 +48,7 @@ class AdminMoreScreen extends StatelessWidget {
               context,
               label: section['label'] as String,
               icon: section['icon'] as IconData,
-              color: const Color(0xFF006FBA), // لون هوية موحّد لكل الأقسام
+              color: const Color(0xFF660033), // لون هوية موحّد لكل الأقسام
               items: items,
             );
           },
@@ -287,7 +287,7 @@ class AdminMoreScreen extends StatelessWidget {
   }
 
   Widget _buildItem(BuildContext context, Map<String, dynamic> item) {
-    const color = Color(0xFF006FBA); // لون هوية موحّد لكل العناصر
+    const color = Color(0xFF660033); // لون هوية موحّد لكل العناصر
     return InkWell(
       onTap: () {
         HapticFeedback.lightImpact();

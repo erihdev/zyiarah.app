@@ -178,7 +178,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             "العملاء والمستخدمون",
             style: GoogleFonts.tajawal(fontWeight: FontWeight.bold),
           ),
-          backgroundColor: const Color(0xFF006FBA),
+          backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,
           elevation: 0,
         ),
@@ -258,7 +258,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                       hintStyle: GoogleFonts.tajawal(
                           fontSize: 14, color: Colors.grey.shade400),
                       prefixIcon: const Icon(Icons.search_rounded,
-                          color: Color(0xFF006FBA)),
+                          color: Color(0xFF660033)),
                       suffixIcon: _search.isEmpty
                           ? null
                           : IconButton(
@@ -285,7 +285,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
                         borderSide: const BorderSide(
-                            color: Color(0xFF006FBA), width: 1.5),
+                            color: Color(0xFF660033), width: 1.5),
                       ),
                     ),
                   ),
@@ -338,7 +338,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           leading: CircleAvatar(
                             radius: 24,
-                            backgroundColor: const Color(0xFF006FBA).withValues(alpha: 0.1),
+                            backgroundColor: const Color(0xFF660033).withValues(alpha: 0.1),
                             child: Text(
                               name.isNotEmpty ? name[0] : 'م',
                               style: const TextStyle(

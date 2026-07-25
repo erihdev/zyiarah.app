@@ -227,9 +227,9 @@ export default function Drivers() {
 
             {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
-                <div className="bg-white p-6 rounded-[20px] shadow-sm border border-slate-100/60 flex items-center justify-between group hover:border-[#A9D2EF] transition-colors">
+                <div className="bg-white p-6 rounded-[20px] shadow-sm border border-slate-100/60 flex items-center justify-between group hover:border-[#E5C3D5] transition-colors">
                     <div><p className="text-sm font-bold text-slate-500 mb-1">إجمالي السائقين</p><h3 className="text-3xl font-extrabold text-slate-800">{drivers.length}</h3></div>
-                    <div className="w-12 h-12 bg-[#EDF5FC] text-[#006FBA] rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform"><ShieldCheck size={24} /></div>
+                    <div className="w-12 h-12 bg-[#FAF1F6] text-[#660033] rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform"><ShieldCheck size={24} /></div>
                 </div>
                 <div className="bg-white p-6 rounded-[20px] shadow-sm border border-slate-100/60 flex items-center justify-between group hover:border-emerald-200 transition-colors">
                     <div><p className="text-sm font-bold text-slate-500 mb-1">المتاحين حالياً</p><h3 className="text-3xl font-extrabold text-slate-800">{isAvailableCount}</h3></div>
@@ -251,7 +251,7 @@ export default function Drivers() {
                         <div className="col-span-full py-12 text-center text-slate-500 font-bold">لا يوجد سائقين مطابقين للبحث.</div>
                     ) : filteredDrivers.map(driver => (
                         <div key={driver.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow p-5 relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-bl-full -z-10 group-hover:bg-[#EDF5FC]/50 transition-colors duration-500"></div>
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-bl-full -z-10 group-hover:bg-[#FAF1F6]/50 transition-colors duration-500"></div>
 
                             <div className="flex justify-between items-start mb-4">
                                 {/* Photo with upload trigger */}
@@ -293,7 +293,7 @@ export default function Drivers() {
 
                             {/* Action buttons */}
                             <div className="flex gap-2">
-                                <button type="button" onClick={() => openEdit(driver)} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-bold border border-[#A9D2EF] text-[#006FBA] hover:bg-[#EDF5FC] transition-colors"><Pencil size={14} />تعديل</button>
+                                <button type="button" onClick={() => openEdit(driver)} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-bold border border-[#E5C3D5] text-[#660033] hover:bg-[#FAF1F6] transition-colors"><Pencil size={14} />تعديل</button>
                                 <button type="button" disabled={togglingId === driver.id} onClick={() => handleToggleSuspension(driver)} className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-bold border transition-colors disabled:opacity-50 ${driver.is_suspended ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50' : 'border-amber-200 text-amber-600 hover:bg-amber-50'}`}>
                                     {togglingId === driver.id ? <Loader2 size={14} className="animate-spin" /> : driver.is_suspended ? <><ToggleRight size={14} />تفعيل</> : <><ToggleLeft size={14} />إيقاف</>}
                                 </button>
@@ -408,23 +408,23 @@ export default function Drivers() {
 
                             <div className="space-y-2">
                                 <label className="block text-sm font-extrabold text-slate-700">الاسم الكامل</label>
-                                <input type="text" required value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#006FBA] focus:ring-2 focus:ring-[#006FBA]/20 transition-all font-medium" />
+                                <input type="text" required value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#660033] focus:ring-2 focus:ring-[#660033]/20 transition-all font-medium" />
                             </div>
                             <div className="space-y-2">
                                 <label className="block text-sm font-extrabold text-slate-700">رقم الجوال</label>
-                                <input type="tel" required value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#006FBA] focus:ring-2 focus:ring-[#006FBA]/20 transition-all font-medium" dir="ltr" />
+                                <input type="tel" required value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#660033] focus:ring-2 focus:ring-[#660033]/20 transition-all font-medium" dir="ltr" />
                             </div>
                             <div className="space-y-2">
                                 <label className="block text-sm font-extrabold text-slate-700">بيانات المركبة</label>
-                                <input type="text" value={editForm.vehicle} onChange={e => setEditForm({ ...editForm, vehicle: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#006FBA] focus:ring-2 focus:ring-[#006FBA]/20 transition-all font-medium" />
+                                <input type="text" value={editForm.vehicle} onChange={e => setEditForm({ ...editForm, vehicle: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#660033] focus:ring-2 focus:ring-[#660033]/20 transition-all font-medium" />
                             </div>
                             <div className="space-y-2">
                                 <label className="block text-sm font-extrabold text-slate-700">الراتب الشهري (ر.س)</label>
-                                <input type="number" aria-label="الراتب الشهري" min="0" value={editForm.monthly_salary || ''} onChange={e => setEditForm({ ...editForm, monthly_salary: Number(e.target.value) })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#006FBA] focus:ring-2 focus:ring-[#006FBA]/20 transition-all font-medium" dir="ltr" />
+                                <input type="number" aria-label="الراتب الشهري" min="0" value={editForm.monthly_salary || ''} onChange={e => setEditForm({ ...editForm, monthly_salary: Number(e.target.value) })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#660033] focus:ring-2 focus:ring-[#660033]/20 transition-all font-medium" dir="ltr" />
                             </div>
                             <div className="pt-2 flex gap-3">
                                 <button type="button" onClick={() => setEditDriver(null)} className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors">إلغاء</button>
-                                <button disabled={isSaving} type="submit" className="flex-1 px-4 py-3 bg-[#006FBA] text-white rounded-xl font-bold hover:bg-[#00578F] transition-colors flex justify-center items-center disabled:opacity-70">
+                                <button disabled={isSaving} type="submit" className="flex-1 px-4 py-3 bg-[#660033] text-white rounded-xl font-bold hover:bg-[#4D0026] transition-colors flex justify-center items-center disabled:opacity-70">
                                     {isSaving ? <Loader2 className="animate-spin" size={20} /> : 'حفظ التعديلات'}
                                 </button>
                             </div>

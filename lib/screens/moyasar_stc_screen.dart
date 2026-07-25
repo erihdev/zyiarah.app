@@ -44,7 +44,7 @@ enum _Phase { phone, otp }
 
 class _MoyasarStcScreenState extends State<MoyasarStcScreen> {
   // Shared
-  final Color _brand = const Color(0xFF006FBA);
+  final Color _brand = const Color(0xFF660033);
   final Color _brandLight = const Color(0xFFE8D0E8);
 
   _Phase _phase = _Phase.phone;

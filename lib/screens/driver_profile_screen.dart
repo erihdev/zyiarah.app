@@ -16,7 +16,7 @@ class DriverProfileScreen extends StatefulWidget {
 }
 
 class _DriverProfileScreenState extends State<DriverProfileScreen> {
-  static const Color _brand = Color(0xFF006FBA);
+  static const Color _brand = Color(0xFF660033);
   final _auth = FirebaseAuth.instance;
 
   @override
@@ -105,7 +105,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF006FBA), Color(0xFF2E86C8)],
+          colors: [Color(0xFF660033), Color(0xFF8E2B5C)],
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
         ),

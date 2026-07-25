@@ -56,7 +56,7 @@ class ZyiarahPopupService {
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF006FBA), Color(0xFF3B0A3B)],
+                    colors: [Color(0xFF660033), Color(0xFF3B0A3B)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -133,7 +133,7 @@ class ZyiarahPopupService {
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
-                            foregroundColor: const Color(0xFF006FBA),
+                            foregroundColor: const Color(0xFF660033),
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                             elevation: 0,

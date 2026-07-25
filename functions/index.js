@@ -1026,7 +1026,7 @@ async function _buildAdminAlertHtml(type, data) {
     `<tr><td style="padding:11px 10px;color:#64748b;font-size:14px;border-bottom:1px solid #f1f5f9">${k}</td>` +
     `<td style="padding:11px 10px;font-weight:bold;color:#1e293b;text-align:left;border-bottom:1px solid #f1f5f9">${v}</td></tr>`).join("");
   return `<div dir="rtl" style="font-family:Tajawal,Arial,sans-serif;max-width:600px;margin:auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0">
-  <div style="background:linear-gradient(135deg,#006FBA,#8B3D8C);padding:28px;text-align:center">
+  <div style="background:linear-gradient(135deg,#660033,#8B3D8C);padding:28px;text-align:center">
     <h1 style="color:#fff;margin:0;font-size:22px">${heading} 🔔</h1>
     <p style="color:#e9d5ea;margin:6px 0 0">لوحة إدارة زيارة</p>
   </div>

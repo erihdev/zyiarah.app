@@ -8,7 +8,7 @@ import 'package:zyiarah/services/zone_locator_service.dart';
 /// بالأسفل» لكل الأسباب على السواء: الخدمة مطفأة، الإذن مرفوض، GPS لم يستجب،
 /// خارج النطاق… كلها رسالة واحدة لا تدلّ على شيء، وبلا سجلّ يكشف السبب.
 class ZyiarahZoneLocationCard extends StatelessWidget {
-  static const Color _brand = Color(0xFF006FBA);
+  static const Color _brand = Color(0xFF660033);
 
   /// جارٍ التحديد الآن.
   final bool isLocating;

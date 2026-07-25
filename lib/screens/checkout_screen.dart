@@ -314,13 +314,13 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("إتمام الدفع - تمارا"),
-        backgroundColor: const Color(0xFF006FBA),
+        backgroundColor: const Color(0xFF660033),
       ),
       body: Stack(
         children: [
           WebViewWidget(controller: _controller),
           if (_pageLoading)
-            const Center(child: CircularProgressIndicator(color: Color(0xFF006FBA))),
+            const Center(child: CircularProgressIndicator(color: Color(0xFF660033))),
         ],
       ),
     );

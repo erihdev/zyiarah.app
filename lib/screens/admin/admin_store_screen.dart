@@ -286,7 +286,7 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                       if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ في الحفظ: $e")));
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF006FBA), foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF660033), foregroundColor: Colors.white),
                   child: Text(isSaving ? "جاري الحفظ..." : "حفظ المنتج"),
                 ),
               ],
@@ -309,12 +309,12 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: Text("إدارة المتجر", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF006FBA),
+          backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: () => _showProductDialog(),
-          backgroundColor: const Color(0xFF006FBA),
+          backgroundColor: const Color(0xFF660033),
           child: const Icon(Icons.add, color: Colors.white),
         ),
         body: StreamBuilder<QuerySnapshot>(
@@ -338,7 +338,7 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                       onPressed: () => _showProductDialog(),
                       icon: const Icon(Icons.add),
                       label: const Text("أضف أول منتج"),
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF006FBA), foregroundColor: Colors.white),
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF660033), foregroundColor: Colors.white),
                     )
                   ],
                 ),
@@ -394,14 +394,14 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF006FBA).withValues(alpha: 0.08),
+                                      color: const Color(0xFF660033).withValues(alpha: 0.08),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: Text('متجر الشركات',
                                         style: GoogleFonts.tajawal(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
-                                            color: const Color(0xFF006FBA))),
+                                            color: const Color(0xFF660033))),
                                   ),
                                 ),
                               if ((data['description'] ?? '').isNotEmpty)
