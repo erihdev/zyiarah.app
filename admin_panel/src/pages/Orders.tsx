@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Filter, MoreVertical, CheckCircle2, Clock, XCircle, Package, UserCheck, X, Loader2 } from 'lucide-react';
+import { Search, Filter, MoreVertical, CheckCircle2, Clock, XCircle, Package, UserCheck, X, Loader2, CalendarClock } from 'lucide-react';
 import {
     collection, onSnapshot, query, orderBy, doc, Timestamp, updateDoc,
     type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot
@@ -31,6 +31,7 @@ interface OrderRecord {
     code?: string;
     payment_method?: string;
     is_paid?: boolean;
+    service_date?: Timestamp;
 }
 
 interface DriverOption { id: string; name: string; is_available: boolean; is_active: boolean; }
@@ -64,6 +65,11 @@ export default function Orders() {
     const [scheduledAt, setScheduledAt] = useState('');
     const [isAssigning, setIsAssigning] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
+    // «تعديل الزيارة»: تغيير الموعد و/أو السائق لطلبٍ قائم.
+    const [editModal, setEditModal] = useState<OrderRecord | null>(null);
+    const [editScheduledAt, setEditScheduledAt] = useState('');
+    const [editDriverId, setEditDriverId] = useState('');
+    const [isEditing, setIsEditing] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -121,6 +127,54 @@ export default function Orders() {
             toast.error((err as { message?: string })?.message || 'حدث خطأ أثناء التعيين');
         } finally {
             setIsAssigning(false);
+        }
+    };
+
+    // «تعديل الزيارة» — نفس مساري تطبيق الأدمن (admin_order_details_screen):
+    // طلب مُسنَد نشط ⇒ rescheduleAssignedOrder الذرّية (تفحص تعارض السائق المستهدَف
+    // داخل معاملة، وتُطلق إشعارَي العميل/السائق خادمياً، وتحرير السائق القديم عند
+    // التبديل يتكفّل به freeOldDriverOnReassign)؛ وإلا (pending/مُدار بلا سائق) ⇒
+    // كتابة الموعد مباشرة (لا سائق يُفحص تعارضه).
+    const ACTIVE_ASSIGNED = ['scheduled', 'assigned', 'accepted', 'on_the_way', 'in_progress'];
+    const handleEditVisit = async () => {
+        if (!editModal) return;
+        setIsEditing(true);
+        try {
+            if (editModal.driver_id && ACTIVE_ASSIGNED.includes(editModal.status)) {
+                const payload: { orderId: string; scheduledIso?: string; newDriverId?: string } = {
+                    orderId: editModal.id,
+                };
+                if (editScheduledAt) payload.scheduledIso = new Date(editScheduledAt).toISOString();
+                if (editDriverId && editDriverId !== editModal.driver_id) payload.newDriverId = editDriverId;
+                if (!payload.scheduledIso && !payload.newDriverId) {
+                    toast.error('لا تغيير — عدّل الموعد أو اختر سائقاً آخر');
+                    setIsEditing(false);
+                    return;
+                }
+                await httpsCallable(functions, 'rescheduleAssignedOrder')(payload);
+            } else {
+                if (!editScheduledAt) {
+                    toast.error('حدد الموعد الجديد');
+                    setIsEditing(false);
+                    return;
+                }
+                const ts = Timestamp.fromDate(new Date(editScheduledAt));
+                await updateDoc(doc(db, 'orders', editModal.id), {
+                    service_date: ts,
+                    scheduled_at: ts,
+                    updated_at: Timestamp.now(),
+                });
+            }
+            toast.success('تم تعديل الزيارة بنجاح');
+            setEditModal(null);
+            setEditScheduledAt('');
+            setEditDriverId('');
+        } catch (err: unknown) {
+            console.error('Error editing visit:', err);
+            // رسائل الدالة الخادمية عربية أصلاً (مثل «السائق مشغول بمهمة أخرى…»).
+            toast.error((err as { message?: string })?.message || 'تعذّر تعديل الزيارة');
+        } finally {
+            setIsEditing(false);
         }
     };
 
@@ -294,6 +348,19 @@ export default function Orders() {
                                                     )}
                                                     <button
                                                         type="button"
+                                                        onClick={() => {
+                                                            setEditModal(order);
+                                                            setEditScheduledAt(order.service_date instanceof Timestamp
+                                                                ? toDatetimeLocal(order.service_date.toDate()) : '');
+                                                            setEditDriverId(order.driver_id || '');
+                                                            setActionMenuId(null);
+                                                        }}
+                                                        className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-[#f7f0f8] hover:text-[#4a1149] transition-colors text-right"
+                                                    >
+                                                        <CalendarClock size={16} />تعديل الزيارة
+                                                    </button>
+                                                    <button
+                                                        type="button"
                                                         disabled={isCancelling}
                                                         onClick={() => handleCancelOrder(order)}
                                                         className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-rose-600 hover:bg-rose-50 transition-colors text-right disabled:opacity-50"
@@ -362,6 +429,63 @@ export default function Orders() {
                                     className="flex-1 px-4 py-3 bg-[#5D1B5E] text-white rounded-xl font-bold hover:bg-[#4a1149] transition-colors flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isAssigning ? <Loader2 className="animate-spin" size={20} /> : 'تعيين السائق'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Edit Visit Modal — تعديل موعد الزيارة و/أو السائق */}
+            {editModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md overflow-hidden">
+                        <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-slate-50/50">
+                            <div>
+                                <h3 className="text-xl font-extrabold text-slate-800">تعديل الزيارة</h3>
+                                <p className="text-sm text-slate-500 mt-0.5">الطلب #{editModal.code || editModal.id.substring(0, 6).toUpperCase()} — {editModal.customer}</p>
+                            </div>
+                            <button type="button" title="إغلاق" onClick={() => setEditModal(null)} className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="space-y-2">
+                                <label className="block text-sm font-extrabold text-slate-700">موعد الزيارة الجديد</label>
+                                <input
+                                    type="datetime-local"
+                                    title="موعد الزيارة"
+                                    value={editScheduledAt}
+                                    onChange={e => setEditScheduledAt(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#5D1B5E] focus:ring-2 focus:ring-[#5D1B5E]/20 font-medium"
+                                />
+                            </div>
+                            {editModal.driver_id && ACTIVE_ASSIGNED.includes(editModal.status) && (
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-extrabold text-slate-700">السائق (اختر آخر لإعادة الإسناد)</label>
+                                    <select
+                                        title="السائق"
+                                        value={editDriverId}
+                                        onChange={e => setEditDriverId(e.target.value)}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#5D1B5E] focus:ring-2 focus:ring-[#5D1B5E]/20 font-medium"
+                                    >
+                                        {availableDrivers.map(d => (
+                                            <option key={d.id} value={d.id}>{d.name}{d.id === editModal.driver_id ? ' (الحالي)' : ''}</option>
+                                        ))}
+                                    </select>
+                                    <p className="text-[11px] text-slate-400 font-bold">
+                                        يُفحص تفرّغ السائق في الموعد خادمياً — وعند التبديل يُحرَّر السائق السابق ويُشعَر الجديد تلقائياً.
+                                    </p>
+                                </div>
+                            )}
+                            <div className="flex gap-3 pt-2">
+                                <button type="button" onClick={() => setEditModal(null)} className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors">إلغاء</button>
+                                <button
+                                    type="button"
+                                    disabled={isEditing}
+                                    onClick={handleEditVisit}
+                                    className="flex-1 px-4 py-3 bg-[#5D1B5E] text-white rounded-xl font-bold hover:bg-[#4a1149] transition-colors flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isEditing ? <Loader2 className="animate-spin" size={20} /> : 'حفظ التعديل'}
                                 </button>
                             </div>
                         </div>
