@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, FileSignature, CheckCircle2, Clock, XCircle, AlertCircle, Calendar, CreditCard, Trash2, Info } from 'lucide-react';
+import { Search, FileSignature, CheckCircle2, Clock, XCircle, AlertCircle, Calendar, CreditCard, Trash2, Info, Package, Plus, Pencil, Star, Loader2 } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc, deleteDoc, addDoc, serverTimestamp, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
@@ -14,6 +14,258 @@ interface ContractRecord {
     planVisits?: number;
     status: string;
     createdAt?: Timestamp;
+}
+
+// (تكافؤ مع تطبيق الأدمن — admin_subscriptions_screen.dart) نفس مجموعة
+// subscription_packages ونفس الحقول حرفياً: title/subtitle/price/visits/hours/
+// features/isPremium/rank. كانت اللوحة تعرض العقود فقط بلا أي إدارة للباقات.
+interface PackageRecord {
+    id: string;
+    title: string;
+    subtitle?: string;
+    price: number;
+    visits?: number;
+    hours?: number;
+    features?: string[];
+    isPremium?: boolean;
+    rank?: number;
+}
+
+const emptyPkgForm = {
+    title: '', subtitle: '', price: '', visits: '', hours: '4',
+    features: '', isPremium: false,
+};
+
+const pkgInputCls = 'w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-800 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all';
+
+function PackagesSection() {
+    const { toast, confirm } = useNotification();
+    const [packages, setPackages] = useState<PackageRecord[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [showForm, setShowForm] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [form, setForm] = useState(emptyPkgForm);
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        const q = query(collection(db, 'subscription_packages'), orderBy('rank'));
+        const unsub = onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
+            setPackages(snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({
+                id: d.id, ...(d.data() as Omit<PackageRecord, 'id'>),
+            })));
+            setLoading(false);
+        }, (e) => { console.error('subscription_packages listener error:', e); setLoading(false); });
+        return () => unsub();
+    }, []);
+
+    const openForm = (pkg?: PackageRecord) => {
+        if (pkg) {
+            setEditingId(pkg.id);
+            setForm({
+                title: pkg.title || '', subtitle: pkg.subtitle || '',
+                price: String(pkg.price ?? ''), visits: String(pkg.visits ?? ''),
+                hours: String(pkg.hours ?? 4),
+                features: (pkg.features || []).join('\n'),
+                isPremium: pkg.isPremium === true,
+            });
+        } else {
+            setEditingId(null);
+            setForm(emptyPkgForm);
+        }
+        setShowForm(true);
+    };
+
+    const handleSave = async () => {
+        // نفس شرط التطبيق: الاسم والسعر إلزاميان.
+        if (!form.title.trim() || !form.price.trim()) {
+            toast.error('يرجى إكمال البيانات الأساسية (اسم الباقة والسعر)');
+            return;
+        }
+        setSaving(true);
+        try {
+            const payload = {
+                title: form.title.trim(),
+                subtitle: form.subtitle.trim(),
+                price: parseFloat(form.price) || 0,
+                visits: parseInt(form.visits) || 0,
+                hours: parseInt(form.hours) || 4,
+                features: form.features.split('\n').map(s => s.trim()).filter(Boolean),
+                isPremium: form.isPremium,
+                // نُبقي رتبة الباقة عند التعديل؛ الجديدة تُلحق بآخر الترتيب.
+                rank: editingId ? (packages.find(p => p.id === editingId)?.rank ?? 0) : packages.length,
+                updated_at: serverTimestamp(),
+            };
+            if (editingId) await updateDoc(doc(db, 'subscription_packages', editingId), payload);
+            else await addDoc(collection(db, 'subscription_packages'), payload);
+            toast.success(editingId ? 'تم تحديث الباقة بنجاح' : 'تمت إضافة الباقة بنجاح');
+            setShowForm(false); setEditingId(null); setForm(emptyPkgForm);
+        } catch (e) {
+            console.error(e);
+            toast.error('تعذّر حفظ الباقة — تحقق من الاتصال والصلاحيات');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDelete = async (pkg: PackageRecord) => {
+        // نفس تحذير التطبيق: الحذف لا يلغي اشتراكات المشتركين الحاليين.
+        if (!await confirm(`حذف باقة "${pkg.title}"؟ لن تظهر للعملاء الجدد، ولكن قد تظل نشطة للمشتركين الحاليين.`)) return;
+        try {
+            await deleteDoc(doc(db, 'subscription_packages', pkg.id));
+            toast.success('تم حذف الباقة');
+        } catch (e) {
+            console.error(e);
+            toast.error('حدث خطأ أثناء الحذف');
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                <p className="text-slate-500 font-bold text-sm">{packages.length} باقة — التطبيق يعرض هذه الباقات للعملاء مباشرةً</p>
+                <button
+                    type="button"
+                    onClick={() => { if (showForm) { setShowForm(false); setEditingId(null); } else openForm(); }}
+                    className="flex items-center gap-2 px-5 py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl transition-all"
+                >
+                    <Plus size={16} />
+                    {showForm ? 'إغلاق النموذج' : 'إضافة باقة'}
+                </button>
+            </div>
+
+            {showForm && (
+                <div className="bg-purple-50 border-2 border-purple-200 rounded-[2rem] p-6 space-y-4">
+                    <h4 className="font-black text-slate-800 text-lg">{editingId ? 'تعديل الباقة' : 'بيانات الباقة الجديدة'}</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">اسم الباقة الرئيسية *</label>
+                            <input type="text" dir="rtl" value={form.title}
+                                onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+                                placeholder="مثال: باقة النظافة الشهرية" className={pkgInputCls} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">العنوان الفرعي / الوصف القصير</label>
+                            <input type="text" dir="rtl" value={form.subtitle}
+                                onChange={e => setForm(p => ({ ...p, subtitle: e.target.value }))}
+                                placeholder="مثال: 4 زيارات شهرياً بسعر مخفّض" className={pkgInputCls} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">السعر الإجمالي (ر.س) *</label>
+                            <input type="number" dir="ltr" min="0" step="0.5" value={form.price}
+                                onChange={e => setForm(p => ({ ...p, price: e.target.value }))}
+                                className={pkgInputCls} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">عدد الزيارات المشمولة</label>
+                            <input type="number" dir="ltr" min="0" value={form.visits}
+                                onChange={e => setForm(p => ({ ...p, visits: e.target.value }))}
+                                className={pkgInputCls} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">عدد الساعات لكل زيارة</label>
+                            <input type="number" dir="ltr" min="1" max="8" value={form.hours}
+                                onChange={e => setForm(p => ({ ...p, hours: e.target.value }))}
+                                className={pkgInputCls} />
+                        </div>
+                        <div className="flex items-end">
+                            <button
+                                type="button"
+                                onClick={() => setForm(p => ({ ...p, isPremium: !p.isPremium }))}
+                                className={`flex items-center gap-2 px-4 py-3 rounded-xl font-bold border-2 transition-all w-full justify-center ${form.isPremium ? 'bg-amber-50 border-amber-400 text-amber-700' : 'bg-white border-slate-200 text-slate-400'}`}
+                            >
+                                <Star size={16} fill={form.isPremium ? 'currentColor' : 'none'} />
+                                {form.isPremium ? 'باقة مميزة (Golden)' : 'باقة عادية — اضغط لتمييزها'}
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">الميزات (كل ميزة في سطر منفصل)</label>
+                        <textarea dir="rtl" rows={4} value={form.features}
+                            onChange={e => setForm(p => ({ ...p, features: e.target.value }))}
+                            placeholder={'زيارة أسبوعية\nتوفير 20%\nدعم فني'}
+                            className={pkgInputCls} />
+                    </div>
+                    <div className="flex gap-3">
+                        <button
+                            type="button"
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white font-bold rounded-xl transition-all"
+                        >
+                            {saving ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                            {editingId ? 'حفظ التعديلات' : 'حفظ الباقة'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { setShowForm(false); setEditingId(null); }}
+                            className="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all"
+                        >
+                            إلغاء
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {loading ? (
+                <div className="flex flex-col items-center justify-center h-48 bg-white rounded-[32px] border-2 border-dashed border-slate-100">
+                    <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#5D1B5E] border-t-transparent"></div>
+                    <p className="text-slate-500 mt-4 font-black">جاري تحميل الباقات...</p>
+                </div>
+            ) : packages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center p-16 bg-white rounded-[32px] border-2 border-dashed border-slate-100">
+                    <Package size={56} className="text-slate-200 mb-4" />
+                    <h3 className="text-lg font-bold text-slate-800">لا توجد باقات متاحة حالياً</h3>
+                    <p className="text-slate-400 mt-1 font-medium text-sm">أضف أول باقة ليراها العملاء في التطبيق</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {packages.map(pkg => (
+                        <div key={pkg.id}
+                            className={`bg-white rounded-[28px] border-2 overflow-hidden transition-all duration-300 hover:shadow-xl ${pkg.isPremium ? 'border-amber-300' : 'border-slate-100'}`}>
+                            <div className="p-6 space-y-4">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <h4 className="text-lg font-black text-[#5D1B5E] truncate flex items-center gap-2">
+                                            {pkg.isPremium && <Star size={16} className="text-amber-400 shrink-0" fill="currentColor" />}
+                                            {pkg.title}
+                                        </h4>
+                                        {pkg.subtitle && <p className="text-xs font-bold text-slate-400 mt-1">{pkg.subtitle}</p>}
+                                    </div>
+                                    <div className="flex gap-1 shrink-0">
+                                        <button type="button" onClick={() => openForm(pkg)}
+                                            className="p-2.5 bg-slate-50 text-blue-500 hover:bg-blue-50 rounded-xl transition-all" title="تعديل">
+                                            <Pencil size={16} />
+                                        </button>
+                                        <button type="button" onClick={() => handleDelete(pkg)}
+                                            className="p-2.5 bg-red-50 text-red-500 hover:bg-red-100 rounded-xl transition-all" title="حذف">
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-2xl font-black text-slate-800">{pkg.price} <span className="text-sm">ر.س</span></span>
+                                    <div className="flex gap-2">
+                                        <span className="px-3 py-1 bg-[#5D1B5E]/10 text-[#5D1B5E] text-[11px] font-bold rounded-lg">{pkg.visits || 0} زيارة</span>
+                                        <span className="px-3 py-1 bg-[#5D1B5E]/10 text-[#5D1B5E] text-[11px] font-bold rounded-lg">{pkg.hours || 4} ساعات/زيارة</span>
+                                    </div>
+                                </div>
+                                {(pkg.features || []).length > 0 && (
+                                    <div className="border-t border-slate-100 pt-3 space-y-1.5">
+                                        {(pkg.features || []).map((f, i) => (
+                                            <div key={i} className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                                                <CheckCircle2 size={14} className={pkg.isPremium ? 'text-amber-400' : 'text-[#5D1B5E]'} />
+                                                {f}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
 }
 
 const StatusBadge = ({ status }: { status: string }) => {
@@ -33,6 +285,7 @@ const StatusBadge = ({ status }: { status: string }) => {
 
 export default function Contracts() {
     const { toast, confirm } = useNotification();
+    const [activeTab, setActiveTab] = useState<'contracts' | 'packages'>('contracts');
     const [searchTerm, setSearchTerm] = useState('');
     const [contracts, setContracts] = useState<ContractRecord[]>([]);
     const [loading, setLoading] = useState(true);
@@ -109,6 +362,29 @@ export default function Contracts() {
                 </div>
             </div>
 
+            {/* تبويب: العقود | باقات الاشتراك (إدارة الباقات كانت في التطبيق فقط) */}
+            <div className="flex gap-2 bg-white p-1.5 rounded-2xl border-2 border-slate-100 w-fit">
+                <button
+                    type="button"
+                    onClick={() => setActiveTab('contracts')}
+                    className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'contracts' ? 'bg-[#5D1B5E] text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
+                >
+                    <FileSignature size={16} />
+                    العقود
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveTab('packages')}
+                    className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'packages' ? 'bg-[#5D1B5E] text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
+                >
+                    <Package size={16} />
+                    باقات الاشتراك
+                </button>
+            </div>
+
+            {activeTab === 'packages' && <PackagesSection />}
+
+            {activeTab === 'contracts' && (<>
             <div className="relative group">
                 <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#5D1B5E] transition-colors" size={20} />
                 <input
@@ -200,6 +476,7 @@ export default function Contracts() {
                     ))}
                 </div>
             )}
+            </>)}
         </div>
     );
 }
