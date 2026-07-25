@@ -5,6 +5,7 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
+import { arabizeMapLabels } from '../utils/mapboxArabic.ts';
 
 interface SystemSettings {
     // General
@@ -231,6 +232,7 @@ export default function Settings() {
             }));
         });
         m.on('load', () => {
+            arabizeMapLabels(m); // التسميات بالعربية (name_ar) بدل الإنجليزية الافتراضية
             m.addSource('zone-circle', {
                 type: 'geojson',
                 data: { type: 'FeatureCollection', features: [] },

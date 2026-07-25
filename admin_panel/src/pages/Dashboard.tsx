@@ -6,6 +6,7 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { collection, onSnapshot, query, where, orderBy, limit, Timestamp, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
+import { arabizeMapLabels } from '../utils/mapboxArabic.ts';
 
 interface RecentOrder {
     id: string;
@@ -225,6 +226,8 @@ export default function Dashboard() {
         });
 
         map.current.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
+        // التسميات بالعربية — style.load يلتقط أيضاً أي إعادة تحميل للستايل.
+        map.current.on('style.load', () => { if (map.current) arabizeMapLabels(map.current); });
 
         // Live Drivers Data Markers from Firestore
         const unsubDriversMap = onSnapshot(
