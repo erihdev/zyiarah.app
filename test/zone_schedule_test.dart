@@ -184,8 +184,10 @@ void main() {
     // ليست مشروطة بتحديد سابق: المركز nullable مع مركز افتراضي لجازان.
     expect(s.contains('final GeoPoint? center;'), isTrue);
     expect(s.contains('_fallbackCenter'), isTrue);
-    // النقر على الخريطة يضع المركز.
-    expect(s.contains('onTap: (tapPos, ll) =>'), isTrue);
+    // النقر على الخريطة يضع المركز — بعد حارس حدود جازان (النقرة خارجها تُرفض).
+    expect(s.contains('onTap: (tapPos, ll) {'), isTrue);
+    expect(s.contains('isInJazan(ll)'), isTrue,
+        reason: 'المناطق محصورة بمنطقة جازان — نقرة خارج حدودها لا تضع مركزاً');
     expect(s.contains('onPick(GeoPoint(ll.latitude, ll.longitude))'), isTrue);
     // الدائرة تقرأ نصف القطر من الحقل حيّاً (الحقل يعيد الرسم عند كل تغيير).
     expect(s.contains('onChanged: (_) => setDialogState(() {})'), isTrue,

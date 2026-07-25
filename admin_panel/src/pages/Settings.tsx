@@ -6,6 +6,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
 import { arabizeMapLabels } from '../utils/mapboxArabic.ts';
+import { JAZAN_BBOX, jazanMaskGeoJSON, jazanOutlineGeoJSON, isInJazan } from '../utils/jazanBoundary.ts';
 
 interface SystemSettings {
     // General
@@ -220,11 +221,22 @@ export default function Settings() {
         const m = new mapboxgl.Map({
             container: zoneMapContainer.current,
             style: 'mapbox://styles/mapbox/streets-v12',
-            center: [43.1572, 17.3453], // جازان — نفس افتراض حقول الإحداثيات
-            zoom: 8,
+            // العرض الابتدائي = منطقة جازان كاملة، والكاميرا مقفولة داخلها (بهامش طفيف)
+            // — لا تحريك/تصغير يُخرج الخريطة لأي منطقة أخرى.
+            bounds: [[JAZAN_BBOX[0], JAZAN_BBOX[1]], [JAZAN_BBOX[2], JAZAN_BBOX[3]]],
+            fitBoundsOptions: { padding: 24 },
+            maxBounds: [
+                [JAZAN_BBOX[0] - 0.25, JAZAN_BBOX[1] - 0.25],
+                [JAZAN_BBOX[2] + 0.25, JAZAN_BBOX[3] + 0.25],
+            ],
         });
         m.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
         m.on('click', (e) => {
+            // المحافظات محصورة بجازان — لا مركز خارج حدودها الإدارية.
+            if (!isInJazan(e.lngLat.lng, e.lngLat.lat)) {
+                toast.error('خارج نطاق منطقة جازان — حدد داخل حدود المنطقة');
+                return;
+            }
             setNewZone(p => ({
                 ...p,
                 latitude: e.lngLat.lat.toFixed(5),
@@ -233,6 +245,12 @@ export default function Settings() {
         });
         m.on('load', () => {
             arabizeMapLabels(m); // التسميات بالعربية (name_ar) بدل الإنجليزية الافتراضية
+            // قناع «خارج جازان»: يُعتِّم كل ما حول المنطقة فلا تظهر إلا محافظاتها
+            // وقراها وهجرها، مع حدّ بنفسجي يرسم حدودها الإدارية (اليابسة + فرسان).
+            m.addSource('jazan-mask', { type: 'geojson', data: jazanMaskGeoJSON() });
+            m.addLayer({ id: 'jazan-mask-fill', type: 'fill', source: 'jazan-mask', paint: { 'fill-color': '#e2e8f0', 'fill-opacity': 0.9 } });
+            m.addSource('jazan-outline', { type: 'geojson', data: jazanOutlineGeoJSON() });
+            m.addLayer({ id: 'jazan-outline-line', type: 'line', source: 'jazan-outline', paint: { 'line-color': '#5D1B5E', 'line-width': 2.5 } });
             m.addSource('zone-circle', {
                 type: 'geojson',
                 data: { type: 'FeatureCollection', features: [] },
@@ -263,7 +281,8 @@ export default function Settings() {
         const t = setTimeout(async () => {
             try {
                 const q = encodeURIComponent(newZone.name.trim());
-                const r = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${q}.json?access_token=${import.meta.env.VITE_MAPBOX_TOKEN}&country=sa&language=ar&limit=1`);
+                // bbox: قصر نتائج البحث على منطقة جازان فقط (لا مدن/مناطق أخرى).
+                const r = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${q}.json?access_token=${import.meta.env.VITE_MAPBOX_TOKEN}&country=sa&language=ar&limit=1&bbox=${JAZAN_BBOX.join(',')}`);
                 const j = await r.json();
                 const c = j?.features?.[0]?.center;
                 if (Array.isArray(c) && c.length >= 2 && zoneMap.current) {

@@ -12,6 +12,7 @@ import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/utils/service_pricing_defaults.dart';
 import 'package:zyiarah/utils/firestore_maps.dart';
 import 'package:zyiarah/screens/admin/admin_zone_schedule_editor.dart';
+import 'package:zyiarah/utils/jazan_boundary.dart';
 
 class AdminHourlyZonesScreen extends StatefulWidget {
   const AdminHourlyZonesScreen({super.key});
@@ -198,6 +199,8 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
           'https://api.mapbox.com/search/geocode/v6/forward'
           '?q=${Uri.encodeComponent(query.trim())}'
           '&access_token=$token&language=ar&country=sa'
+          // bbox: قصر النتائج على منطقة جازان فقط (لا مدن/مناطق أخرى).
+          '&bbox=${kJazanSw.longitude},${kJazanSw.latitude},${kJazanNe.longitude},${kJazanNe.latitude}'
           '&proximity=43.0505,17.3023&limit=1');
       final res = await http.get(url).timeout(const Duration(seconds: 8));
       if (res.statusCode != 200) return null;
@@ -786,8 +789,17 @@ class _ZoneCoveragePreview extends StatelessWidget {
                     // الخريطةُ تمريرَ الحوار.
                     interactionOptions:
                         const InteractionOptions(flags: InteractiveFlag.none),
-                    onTap: (tapPos, ll) =>
-                        onPick(GeoPoint(ll.latitude, ll.longitude)),
+                    onTap: (tapPos, ll) {
+                      // المناطق محصورة بجازان — لا مركز خارج حدودها الإدارية.
+                      if (!isInJazan(ll)) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('خارج نطاق منطقة جازان — حدّد داخل حدود المنطقة'),
+                          backgroundColor: Colors.red,
+                        ));
+                        return;
+                      }
+                      onPick(GeoPoint(ll.latitude, ll.longitude));
+                    },
                   ),
                   children: [
                     // بلاطات OSM القياسية: تعرض الأسماء المحلية (العربية في السعودية)
@@ -798,6 +810,26 @@ class _ZoneCoveragePreview extends StatelessWidget {
                           'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       userAgentPackageName: 'com.zyiarah.zyiarah',
                     ),
+                    // قناع «خارج جازان»: مستطيل واسع بثقوبٍ = حلقات المنطقة — يُعتِّم
+                    // كل ما حولها فلا يظهر إلا محافظات جازان وقراها وهجرها، بحدٍّ بنفسجي.
+                    PolygonLayer(polygons: [
+                      Polygon(
+                        points: [
+                          const LatLng(10, 35), const LatLng(10, 50),
+                          const LatLng(25, 50), const LatLng(25, 35),
+                        ],
+                        holePointsList: kJazanRings,
+                        color: const Color(0xCCF1F5F9),
+                      ),
+                    ]),
+                    PolylineLayer(polylines: [
+                      for (final ring in kJazanRings)
+                        Polyline(
+                          points: ring,
+                          strokeWidth: 2.5,
+                          color: const Color(0xFF5D1B5E),
+                        ),
+                    ]),
                     if (picked)
                       CircleLayer(
                         circles: [

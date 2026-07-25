@@ -8,6 +8,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'package:zyiarah/services/zone_locator_service.dart';
+import 'package:zyiarah/utils/jazan_boundary.dart';
 
 class LocationPickerScreen extends StatefulWidget {
   final String serviceName;
@@ -40,7 +41,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   final MapController _mapController = MapController();
   Timer? _debounce;
   List<dynamic> _searchResults = [];
-  LatLng _selectedLatLng = const LatLng(24.7136, 46.6753); // Default: Riyadh
+  // الافتراضي: مدينة جازان — الخدمة محصورة بمنطقة جازان (كان الرياض خارج النطاق).
+  LatLng _selectedLatLng = const LatLng(16.8894, 42.5706);
   bool _isMapReady = false;
   // هل حدّد المستخدم موقعه فعلاً (GPS دقيق / تحريك الخريطة / نتيجة بحث)؟ لتفادي
   // اعتماد الموقع الافتراضي (الرياض) بصمت لمستخدم في مدينة أخرى.
@@ -122,7 +124,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
     try {
       final url = Uri.parse(
-          'https://api.mapbox.com/search/geocode/v6/forward?q=${Uri.encodeComponent(query)}&access_token=$_mapboxToken&language=ar&country=sa');
+          // bbox: قصر نتائج البحث على منطقة جازان فقط (لا مدن/مناطق أخرى).
+          'https://api.mapbox.com/search/geocode/v6/forward?q=${Uri.encodeComponent(query)}&access_token=$_mapboxToken&language=ar&country=sa'
+          '&bbox=${kJazanSw.longitude},${kJazanSw.latitude},${kJazanNe.longitude},${kJazanNe.latitude}');
       
       // بمهلة: طلب معلّق كان يترك البحث بلا استجابة إلى الأبد.
       final response = await http.get(url).timeout(const Duration(seconds: 10));
@@ -187,6 +191,14 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       if (proceed != true) return;
     }
     if (!mounted) return;
+    // الخدمة محصورة بمنطقة جازان — لا يُعتمد موقعٌ خارج حدودها الإدارية.
+    if (!isInJazan(_selectedLatLng)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('الموقع خارج نطاق منطقة جازان — حرّك الخريطة داخل حدود المنطقة'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
     final geoPoint = GeoPoint(_selectedLatLng.latitude, _selectedLatLng.longitude);
     if (widget.hours != null) {
       Navigator.pop(context, {
@@ -242,6 +254,13 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                 options: MapOptions(
                   initialCenter: _selectedLatLng,
                   initialZoom: 15.0,
+                  // قفل الكاميرا داخل منطقة جازان (بهامش طفيف) — لا تحريك لأي منطقة أخرى.
+                  cameraConstraint: CameraConstraint.contain(
+                    bounds: LatLngBounds(
+                      LatLng(kJazanSw.latitude - 0.15, kJazanSw.longitude - 0.15),
+                      LatLng(kJazanNe.latitude + 0.15, kJazanNe.longitude + 0.15),
+                    ),
+                  ),
                   onPositionChanged: (position, hasGesture) {
                     if (hasGesture) {
                       setState(() {
@@ -258,6 +277,26 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                     urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     userAgentPackageName: 'com.zyiarah.zyiarah',
                   ),
+                  // قناع «خارج جازان»: مستطيل واسع بثقوبٍ = حلقات المنطقة — يُعتِّم كل
+                  // ما حول جازان فلا تظهر إلا محافظاتها وقراها وهجرها، مع حدّ بنفسجي.
+                  PolygonLayer(polygons: [
+                    Polygon(
+                      points: [
+                        const LatLng(10, 35), const LatLng(10, 50),
+                        const LatLng(25, 50), const LatLng(25, 35),
+                      ],
+                      holePointsList: kJazanRings,
+                      color: const Color(0xCCF1F5F9),
+                    ),
+                  ]),
+                  PolylineLayer(polylines: [
+                    for (final ring in kJazanRings)
+                      Polyline(
+                        points: ring,
+                        strokeWidth: 2.5,
+                        color: const Color(0xFF5D1B5E),
+                      ),
+                  ]),
                   if (widget.radius != null)
                     CircleLayer(
                       circles: [
