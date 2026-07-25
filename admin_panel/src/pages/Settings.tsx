@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Save, Bell, Shield, Wallet, MapPin, Search, Smartphone, Loader2, CheckCircle2, ChevronLeft, CreditCard, Activity, Globe, Database, KeyRound, ArrowRight, Plus, Navigation, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
-import { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, GeoPoint } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, GeoPoint, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
 
@@ -33,7 +33,42 @@ interface CoverageZone {
     rank: number;
 }
 
-const emptyZoneForm = { name: '', latitude: '', longitude: '', radiusKm: '15' };
+// (تكافؤ مع تطبيق الأدمن — admin_hourly_zones_screen.dart) نفس خيارات الساعات ونفس
+// حقول التسعير حرفياً: prices / sofaSqmPrice / rugSqmPrice / ac*Price / car*Price —
+// وهي الحقول الموثوقة التي يقرؤها التسعير الخادمي (functions/pricing.js). كان النموذج
+// هنا يبذر أسعار ساعات ثابتة لم يُدخلها أحد (35/120/…) وبلا حقول سيارات إطلاقاً.
+const ZONE_HOUR_OPTIONS = [1, 2, 4, 5, 6, 7, 8];
+const hourLabel = (h: number) => (h === 1 ? 'ساعة' : `${h} ساعات`);
+
+const emptyZoneForm = {
+    name: '', latitude: '', longitude: '', radiusKm: '15',
+    // الساعات تبدأ فارغة: فارغ/0 = «غير مسعّرة» فتُعطَّل الشريحة بدل بيعها بسعر لم يُعتمد.
+    hourPrices: Object.fromEntries(ZONE_HOUR_OPTIONS.map(h => [String(h), ''])) as Record<string, string>,
+    // البقية تُبذر بنفس افتراضيات التطبيق (service_pricing_defaults.dart).
+    sofaSqmPrice: '35', rugSqmPrice: '15',
+    acMaintWindowPrice: '100', acMaintSplitPrice: '150',
+    acWashWindowPrice: '80', acWashSplitPrice: '120',
+    carSmallPrice: '100', carMediumPrice: '150', carLargePrice: '200',
+};
+
+// مجموعات حقول الأسعار المفردة — نفس تسميات حوار التطبيق.
+const SOFA_RUG_FIELDS = [
+    { key: 'sofaSqmPrice', label: 'الكنب (ر.س/م طولي)' },
+    { key: 'rugSqmPrice', label: 'السجاد (ر.س/م²)' },
+] as const;
+const AC_FIELDS = [
+    { key: 'acMaintWindowPrice', label: 'صيانة — شباك' },
+    { key: 'acMaintSplitPrice', label: 'صيانة — سبليت' },
+    { key: 'acWashWindowPrice', label: 'غسيل — شباك' },
+    { key: 'acWashSplitPrice', label: 'غسيل — سبليت' },
+] as const;
+const CAR_FIELDS = [
+    { key: 'carSmallPrice', label: 'صغيرة' },
+    { key: 'carMediumPrice', label: 'وسط' },
+    { key: 'carLargePrice', label: 'كبيرة' },
+] as const;
+
+const zoneInputCls = 'w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-800 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all';
 
 // إعداد التحديث الإجباري — يُخزَّن في مستند منفصل system_configs/app_update
 // والذي يقرأه التطبيق (app_update_service.dart). كانت اللوحة سابقاً تكتب
@@ -136,29 +171,27 @@ export default function Settings() {
         }
         setIsAddingZone(true);
         try {
+            // نفس مخطط حفظ تطبيق الأدمن حرفياً — التسعير الخادمي يقرأ هذه الحقول.
+            // فارغ/غير رقمي = 0 = «غير مسعّرة» فتُعطَّل الخدمة/الشريحة بدل بيعها بسعر لم يُعتمد.
+            const num = (s: string) => { const v = parseFloat(s); return isNaN(v) ? 0 : v; };
             await addDoc(collection(db, 'service_zones'), {
                 name: newZone.name.trim(),
                 centerLoc: new GeoPoint(lat, lng),
                 radiusKm: radius,
                 enabled: true,
                 rank: zones.length + 1,
-                prices: {
-                    '1': 35,
-                    '4': 120,
-                    '5': 150,
-                    '6': 180,
-                    '8': 240
-                },
-                // الأسعار الجديدة (م² للكنب/السجاد، ولكل مكيف) تُبذر بصفر عمداً: صفر =
-                // «غير مسعّرة» فتُعطَّل الخدمة حتى تُسعّرها الإدارة من تطبيق الأدمن —
-                // بدل بيعها بسعر افتراضي لم يعتمده أحد.
-                sofaSqmPrice: 0,
-                rugSqmPrice: 0,
-                acMaintWindowPrice: 0,
-                acMaintSplitPrice: 0,
-                acWashWindowPrice: 0,
-                acWashSplitPrice: 0,
-                updated_at: new Date(),
+                prices: Object.fromEntries(
+                    ZONE_HOUR_OPTIONS.map(h => [String(h), num(newZone.hourPrices[String(h)])])),
+                sofaSqmPrice: num(newZone.sofaSqmPrice),
+                rugSqmPrice: num(newZone.rugSqmPrice),
+                acMaintWindowPrice: num(newZone.acMaintWindowPrice),
+                acMaintSplitPrice: num(newZone.acMaintSplitPrice),
+                acWashWindowPrice: num(newZone.acWashWindowPrice),
+                acWashSplitPrice: num(newZone.acWashSplitPrice),
+                carSmallPrice: num(newZone.carSmallPrice),
+                carMediumPrice: num(newZone.carMediumPrice),
+                carLargePrice: num(newZone.carLargePrice),
+                updated_at: serverTimestamp(),
             });
             setNewZone(emptyZoneForm);
             setShowAddForm(false);
@@ -168,6 +201,32 @@ export default function Settings() {
             toast.error('حدث خطأ أثناء الإضافة');
         } finally {
             setIsAddingZone(false);
+        }
+    };
+
+    // (تكافؤ التطبيق) نسخ أسعار محافظة قائمة إلى النموذج — تعبئة فقط، لا كتابة على أحد؛
+    // الحفظ الصريح هو التأكيد. تُجلب من المستند مباشرةً لأن قائمة zones لا تحمل الأسعار.
+    const handleCopyPricesFrom = async (zoneId: string) => {
+        if (!zoneId) return;
+        try {
+            const snap = await getDoc(doc(db, 'service_zones', zoneId));
+            if (!snap.exists()) return;
+            const d = snap.data() as Record<string, unknown>;
+            const p = (d.prices ?? {}) as Record<string, unknown>;
+            const s = (v: unknown) => (v === undefined || v === null ? '' : String(v));
+            setNewZone(prev => ({
+                ...prev,
+                hourPrices: Object.fromEntries(
+                    ZONE_HOUR_OPTIONS.map(h => [String(h), s(p[String(h)])])) as Record<string, string>,
+                sofaSqmPrice: s(d.sofaSqmPrice), rugSqmPrice: s(d.rugSqmPrice),
+                acMaintWindowPrice: s(d.acMaintWindowPrice), acMaintSplitPrice: s(d.acMaintSplitPrice),
+                acWashWindowPrice: s(d.acWashWindowPrice), acWashSplitPrice: s(d.acWashSplitPrice),
+                carSmallPrice: s(d.carSmallPrice), carMediumPrice: s(d.carMediumPrice), carLargePrice: s(d.carLargePrice),
+            }));
+            toast.success('نُسخت الأسعار إلى النموذج — راجعها ثم احفظ');
+        } catch (e) {
+            console.error(e);
+            toast.error('تعذّر نسخ الأسعار');
         }
     };
 
@@ -750,6 +809,92 @@ export default function Settings() {
                                                 </a>
                                                 <span className="text-xs text-slate-400">(انقر على الموقع → انسخ الأرقام من شريط العنوان)</span>
                                             </div>
+
+                                            {/* ═══ التسعير — تكافؤ كامل مع حوار التطبيق ═══ */}
+                                            {zones.length > 0 && (
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-600 mb-1">نسخ الأسعار من محافظة سابقة (اختياري)</label>
+                                                    <select
+                                                        defaultValue=""
+                                                        onChange={e => { handleCopyPricesFrom(e.target.value); e.target.value = ''; }}
+                                                        className={zoneInputCls}
+                                                        dir="rtl"
+                                                    >
+                                                        <option value="">— اختر محافظة لنسخ أسعارها —</option>
+                                                        {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
+                                                    </select>
+                                                </div>
+                                            )}
+
+                                            <div>
+                                                <h5 className="font-black text-slate-800 text-sm mb-1">أسعار النظافة بالساعة (ر.س)</h5>
+                                                <p className="text-xs text-slate-400 mb-2">اترك الحقل فارغاً (أو 0) لتعطيل الشريحة — لا تُباع ساعة غير مسعّرة.</p>
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                                    {ZONE_HOUR_OPTIONS.map(h => (
+                                                        <div key={h}>
+                                                            <label className="block text-xs font-bold text-slate-600 mb-1">{hourLabel(h)}</label>
+                                                            <input
+                                                                type="number" dir="ltr" min="0" step="0.5"
+                                                                value={newZone.hourPrices[String(h)]}
+                                                                onChange={e => setNewZone(p => ({ ...p, hourPrices: { ...p.hourPrices, [String(h)]: e.target.value } }))}
+                                                                className={zoneInputCls}
+                                                            />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <h5 className="font-black text-slate-800 text-sm mb-2">أسعار الكنب (بالمتر الطولي) والسجاد (بالمتر المربع)</h5>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    {SOFA_RUG_FIELDS.map(f => (
+                                                        <div key={f.key}>
+                                                            <label className="block text-xs font-bold text-slate-600 mb-1">{f.label}</label>
+                                                            <input
+                                                                type="number" dir="ltr" min="0" step="0.5"
+                                                                value={newZone[f.key]}
+                                                                onChange={e => setNewZone(p => ({ ...p, [f.key]: e.target.value }))}
+                                                                className={zoneInputCls}
+                                                            />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <h5 className="font-black text-slate-800 text-sm mb-2">أسعار المكيفات — لكل مكيف (ر.س)</h5>
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                                    {AC_FIELDS.map(f => (
+                                                        <div key={f.key}>
+                                                            <label className="block text-xs font-bold text-slate-600 mb-1">{f.label}</label>
+                                                            <input
+                                                                type="number" dir="ltr" min="0" step="0.5"
+                                                                value={newZone[f.key]}
+                                                                onChange={e => setNewZone(p => ({ ...p, [f.key]: e.target.value }))}
+                                                                className={zoneInputCls}
+                                                            />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <h5 className="font-black text-slate-800 text-sm mb-2">تنظيف داخلية السيارة — لكل سيارة (ر.س)</h5>
+                                                <div className="grid grid-cols-3 gap-3">
+                                                    {CAR_FIELDS.map(f => (
+                                                        <div key={f.key}>
+                                                            <label className="block text-xs font-bold text-slate-600 mb-1">{f.label}</label>
+                                                            <input
+                                                                type="number" dir="ltr" min="0" step="0.5"
+                                                                value={newZone[f.key]}
+                                                                onChange={e => setNewZone(p => ({ ...p, [f.key]: e.target.value }))}
+                                                                className={zoneInputCls}
+                                                            />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
                                             <div className="flex gap-3">
                                                 <button
                                                     type="button"
