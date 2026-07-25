@@ -744,7 +744,6 @@ class _ZoneCoveragePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final token = dotenv.env['MAPBOX_TOKEN'] ?? '';
     final picked = center != null;
     final latLng = picked
         ? LatLng(center!.latitude, center!.longitude)
@@ -791,10 +790,12 @@ class _ZoneCoveragePreview extends StatelessWidget {
                         onPick(GeoPoint(ll.latitude, ll.longitude)),
                   ),
                   children: [
+                    // بلاطات OSM القياسية: تعرض الأسماء المحلية (العربية في السعودية)
+                    // بدل بلاطات Mapbox النقطية الإنجليزية التي لا يُغيَّر لسانها من
+                    // العميل — وتوحيدٌ مع بقية خرائط التطبيق (التتبع/السائق/العامة).
                     TileLayer(
                       urlTemplate:
-                          'https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/{z}/{x}/{y}?access_token=$token',
-                      additionalOptions: {'accessToken': token},
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       userAgentPackageName: 'com.zyiarah.zyiarah',
                     ),
                     if (picked)

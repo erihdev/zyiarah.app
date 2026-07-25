@@ -252,9 +252,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                   },
                 ),
                 children: [
+                   // بلاطات OSM القياسية: أسماء محلية (عربية في السعودية) بدل بلاطات
+                   // Mapbox النقطية الإنجليزية — وتوحيدٌ مع بقية خرائط التطبيق.
                    TileLayer(
-                    urlTemplate: 'https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/{z}/{x}/{y}?access_token=$_mapboxToken',
-                    additionalOptions: {'accessToken': _mapboxToken},
+                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     userAgentPackageName: 'com.zyiarah.zyiarah',
                   ),
                   if (widget.radius != null)
