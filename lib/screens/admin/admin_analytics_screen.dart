@@ -303,7 +303,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                       value: fraction.clamp(0.0, 1.0),
                       minHeight: 8,
                       backgroundColor: const Color(0xFFF1F5F9),
-                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF5D1B5E)),
+                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF006FBA)),
                     ),
                   ),
                 ],
@@ -339,10 +339,10 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF5D1B5E).withValues(alpha: 0.08),
+                        color: const Color(0xFF006FBA).withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.receipt_long_outlined, color: Color(0xFF5D1B5E), size: 18),
+                      child: const Icon(Icons.receipt_long_outlined, color: Color(0xFF006FBA), size: 18),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -487,7 +487,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Text('لوحة التحليلات', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF5D1B5E),
+        backgroundColor: const Color(0xFF006FBA),
         foregroundColor: Colors.white,
         elevation: 0,
       ),

@@ -229,7 +229,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text("تحديد موقع - ${widget.serviceName}"),
-          backgroundColor: const Color(0xFF5D1B5E),
+          backgroundColor: const Color(0xFF006FBA),
           foregroundColor: Colors.white,
         ),
         body: Stack(
@@ -241,7 +241,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CircularProgressIndicator(color: Color(0xFF5D1B5E)),
+                    CircularProgressIndicator(color: Color(0xFF006FBA)),
                     SizedBox(height: 14),
                     Text('جارٍ تحديد موقعك…',
                         style: TextStyle(color: Color(0xFF64748B), fontSize: 13)),
@@ -294,7 +294,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       Polyline(
                         points: ring,
                         strokeWidth: 2.5,
-                        color: const Color(0xFF5D1B5E),
+                        color: const Color(0xFF006FBA),
                       ),
                   ]),
                   if (widget.radius != null)
@@ -356,14 +356,14 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                 heroTag: 'locate_me_fab',
                 onPressed: _isLocating ? null : () => _locateMe(userInitiated: true),
                 backgroundColor: Colors.white,
-                foregroundColor: const Color(0xFF5D1B5E),
+                foregroundColor: const Color(0xFF006FBA),
                 tooltip: 'موقعي الحالي',
                 child: _isLocating
                     ? const SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Color(0xFF5D1B5E)),
+                            strokeWidth: 2, color: Color(0xFF006FBA)),
                       )
                     : const Icon(Icons.my_location_rounded),
               ),
@@ -397,7 +397,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       onChanged: _onSearchChanged,
                       decoration: const InputDecoration(
                         hintText: "ابحث عن شارع، حي، أو معلم...",
-                        prefixIcon: Icon(Icons.search, color: Color(0xFF5D1B5E)),
+                        prefixIcon: Icon(Icons.search, color: Color(0xFF006FBA)),
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.symmetric(vertical: 15, horizontal: 15),
                       ),
@@ -438,7 +438,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
               child: ElevatedButton(
                 onPressed: _confirmLocation,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF5D1B5E),
+                  backgroundColor: const Color(0xFF006FBA),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 15),
                   shape: roundedRectangleCircular(20),

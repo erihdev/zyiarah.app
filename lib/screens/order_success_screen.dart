@@ -120,7 +120,7 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
               Text(
                 widget.title,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 24, color: const Color(0xFF5D1B5E)),
+                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 24, color: const Color(0xFF006FBA)),
               ),
               const SizedBox(height: 15),
               Text(
@@ -142,7 +142,7 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
                     const SizedBox(height: 5),
                     Text(
                       widget.orderCode,
-                      style: GoogleFonts.ibmPlexMono(fontWeight: FontWeight.w900, fontSize: 32, letterSpacing: 2, color: const Color(0xFF5D1B5E)),
+                      style: GoogleFonts.ibmPlexMono(fontWeight: FontWeight.w900, fontSize: 32, letterSpacing: 2, color: const Color(0xFF006FBA)),
                     ),
                   ],
                 ),
@@ -157,7 +157,7 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF5D1B5E),
+                    backgroundColor: const Color(0xFF006FBA),
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
@@ -236,7 +236,7 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
           icon: const Icon(Icons.picture_as_pdf_rounded, size: 20, color: Color(0xFF1E293B)),
-          label: Text("تحميل الفاتورة الضريبية", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF5D1B5E))),
+          label: Text("تحميل الفاتورة الضريبية", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF006FBA))),
         );
       },
     );

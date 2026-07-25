@@ -26,10 +26,10 @@ interface StatCardProps {
 
 const colorMaps = {
     blue: {
-        bg: 'bg-[#f7f0f8]/80',
-        text: 'text-[#5D1B5E]',
+        bg: 'bg-[#EDF5FC]/80',
+        text: 'text-[#006FBA]',
         iconBg: 'bg-white',
-        shadow: 'shadow-[#5D1B5E]/10'
+        shadow: 'shadow-[#006FBA]/10'
     },
     orange: {
         bg: 'bg-orange-50/80',
@@ -38,10 +38,10 @@ const colorMaps = {
         shadow: 'shadow-orange-500/10'
     },
     indigo: {
-        bg: 'bg-[#f7f0f8]/80',
-        text: 'text-[#5D1B5E]',
+        bg: 'bg-[#EDF5FC]/80',
+        text: 'text-[#006FBA]',
         iconBg: 'bg-white',
-        shadow: 'shadow-[#7a3a7c]/10'
+        shadow: 'shadow-[#2E86C8]/10'
     },
     emerald: {
         bg: 'bg-emerald-50/80',
@@ -197,7 +197,7 @@ export default function Dashboard() {
     const getStatusBadge = (status: string) => {
         switch (status) {
             case 'completed': return <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-600 text-xs font-bold flex items-center w-fit border border-emerald-100"><CheckCircle2 size={14} strokeWidth={2.5} className="ml-1.5" /> مكتمل</span>;
-            case 'active': return <span className="px-3 py-1.5 rounded-xl bg-[#f7f0f8] text-[#5D1B5E] text-xs font-bold flex items-center w-fit border border-[#f0e2f1]"><Clock size={14} strokeWidth={2.5} className="ml-1.5" /> جاري التنفيذ</span>;
+            case 'active': return <span className="px-3 py-1.5 rounded-xl bg-[#EDF5FC] text-[#006FBA] text-xs font-bold flex items-center w-fit border border-[#D4E8F7]"><Clock size={14} strokeWidth={2.5} className="ml-1.5" /> جاري التنفيذ</span>;
             case 'pending': return <span className="px-3 py-1.5 rounded-xl bg-orange-50 text-orange-600 text-xs font-bold flex items-center w-fit border border-orange-100"><Clock size={14} strokeWidth={2.5} className="ml-1.5" /> قيد الانتظار</span>;
             default: return null;
         }
@@ -223,7 +223,7 @@ export default function Dashboard() {
 
             <div className="pt-4">
                 <h3 className="text-lg font-extrabold text-slate-800 mb-4 flex items-center gap-2">
-                    <ArrowUpRight className="text-[#5D1B5E]" size={20} />
+                    <ArrowUpRight className="text-[#006FBA]" size={20} />
                     إحصائيات متجر الأدوات
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -242,7 +242,7 @@ export default function Dashboard() {
                             <h3 className="text-lg font-extrabold text-slate-800">أحدث الطلبات</h3>
                             <p className="text-sm font-medium text-slate-400 mt-1">آخر 5 طلبات مسجلة في النظام</p>
                         </div>
-                        <button type="button" onClick={() => navigate('/orders')} className="text-[#5D1B5E] bg-[#f7f0f8] hover:bg-[#f0e2f1] px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center">
+                        <button type="button" onClick={() => navigate('/orders')} className="text-[#006FBA] bg-[#EDF5FC] hover:bg-[#D4E8F7] px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center">
                             <span>عرض الكل</span>
                             <ChevronLeft size={16} className="mr-1" />
                         </button>
@@ -270,7 +270,7 @@ export default function Dashboard() {
                                                     {order.avatar}
                                                 </div>
                                                 <div>
-                                                    <p className="font-bold text-slate-800 group-hover:text-[#5D1B5E] transition-colors">{order.client}</p>
+                                                    <p className="font-bold text-slate-800 group-hover:text-[#006FBA] transition-colors">{order.client}</p>
                                                     <p className="text-xs font-semibold text-slate-400 mt-0.5">{order.time}</p>
                                                 </div>
                                             </div>

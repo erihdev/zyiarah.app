@@ -18,7 +18,7 @@ class DriverNotificationsScreen extends StatelessWidget {
         appBar: AppBar(
           title: Text('الإشعارات',
               style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF5D1B5E),
+          backgroundColor: const Color(0xFF006FBA),
           foregroundColor: Colors.white,
           elevation: 0,
           automaticallyImplyLeading: false,
@@ -39,7 +39,7 @@ class DriverNotificationsScreen extends StatelessWidget {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(
                         child: CircularProgressIndicator(
-                            color: Color(0xFF5D1B5E)));
+                            color: Color(0xFF006FBA)));
                   }
 
                   if (snapshot.hasError) {
@@ -156,7 +156,7 @@ class _NotifCard extends StatelessWidget {
         break;
       case 'order_update':
         icon = Icons.autorenew_rounded;
-        iconColor = const Color(0xFF5D1B5E);
+        iconColor = const Color(0xFF006FBA);
         break;
       case 'driver_near':
       case 'driver_status':
@@ -165,7 +165,7 @@ class _NotifCard extends StatelessWidget {
         break;
       default:
         icon = Icons.notifications_outlined;
-        iconColor = const Color(0xFF5D1B5E);
+        iconColor = const Color(0xFF006FBA);
     }
 
     return Container(
@@ -176,7 +176,7 @@ class _NotifCard extends StatelessWidget {
         border: Border.all(
           color: isRead
               ? Colors.grey.shade100
-              : const Color(0xFF5D1B5E).withValues(alpha: 0.2),
+              : const Color(0xFF006FBA).withValues(alpha: 0.2),
         ),
         boxShadow: [
           BoxShadow(
@@ -229,7 +229,7 @@ class _NotifCard extends StatelessWidget {
               height: 8,
               margin: const EdgeInsets.only(top: 4),
               decoration: const BoxDecoration(
-                color: Color(0xFF5D1B5E),
+                color: Color(0xFF006FBA),
                 shape: BoxShape.circle,
               ),
             ),

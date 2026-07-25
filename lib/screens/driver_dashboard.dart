@@ -292,7 +292,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       expandedHeight: 120.0,
       floating: false,
       pinned: true,
-      backgroundColor: const Color(0xFF5D1B5E),
+      backgroundColor: const Color(0xFF006FBA),
       flexibleSpace: FlexibleSpaceBar(
         titlePadding: const EdgeInsets.only(right: 20, bottom: 16),
         title: Text(
@@ -304,7 +304,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
         background: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
-              colors: [Color(0xFF5D1B5E), Color(0xFF7E3080)],
+              colors: [Color(0xFF006FBA), Color(0xFF2E86C8)],
               begin: Alignment.topRight,
               end: Alignment.bottomLeft,
             ),
@@ -361,7 +361,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
           setState(() => _currentIndex = i);
         },
         type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xFF5D1B5E),
+        selectedItemColor: const Color(0xFF006FBA),
         unselectedItemColor: Colors.grey,
         selectedLabelStyle:
             GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 11),
@@ -629,7 +629,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
         Row(
           children: [
             const Icon(Icons.calendar_month_rounded,
-                color: Color(0xFF5D1B5E), size: 20),
+                color: Color(0xFF006FBA), size: 20),
             const SizedBox(width: 8),
             Text('مهامك القادمة',
                 style: GoogleFonts.tajawal(
@@ -640,14 +640,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF5D1B5E).withValues(alpha: 0.1),
+                color: const Color(0xFF006FBA).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text('${tasks.length}',
                   style: GoogleFonts.tajawal(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: const Color(0xFF5D1B5E))),
+                      color: const Color(0xFF006FBA))),
             ),
           ],
         ),
@@ -661,7 +661,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   width: 4,
                   height: 14,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF5D1B5E),
+                    color: const Color(0xFF006FBA),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -670,7 +670,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                     style: GoogleFonts.tajawal(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
-                        color: const Color(0xFF5D1B5E))),
+                        color: const Color(0xFF006FBA))),
               ],
             ),
           ),
@@ -724,7 +724,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       final m = zyiarahServiceMetaSummary(data['service_meta']);
       if (m != null) {
         rows.add(
-            _detailRow(Icons.list_alt_rounded, m, const Color(0xFF5D1B5E)));
+            _detailRow(Icons.list_alt_rounded, m, const Color(0xFF006FBA)));
       }
     } else {
       final w = _workersLabel(data['worker_count']);
@@ -793,7 +793,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
         : (status == 'on_the_way' || status == 'accepted')
             ? Colors.blue
             : status == 'scheduled'
-                ? const Color(0xFF5D1B5E)
+                ? const Color(0xFF006FBA)
                 : Colors.grey;
 
     return Container(
@@ -959,7 +959,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     String stateTitle = "";
     String actionLabel = "";
     String nextStatus = "";
-    Color stateColor = const Color(0xFF5D1B5E);
+    Color stateColor = const Color(0xFF006FBA);
     IconData stateIcon = Icons.directions_car;
 
     switch (status) {
@@ -967,7 +967,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
         stateTitle = "مهمة مجدولة — جاهز للانطلاق";
         actionLabel = "اضغط مطولاً — أنا في الطريق";
         nextStatus = "on_the_way";
-        stateColor = const Color(0xFF5D1B5E);
+        stateColor = const Color(0xFF006FBA);
         stateIcon = Icons.event_available;
         break;
       case 'on_the_way':
@@ -1284,7 +1284,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
           // موثوق لأن مرساة البدء صارت خادميّة (start_time == request.time بالقواعد).
           final timerColor = d.inSeconds > hours * 3600
               ? Colors.redAccent
-              : const Color(0xFF5D1B5E);
+              : const Color(0xFF006FBA);
           return Text(time, style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: timerColor));
         },
       ),

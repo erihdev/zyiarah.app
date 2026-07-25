@@ -98,7 +98,7 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
         appBar: AppBar(
           title: Text(widget.companies ? 'متجر الشركات' : 'متجر الأدوات والتنظيف',
               style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF5D1B5E),
+          backgroundColor: const Color(0xFF006FBA),
           foregroundColor: Colors.white,
           actions: [
             Stack(
@@ -179,7 +179,7 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: const BorderSide(color: Color(0xFF5D1B5E)),
+                    borderSide: const BorderSide(color: Color(0xFF006FBA)),
                   ),
                 ),
               ),
@@ -305,7 +305,7 @@ class _ProductCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF5D1B5E).withValues(alpha: 0.08), 
+            color: const Color(0xFF006FBA).withValues(alpha: 0.08), 
             blurRadius: 20, 
             offset: const Offset(0, 8)
           )
@@ -346,12 +346,12 @@ class _ProductCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('${product.price} ر.س', style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF5D1B5E))),
+                    Text('${product.price} ر.س', style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF006FBA))),
                     InkWell(
                       onTap: onAdd,
                       child: Container(
                         padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(color: const Color(0xFF5D1B5E), borderRadius: BorderRadius.circular(8)),
+                        decoration: BoxDecoration(color: const Color(0xFF006FBA), borderRadius: BorderRadius.circular(8)),
                         child: const Icon(Icons.add_shopping_cart, color: Colors.white, size: 18),
                       ),
                     ),
@@ -529,18 +529,18 @@ class _CartSheetState extends State<_CartSheet> {
                   decoration: BoxDecoration(
                     color: const Color(0xFFF3E8F4),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFF5D1B5E).withValues(alpha: 0.2)),
+                    border: Border.all(color: const Color(0xFF006FBA).withValues(alpha: 0.2)),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.info_outline, color: Color(0xFF5D1B5E), size: 22),
+                      const Icon(Icons.info_outline, color: Color(0xFF006FBA), size: 22),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           widget.companies
                               ? 'ستنتقل لإتمام الدفع مباشرةً (بطاقة / تمارا)، ويصلك طلبك بعد تأكيد الدفع.'
                               : 'ستحدّد عنوان التوصيل وموعده في الخطوة التالية، ثم تدفع ويصلك سائق بطلبك في الموعد.',
-                          style: GoogleFonts.tajawal(fontSize: 12, height: 1.5, color: const Color(0xFF5D1B5E), fontWeight: FontWeight.w600),
+                          style: GoogleFonts.tajawal(fontSize: 12, height: 1.5, color: const Color(0xFF006FBA), fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],
@@ -555,7 +555,7 @@ class _CartSheetState extends State<_CartSheet> {
                   child: ElevatedButton(
                     onPressed: (_isSubmitting || !_agreeToTerms) ? null : () => _checkout(snapshot.data!),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _agreeToTerms ? const Color(0xFF5D1B5E) : Colors.grey.shade300,
+                      backgroundColor: _agreeToTerms ? const Color(0xFF006FBA) : Colors.grey.shade300,
                       foregroundColor: Colors.white,
                     ),
                     child: _isSubmitting
@@ -578,12 +578,12 @@ class _CartSheetState extends State<_CartSheet> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _agreeToTerms ? const Color(0xFF5D1B5E) : Colors.grey.shade200),
+        border: Border.all(color: _agreeToTerms ? const Color(0xFF006FBA) : Colors.grey.shade200),
       ),
       child: CheckboxListTile(
         value: _agreeToTerms,
         onChanged: (val) => setState(() => _agreeToTerms = val ?? false),
-        activeColor: const Color(0xFF5D1B5E),
+        activeColor: const Color(0xFF006FBA),
         title: Text(
           "أوافق على شروط المتجر وسياسة الخصوصية",
           style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold),

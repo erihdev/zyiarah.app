@@ -16,7 +16,7 @@ import 'package:zyiarah/screens/subscription_plans_screen.dart';
 class ZyiarahOffersScreen extends StatelessWidget {
   const ZyiarahOffersScreen({super.key});
 
-  static const Color _brand = Color(0xFF5D1B5E);
+  static const Color _brand = Color(0xFF006FBA);
 
   Future<void> _handleTap(BuildContext context, Map<String, dynamic> data) async {
     final String routeType = data['routeType'] ?? 'none';

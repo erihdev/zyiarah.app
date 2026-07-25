@@ -87,7 +87,7 @@ class _UpdateDialog extends StatelessWidget {
     required this.force,
   });
 
-  static const Color _brand = Color(0xFF5D1B5E);
+  static const Color _brand = Color(0xFF006FBA);
 
   /// يفتح المتجر بشكل مضمون. لا يعتمد على canLaunchUrl لأنه يُرجع false زائفاً على
   /// أندرويد 11+ حين لا تُعلَن حزمة الاستهداف — ما كان يجعل الزر ميتاً ويحبس المستخدم

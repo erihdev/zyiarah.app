@@ -35,7 +35,7 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
         appBar: AppBar(
           title: Text('تتبع السائق',
               style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF5D1B5E),
+          backgroundColor: const Color(0xFF006FBA),
           foregroundColor: Colors.white,
           systemOverlayStyle: SystemUiOverlayStyle.light,
         ),
@@ -46,7 +46,7 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
               return const Center(child: Text("تعذّر تحميل بيانات التتبع", style: TextStyle(color: Colors.grey)));
             }
             if (!snapshot.hasData || !snapshot.data!.exists) {
-              return const Center(child: CircularProgressIndicator(color: Color(0xFF5D1B5E)));
+              return const Center(child: CircularProgressIndicator(color: Color(0xFF006FBA)));
             }
 
             final data = snapshot.data!.data() as Map<String, dynamic>;
@@ -91,7 +91,7 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
                         polylines: [
                           Polyline(
                             points: [driverLatLng, clientLatLng],
-                            color: const Color(0xFF5D1B5E),
+                            color: const Color(0xFF006FBA),
                             strokeWidth: 3.0,
                           ),
                         ],
@@ -114,7 +114,7 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
                             height: 44,
                             child: const _MapMarker(
                               icon: Icons.directions_car_rounded,
-                              color: Color(0xFF5D1B5E),
+                              color: Color(0xFF006FBA),
                             ),
                           ),
                       ],
@@ -134,7 +134,7 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
                     left: 12,
                     child: FloatingActionButton.small(
                       heroTag: 'center_driver',
-                      backgroundColor: const Color(0xFF5D1B5E),
+                      backgroundColor: const Color(0xFF006FBA),
                       onPressed: () => _mapController.move(driverLatLng, 15.0),
                       child: const Icon(Icons.my_location, color: Colors.white, size: 18),
                     ),
@@ -163,7 +163,7 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
           _legendRow(Icons.home_work_rounded, Colors.green, 'موقع العميل'),
           if (hasDriver) ...[
             const SizedBox(height: 4),
-            _legendRow(Icons.directions_car_rounded, const Color(0xFF5D1B5E), 'السائق (حي)'),
+            _legendRow(Icons.directions_car_rounded, const Color(0xFF006FBA), 'السائق (حي)'),
           ],
         ],
       ),
@@ -217,7 +217,7 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
                 ? Colors.red
                 : status == 'in_progress'
                     ? Colors.blue
-                    : const Color(0xFF5D1B5E);
+                    : const Color(0xFF006FBA);
 
         return Container(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -257,18 +257,18 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF5D1B5E).withValues(alpha: 0.08),
+                        color: const Color(0xFF006FBA).withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.straighten, size: 12, color: Color(0xFF5D1B5E)),
+                          const Icon(Icons.straighten, size: 12, color: Color(0xFF006FBA)),
                           const SizedBox(width: 4),
                           Text(distanceText,
                               style: GoogleFonts.tajawal(
                                   fontSize: 12,
-                                  color: const Color(0xFF5D1B5E),
+                                  color: const Color(0xFF006FBA),
                                   fontWeight: FontWeight.bold)),
                         ],
                       ),

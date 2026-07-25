@@ -19,6 +19,6 @@ class ZyiarahConfigService {
       hexColor = "FF$hexColor";
     }
     final value = int.tryParse(hexColor, radix: 16);
-    return Color(value ?? 0xFF5D1B5E);
+    return Color(value ?? 0xFF006FBA);
   }
 }

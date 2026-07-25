@@ -301,10 +301,10 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
     }
   }
 
-  /// يفتح منتقي التاريخ ثم الوقت (بثيم العلامة #5D1B5E) لتعديل موعد الزيارة.
+  /// يفتح منتقي التاريخ ثم الوقت (بثيم العلامة #006FBA) لتعديل موعد الزيارة.
   Future<void> _pickSchedule() async {
     final DateTime base = _editedSchedule ?? DateTime.now();
-    const brand = Color(0xFF5D1B5E);
+    const brand = Color(0xFF006FBA);
 
     final DateTime? pickedDate = await showDatePicker(
       context: context,
@@ -671,7 +671,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text("طلب #$code", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF5D1B5E),
+          backgroundColor: const Color(0xFF006FBA),
           foregroundColor: Colors.white,
         ),
         body: ListView(
@@ -762,14 +762,14 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                         trailing: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF5D1B5E).withValues(alpha: 0.08),
+                            color: const Color(0xFF006FBA).withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Icon(
                             data['driver_location'] != null
                                 ? Icons.gps_fixed
                                 : Icons.map_outlined,
-                            color: const Color(0xFF5D1B5E),
+                            color: const Color(0xFF006FBA),
                             size: 20,
                           ),
                         ),
@@ -847,7 +847,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.event, color: Color(0xFF5D1B5E), size: 20),
+                            const Icon(Icons.event, color: Color(0xFF006FBA), size: 20),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
@@ -857,7 +857,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                                 style: GoogleFonts.tajawal(fontSize: 14),
                               ),
                             ),
-                            const Icon(Icons.edit_calendar, color: Color(0xFF5D1B5E), size: 20),
+                            const Icon(Icons.edit_calendar, color: Color(0xFF006FBA), size: 20),
                           ],
                         ),
                       ),
@@ -867,7 +867,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E)),
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF006FBA)),
                         onPressed: _updateOrder,
                         child: const Text("حفظ التعديلات", style: TextStyle(fontSize: 16, color: Colors.white)),
                       ),

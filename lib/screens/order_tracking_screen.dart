@@ -48,7 +48,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: Text("تتبع طلبك", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF5D1B5E),
+          backgroundColor: const Color(0xFF006FBA),
           foregroundColor: Colors.white,
           elevation: 0,
           systemOverlayStyle: SystemUiOverlayStyle.light,
@@ -149,10 +149,10 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                   children: [
                     Container(
                       padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(color: Color(0xFF5D1B5E), shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]),
+                      decoration: const BoxDecoration(color: Color(0xFF006FBA), shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]),
                       child: const Icon(Icons.directions_car, color: Colors.white, size: 20),
                     ),
-                    const Icon(Icons.arrow_drop_down, color: Color(0xFF5D1B5E), size: 15),
+                    const Icon(Icons.arrow_drop_down, color: Color(0xFF006FBA), size: 15),
                   ],
                 ),
               ),
@@ -189,7 +189,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Text(distanceInfo, style: const TextStyle(color: Color(0xFF5D1B5E), fontWeight: FontWeight.bold, fontSize: 12)),
+                          Text(distanceInfo, style: const TextStyle(color: Color(0xFF006FBA), fontWeight: FontWeight.bold, fontSize: 12)),
                           _buildStaleStatus(data['last_location_update']),
                         ],
                       ),
@@ -210,14 +210,14 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                               style: GoogleFonts.tajawal(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
-                                  color: const Color(0xFF5D1B5E)),
+                                  color: const Color(0xFF006FBA)),
                             ),
                           ),
                         ),
                       const SizedBox(
                         width: 28, height: 28,
                         child: CircularProgressIndicator(
-                            strokeWidth: 3, color: Color(0xFF5D1B5E)),
+                            strokeWidth: 3, color: Color(0xFF006FBA)),
                       ),
                     ]),
                   IconButton(

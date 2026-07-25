@@ -50,6 +50,6 @@ class ZyiarahStatus {
   }
 
   // Consistent Colors
-  static const Color primaryPurple = Color(0xFF5D1B5E);
+  static const Color primaryPurple = Color(0xFF006FBA);
   static const Color adminNavy = Color(0xFF1E293B);
 }

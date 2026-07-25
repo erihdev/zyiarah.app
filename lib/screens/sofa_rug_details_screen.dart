@@ -29,7 +29,7 @@ class SofaRugCleaningDetailsScreen extends StatefulWidget {
 
 class _SofaRugCleaningDetailsScreenState
     extends State<SofaRugCleaningDetailsScreen> {
-  static const Color _brand = Color(0xFF5D1B5E);
+  static const Color _brand = Color(0xFF006FBA);
 
   bool _isLoading = true;
 

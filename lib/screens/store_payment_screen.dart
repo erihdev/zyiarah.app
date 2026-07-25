@@ -346,7 +346,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
           appBar: AppBar(
             title: Text('إتمام دفع طلب المتجر',
                 style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-            backgroundColor: const Color(0xFF5D1B5E),
+            backgroundColor: const Color(0xFF006FBA),
             foregroundColor: Colors.white,
           ),
           body: Stack(
@@ -378,7 +378,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
                           Icon(Icons.location_on,
                               color: _deliveryLocation == null
                                   ? Colors.red
-                                  : const Color(0xFF5D1B5E)),
+                                  : const Color(0xFF006FBA)),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
@@ -430,7 +430,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
                   color: Colors.black.withValues(alpha: 0.3),
                   child: const Center(
                       child: CircularProgressIndicator(
-                          color: Color(0xFF5D1B5E))),
+                          color: Color(0xFF006FBA))),
                 ),
             ],
           ),
@@ -470,7 +470,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
                   style: GoogleFonts.tajawal(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
-                      color: const Color(0xFF5D1B5E))),
+                      color: const Color(0xFF006FBA))),
             ],
           ),
         ],
@@ -511,7 +511,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
               color:
-                  isSelected ? const Color(0xFF5D1B5E) : Colors.grey.shade200,
+                  isSelected ? const Color(0xFF006FBA) : Colors.grey.shade200,
               width: 2),
         ),
         child: Row(
@@ -520,11 +520,11 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? const Color(0xFF5D1B5E).withValues(alpha: 0.1)
+                    ? const Color(0xFF006FBA).withValues(alpha: 0.1)
                     : Colors.grey.shade50,
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: color ?? const Color(0xFF5D1B5E)),
+              child: Icon(icon, color: color ?? const Color(0xFF006FBA)),
             ),
             const SizedBox(width: 15),
             Expanded(
@@ -541,7 +541,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
               ),
             ),
             if (isSelected)
-              const Icon(Icons.check_circle, color: Color(0xFF5D1B5E)),
+              const Icon(Icons.check_circle, color: Color(0xFF006FBA)),
           ],
         ),
       ),
@@ -556,13 +556,13 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
             color: _agreeToTerms
-                ? const Color(0xFF5D1B5E)
+                ? const Color(0xFF006FBA)
                 : Colors.grey.shade200),
       ),
       child: CheckboxListTile(
         value: _agreeToTerms,
         onChanged: (val) => setState(() => _agreeToTerms = val ?? false),
-        activeColor: const Color(0xFF5D1B5E),
+        activeColor: const Color(0xFF006FBA),
         title: Text('أوافق على شروط الخدمة وسياسة الخصوصية الخاصة بزيارة',
             style: GoogleFonts.tajawal(
                 fontSize: 12, fontWeight: FontWeight.bold)),
@@ -589,7 +589,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
           onPressed: (_isLoading || !_hasPaymentMethod) ? null : _handlePay,
           style: ElevatedButton.styleFrom(
             backgroundColor:
-                _agreeToTerms ? const Color(0xFF5D1B5E) : Colors.grey.shade300,
+                _agreeToTerms ? const Color(0xFF006FBA) : Colors.grey.shade300,
             foregroundColor: Colors.white,
             disabledBackgroundColor: Colors.grey.shade300,
             padding: const EdgeInsets.symmetric(vertical: 16),
@@ -650,7 +650,7 @@ class _StoreTamaraWebViewState extends State<_StoreTamaraWebView> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('إتمام الدفع - تمارا'),
-        backgroundColor: const Color(0xFF5D1B5E),
+        backgroundColor: const Color(0xFF006FBA),
         foregroundColor: Colors.white,
       ),
       body: WebViewWidget(controller: _controller),

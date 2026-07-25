@@ -37,7 +37,7 @@ class _DriverTasksScreenState extends State<DriverTasksScreen>
         appBar: AppBar(
           title: Text('مهامي',
               style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF5D1B5E),
+          backgroundColor: const Color(0xFF006FBA),
           foregroundColor: Colors.white,
           elevation: 0,
           automaticallyImplyLeading: false,
@@ -82,7 +82,7 @@ class _DriverTasksScreenState extends State<DriverTasksScreen>
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
-              child: CircularProgressIndicator(color: Color(0xFF5D1B5E)));
+              child: CircularProgressIndicator(color: Color(0xFF006FBA)));
         }
         if (snapshot.hasError) {
           return Center(
@@ -172,7 +172,7 @@ class _DriverTasksScreenState extends State<DriverTasksScreen>
         statusIcon = Icons.timer_outlined;
         break;
       case 'scheduled':
-        statusColor = const Color(0xFF5D1B5E);
+        statusColor = const Color(0xFF006FBA);
         statusLabel = 'مجدولة';
         statusIcon = Icons.event_available_outlined;
         break;
@@ -183,7 +183,7 @@ class _DriverTasksScreenState extends State<DriverTasksScreen>
         statusIcon = Icons.directions_car_outlined;
         break;
       default:
-        statusColor = const Color(0xFF5D1B5E);
+        statusColor = const Color(0xFF006FBA);
         statusLabel = 'معلقة';
         statusIcon = Icons.hourglass_empty;
     }

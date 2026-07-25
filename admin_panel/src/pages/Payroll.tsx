@@ -219,16 +219,16 @@ export default function Payroll() {
                     <h3 className="text-2xl font-extrabold text-slate-800">{unpaidTotal.toLocaleString()} <span className="text-sm font-bold text-slate-400">ر.س</span></h3>
                 </div>
 
-                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group hover:border-[#d9b8db] transition-colors">
+                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group hover:border-[#A9D2EF] transition-colors">
                     <div className="flex justify-between items-start mb-4">
-                        <div className="p-3 bg-[#f7f0f8] text-[#5D1B5E] rounded-2xl"><Users size={22} /></div>
+                        <div className="p-3 bg-[#EDF5FC] text-[#006FBA] rounded-2xl"><Users size={22} /></div>
                     </div>
                     <p className="text-slate-500 text-xs font-bold mb-1">نسبة الإنجاز</p>
                     <h3 className="text-2xl font-extrabold text-slate-800">
                         {drivers.length ? Math.round((paidCount / drivers.length) * 100) : 0}<span className="text-sm font-bold text-slate-400">%</span>
                     </h3>
                     <div className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-gradient-to-l from-[#5D1B5E] to-[#7a3a7c] rounded-full transition-all duration-700"
+                        <div className="h-full bg-gradient-to-l from-[#006FBA] to-[#2E86C8] rounded-full transition-all duration-700"
                             style={{ width: `${drivers.length ? (paidCount / drivers.length) * 100 : 0}%` }}></div>
                     </div>
                 </div>

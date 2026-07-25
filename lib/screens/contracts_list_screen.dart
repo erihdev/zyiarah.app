@@ -15,7 +15,7 @@ String _shortRef(dynamic v) {
 class ZyiarahContractsListScreen extends StatelessWidget {
   const ZyiarahContractsListScreen({super.key});
 
-  final Color brandPurple = const Color(0xFF5D1B5E);
+  final Color brandPurple = const Color(0xFF006FBA);
 
   @override
   Widget build(BuildContext context) {

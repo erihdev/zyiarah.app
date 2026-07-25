@@ -30,7 +30,7 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
         child: Scaffold(
           appBar: AppBar(
             title: Text("مركز المساعدة والدعم", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-            backgroundColor: const Color(0xFF5D1B5E),
+            backgroundColor: const Color(0xFF006FBA),
             foregroundColor: Colors.white,
             bottom: TabBar(
               indicatorColor: Colors.blueAccent,
@@ -103,7 +103,7 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
                 decoration: InputDecoration(
                   hintText: "ابحث بالموضوع أو اسم العميل أو البريد",
                   hintStyle: GoogleFonts.tajawal(color: Colors.grey, fontSize: 13),
-                  prefixIcon: const Icon(Icons.search, color: Color(0xFF5D1B5E)),
+                  prefixIcon: const Icon(Icons.search, color: Color(0xFF006FBA)),
                   suffixIcon: _search.isEmpty
                       ? null
                       : IconButton(
@@ -126,7 +126,7 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: const BorderSide(color: Color(0xFF5D1B5E)),
+                    borderSide: const BorderSide(color: Color(0xFF006FBA)),
                   ),
                 ),
               ),

@@ -19,7 +19,7 @@ class ZyiarahSubscriptionPlansScreen extends StatefulWidget {
 
 class _ZyiarahSubscriptionPlansScreenState
     extends State<ZyiarahSubscriptionPlansScreen> {
-  static const Color _brand = Color(0xFF5D1B5E);
+  static const Color _brand = Color(0xFF006FBA);
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   bool _isLoading = true;

@@ -27,7 +27,7 @@ class AdminServicesScreen extends StatefulWidget {
 
 class _AdminServicesScreenState extends State<AdminServicesScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  static const Color _brand = Color(0xFF5D1B5E);
+  static const Color _brand = Color(0xFF006FBA);
 
   @override
   Widget build(BuildContext context) {

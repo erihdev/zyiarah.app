@@ -21,7 +21,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
   bool _isLoading = false;
   bool _isPasswordVisible = false;
 
-  final Color brandColor = const Color(0xFF5D1B5E);
+  final Color brandColor = const Color(0xFF006FBA);
 
   void _login() async {
     final email = _emailController.text.trim();

@@ -54,10 +54,10 @@ export default function Login() {
 
     return (
         <div className="min-h-screen flex items-center justify-center font-tajawal relative bg-slate-50" dir="rtl">
-            {/* Background elements — بهوية التطبيق (بنفسجي #5D1B5E) */}
+            {/* Background elements — بهوية التطبيق (بنفسجي #006FBA) */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute -top-[20%] -right-[10%] w-[70%] h-[70%] rounded-full bg-gradient-to-br from-[#5D1B5E]/10 to-[#8a4a8c]/5 blur-3xl opacity-80"></div>
-                <div className="absolute top-[40%] -left-[10%] w-[50%] h-[50%] rounded-full bg-gradient-to-tr from-[#5D1B5E]/[0.07] to-purple-50 blur-3xl opacity-60"></div>
+                <div className="absolute -top-[20%] -right-[10%] w-[70%] h-[70%] rounded-full bg-gradient-to-br from-[#006FBA]/10 to-[#3D93D1]/5 blur-3xl opacity-80"></div>
+                <div className="absolute top-[40%] -left-[10%] w-[50%] h-[50%] rounded-full bg-gradient-to-tr from-[#006FBA]/[0.07] to-blue-50 blur-3xl opacity-60"></div>
                 <div className="absolute -bottom-[20%] left-[20%] w-[60%] h-[60%] rounded-full bg-gradient-to-t from-slate-100 to-transparent blur-3xl opacity-80"></div>
             </div>
 
@@ -65,7 +65,7 @@ export default function Login() {
                 <div className="bg-white/90 backdrop-blur-2xl rounded-3xl p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/60">
 
                     <div className="text-center mb-10">
-                        <div className="mx-auto w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-[#5D1B5E]/25 ring-1 ring-slate-100 overflow-hidden mb-6">
+                        <div className="mx-auto w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-[#006FBA]/25 ring-1 ring-slate-100 overflow-hidden mb-6">
                             <img src="/logo.png" alt="زيارة" className="w-full h-full object-contain p-1.5"
                                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                         </div>
@@ -83,7 +83,7 @@ export default function Login() {
                     <form onSubmit={handleLogin} className="space-y-6">
                         <div className="space-y-5">
                             <div className="relative group">
-                                <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-slate-400 group-focus-within:text-[#5D1B5E] transition-colors duration-300">
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-slate-400 group-focus-within:text-[#006FBA] transition-colors duration-300">
                                     <Mail size={20} strokeWidth={2.5} />
                                 </div>
                                 <input
@@ -91,14 +91,14 @@ export default function Login() {
                                     type="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-2xl focus:ring-4 focus:ring-[#5D1B5E]/10 focus:border-[#5D1B5E] block py-4 pr-12 pl-4 transition-all duration-300 outline-none font-medium placeholder-slate-400"
+                                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-2xl focus:ring-4 focus:ring-[#006FBA]/10 focus:border-[#006FBA] block py-4 pr-12 pl-4 transition-all duration-300 outline-none font-medium placeholder-slate-400"
                                     placeholder="البريد الإلكتروني"
                                     required
                                 />
                             </div>
 
                             <div className="relative group">
-                                <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-slate-400 group-focus-within:text-[#5D1B5E] transition-colors duration-300">
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-slate-400 group-focus-within:text-[#006FBA] transition-colors duration-300">
                                     <KeyRound size={20} strokeWidth={2.5} />
                                 </div>
                                 <input
@@ -106,7 +106,7 @@ export default function Login() {
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-2xl focus:ring-4 focus:ring-[#5D1B5E]/10 focus:border-[#5D1B5E] block py-4 pr-12 pl-4 transition-all duration-300 outline-none font-medium placeholder-slate-400"
+                                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-2xl focus:ring-4 focus:ring-[#006FBA]/10 focus:border-[#006FBA] block py-4 pr-12 pl-4 transition-all duration-300 outline-none font-medium placeholder-slate-400"
                                     placeholder="كلمة المرور"
                                     required
                                 />
@@ -117,21 +117,21 @@ export default function Login() {
                             <label htmlFor="remember-me" className="flex items-center text-slate-600 cursor-pointer group">
                                 <div className="relative flex items-center justify-center w-5 h-5 ml-2">
                                     <input id="remember-me" type="checkbox" className="peer w-5 h-5 opacity-0 absolute cursor-pointer" />
-                                    <div className="w-5 h-5 rounded-md border-2 border-slate-300 peer-checked:bg-[#5D1B5E] peer-checked:border-[#5D1B5E] transition-colors flex items-center justify-center">
+                                    <div className="w-5 h-5 rounded-md border-2 border-slate-300 peer-checked:bg-[#006FBA] peer-checked:border-[#006FBA] transition-colors flex items-center justify-center">
                                         <ShieldCheck size={14} className="text-white opacity-0 peer-checked:opacity-100 transition-opacity" />
                                     </div>
                                 </div>
                                 <span className="font-medium group-hover:text-slate-800 transition-colors">تذكرني</span>
                             </label>
-                            <a href="#" className="font-bold text-[#5D1B5E] hover:text-[#4a1149] transition-colors">نسيت كلمة المرور؟</a>
+                            <a href="#" className="font-bold text-[#006FBA] hover:text-[#00578F] transition-colors">نسيت كلمة المرور؟</a>
                         </div>
 
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="w-full relative flex items-center justify-center space-x-2 space-x-reverse text-white bg-[#5D1B5E] overflow-hidden font-bold rounded-2xl text-lg px-5 py-4 text-center transition-all duration-300 disabled:opacity-70 group hover:shadow-xl hover:shadow-[#5D1B5E]/30"
+                            className="w-full relative flex items-center justify-center space-x-2 space-x-reverse text-white bg-[#006FBA] overflow-hidden font-bold rounded-2xl text-lg px-5 py-4 text-center transition-all duration-300 disabled:opacity-70 group hover:shadow-xl hover:shadow-[#006FBA]/30"
                         >
-                            <div className="absolute inset-0 bg-gradient-to-r from-[#5D1B5E] to-[#8a4a8c] opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                            <div className="absolute inset-0 bg-gradient-to-r from-[#006FBA] to-[#3D93D1] opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                             {isLoading ? (
                                 <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin relative z-10" />
                             ) : (

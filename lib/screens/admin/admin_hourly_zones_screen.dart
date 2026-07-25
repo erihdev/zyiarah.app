@@ -613,7 +613,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                       setDialogState(() => isSaving = false);
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E), foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF006FBA), foregroundColor: Colors.white),
                   child: Text(isSaving ? "جاري الحفظ..." : "حفظ المنطقة"),
                 ),
               ],
@@ -649,12 +649,12 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: Text('إدارة ونطاقات الخدمة', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF5D1B5E),
+          backgroundColor: const Color(0xFF006FBA),
           foregroundColor: Colors.white,
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: () => _showZoneDialog(),
-          backgroundColor: const Color(0xFF5D1B5E),
+          backgroundColor: const Color(0xFF006FBA),
           child: const Icon(Icons.add_location_alt_rounded, color: Colors.white),
         ),
         body: StreamBuilder<QuerySnapshot>(
@@ -827,7 +827,7 @@ class _ZoneCoveragePreview extends StatelessWidget {
                         Polyline(
                           points: ring,
                           strokeWidth: 2.5,
-                          color: const Color(0xFF5D1B5E),
+                          color: const Color(0xFF006FBA),
                         ),
                     ]),
                     if (picked)
@@ -851,7 +851,7 @@ class _ZoneCoveragePreview extends StatelessWidget {
                             width: 34,
                             height: 34,
                             child: const Icon(Icons.location_on,
-                                color: Color(0xFF5D1B5E), size: 34),
+                                color: Color(0xFF006FBA), size: 34),
                           ),
                         ],
                       ),

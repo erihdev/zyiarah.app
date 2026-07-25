@@ -741,7 +741,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
                 title: "كفاءة الكوادر (Performance)",
                 subtitle: "متابعة الإنجازات والتقييمات",
                 icon: Icons.insights_rounded,
-                color: const Color(0xFF5D1B5E),
+                color: const Color(0xFF006FBA),
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminStaffPerformanceScreen())),
               ),
               const Divider(height: 30),

@@ -89,7 +89,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                   style: GoogleFonts.tajawal(
                       fontSize: 15,
                       height: 1.6,
-                      color: const Color(0xFF5D1B5E),
+                      color: const Color(0xFF006FBA),
                       fontWeight: FontWeight.w600)),
               const SizedBox(height: 22),
               Row(
@@ -114,7 +114,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                     child: ElevatedButton(
                       onPressed: () => Navigator.pop(ctx, true),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF5D1B5E),
+                        backgroundColor: const Color(0xFF006FBA),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
@@ -307,7 +307,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text("تم تحديد موقعك تلقائياً: $_selectedZoneName"),
-      backgroundColor: const Color(0xFF5D1B5E),
+      backgroundColor: const Color(0xFF006FBA),
       duration: const Duration(seconds: 2),
     ));
   }
@@ -487,7 +487,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
             ),
           ),
           body: _isLoading
-              ? const Center(child: CircularProgressIndicator(color: Color(0xFF5D1B5E)))
+              ? const Center(child: CircularProgressIndicator(color: Color(0xFF006FBA)))
               : Column(
             children: [
               Hero(
@@ -545,7 +545,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                         height: 60,
                         child: ElevatedButton(
                           onPressed: _handleInitiateFlow,
-                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), elevation: 4),
+                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF006FBA), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), elevation: 4),
                           child: const Text("متابعة لملخص الحجز", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                         ),
                       ),
@@ -593,10 +593,10 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
             height: 70,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: isSelected ? const Color(0xFF5D1B5E) : Colors.white,
+              color: isSelected ? const Color(0xFF006FBA) : Colors.white,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: isSelected ? const Color(0xFF5D1B5E) : Colors.grey.shade300, width: 2),
-              boxShadow: isSelected ? [BoxShadow(color: const Color(0xFF5D1B5E).withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 5))] : [],
+              border: Border.all(color: isSelected ? const Color(0xFF006FBA) : Colors.grey.shade300, width: 2),
+              boxShadow: isSelected ? [BoxShadow(color: const Color(0xFF006FBA).withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 5))] : [],
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -645,7 +645,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       return const SizedBox(
         height: 82,
         child: Center(
-          child: CircularProgressIndicator(color: Color(0xFF5D1B5E)),
+          child: CircularProgressIndicator(color: Color(0xFF006FBA)),
         ),
       );
     }
@@ -705,14 +705,14 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
               margin: const EdgeInsets.symmetric(horizontal: 5),
               width: 58,
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF5D1B5E) : availBg,
+                color: isSelected ? const Color(0xFF006FBA) : availBg,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: isSelected ? const Color(0xFF5D1B5E) : availBorder,
+                  color: isSelected ? const Color(0xFF006FBA) : availBorder,
                   width: 1.5,
                 ),
                 boxShadow: isSelected
-                    ? [BoxShadow(color: const Color(0xFF5D1B5E).withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))]
+                    ? [BoxShadow(color: const Color(0xFF006FBA).withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))]
                     : [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4)],
               ),
               child: Column(
@@ -793,7 +793,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
             child: Row(children: [
-              SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF5D1B5E))),
+              SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF006FBA))),
               SizedBox(width: 10),
               Text("جاري التحقق من التوفر...", style: TextStyle(color: Colors.grey, fontSize: 13)),
             ]),
@@ -818,7 +818,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                   color: isBooked
                       ? Colors.red.shade50
                       : isSelected
-                          ? const Color(0xFF5D1B5E)
+                          ? const Color(0xFF006FBA)
                           : !isChecked
                               ? Colors.grey.shade100
                               : Colors.white,
@@ -827,7 +827,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                     color: isBooked
                         ? Colors.red.shade300
                         : isSelected
-                            ? const Color(0xFF5D1B5E)
+                            ? const Color(0xFF006FBA)
                             : Colors.grey.shade200,
                     width: 1.5,
                   ),
@@ -858,7 +858,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
               _legendDot(Colors.red.shade200), const SizedBox(width: 4),
               Text("محجوز", style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
               const SizedBox(width: 12),
-              _legendDot(const Color(0xFF5D1B5E)), const SizedBox(width: 4),
+              _legendDot(const Color(0xFF006FBA)), const SizedBox(width: 4),
               Text("مختار", style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
               const SizedBox(width: 12),
               _legendDot(Colors.white, border: Colors.grey.shade300), const SizedBox(width: 4),
@@ -901,7 +901,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   Widget _buildAdjustButton(IconData icon, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
-      child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: const Color(0xFF5D1B5E).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)), child: Icon(icon, color: const Color(0xFF5D1B5E))),
+      child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: const Color(0xFF006FBA).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)), child: Icon(icon, color: const Color(0xFF006FBA))),
     );
   }
 

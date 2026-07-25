@@ -75,7 +75,7 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (isSaving) const Padding(padding: EdgeInsets.only(bottom: 15), child: LinearProgressIndicator(color: Color(0xFF5D1B5E))),
+                    if (isSaving) const Padding(padding: EdgeInsets.only(bottom: 15), child: LinearProgressIndicator(color: Color(0xFF006FBA))),
 
                     TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'اسم الباقة الرئيسية', border: OutlineInputBorder())),
                     const SizedBox(height: 15),
@@ -149,7 +149,7 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                       }
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D1B5E), foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF006FBA), foregroundColor: Colors.white),
                   child: Text(isSaving ? "جاري الحفظ..." : "حفظ الباقة"),
                 ),
               ],
@@ -175,12 +175,12 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: Text('إدارة باقات الاشتراك', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF5D1B5E),
+          backgroundColor: const Color(0xFF006FBA),
           foregroundColor: Colors.white,
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: () => _showPackageDialog(),
-          backgroundColor: const Color(0xFF5D1B5E),
+          backgroundColor: const Color(0xFF006FBA),
           child: const Icon(Icons.add, color: Colors.white),
         ),
         body: StreamBuilder<QuerySnapshot>(
@@ -214,7 +214,7 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Expanded(child: Text(data['title'] ?? '', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF5D1B5E)))),
+                            Expanded(child: Text(data['title'] ?? '', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF006FBA)))),
                             Row(
                               children: [
                                 IconButton(icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20), onPressed: () => _showPackageDialog(doc: doc)),
@@ -232,13 +232,13 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF5D1B5E).withValues(alpha: 0.1),
+                                color: const Color(0xFF006FBA).withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
                                 "عدد الساعات: ${data['hours'] ?? 4} ساعات",
                                 style: GoogleFonts.tajawal(
-                                  color: const Color(0xFF5D1B5E),
+                                  color: const Color(0xFF006FBA),
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -251,7 +251,7 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                           padding: const EdgeInsets.only(bottom: 6),
                           child: Row(
                             children: [
-                              Icon(Icons.check_circle_outline, size: 16, color: isPremium ? Colors.amber : const Color(0xFF5D1B5E)),
+                              Icon(Icons.check_circle_outline, size: 16, color: isPremium ? Colors.amber : const Color(0xFF006FBA)),
                               const SizedBox(width: 8),
                               Expanded(child: Text(f.toString(), style: const TextStyle(fontSize: 12))),
                             ],

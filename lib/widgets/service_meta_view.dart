@@ -70,7 +70,7 @@ class ZyiarahServiceMetaView extends StatelessWidget {
   final dynamic meta;
   const ZyiarahServiceMetaView({super.key, required this.meta});
 
-  static const Color _brand = Color(0xFF5D1B5E);
+  static const Color _brand = Color(0xFF006FBA);
 
   @override
   Widget build(BuildContext context) {

@@ -345,9 +345,9 @@ class ZyiarahPdfService {
               ],
             ),
             pw.SizedBox(height: 10),
-            pw.Center(child: pw.Text(_ar('عقد تقديم خدمات إلكتروني'), style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: PdfColors.purple800))),
+            pw.Center(child: pw.Text(_ar('عقد تقديم خدمات إلكتروني'), style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800))),
             pw.SizedBox(height: 20),
-            pw.Divider(color: PdfColors.purple),
+            pw.Divider(color: PdfColors.blue),
             pw.SizedBox(height: 20),
 
             // Parties

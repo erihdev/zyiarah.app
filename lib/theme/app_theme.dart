@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class ZyiarahTheme {
-  static const Color brand = Color(0xFF5D1B5E);
+  static const Color brand = Color(0xFF006FBA);
   static const Color brandLight = Color(0xFF8B3D8C);
   static const Color brandDark = Color(0xFF3D1040);
   static const Color accent = Color(0xFFE8427A);

@@ -25,7 +25,7 @@ class ZyiarahProfileScreen extends StatefulWidget {
 }
 
 class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
-  static const Color _brand = Color(0xFF5D1B5E);
+  static const Color _brand = Color(0xFF006FBA);
   static const Color _violet = Color(0xFF7C3AED);
   static const Color _deepPurple = Color(0xFF3B0764);
 
@@ -697,7 +697,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [_deepPurple, Color(0xFF5D1B5E), _violet],
+          colors: [_deepPurple, Color(0xFF006FBA), _violet],
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
         ),

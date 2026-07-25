@@ -111,7 +111,7 @@ function SidebarNav({
             {/* Logo */}
             <div className="px-5 py-5 flex items-center justify-between border-b border-slate-100 shrink-0">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-white ring-1 ring-slate-100 flex items-center justify-center shadow-lg shadow-[#5D1B5E]/20 shrink-0 overflow-hidden">
+                    <div className="w-10 h-10 rounded-2xl bg-white ring-1 ring-slate-100 flex items-center justify-center shadow-lg shadow-[#006FBA]/20 shrink-0 overflow-hidden">
                         <img src="/logo.png" alt="زيارة" className="w-full h-full object-contain p-0.5" />
                     </div>
                     <div>
@@ -147,7 +147,7 @@ function SidebarNav({
                                         to={item.path}
                                         className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${
                                             active
-                                                ? 'bg-gradient-to-l from-[#5D1B5E] to-[#8a4a8c] text-white shadow-md shadow-[#5D1B5E]/25'
+                                                ? 'bg-gradient-to-l from-[#006FBA] to-[#3D93D1] text-white shadow-md shadow-[#006FBA]/25'
                                                 : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                                         }`}
                                     >
@@ -221,7 +221,7 @@ export default function Layout({ onLogout, role = null }: LayoutProps) {
     const currentTitle = pageTitles[location.pathname] ?? 'لوحة التحكم';
 
     return (
-        <div className="flex h-screen bg-[#f1f5f9] font-tajawal selection:bg-[#5D1B5E]/10 selection:text-[#5D1B5E]" dir="rtl">
+        <div className="flex h-screen bg-[#f1f5f9] font-tajawal selection:bg-[#006FBA]/10 selection:text-[#006FBA]" dir="rtl">
 
             {/* مستمع تنبيهات الإدارة اللحظي (إشعارات متصفح — بلا FCM/VAPID) */}
             <AdminNotificationsListener role={role} />
@@ -287,12 +287,12 @@ export default function Layout({ onLogout, role = null }: LayoutProps) {
 
                         {/* Search — desktop only */}
                         <div className="hidden lg:flex relative group">
-                            <div className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-slate-400 group-focus-within:text-[#5D1B5E] transition-colors">
+                            <div className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-slate-400 group-focus-within:text-[#006FBA] transition-colors">
                                 <Search size={15} strokeWidth={2.5} />
                             </div>
                             <input
                                 type="text"
-                                className="bg-slate-50 border border-slate-200 text-sm rounded-xl focus:ring-4 focus:ring-[#5D1B5E]/10 focus:border-[#5D1B5E] w-52 py-2 pr-10 pl-4 outline-none transition-all placeholder-slate-400 font-medium"
+                                className="bg-slate-50 border border-slate-200 text-sm rounded-xl focus:ring-4 focus:ring-[#006FBA]/10 focus:border-[#006FBA] w-52 py-2 pr-10 pl-4 outline-none transition-all placeholder-slate-400 font-medium"
                                 placeholder="بحث سريع..."
                             />
                         </div>
@@ -301,7 +301,7 @@ export default function Layout({ onLogout, role = null }: LayoutProps) {
                         <button
                             type="button"
                             title="الإشعارات"
-                            className="relative p-2 text-slate-500 hover:text-[#5D1B5E] hover:bg-[#5D1B5E]/5 rounded-xl transition-all"
+                            className="relative p-2 text-slate-500 hover:text-[#006FBA] hover:bg-[#006FBA]/5 rounded-xl transition-all"
                         >
                             <Bell size={19} strokeWidth={2.5} />
                             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-[1.5px] border-white" />
@@ -314,7 +314,7 @@ export default function Layout({ onLogout, role = null }: LayoutProps) {
                                 <p className="text-[10px] font-semibold text-slate-400 mt-0.5">Admin</p>
                             </div>
                             <img
-                                src="https://ui-avatars.com/api/?name=Admin&background=f3e8f4&color=5D1B5E&bold=true"
+                                src="https://ui-avatars.com/api/?name=Admin&background=e3f0fa&color=006FBA&bold=true"
                                 alt="Admin"
                                 className="w-8 h-8 lg:w-9 lg:h-9 rounded-xl object-cover"
                             />
@@ -341,16 +341,16 @@ export default function Layout({ onLogout, role = null }: LayoutProps) {
                                 key={item.path}
                                 to={item.path}
                                 className={`flex-1 flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
-                                    active ? 'text-[#5D1B5E]' : 'text-slate-400 active:scale-95'
+                                    active ? 'text-[#006FBA]' : 'text-slate-400 active:scale-95'
                                 }`}
                             >
                                 <div className={`relative transition-transform duration-200 ${active ? 'scale-110' : ''}`}>
                                     <Icon size={21} strokeWidth={active ? 2.5 : 2} />
                                     {active && (
-                                        <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[#5D1B5E]" />
+                                        <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[#006FBA]" />
                                     )}
                                 </div>
-                                <span className={`text-[10px] font-bold ${active ? 'text-[#5D1B5E]' : 'text-slate-400'}`}>
+                                <span className={`text-[10px] font-bold ${active ? 'text-[#006FBA]' : 'text-slate-400'}`}>
                                     {item.label}
                                 </span>
                             </Link>

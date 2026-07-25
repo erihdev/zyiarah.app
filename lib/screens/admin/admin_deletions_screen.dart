@@ -64,7 +64,7 @@ class AdminDeletionsScreen extends StatelessWidget {
       child: Scaffold(
         appBar: AppBar(
           title: Text("طلبات حذف الحسابات", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFF5D1B5E), // Red
+          backgroundColor: const Color(0xFF006FBA), // Red
           foregroundColor: Colors.white,
         ),
         body: StreamBuilder<QuerySnapshot>(

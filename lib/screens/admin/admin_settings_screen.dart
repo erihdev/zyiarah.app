@@ -363,13 +363,13 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                           Container(
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF5D1B5E).withValues(alpha: 0.06),
+                              color: const Color(0xFF006FBA).withValues(alpha: 0.06),
                               borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: const Color(0xFF5D1B5E).withValues(alpha: 0.15)),
+                              border: Border.all(color: const Color(0xFF006FBA).withValues(alpha: 0.15)),
                             ),
                             child: const Row(
                               children: [
-                                Icon(Icons.info_outline_rounded, color: Color(0xFF5D1B5E), size: 20),
+                                Icon(Icons.info_outline_rounded, color: Color(0xFF006FBA), size: 20),
                                 SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
@@ -407,7 +407,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                       _buildSectionCard(
                         title: "التحديث الإجباري للتطبيق",
                         icon: Icons.system_update_rounded,
-                        color: const Color(0xFF5D1B5E),
+                        color: const Color(0xFF006FBA),
                         children: [
                           _buildPremiumField("أحدث رقم بناء منشور (Latest Build)", "مثال 210", _latestBuildCtrl, Icons.numbers_rounded),
                           const Padding(
@@ -419,7 +419,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                           ),
                           const Divider(),
                           _buildToggle("تفعيل إشعار التحديث", "", _updateEnabled, (v) => setState(() => _updateEnabled = v), const Color(0xFF10B981)),
-                          _buildToggle("إجباري (لا يمكن تجاهله)", "يمنع المستخدم من استخدام التطبيق حتى يُحدّث.", _updateForce, (v) => setState(() => _updateForce = v), const Color(0xFF5D1B5E)),
+                          _buildToggle("إجباري (لا يمكن تجاهله)", "يمنع المستخدم من استخدام التطبيق حتى يُحدّث.", _updateForce, (v) => setState(() => _updateForce = v), const Color(0xFF006FBA)),
                           const SizedBox(height: 12),
                           _buildPremiumField("رسالة التحديث (اختياري)", "نص", _updateMsgCtrl, Icons.message_rounded, keyboardType: TextInputType.text),
                         ],
@@ -460,7 +460,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                         child: ElevatedButton(
                           onPressed: _isSaving ? null : _savePricing,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF5D1B5E),
+                            backgroundColor: const Color(0xFF006FBA),
                             foregroundColor: Colors.white,
                             elevation: 0,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),

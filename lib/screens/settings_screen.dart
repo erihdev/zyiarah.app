@@ -9,7 +9,7 @@ import 'package:zyiarah/screens/support_screen.dart';
 class ZyiarahSettingsScreen extends StatelessWidget {
   const ZyiarahSettingsScreen({super.key});
 
-  static const Color _brand = Color(0xFF5D1B5E);
+  static const Color _brand = Color(0xFF006FBA);
 
   @override
   Widget build(BuildContext context) {

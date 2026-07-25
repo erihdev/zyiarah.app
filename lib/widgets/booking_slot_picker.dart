@@ -42,7 +42,7 @@ class ZyiarahBookingSlotPicker extends StatefulWidget {
 }
 
 class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
-  static const Color _brand = Color(0xFF5D1B5E);
+  static const Color _brand = Color(0xFF006FBA);
   static const int _workStart = 8;
   static const int _workEnd = 22;
   static const int _horizonDays = 30;

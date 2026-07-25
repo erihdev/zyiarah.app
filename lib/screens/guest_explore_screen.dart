@@ -7,7 +7,7 @@ import 'package:zyiarah/services/zyiarah_core_services.dart';
 class GuestExploreScreen extends StatelessWidget {
   const GuestExploreScreen({super.key});
 
-  static const Color _brand = Color(0xFF5D1B5E);
+  static const Color _brand = Color(0xFF006FBA);
 
   static const List<_ServiceItem> _services = [
     _ServiceItem(
@@ -59,7 +59,7 @@ class GuestExploreScreen extends StatelessWidget {
       title: 'متجر المنظفات',
       subtitle: 'أدوات احترافية',
       price: 'عروض حصرية',
-      themeColor: Color(0xFF5D1B5E),
+      themeColor: Color(0xFF006FBA),
       iconBgColor: Color(0xFFFCEEFA),
       icon: Icons.storefront,
       imagePath: 'assets/images/store.png',
@@ -162,7 +162,7 @@ class GuestExploreScreen extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF5D1B5E), Color(0xFF8B3D8C)],
+          colors: [Color(0xFF006FBA), Color(0xFF8B3D8C)],
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
         ),

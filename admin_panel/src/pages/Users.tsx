@@ -20,7 +20,7 @@ const StatusBadge = ({ status }: { status: string }) => {
         case 'active':
             return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-100 text-xs"><UserCheck size={14} />نشط</span>;
         case 'driver':
-            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f7f0f8] text-[#4a1149] font-bold border border-[#f0e2f1] text-xs"><UsersIcon size={14} />سائق</span>;
+            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EDF5FC] text-[#00578F] font-bold border border-[#D4E8F7] text-xs"><UsersIcon size={14} />سائق</span>;
         case 'inactive':
             return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-600 font-bold border border-slate-200 text-xs">غير نشط</span>;
         case 'banned':
@@ -82,7 +82,7 @@ export default function Users() {
                     <p className="text-slate-500 font-medium text-sm mt-1">قائمة حية بكل المستخدمين المسجلين عبر التطبيق</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <span className="px-4 py-2 bg-[#f7f0f8] text-[#4a1149] font-bold rounded-xl border border-[#f0e2f1] text-sm">
+                    <span className="px-4 py-2 bg-[#EDF5FC] text-[#00578F] font-bold rounded-xl border border-[#D4E8F7] text-sm">
                         إجمالي: {users.length} مستخدم
                     </span>
                     <button type="button" className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors shadow-sm">
@@ -98,7 +98,7 @@ export default function Users() {
                         <input
                             type="text"
                             placeholder="ابحث بالاسم أو رقم الجوال أو ID..."
-                            className="w-full pl-4 pr-11 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#5D1B5E]/20 focus:border-[#5D1B5E] transition-all text-slate-700"
+                            className="w-full pl-4 pr-11 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#006FBA]/20 focus:border-[#006FBA] transition-all text-slate-700"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -108,7 +108,7 @@ export default function Users() {
                 <div className="overflow-x-auto min-h-[300px]">
                     {loading ? (
                         <div className="flex flex-col items-center justify-center h-64">
-                            <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#5D1B5E] border-t-transparent" />
+                            <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#006FBA] border-t-transparent" />
                             <p className="text-slate-500 mt-4 font-bold">جاري جلب بيانات المستخدمين...</p>
                         </div>
                     ) : (
@@ -131,10 +131,10 @@ export default function Users() {
                                         </td>
                                     </tr>
                                 ) : filteredUsers.map((user) => (
-                                    <tr key={user.uid} className="hover:bg-[#f7f0f8]/30 transition-colors">
+                                    <tr key={user.uid} className="hover:bg-[#EDF5FC]/30 transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#f0e2f1] to-[#f0e2f1] flex items-center justify-center text-[#4a1149] font-bold border border-[#d9b8db] text-sm">
+                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#D4E8F7] to-[#D4E8F7] flex items-center justify-center text-[#00578F] font-bold border border-[#A9D2EF] text-sm">
                                                     {(user.name || user.uid || 'U').substring(0, 1).toUpperCase()}
                                                 </div>
                                                 <div>
@@ -156,7 +156,7 @@ export default function Users() {
                                             )}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={`text-xs font-bold px-2 py-1 rounded-md ${user.role === 'driver' ? 'bg-[#f7f0f8] text-[#5D1B5E]' : 'bg-violet-50 text-violet-600'}`}>
+                                            <span className={`text-xs font-bold px-2 py-1 rounded-md ${user.role === 'driver' ? 'bg-[#EDF5FC] text-[#006FBA]' : 'bg-violet-50 text-violet-600'}`}>
                                                 {user.role === 'driver' ? '🚗 سائق' : '👤 عميل'}
                                             </span>
                                         </td>

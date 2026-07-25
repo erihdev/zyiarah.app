@@ -24,7 +24,7 @@ class CarInteriorDetailsScreen extends StatefulWidget {
 }
 
 class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
-  static const Color _brand = Color(0xFF5D1B5E);
+  static const Color _brand = Color(0xFF006FBA);
 
   bool _isLoading = true;
 
