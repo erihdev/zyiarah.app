@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Save, Bell, Shield, Wallet, MapPin, Search, Smartphone, Loader2, CheckCircle2, ChevronLeft, CreditCard, Activity, Globe, Database, KeyRound, ArrowRight, Plus, Navigation, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
 import { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, GeoPoint, serverTimestamp } from 'firebase/firestore';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
 
@@ -70,6 +72,23 @@ const CAR_FIELDS = [
 
 const zoneInputCls = 'w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-800 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all';
 
+// دائرة نطاق التغطية كمضلّع GeoJSON (64 نقطة) حول المركز — MapBox لا يرسم دائرة
+// جغرافية بالكيلومتر مباشرةً (طبقة circle بالبكسل)، فنبنيها كمضلّع يثبُت مع التقريب.
+const circleGeoJSON = (lat: number, lng: number, radiusKm: number): GeoJSON.FeatureCollection => {
+    const points = 64;
+    const distX = radiusKm / (111.32 * Math.cos((lat * Math.PI) / 180));
+    const distY = radiusKm / 110.574;
+    const coords: [number, number][] = [];
+    for (let i = 0; i <= points; i++) {
+        const theta = (i / points) * 2 * Math.PI;
+        coords.push([lng + distX * Math.cos(theta), lat + distY * Math.sin(theta)]);
+    }
+    return {
+        type: 'FeatureCollection',
+        features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [coords] } }],
+    };
+};
+
 // إعداد التحديث الإجباري — يُخزَّن في مستند منفصل system_configs/app_update
 // والذي يقرأه التطبيق (app_update_service.dart). كانت اللوحة سابقاً تكتب
 // force_update_version/enabled في main_settings الذي لا يقرأه التطبيق إطلاقاً.
@@ -119,6 +138,14 @@ export default function Settings() {
     const [loadFailed, setLoadFailed] = useState(false);
     const zoneNameRef = useRef<HTMLInputElement>(null);
 
+    // (تكافؤ التطبيق) خريطة اختيار مركز المحافظة: نقرة تحدّد المركز، والدائرة تتبع النطاق.
+    const zoneMapContainer = useRef<HTMLDivElement>(null);
+    const zoneMap = useRef<mapboxgl.Map | null>(null);
+    const zoneMarker = useRef<mapboxgl.Marker | null>(null);
+    // مرآة للنموذج تقرؤها معالِجات الخريطة (load/click) دون أسر state قديم.
+    const newZoneRef = useRef(newZone);
+    newZoneRef.current = newZone;
+
     useEffect(() => {
         const fetchSettings = async () => {
             try {
@@ -160,6 +187,90 @@ export default function Settings() {
         }, (err) => console.error('service_zones snapshot error:', err));
         return () => unsub();
     }, []);
+
+    // يرسم/يحرّك الدبوس والدائرة من قيم النموذج الحالية (يدوية كانت أم من نقرة الخريطة).
+    const syncZoneMapFromForm = () => {
+        const m = zoneMap.current;
+        if (!m) return;
+        const z = newZoneRef.current;
+        const lat = parseFloat(z.latitude);
+        const lng = parseFloat(z.longitude);
+        const radius = parseFloat(z.radiusKm) || 15;
+        if (isNaN(lat) || isNaN(lng)) return;
+        if (!zoneMarker.current) {
+            zoneMarker.current = new mapboxgl.Marker({ color: '#5D1B5E' }).setLngLat([lng, lat]).addTo(m);
+        } else {
+            zoneMarker.current.setLngLat([lng, lat]);
+        }
+        const src = m.getSource('zone-circle') as mapboxgl.GeoJSONSource | undefined;
+        if (src) src.setData(circleGeoJSON(lat, lng, radius));
+    };
+
+    // إنشاء الخريطة عند فتح النموذج وتدميرها عند إغلاقه (الحاوية لا تُرسم إلا وهو مفتوح).
+    useEffect(() => {
+        if (!showAddForm) {
+            zoneMarker.current = null;
+            zoneMap.current?.remove();
+            zoneMap.current = null;
+            return;
+        }
+        if (zoneMap.current || !zoneMapContainer.current) return;
+        mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
+        const m = new mapboxgl.Map({
+            container: zoneMapContainer.current,
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center: [43.1572, 17.3453], // جازان — نفس افتراض حقول الإحداثيات
+            zoom: 8,
+        });
+        m.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
+        m.on('click', (e) => {
+            setNewZone(p => ({
+                ...p,
+                latitude: e.lngLat.lat.toFixed(5),
+                longitude: e.lngLat.lng.toFixed(5),
+            }));
+        });
+        m.on('load', () => {
+            m.addSource('zone-circle', {
+                type: 'geojson',
+                data: { type: 'FeatureCollection', features: [] },
+            });
+            m.addLayer({ id: 'zone-circle-fill', type: 'fill', source: 'zone-circle', paint: { 'fill-color': '#5D1B5E', 'fill-opacity': 0.15 } });
+            m.addLayer({ id: 'zone-circle-line', type: 'line', source: 'zone-circle', paint: { 'line-color': '#5D1B5E', 'line-width': 2 } });
+            syncZoneMapFromForm(); // قيمٌ أُدخلت يدوياً قبل جاهزية الخريطة تُرسم الآن
+        });
+        zoneMap.current = m;
+        return () => {
+            zoneMarker.current = null;
+            zoneMap.current?.remove();
+            zoneMap.current = null;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showAddForm]);
+
+    // مزامنة الدبوس/الدائرة مع أي تغيير في الإحداثيات أو النطاق.
+    useEffect(() => {
+        syncZoneMapFromForm();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [newZone.latitude, newZone.longitude, newZone.radiusKm, showAddForm]);
+
+    // (تكافؤ التطبيق) كتابة اسم المحافظة تنقل الخريطة إليه تلقائياً — geocoding بنفس التوكن،
+    // بلا تثبيت دبوس: الانتقال للعرض فقط، والنقرة هي التي تحدّد المركز. صامت عند الفشل.
+    useEffect(() => {
+        if (!showAddForm || newZone.name.trim().length < 3) return;
+        const t = setTimeout(async () => {
+            try {
+                const q = encodeURIComponent(newZone.name.trim());
+                const r = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${q}.json?access_token=${import.meta.env.VITE_MAPBOX_TOKEN}&country=sa&language=ar&limit=1`);
+                const j = await r.json();
+                const c = j?.features?.[0]?.center;
+                if (Array.isArray(c) && c.length >= 2 && zoneMap.current) {
+                    zoneMap.current.flyTo({ center: [c[0], c[1]], zoom: 10 });
+                }
+            } catch { /* صامت — الخريطة تبقى حيث هي */ }
+        }, 800);
+        return () => clearTimeout(t);
+    }, [newZone.name, showAddForm]);
 
     const handleAddZone = async () => {
         const lat = parseFloat(newZone.latitude);
@@ -797,6 +908,17 @@ export default function Settings() {
                                                     />
                                                 </div>
                                             </div>
+                                            {/* (تكافؤ التطبيق) خريطة تفاعلية: نقرة تحدّد المركز وتملأ الإحداثيات، والدائرة تتبع النطاق */}
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-600 mb-1">
+                                                    اضغط على الخريطة لتحديد مركز المحافظة — الدائرة تعرض نطاق التغطية
+                                                </label>
+                                                <div
+                                                    ref={zoneMapContainer}
+                                                    className="w-full h-72 rounded-2xl overflow-hidden border-2 border-purple-200"
+                                                />
+                                            </div>
+
                                             <div className="flex items-center gap-3 flex-wrap">
                                                 <a
                                                     href={`https://www.google.com/maps/search/${encodeURIComponent(newZone.name || 'جازان')}`}
