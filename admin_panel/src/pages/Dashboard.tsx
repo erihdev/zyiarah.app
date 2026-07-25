@@ -1,12 +1,9 @@
-import { TrendingUp, Users, CarFront, CheckCircle2, Clock, Map as MapIcon, ChevronLeft, ArrowUpRight } from 'lucide-react';
+import { TrendingUp, Users, CarFront, CheckCircle2, Clock, ChevronLeft, ArrowUpRight } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
 import { collection, onSnapshot, query, where, orderBy, limit, Timestamp, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
-import { arabizeMapLabels } from '../utils/mapboxArabic.ts';
 
 interface RecentOrder {
     id: string;
@@ -16,16 +13,6 @@ interface RecentOrder {
     status: string;
     time: string;
     avatar: string;
-}
-
-interface DriverData {
-    id: string;
-    name?: string;
-    is_available?: boolean;
-    is_suspended?: boolean;
-    status?: string;
-    location?: { latitude: number; longitude: number };
-    current_order_id?: string;
 }
 
 interface StatCardProps {
@@ -92,9 +79,6 @@ const StatCard = ({ title, value, icon: Icon, trend, trendUp, colorScheme }: Sta
 
 export default function Dashboard() {
     const navigate = useNavigate();
-    const mapContainer = useRef<HTMLDivElement>(null);
-    const map = useRef<mapboxgl.Map | null>(null);
-    const markersRef = useRef<{ [key: string]: mapboxgl.Marker }>({});
     const [totalUsers, setTotalUsers] = useState('...');
     const [activeOrders, setActiveOrders] = useState('...');
     const [availableDrivers, setAvailableDrivers] = useState('...');
@@ -110,10 +94,6 @@ export default function Dashboard() {
     const [revenueTrend, setRevenueTrend] = useState('0');
     const [ordersTrend, setOrdersTrend] = useState('0');
     const [usersTrend, setUsersTrend] = useState('0');
-
-    // Tracking map variables
-    const [isAvailableCount, setIsAvailableCount] = useState(0);
-    const [trackingDrivers, setTrackingDrivers] = useState<DriverData[]>([]);
 
     // Live stats from Firestore
     useEffect(() => {
@@ -214,135 +194,6 @@ export default function Dashboard() {
         return () => { unsubUsers(); unsubOrders(); unsubDrivers(); unsubCompletedOrders(); unsubRecentOrders(); unsubStoreOrders(); };
     }, []);
 
-    useEffect(() => {
-        if (map.current || !mapContainer.current) return;
-
-        mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
-        map.current = new mapboxgl.Map({
-            container: mapContainer.current,
-            style: 'mapbox://styles/mapbox/dark-v11',
-            center: [46.6753, 24.7136],
-            zoom: 11
-        });
-
-        map.current.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
-        // التسميات بالعربية — style.load يلتقط أيضاً أي إعادة تحميل للستايل.
-        map.current.on('style.load', () => { if (map.current) arabizeMapLabels(map.current); });
-
-        // Live Drivers Data Markers from Firestore
-        const unsubDriversMap = onSnapshot(
-            collection(db, 'drivers'),
-            (snapshot: QuerySnapshot<DocumentData>) => {
-                const currentDriverIds = new Set<string>();
-                const currentDriversData: DriverData[] = [];
-                let onlineCount = 0;
-
-                snapshot.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
-                    const data = doc.data() as DriverData;
-                    const id = doc.id;
-                    
-                    // Only show drivers who are online/available
-                    if (!data.is_available && data.status === 'off') return;
-                    
-                    onlineCount++;
-                    currentDriversData.push({ ...data, id });
-                    currentDriverIds.add(id);
-
-                    if (data.location && typeof data.location.latitude === 'number' && typeof data.location.longitude === 'number') {
-                        const lng = data.location.longitude;
-                        const lat = data.location.latitude;
-                        
-                        // Status-based colors
-                        let markerColor = "#10b981"; // Green (Idle)
-                        if (data.status === 'en_route') markerColor = "#f59e0b"; // Orange (En-route)
-                        if (data.status === 'in_service') markerColor = "#ef4444"; // Red (Active)
-
-                        const escHtml = (s: string) => s
-                            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-                            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-                        const driverName = escHtml(data.name || 'سائق');
-                        const statusLabel = data.status === 'in_service' ? 'يخدم عميل'
-                            : data.status === 'en_route' ? 'في الطريق للعميل' : 'متاح';
-                        const orderBadge = data.current_order_id
-                            ? `<p class="text-[10px] bg-slate-100 p-1 rounded mt-2">طلب: #${escHtml(data.current_order_id.substring(0, 4))}</p>`
-                            : '';
-                        const popupHtml = `
-                            <div class="p-3 text-right" dir="rtl">
-                                <h4 class="font-bold text-slate-800">${driverName}</h4>
-                                <p class="text-xs text-slate-500 mt-1">الحالة: ${statusLabel}</p>
-                                ${orderBadge}
-                            </div>
-                        `;
-
-                        if (markersRef.current[id]) {
-                            markersRef.current[id].setLngLat([lng, lat]);
-                            const el = markersRef.current[id].getElement();
-                            const path = el.querySelector('path');
-                            if (path) path.setAttribute('fill', markerColor);
-                            
-                            // Update popup content if needed
-                            markersRef.current[id].getPopup()?.setHTML(popupHtml);
-                        } else {
-                            const popup = new mapboxgl.Popup({ offset: 25, closeButton: false }).setHTML(popupHtml);
-                            
-                            const marker = new mapboxgl.Marker({ color: markerColor })
-                                .setLngLat([lng, lat])
-                                .setPopup(popup)
-                                .addTo(map.current!);
-                            markersRef.current[id] = marker;
-                        }
-                    }
-                });
-
-                setIsAvailableCount(onlineCount);
-                setTrackingDrivers(currentDriversData);
-
-                // Remove drivers that are no longer available or online
-                Object.keys(markersRef.current).forEach(id => {
-                    if (!currentDriverIds.has(id)) {
-                        markersRef.current[id].remove();
-                        delete markersRef.current[id];
-                    }
-                });
-            }
-        );
-
-        return () => {
-            unsubDriversMap();
-            // Cleanup markers
-            Object.values(markersRef.current).forEach((m: mapboxgl.Marker) => m.remove());
-            markersRef.current = {};
-        };
-    }, []);
-
-    const fitMapToDrivers = () => {
-        if (!map.current || trackingDrivers.length === 0) return;
-
-        const activeDriversWithLocation = trackingDrivers.filter(d =>
-            d.is_available &&
-            !d.is_suspended &&
-            d.location?.longitude &&
-            d.location?.latitude
-        );
-
-        if (activeDriversWithLocation.length === 0) return;
-
-        const bounds = new mapboxgl.LngLatBounds(
-            [activeDriversWithLocation[0].location!.longitude, activeDriversWithLocation[0].location!.latitude],
-            [activeDriversWithLocation[0].location!.longitude, activeDriversWithLocation[0].location!.latitude]
-        );
-
-        activeDriversWithLocation.forEach(driver => {
-            bounds.extend([driver.location!.longitude, driver.location!.latitude]);
-        });
-
-        map.current.fitBounds(bounds, {
-            padding: 50,
-            maxZoom: 14,
-            duration: 2000
-        });
-    };
-
     const getStatusBadge = (status: string) => {
         switch (status) {
             case 'completed': return <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-600 text-xs font-bold flex items-center w-fit border border-emerald-100"><CheckCircle2 size={14} strokeWidth={2.5} className="ml-1.5" /> مكتمل</span>;
@@ -382,10 +233,10 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 gap-8">
 
                 {/* Recent Orders List */}
-                <div className="xl:col-span-2 bg-white rounded-[24px] shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-slate-100/60 overflow-hidden flex flex-col">
+                <div className="bg-white rounded-[24px] shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-slate-100/60 overflow-hidden flex flex-col">
                     <div className="p-6 md:p-8 border-b border-slate-100 flex justify-between items-center bg-white/50 backdrop-blur-sm">
                         <div>
                             <h3 className="text-lg font-extrabold text-slate-800">أحدث الطلبات</h3>
@@ -436,45 +287,7 @@ export default function Dashboard() {
                             </tbody>
                         </table>
                     </div>
-                </div>
-
-                {/* Tracking Map Widget Placeholder */}
-                <div className="bg-slate-900 rounded-[24px] p-8 text-white relative overflow-hidden group shadow-xl shadow-slate-900/10 flex flex-col h-full min-h-[400px]">
-                    <div className="absolute inset-0 opacity-40 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-[#5D1B5E]/40 via-slate-900 to-slate-900 mix-blend-overlay pointer-events-none"></div>
-
-                    {/* Animated grid background */}
-                    <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[length:20px_20px] opacity-20"></div>
-
-                    <div className="relative z-10 flex flex-col h-full w-full">
-                        <div className="flex items-start justify-between mb-2">
-                            <div>
-                                <h3 className="text-xl font-extrabold tracking-tight flex items-center gap-2"><MapIcon size={20} className="text-[#8a4a8c]" /> تتبع السائقين الحصري</h3>
-                                <p className="text-slate-400 text-sm font-medium mt-1">اضغط على السائق للتتبع المباشر</p>
-                            </div>
-                            <div className="bg-emerald-500/20 p-2 rounded-xl flex items-center gap-2">
-                                <span className="block w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(16,185,129,0.9)]"></span>
-                                <span className="text-xs font-bold text-emerald-400">{isAvailableCount} متصل</span>
-                            </div>
-                        </div>
-
-                        <div className="flex-1 my-6 relative rounded-2xl border border-slate-700/60 overflow-hidden bg-slate-800/50 backdrop-blur-sm transition-colors w-full h-[300px]">
-                            <div ref={mapContainer} className="w-full h-full" />
-                        </div>
-
-                        <button
-                            type="button"
-                            onClick={fitMapToDrivers}
-                            className="w-full relative overflow-hidden bg-white text-slate-900 font-bold py-4 rounded-xl transition-all hover:shadow-[0_0_20px_rgba(255,255,255,0.3)] group/btn"
-                        >
-                            <span className="relative z-10 flex items-center justify-center">
-                                إظهار جميع السائقين على الخريطة
-                                <MapIcon className="mr-2 w-5 h-5 group-hover/btn:scale-110 transition-transform" />
-                            </span>
-                        </button>
-                    </div>
-                </div>
-
-            </div>
+                </div>            </div>
         </div>
     );
 }
