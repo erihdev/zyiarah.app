@@ -1773,13 +1773,18 @@ exports.notifyOnAppointmentChange = onDocumentUpdated(
       const activeStatuses = ["scheduled", "accepted", "assigned",
         "on_the_way", "in_progress"];
       if (!activeStatuses.includes(after.status)) return null;
-      // إسناد جديد (تغيّر السائق) يغطّيه notifyDriverOnAssignment — نتجنّب الازدواج.
-      if ((before.driver_id || null) !== (after.driver_id || null)) return null;
+      // تغيّر السائق مع الموعد: إشعار السائق الجديد يغطّيه notifyDriverOnAssignment
+      // (والقديم freeOldDriverOnReassign) — لكن **العميل يجب أن يعرف موعده الجديد
+      // دائماً**؛ كان الخروج الكامل هنا يتركه بلا أي إشعار عند تغيير الوقت+السائق معاً.
+      const driverChanged =
+        (before.driver_id || null) !== (after.driver_id || null);
 
-      const when = aSd.toDate();
+      // توقيت الرياض (UTC+3): الدوال تعمل بـUTC — getHours() الخام كان يُعلن
+      // للطرفين ساعةً أبكر بثلاث ساعات من الموعد الفعلي (نفس تحويل بقية المنسّقات).
+      const when = new Date(aSd.toDate().getTime() + 3 * 60 * 60 * 1000);
       const pad = (n) => String(n).padStart(2, "0");
-      const dateStr = `${when.getFullYear()}-${pad(when.getMonth() + 1)}-` +
-        `${pad(when.getDate())} ${pad(when.getHours())}:00`;
+      const dateStr = `${when.getUTCFullYear()}-${pad(when.getUTCMonth() + 1)}-` +
+        `${pad(when.getUTCDate())} ${pad(when.getUTCHours())}:00`;
       const code = after.code || event.params.orderId;
       const oid = event.params.orderId;
 
@@ -1789,7 +1794,7 @@ exports.notifyOnAppointmentChange = onDocumentUpdated(
             "appointment_changed", {orderId: oid}).catch((e) =>
           console.error("notifyOnAppointmentChange client:", e.message));
       }
-      if (after.driver_id) {
+      if (after.driver_id && !driverChanged) {
         await queuePush(after.driver_id, "تم تغيير موعد مهمة 🗓️",
             `موعد الطلب #${code} أصبح ${dateStr}.`,
             "appointment_changed", {orderId: oid}).catch((e) =>
@@ -1823,6 +1828,42 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
     walletRef.collection("transactions").doc(`wallet_pay_${orderId}`) :
     walletRef.collection("transactions").doc();
   const orderRef = orderId ? db.collection("orders").doc(orderId) : null;
+
+  // (تسعير خادمي للمحفظة) حقل amount يكتبه العميل، وفحص المطابقة أدناه يقارن به
+  // نفسَه — فكان طلبُ باقةٍ مزوَّر بـ1 ر.س يمرّ من المحفظة بلا أي علم (مسار ميسر
+  // يحميه verifyMoyasarPayment، والمحفظة كانت مستثناة). نعيد حساب سعر الباقة من
+  // zone.packages الموثوق: فجّ (<20%) يُرفض، ودون النصف يُعلَّم price_mismatch.
+  let pkgExpectedGross = null;
+  if (orderRef) {
+    try {
+      const pre = await orderRef.get();
+      const od = pre.exists ? pre.data() : null;
+      if (od && od.service_meta && od.service_meta.kind === "home_package" &&
+          od.zone_name) {
+        const zq = await db.collection("service_zones")
+            .where("name", "==", od.zone_name).limit(1).get();
+        if (!zq.empty) {
+          const base = computeExpectedBasePrice(od, zq.docs[0].data());
+          if (base && base > 0) {
+            const surge = await _readSurgeFactor(db);
+            pkgExpectedGross = Math.round(base * 1.15 * surge * 100) / 100;
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[wallet-pricing] recompute failed:", e.message);
+    }
+  }
+  if (pkgExpectedGross && amount < pkgExpectedGross * 0.2) {
+    throw new HttpsError("failed-precondition",
+        "المبلغ لا يطابق سعر الباقة في منطقتك");
+  }
+  if (pkgExpectedGross && amount < pkgExpectedGross * 0.5) {
+    await orderRef.update({
+      price_mismatch: true,
+      price_expected: pkgExpectedGross,
+    }).catch(() => {});
+  }
 
   const result = await db.runTransaction(async (t) => {
     const wSnap = await t.get(walletRef);
@@ -1883,6 +1924,17 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
 // آلياً (cancel_reason='unpaid_expired' — سباق نادر: بطاقة/Apple Pay تأكّدت بعد نافذة
 // الـ30 دقيقة عبر verify/webhook/reconcile)، نُعيد فتحه (pending) بدل تركه ملغى مدفوعاً
 // بلا خدمة. يُدمج داخل نفس معامَلة قلب is_paid فلا سباق. تمارا/تابي مستثناة أصلاً بالكرون.
+// يفكّ ISO قادماً من العملاء إلى **لحظة زمنية صحيحة**: سلسلة Dart المحلية بلا لاحقة
+// منطقة (2026-07-30T14:00:00.000) يفسّرها Node كـUTC بينما قصدُ المرسِل توقيت
+// الرياض — فكانت المواعيد تُخزَّن متأخرة 3 ساعات (ثم يضيف مشتقّ booking_time_slot
+// ثلاثاً أخرى للعرض). سلاسل الويب بـZ/إزاحة تمرّ كما هي.
+function _parseKsaIso(s) {
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return d;
+  return /(?:Z|[+-]\d{2}:?\d{2})$/.test(String(s).trim()) ?
+    d : new Date(d.getTime() - 3 * 60 * 60 * 1000);
+}
+
 function _reopenFieldsIfSystemCancelled(data) {
   if (data && data.status === "cancelled" &&
       data.cancel_reason === "unpaid_expired") {
@@ -1944,8 +1996,9 @@ async function _computeTrustedDiscount(db, od, expectedGross, surge) {
 // لتعليم «تعذّر التحقّق» حين يبدو الطلب قابلاً للتسعير لكن غابت منطقته/تعذّر حسابه.
 function _isPriceableKind(od) {
   const kind = od.service_meta && od.service_meta.kind;
-  if (["sofa_rug_sqm", "ac_service", "car_interior"].includes(kind)) return true;
-  if (od.hours_contracted && !kind) return true; // بالساعة
+  if (["sofa_rug_sqm", "ac_service", "car_interior", "home_package"]
+      .includes(kind)) return true;
+  if (od.hours_contracted && !kind) return true; // بالساعة (النظام القديم)
   return false;
 }
 
@@ -2101,7 +2154,7 @@ exports.verifyMoyasarPayment = onCall(
               {service_meta: _parseServiceMeta(md.service_meta_json)} : {}),
           };
           if (md.service_date) {
-            const sd = new Date(md.service_date);
+            const sd = _parseKsaIso(md.service_date);
             if (!isNaN(sd.getTime())) {
               payload.service_date = admin.firestore.Timestamp.fromDate(sd);
               if (isHourly) {
@@ -2400,8 +2453,9 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
         (afterData.status === "cancelled" || afterData.status === "completed");
     if (driverFreed) {
       const db = admin.firestore();
+      // −13س كنافذة المكنسة: طلبٌ طويل فات بدؤه ونافذته قائمة يلتقط السائقَ المتحرر.
       const cutoff = admin.firestore.Timestamp.fromDate(
-          new Date(Date.now() - 60 * 60 * 1000));
+          new Date(Date.now() - 13 * 60 * 60 * 1000));
       // نفس شكل استعلام المكنسة (فهرس status+service_date قائم).
       const snap = await db.collection("orders")
           .where("status", "==", "pending")
@@ -2409,7 +2463,11 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
           .limit(25).get();
       const waiting = snap.docs.filter((d) => {
         const o = d.data();
-        return o.is_paid === true && !o.driver_id && o.service_date;
+        if (o.is_paid !== true || o.driver_id || !o.service_date) return false;
+        // لا نُسند طلباً انتهت نافذته كاملةً (البدء + المدة) — ذاك للاسترداد.
+        const endMs = o.service_date.toDate().getTime() +
+          Number(o.hours_contracted || 4) * 60 * 60 * 1000;
+        return endMs > Date.now();
       }).slice(0, 5);
       // كل مسار يسجّل — الاختبار الحيّ الأول فشل صامتاً ولم نعرف أي فرع ابتلعه.
       console.log(`onOrderWritten: driver freed by ${event.params.orderId} — ` +
@@ -3120,7 +3178,7 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   if (!orderId || !driverId || !scheduledIso) {
     throw new HttpsError("invalid-argument", "البيانات ناقصة (الطلب/السائق/الموعد)");
   }
-  const startDateTime = new Date(scheduledIso);
+  const startDateTime = _parseKsaIso(scheduledIso);
   if (isNaN(startDateTime.getTime())) {
     throw new HttpsError("invalid-argument", "موعد غير صالح");
   }
@@ -3171,9 +3229,10 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
     }
     // (منع الحجز المزدوج) إعادة فحص حرّية السائق ذرّياً داخل المعاملة — الفحص أعلاه
     // خارج المعاملة كان يسمح لموافقتين متزامنتين على طلبين مختلفين بإسناد نفس السائق
-    // لفترة متداخلة. النافذة تمتدّ 8س للخلف لالتقاط مهمّة تعبر منتصف ليل UTC.
+    // لفترة متداخلة. النافذة −24س (كانت −8 فتُفوِّت مهمة hours_contracted>8 تبدأ
+    // قبلها بأكثر من 8س — باقات السكن تتيح مدداً حتى 12س؛ نفس إصلاح _assignDriverScheduled).
     const slotEnd = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
-    const winStart = new Date(startDateTime.getTime() - 8 * 60 * 60 * 1000);
+    const winStart = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
     const conflictQ = db.collection("orders")
         .where("service_date", ">=", admin.firestore.Timestamp.fromDate(winStart))
         .where("service_date", "<", admin.firestore.Timestamp.fromDate(slotEnd))
@@ -3226,7 +3285,7 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
   }
   let parsedStart = null;
   if (scheduledIso) {
-    parsedStart = new Date(scheduledIso);
+    parsedStart = _parseKsaIso(scheduledIso);
     if (isNaN(parsedStart.getTime())) {
       throw new HttpsError("invalid-argument", "موعد غير صالح");
     }
@@ -3264,7 +3323,9 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
     }
     const hours = Number(o.hours_contracted || 4);
     const slotEnd = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
-    const winStart = new Date(startDateTime.getTime() - 8 * 60 * 60 * 1000);
+    // −24س: تلتقط مهمة طويلة (hours_contracted>8، باقات السكن حتى 12س) تبدأ قبل
+    // الموعد الجديد بأكثر من 8 ساعات — كانت −8 تُفوِّتها فيُحجَز السائق لمهمتين.
+    const winStart = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
     const conflictQ = db.collection("orders")
         .where("service_date", ">=", admin.firestore.Timestamp.fromDate(winStart))
         .where("service_date", "<", admin.firestore.Timestamp.fromDate(slotEnd))
@@ -3291,6 +3352,11 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
         `${String(riyadh.getUTCMonth() + 1).padStart(2, "0")}-` +
         `${String(riyadh.getUTCDate()).padStart(2, "0")}`;
       upd.booking_time_slot = `${String(riyadh.getUTCHours()).padStart(2, "0")}:00`;
+      // موعد جديد = تذكيرات جديدة: كرونا تذكير السائق والعميل يتخطيان من سبق
+      // تذكيره — نقلُ زيارةٍ بعد إرسال تذكيرها كان يترك موعدها الجديد بلا تذكير.
+      upd.reminder_sent = false;
+      upd.client_reminder_24h_sent = false;
+      upd.client_reminder_soon_sent = false;
     }
     if (reassign) {
       upd.driver_id = newDriverId;
@@ -3532,13 +3598,20 @@ exports.remindClientsUpcomingAppointments = onSchedule(
              new Date(`${_riyadhLocalDate(now)}T00:00:00Z`).getTime()) / 86400000);
         const dayLabel = dDiff <= 0 ? "اليوم" : dDiff === 1 ? "غداً" : `بعد ${dDiff} أيام`;
 
+        // (باقات السكن) الساعة مُرساة آلياً ولم يخترها العميل — تذكير الغد لا
+        // يعِد بساعةٍ قد تعدّلها الإدارة؛ تذكير الساعتين يذكرها (استقرّت عندئذٍ).
+        const isHomePkg =
+          d.service_meta && d.service_meta.kind === "home_package";
+
         if (hoursUntil > 2.5 && d.client_reminder_24h_sent !== true) {
           // queuePush: يكتب صندوق الوارد دائماً — كان _pushToUid يضبط علم الإرسال
           // ثم يتخطّى بصمت العميل بلا توكن، فيفقد التذكير للأبد ولا يُعاد.
           await queuePush(
               d.client_id,
               "موعد زيارتكِ اقترب 🏡",
-              `${greet}موعد «${serviceName}» ${dayLabel} الساعة ${timeStr}. بانتظاركِ 🌿`,
+              isHomePkg ?
+                `${greet}زيارة «${serviceName}» ${dayLabel} ضمن ساعات عمل منطقتكِ — وتصلكِ رسالة بالوقت المحدد. بانتظاركِ 🌿` :
+                `${greet}موعد «${serviceName}» ${dayLabel} الساعة ${timeStr}. بانتظاركِ 🌿`,
               "appointment_reminder",
               {orderId: doc.id},
           );
@@ -3572,7 +3645,11 @@ exports.sweepUnassignedPaidOrders = onSchedule(
     async () => {
       const db = admin.firestore();
       const now = Date.now();
-      const cutoff = admin.firestore.Timestamp.fromDate(new Date(now - 60 * 60 * 1000));
+      // −13س (أطول باقة 12س + هامش): كانت −1س فتتوقف إعادة المحاولة بعد ساعة من
+      // موعد البدء رغم أن الزيارة الطويلة ما تزال قابلة للإنقاذ طوال نافذتها —
+      // «منطقة ميتة» بلا محاولة ولا تنبيه حتى استرداد نهاية النافذة.
+      const cutoff = admin.firestore.Timestamp.fromDate(
+          new Date(now - 13 * 60 * 60 * 1000));
       // (حذف الاعتمادات — قرار المالك) كان هنا استعلام ثانٍ على حالة
       // pending_admin_approval لزيارات الاشتراك؛ حُذفت الحالة من الجذور وكل
       // المنتجين يكتبون pending، فيغطيها هذا الاستعلام الواحد.
@@ -3589,6 +3666,21 @@ exports.sweepUnassignedPaidOrders = onSchedule(
         const start = d.service_date.toDate();
         const hours = Number(d.hours_contracted || 4);
         const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
+        // انتهت نافذة الخدمة كلها → اتركه لمسار الاسترداد/التصعيد أدناه.
+        if (end.getTime() <= now) continue;
+        // فات موعد البدء ولم يُسنَد بعد → أنذر الإدارة مبكراً (مرة واحدة) مع
+        // استمرار المحاولة — كان الصمت يمتد حتى نهاية النافذة + ساعتين.
+        if (start.getTime() < now - 60 * 60 * 1000 &&
+            d.stranded_alerted !== true) {
+          await queuePush(
+              "ADMIN_BROADCAST",
+              "طلب مدفوع تجاوز موعد بدئه بلا سائق ⚠️",
+              `الطلب #${d.code || doc.id} مدفوع وفات موعد بدئه ولم يُسنَد — ` +
+              `ما تزال نافذته قائمة والمحاولة مستمرة، وقد يلزم تدخّل يدوي.`,
+              "admin_order_alert",
+              {orderId: doc.id, code: d.code || doc.id}).catch(() => {});
+          await doc.ref.update({stranded_alerted: true}).catch(() => {});
+        }
         try {
           const driver = await _findFreeDriverForSlot(db, {
             startDateTime: start,
@@ -3769,7 +3861,7 @@ exports.reconcileOrphanPayments = onSchedule(
               {service_meta: _parseServiceMeta(md.service_meta_json)} : {}),
           };
           if (md.service_date) {
-            const sd = new Date(md.service_date);
+            const sd = _parseKsaIso(md.service_date);
             if (!isNaN(sd.getTime())) {
               payload.service_date = admin.firestore.Timestamp.fromDate(sd);
               if (isHourly) {
@@ -4192,9 +4284,17 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
 
   // 1. السعة الحقيقية للفترة = عدد السائقين النشطين. **بلا مناطق** (قرار المالك):
   // السائق يقبل أي طلب، فالسعة رقم واحد للنشاط كلّه لا لكل منطقة.
+  // **نفس مرشّح الأهلية الذي يفرضه المُسنِد** (H3: users/{id} بدور driver) — عدّاد
+  // يفوق ما يقبله _findFreeDriverForSlot كان يُظهر يوماً «متاحاً» فيدفع العميل
+  // ثم لا يجد المُسنِد سائقاً مؤهّلاً فيعلق الطلب حتى الاسترداد الآلي.
   const driversSnap = await db.collection("drivers").get();
-  const eligible = driversSnap.docs.filter((doc) => doc.data().is_active !== false);
-  const driverCount = eligible.length;
+  const activeDocs = driversSnap.docs.filter((doc) => doc.data().is_active !== false);
+  const roleChecks = await Promise.all(activeDocs.map(async (doc) => {
+    const u = await db.collection("users").doc(doc.id).get();
+    const role = u.exists ? (u.data().staff_role || u.data().role) : null;
+    return role === "driver";
+  }));
+  const driverCount = roleChecks.filter(Boolean).length;
 
   // 2. السعة اليومية تبقى من الإعدادات (سقف إضافي)
   let maxOrdersPerDay = 10;

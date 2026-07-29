@@ -79,9 +79,10 @@ void main() {
 
   group('العرض يستعمل المُنسّق المشترك', () {
     test('لا شاشة تعرض HH:00 خاماً للعميلة', () {
+      // (باقات السكن) hourly_details لم تعد تعرض أي ساعة للعميلة إطلاقاً —
+      // العميل يختار اليوم فقط والوقت يُرسى داخلياً، فخرجت من هذا الحارس.
       for (final p in [
         'lib/widgets/booking_slot_picker.dart',
-        'lib/screens/hourly_details_screen.dart',
         'lib/screens/subscription_plans_screen.dart',
       ]) {
         final s = _code(p);

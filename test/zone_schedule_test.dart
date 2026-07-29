@@ -68,9 +68,18 @@ void main() {
       expect(gate.contains("data['closedDates']"), isTrue);
       expect(gate.contains('لا نخدم منطقتك في هذا اليوم'), isTrue);
     });
-    test('الساعة خارج نطاق الفتح تُمنع', () {
-      expect(gate.contains("data['openHours']") || gate.contains("openHoursMap"), isTrue);
+    test('بوابة مزدوجة: باقات السكن باليوم، والخدمات المجدولة بخانتها المحددة', () {
+      // باقات السكن (home_package): العميل اختار اليوم فقط — الشرط وجود **أي**
+      // فترة بطول الخدمة دون عدد السائقين ضمن ساعات الفتح.
+      expect(gate.contains("data['openHours']"), isTrue);
+      expect(gate.contains("== 'home_package'"), isTrue,
+          reason: 'التفريع بنوع الطلب — لا بوابة واحدة للجميع');
+      expect(gate.contains('anyWindowFree'), isTrue);
+      expect(gate.contains('لا يوجد فريق متاح لمدة الخدمة'), isTrue);
+      // بقية الخدمات المجدولة (كنب/مكيفات/سيارات/متجر) اختارت خانةً محددة —
+      // تُفحص خانتها هي: ضمن الفتح + سائق حرّ طوالها (كما كان دائماً).
       expect(gate.contains('خارج ساعات عمل منطقتك'), isTrue);
+      expect(gate.contains('يرجى اختيار وقت بدء آخر'), isTrue);
     });
     test('تمرّر zoneName لجلب الجدول', () {
       final i = gate.indexOf('Future<String?> _checkHourlyCapacity');
@@ -95,8 +104,11 @@ void main() {
     test('خانات البدء محصورة بساعات الفتح لا 8..22 دائماً', () {
       final s = _code('lib/widgets/booking_slot_picker.dart');
       expect(s.contains('_openHoursFor'), isTrue);
+      // (باقات السكن) الإرساء الداخلي يبدأ من ساعة فتح المنطقة ولا يتجاوز
+      // (الإغلاق − المدة) — نفس القيد بلا واجهة أوقات.
       final hourly = _code('lib/screens/hourly_details_screen.dart');
-      expect(hourly.contains('_openHoursForSelected'), isTrue);
+      expect(hourly.contains('_openHoursFor(d)'), isTrue);
+      expect(hourly.contains('open[1] - _durationHours'), isTrue);
     });
   });
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:zyiarah/services/zyiarah_messaging_service.dart';
@@ -81,6 +82,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   // سبب امتلاء السعة (للطلبات بالساعة) — يُفحص عند فتح الشاشة ويُستخدم لمنع أزرار
   // الدفع الأصلية (Apple/Google/Samsung Pay) التي تخصم فوراً وتتجاوز فحص _handlePayment.
   String? _capacityError;
+  Timer? _capacityWatch; // تحديث دوري لفحص السعة (يحمي مسار الدفع الأصلي)
   ZyiarahUser? _currentUser;
   bool _agreeToTerms = false;
   bool _tamaraEnabled = false;
@@ -117,15 +119,23 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     }
     _loadUserData();
     // فحص السعة مبكّراً للطلبات بالساعة — كي نمنع أزرار الدفع الأصلية عند الامتلاء.
+    // **ويتجدد دورياً**: أزرار Apple/Google/Samsung Pay تخصم قبل أي رد نداء لنا،
+    // ففحصُ الفتح وحده كان يتقادم — يمتلئ اليوم والعميل على الشاشة فيدفع لحجزٍ
+    // لم يعد متاحاً. التحديث كل 45ث يُحدّث المنع والسماح معاً (مسارات _handlePayment
+    // الأخرى تفحص لحظة الدفع أصلاً).
     if (widget.hours != null && widget.serviceDate != null) {
-      _checkHourlyCapacity().then((err) {
-        if (mounted && err != null) setState(() => _capacityError = err);
-      });
+      Future<void> refresh() => _checkHourlyCapacity().then((err) {
+            if (mounted) setState(() => _capacityError = err);
+          });
+      refresh();
+      _capacityWatch =
+          Timer.periodic(const Duration(seconds: 45), (_) => refresh());
     }
   }
 
   @override
   void dispose() {
+    _capacityWatch?.cancel();
     _couponController.dispose();
     _phoneController.dispose();
     super.dispose();
@@ -393,31 +403,57 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       return 'لا يوجد فريق متاح حالياً. تواصل معنا لتحديد موعد.';
     }
 
-    // فرض جدول فتح المنطقة **خادميّاً**: العرض قد يُتجاوَز (نسخة قديمة، تلاعب)، فالبوابة
-    // هي الحدّ الأخير. اليوم مغلق أو الساعة خارج نطاق الفتح ⇒ يُمنع.
-    final int reqStart = widget.serviceDate!.hour;
-    final int reqEnd = reqStart + widget.hours!;
     final closedDates =
         ((data['closedDates'] as List?) ?? []).map((e) => e.toString()).toSet();
     if (closedDates.contains(bookingDate)) {
       return 'نعتذر، لا نخدم منطقتك في هذا اليوم. يرجى اختيار يوم آخر.';
-    }
-    final openHoursMap = data['openHours'] as Map? ?? {};
-    final open = openHoursMap[bookingDate];
-    if (open is List && open.length == 2) {
-      final int openStart = (open[0] as num).toInt();
-      final int openEnd = (open[1] as num).toInt();
-      if (reqStart < openStart || reqEnd > openEnd) {
-        return 'الوقت المختار خارج ساعات عمل منطقتك في هذا اليوم. يرجى اختيار وقت آخر.';
-      }
     }
 
     if (((daily[bookingDate] as num?)?.toInt() ?? 0) >= maxOrdersPerDay) {
       return 'نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.';
     }
 
-    // الطلب يشغل سائقاً طوال مدته، فنفحص **كل ساعة يشغلها** لا ساعة البدء وحدها —
-    // الدالة تعدّ الطلب في كل ساعة من فترته للسبب نفسه.
+    final openRaw = (data['openHours'] as Map? ?? {})[bookingDate];
+    final int openStart =
+        (openRaw is List && openRaw.isNotEmpty) ? (openRaw[0] as num).toInt() : 8;
+    final int openEnd =
+        (openRaw is List && openRaw.length > 1) ? (openRaw[1] as num).toInt() : 22;
+
+    // مساران بحسب نوع الطلب:
+    // • باقات السكن (home_package): العميل اختار **اليوم فقط** — الشرط وجود
+    //   **أي** فترة بطول الخدمة كل ساعاتها دون عدد السائقين (قرار المالك).
+    // • بقية الخدمات المجدولة (كنب/مكيفات/سيارات/متجر): العميل اختار **خانة
+    //   محددة** — تُفحص خانته هي (ضمن الفتح + سائق حرّ طوالها) كما كان دائماً.
+    final bool dayOnly =
+        widget.serviceMeta != null && widget.serviceMeta!['kind'] == 'home_package';
+
+    if (dayOnly) {
+      bool anyWindowFree = false;
+      for (int h = openStart; h <= openEnd - widget.hours!; h++) {
+        bool free = true;
+        for (int hh = h; hh < h + widget.hours!; hh++) {
+          final key = '${bookingDate}_${hh.toString().padLeft(2, '0')}:00';
+          if (((slots[key] as num?)?.toInt() ?? 0) >= maxTeamsPerSlot) {
+            free = false;
+            break;
+          }
+        }
+        if (free) {
+          anyWindowFree = true;
+          break;
+        }
+      }
+      if (!anyWindowFree) {
+        return 'نعتذر، اكتملت مواعيد هذا اليوم — لا يوجد فريق متاح لمدة الخدمة. يرجى اختيار يوم آخر.';
+      }
+      return null;
+    }
+
+    final int reqStart = widget.serviceDate!.hour;
+    final int reqEnd = reqStart + widget.hours!;
+    if (reqStart < openStart || reqEnd > openEnd) {
+      return 'الوقت المختار خارج ساعات عمل منطقتك في هذا اليوم. يرجى اختيار وقت آخر.';
+    }
     for (int h = reqStart; h < reqEnd; h++) {
       final key = '${bookingDate}_${h.toString().padLeft(2, '0')}:00';
       if (((slots[key] as num?)?.toInt() ?? 0) >= maxTeamsPerSlot) {
@@ -535,6 +571,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 discountAmount: _discountAmount,
                 contractId: widget.contractId,
                 planVisits: widget.planVisits,
+                serviceMeta: widget.serviceMeta,
                 onOrderCreated: (code) async {
                   if (!mounted) return;
                   Navigator.of(context).pushAndRemoveUntil(

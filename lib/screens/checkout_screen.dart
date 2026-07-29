@@ -28,6 +28,9 @@ class TamaraCheckoutScreen extends StatefulWidget {
   final int? planVisits;
   final String? customerName;
   final String? customerPhone;
+  // تفصيل الخدمة (باقات السكن/كنب/مكيفات…) — يُكتب مع الطلب الاحتياطي وإلا فقد
+  // الطلبُ هويته: الإدارة/السائق بلا تفصيل والتسعير الخادمي يظنه ساعات قديمة.
+  final Map<String, dynamic>? serviceMeta;
   /// Callback يُستدعى بعد نجاح الدفع وإنشاء الطلب — يمرر كود الطلب للمتصل.
   /// إذا كان null يتم التوجيه لـ ZyiarahOrderSuccessScreen مباشرة.
   final Future<void> Function(String orderCode)? onOrderCreated;
@@ -49,6 +52,7 @@ class TamaraCheckoutScreen extends StatefulWidget {
     this.planVisits,
     this.customerName,
     this.customerPhone,
+    this.serviceMeta,
     this.onOrderCreated,
   });
 
@@ -178,6 +182,8 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                         'worker_count': widget.workerCount,
                         'coupon_code': widget.couponCode,
                         'discount_amount': widget.discountAmount,
+                        if (widget.serviceMeta != null)
+                          'service_meta': widget.serviceMeta,
                         if (isHourly && widget.serviceDate != null) ...{
                           'booking_date': '${widget.serviceDate!.year}-'
                               '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'

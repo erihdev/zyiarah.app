@@ -75,6 +75,20 @@ function computeExpectedBasePrice(order, zone) {
     return base > 0 ? base : null;
   }
 
+  // (باقات السكن) السعر من zone.packages[نوع السكن].crews[عدد الكوادر] الموثوق —
+  // يشمل الكوادر سلفاً فلا يُضرب بأي عدد. خيارٌ معطَّل/غير مسعَّر = يتعذّر التحقق (null)
+  // فلا يُقبل سعرُ عميلٍ لخيارٍ أطفأه الأدمن لمنطقته.
+  if (kind === "home_package") {
+    const pkgs = zone.packages || {};
+    const pkg = pkgs[String(meta.homeType)] || {};
+    const crews = pkg.crews || {};
+    const opt = crews[String(meta.crewCount)];
+    if (!opt || opt.enabled !== true) return null;
+    const price = Number(opt.price);
+    if (!price || isNaN(price) || price <= 0) return null;
+    return price;
+  }
+
   // store_products: عناصر service_meta بلا معرّف منتج → يتعذّر إعادة التسعير الموثوق.
   // (متجر الشركات المباشر آمن أصلاً: createStoreOrder يُعيد قراءة السعر من products.)
   return null;

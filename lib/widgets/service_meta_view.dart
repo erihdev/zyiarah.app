@@ -57,6 +57,17 @@ String? zyiarahServiceMetaSummary(dynamic meta) {
         final q = ZyiarahServiceMetaView._num(it['quantity']).toInt();
         if (q > 0) parts.add('${it['name'] ?? '-'} ×$q');
       }
+    // (باقات السكن) «شقة متوسطة • كادران» — يظهر في قوائم الإدارة والسائق.
+    case 'home_package':
+      final label = meta['homeLabel'];
+      final crews = ZyiarahServiceMetaView._num(meta['crewCount']).toInt();
+      if (label is! String || label.isEmpty || crews <= 0) return null;
+      parts.add(label);
+      parts.add(switch (crews) {
+        1 => 'كادر واحد',
+        2 => 'كادران',
+        _ => '$crews كوادر',
+      });
     default:
       return null;
   }
@@ -82,6 +93,7 @@ class ZyiarahServiceMetaView extends StatelessWidget {
       'ac_service' => _acRows(m),
       'car_interior' => _acRows(m), // بنود label/count/unit_price نفسها
       'store_products' => _storeRows(m),
+      'home_package' => _homePackageRows(m),
 
       _ => const <_MetaRow>[],
     };
@@ -150,7 +162,28 @@ class ZyiarahServiceMetaView extends StatelessWidget {
     if (m['kind'] == 'store_products') {
       return '${_num(m['total_qty']).toInt()} منتج';
     }
+    if (m['kind'] == 'home_package') {
+      final h = _num(m['durationHours']).toInt();
+      return h > 0 ? 'مدة الجدولة $h ساعات' : '';
+    }
     return '';
+  }
+
+  /// (باقات السكن) صفّان: نوع السكن، وعدد الكوادر — ليعرف السائق حجم المهمة
+  /// والفريق قبل الوصول.
+  List<_MetaRow> _homePackageRows(Map m) {
+    final label = m['homeLabel'];
+    final crews = _num(m['crewCount']).toInt();
+    if (label is! String || label.isEmpty || crews <= 0) return const [];
+    final crewsLabel = switch (crews) {
+      1 => 'كادر واحد',
+      2 => 'كادران',
+      _ => '$crews كوادر',
+    };
+    return [
+      _MetaRow(label: 'نوع السكن', detail: '', total: label),
+      _MetaRow(label: 'عدد الكوادر', detail: '', total: crewsLabel),
+    ];
   }
 
   List<_MetaRow> _sofaRugRows(Map m) {

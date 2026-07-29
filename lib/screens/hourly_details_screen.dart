@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,8 +9,7 @@ import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/zone_locator_service.dart';
-import 'package:zyiarah/utils/firestore_maps.dart';
-import 'package:zyiarah/utils/time_format.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
 
 
@@ -20,20 +21,37 @@ class HourlyCleaningDetailsScreen extends StatefulWidget {
   State<HourlyCleaningDetailsScreen> createState() => _HourlyCleaningDetailsScreenState();
 }
 
-class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScreen> {
-  int _selectedHours = 4;
+class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScreen>
+    with WidgetsBindingObserver {
+  // (نظام باقات السكن) اختيار العميل: نوع السكن + عدد الكوادر — بدل الساعات.
+  List<HomePackage> _packages = [];
+  String? _selectedType;
+  int? _selectedCrews;
+  double _basePrice = 0.0; // أساس (قبل الضريبة) لخيار (النوع × الكوادر) المختار
+  int _durationHours = 4; // مدة الجدولة للنوع المختار — تحجز فترة السائق وتفحص السعة
+
+  // (قرار المالك) العميل يختار **اليوم فقط** — لا وقت بدء. السعة اليومية
+  // (max_orders_per_day) تضبطها الإدارة من الإعدادات، ووقت البدء الفعلي يُرسى
+  // على ساعة فتح المنطقة وتعدّله الإدارة من «تعديل الزيارة» عند الحاجة.
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
-  int? _selectedStartHour;
-  Map<int, bool> _slotAvailability = {};
-  bool _checkingSlots = false;
-  int _workerCount = 1;
   bool _isLoading = true;
 
+  /// مراقبة تنقّل العميل: يعاد التحديد بصمت دورياً وعند العودة للتطبيق،
+  /// فإن دخل محافظة أخرى تتبدّل المنطقة والأسعار تلقائياً.
+  Timer? _zoneWatch;
+
+  /// اختار العميل موقعه يدوياً من الخريطة (يحجز لبيته وهو في مكان آخر) —
+  /// **تتوقف المراقبة الصامتة** كي لا يسحقه GPS موضعِه الحالي كل 45 ثانية
+  /// ويُرسَل السائق لموقفه بدل بيته. زر «حدّد موقعي تلقائياً» يعيد تفعيلها.
+  bool _manualLocationOverride = false;
+
   int _maxOrdersPerDay = 10;
-  int _maxTeamsPerSlot = 5;
   Map<String, int> _dailyOrderCounts = {};   // "yyyy-MM-dd" → total orders
-  Map<String, int> _slotCounts = {};          // "yyyy-MM-dd_HH:00" → orders in slot
-  Map<String, List<int>> _openHours = {};     // yyyy-MM-dd → [فتح، إغلاق] من جدول المنطقة
+  // (إتاحة اليوم = سعة يومية **و** سائق متاح) عدّادات الساعات وعدد السائقين
+  // النشطين — لا تُعرض كأوقات للعميل، بل تقرر داخلياً هل يتسع اليومُ لمدة الباقة.
+  Map<String, int> _slotCounts = {};          // "yyyy-MM-dd_HH:00" → طلبات تشغل الساعة
+  int _maxTeamsPerSlot = 5;                   // عدد السائقين النشطين
+  Map<String, List<int>> _openHours = {};     // yyyy-MM-dd → [فتح، إغلاق] — لساعة بدء الإرساء
   Set<String> _closedDates = {};              // أيام لا تُخدَم فيها المنطقة
   bool _loadingDailyCounts = true;
 
@@ -41,7 +59,10 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   /// تكون فارغة فيبدو كل يوم متاحاً، فيختار العميل يوماً ممتلئاً. نعرض إعادة محاولة.
   bool _availabilityError = false;
 
-  double _hourlyBasePrice = 0.0;
+  /// حارس تسلسلي لطلبات الإتاحة: نداء الفتح (بلا منطقة) ونداء ما بعد التحديد
+  /// (بمنطقة) يتسابقان — الأبطأ كان يكتب فوق الأحدث فتظهر أيام مغلقة خضراء.
+  int _availabilityReqId = 0;
+
   String? _selectedZoneName;
   GeoPoint? _selectedLocation;
 
@@ -49,18 +70,26 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   bool _isLocating = false;
   LocateFailure? _locateFailure;
 
-  List<int> _allowedHours = [4, 5, 6, 8];
-  int _maxAllowedWorkers = 5;
   List<Map<String, dynamic>> _zones = [];
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _fetchConfigAndZones();
     _loadAvailabilityFromServer();
+    // إعادة تحديد صامتة دورية: إن تنقّل العميل لمحافظة أخرى تتبدّل المنطقة تلقائياً.
+    _zoneWatch = Timer.periodic(
+        const Duration(seconds: 45), (_) => _attemptAutoLocation(silent: true));
     // شرط الخدمة: يجب أن تُقرّ العميلة بوجود سيدة في المنزل قبل طلب العاملات.
     // «إلغاء» يعيدها للرئيسية فلا تُكمل الطلب؛ «نعم» يتيح المتابعة.
     WidgetsBinding.instance.addPostFrameCallback((_) => _confirmWomanPresent());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // عاد للتطبيق (ربما من مدينة أخرى) → أعد التحديد بصمت.
+    if (state == AppLifecycleState.resumed) _attemptAutoLocation(silent: true);
   }
 
   Future<void> _confirmWomanPresent() async {
@@ -140,6 +169,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   /// تُعيد الأعداد الحقيقية للطلبات لكل تاريخ وكل خانة زمنية.
   Future<void> _loadAvailabilityFromServer() async {
     if (!mounted) return;
+    final int reqId = ++_availabilityReqId; // استجابة أقدم من الأحدث تُهمَل
     setState(() {
       _loadingDailyCounts = true;
       _availabilityError = false;
@@ -180,7 +210,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       final int maxPerDay = ((data['maxOrdersPerDay'] as num?)?.toInt()) ?? 10;
       final int maxPerSlot = ((data['maxTeamsPerSlot'] as num?)?.toInt()) ?? 5;
 
-      if (!mounted) return;
+      if (!mounted || reqId != _availabilityReqId) return;
       setState(() {
         _dailyOrderCounts = daily;
         _slotCounts = slots;
@@ -190,33 +220,24 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
         _maxTeamsPerSlot = maxPerSlot;
         _loadingDailyCounts = false;
 
-        // انتقل تلقائياً لأول تاريخ متاح (غير ممتلئ وغير مغلق بالجدول).
-        bool unavailable(DateTime d) {
-          final s = intl.DateFormat('yyyy-MM-dd').format(d);
-          return closed.contains(s) || (daily[s] ?? 0) >= maxPerDay;
-        }
-        if (unavailable(_selectedDate)) {
+        // انتقل تلقائياً لأول تاريخ متاح (سعةً وسائقين، وغير مغلق بالجدول).
+        if (_dateUnavailable(_selectedDate)) {
           for (int i = 0; i < 30; i++) {
             final candidate = now.add(Duration(days: i + 1));
-            if (!unavailable(candidate)) {
+            if (!_dateUnavailable(candidate)) {
               _selectedDate = candidate;
               break;
             }
           }
         }
       });
-
-      // بعد تحميل البيانات: احسب إتاحة الخانات من الـ cache مباشرة
-      if (_selectedLocation != null) {
-        _buildSlotAvailabilityFromCache();
-      }
     } catch (e) {
       // **لا نبتلع الفشل بصمت.** كان هذا الـ catch يكتفي بإطفاء الدوّار، فتبقى
       // ‎_dailyOrderCounts فارغة ⇒ ‎`activeOrders = 0` لكل تاريخ ⇒ ‎`0 >= _maxOrdersPerDay`
       // = false ⇒ **كل التواريخ تظهر خضراء** والعميل يختار يوماً ممتلئاً.
       // الأخضر يجب أن يعني «متاح»، لا «لا نعرف».
       debugPrint('[getHourlyAvailability] error: $e');
-      if (mounted) {
+      if (mounted && reqId == _availabilityReqId) {
         setState(() {
           _loadingDailyCounts = false;
           _availabilityError = true;
@@ -226,29 +247,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   }
 
   Future<void> _fetchConfigAndZones() async {
-    // system_configs is admin-only — separate try-catch so a permission error
-    // doesn't prevent service_zones from loading for regular clients.
-    try {
-      final configDoc = await FirebaseFirestore.instance.collection('system_configs').doc('hourly_settings').get();
-      if (configDoc.exists) {
-        final List<dynamic>? hoursList = configDoc.data()?['allowed_hours'];
-        if (hoursList != null) {
-          _allowedHours = hoursList.map((e) => int.tryParse(e.toString()) ?? 4).toList()..sort();
-          if (_allowedHours.isNotEmpty && !_allowedHours.contains(_selectedHours)) {
-            _selectedHours = _allowedHours.first;
-          }
-        }
-        if (configDoc.data()!.containsKey('max_workers')) {
-          _maxAllowedWorkers = configDoc.data()?['max_workers'] ?? 5;
-        }
-        if (configDoc.data()!.containsKey('max_orders_per_day')) {
-          _maxOrdersPerDay = configDoc.data()?['max_orders_per_day'] ?? 10;
-        }
-      }
-    } catch (_) {
-      // Clients lack read access to system_configs — defaults are already set.
-    }
-
+    // (باقات السكن) لا إعدادات ساعات بعد الآن — الخيارات والأسعار والمدد كلها من
+    // وثيقة المنطقة packages، وسقف اليوم يأتي مع استجابة الإتاحة الخادمية.
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection('service_zones')
@@ -276,18 +276,29 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   ///
   /// [userInitiated] عند الفتح نحاول بلا إظهار مربّع الإذن إن كان مرفوضاً سلفاً؛
   /// وعند ضغط «حدّد موقعي تلقائياً» نطلبه صراحةً.
-  Future<void> _attemptAutoLocation({bool userInitiated = false}) async {
+  ///
+  /// [silent] (مراقبة التنقّل): محاولة خلفية دورية — لا مؤشر تحميل، والفشل يُتجاهل
+  /// (تبقى المنطقة الحالية)، ولا إشعار إلا إن تغيّرت المنطقة فعلاً.
+  Future<void> _attemptAutoLocation(
+      {bool userInitiated = false, bool silent = false}) async {
     if (!mounted || _zones.isEmpty) return;
-    setState(() {
-      _isLocating = true;
-      _locateFailure = null;
-    });
+    // اختيار يدوي قائم: المراقبة الصامتة لا تكتبه أبداً. الطلب الصريح يلغيه.
+    if (silent && _manualLocationOverride) return;
+    if (userInitiated) _manualLocationOverride = false;
+    if (silent && _isLocating) return; // لا نزاحم محاولة ظاهرة جارية
+    if (!silent) {
+      setState(() {
+        _isLocating = true;
+        _locateFailure = null;
+      });
+    }
 
     final res = await ZyiarahZoneLocator.locate(_zones,
         requestPermission: userInitiated);
     if (!mounted) return;
 
     if (!res.isSuccess) {
+      if (silent) return; // خلفية: أبقِ الحالة الحالية بلا إزعاج
       setState(() {
         _isLocating = false;
         _locateFailure = res.failure;
@@ -296,17 +307,22 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       return;
     }
 
+    final bool zoneChanged = _selectedZoneName != res.zoneName;
+    if (silent && !zoneChanged) return; // لا جديد — لا إعادة رسم ولا شبكة
+
     setState(() {
       _selectedLocation = res.location;
       _selectedZoneName = res.zoneName;
       _isLocating = false;
       _locateFailure = null;
     });
-    _updatePriceForZone(res.zone!);
+    _applyZonePackages(res.zone!);
     await _loadAvailabilityFromServer();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text("تم تحديد موقعك تلقائياً: $_selectedZoneName"),
+      content: Text(silent
+          ? "انتقلتِ إلى منطقة أخرى — حُدِّثت الأسعار: $_selectedZoneName"
+          : "تم تحديد موقعك تلقائياً: $_selectedZoneName"),
       backgroundColor: const Color(0xFF660033),
       duration: const Duration(seconds: 2),
     ));
@@ -324,8 +340,10 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
 
     if (!mounted) return;
     if (result == null || result is! GeoPoint) return;
-    
+
     GeoPoint loc = result;
+    // اختيارٌ يدوي صريح — أوقف الكتابة الصامتة فوقه (يحجز لبيته من مكان عمله).
+    _manualLocationOverride = true;
 
     // مطابقة المنطقة من المصدر المشترك — كانت منسوخة حرفياً في ثلاث شاشات.
     final matchedZone = ZyiarahZoneLocator.matchZone(loc, _zones);
@@ -337,7 +355,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           _selectedZoneName = matchedZone['name'] as String?;
           _locateFailure = null;
         });
-        _updatePriceForZone(matchedZone);
+        _applyZonePackages(matchedZone);
         // حمّل بيانات الإتاحة من الـ CF ثم احسب الخانات من الـ cache
         await _loadAvailabilityFromServer();
       }
@@ -346,75 +364,89 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
         setState(() {
           _selectedLocation = loc;
           _selectedZoneName = null;
-          _hourlyBasePrice = 0.0;
+          _packages = [];
+          _selectedType = null;
+          _selectedCrews = null;
+          _basePrice = 0.0;
         });
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("نأسف، موقعك خارج نطاق الخدمة حالياً"), backgroundColor: Colors.red));
       }
     }
   }
 
-  void _updatePriceForZone(Map<String, dynamic> zone) {
-    if (_allowedHours.isNotEmpty && !_allowedHours.contains(_selectedHours)) {
-       _selectedHours = _allowedHours.first;
+  /// يقرأ باقات المنطقة ويتحقق أن الاختيار الحالي ما زال مفعّلاً فيها —
+  /// عند التنقّل لمحافظةٍ خيارُ كوادرها المطابق معطّل يُصفَّر الاختيار.
+  void _applyZonePackages(Map<String, dynamic> zone) {
+    final pkgs = zoneHomePackages(zone);
+    String? type = _selectedType;
+    int? crews = _selectedCrews;
+    double price = 0.0;
+    int duration = _durationHours;
+
+    final current = pkgs.where((p) => p.type == type).toList();
+    if (current.isEmpty || !current.first.sellable) {
+      type = null;
+      crews = null;
+    } else {
+      final match =
+          current.first.options.where((o) => o.crews == crews).toList();
+      if (match.isEmpty) {
+        crews = null;
+      } else {
+        price = match.first.basePrice;
+        duration = current.first.durationHours;
+      }
     }
-    final prices = stringKeyedMap(zone['prices']) ?? {};
-    double p = 0.0;
-    if (prices.containsKey(_selectedHours.toString())) {
-       p = (prices[_selectedHours.toString()] as num).toDouble();
-    }
+
     setState(() {
-       _hourlyBasePrice = p;
+      _packages = pkgs;
+      _selectedType = type;
+      _selectedCrews = crews;
+      _basePrice = price;
+      _durationHours = duration;
     });
   }
 
-  // الفتحات الزمنية المتاحة (8ص حتى آخر وقت تنتهي فيه الخدمة قبل 10م)
-  /// ساعات فتح المنطقة في اليوم المختار (من الجدول، وإلا 8..22 الافتراضية).
-  List<int> _openHoursForSelected() {
-    final key = intl.DateFormat('yyyy-MM-dd').format(_selectedDate);
+  /// ساعات فتح المنطقة في يومٍ ما (من الجدول، وإلا 8..22 الافتراضية).
+  List<int> _openHoursFor(DateTime d) {
+    final key = intl.DateFormat('yyyy-MM-dd').format(d);
     return _openHours[key] ?? const [8, 22];
   }
 
-  List<int> _getStartHours() {
-    // خانات البدء محصورة بساعات فتح المنطقة لهذا اليوم — لا 8..22 دائماً.
-    final open = _openHoursForSelected();
-    final startHour = open[0];
-    final last = open[1] - _selectedHours;
-    // احرس ضد الطول السالب (مدة أطول من نافذة الفتح) → List.generate ينهار.
-    if (last < startHour) return <int>[];
-    return List.generate(last - startHour + 1, (i) => startHour + i);
-  }
-
-  /// يحسب إتاحة الخانات الزمنية من الـ cache المحلي (لا يصدر أي طلب شبكة).
-  void _buildSlotAvailabilityFromCache() {
-    if (!mounted) return;
-    final dateKey = intl.DateFormat('yyyy-MM-dd').format(_selectedDate);
-    final slots = _getStartHours();
-    final Map<int, bool> result = {};
-    for (final h in slots) {
-      // متاح فقط إن وُجد سائق حرّ طوال مدة الحجز كلها (لا ساعة البدء وحدها) — وإلا
-      // كان العميل يحجز بدايةً متاحة بينما ساعةٌ لاحقة كل السائقين فيها مشغولون،
-      // فينتهي الطلب معلّقاً بلا إسناد. slotCounts يراعي التداخل، وmaxTeams = عدد السائقين.
-      bool available = true;
-      for (int hh = h; hh < h + _selectedHours; hh++) {
-        final slotKey = '${dateKey}_${hh.toString().padLeft(2, '0')}:00';
+  /// أول ساعة في اليوم يتسع فيها **سائقٌ** لمدة الباقة كاملةً — null إن لم توجد.
+  /// لا تُعرض للعميل: تقرر إتاحة اليوم وتُرسي موعد الطلب على فترةٍ حرّة فعلاً.
+  int? _firstFeasibleStart(DateTime d) {
+    final key = intl.DateFormat('yyyy-MM-dd').format(d);
+    final open = _openHoursFor(d);
+    final last = open[1] - _durationHours;
+    for (int h = open[0]; h <= last; h++) {
+      bool free = true;
+      for (int hh = h; hh < h + _durationHours; hh++) {
+        final slotKey = '${key}_${hh.toString().padLeft(2, '0')}:00';
         if ((_slotCounts[slotKey] ?? 0) >= _maxTeamsPerSlot) {
-          available = false;
+          free = false;
           break;
         }
       }
-      result[h] = available;
+      if (free) return h;
     }
-    setState(() {
-      _slotAvailability = result;
-      _selectedStartHour = null;
-      _checkingSlots = false;
-    });
+    return null;
   }
 
-  double get totalAmount => _hourlyBasePrice * _workerCount;
+  /// (قرار المالك) إتاحة اليوم = **سعة يومية تسمح + سائق متاح لمدة الباقة** —
+  /// لا يكفي أحدهما. اليوم المغلق بجدول المنطقة غير متاح بداهةً.
+  bool _dateUnavailable(DateTime d) {
+    final s = intl.DateFormat('yyyy-MM-dd').format(d);
+    if (_closedDates.contains(s)) return true;
+    if ((_dailyOrderCounts[s] ?? 0) >= _maxOrdersPerDay) return true;
+    return _firstFeasibleStart(d) == null; // لا سائق يتسع جدوله = غير متاح
+  }
 
-  // الأساس = سعر الساعات × عدد العاملات؛ الضريبة 15% تُضاف فوقه (قرار المالك).
-  double get grandTotal => totalAmount * 1.15; // ما يدفعه العميل (شامل الضريبة)
+  // (باقات السكن) سعر الخيار المختار يشمل عدد الكوادر سلفاً — لا ضرب بعدد عاملات.
+  double get totalAmount => _basePrice;
+
+  // الأساس من اللوحة؛ الضريبة 15% تُضاف فوقه (قرار المالك) — المعروض «شامل الضريبة».
+  double get grandTotal => ((totalAmount * 1.15) * 100).roundToDouble() / 100;
 
   bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
@@ -424,18 +456,21 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى تحديد موقعك أولاً لمعرفة الأسعار المتاحة")));
       return;
     }
-    if (totalAmount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("هذه الخدمة غير مسعرة في منطقتك حالياً لعدد الساعات المحدد")));
+    if (_selectedType == null || _selectedCrews == null || totalAmount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("اختر نوع السكن وعدد الكوادر أولاً")));
       return;
     }
-    if (_selectedStartHour == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى اختيار وقت بدء الخدمة")));
+    // (قرار المالك) لا وقت بدء يختاره العميل: يُرسى الموعد على **أول ساعة فيها
+    // سائق متاح لمدة الباقة** في اليوم المختار — فالإسناد يجد سائقاً فعلاً،
+    // والإدارة تعدّل الوقت من «تعديل الزيارة» عند الحاجة (يُشعَر الطرفان تلقائياً).
+    final int? feasibleStart = _firstFeasibleStart(_selectedDate);
+    if (feasibleStart == null || _dateUnavailable(_selectedDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("اكتملت مواعيد هذا اليوم — اختر يوماً آخر متاحاً")));
       return;
     }
-
-    // دمج التاريخ مع وقت البدء المختار
     final serviceDateTime = DateTime(
-      _selectedDate.year, _selectedDate.month, _selectedDate.day, _selectedStartHour!,
+      _selectedDate.year, _selectedDate.month, _selectedDate.day, feasibleStart,
     );
 
     if (mounted) {
@@ -446,10 +481,19 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
             serviceName: widget.serviceName,
             amount: grandTotal, // الأساس + 15% — شاشة الدفع تعامله كإجمالي
             location: _selectedLocation!,
-            hours: _selectedHours,
+            // مدة الجدولة (تحجز فترة السائق وتفحصها السعة) — من الباقة لا من العميل.
+            hours: _durationHours,
             serviceDate: serviceDateTime,
-            workerCount: _workerCount,
+            workerCount: _selectedCrews!,
             zoneName: _selectedZoneName,
+            // تفصيل الباقة: يراه الأدمن والسائق، ويتحقق منه التسعير الخادمي.
+            serviceMeta: {
+              'kind': 'home_package',
+              'homeType': _selectedType,
+              'homeLabel': kHomeTypeLabels[_selectedType],
+              'crewCount': _selectedCrews,
+              'durationHours': _durationHours,
+            },
           ),
         ),
       ).then((success) {
@@ -460,6 +504,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
 
   @override
   void dispose() {
+    _zoneWatch?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -515,9 +561,12 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                     const SizedBox(height: 30),
                     
                     if (_selectedLocation != null) ...[
-                      const Text("اختر عدد الساعات:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                      const Text("اختر نوع سكنك:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                      const SizedBox(height: 6),
+                      const Text("الأسعار شاملة الضريبة وتشمل كامل الكوادر المختارة",
+                          style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
                       const SizedBox(height: 15),
-                      _buildHoursSelector(),
+                      _buildPackageSelector(),
                       const SizedBox(height: 30),
 
                       const Text("تاريخ الخدمة:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
@@ -527,15 +576,33 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                       _buildDateLegend(),
                       const SizedBox(height: 30),
 
-                      const Text("وقت البدء:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-                      const SizedBox(height: 15),
-                      _buildTimeSlotSelector(),
+                      // (قرار المالك) لا اختيار وقت — اليوم يكفي، والإدارة تضبط
+                      // الوقت المناسب ضمن ساعات عمل المنطقة ويصل العميل إشعار به.
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFAF1F6),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFF2DEE9)),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.schedule_rounded,
+                                color: Color(0xFF660033), size: 20),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                "يصلك الفريق ضمن ساعات عمل منطقتك في اليوم المختار — وتصلك رسالة بالوقت المحدد.",
+                                style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: Color(0xFF660033),
+                                    height: 1.5),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                       const SizedBox(height: 30),
-
-                      const Text("عدد العاملات (اختياري):", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-                      const SizedBox(height: 15),
-                      _buildWorkerCounter(),
-                      const SizedBox(height: 40),
 
                       _buildSummaryCard(),
                       const SizedBox(height: 30),
@@ -573,38 +640,138 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     );
   }
 
-  Widget _buildHoursSelector() {
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      children: _allowedHours.map((h) {
-        final isSelected = _selectedHours == h;
-        return GestureDetector(
-          onTap: () {
-            setState(() {
-              _selectedHours = h;
-              final matchedZone = _zones.firstWhere((z) => z['name'] == _selectedZoneName, orElse: () => {});
-              if (matchedZone.isNotEmpty) _updatePriceForZone(matchedZone);
-            });
-            if (_selectedLocation != null) _buildSlotAvailabilityFromCache();
-          },
-          child: Container(
-            width: 70,
-            height: 70,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: isSelected ? const Color(0xFF660033) : Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: isSelected ? const Color(0xFF660033) : Colors.grey.shade300, width: 2),
-              boxShadow: isSelected ? [BoxShadow(color: const Color(0xFF660033).withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 5))] : [],
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text("$h", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : const Color(0xFF1E293B))),
-                Text("ساعات", style: TextStyle(fontSize: 12, color: isSelected ? Colors.white70 : Colors.grey.shade600))
-              ],
-            ),
+  /// بطاقات باقات السكن: لكل نوعٍ وصفُه وخيارات الكوادر **المفعّلة في منطقة العميل
+  /// فقط** بسعرها شامل الضريبة — اختيار الكادر يختار الباقة ويعيد حساب الخانات
+  /// بمدة الجدولة الخاصة بالنوع.
+  Widget _buildPackageSelector() {
+    final sellable = _packages.where((p) => p.sellable).toList();
+    if (sellable.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.grey.shade200)),
+        child: const Text("لا توجد باقات مسعّرة في منطقتك حالياً",
+            style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+      );
+    }
+    return Column(
+      children: sellable.map((pkg) {
+        final bool isTypeSelected = _selectedType == pkg.type;
+        return Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+                color: isTypeSelected
+                    ? const Color(0xFF660033)
+                    : Colors.grey.shade200,
+                width: isTypeSelected ? 2 : 1.5),
+            boxShadow: [
+              BoxShadow(
+                  color: isTypeSelected
+                      ? const Color(0xFF660033).withValues(alpha: 0.12)
+                      : Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 10),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                      pkg.type == 'villa'
+                          ? Icons.villa_rounded
+                          : Icons.apartment_rounded,
+                      color: const Color(0xFF660033),
+                      size: 22),
+                  const SizedBox(width: 8),
+                  Text(pkg.label,
+                      style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E293B))),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Padding(
+                padding: const EdgeInsets.only(right: 30),
+                child: Text("(${pkg.desc})",
+                    style: const TextStyle(
+                        fontSize: 12.5, color: Color(0xFF64748B))),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: pkg.options.map((opt) {
+                  final bool isSelected =
+                      isTypeSelected && _selectedCrews == opt.crews;
+                  return GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      setState(() {
+                        _selectedType = pkg.type;
+                        _selectedCrews = opt.crews;
+                        _basePrice = opt.basePrice;
+                        _durationHours = pkg.durationHours;
+                        // مدةٌ أطول قد تُفقِد اليوم المختار سائقَه المتاح —
+                        // انتقل لأول يومٍ يتسع (سعةً وسائقين) بدل تركه محجوباً.
+                        if (_dateUnavailable(_selectedDate)) {
+                          final now = DateTime.now();
+                          for (int i = 0; i < 30; i++) {
+                            final c = now.add(Duration(days: i + 1));
+                            if (!_dateUnavailable(c)) {
+                              _selectedDate = c;
+                              break;
+                            }
+                          }
+                        }
+                      });
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? const Color(0xFF660033)
+                            : const Color(0xFFFAF1F6),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: isSelected
+                                ? const Color(0xFF660033)
+                                : const Color(0xFFF2DEE9),
+                            width: 1.5),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(crewLabel(opt.crews),
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : const Color(0xFF660033))),
+                          const SizedBox(height: 2),
+                          Text("${formatSar(opt.grossPrice)} ر.س",
+                              style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w900,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : const Color(0xFF1E293B))),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
           ),
         );
       }).toList(),
@@ -663,8 +830,11 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           final dateStr = intl.DateFormat('yyyy-MM-dd').format(date);
           final activeOrders = _dailyOrderCounts[dateStr] ?? 0;
           // مغلق بالجدول (رمادي) ≠ محجوز بالكامل (أحمر) — سببان مختلفان.
+          // «محجوز» = سعة اليوم امتلأت **أو** لا سائق يتسع لمدة الباقة (قرار المالك).
           final isClosed = _closedDates.contains(dateStr);
-          final isFullyBooked = !isClosed && activeOrders >= _maxOrdersPerDay;
+          final isFullyBooked = !isClosed &&
+              (activeOrders >= _maxOrdersPerDay ||
+                  _firstFeasibleStart(date) == null);
           final unavailable = isClosed || isFullyBooked;
           final Color availBg = isClosed
               ? const Color(0xFFF1F5F9)
@@ -698,7 +868,6 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                     : () {
                         HapticFeedback.lightImpact();
                         setState(() => _selectedDate = date);
-                        _buildSlotAvailabilityFromCache();
                       },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
@@ -778,134 +947,17 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     );
   }
 
-  Widget _buildTimeSlotSelector() {
-    if (_slotAvailability.isEmpty && !_checkingSlots) {
-      return Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.grey.shade200)),
-        child: const Text("اختر التاريخ أولاً لعرض الأوقات المتاحة", style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (_checkingSlots)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Row(children: [
-              SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF660033))),
-              SizedBox(width: 10),
-              Text("جاري التحقق من التوفر...", style: TextStyle(color: Colors.grey, fontSize: 13)),
-            ]),
-          ),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _getStartHours().map((h) {
-            final isBooked = _slotAvailability[h] == false;
-            final isChecked = _slotAvailability.containsKey(h);
-            final isSelected = _selectedStartHour == h;
-            final label = formatHour12(h); // عرض 12 ساعة — التخزين يبقى 24
-            return GestureDetector(
-              onTap: (!isChecked || isBooked) ? null : () {
-                HapticFeedback.lightImpact();
-                setState(() => _selectedStartHour = h);
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: isBooked
-                      ? Colors.red.shade50
-                      : isSelected
-                          ? const Color(0xFF660033)
-                          : !isChecked
-                              ? Colors.grey.shade100
-                              : Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isBooked
-                        ? Colors.red.shade300
-                        : isSelected
-                            ? const Color(0xFF660033)
-                            : Colors.grey.shade200,
-                    width: 1.5,
-                  ),
-                ),
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: isBooked
-                        ? Colors.red.shade400
-                        : isSelected
-                            ? Colors.white
-                            : !isChecked
-                                ? Colors.grey.shade400
-                                : const Color(0xFF1E293B),
-                    decoration: isBooked ? TextDecoration.lineThrough : null,
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-        if (_slotAvailability.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Row(children: [
-              _legendDot(Colors.red.shade200), const SizedBox(width: 4),
-              Text("محجوز", style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-              const SizedBox(width: 12),
-              _legendDot(const Color(0xFF660033)), const SizedBox(width: 4),
-              Text("مختار", style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-              const SizedBox(width: 12),
-              _legendDot(Colors.white, border: Colors.grey.shade300), const SizedBox(width: 4),
-              Text("متاح", style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-            ]),
-          ),
-      ],
-    );
-  }
-
   Widget _legendDot(Color color, {Color? border}) => Container(
     width: 12, height: 12,
     decoration: BoxDecoration(color: color, shape: BoxShape.circle, border: Border.all(color: border ?? color)),
   );
 
-  Widget _buildWorkerCounter() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10)]),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Text("عدد العاملات المطلوب", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-          Row(
-            children: [
-              _buildAdjustButton(Icons.remove, () {
-                if (_workerCount > 1) setState(() => _workerCount--);
-              }),
-              Container(width: 50, alignment: Alignment.center, child: Text("$_workerCount", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold))),
-              _buildAdjustButton(Icons.add, () {
-                if (_workerCount < _maxAllowedWorkers) setState(() => _workerCount++);
-              }),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAdjustButton(IconData icon, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: const Color(0xFF660033).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)), child: Icon(icon, color: const Color(0xFF660033))),
-    );
-  }
-
   Widget _buildSummaryCard() {
+    final String pkgLabel = _selectedType == null
+        ? '—'
+        : (kHomeTypeLabels[_selectedType] ?? _selectedType!);
+    final String crewsLabel =
+        _selectedCrews == null ? '—' : crewLabel(_selectedCrews!);
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 15)]),
@@ -914,24 +966,24 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("سعر الزيارة:", style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
-              Text("${_hourlyBasePrice.toStringAsFixed(2)} ر.س", style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+              const Text("الباقة:", style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+              Text(pkgLabel, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
             ],
           ),
           const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("عدد العاملات:", style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
-              Text("x$_workerCount", style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+              const Text("الكوادر:", style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+              Text(crewsLabel, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
             ],
           ),
           const Divider(height: 20, thickness: 1),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("الإجمالي المطلوب:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-              Text("${grandTotal.toStringAsFixed(2)} ر.س", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF6366F1))),
+              const Text("الإجمالي شامل الضريبة:", style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+              Text("${grandTotal.toStringAsFixed(2)} ر.س", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF660033))),
             ],
           )
         ],

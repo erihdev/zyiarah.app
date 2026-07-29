@@ -13,6 +13,7 @@ import 'package:zyiarah/utils/service_pricing_defaults.dart';
 import 'package:zyiarah/utils/firestore_maps.dart';
 import 'package:zyiarah/screens/admin/admin_zone_schedule_editor.dart';
 import 'package:zyiarah/utils/jazan_boundary.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 
 class AdminHourlyZonesScreen extends StatefulWidget {
   const AdminHourlyZonesScreen({super.key});
@@ -251,6 +252,56 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     final pCarMediumCtrl = TextEditingController(text: (data?['carMediumPrice'] ?? kDefaultCarMediumPrice).toString());
     final pCarLargeCtrl = TextEditingController(text: (data?['carLargePrice'] ?? kDefaultCarLargePrice).toString());
 
+    // (باقات السكن — النظام الجديد للنظافة بالساعة) لكل نوع: وصف + مدة جدولة +
+    // 4 خيارات كوادر، كلٌّ بسعرٍ ومفتاح تفعيل يتحكم به الأدمن **لكل منطقة**.
+    final pkgSrc = stringKeyedMap(data?['packages']) ?? {};
+    final Map<String, TextEditingController> pkgDescCtrls = {};
+    final Map<String, TextEditingController> pkgDurCtrls = {};
+    final Map<String, Map<int, TextEditingController>> pkgPriceCtrls = {};
+    final Map<String, Map<int, bool>> pkgEnabled = {};
+    for (final type in kHomeTypes) {
+      final p = stringKeyedMap(pkgSrc[type]) ?? {};
+      final crews = stringKeyedMap(p['crews']) ?? {};
+      pkgDescCtrls[type] = TextEditingController(
+          text: (p['desc'] as String?)?.trim().isNotEmpty == true
+              ? (p['desc'] as String)
+              : (kHomeTypeDefaultDesc[type] ?? ''));
+      pkgDurCtrls[type] = TextEditingController(
+          text: ((p['durationHours'] as num?)?.toInt() ??
+                  kHomeTypeDefaultDuration[type] ??
+                  4)
+              .toString());
+      pkgPriceCtrls[type] = {};
+      pkgEnabled[type] = {};
+      for (int n = 1; n <= kMaxCrews; n++) {
+        final c = stringKeyedMap(crews['$n']) ?? {};
+        pkgPriceCtrls[type]![n] =
+            TextEditingController(text: c['price']?.toString() ?? '');
+        pkgEnabled[type]![n] = c['enabled'] == true;
+      }
+    }
+
+    // خريطة packages من قيم النموذج الحالية — تُستعمل في الحفظ والنسخ للمناطق.
+    Map<String, dynamic> buildPackages() => {
+          for (final type in kHomeTypes)
+            type: {
+              'desc': pkgDescCtrls[type]!.text.trim(),
+              // تثبيت 1..12 — صفر/سالب من خطأ إدخال كان يعطّل فحص السعة للمنطقة.
+              'durationHours': (int.tryParse(pkgDurCtrls[type]!.text) ??
+                      kHomeTypeDefaultDuration[type] ??
+                      4)
+                  .clamp(1, 12),
+              'crews': {
+                for (int n = 1; n <= kMaxCrews; n++)
+                  '$n': {
+                    'price':
+                        double.tryParse(pkgPriceCtrls[type]![n]!.text) ?? 0,
+                    'enabled': pkgEnabled[type]![n] == true,
+                  },
+              },
+            },
+        };
+
     // rank عبر num: لو خُزّن double يوماً (لوحة الويب) لا ينفجر الحوار.
     // مصدر القائمة المنسدلة «نسخ الأسعار من»: يُجلب مرة عند فتح الحوار.
     final Future<QuerySnapshot<Map<String, dynamic>>> zonesFuture =
@@ -426,6 +477,43 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                                         n(src['carMediumPrice']);
                                     pCarLargeCtrl.text =
                                         n(src['carLargePrice']);
+                                    // (باقات السكن) تعبئة من المنطقة المصدر.
+                                    final sp =
+                                        stringKeyedMap(src['packages']) ?? {};
+                                    for (final type in kHomeTypes) {
+                                      final p =
+                                          stringKeyedMap(sp[type]) ?? {};
+                                      final crews =
+                                          stringKeyedMap(p['crews']) ?? {};
+                                      // يُكتَب دائماً: مصدرٌ بلا وصف يُرجِع الافتراضي —
+                                      // وإلا بقي وصفُ نسخةٍ سابقة مخلوطاً بأسعار الجديدة.
+                                      pkgDescCtrls[type]!.text =
+                                          (p['desc'] as String?)
+                                                      ?.trim()
+                                                      .isNotEmpty ==
+                                                  true
+                                              ? p['desc'] as String
+                                              : (kHomeTypeDefaultDesc[type] ??
+                                                  '');
+                                      pkgDurCtrls[type]!.text =
+                                          ((p['durationHours'] as num?)
+                                                      ?.toInt() ??
+                                                  kHomeTypeDefaultDuration[
+                                                      type] ??
+                                                  4)
+                                              .toString();
+                                      for (int cn = 1;
+                                          cn <= kMaxCrews;
+                                          cn++) {
+                                        final c = stringKeyedMap(
+                                                crews['$cn']) ??
+                                            {};
+                                        pkgPriceCtrls[type]![cn]!.text =
+                                            c['price']?.toString() ?? '';
+                                        pkgEnabled[type]![cn] =
+                                            c['enabled'] == true;
+                                      }
+                                    }
                                   });
                                 },
                         );
@@ -502,6 +590,93 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                       ],
                     ),
 
+                    const Divider(height: 30),
+                    const Text("باقات السكن — النظافة بالساعة (ر.س، قبل الضريبة):",
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Text(
+                        "السعر لكل خيار يشمل كامل الكوادر. المفتاح يفعّل/يعطّل الخيار لهذه المنطقة — المعطَّل/الصفر لا يظهر للعميل. «المدة» تحجز فترة السائق ولا تظهر للعميل.",
+                        style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    const SizedBox(height: 10),
+                    for (final type in kHomeTypes) ...[
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFAF1F6),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFF2DEE9)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(kHomeTypeLabels[type] ?? type,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: Color(0xFF660033))),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: TextField(
+                                    controller: pkgDescCtrls[type],
+                                    decoration: const InputDecoration(
+                                        labelText: 'الوصف (يظهر للعميل)',
+                                        border: OutlineInputBorder(),
+                                        isDense: true),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller: pkgDurCtrls[type],
+                                    keyboardType: TextInputType.number,
+                                    decoration: const InputDecoration(
+                                        labelText: 'المدة (س)',
+                                        border: OutlineInputBorder(),
+                                        isDense: true),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            for (int n = 1; n <= kMaxCrews; n++)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: Row(
+                                  children: [
+                                    Switch(
+                                      value: pkgEnabled[type]![n] == true,
+                                      activeThumbColor: const Color(0xFF660033),
+                                      onChanged: (v) => setDialogState(
+                                          () => pkgEnabled[type]![n] = v),
+                                    ),
+                                    SizedBox(
+                                      width: 78,
+                                      child: Text(crewLabel(n),
+                                          style: const TextStyle(fontSize: 12)),
+                                    ),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: pkgPriceCtrls[type]![n],
+                                        enabled: pkgEnabled[type]![n] == true,
+                                        keyboardType: const TextInputType
+                                            .numberWithOptions(decimal: true),
+                                        decoration: const InputDecoration(
+                                            labelText: 'السعر (ر.س)',
+                                            border: OutlineInputBorder(),
+                                            isDense: true),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+
                     // جدول فتح المنطقة: أيام وساعات العمل + فتح/إغلاق تواريخ استثنائية.
                     ZoneScheduleEditor(
                       initial: scheduleData,
@@ -536,6 +711,8 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                               'carSmallPrice': double.tryParse(pCarSmallCtrl.text) ?? 0,
                               'carMediumPrice': double.tryParse(pCarMediumCtrl.text) ?? 0,
                               'carLargePrice': double.tryParse(pCarLargeCtrl.text) ?? 0,
+                              // (باقات السكن) تُنسخ مع الأسعار — تفعيلاتها وأسعارها ومددها.
+                              'packages': buildPackages(),
                             });
                             if (ctx.mounted) {
                               Navigator.pop(ctx);
@@ -585,6 +762,8 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                         'carSmallPrice': double.tryParse(pCarSmallCtrl.text) ?? 0,
                         'carMediumPrice': double.tryParse(pCarMediumCtrl.text) ?? 0,
                         'carLargePrice': double.tryParse(pCarLargeCtrl.text) ?? 0,
+                        // (باقات السكن) أسعار (نوع × كوادر) + تفعيلاتها + مدد الجدولة.
+                        'packages': buildPackages(),
                         'rank': rank,
                         'enabled': data?['enabled'] ?? true,
                         // جدول الفتح — يُكتب متى لمس الأدمن المحرّر (scheduleData != null).
@@ -638,6 +817,18 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
       pCarSmallCtrl.dispose();
       pCarMediumCtrl.dispose();
       pCarLargeCtrl.dispose();
+      // (باقات السكن) 3 أوصاف + 3 مدد + 12 سعر كوادر.
+      for (final c in pkgDescCtrls.values) {
+        c.dispose();
+      }
+      for (final c in pkgDurCtrls.values) {
+        c.dispose();
+      }
+      for (final m in pkgPriceCtrls.values) {
+        for (final c in m.values) {
+          c.dispose();
+        }
+      }
     });
   }
 

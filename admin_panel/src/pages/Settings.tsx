@@ -44,6 +44,23 @@ interface CoverageZone {
 const ZONE_HOUR_OPTIONS = [1, 2, 4, 5, 6, 7, 8];
 const hourLabel = (h: number) => (h === 1 ? 'ساعة' : `${h} ساعات`);
 
+// (باقات السكن — النظافة بالساعة الجديدة) نفس مخطط تطبيق الأدمن حرفياً:
+// packages[type] = { desc, durationHours, crews: { '1..4': {price, enabled} } }.
+// السعر أساس قبل الضريبة ويشمل كامل الكوادر؛ المعطَّل/الصفر لا يظهر للعميل.
+const HOME_TYPES = [
+    { key: 'small', label: 'شقة صغيرة', desc: '4 غرف + دورتا مياه', dur: 4 },
+    { key: 'medium', label: 'شقة متوسطة', desc: '6 غرف + 3 دورات مياه', dur: 6 },
+    { key: 'villa', label: 'فيلا أو بيت كامل', desc: 'جميع الغرف ودورات المياه', dur: 8 },
+] as const;
+const CREW_LABELS: Record<string, string> = { '1': 'كادر واحد', '2': 'كادران', '3': '3 كوادر', '4': '4 كوادر' };
+type PkgCrewForm = { price: string; enabled: boolean };
+type PkgForm = { desc: string; dur: string; crews: Record<string, PkgCrewForm> };
+const emptyPackagesForm = (): Record<string, PkgForm> => Object.fromEntries(
+    HOME_TYPES.map(t => [t.key, {
+        desc: t.desc, dur: String(t.dur),
+        crews: Object.fromEntries(['1', '2', '3', '4'].map(n => [n, { price: '', enabled: false }])),
+    }]));
+
 const emptyZoneForm = {
     name: '', latitude: '', longitude: '', radiusKm: '15',
     // الساعات تبدأ فارغة: فارغ/0 = «غير مسعّرة» فتُعطَّل الشريحة بدل بيعها بسعر لم يُعتمد.
@@ -53,6 +70,7 @@ const emptyZoneForm = {
     acMaintWindowPrice: '100', acMaintSplitPrice: '150',
     acWashWindowPrice: '80', acWashSplitPrice: '120',
     carSmallPrice: '100', carMediumPrice: '150', carLargePrice: '200',
+    packages: emptyPackagesForm(),
 };
 
 // مجموعات حقول الأسعار المفردة — نفس تسميات حوار التطبيق.
@@ -323,6 +341,20 @@ export default function Settings() {
                 carSmallPrice: num(newZone.carSmallPrice),
                 carMediumPrice: num(newZone.carMediumPrice),
                 carLargePrice: num(newZone.carLargePrice),
+                // (باقات السكن) نفس مخطط تطبيق الأدمن حرفياً — يقرؤه العميل
+                // ويتحقق منه التسعير الخادمي (functions/pricing.js).
+                packages: Object.fromEntries(HOME_TYPES.map(t => {
+                    const p = newZone.packages[t.key];
+                    return [t.key, {
+                        desc: p.desc.trim() || t.desc,
+                        // تثبيت 1..12 — سالب مكتوب يتجاوز min/max في HTML.
+                        durationHours: Math.min(12, Math.max(1, parseInt(p.dur) || t.dur)),
+                        crews: Object.fromEntries(['1', '2', '3', '4'].map(n => {
+                            const c = p.crews[n];
+                            return [n, { price: num(c.price), enabled: !!c.enabled }];
+                        })),
+                    }];
+                })),
                 updated_at: serverTimestamp(),
             });
             setNewZone(emptyZoneForm);
@@ -346,6 +378,24 @@ export default function Settings() {
             const d = snap.data() as Record<string, unknown>;
             const p = (d.prices ?? {}) as Record<string, unknown>;
             const s = (v: unknown) => (v === undefined || v === null ? '' : String(v));
+            // (باقات السكن) تعبئة من المنطقة المصدر — أسعار وتفعيلات ومدد.
+            const srcPkgs = (d.packages ?? {}) as Record<string, {
+                desc?: string; durationHours?: number;
+                crews?: Record<string, { price?: number; enabled?: boolean }>;
+            }>;
+            const packages: Record<string, PkgForm> = Object.fromEntries(
+                HOME_TYPES.map(t => {
+                    const sp = srcPkgs[t.key] ?? {};
+                    const crews = sp.crews ?? {};
+                    return [t.key, {
+                        desc: (sp.desc ?? '').trim() || t.desc,
+                        dur: String(sp.durationHours ?? t.dur),
+                        crews: Object.fromEntries(['1', '2', '3', '4'].map(n => [n, {
+                            price: s(crews[n]?.price),
+                            enabled: crews[n]?.enabled === true,
+                        }])),
+                    }];
+                }));
             setNewZone(prev => ({
                 ...prev,
                 hourPrices: Object.fromEntries(
@@ -354,6 +404,7 @@ export default function Settings() {
                 acMaintWindowPrice: s(d.acMaintWindowPrice), acMaintSplitPrice: s(d.acMaintSplitPrice),
                 acWashWindowPrice: s(d.acWashWindowPrice), acWashSplitPrice: s(d.acWashSplitPrice),
                 carSmallPrice: s(d.carSmallPrice), carMediumPrice: s(d.carMediumPrice), carLargePrice: s(d.carLargePrice),
+                packages,
             }));
             toast.success('نُسخت الأسعار إلى النموذج — راجعها ثم احفظ');
         } catch (e) {
@@ -1035,6 +1086,54 @@ export default function Settings() {
                                                             />
                                                         </div>
                                                     ))}
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <h5 className="font-black text-slate-800 text-sm mb-1">باقات السكن — النظافة بالساعة (ر.س، قبل الضريبة)</h5>
+                                                <p className="text-xs text-slate-400 mb-2">السعر لكل خيار يشمل كامل الكوادر. المفتاح يفعّل/يعطّل الخيار لهذه المحافظة — المعطَّل أو الصفر لا يظهر للعميل. «المدة» تحجز فترة السائق ولا تظهر للعميل.</p>
+                                                <div className="space-y-3">
+                                                    {HOME_TYPES.map(t => {
+                                                        const pkg = newZone.packages[t.key];
+                                                        return (
+                                                            <div key={t.key} className="bg-white border border-rose-100 rounded-2xl p-4 space-y-3">
+                                                                <p className="font-black text-[#660033] text-sm">{t.label}</p>
+                                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                                                    <div className="sm:col-span-2">
+                                                                        <label className="block text-xs font-bold text-slate-600 mb-1">الوصف (يظهر للعميل)</label>
+                                                                        <input type="text" dir="rtl" value={pkg.desc}
+                                                                            onChange={e => setNewZone(p => ({ ...p, packages: { ...p.packages, [t.key]: { ...p.packages[t.key], desc: e.target.value } } }))}
+                                                                            className={zoneInputCls} />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="block text-xs font-bold text-slate-600 mb-1">المدة (ساعات)</label>
+                                                                        <input type="number" dir="ltr" min="1" max="12" value={pkg.dur}
+                                                                            onChange={e => setNewZone(p => ({ ...p, packages: { ...p.packages, [t.key]: { ...p.packages[t.key], dur: e.target.value } } }))}
+                                                                            className={zoneInputCls} />
+                                                                    </div>
+                                                                </div>
+                                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                                    {['1', '2', '3', '4'].map(n => {
+                                                                        const c = pkg.crews[n];
+                                                                        return (
+                                                                            <div key={n} className="flex items-center gap-2">
+                                                                                <input type="checkbox" checked={c.enabled}
+                                                                                    title={`تفعيل ${CREW_LABELS[n]}`}
+                                                                                    onChange={e => setNewZone(p => ({ ...p, packages: { ...p.packages, [t.key]: { ...p.packages[t.key], crews: { ...p.packages[t.key].crews, [n]: { ...p.packages[t.key].crews[n], enabled: e.target.checked } } } } }))}
+                                                                                    className="w-4 h-4 accent-[#660033] shrink-0" />
+                                                                                <span className="text-xs font-bold text-slate-600 w-20 shrink-0">{CREW_LABELS[n]}</span>
+                                                                                <input type="number" dir="ltr" min="0" step="0.5" value={c.price}
+                                                                                    disabled={!c.enabled}
+                                                                                    placeholder="السعر"
+                                                                                    onChange={e => setNewZone(p => ({ ...p, packages: { ...p.packages, [t.key]: { ...p.packages[t.key], crews: { ...p.packages[t.key].crews, [n]: { ...p.packages[t.key].crews[n], price: e.target.value } } } } }))}
+                                                                                    className={zoneInputCls + (c.enabled ? '' : ' opacity-50')} />
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
 

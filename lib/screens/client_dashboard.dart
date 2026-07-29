@@ -653,10 +653,12 @@ class _ClientDashboardState extends State<ClientDashboard> {
       crossAxisSpacing: 15,
       childAspectRatio: childAspectRatio,
       children: [
+        // (باقات السكن) البطاقة تعكس المنتج الجديد: باقة بنوع السكن وعدد الكوادر —
+        // لا ساعات ولا «من 50 ر.س» التي لم تعد تطابق أي سعر خلف الضغطة.
         _buildWebStyleServiceCard(
-          title: "خدمة بالساعة",
-          subtitle: "عاملة منزلية بالساعة",
-          price: "من 50 ر.س",
+          title: "تنظيف منزلي",
+          subtitle: "باقة حسب نوع سكنك وعدد الكوادر",
+          price: "حسب الباقة",
           numericPrice: 50.0,
           themeColor: const Color(0xFF10B981),
           icon: Icons.access_time_filled,

@@ -95,4 +95,49 @@ t("null zone / null order => null (safe, no false flag)", () => {
   assert.strictEqual(computeExpectedBasePrice({hours_contracted: 4}, null), null);
 });
 
+// ── (باقات السكن) home_package: السعر من packages[type].crews[count] الموثوق ──
+const pkgZone = {packages: {
+  small: {durationHours: 4, crews: {
+    "1": {price: 200, enabled: true},
+    "2": {price: 310, enabled: true},
+    "3": {price: 400, enabled: false}, // معطَّل من اللوحة لهذه المنطقة
+  }},
+  villa: {durationHours: 8, crews: {"2": {price: 380, enabled: true}}},
+}};
+
+t("home_package: enabled option returns its exact price (no worker multiply)", () => {
+  assert.strictEqual(computeExpectedBasePrice({
+    worker_count: 2, // يجب تجاهله — سعر الباقة يشمل الكوادر سلفاً
+    service_meta: {kind: "home_package", homeType: "small", crewCount: 2},
+  }, pkgZone), 310);
+  assert.strictEqual(computeExpectedBasePrice({
+    service_meta: {kind: "home_package", homeType: "villa", crewCount: 2},
+  }, pkgZone), 380);
+});
+
+t("home_package: disabled/missing option => null (client can't buy it)", () => {
+  // معطَّل من اللوحة
+  assert.strictEqual(computeExpectedBasePrice({
+    service_meta: {kind: "home_package", homeType: "small", crewCount: 3},
+  }, pkgZone), null);
+  // عدد كوادر غير مسعَّر أصلاً
+  assert.strictEqual(computeExpectedBasePrice({
+    service_meta: {kind: "home_package", homeType: "villa", crewCount: 1},
+  }, pkgZone), null);
+  // نوع سكن غير موجود في المنطقة
+  assert.strictEqual(computeExpectedBasePrice({
+    service_meta: {kind: "home_package", homeType: "medium", crewCount: 1},
+  }, pkgZone), null);
+  // منطقة بلا packages إطلاقاً
+  assert.strictEqual(computeExpectedBasePrice({
+    service_meta: {kind: "home_package", homeType: "small", crewCount: 1},
+  }, zone), null);
+});
+
+t("home_package: zero/invalid price => null (unpriced = not sellable)", () => {
+  assert.strictEqual(computeExpectedBasePrice({
+    service_meta: {kind: "home_package", homeType: "small", crewCount: 1},
+  }, {packages: {small: {crews: {"1": {price: 0, enabled: true}}}}}), null);
+});
+
 console.log(`\n${passed} pricing tests passed.`);
