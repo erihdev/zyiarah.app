@@ -2240,6 +2240,9 @@ exports.verifyMoyasarPayment = onCall(
                 console.warn(`[price-shadow] UNDERPAID ${orderId}: paid=${paid} expected=${expected} net=${expectedNet} ratio=${ratio.toFixed(3)} kind=${kind}`);
                 await orderRef.update({
                   price_mismatch: true,
+                  // هذا المسار يُنبّه فوراً أدناه — الوسم يمنع opsHealthSweep من
+                  // تكرار التنبيه نفسه؛ مسار المحفظة يَسِم بصمت فيغطيه الفحص الدوري.
+                  ops_alerted_mismatch: true,
                   price_expected: expected,
                   price_expected_net: expectedNet,
                   price_shadow_ratio: Math.round(ratio * 1000) / 1000,
@@ -3746,6 +3749,147 @@ exports.sweepUnassignedPaidOrders = onSchedule(
       }
       if (autoResolved) console.warn(`sweepUnassignedPaidOrders: auto-resolved ${autoResolved} unfulfillable paid order(s)`);
       if (alerted) console.warn(`sweepUnassignedPaidOrders: ${alerted} stranded paid order(s) escalated to admin`);
+    },
+);
+
+// ════════════════════════════════════════════════════════════════════════
+// فحص الصحة التشغيلية (كل 6 ساعات): يرصد الشذوذ الذي لا تغطيه المسارات الفورية —
+// حالات لا يراها أحد إلا مصادفةً في اللوحة. كل فئة تُنبَّه مرة واحدة لكل مستند
+// (علم ops_alerted_*) بدفعة إشعار إداري واحدة تلخّص الفئة، لا إشعاراً لكل مستند.
+// الاستعلامات كلها على فهارس قائمة: (status+service_date) نفسها التي يستخدمها
+// sweepUnassignedPaidOrders، والبقية مساواة/مدى بحقل واحد (فهرسة تلقائية).
+// ════════════════════════════════════════════════════════════════════════
+exports.opsHealthSweep = onSchedule(
+    {schedule: "every 6 hours", timeZone: "Asia/Riyadh"},
+    async () => {
+      const db = admin.firestore();
+      const now = Date.now();
+      const codeOf = (doc, d) => `#${d.code || doc.id}`;
+
+      // إشعار إداري واحد يلخّص الفئة (حتى 5 أكواد + العدد الكلي) ثم وسم كل
+      // مستند كي لا يتكرر التنبيه في الدورات القادمة. الوسم **بعد** نجاح الإشعار
+      // فقط — فشل الإرسال يترك الفئة كاملة لدورة قادمة بدل إخراسها للأبد.
+      const alertBatch = async (docs, flag, title, bodyOf) => {
+        const fresh = docs.filter(({d}) => d[flag] !== true);
+        if (!fresh.length) return 0;
+        const codes = fresh.slice(0, 5).map(({doc, d}) => codeOf(doc, d)).join("، ");
+        const more = fresh.length > 5 ? ` و${fresh.length - 5} غيرها` : "";
+        await queuePush("ADMIN_BROADCAST", title, bodyOf(codes + more, fresh.length),
+            "admin_order_alert", {count: fresh.length},
+            ["super_admin", "orders_manager"]);
+        for (const {doc} of fresh) {
+          await doc.ref.update({[flag]: true}).catch(() => {});
+        }
+        return fresh.length;
+      };
+      const endMsOf = (d) => d.service_date.toDate().getTime() +
+        Number(d.hours_contracted || 4) * 60 * 60 * 1000;
+
+      // 1) مستند موسوم awaiting_payment لكنه مدفوع فعلاً — حالة متناقضة: مال مقبوض
+      //    بلا مسار تشغيل. الحالة تعيش أساساً في store_orders (متجر الشركات المباشر —
+      //    محوّل الترقية التلقائي قد يفشل بلا بديل)، وتُفحص orders أيضاً لأن القواعد
+      //    تسمح بإنشائها عميلياً (مستندات قديمة/عدائية). مساواة واحدة، لا فهرس جديد.
+      //    limit بلا orderBy مقبول: تشبّعه يتطلب مئات المستندات العالقة معاً.
+      for (const coll of ["store_orders", "orders"]) {
+        try {
+          const snap = await db.collection(coll)
+              .where("status", "==", "awaiting_payment").limit(500).get();
+          const paid = snap.docs
+              .filter((doc) => doc.data().is_paid === true)
+              .map((doc) => ({doc, d: doc.data()}));
+          const n = await alertBatch(paid, "ops_alerted_paid_awaiting",
+              "طلب مدفوع عالق في «بانتظار الدفع» ⚠️",
+              (codes, c) => `${c} طلب مدفوع وحالته ما تزال awaiting_payment (${codes}) — ` +
+                "مال مقبوض بلا مسار تشغيل، يلزم تصحيح الحالة يدوياً.");
+          // المهجورة (غير المدفوعة) الأقدم من 24س ضجيج سلات متروكة — سجلّ فقط.
+          const abandoned = snap.docs.filter((doc) => {
+            const d = doc.data();
+            return d.is_paid !== true && d.created_at &&
+              typeof d.created_at.toDate === "function" &&
+              d.created_at.toDate().getTime() < now - 24 * 60 * 60 * 1000;
+          }).length;
+          console.log(`opsHealthSweep[${coll}]: paid-awaiting alerted=${n}, abandoned>24h=${abandoned}`);
+        } catch (e) {
+          console.error(`opsHealthSweep: awaiting_payment check failed (${coll}):`, e.message);
+        }
+      }
+
+      // 2) غياب سائق (no-show): طلب مجدول/مسند انتهت نافذته كاملة + 3 ساعات وما
+      //    بدأ ولا اكتمل — العميلة انتظرت ولم يصل أحد ولا أحد يعلم.
+      // 3) عالق قيد التنفيذ: بدأ ولم يُكمَل حتى بعد نهاية النافذة + 12 ساعة —
+      //    السائق نسي الإكمال فتتعطل إحصاءات اليوم وسعة الغد.
+      try {
+        const floor = admin.firestore.Timestamp.fromDate(
+            new Date(now - 72 * 60 * 60 * 1000));
+        const ceil = admin.firestore.Timestamp.fromDate(new Date(now));
+        const perStatus = await Promise.all(
+            ["scheduled", "assigned", "accepted", "on_the_way", "in_progress"]
+                .map((s) => db.collection("orders")
+                    .where("status", "==", s)
+                    .where("service_date", ">=", floor)
+                    .where("service_date", "<", ceil).get()));
+        const all = perStatus.flatMap((snap) => snap.docs)
+            .map((doc) => ({doc, d: doc.data()}))
+            .filter(({d}) => d.service_date &&
+              typeof d.service_date.toDate === "function");
+        const noShow = all.filter(({d}) => d.status !== "in_progress" &&
+          endMsOf(d) + 3 * 60 * 60 * 1000 < now);
+        const stuck = all.filter(({d}) => d.status === "in_progress" &&
+          endMsOf(d) + 12 * 60 * 60 * 1000 < now);
+        const n1 = await alertBatch(noShow, "ops_alerted_noshow",
+            "زيارة فات موعدها ولم تبدأ ⚠️",
+            (codes, c) => `${c} زيارة انتهت نافذتها منذ 3+ ساعات دون بدء (${codes}) — ` +
+              "تحقق من السائق وتواصل مع العميلة.");
+        const n2 = await alertBatch(stuck, "ops_alerted_stuck",
+            "زيارة عالقة «قيد التنفيذ» ⚠️",
+            (codes, c) => `${c} زيارة تجاوزت نهايتها بـ12+ ساعة وما زالت قيد التنفيذ (${codes}) — ` +
+              "غالباً نسي السائق الإكمال؛ أكملها يدوياً لتصحيح الإحصاءات والسعة.");
+        console.log(`opsHealthSweep: no-show alerted=${n1}, stuck alerted=${n2}`);
+      } catch (e) {
+        console.error("opsHealthSweep: schedule checks failed:", e.message);
+      }
+
+      // 4) محافظ سالبة: كل الكتابة خادمية، فالسالب إما خلل منطق أو استرداد تجاوز
+      //    الرصيد — يهم المحاسبة فوراً.
+      try {
+        const snap = await db.collection("wallets")
+            .where("balance", "<", 0).limit(200).get();
+        const negs = snap.docs.map((doc) => ({doc, d: doc.data()}));
+        const fresh = negs.filter(({d}) => d.ops_negative_alerted !== true);
+        if (fresh.length) {
+          const sample = fresh.slice(0, 5)
+              .map(({doc, d}) => `${doc.id.slice(0, 6)}…: ${Number(d.balance).toFixed(2)}`)
+              .join("، ");
+          // الوسم بعد نجاح الإشعار فقط — فشله يعيد المحاولة الدورة القادمة.
+          await queuePush("ADMIN_BROADCAST", "محافظ برصيد سالب ⚠️",
+              `${fresh.length} محفظة رصيدها سالب (${sample}` +
+              `${fresh.length > 5 ? ` و${fresh.length - 5} غيرها` : ""}) — ` +
+              "كل الكتابة خادمية؛ راجع سجل المعاملات فقد يكون خللاً أو استرداداً زائداً.",
+              "admin_order_alert", {count: fresh.length},
+              ["super_admin", "accountant_admin"]);
+          for (const {doc} of fresh) {
+            await doc.ref.update({ops_negative_alerted: true}).catch(() => {});
+          }
+        }
+        console.log(`opsHealthSweep: negative wallets total=${negs.length}, newly alerted=${fresh.length}`);
+      } catch (e) {
+        console.error("opsHealthSweep: wallet check failed:", e.message);
+      }
+
+      // 5) طلبات موسومة price_mismatch (دفعُ محفظةٍ دون نصف السعر المتوقع مرّ
+      //    موسوماً لا مرفوضاً) لم تُراجَع — بلا هذا التنبيه يبقى الوسم بيانات ميتة.
+      try {
+        const snap = await db.collection("orders")
+            .where("price_mismatch", "==", true).limit(200).get();
+        const flagged = snap.docs.map((doc) => ({doc, d: doc.data()}));
+        const n = await alertBatch(flagged, "ops_alerted_mismatch",
+            "طلبات بمبلغ لا يطابق التسعيرة ⚠️",
+            (codes, c) => `${c} طلب دُفع بمبلغ أدنى من المتوقع ووُسم price_mismatch (${codes}) — ` +
+              "راجع المبالغ واسترد الفارق أو اعتمده.");
+        console.log(`opsHealthSweep: price_mismatch alerted=${n}`);
+      } catch (e) {
+        console.error("opsHealthSweep: price_mismatch check failed:", e.message);
+      }
     },
 );
 
