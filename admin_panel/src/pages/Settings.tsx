@@ -37,12 +37,11 @@ interface CoverageZone {
     rank: number;
 }
 
-// (تكافؤ مع تطبيق الأدمن — admin_hourly_zones_screen.dart) نفس خيارات الساعات ونفس
-// حقول التسعير حرفياً: prices / sofaSqmPrice / rugSqmPrice / ac*Price / car*Price —
-// وهي الحقول الموثوقة التي يقرؤها التسعير الخادمي (functions/pricing.js). كان النموذج
-// هنا يبذر أسعار ساعات ثابتة لم يُدخلها أحد (35/120/…) وبلا حقول سيارات إطلاقاً.
-const ZONE_HOUR_OPTIONS = [1, 2, 4, 5, 6, 7, 8];
-const hourLabel = (h: number) => (h === 1 ? 'ساعة' : `${h} ساعات`);
+// (تكافؤ مع تطبيق الأدمن — admin_hourly_zones_screen.dart) نفس حقول التسعير حرفياً:
+// sofaSqmPrice / rugSqmPrice / ac*Price / car*Price — وهي الحقول الموثوقة التي يقرؤها
+// التسعير الخادمي (functions/pricing.js). أسعار الساعات (prices) حُذفت من النموذج
+// بطلب المالك — النظافة المنزلية صارت «باقات السكن»؛ الحفظ لا يكتب prices إطلاقاً
+// فلا يمسّ ما لدى المحافظات القائمة (تقرؤه النسخ القديمة وزيارات العقود فقط).
 
 // (باقات السكن — النظافة بالساعة الجديدة) نفس مخطط تطبيق الأدمن حرفياً:
 // packages[type] = { desc, durationHours, crews: { '1..4': {price, enabled} } }.
@@ -63,9 +62,7 @@ const emptyPackagesForm = (): Record<string, PkgForm> => Object.fromEntries(
 
 const emptyZoneForm = {
     name: '', latitude: '', longitude: '', radiusKm: '15',
-    // الساعات تبدأ فارغة: فارغ/0 = «غير مسعّرة» فتُعطَّل الشريحة بدل بيعها بسعر لم يُعتمد.
-    hourPrices: Object.fromEntries(ZONE_HOUR_OPTIONS.map(h => [String(h), ''])) as Record<string, string>,
-    // البقية تُبذر بنفس افتراضيات التطبيق (service_pricing_defaults.dart).
+    // تُبذر بنفس افتراضيات التطبيق (service_pricing_defaults.dart).
     sofaSqmPrice: '35', rugSqmPrice: '15',
     acMaintWindowPrice: '100', acMaintSplitPrice: '150',
     acWashWindowPrice: '80', acWashSplitPrice: '120',
@@ -339,8 +336,6 @@ export default function Settings() {
                 name: newZone.name.trim(),
                 centerLoc: new GeoPoint(lat, lng),
                 radiusKm: radius,
-                prices: Object.fromEntries(
-                    ZONE_HOUR_OPTIONS.map(h => [String(h), num(newZone.hourPrices[String(h)])])),
                 sofaSqmPrice: num(newZone.sofaSqmPrice),
                 rugSqmPrice: num(newZone.rugSqmPrice),
                 acMaintWindowPrice: num(newZone.acMaintWindowPrice),
@@ -393,7 +388,6 @@ export default function Settings() {
             const snap = await getDoc(doc(db, 'service_zones', zone.id));
             if (!snap.exists()) { toast.error('المحافظة لم تعد موجودة'); return; }
             const d = snap.data() as Record<string, unknown>;
-            const p = (d.prices ?? {}) as Record<string, unknown>;
             const s = (v: unknown) => (v === undefined || v === null ? '' : String(v));
             const srcPkgs = (d.packages ?? {}) as Record<string, {
                 desc?: string; durationHours?: number;
@@ -417,8 +411,6 @@ export default function Settings() {
                 latitude: zone.latitude ? zone.latitude.toFixed(5) : '',
                 longitude: zone.longitude ? zone.longitude.toFixed(5) : '',
                 radiusKm: s(d.radiusKm) || '15',
-                hourPrices: Object.fromEntries(
-                    ZONE_HOUR_OPTIONS.map(h => [String(h), s(p[String(h)])])) as Record<string, string>,
                 sofaSqmPrice: s(d.sofaSqmPrice), rugSqmPrice: s(d.rugSqmPrice),
                 acMaintWindowPrice: s(d.acMaintWindowPrice), acMaintSplitPrice: s(d.acMaintSplitPrice),
                 acWashWindowPrice: s(d.acWashWindowPrice), acWashSplitPrice: s(d.acWashSplitPrice),
@@ -460,7 +452,6 @@ export default function Settings() {
             const snap = await getDoc(doc(db, 'service_zones', zoneId));
             if (!snap.exists()) return;
             const d = snap.data() as Record<string, unknown>;
-            const p = (d.prices ?? {}) as Record<string, unknown>;
             const s = (v: unknown) => (v === undefined || v === null ? '' : String(v));
             // (باقات السكن) تعبئة من المنطقة المصدر — أسعار وتفعيلات ومدد.
             const srcPkgs = (d.packages ?? {}) as Record<string, {
@@ -482,8 +473,6 @@ export default function Settings() {
                 }));
             setNewZone(prev => ({
                 ...prev,
-                hourPrices: Object.fromEntries(
-                    ZONE_HOUR_OPTIONS.map(h => [String(h), s(p[String(h)])])) as Record<string, string>,
                 sofaSqmPrice: s(d.sofaSqmPrice), rugSqmPrice: s(d.rugSqmPrice),
                 acMaintWindowPrice: s(d.acMaintWindowPrice), acMaintSplitPrice: s(d.acMaintSplitPrice),
                 acWashWindowPrice: s(d.acWashWindowPrice), acWashSplitPrice: s(d.acWashSplitPrice),
@@ -1142,24 +1131,6 @@ export default function Settings() {
                                                     </select>
                                                 </div>
                                             )}
-
-                                            <div>
-                                                <h5 className="font-black text-slate-800 text-sm mb-1">أسعار النظافة بالساعة (ر.س)</h5>
-                                                <p className="text-xs text-slate-400 mb-2">اترك الحقل فارغاً (أو 0) لتعطيل الشريحة — لا تُباع ساعة غير مسعّرة.</p>
-                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                                    {ZONE_HOUR_OPTIONS.map(h => (
-                                                        <div key={h}>
-                                                            <label className="block text-xs font-bold text-slate-600 mb-1">{hourLabel(h)}</label>
-                                                            <input
-                                                                type="number" dir="ltr" min="0" step="0.5"
-                                                                value={newZone.hourPrices[String(h)]}
-                                                                onChange={e => setNewZone(p => ({ ...p, hourPrices: { ...p.hourPrices, [String(h)]: e.target.value } }))}
-                                                                className={zoneInputCls}
-                                                            />
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
 
                                             <div>
                                                 <h5 className="font-black text-slate-800 text-sm mb-2">أسعار الكنب (بالمتر الطولي) والسجاد (بالمتر المربع)</h5>
