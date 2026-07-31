@@ -154,6 +154,9 @@ export default function Settings() {
     // كانت اللوحة تضيف فقط، وأي تصحيح سعر/موقع يستلزم فتح تطبيق الأدمن.
     const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
     const [editingZoneName, setEditingZoneName] = useState('');
+    // هدف الحذف الجاري تأكيده — يفتح نافذة تأكيد داخلية بدل window.confirm.
+    const [deleteTarget, setDeleteTarget] = useState<CoverageZone | null>(null);
+    const [isDeletingZone, setIsDeletingZone] = useState(false);
     // الطاقة الاستيعابية اليومية (سقف الطلبات المجدولة) — يقرؤها العميل والخادم
     // من system_configs/hourly_settings؛ كانت تُضبط من التطبيق فقط.
     const [maxOrdersPerDay, setMaxOrdersPerDay] = useState('');
@@ -212,8 +215,14 @@ export default function Settings() {
                     rank: data.rank || 0,
                 } as CoverageZone;
             }));
-        }, (err) => console.error('service_zones snapshot error:', err));
+        }, (err) => {
+            // فشل المستمع = قائمة متجمدة: يحذف الأدمن بنجاح والبطاقة لا تختفي فيظن
+            // الزر معطّلاً. نُظهر الخطأ صراحةً بدل الصمت.
+            console.error('service_zones snapshot error:', err);
+            toast.error('انقطع تحديث قائمة المحافظات — أعد تحميل الصفحة');
+        });
         return () => unsub();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // يرسم/يحرّك الدبوس والدائرة من قيم النموذج الحالية (يدوية كانت أم من نقرة الخريطة).
@@ -494,12 +503,22 @@ export default function Settings() {
         }
     };
 
-    const handleDeleteZone = async (zone: CoverageZone) => {
-        if (!await confirm(`حذف محافظة "${zone.name}" نهائياً؟`)) return;
+    // التأكيد بنافذة داخلية (deleteTarget) لا window.confirm: المتصفح قد يكبتها
+    // بصمت («منع هذه الصفحة من إظهار مربعات حوار») فيبدو زر الحذف معطّلاً بلا أي
+    // خطأ — وهو ما اشتكى منه المالك. النجاح يظهر بتوست صريح لا بمجرد اختفاء البطاقة.
+    const handleConfirmDeleteZone = async () => {
+        const zone = deleteTarget;
+        if (!zone) return;
+        setIsDeletingZone(true);
         try {
             await deleteDoc(doc(db, 'service_zones', zone.id));
+            toast.success(`تم حذف «${zone.name}» نهائياً`);
+            setDeleteTarget(null);
         } catch (e) {
-            toast.error('حدث خطأ أثناء الحذف');
+            console.error(e);
+            toast.error(`تعذّر حذف «${zone.name}»: ${e instanceof Error ? e.message : e}`);
+        } finally {
+            setIsDeletingZone(false);
         }
     };
 
@@ -974,6 +993,42 @@ export default function Settings() {
 
                         {activeTab === 'coverage' && (
                             <div className="flex flex-col h-full">
+                                {/* نافذة تأكيد الحذف الداخلية — بديل window.confirm القابل للكبت */}
+                                {deleteTarget && (
+                                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                                        <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl" dir="rtl">
+                                            <div className="flex items-center gap-3 mb-3">
+                                                <div className="p-2.5 bg-red-50 text-red-600 rounded-xl">
+                                                    <Trash2 size={20} />
+                                                </div>
+                                                <h4 className="font-black text-slate-800 text-lg">تأكيد الحذف</h4>
+                                            </div>
+                                            <p className="text-sm text-slate-600 mb-5">
+                                                حذف محافظة <span className="font-black text-slate-800">«{deleteTarget.name}»</span> نهائياً؟
+                                                ستختفي أسعارها وباقاتها وجدولها ولن تظهر للعملاء.
+                                            </p>
+                                            <div className="flex gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={handleConfirmDeleteZone}
+                                                    disabled={isDeletingZone}
+                                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white font-bold rounded-xl transition-all"
+                                                >
+                                                    {isDeletingZone ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                                                    حذف نهائياً
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setDeleteTarget(null)}
+                                                    disabled={isDeletingZone}
+                                                    className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all"
+                                                >
+                                                    إلغاء
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="px-10 py-8 border-b border-rose-50 bg-white/80 backdrop-blur-xl sticky top-0 z-20">
                                     <div className="flex items-center justify-between gap-4 flex-wrap">
                                         <div className="flex items-center gap-4">
@@ -1291,7 +1346,7 @@ export default function Settings() {
                                                             </button>
                                                             <button
                                                                 type="button"
-                                                                onClick={() => handleDeleteZone(zone)}
+                                                                onClick={() => setDeleteTarget(zone)}
                                                                 className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
                                                                 title="حذف"
                                                             >
