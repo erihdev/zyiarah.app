@@ -14,6 +14,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   
   bool _isLoading = true;
   bool _isSaving = false;
+  // فشل تحميل الإعدادات = حقول فارغة، والحفظ حينها يكتب فوق إعدادات الإنتاج الحيّة
+  // (اسم المنشأة/الرقم الضريبي/بنود العقد/سياسة الخصوصية) بنصوص فارغة — نعطّل زر
+  // الحفظ حتى تنجح إعادة التحميل.
+  bool _loadFailed = false;
   late AnimationController _fadeController;
 
   final TextEditingController _maxOrdersPerDayCtrl = TextEditingController();
@@ -42,6 +46,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
 
   Future<void> _fetchPricing() async {
     try {
+      if (_loadFailed && mounted) setState(() => _loadFailed = false);
       final doc = await _db.collection('system_configs').doc('main_settings').get();
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
@@ -98,9 +103,24 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         }
       }
     } catch (e) {
+      // كان الفشل صامتاً: نموذج فارغ + زر حفظ مفعّل = ضغطة واحدة تمسح الإعدادات
+      // الحيّة بنصوص فارغة مع رسالة نجاح خضراء. نعلن الفشل ونقفل الحفظ مع زر إعادة.
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _loadFailed = true;
+        });
         _fadeController.forward();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('فشل تحميل الإعدادات: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'إعادة المحاولة',
+            textColor: Colors.white,
+            onPressed: _fetchPricing,
+          ),
+        ));
       }
     }
   }
@@ -420,6 +440,36 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
 
                       const SizedBox(height: 36),
 
+                      // شريط دائم عند فشل التحميل — الـSnackBar يختفي ويبقى زر الحفظ
+                      // معطّلاً بلا تفسير، فنعرض السبب وزر إعادة المحاولة هنا.
+                      if (_loadFailed) ...[
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.red.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.error_outline_rounded, color: Colors.red.shade700, size: 22),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  "تعذّر تحميل الإعدادات الحالية — الحفظ معطّل حتى لا تُستبدل البيانات الحيّة بحقول فارغة.",
+                                  style: TextStyle(fontSize: 12, color: Colors.red.shade700, height: 1.5),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _fetchPricing,
+                                child: const Text("إعادة المحاولة", style: TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
                       // Save Button
                       Container(
                         height: 60,
@@ -434,7 +484,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                           ],
                         ),
                         child: ElevatedButton(
-                          onPressed: _isSaving ? null : _savePricing,
+                          // _loadFailed: لا حفظ فوق نموذج فارغ بعد فشل التحميل (مسح بيانات).
+                          onPressed: (_isSaving || _loadFailed) ? null : _savePricing,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF660033),
                             foregroundColor: Colors.white,

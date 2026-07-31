@@ -359,6 +359,9 @@ class ZyiarahMessagingService {
       });
     } catch (e) {
       debugPrint("Error scheduling broadcast: $e");
+      // لا نبتلع الخطأ: الابتلاع كان يجعل شاشة البث تعرض «تم جدولة البث بنجاح»
+      // رغم أن الكتابة فشلت (permission-denied/App Check/quota) ولم يُجدول شيء.
+      rethrow;
     }
   }
 

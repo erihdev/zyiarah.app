@@ -73,7 +73,6 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
         final loc = d.data()['location'];
         if (loc is GeoPoint) {
           if (mounted) setState(() => _deliveryLocation = loc);
-          _persistDeliveryLocation(loc);
           return;
         }
       }
@@ -94,19 +93,13 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
       loc = result['location'] as GeoPoint;
     }
     if (loc != null && mounted) {
+      // لا «حفظ مسبق» للعنوان على المستند هنا: قاعدة store_orders تشترط على أي
+      // تحديث من العميل أن يكون status='under_review'، والطلب قبل الدفع
+      // awaiting_payment — فكل كتابة مسبقة كانت تُرفض permission-denied ويبتلعها
+      // catchError فتبدو ناجحة وهي ميتة. العنوان يُكتب في _finalizeStorePayment
+      // (الكتابة الوحيدة التي تجيزها القاعدة) مع إعادة محاولة كي لا يضيع.
       setState(() => _deliveryLocation = loc);
-      _persistDeliveryLocation(loc);
     }
-  }
-
-  /// اكتب عنوان التوصيل على الطلب فور اختياره — كي لا يُفقَد إن تعثّر التحديث النهائي بعد
-  /// الدفع (كان يُكتب فقط داخل _finalizeStorePayment، فيضيع مع أي فشل، فيبقى الطلب المدفوع
-  /// بلا عنوان توصيل ويختفي زر الخريطة في لوحة الإدارة).
-  void _persistDeliveryLocation(GeoPoint loc) {
-    FirebaseFirestore.instance
-        .collection('store_orders')
-        .doc(widget.storeOrderId)
-        .update({'delivery_location': loc}).catchError((_) {});
   }
 
   Future<void> _loadConfig() async {
@@ -241,19 +234,35 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
   Future<void> _finalizeStorePayment(String method, {required bool isPaid, String? paymentId}) async {
     try {
     // 1) تحديث طلب المتجر القائم (is_paid=false — القاعدة تمنع العميل من كتابة true)
-    await FirebaseFirestore.instance
-        .collection('store_orders')
-        .doc(widget.storeOrderId)
-        .update({
-      'payment_method': method,
-      'is_paid': isPaid,
-      'payment_status': isPaid ? 'paid' : 'awaiting_confirmation',
-      'status': 'under_review',
-      // عنوان التوصيل على طلب المتجر نفسه — كان يعيش على طلب توصيل مرتبط
-      // في orders أُلغي (طلب المتجر هو السجل الوحيد الآن).
-      'delivery_location': _deliveryLocation,
-      'paid_at': FieldValue.serverTimestamp(),
-    });
+    // **بإعادة محاولة**: القاعدة تشترط status='under_review' على أي تحديث عميل،
+    // فأي «حفظ مسبق» للعنوان قبل الدفع مرفوض حتماً — هذه الكتابة بعد الدفع هي
+    // الفرصة الوحيدة لحفظ عنوان التوصيل، وفشلها العابر (شبكة) كان يترك طلباً
+    // مدفوعاً بلا عنوان نهائياً (يختفي زر الخريطة في لوحة الإدارة).
+    Object? finalizeErr;
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('store_orders')
+            .doc(widget.storeOrderId)
+            .update({
+          'payment_method': method,
+          'is_paid': isPaid,
+          'payment_status': isPaid ? 'paid' : 'awaiting_confirmation',
+          'status': 'under_review',
+          // عنوان التوصيل على طلب المتجر نفسه — كان يعيش على طلب توصيل مرتبط
+          // في orders أُلغي (طلب المتجر هو السجل الوحيد الآن).
+          'delivery_location': _deliveryLocation,
+          'paid_at': FieldValue.serverTimestamp(),
+        });
+        finalizeErr = null;
+        break;
+      } catch (e) {
+        finalizeErr = e;
+        debugPrint('[store finalize update attempt $attempt] $e');
+        await Future.delayed(Duration(seconds: attempt));
+      }
+    }
+    if (finalizeErr != null) throw finalizeErr;
 
     // 1b) تأكيد خادمي فوري للبطاقة: verifyMoyasarPayment يقلب is_paid=true (متجاوزاً
     // القواعد) بعد فحص المبلغ ويُشعر العميل — فلا يبقى الطلب معلّقاً بانتظار webhook.

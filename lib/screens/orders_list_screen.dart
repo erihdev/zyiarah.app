@@ -460,9 +460,15 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
         ),
       );
     } catch (e) {
+      // permission-denied يعني أن القواعد منعت الإلغاء (مثلاً أُسند الطلب لسائق
+      // بعد فتح الشاشة) — رسالة ودّية بدل نص الاستثناء الخام للعميل.
+      final raw = e.toString().replaceAll("Exception: ", "");
+      final msg = raw.contains('permission-denied')
+          ? 'لا يمكن إلغاء الطلب في حالته الحالية — تواصل مع الدعم'
+          : 'خطأ: $raw';
       messenger.showSnackBar(
         SnackBar(
-          content: Text('خطأ: ${e.toString().replaceAll("Exception: ", "")}', style: GoogleFonts.tajawal()),
+          content: Text(msg, style: GoogleFonts.tajawal()),
           backgroundColor: Colors.red,
         ),
       );
@@ -543,11 +549,12 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                   label: Text('أعد الطلب', style: GoogleFonts.tajawal(fontSize: 12)),
                   style: TextButton.styleFrom(foregroundColor: const Color(0xFF660033)),
                 )
-              else if (['pending', 'waiting_payment_cod',
-                'scheduled', 'accepted'].contains(status))
-                // كان الإلغاء متاحاً لـ pending فقط، فالطلبات المدفوعة غير الساعية
-                // (كنب/صيانة/اشتراك = pending_admin_approval) لا يستطيع العميل إلغاءها
-                // ولا يُطلق استرداد المحفظة الجاهز خادميّاً. نُتيحه قبل انطلاق السائق.
+              else if (['pending', 'awaiting_payment'].contains(status))
+                // قواعد Firestore تسمح للعميل بالإلغاء فقط قبل الإسناد
+                // (pending/awaiting_payment). كان الزر يظهر أيضاً لـ scheduled/accepted
+                // و waiting_payment_cod (حالة COD الملغاة من الجذر) فيفشل **دوماً**
+                // بـ permission-denied — إلغاء ما بعد الإسناد يحتاج مساراً خادميّاً
+                // (Cloud Function أو توسيع القواعد)، فلا نعرض زرّاً معطوباً حتى حينه.
                 OutlinedButton.icon(
                   onPressed: () => _confirmCancelOrder(context, docId, order['code']),
                   icon: const Icon(Icons.cancel_outlined, size: 16),

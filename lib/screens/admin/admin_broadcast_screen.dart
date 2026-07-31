@@ -555,7 +555,7 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isSending = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل البث: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل البث: $e"), backgroundColor: Colors.red));
       }
     }
   }
@@ -634,6 +634,32 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
           .where('status', isEqualTo: 'scheduled')
           .snapshots(),
       builder: (context, snapshot) {
+        // قراءة notifications_log مقصورة بالقواعد على admin/super_admin/accountant_admin،
+        // بينما الشاشة متاحة أيضاً لـ orders_manager/marketing_admin: كان permission-denied
+        // يُبتلع (!hasData → shrink) فتختفي القائمة وزر الإلغاء بصمت رغم قدرة الدور
+        // على الجدولة نفسها — نُظهر السبب بدل الفراغ المضلِّل.
+        if (snapshot.hasError) {
+          final bool denied = snapshot.error is FirebaseException &&
+              (snapshot.error as FirebaseException).code == 'permission-denied';
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
+            ),
+            child: Center(
+              child: Text(
+                denied
+                    ? "لا تملك صلاحية عرض الإشعارات المجدولة أو إلغائها — هذه القائمة متاحة للمشرف العام والمحاسب فقط."
+                    : "تعذّر تحميل قائمة الإشعارات المجدولة: ${snapshot.error}",
+                style: GoogleFonts.tajawal(color: Colors.red[800], fontSize: 12, height: 1.6),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
         if (!snapshot.hasData) return const SizedBox.shrink();
         final docs = (snapshot.data!.docs.toList())
           ..sort((a, b) {

@@ -81,14 +81,31 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                   isScrollControlled: true,
                   backgroundColor: Colors.transparent,
                   builder: (ctx) => ZyiarahRatingDialog(
-                    onSubmitted: (rating, comment, {reason, evidence}) {
-                      _orderService.submitOrderRating(
-                        widget.orderId, 
-                        rating, 
-                        comment,
-                        reason: reason,
-                        evidence: evidence,
-                      );
+                    onSubmitted: (rating, comment, {reason, evidence}) async {
+                      // الحوار يُغلق فوراً بعد الإرسال، فكان فشل الكتابة (انقطاع
+                      // شبكة — الـ Transaction لا تعمل offline) يضيع صامتاً والعميل
+                      // يظن تقييمه وصل. ننتظر النتيجة ونُظهر الخطأ ونعيد فتح
+                      // فرصة التقييم بدل قفلها لبقية الجلسة.
+                      // الرسول يُلتقط قبل الفجوة غير المتزامنة (قاعدة اللنت).
+                      final messenger = ScaffoldMessenger.of(context);
+                      try {
+                        await _orderService.submitOrderRating(
+                          widget.orderId,
+                          rating,
+                          comment,
+                          reason: reason,
+                          evidence: evidence,
+                        );
+                      } catch (e) {
+                        if (!mounted) return;
+                        _ratingPromptShown = false;
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text('تعذّر إرسال التقييم: ${e.toString().replaceAll("Exception: ", "")}'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
                     },
                   ),
                 );

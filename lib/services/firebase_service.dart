@@ -331,31 +331,49 @@ class ZyiarahFirebaseService {
       if (userCredential.user != null) {
         final uid = userCredential.user!.uid;
 
-        // 1. إضافة للمجموعة العامة
-        await _db.collection('users').doc(uid).set({
-          'name': name,
-          'role': role,
-          'phone': phone,
-          'email': email,
-          'created_at': FieldValue.serverTimestamp(),
-          'is_verified': true,
-          'entity': 'مؤسسة معاذ يحي محمد المالكي',
-          ...extraData ?? {},
-        }, SetOptions(merge: true));
+        try {
+          // 1. إضافة للمجموعة العامة
+          await _db.collection('users').doc(uid).set({
+            'name': name,
+            'role': role,
+            'phone': phone,
+            'email': email,
+            'created_at': FieldValue.serverTimestamp(),
+            'is_verified': true,
+            'entity': 'مؤسسة معاذ يحي محمد المالكي',
+            ...extraData ?? {},
+          }, SetOptions(merge: true));
 
-        // 2. إضافة لمجموعة التخصص (سائقين أو مديرين)
-        final String collection = role == 'admin' ? 'admins' : 'drivers';
-        await _db.collection(collection).doc(uid).set({
-          'name': name,
-          'phone': phone,
-          'email': email,
-          'role': role,
-          // type: يقرؤه عدّاد السائقين وكشف الرواتب — بدونه يُصنَّف الجميع افتراضياً.
-          'type': role,
-          'is_active': isActive,
-          'created_at': FieldValue.serverTimestamp(),
-          ...extraData ?? {},
-        });
+          // 2. إضافة لمجموعة التخصص (سائقين أو مديرين)
+          final String collection = role == 'admin' ? 'admins' : 'drivers';
+          await _db.collection(collection).doc(uid).set({
+            'name': name,
+            'phone': phone,
+            'email': email,
+            'role': role,
+            // type: يقرؤه عدّاد السائقين وكشف الرواتب — بدونه يُصنَّف الجميع افتراضياً.
+            'type': role,
+            'is_active': isActive,
+            'created_at': FieldValue.serverTimestamp(),
+            ...extraData ?? {},
+          });
+        } catch (e) {
+          // فشلت كتابة Firestore (رفض قواعد/شبكة) بعد إنشاء حساب Auth: كان الحساب
+          // يبقى يتيماً فيُحرق البريد نهائياً — كل إعادة محاولة تفشل بـ
+          // email-already-in-use. نتراجع: نحذف مستند users (إن كُتب) وحساب Auth
+          // عبر جلسة التطبيق الثانوي، ثم نعيد رمي الخطأ الأصلي ليظهر للأدمن.
+          try {
+            await _db.collection('users').doc(uid).delete();
+          } catch (_) {
+            // المستند لم يُكتب أصلاً (الرفض حدث في الكتابة الأولى) — نتجاهل.
+          }
+          try {
+            await userCredential.user!.delete();
+          } catch (_) {
+            // فشل حذف التعويض نفسه — نُبقي الخطأ الأصلي هو الظاهر للمستخدم.
+          }
+          rethrow;
+        }
 
         await secondaryAuth.sendPasswordResetEmail(email: email);
         return uid;

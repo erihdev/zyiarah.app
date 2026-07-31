@@ -5,7 +5,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/screens/admin/admin_order_details_screen.dart';
 
 class AdminSearchScreen extends StatefulWidget {
-  const AdminSearchScreen({super.key});
+  // الدور يصل من AdminDashboardScreen (مطبَّع: admin→super_admin) — قواعد Firestore
+  // تحصر قراءة store_orders في مديري الطلبات، فنحتاجه لتخطي ذلك الاستعلام.
+  final String role;
+  const AdminSearchScreen({super.key, required this.role});
 
   @override
   State<AdminSearchScreen> createState() => _AdminSearchScreenState();
@@ -59,38 +62,59 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
     final q = query.trim();
     final qUpper = q.toUpperCase();
 
+    // \u0639\u0632\u0644 \u0643\u0644 \u0627\u0633\u062a\u0639\u0644\u0627\u0645 \u0628\u062e\u0637\u0626\u0647 \u0627\u0644\u062e\u0627\u0635: \u0631\u0641\u0636\u064f \u0645\u062c\u0645\u0648\u0639\u0629\u064d \u0648\u0627\u062d\u062f\u0629 (store_orders \u0644\u0644\u0645\u062d\u0627\u0633\u0628/\u0627\u0644\u062a\u0633\u0648\u064a\u0642)
+    // \u0643\u0627\u0646 \u064a\u064f\u0641\u0634\u0650\u0644 Future.wait \u0643\u0627\u0645\u0644\u0627\u064b \u0641\u062a\u0628\u0642\u0649 \u0627\u0644\u0642\u0648\u0627\u0626\u0645 \u0627\u0644\u0633\u062a \u0641\u0627\u0631\u063a\u0629 \u2014 \u0628\u062d\u062b\u064c \u0645\u064a\u062a \u0628\u0635\u0645\u062a.
+    Object? firstError;
+    Future<QuerySnapshot<Map<String, dynamic>>?> guarded(Future<QuerySnapshot<Map<String, dynamic>>> f) =>
+        f.then<QuerySnapshot<Map<String, dynamic>>?>((v) => v, onError: (Object e) {
+          firstError ??= e;
+          return null;
+        });
     try {
       // Parallel searches
       final results = await Future.wait([
         // 1. Regular Orders (Cleaning/Services) - Search by Code
-        db.collection('orders').where('code', isGreaterThanOrEqualTo: qUpper).where('code', isLessThanOrEqualTo: '$qUpper\uf8ff').limit(15).get(),
-        // 2. Store Orders - Search by Code
-        db.collection('store_orders').where('code', isGreaterThanOrEqualTo: qUpper).where('code', isLessThanOrEqualTo: '$qUpper\uf8ff').limit(15).get(),
+        guarded(db.collection('orders').where('code', isGreaterThanOrEqualTo: qUpper).where('code', isLessThanOrEqualTo: '$qUpper\uf8ff').limit(15).get()),
+        // 2. Store Orders - Search by Code (\u0642\u0631\u0627\u0621\u062a\u0647\u0627 \u0645\u062d\u0635\u0648\u0631\u0629 \u0628\u0627\u0644\u0642\u0648\u0627\u0639\u062f \u0641\u064a \u0645\u062f\u064a\u0631\u064a \u0627\u0644\u0637\u0644\u0628\u0627\u062a \u2014
+        // \u0646\u062a\u062e\u0637\u0627\u0647\u0627 \u0644\u0644\u0623\u062f\u0648\u0627\u0631 \u0627\u0644\u0623\u062e\u0631\u0649 \u0628\u062f\u0644 \u0627\u0633\u062a\u0639\u0644\u0627\u0645\u064d \u0645\u062d\u0643\u0648\u0645\u064d \u0639\u0644\u064a\u0647 \u0628\u0640 permission-denied)
+        _canReadStore
+            ? guarded(db.collection('store_orders').where('code', isGreaterThanOrEqualTo: qUpper).where('code', isLessThanOrEqualTo: '$qUpper\uf8ff').limit(15).get())
+            : Future<QuerySnapshot<Map<String, dynamic>>?>.value(null),
         // 3. Maintenance Requests - Search by Code
-        db.collection('maintenance_requests').where('code', isGreaterThanOrEqualTo: qUpper).where('code', isLessThanOrEqualTo: '$qUpper\uf8ff').limit(15).get(),
+        guarded(db.collection('maintenance_requests').where('code', isGreaterThanOrEqualTo: qUpper).where('code', isLessThanOrEqualTo: '$qUpper\uf8ff').limit(15).get()),
         // 4. Users - Search by Name
-        db.collection('users').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(15).get(),
+        guarded(db.collection('users').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(15).get()),
         // 5. Products - Search by Name
-        db.collection('products').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(15).get(),
+        guarded(db.collection('products').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(15).get()),
         // 6. Drivers - Search by Name
-        db.collection('drivers').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(15).get(),
+        guarded(db.collection('drivers').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(15).get()),
       ]);
 
       if (mounted) {
         setState(() {
-          _orderResults = results[0].docs;
-          _storeResults = results[1].docs;
-          _maintenanceResults = results[2].docs;
-          _userResults = results[3].docs;
-          _productResults = results[4].docs;
-          _driverResults = results[5].docs;
+          _orderResults = results[0]?.docs ?? [];
+          _storeResults = results[1]?.docs ?? [];
+          _maintenanceResults = results[2]?.docs ?? [];
+          _userResults = results[3]?.docs ?? [];
+          _productResults = results[4]?.docs ?? [];
+          _driverResults = results[5]?.docs ?? [];
           _isSearching = false;
         });
+        if (firstError != null) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('\u0641\u0634\u0644 \u0627\u0644\u0628\u062d\u062b \u0641\u064a \u0628\u0639\u0636 \u0627\u0644\u0623\u0642\u0633\u0627\u0645: $firstError'),
+            backgroundColor: Colors.red,
+          ));
+        }
       }
-    } catch (e) {
-      if (mounted) setState(() => _isSearching = false);
+    } finally {
+      // \u0636\u0645\u0627\u0646 \u0639\u062f\u0645 \u0628\u0642\u0627\u0621 \u0645\u0624\u0634\u0631 \u0627\u0644\u0628\u062d\u062b \u0639\u0627\u0644\u0642\u0627\u064b \u0645\u0647\u0645\u0627 \u0643\u0627\u0646 \u0645\u0633\u0627\u0631 \u0627\u0644\u0641\u0634\u0644.
+      if (mounted && _isSearching) setState(() => _isSearching = false);
     }
   }
+
+  // \u0627\u0644\u062f\u0648\u0631 \u0645\u0637\u0628\u064e\u0651\u0639 \u0645\u0646 \u0627\u0644\u062f\u0627\u0634\u0628\u0648\u0631\u062f\u061b admin \u062a\u0628\u0642\u0649 \u0644\u0644\u0627\u062d\u062a\u064a\u0627\u0637 \u0644\u0648 \u0645\u064f\u0631\u0651\u0631\u062a \u0628\u0644\u0627 \u062a\u0637\u0628\u064a\u0639.
+  bool get _canReadStore => ['admin', 'super_admin', 'orders_manager'].contains(widget.role);
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +164,16 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
               controller: _tabController,
               children: [
                 _buildResultsList(_orderResults, 'order'),
-                _buildResultsList(_storeResults, 'store_order'),
+                // للأدوار الممنوعة من قراءة store_orders نوضّح السبب بدل «لا توجد
+                // نتائج» المضلِّلة (الاستعلام مُتخطّى أصلاً لتفادي permission-denied).
+                _canReadStore
+                    ? _buildResultsList(_storeResults, 'store_order')
+                    : Center(
+                        child: Text(
+                          "البحث في طلبات المتجر متاح لمديري الطلبات فقط",
+                          style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 13),
+                        ),
+                      ),
                 _buildResultsList(_maintenanceResults, 'maintenance'),
                 _buildResultsList(_userResults, 'user'),
                 _buildResultsList(_productResults, 'product'),
@@ -231,15 +264,19 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
             Navigator.push(context, MaterialPageRoute(builder: (_) => AdminOrderDetailsScreen(orderId: doc.id)));
           } else if (type == 'maintenance') {
              // Future: AdminMaintenanceDetailsScreen
-             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("طلب صيانة: $title")));
+             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("طلب صيانة: $title — $subtitle")));
           } else {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("ملف: $title")));
+            // لا شاشات تفاصيل لهذه الأنواع بعد (توجد قوائم فقط) — نعرض البيانات
+            // المتاحة بدل ترديد العنوان الظاهر أصلاً على البطاقة.
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("$title — $subtitle")));
           }
         },
         leading: CircleAvatar(backgroundColor: color.withValues(alpha: 0.1), child: Icon(icon, color: color, size: 18)),
         title: Text(title, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 14)),
         subtitle: Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-        trailing: const Icon(Icons.arrow_back_ios_rounded, size: 12, color: Colors.grey),
+        // سهم التنقّل للطلبات فقط — بقية الأنواع بلا شاشة تفاصيل، فالسهم كان يوهم
+        // بوجهةٍ لا تُفتح.
+        trailing: type == 'order' ? const Icon(Icons.arrow_back_ios_rounded, size: 12, color: Colors.grey) : null,
       ),
     );
   }

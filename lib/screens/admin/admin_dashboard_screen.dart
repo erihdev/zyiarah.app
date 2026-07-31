@@ -59,10 +59,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   List<Map<String, dynamic>> _getFilteredTabs() {
     final allTabs = [
-      {'page': const AdminInsightsScreen(), 'label': ZyiarahStrings.dashboardTitle, 'icon': Icons.insights_rounded, 'roles': ['super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin']},
+      // نمرّر الدور كـ AdminMoreScreen: قواعد Firestore تمنع accountant/marketing من
+      // قراءة store_orders، فتحتاج الشاشة للدور كي تتخطى ذلك الاستعلام بدل رفضٍ حتمي.
+      {'page': AdminInsightsScreen(role: _role), 'label': ZyiarahStrings.dashboardTitle, 'icon': Icons.insights_rounded, 'roles': ['super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin']},
       {'page': const AdminServicesScreen(), 'label': ZyiarahStrings.servicesHeader, 'icon': Icons.design_services, 'roles': ['super_admin', 'orders_manager']},
       {'page': const AdminOrdersScreen(), 'label': ZyiarahStrings.ordersManagement, 'icon': Icons.list_alt, 'roles': ['super_admin', 'orders_manager']},
-      {'page': const AdminStoreScreen(), 'label': ZyiarahStrings.storeManagement, 'icon': Icons.storefront, 'roles': ['super_admin', 'accountant_admin']},
+      // marketing_admin هو من تُجيز له القواعد كتابة المنتجات — كان بلا تبويب متجر أصلاً؛
+      // accountant_admin يبقى للاطلاع فقط (الشاشة تخفي أدوات الكتابة حسب الدور الممرَّر).
+      {'page': AdminStoreScreen(role: _role), 'label': ZyiarahStrings.storeManagement, 'icon': Icons.storefront, 'roles': ['super_admin', 'accountant_admin', 'marketing_admin']},
       {'page': AdminMoreScreen(role: _role), 'label': ZyiarahStrings.systemSettings, 'icon': Icons.grid_view_rounded, 'roles': ['super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin']},
     ];
 
@@ -70,7 +74,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   void _logout() async {
-    bool confirm = await showDialog(
+    // <bool> + ?? false: النقر خارج الحوار (barrier) يُرجع null، وبدونهما كان
+    // الإسناد الضمني null→bool يرمي TypeError غير ملتقط (يُسجَّل fatal في Crashlytics).
+    final bool confirm = await showDialog<bool>(
       context: context,
       builder: (context) => Directionality(
         textDirection: TextDirection.rtl,
@@ -86,9 +92,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ],
         ),
       ),
-    );
+    ) ?? false;
 
-    if (confirm == true && mounted) {
+    if (confirm && mounted) {
       // الخروج المركزي (B3): تنظيف كامل للذاكرة بدل FirebaseAuth.signOut() المباشرة
       await ZyiarahFirebaseService().signOut();
       // لا دفع يدوي: الراوتر مربوط بـ refreshListenable(authStateChanges)، فيعيد التقييم
@@ -161,7 +167,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             IconButton(
               icon: const Icon(Icons.search_rounded),
               onPressed: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const AdminSearchScreen())),
+                  MaterialPageRoute(builder: (_) => AdminSearchScreen(role: _role))),
               tooltip: "بحث شامل",
             ),
             IconButton(

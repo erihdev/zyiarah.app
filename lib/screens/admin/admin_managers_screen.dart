@@ -130,11 +130,29 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Switch.adaptive(
-                                    value: isActive, 
+                                    value: isActive,
                                     activeThumbColor: Colors.green,
-                                    onChanged: (val) {
-                                      _db.collection('admins').doc(doc.id).update({'is_active': val});
-                                      _audit.logAction(action: 'TOGGLE_ADMIN_STATUS', details: {'email': admin['email'], 'new_status': val});
+                                    onChanged: (val) async {
+                                      // كانت الكتابة fire-and-forget: فشلها (رفض قواعد/شبكة)
+                                      // يضيع كخطأ غير معالَج ويرتد المفتاح صمتاً — ننتظر
+                                      // ونُظهر النتيجة كنمط مفتاح السائقين في admin_drivers_screen.
+                                      try {
+                                        await _db.collection('admins').doc(doc.id).update({'is_active': val});
+                                        await _audit.logAction(action: 'TOGGLE_ADMIN_STATUS', details: {'email': admin['email'], 'new_status': val});
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                            content: Text(val ? 'تم تفعيل المنسوب ✅' : 'تم تعطيل المنسوب'),
+                                            backgroundColor: val ? Colors.green : Colors.orange.shade800,
+                                          ));
+                                        }
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                            content: Text('فشل التحديث: $e'),
+                                            backgroundColor: Colors.red,
+                                          ));
+                                        }
+                                      }
                                     }
                                   ),
                                   Text(isActive ? "نشط" : "معطل", style: TextStyle(fontSize: 9, color: isActive ? Colors.green : Colors.red, fontWeight: FontWeight.bold)),
@@ -200,7 +218,6 @@ class _ManagerFormSheet extends StatefulWidget {
 class _ManagerFormSheetState extends State<_ManagerFormSheet> {
   late TextEditingController nameCtrl;
   late TextEditingController emailCtrl;
-  late TextEditingController passwordCtrl;
   late String role;
   bool isSaving = false;
 
@@ -216,7 +233,6 @@ class _ManagerFormSheetState extends State<_ManagerFormSheet> {
     super.initState();
     nameCtrl = TextEditingController(text: widget.currentData?['name'] ?? '');
     emailCtrl = TextEditingController(text: widget.currentData?['email'] ?? '');
-    passwordCtrl = TextEditingController();
     role = widget.currentData?['staff_role'] ?? widget.currentData?['role'] ?? 'orders_manager';
   }
 
@@ -224,7 +240,6 @@ class _ManagerFormSheetState extends State<_ManagerFormSheet> {
   void dispose() {
     nameCtrl.dispose();
     emailCtrl.dispose();
-    passwordCtrl.dispose();
     super.dispose();
   }
 
@@ -281,14 +296,31 @@ class _ManagerFormSheetState extends State<_ManagerFormSheet> {
               ),
               const SizedBox(height: 20),
               
-              _fieldLabel("كلمة المرور"),
-              TextField(
-                controller: passwordCtrl,
-                obscureText: true,
-                enabled: !isSaving,
-                decoration: _inputDecoration(widget.docId != null ? "اتركها فارغة لعدم التغيير" : "كلمة المرور الافتتاحية", Icons.lock_outline),
-              ),
-              const SizedBox(height: 20),
+              // أُزيل حقل كلمة المرور: كان يُهمَل صمتاً — createAccountViaAdmin يولّد
+              // كلمة عشوائية ويرسل رابط تعيينها بالبريد، والتعديل لا يغيّر كلمة المرور
+              // إطلاقاً (يتطلب Admin SDK خادمياً). كان المدير يسلّم الموظف كلمة لا تعمل.
+              if (widget.docId == null) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B).withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.mark_email_read_outlined, color: Color(0xFF1E293B), size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          "سيصل الموظف رابط تعيين كلمة المرور على بريده الإلكتروني بعد الحفظ",
+                          style: GoogleFonts.tajawal(fontSize: 12, color: const Color(0xFF1E293B)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
               
               _fieldLabel("مستوى الصلاحيات"),
               DropdownButtonFormField<String>(

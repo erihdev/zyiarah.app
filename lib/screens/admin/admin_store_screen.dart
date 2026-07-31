@@ -9,7 +9,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:zyiarah/services/audit_service.dart';
 
 class AdminStoreScreen extends StatefulWidget {
-  const AdminStoreScreen({super.key});
+  // قاعدة /products في firestore.rules تحصر الكتابة بـ isMarketingAdmin
+  // (admin/super_admin/marketing_admin) — نمرّر الدور من اللوحة (نمط AdminMoreScreen)
+  // كي نخفي أدوات الكتابة عمّن تُرفض كتابته حتماً (accountant_admin).
+  final String role;
+  const AdminStoreScreen({super.key, this.role = 'none'});
 
   @override
   State<AdminStoreScreen> createState() => _AdminStoreScreenState();
@@ -19,12 +23,27 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final ImagePicker _picker = ImagePicker();
 
+  // نفس قائمة isMarketingAdmin في القواعد — أي دور خارجها يرى الشاشة للاطلاع فقط،
+  // فكل زر كتابة كان يفشل بـ permission-denied (المفتاح صامتاً والباقي بخطأ خام).
+  bool get _canWriteProducts =>
+      const ['admin', 'super_admin', 'marketing_admin'].contains(widget.role);
+
   void _toggleProductVisibility(DocumentSnapshot doc) async {
     // doc['is_hidden'] عبر عامل [] يرمي StateError حين يغيب الحقل (منتجات قديمة) بدل
     // إرجاع null — نقرأ من الخريطة المفكوكة كي يعمل ?? false ولا ينهار التبديل.
     final data = doc.data() as Map<String, dynamic>?;
     final isHidden = data?['is_hidden'] ?? false;
-    await _db.collection('products').doc(doc.id).update({'is_hidden': !isHidden});
+    try {
+      await _db.collection('products').doc(doc.id).update({'is_hidden': !isHidden});
+    } catch (e) {
+      // كان بلا try/catch: فشل الكتابة (صلاحيات/شبكة) يجعل المفتاح يرتد صامتاً
+      // بلا أي مؤشر — نُظهر الخطأ كبقية عمليات الشاشة (_deleteProduct).
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('تعذّر تغيير حالة المنتج: $e'),
+            backgroundColor: Colors.red));
+      }
+    }
   }
 
   Future<void> _deleteProduct(String id) async {
@@ -50,19 +69,21 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
     if (confirm == true) {
       try {
         final docSnap = await _db.collection('products').doc(id).get();
-        if (docSnap.exists) {
-          final data = docSnap.data();
-          final String? imageUrl = data?['image_url'];
-          if (imageUrl != null && imageUrl.isNotEmpty) {
-            try {
-              await FirebaseStorage.instance.refFromURL(imageUrl).delete();
-            } catch (storageErr) {
-              debugPrint("Failed to delete product image from storage: $storageErr");
-            }
+        // data() تُعيد null أصلاً لغير الموجود — بلا ثلاثية: «?[» داخلها يُربك المحلل.
+        final String? imageUrl = docSnap.data()?['image_url'] as String?;
+
+        // حذف مستند Firestore أولاً: كان حذف الصورة يسبقه، فرفضُ القاعدة بعده
+        // (كتابة products مقيّدة بالأدوار) يُتلف صورة منتجٍ ما زال معروضاً.
+        await _db.collection('products').doc(id).delete();
+
+        if (imageUrl != null && imageUrl.isNotEmpty) {
+          try {
+            await FirebaseStorage.instance.refFromURL(imageUrl).delete();
+          } catch (storageErr) {
+            debugPrint("Failed to delete product image from storage: $storageErr");
           }
         }
 
-        await _db.collection('products').doc(id).delete();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف المنتج بنجاح")));
         }
@@ -312,11 +333,15 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
           backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,
         ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () => _showProductDialog(),
-          backgroundColor: const Color(0xFF660033),
-          child: const Icon(Icons.add, color: Colors.white),
-        ),
+        // زر الإضافة يظهر فقط لمن تسمح له القواعد بالكتابة — كان يظهر لـ
+        // accountant_admin ثم يفشل الحفظ بعد رفع الصورة (ملف يتيم في Storage).
+        floatingActionButton: _canWriteProducts
+            ? FloatingActionButton(
+                onPressed: () => _showProductDialog(),
+                backgroundColor: const Color(0xFF660033),
+                child: const Icon(Icons.add, color: Colors.white),
+              )
+            : null,
         body: StreamBuilder<QuerySnapshot>(
           stream: _db.collection('products').orderBy('created_at', descending: true).snapshots(),
           builder: (context, snapshot) {
@@ -334,12 +359,13 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                     const SizedBox(height: 20),
                     Text("لا توجد منتجات حالياً", style: GoogleFonts.tajawal(fontSize: 18, color: Colors.grey)),
                     const SizedBox(height: 20),
-                    ElevatedButton.icon(
-                      onPressed: () => _showProductDialog(),
-                      icon: const Icon(Icons.add),
-                      label: const Text("أضف أول منتج"),
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF660033), foregroundColor: Colors.white),
-                    )
+                    if (_canWriteProducts)
+                      ElevatedButton.icon(
+                        onPressed: () => _showProductDialog(),
+                        icon: const Icon(Icons.add),
+                        label: const Text("أضف أول منتج"),
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF660033), foregroundColor: Colors.white),
+                      )
                   ],
                 ),
               );
@@ -419,21 +445,24 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                         ),
                         Column(
                           children: [
-                            Row(
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20),
-                                  onPressed: () => _showProductDialog(product: doc),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
-                                  onPressed: () => _deleteProduct(doc.id),
-                                ),
-                              ],
-                            ),
+                            // أدوات الكتابة مخفية/معطّلة لغير أدوار isMarketingAdmin —
+                            // كانت تُعرض ثم تُرفض كل عملية بـ permission-denied.
+                            if (_canWriteProducts)
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20),
+                                    onPressed: () => _showProductDialog(product: doc),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                                    onPressed: () => _deleteProduct(doc.id),
+                                  ),
+                                ],
+                              ),
                             Switch(
                               value: !isHidden,
-                              onChanged: (val) => _toggleProductVisibility(doc),
+                              onChanged: _canWriteProducts ? (val) => _toggleProductVisibility(doc) : null,
                               activeThumbColor: Colors.green,
                             ),
                             Text(isHidden ? "مخفي" : "نشط", style: TextStyle(fontSize: 9, color: isHidden ? Colors.red : Colors.green, fontWeight: FontWeight.bold)),

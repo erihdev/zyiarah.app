@@ -63,8 +63,11 @@ class ZyiarahOrderService {
 
       return data;
     } catch (e) {
+      // لا نُعيد null هنا: null لدى المستدعي تعني «الكود باطل/منتهٍ»، بينما هذا
+      // فشل بنيوي (شبكة/صلاحيات) — إعادته null كانت تعرض «كود غير صحيح» لكوبون
+      // سليم أثناء انقطاع عابر، فيظن العميل أن كوبونه فاسد بدل أن يعيد المحاولة.
       debugPrint('Error validating coupon: $e');
-      return null;
+      rethrow;
     }
   }
 

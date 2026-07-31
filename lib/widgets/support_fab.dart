@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -5,6 +6,27 @@ import 'package:zyiarah/screens/support_screen.dart';
 
 class ZyiarahSupportFab extends StatelessWidget {
   const ZyiarahSupportFab({super.key});
+
+  // canLaunchUrl + SnackBar: بدونهما غياب واتساب/تطبيق الهاتف يجعل الضغطة صامتة تماماً.
+  Future<void> _launchSupportUrl(BuildContext context, String url) async {
+    try {
+      final uri = Uri.parse(url);
+      final ok = await canLaunchUrl(uri) &&
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('تعذّر فتح تطبيق التواصل — تأكد من تثبيته على جهازك'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('تعذّر الاتصال بالدعم: $e'),
+        backgroundColor: Colors.red,
+      ));
+    }
+  }
 
   void _showSupportOptions(BuildContext context) {
     showModalBottomSheet(
@@ -29,17 +51,34 @@ class ZyiarahSupportFab extends StatelessWidget {
             Text("نحن هنا لخدمتك على مدار الساعة", style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey)),
             const SizedBox(height: 30),
             
-            _buildOption(
-              icon: Icons.chat_bubble_outline_rounded,
-              title: "تحدث معنا عبر الواتساب",
-              color: const Color(0xFF25D366),
-              onTap: () => launchUrl(Uri.parse('https://wa.me/966550000000'), mode: LaunchMode.externalApplication),
-            ),
-            _buildOption(
-              icon: Icons.phone_in_talk_rounded,
-              title: "اتصال هاتفي مباشر",
-              color: const Color(0xFF3B82F6),
-              onTap: () => launchUrl(Uri.parse('tel:+966550000000')),
+            // الرقم الثابت القديم كان placeholder لا يصل لأحد — نقرأ من نفس مفاتيح
+            // settings_screen (system_configs/main_settings) ليكون مصدر الرقم واحداً ويُحدَّث من اللوحة.
+            StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('system_configs')
+                  .doc('main_settings')
+                  .snapshots(),
+              builder: (context, snapshot) {
+                final data = snapshot.data?.data() as Map<String, dynamic>?;
+                final whatsapp = data?['support_whatsapp'] ?? '966500000000';
+                final phone = data?['support_phone'] ?? '920000000';
+                return Column(
+                  children: [
+                    _buildOption(
+                      icon: Icons.chat_bubble_outline_rounded,
+                      title: "تحدث معنا عبر الواتساب",
+                      color: const Color(0xFF25D366),
+                      onTap: () => _launchSupportUrl(ctx, 'https://wa.me/$whatsapp'),
+                    ),
+                    _buildOption(
+                      icon: Icons.phone_in_talk_rounded,
+                      title: "اتصال هاتفي مباشر",
+                      color: const Color(0xFF3B82F6),
+                      onTap: () => _launchSupportUrl(ctx, 'tel:$phone'),
+                    ),
+                  ],
+                );
+              },
             ),
             _buildOption(
               icon: Icons.support_agent_rounded,

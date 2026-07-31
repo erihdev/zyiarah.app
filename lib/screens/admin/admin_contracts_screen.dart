@@ -1,6 +1,8 @@
 import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
@@ -19,6 +21,31 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
 
   final TextEditingController _searchController = TextEditingController();
   String _search = '';
+
+  // حذف العقود في firestore.rules حكرٌ على isSuperAdmin، والشاشة تُفتح أيضاً من
+  // orders_manager (شاشة المزيد) و accountant/marketing (بطاقة الرؤى) — نجلب الدور
+  // مرة (نمط AdminDashboardScreen) لإخفاء زر حذفٍ كان يفشل حتماً لهؤلاء.
+  String _role = 'none';
+
+  bool get _canDeleteContracts => const ['admin', 'super_admin'].contains(_role);
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchRole();
+  }
+
+  Future<void> _fetchRole() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      final role = await ZyiarahFirebaseService().getUserRole(user.uid) ?? 'none';
+      if (mounted) setState(() => _role = role);
+    } catch (_) {
+      // فشل جلب الدور يُبقي زر الحذف مخفياً — الافتراض الآمن، ولا فائدة من إزعاج
+      // المستخدم بخطأ لا يعطّل باقي الشاشة (العرض والاعتماد يعملان).
+    }
+  }
 
   @override
   void dispose() {
@@ -223,11 +250,12 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
                   icon: const Icon(Icons.info_outline_rounded),
                   style: IconButton.styleFrom(backgroundColor: Colors.blueGrey[50], foregroundColor: Colors.blueGrey[600]),
                 ),
-                IconButton.filled(
-                  onPressed: () => _deleteContract(doc.id),
-                  icon: const Icon(Icons.delete_outline_rounded),
-                  style: IconButton.styleFrom(backgroundColor: Colors.red[50], foregroundColor: Colors.red[600]),
-                ),
+                if (_canDeleteContracts)
+                  IconButton.filled(
+                    onPressed: () => _deleteContract(doc.id),
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    style: IconButton.styleFrom(backgroundColor: Colors.red[50], foregroundColor: Colors.red[600]),
+                  ),
               ],
             ),
           ),
@@ -331,6 +359,14 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
       await FirebaseFirestore.instance.collection('contracts').doc(id).delete();
       messenger.showSnackBar(const SnackBar(
           content: Text('تم حذف العقد'), backgroundColor: Colors.green));
+    } on FirebaseException catch (e) {
+      // permission-denied دائمٌ لغير المدير العام (rules) — «أعد المحاولة» كانت
+      // مضلِّلة وتدفع للتكرار بلا جدوى.
+      messenger.showSnackBar(SnackBar(
+          content: Text(e.code == 'permission-denied'
+              ? 'صلاحية غير كافية — حذف العقود متاح للمدير العام فقط'
+              : 'تعذّر حذف العقد — أعد المحاولة'),
+          backgroundColor: Colors.red));
     } catch (_) {
       messenger.showSnackBar(const SnackBar(
           content: Text('تعذّر حذف العقد — أعد المحاولة'), backgroundColor: Colors.red));
@@ -367,6 +403,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   onPressed: () async {
+                    final messenger = ScaffoldMessenger.of(context);
                     try {
                       await ZyiarahPdfService.generateAndDownloadContract(
                         contractId: data['contractId'] ?? 'XXXX',
@@ -379,7 +416,13 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
                         signatureData: data['signatureData'], // Passing the actual signature data
                       );
                     } catch (e) {
-                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل إنشاء الملف: $e')));
+                      // SnackBar الشاشة يُرسم خلف الشيت المفتوحة فيبدو الزر ميتاً —
+                      // نغلق الشيت أولاً ثم نعرض الخطأ عبر messenger ملتقط مسبقاً
+                      // (نفس نمط _deleteContract).
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      messenger.showSnackBar(SnackBar(
+                          content: Text('فشل إنشاء الملف: $e'),
+                          backgroundColor: Colors.red));
                     }
                   },
                   icon: const Icon(Icons.picture_as_pdf),

@@ -85,11 +85,24 @@ class _ZyiarahRatingDialogState extends State<ZyiarahRatingDialog> {
                 GestureDetector(
                   onTap: () async {
                     final picker = ImagePicker();
-                    final picked = await picker.pickImage(source: ImageSource.camera, imageQuality: 50);
-                    // File(dart:io) يرمي UnsupportedError على الويب — نحرسه بـ kIsWeb.
-                    // (الدليل اختياري، والإرسال يبقى ممكناً بدونه على الويب.)
-                    if (picked != null && !kIsWeb) {
-                      setState(() => _evidenceImage = File(picked.path));
+                    // الرسول يُلتقط قبل الفجوة غير المتزامنة (قاعدة اللنت).
+                    final messenger = ScaffoldMessenger.of(context);
+                    try {
+                      final picked = await picker.pickImage(source: ImageSource.camera, imageQuality: 50);
+                      if (!mounted) return;
+                      // File(dart:io) يرمي UnsupportedError على الويب — نحرسه بـ kIsWeb.
+                      // (الدليل اختياري، والإرسال يبقى ممكناً بدونه على الويب.)
+                      if (picked != null && !kIsWeb) {
+                        setState(() => _evidenceImage = File(picked.path));
+                      }
+                    } catch (e) {
+                      // رفض إذن الكاميرا يرمي PlatformException — بدون تنبيه يبدو زر
+                      // إرفاق الدليل ميتاً في مسار شكوى التقييم المنخفض حيث الدليل مهم.
+                      if (!mounted) return;
+                      messenger.showSnackBar(SnackBar(
+                        content: Text('تعذّر فتح الكاميرا — فعّل إذن الكاميرا من الإعدادات: $e'),
+                        backgroundColor: Colors.red,
+                      ));
                     }
                   },
                   child: Container(

@@ -349,8 +349,15 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('تعذّر تحديث الحالة')));
+        // تحديث orders حكر على مديري الطلبات (firestore.rules) بينما تصل هذه
+        // الشاشة للمحاسب/التسويق عبر رادار الرؤى — الرسالة العامة كانت تبتلع
+        // permission-denied فيُعيد الأدمن المحاولة بلا جدوى. نُسمّي الرفض باسمه
+        // ونُظهر نصّ الخطأ الفعلي لبقية الحالات.
+        final String msg = e is FirebaseException && e.code == 'permission-denied'
+            ? 'لا تملك صلاحية تحديث الطلبات — هذه العملية لمديري الطلبات فقط'
+            : 'تعذّر تحديث الحالة: $e';
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg), backgroundColor: Colors.red));
       }
     }
   }

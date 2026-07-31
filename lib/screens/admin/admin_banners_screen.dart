@@ -248,6 +248,12 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {
                       setDialogState(() => isSaving = false);
+                      // كان الفشل صامتاً تماماً: الزر يرتد من «جاري الحفظ...» بلا أي
+                      // مؤشر فيغلق الأدمن الحوار ظاناً أن البنر نُشر — نُظهر الخطأ
+                      // بنفس نمط فشل الرفع أعلاه.
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل الحفظ: ${e.toString()}"), backgroundColor: Colors.redAccent));
+                      }
                     }
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF660033), foregroundColor: Colors.white),

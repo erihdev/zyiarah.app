@@ -405,14 +405,28 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   }
 
   Future<void> _openWhatsApp() async {
-    String adminPhone = '966500000000';
+    String? adminPhone;
     try {
       final doc = await FirebaseFirestore.instance
           .collection('system_configs')
           .doc('main_settings')
           .get();
-      adminPhone = doc.data()?['support_whatsapp'] ?? doc.data()?['admin_whatsapp'] ?? adminPhone;
-    } catch (_) {}
+      adminPhone = (doc.data()?['support_whatsapp'] ?? doc.data()?['admin_whatsapp'])?.toString();
+    } catch (_) {
+      // قراءة فاشلة (أوفلاين غالباً) — نُبلغ أدناه بدل المتابعة برقم وهمي
+    }
+    // كان الرقم الوهمي 966500000000 قيمةً افتراضية عند فشل القراءة أو غياب
+    // الحقلين، فيفتح واتساب على محادثة لا تصل الإدارة أبداً.
+    if (adminPhone == null || adminPhone.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('تعذّر جلب رقم الدعم — حاول لاحقاً',
+              style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
     final url =
         'https://wa.me/$adminPhone?text=${Uri.encodeComponent("استفسار من سائق زيارة")}';
     await _openUrl(url, failMessage: 'تعذّر فتح واتساب — تأكد من تثبيته');

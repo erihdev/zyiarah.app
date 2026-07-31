@@ -320,12 +320,15 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
   }
 
   void _showNewTicketDialog(BuildContext context) {
+    // خارج builder الـ sheet لا داخله: الـ builder يقرأ viewInsets فيُعاد استدعاؤه
+    // مع كل حركة كيبورد، وكان إعلان المتغيّر داخله يصفّره مجدداً فيختفي المؤشّر
+    // ويعود الزر للعمل ظاهرياً أثناء الإرسال (والضغطة الثانية تُبتلع صامتة).
+    bool sheetSending = false;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
       builder: (context) {
-        bool sheetSending = false; // حالة مستمرّة عبر إعادات بناء الـ StatefulBuilder
         return Directionality(
         textDirection: TextDirection.rtl,
         child: Padding(

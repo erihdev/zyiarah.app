@@ -15,6 +15,9 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final ZyiarahAuditService _audit = ZyiarahAuditService();
   bool _isLoading = true;
+  // كان فشل التحميل يُبتلع بـ catch(_) فتُعرض حالة «لا توجد أكواد» الفارغة —
+  // لا يميّزها المدير عن القائمة الفارغة فعلاً ولا سبيل لإعادة المحاولة.
+  bool _loadError = false;
   List<QueryDocumentSnapshot> _coupons = [];
   List<String> _availableZones = [];
 
@@ -32,20 +35,42 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
       setState(() {
         _availableZones = snapshot.docs.map((d) => (d.data()['name'] ?? '').toString()).toList();
       });
-    } catch (_) {}
+    } catch (e) {
+      // كان catch(_){} صامتاً: فشل الجلب يترك حوار حصر المناطق فارغاً بلا تفسير.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('فشل تحميل المناطق: $e'), backgroundColor: Colors.red));
+      }
+    }
   }
 
   Future<void> _fetchCoupons() async {
+    // عند إعادة المحاولة من حالة الخطأ نُعيد المؤشر (initState يمرّ من هنا
+    // و_isLoading مرفوع أصلاً فلا setState قبل أول build).
+    if (_loadError && mounted) {
+      setState(() {
+        _isLoading = true;
+        _loadError = false;
+      });
+    }
     try {
       final snapshot = await _db.collection('promo_codes').get();
       if (mounted) {
         setState(() {
           _coupons = snapshot.docs;
           _isLoading = false;
+          _loadError = false;
         });
       }
-    } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _loadError = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('فشل تحميل أكواد الخصم: $e'), backgroundColor: Colors.red));
+      }
     }
   }
 
@@ -68,6 +93,10 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
     bool valueEmpty = false;
 
     showDialog(
+      // مطابقةً لبقية حوارات الأدمن (المتجر/الاشتراكات): النقر خارج الحوار أثناء
+      // الحفظ كان يُسقط رسالة النجاح وتحديث القائمة رغم اكتمال الكتابة — فيُعاد
+      // إنشاء الكوبون ويُصدَم المدير برفض التكرار.
+      barrierDismissible: false,
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
@@ -255,7 +284,18 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                                     title: const Text('اختر المناطق المحصورة'),
                                     content: SizedBox(
                                       width: double.maxFinite,
-                                      child: ListView.builder(
+                                      // القائمة الفارغة (فشل _fetchZones أو لا مناطق معرّفة)
+                                      // كانت تعرض حواراً أبيض بلا أي رسالة.
+                                      child: _availableZones.isEmpty
+                                        ? Padding(
+                                            padding: const EdgeInsets.symmetric(vertical: 24),
+                                            child: Text(
+                                              'تعذّر تحميل المناطق — حاول مجدداً',
+                                              textAlign: TextAlign.center,
+                                              style: GoogleFonts.tajawal(color: Colors.grey),
+                                            ),
+                                          )
+                                        : ListView.builder(
                                         shrinkWrap: true,
                                         itemCount: _availableZones.length,
                                         itemBuilder: (context, index) {
@@ -297,7 +337,8 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                 ),
                 actions: [
                   TextButton(
-                    onPressed: () => Navigator.pop(ctx),
+                    // معطّل أثناء الحفظ (كحوار المتجر) — الإغلاق حينها يفقد نتيجة الكتابة.
+                    onPressed: isSaving ? null : () => Navigator.pop(ctx),
                     child: Text('إلغاء', style: GoogleFonts.tajawal(color: Colors.grey)),
                   ),
                   ElevatedButton(
@@ -351,9 +392,11 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                             return;
                           }
                           await _db.collection('promo_codes').add(newData);
+                          // لا نقرأ الحواسّ بعد await: زر الرجوع قد يغلق الحوار أثناء
+                          // الحفظ فتُتلَف الحواسّ في whenComplete ويرمي .text — نستخدم newData.
                           await _audit.logAction(
                             action: ZyiarahAuditService.actionCreateCoupon,
-                            details: {'code': codeCtrl.text, 'value': valueCtrl.text, 'type': type},
+                            details: {'code': newData['code'], 'value': '$couponVal', 'type': type},
                           );
                         } else {
                           // نفس فحص التكرار في التعديل: قد يُغيَّر الكود ليطابق كوبوناً آخر،
@@ -372,19 +415,24 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                           await _db.collection('promo_codes').doc(doc.id).update(newData);
                           await _audit.logAction(
                             action: ZyiarahAuditService.actionUpdateCoupon,
-                            details: {'code': codeCtrl.text, 'value': valueCtrl.text, 'type': type},
+                            details: {'code': newData['code'], 'value': '$couponVal', 'type': type},
                             targetId: doc.id,
                           );
                         }
 
-                        if (context.mounted) {
-                          Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حفظ كود الخصم بنجاح ✅")));
+                        // حتى لو أُغلق الحوار (زر الرجوع) أثناء الحفظ: الكتابة اكتملت،
+                        // فنُحدِّث القائمة ونُظهر النجاح عبر حالة الشاشة لا حالة الحوار
+                        // كي لا يختفي الكوبون الجديد من القائمة المجلوبة يدوياً.
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (mounted) {
+                          ScaffoldMessenger.of(this.context).showSnackBar(const SnackBar(content: Text("تم حفظ كود الخصم بنجاح ✅")));
                           _fetchCoupons();
                         }
                       } catch (e) {
-                         setDialogState(() => isSaving = false);
-                         if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل الحفظ: $e")));
+                         if (ctx.mounted) setDialogState(() => isSaving = false);
+                         if (mounted) {
+                           ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text("فشل الحفظ: $e"), backgroundColor: Colors.red));
+                         }
                       }
                     },
                     style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF660033)),
@@ -454,6 +502,29 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
         textDirection: TextDirection.rtl,
         child: _isLoading
           ? const Center(child: CircularProgressIndicator())
+          : _loadError
+            // حالة فشل صريحة مع زر إعادة محاولة — الجلب لمرة واحدة (لا بثّ/سحب للتحديث)
+            // فكانت الشاشة تعلق على «لا توجد أكواد» الكاذبة حتى الخروج والدخول.
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.cloud_off_rounded, size: 80, color: Colors.grey),
+                    const SizedBox(height: 20),
+                    Text('تعذّر تحميل أكواد الخصم', style: GoogleFonts.tajawal(fontSize: 18, color: Colors.grey[600])),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        _fetchCoupons();
+                        _fetchZones();
+                      },
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('إعادة المحاولة'),
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF660033), foregroundColor: Colors.white),
+                    ),
+                  ],
+                ),
+              )
           : _coupons.isEmpty
             ? Center(
                 child: Column(

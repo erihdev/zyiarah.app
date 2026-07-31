@@ -32,23 +32,28 @@ class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
       // إشعار العميل يتولّاه خادميّاً مُشغّل sendNotificationOnTicketReply عند إضافة
       // رسالة senderRole:'admin' (يعمل الآن لكل من تطبيق الأدمن ولوحة الويب). كان
       // الاستدعاء المباشر notifyUserOfSupportReply هنا يُنتج إشعاراً ثانياً مكرّراً.
-      await _db.collection('support_tickets').doc(widget.ticketId).collection('messages').add({
+      // الكتابتان (الرسالة + حالة التذكرة) في batch ذرّية واحدة: كانتا متتاليتين،
+      // ففشل تحديث الحالة بعد نجاح الإضافة يعرض «فشل إرسال الرد» رغم وصول الرسالة
+      // (وإشعارها) للعميل، فيعيد الأدمن الإرسال ويتكرر الرد والإشعار.
+      final ticketRef = _db.collection('support_tickets').doc(widget.ticketId);
+      final batch = _db.batch();
+      batch.set(ticketRef.collection('messages').doc(), {
         'text': text,
         'senderRole': 'admin',
         // (تحسين من الويب) اسم المُرسِل يظهر للعميل بدل «إدارة» مجهّلة.
         'senderName': 'فريق زيارة',
         'sentAt': FieldValue.serverTimestamp(),
       });
-
-      await _db.collection('support_tickets').doc(widget.ticketId).update({
+      batch.update(ticketRef, {
         'status': 'replied',
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      await batch.commit();
 
       _replyCtrl.clear();
     } catch (e) {
       if (mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('فشل إرسال الرد')));
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل إرسال الرد: $e'), backgroundColor: Colors.red));
       }
     } finally {
       if (mounted) setState(() => _isSending = false);

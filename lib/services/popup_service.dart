@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:zyiarah/screens/subscription_plans_screen.dart';
 import 'package:zyiarah/screens/ac_service_details_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
+import 'package:zyiarah/screens/hourly_details_screen.dart';
 
 class ZyiarahPopupService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -42,7 +43,9 @@ class ZyiarahPopupService {
     showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (context) => Dialog(
+      // سياق الحوار باسم مستقل: التنقّل وSnackBar يستخدمان سياق الشاشة الأم (context)
+      // لأن سياق الحوار يُغلَق قبل التنقّل.
+      builder: (dialogContext) => Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 20),
         child: Directionality(
@@ -115,21 +118,39 @@ class ZyiarahPopupService {
                       child: SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: () {
+                          onPressed: () async {
+                            // نغلق الحوار أولاً: Navigator.push يُدرج الوجهة فوق الحوار فوراً،
+                            // فكان pop اللاحق يزيل الشاشة الهدف بدل الحوار — والزر يبدو ميتاً.
+                            Navigator.pop(dialogContext); // Close Popup
                             // 1. Handle External Links
                             if (btn['link'] != null && btn['link'].toString().isNotEmpty) {
                               final uri = Uri.tryParse(btn['link'].toString());
-                              if (uri != null) {
-                                launchUrl(uri, mode: LaunchMode.externalApplication);
+                              try {
+                                // نتحقق من نتيجة launchUrl: الرابط نص حر من اللوحة،
+                                // وفشله بصمت يعني وجهة موعودة تضيع بلا أي تنبيه.
+                                final ok = uri != null &&
+                                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                if (!ok && context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                    content: Text('تعذّر فتح الرابط المُرفق بالإعلان'),
+                                    backgroundColor: Colors.red,
+                                  ));
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                    content: Text('تعذّر فتح الرابط: $e'),
+                                    backgroundColor: Colors.red,
+                                  ));
+                                }
                               }
                             }
                             // 2. Handle Internal Sections
                             else if (data['targetSection'] != null) {
                               final section = data['targetSection'];
+                              if (!context.mounted) return;
                               _navigateBySection(context, section);
                             }
-                            
-                            Navigator.pop(context); // Close Popup
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
@@ -157,7 +178,7 @@ class ZyiarahPopupService {
                 right: 0,
                 child: IconButton(
                   icon: const Icon(Icons.cancel, color: Colors.white, size: 30),
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () => Navigator.pop(dialogContext),
                 ),
               ),
             ],
@@ -172,8 +193,10 @@ class ZyiarahPopupService {
       case 'home':
         // Stay on home/dashboard
         break;
+      // نفس قاعدة 'maintenance' أدناه: بانر لا يفعل شيئاً = فشل صامت،
+      // والشاشة حيّة ومستخدمة من client_dashboard بنفس الاستدعاء.
       case 'hourly':
-        // Navigate to hourly cleaning or just dashboard home as entry point
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const HourlyCleaningDetailsScreen(serviceName: "نظافة بالساعة")));
         break;
       case 'family_basket':
         Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahSubscriptionPlansScreen()));

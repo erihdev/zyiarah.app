@@ -45,6 +45,9 @@ class _ZyiarahSubscriptionPlansScreenState
   Map<String, int> _dailyOrderCounts = {};
   Map<String, int> _slotCounts = {};          // "yyyy-MM-dd_HH:00" → orders in slot
   bool _loadingDailyCounts = true;
+  // فشل جلب الإتاحة: بدون هذا العلم كانت الخرائط تبقى فارغة فيُعرض كل يوم/خانة
+  // «متاحاً» ويوقّع العميل عقداً على أيام ممتلئة — نعرض حالة خطأ مع إعادة محاولة.
+  bool _availabilityError = false;
   // ----------------------------------------
 
   @override
@@ -125,7 +128,7 @@ class _ZyiarahSubscriptionPlansScreenState
   /// تُعيد الأعداد الحقيقية للطلبات لكل تاريخ وكل خانة زمنية.
   Future<void> _loadAvailabilityFromServer() async {
     if (!mounted) return;
-    setState(() => _loadingDailyCounts = true);
+    setState(() { _loadingDailyCounts = true; _availabilityError = false; });
     try {
       final now = DateTime.now();
       final startDate = intl.DateFormat('yyyy-MM-dd').format(now);
@@ -178,7 +181,15 @@ class _ZyiarahSubscriptionPlansScreenState
       }
     } catch (e) {
       debugPrint('[getHourlyAvailability] subscription error: $e');
-      if (mounted) setState(() => _loadingDailyCounts = false);
+      // لا نكتفي بإخفاء المؤشّر: بيانات إتاحة فارغة تعني «كل شيء متاح» زوراً
+      // (0 < الحد الافتراضي) فيُحجَز على أيام ممتلئة — نُظهر خطأً وزرّ إعادة محاولة.
+      if (mounted) {
+        setState(() { _loadingDailyCounts = false; _availabilityError = true; });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('تعذّر تحميل مواعيد الإتاحة: ${e.toString().replaceAll("Exception: ", "")}'),
+          backgroundColor: Colors.red,
+        ));
+      }
     }
   }
 
@@ -685,6 +696,35 @@ class _ZyiarahSubscriptionPlansScreenState
         height: 82,
         child: Center(
           child: CircularProgressIndicator(color: _brand),
+        ),
+      );
+    }
+    // فشل جلب الإتاحة ⇒ لا نعرض التقويم إطلاقاً (كان يُعرض بكل الأيام خضراء
+    // من بياناتٍ فارغة فيُحجَز على أيام ممتلئة) — حالة خطأ بزرّ إعادة محاولة
+    // على نمط _fetchPackages/_hasError.
+    if (_availabilityError) {
+      return SizedBox(
+        height: 82,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('تعذّر تحميل مواعيد الإتاحة',
+                  style: GoogleFonts.tajawal(fontSize: 13, color: Colors.grey[600])),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: _loadAvailabilityFromServer,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: Text('إعادة المحاولة',
+                    style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 12)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _brand,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }

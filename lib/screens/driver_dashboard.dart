@@ -943,7 +943,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
               const Icon(Icons.flash_on, color: Colors.orange, size: 22),
               const SizedBox(width: 8),
               Text(
-                status == 'scheduled' ? "مهمتك القادمة — استعد للانطلاق" : "مهمة نشطة — يُرجى التركيز",
+                (status == 'scheduled' || status == 'assigned') ? "مهمتك القادمة — استعد للانطلاق" : "مهمة نشطة — يُرجى التركيز",
                 style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.orange.shade900),
               ),
             ],
@@ -963,6 +963,16 @@ class _DriverDashboardState extends State<DriverDashboard> {
     IconData stateIcon = Icons.directions_car;
 
     switch (status) {
+      case 'assigned':
+        // 'assigned' تُكتب يدوياً من لوحة الأدمن، وقواعد Firestore لا تسمح للسائق
+        // بتعديل طلبٍ عليها (قائمة الحالات في allow update تستثنيها) — فكانت
+        // البطاقة تعرض زرّاً بلا نصّ يستدعي _updateStatus بحالة "" وتُرفض الكتابة
+        // برسالة «تحقق من اتصالك» المضلِّلة. نعرض حالة انتظارٍ صريحة بلا زرّ
+        // (nextStatus فارغة عمداً) حتى تُحوِّلها الإدارة إلى «مجدولة».
+        stateTitle = "مهمة مُسنَدة إليك — بانتظار الجدولة";
+        stateColor = Colors.orange.shade800;
+        stateIcon = Icons.assignment_ind_outlined;
+        break;
       case 'scheduled':
         stateTitle = "مهمة مجدولة — جاهز للانطلاق";
         actionLabel = "اضغط مطولاً — أنا في الطريق";
@@ -1078,12 +1088,30 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 int.tryParse('${data['hours_contracted'] ?? 4}') ?? 4),
           const SizedBox(height: 8),
           // DRIVER-001/008: swipe-to-confirm replaces tap button — prevents accidental triggers
-          _HoldToActButton(
-            label: actionLabel,
-            color: stateColor,
-            isLoading: _isUpdatingStatus,
-            onConfirmed: () => _updateStatus(id, nextStatus),
-          ),
+          // حارس: لا زرّ إلا بوجود انتقالٍ فعلي — أي حالة بلا nextStatus (مثل
+          // 'assigned') كانت تُنتج زرّاً فارغاً يفشل دائماً عند التأكيد.
+          if (nextStatus.isNotEmpty)
+            _HoldToActButton(
+              label: actionLabel,
+              color: stateColor,
+              isLoading: _isUpdatingStatus,
+              onConfirmed: () => _updateStatus(id, nextStatus),
+            )
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: stateColor.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: stateColor.withValues(alpha: 0.25)),
+              ),
+              child: Text(
+                "بانتظار تأكيد الجدولة من الإدارة — يظهر زر الانطلاق فور تحويل المهمة إلى «مجدولة»",
+                textAlign: TextAlign.center,
+                style: GoogleFonts.tajawal(color: stateColor, fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+            ),
           const SizedBox(height: 14),
           // DRIVER-003: safe phone call — fake fallback removed
           Row(
@@ -1294,13 +1322,26 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
   void _reportIssue(String orderId) async {
     final message = "بلاغ عن الطلب #$orderId: لدي مشكلة في هذا الطلب — السائق: $_currentDriverId";
-    String adminPhone = "966500000000";
+    String? adminPhone;
     try {
       final configDoc = await FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get();
-      adminPhone = configDoc.data()?['support_whatsapp'] ?? configDoc.data()?['admin_whatsapp'] ?? adminPhone;
-    } catch (_) {}
+      adminPhone = (configDoc.data()?['support_whatsapp'] ?? configDoc.data()?['admin_whatsapp'])?.toString();
+    } catch (_) {
+      // قراءة فاشلة (أوفلاين غالباً) — نُبلغ أدناه بدل المتابعة برقم وهمي
+    }
+    // كان الرقم الوهمي 966500000000 قيمةً افتراضية عند فشل القراءة أو غياب
+    // الحقلين، فيفتح واتساب على محادثة لا تصل الإدارة أبداً والبلاغ يضيع بصمت.
+    if (adminPhone == null || adminPhone.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('تعذّر جلب رقم الدعم — حاول لاحقاً', style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
     final url = "https://wa.me/$adminPhone?text=${Uri.encodeComponent(message)}";
-    if (await canLaunchUrl(Uri.parse(url))) await launchUrl(Uri.parse(url));
+    await _openExternalUrl(url, failMessage: 'تعذّر فتح واتساب — تأكد من تثبيته');
   }
 
   // DRIVER-001: try/catch + double-tap guard via _isUpdatingStatus
@@ -1399,30 +1440,55 @@ class _DriverDashboardState extends State<DriverDashboard> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.check_circle_rounded, size: 120, color: Colors.white),
-          const SizedBox(height: 10),
-          Text('تمت المهمة بنجاح', style: GoogleFonts.tajawal(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-        ]),
+      // PopScope: زر الرجوع (أندرويد) يتجاوز barrierDismissible ويُغلق الحوار،
+      // فكان pop المؤجَّل بعد 3 ثوانٍ يُسقط ما تحته — مسار اللوحة نفسها (الجذر).
+      builder: (context) => PopScope(
+        canPop: false,
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.check_circle_rounded, size: 120, color: Colors.white),
+            const SizedBox(height: 10),
+            Text('تمت المهمة بنجاح', style: GoogleFonts.tajawal(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+          ]),
+        ),
       ),
     );
     Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) Navigator.pop(context);
+      // canPop حزام أمان إضافي: لا نُسقط إلا إذا كان فوق الجذر شيء (الحوار).
+      if (mounted && Navigator.of(context).canPop()) Navigator.pop(context);
     });
   }
 
   void _openMaps(dynamic loc) async {
     if (loc is! GeoPoint) return;
     final url = 'https://www.google.com/maps/search/?api=1&query=${loc.latitude},${loc.longitude}';
-    if (await canLaunchUrl(Uri.parse(url))) await launchUrl(Uri.parse(url));
+    await _openExternalUrl(url, failMessage: 'تعذّر فتح الخرائط');
   }
 
   void _callClient(String phone) async {
-    final url = 'tel:$phone';
-    if (await canLaunchUrl(Uri.parse(url))) await launchUrl(Uri.parse(url));
+    await _openExternalUrl('tel:$phone', failMessage: 'تعذّر فتح الاتصال — الرقم: $phone');
+  }
+
+  /// فتح رابط خارجي مع إبلاغ مرئي عند الفشل — نفس معالجة driver_profile_screen:
+  /// كان `if (await canLaunchUrl(...)) await launchUrl(...)` يفشل بصمت تماماً
+  /// (canLaunchUrl يُرجع false زائفاً على iOS بلا LSApplicationQueriesSchemes)
+  /// فيظنّ السائق الزرّ معطّلاً.
+  Future<void> _openExternalUrl(String url, {String? failMessage}) async {
+    final uri = Uri.parse(url);
+    bool ok = false;
+    try {
+      ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      ok = false;
+    }
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(failMessage ?? 'تعذّر فتح الرابط', style: GoogleFonts.tajawal()),
+        backgroundColor: Colors.red,
+      ));
+    }
   }
 }
 

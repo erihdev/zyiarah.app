@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:zyiarah/screens/admin/admin_drivers_screen.dart';
+import 'package:zyiarah/services/firebase_service.dart';
 
 class AdminComplianceScreen extends StatefulWidget {
   const AdminComplianceScreen({super.key});
@@ -12,6 +15,32 @@ class AdminComplianceScreen extends StatefulWidget {
 
 class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
   String _filter = 'all'; // all, expired, expiring_soon
+
+  // قواعد Firestore تحصر الكتابة على drivers بـ isOrdersManager، بينما تصل هذه
+  // الشاشة كل الأدوار الفرعية (من بطاقة «التزام الكوادر» في Insights بلا بوّابة) —
+  // نجلب الدور مرة واحدة (نفس نمط admin_dashboard_screen) لإخفاء زر الحظر عمّن
+  // سيُرفض طلبه حتماً (accountant/marketing) بدل permission-denied صامت.
+  String _role = 'none';
+
+  bool get _canManageDrivers =>
+      ['admin', 'super_admin', 'orders_manager'].contains(_role);
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchAdminRole();
+  }
+
+  Future<void> _fetchAdminRole() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      final role = await ZyiarahFirebaseService().getUserRole(user.uid);
+      if (mounted) setState(() => _role = role ?? 'none');
+    } catch (_) {
+      // فشل جلب الدور = نُبقي 'none' فيبقى زر الحظر مخفياً (الخيار الآمن).
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -188,24 +217,45 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildActionBtn(Icons.phone, "اتصال", Colors.blue, () => _launchURL("tel:$phone")),
-                _buildActionBtn(Icons.block_flipped, isExpired ? "تعطيل الحساب" : "حظر مؤقت", Colors.red, () async {
-                   final confirm = await _showConfirm("تأكيد الإجراء", "هل تريد تغيير حالة هذا الكادر؟");
-                   if (confirm) {
-                     // نضبط is_suspended/is_available أيضاً: لوحة الويب تبني شارة الحالة
-                     // ومفتاح الإيقاف على is_suspended، فحظرٌ يكتب is_active فقط كان يُظهر
-                     // السائق «نشطاً» في الويب رغم تعطيله هنا.
-                     await FirebaseFirestore.instance.collection('drivers').doc(doc.id).update({
-                       'is_active': false,
-                       'is_suspended': true,
-                       'is_available': false,
-                     });
-                     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم تعطيل الحساب بنجاح")));
-                   }
-                }),
+                _buildActionBtn(Icons.phone, "اتصال", Colors.blue,
+                    // بلا رقم مسجّل لا نحاول 'tel:' فارغاً (كان no-op صامتاً).
+                    phone.toString().trim().isEmpty
+                        ? () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('لا يوجد رقم هاتف مسجّل لهذا الكادر'),
+                            backgroundColor: Colors.red))
+                        : () => _launchURL("tel:$phone")),
+                // زر الحظر يظهر فقط لمن تسمح له القواعد بالكتابة على drivers
+                // (isOrdersManager) — كان يظهر للمحاسب/التسويق ثم يفشل بصمت.
+                if (_canManageDrivers)
+                  _buildActionBtn(Icons.block_flipped, isExpired ? "تعطيل الحساب" : "حظر مؤقت", Colors.red, () async {
+                     final confirm = await _showConfirm("تأكيد الإجراء", "هل تريد تغيير حالة هذا الكادر؟");
+                     if (confirm) {
+                       try {
+                         // نضبط is_suspended/is_available أيضاً: لوحة الويب تبني شارة الحالة
+                         // ومفتاح الإيقاف على is_suspended، فحظرٌ يكتب is_active فقط كان يُظهر
+                         // السائق «نشطاً» في الويب رغم تعطيله هنا.
+                         await FirebaseFirestore.instance.collection('drivers').doc(doc.id).update({
+                           'is_active': false,
+                           'is_suspended': true,
+                           'is_available': false,
+                         });
+                         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم تعطيل الحساب بنجاح")));
+                       } catch (e) {
+                         // كان الفشل (رفض قواعد/شبكة) استثناءً صامتاً — السائق يبقى نشطاً
+                         // والأدمن يظن أن التعطيل تم. نُظهر الخطأ صراحةً.
+                         if (mounted) {
+                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                             content: Text('فشل تعطيل الحساب: $e'),
+                             backgroundColor: Colors.red,
+                           ));
+                         }
+                       }
+                     }
+                  }),
                 _buildActionBtn(Icons.edit_note_rounded, "تحديث البيانات", Colors.grey[700]!, () {
-                  // This is a placeholder as the dialog is in AdminDriversScreen
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى التوجه إلى شاشة الكوادر لتحديث البيانات")));
+                  // حوار تحديث بيانات السائق موجود في شاشة الكوادر — ننقل الأدمن إليها
+                  // فعلياً (كان الزر SnackBar إرشادياً فقط بلا أي فعل).
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminDriversScreen()));
                 }),
               ],
             )
@@ -256,15 +306,34 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
       int count = 0;
       for (var doc in docs.docs) {
         final data = doc.data();
-        await FirebaseFirestore.instance.collection('broadcasts').add({
+        // notification_triggers هي القناة الحقيقية للدفع الموجَّه (processNotificationTriggers
+        // يرسل FCM لرمز fcm_tokens/{toUid} ويكتب سجلّ notifications داخل التطبيق) —
+        // الكتابة السابقة في 'broadcasts' كانت أثراً ميتاً: لا دالة سحابية تستمع إليها
+        // (هي سجلّ تاريخ فقط في شاشة البث) فلم يكن يصل السائقين أي شيء.
+        await FirebaseFirestore.instance.collection('notification_triggers').add({
+          'toUid': doc.id,
           'title': 'تنبيه انتهاء وثائق رسمية',
           'body': 'عزيزي ${data['name']}، نرجو تحديث بيانات هويتك في أقرب وقت لتجنب إيقاف الحساب.',
-          'target': 'drivers',
-          'target_uid': doc.id,
-          'timestamp': FieldValue.serverTimestamp(),
           'type': 'compliance_alert',
+          'data': {'driverId': doc.id},
+          // حارس الخادم يرفض أي trigger موجَّه لغير مُنشئه ما لم يكن المُنشئ موظفاً —
+          // نختم بهوية الأدمن الحالي ليُقبل.
+          'createdBy': FirebaseAuth.instance.currentUser?.uid,
+          'createdAt': FieldValue.serverTimestamp(),
+          'processed': false,
         });
         count++;
+      }
+      // سجلّ تاريخ واحد في broadcasts (نفس نمط شاشة البث: broadcasts للتأريخ فقط).
+      if (count > 0) {
+        await FirebaseFirestore.instance.collection('broadcasts').add({
+          'title': 'تنبيه انتهاء وثائق رسمية',
+          'body': 'إرسال $count تنبيه امتثال موجَّه للكوادر منتهية/قاربة الانتهاء.',
+          'target': 'drivers',
+          'timestamp': FieldValue.serverTimestamp(),
+          'sent_by': 'Admin',
+          'kind': 'compliance_alert',
+        });
       }
       messenger.showSnackBar(SnackBar(
         content: Text("تم إرسال $count تنبيه استباقي آلي بنجاح 🤖✅"),
@@ -279,8 +348,26 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
   }
 
   Future<void> _launchURL(String url) async {
-    if (await canLaunchUrl(Uri.parse(url))) {
-      await launchUrl(Uri.parse(url));
+    // كان فشل canLaunchUrl (جهاز لوحي/ويب بلا تطبيق اتصال) يمرّ بلا أي أثر —
+    // نُظهر الخطأ بدل الصمت.
+    try {
+      if (await canLaunchUrl(Uri.parse(url))) {
+        await launchUrl(Uri.parse(url));
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('تعذّر فتح تطبيق الاتصال على هذا الجهاز'),
+            backgroundColor: Colors.red,
+          ));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('تعذّر فتح تطبيق الاتصال: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
     }
   }
 

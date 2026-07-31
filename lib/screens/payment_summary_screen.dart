@@ -144,10 +144,32 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   Future<void> _loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      final results = await Future.wait([
-        FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
-        FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get(),
-      ]);
+      final List<DocumentSnapshot<Map<String, dynamic>>> results;
+      try {
+        results = await Future.wait([
+          FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
+          FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get(),
+        ]);
+      } catch (e) {
+        // فشل جلب المستخدم/الإعدادات (شبكة عابرة) كان بلا التقاط: يبقى
+        // _currentUser=null للأبد فتُحجب كل أزرار الدفع برسالة «جارٍ تحميل
+        // بيانات حسابك» الكاذبة — ولا شيء يعيد الاستدعاء أبداً. نعرض السبب
+        // مع زرّ إعادة محاولة حقيقي بدل ترك الشاشة عالقة.
+        debugPrint('[loadUserData] failed: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('تعذّر تحميل بيانات حسابك: $e',
+                style: GoogleFonts.tajawal()),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'إعادة المحاولة',
+              textColor: Colors.white,
+              onPressed: _loadUserData,
+            ),
+          ));
+        }
+        return;
+      }
       final userDoc = results[0];
       final configDoc = results[1];
       if (userDoc.exists && mounted) {
@@ -242,6 +264,13 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () {
+              // بيانات الحساب غائبة رغم تسجيل الدخول = فشل الجلب الأول —
+              // نعيد المحاولة فعلياً كي تكون «حاول بعد لحظة» صادقة (لا شيء
+              // آخر كان يعيد استدعاء _loadUserData بعد فشله).
+              if (_currentUser == null &&
+                  FirebaseAuth.instance.currentUser != null) {
+                _loadUserData();
+              }
               final r = _nativePayBlockReason();
               if (r != null && mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -314,12 +343,27 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   Future<void> _validateCoupon() async {
     if (_couponController.text.isEmpty) return;
     setState(() => _isValidatingCoupon = true);
-    
-    final couponData = await _orderService.validateCoupon(
-      _couponController.text,
-      currentUserZone: widget.zoneName,
-    );
-    
+
+    final Map<String, dynamic>? couponData;
+    try {
+      couponData = await _orderService.validateCoupon(
+        _couponController.text,
+        currentUserZone: widget.zoneName,
+      );
+    } catch (e) {
+      // فشل بنيوي (شبكة/صلاحيات) لا يعني أن الكود باطل — كانت الرسالة تتهم
+      // كوبوناً سليماً بالبطلان أثناء انقطاع عابر (الخدمة كانت تبتلع الاستثناء
+      // وتُرجع null فيُعامَل ككود خاطئ). نُبقي أي كوبون مُطبَّق سابقاً كما هو.
+      if (mounted) {
+        setState(() => _isValidatingCoupon = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('تعذّر الاتصال — يرجى المحاولة مجدداً: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
+
     if (mounted) {
       setState(() {
         _isValidatingCoupon = false;
@@ -479,6 +523,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
     if (_currentUser == null) {
       final guest = FirebaseAuth.instance.currentUser == null;
+      // مسجّل والبيانات غائبة = فشل الجلب الأول — نعيد المحاولة فعلياً كي تكون
+      // «يرجى المحاولة مجدداً» صادقة (لا شيء آخر كان يعيد استدعاء _loadUserData).
+      if (!guest) _loadUserData();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
           guest ? "يرجى تسجيل الدخول لإتمام الدفع"
                 : "جارٍ تحميل بيانات الحساب، يرجى المحاولة مجدداً")));

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zyiarah/services/firebase_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/widgets/service_meta_view.dart';
 import 'package:intl/intl.dart' hide TextDirection;
@@ -48,6 +50,31 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   /// الكتابات المباشرة تستهدفها، والنداءات الخادمية للطلبات فقط.
   String _srcCollection = 'orders';
 
+  /// أرشيف الصيانة مجمّد بالقواعد (allow update: if false — أرشيف للقراءة فقط)،
+  /// فأي حفظ عليه محكوم بالرفض مهما فعل العميل — نعرضه للقراءة فقط بدل زرّ
+  /// حفظ يفشل دوماً برسالة تلوم الاتصال.
+  bool get _isMaintenanceArchive => _srcCollection == 'maintenance_requests';
+
+  /// قراءة الطلبات متاحة لكل الأدوار الإدارية بينما تعديلها حكر على مديري
+  /// الطلبات (firestore.rules) — المحاسب/التسويق يصلون هنا عبر البحث والروابط
+  /// العميقة فكانت اللوحة تَعِدهم بحفظٍ مصيره الرفض. الافتراض «عرض فقط» حتى
+  /// يثبت الدور (كما تجلبه AdminDashboardScreen).
+  bool _canEditOrders = false;
+
+  Future<void> _fetchAdminRole() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      final role = await ZyiarahFirebaseService().getUserRole(user.uid);
+      if (mounted) {
+        setState(() => _canEditOrders =
+            ['admin', 'super_admin', 'orders_manager'].contains(role));
+      }
+    } catch (_) {
+      // تعذّر جلب الدور ⇒ نُبقي «عرض فقط» — أسلم من إظهار زرٍّ سيُرفض حفظه.
+    }
+  }
+
   List<String> get _statuses => [
         ..._baseStatuses,
         if (!_baseStatuses.contains(_currentStatus)) _currentStatus,
@@ -60,6 +87,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   @override
   void initState() {
     super.initState();
+    _fetchAdminRole();
     _fetchOrder();
   }
 
@@ -150,6 +178,20 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   }
 
   Future<void> _updateOrder() async {
+    // حارس دفاعي: زرّ الحفظ مخفيّ أصلاً في الحالتين، لكن أي مسار استدعاء آخر
+    // يجب ألا يصل لكتابةٍ محكومةٍ بالرفض في القواعد.
+    if (_isMaintenanceArchive) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('أرشيف صيانة — للقراءة فقط، لا يمكن التعديل'),
+          backgroundColor: Colors.red));
+      return;
+    }
+    if (!_canEditOrders) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('ليست لديك صلاحية تعديل الطلبات — هذه العملية لمديري الطلبات فقط'),
+          backgroundColor: Colors.red));
+      return;
+    }
     setState(() => _isLoading = true);
     try {
       final bool isNewAssignment = _selectedDriverId != null &&
@@ -268,7 +310,9 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
             }
           }
           // (#10) الكتابة على المجموعة المصدر — مستند صيانة كان يُكتب على orders
-          // فيرمي not-found بصمت ويظن الأدمن أن التعديل حُفظ.
+          // فيرمي not-found بصمت ويظن الأدمن أن التعديل حُفظ. (لاحقاً جمّدت
+          // القواعد maintenance_requests نهائياً، فصارت الشاشة تعرض الأرشيف
+          // للقراءة فقط ولا يصل هذا المسار إلا لمستندات orders.)
           await _db
               .collection(_srcCollection)
               .doc(widget.orderId)
@@ -322,10 +366,17 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
     } catch (e) {
       if (mounted) {
         // رسالة الخادم عند رفض الإسناد الذرّي (السائق مشغول/اعتُمد من مدير آخر) بدل رسالة عامة.
-        final msg = e is FirebaseFunctionsException &&
-                (e.message ?? '').trim().isNotEmpty
-            ? e.message!.trim()
-            : 'فشل تحديث الطلب — تحقق من اتصالك بالإنترنت';
+        // رفض القواعد (permission-denied) كان يسقط في «تحقق من اتصالك» فيلوم
+        // الشبكة ويدفع الأدمن لإعادة محاولةٍ عبثية — نُسمّيه باسمه، ونُظهر نصّ
+        // الخطأ الفعلي لبقية الحالات (مثل «الطلب غير موجود») بدل إخفائه.
+        final String msg;
+        if (e is FirebaseFunctionsException && (e.message ?? '').trim().isNotEmpty) {
+          msg = e.message!.trim();
+        } else if (e is FirebaseException && e.code == 'permission-denied') {
+          msg = 'ليست لديك صلاحية تعديل الطلبات — هذه العملية لمديري الطلبات فقط';
+        } else {
+          msg = 'فشل تحديث الطلب: ${e.toString().replaceFirst('Exception: ', '')}';
+        }
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(msg),
           backgroundColor: Colors.red,
@@ -662,6 +713,30 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
     };
   }
 
+  /// شارة «للقراءة فقط» بديلاً عن لوحة الإدارة حين تكون الكتابة ممنوعة سلفاً.
+  Widget _buildReadOnlyBanner(String text) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      color: const Color(0xFFFFF7ED),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          children: [
+            const Icon(Icons.lock_outline, color: Color(0xFFD97706)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                text,
+                style: GoogleFonts.tajawal(
+                    fontWeight: FontWeight.bold, color: const Color(0xFF92400E)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -827,6 +902,15 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
               _buildMoyasarOperationsCard(data),
             ],
             const SizedBox(height: 15),
+            // لوحة الإدارة تُستبدل بشارة «للقراءة فقط» حين تكون الكتابة محكومة
+            // بالرفض سلفاً (أرشيف الصيانة مجمّد بالقواعد، وتعديل الطلبات حكر على
+            // مديري الطلبات) — عرض محرّرات وزرّ حفظ سيفشل حتماً كان يوهم الأدمن
+            // بعطلٍ في الاتصال.
+            if (_isMaintenanceArchive)
+              _buildReadOnlyBanner('أرشيف صيانة — للقراءة فقط، لا يمكن تعديل هذا الطلب')
+            else if (!_canEditOrders)
+              _buildReadOnlyBanner('عرض فقط — تعديل الطلبات متاح لمديري الطلبات دون بقية الأدوار')
+            else
             Card(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
               child: Padding(

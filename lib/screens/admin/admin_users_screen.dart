@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/services/firebase_service.dart';
 
 class AdminUsersScreen extends StatefulWidget {
   const AdminUsersScreen({super.key});
@@ -13,6 +15,31 @@ class AdminUsersScreen extends StatefulWidget {
 class _AdminUsersScreenState extends State<AdminUsersScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _search = '';
+
+  // دور الأدمن الحالي: الشاشة متاحة لـ orders_manager أيضاً، لكن قواعد Firestore
+  // تحصر الحذف النهائي (account_deletions) ومسح علم is_blocked بالمدير العام —
+  // نخفي/نمنع هذه الأفعال في الواجهة بدل خطأ permission-denied غامض.
+  String _role = 'none';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchAdminRole();
+  }
+
+  Future<void> _fetchAdminRole() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      final role = await ZyiarahFirebaseService().getUserRole(user.uid) ?? 'none';
+      if (mounted) {
+        // توحيد admin القديم إلى super_admin (نفس نمط admin_dashboard_screen)
+        setState(() => _role = role == 'admin' ? 'super_admin' : role);
+      }
+    } catch (_) {
+      // فشل جلب الدور لا يعطّل الشاشة — تبقى الأفعال الحساسة مخفية والقواعد هي الفيصل.
+    }
+  }
 
   @override
   void dispose() {
@@ -84,8 +111,13 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         }
       } catch (e) {
         if (context.mounted) {
+          // permission-denied يعني أن الدور الحالي لا يملك صلاحية الحذف (القواعد
+          // تحصره بالمدير العام) — رسالة مفهومة بدل نص الاستثناء الخام.
+          final msg = e.toString().contains('permission-denied')
+              ? 'الحذف النهائي يتطلب صلاحية الإدارة العليا'
+              : 'حدث خطأ: $e';
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('حدث خطأ: $e'),
+            content: Text(msg),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ));
@@ -95,9 +127,9 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 
   // (دمج من لوحة الويب) حظر/رفع حظر مستخدم دون حذفه. يفرضه التطبيق فعلاً:
-  // user_provider يفحص status=='banned' فيُسجّل خروجه ويمنعه من الاستخدام.
-  Future<void> _toggleBan(
-      BuildContext context, String uid, String name, bool isBanned) async {
+  // user_provider يفحص status=='banned' أو is_blocked==true فيُسجّل خروجه ويمنعه.
+  Future<void> _toggleBan(BuildContext context, String uid, String name,
+      bool isBanned, bool hasBlockedFlag) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -139,9 +171,25 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     );
 
     if (confirm == true) {
+      // حظر قديم عبر is_blocked (يُضبط من المدير العام/الكونسول): كتابة status
+      // وحدها كانت تُظهر «تم رفع الحظر ✅» بينما user_provider يستمر بطرد المستخدم
+      // لأن العلم باقٍ. القواعد تمنع غير المدير العام من لمس is_blocked، فنمنع
+      // النجاح الكاذب برسالة واضحة بدل الكتابة الناقصة.
+      if (isBanned && hasBlockedFlag && _role != 'super_admin') {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('رفع هذا الحظر يتطلب صلاحية الإدارة العليا (حظر مثبَّت بعلم is_blocked)'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
+        return;
+      }
       try {
         await FirebaseFirestore.instance.collection('users').doc(uid).update({
           'status': isBanned ? 'active' : 'banned',
+          // نمسح علم الحظر القديم أيضاً حتى لا يبقى المستخدم مطروداً بعد رفع الحظر.
+          if (isBanned && hasBlockedFlag) 'is_blocked': FieldValue.delete(),
         });
         await ZyiarahAuditService().logAction(
           action: isBanned ? 'UNBAN_USER' : 'BAN_USER',
@@ -376,7 +424,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                             onSelected: (v) {
                               if (v == 'ban') {
-                                _toggleBan(context, doc.id, name, isBanned);
+                                _toggleBan(context, doc.id, name, isBanned,
+                                    user['is_blocked'] == true);
                               } else if (v == 'delete') {
                                 _deleteUser(context, doc.id, name);
                               }
@@ -391,14 +440,18 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                                   Text(isBanned ? 'رفع الحظر' : 'حظر المستخدم'),
                                 ]),
                               ),
-                              PopupMenuItem<String>(
-                                value: 'delete',
-                                child: Row(children: [
-                                  Icon(Icons.delete_outline_rounded, color: Colors.red.shade400, size: 20),
-                                  const SizedBox(width: 10),
-                                  const Text('حذف نهائي'),
-                                ]),
-                              ),
+                              // الحذف النهائي يكتب account_deletions والقواعد تحصره
+                              // بالمدير العام — إظهاره لمدير العمليات كان زراً معطوباً
+                              // ينتهي دوماً بـ permission-denied.
+                              if (_role == 'super_admin')
+                                PopupMenuItem<String>(
+                                  value: 'delete',
+                                  child: Row(children: [
+                                    Icon(Icons.delete_outline_rounded, color: Colors.red.shade400, size: 20),
+                                    const SizedBox(width: 10),
+                                    const Text('حذف نهائي'),
+                                  ]),
+                                ),
                             ],
                           ),
                         ),

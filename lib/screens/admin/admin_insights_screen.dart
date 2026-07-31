@@ -10,7 +10,10 @@ import 'package:zyiarah/screens/admin/admin_store_orders_screen.dart';
 import 'package:zyiarah/screens/admin/admin_contracts_screen.dart';
 
 class AdminInsightsScreen extends StatefulWidget {
-  const AdminInsightsScreen({super.key});
+  // الدور يصل من AdminDashboardScreen (مطبَّع: admin→super_admin) — نحتاجه لتخطي
+  // استعلام store_orders الذي تحصره القواعد في مديري الطلبات.
+  final String role;
+  const AdminInsightsScreen({super.key, required this.role});
 
   @override
   State<AdminInsightsScreen> createState() => _AdminInsightsScreenState();
@@ -40,17 +43,29 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     setState(() => _isLoading = true);
 
     final db = FirebaseFirestore.instance;
+    // عزل كل استعلام بخطئه الخاص: رفضُ مجموعةٍ واحدة كان يُسقط أول await فتُهمل
+    // نتائج الباقي وتُعرض لوحة مصفّرة بالكامل بلا أي تنبيه (تبدو كحالة فارغة حقيقية).
+    Object? firstError;
+    Future<T?> guarded<T>(Future<T> f) => f.then<T?>((v) => v, onError: (Object e) {
+          firstError ??= e;
+          return null;
+        });
+    // قراءة store_orders محصورة في القواعد بمالك الطلب أو isOrdersManager — نتخطاها
+    // للمحاسب/التسويق بدل استعلامٍ محكومٍ عليه بـ permission-denied.
+    final canReadStore = ['admin', 'super_admin', 'orders_manager'].contains(widget.role);
     try {
       // Fire all requests in parallel; limit keeps memory and cost bounded.
       // (خدمة الصيانة حُذفت من الجذور — لم نعد نجلب maintenance_requests: بقاياها
       // اليتيمتان under_review كانتا تُضخّمان «طلبات نشطة» وترسمان شريحة «صيانة»
       // وهمية للأبد. القائمة تبقى فارغة فتصفر كل مشتقاتها تلقائياً.)
-      final ordersF     = db.collection('orders').orderBy('created_at', descending: true).limit(500).get();
+      final ordersF     = guarded(db.collection('orders').orderBy('created_at', descending: true).limit(500).get());
       // عملاء فقط: مجموعة users تضمّ سائقين وإداريين (يُكتبون فيها أيضاً)، فعدّها كاملةً
       // كان يضخّم «إجمالي العملاء». (حسابات العملاء تُكتب بـ role='client'.)
-      final usersF      = db.collection('users').where('role', isEqualTo: 'client').count().get();
-      final driversF    = db.collection('drivers').limit(200).get();
-      final storeF      = db.collection('store_orders').orderBy('created_at', descending: true).limit(500).get();
+      final usersF      = guarded(db.collection('users').where('role', isEqualTo: 'client').count().get());
+      final driversF    = guarded(db.collection('drivers').limit(200).get());
+      final storeF      = canReadStore
+          ? guarded(db.collection('store_orders').orderBy('created_at', descending: true).limit(500).get())
+          : Future<QuerySnapshot<Map<String, dynamic>>?>.value(null);
 
       final ordersSnap      = await ordersF;
       final usersSnap       = await usersF;
@@ -59,16 +74,23 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
 
       if (!mounted) return;
       setState(() {
-        _orders      = ordersSnap.docs;
+        // عند فشل استعلامٍ نُبقي بياناته السابقة (مهم في السحب للتحديث) بدل تصفيرها.
+        _orders      = ordersSnap?.docs ?? _orders;
         _maintenance = [];
-        _userCount   = usersSnap.count ?? 0;
-        _drivers     = driversSnap.docs;
-        _storeOrders = storeSnap.docs;
+        _userCount   = usersSnap?.count ?? _userCount;
+        _drivers     = driversSnap?.docs ?? _drivers;
+        _storeOrders = storeSnap?.docs ?? _storeOrders;
         _isLoading   = false;
       });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+      if (firstError != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('فشل تحميل بعض بيانات اللوحة: $firstError'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    } finally {
+      // ضمان عدم بقاء المؤشر عالقاً مهما كان مسار الفشل.
+      if (mounted && _isLoading) setState(() => _isLoading = false);
     }
   }
 
@@ -684,7 +706,14 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     // Calculating New (Pending) Counts for each section
     final int cleaningNew = _orders.where((doc) => (doc.data() as Map)['status'] == 'pending' || (doc.data() as Map)['status'] == 'waiting_payment').length;
     final int storeNew = _storeOrders.where((doc) => (doc.data() as Map)['status'] == 'pending').length;
-    
+
+    // بطاقتا «خدمات بالساعة» و«طلبات المتجر» تفتحان شاشتين حكرهما على مديري
+    // الطلبات (تبويب الطلبات في اللوحة وقيود firestore.rules) — كانتا تظهران
+    // للمحاسب/التسويق فتنتهي نقراتهما برفض صلاحيات يُلام عليه الاتصال. نحجبهما
+    // بنفس معيار admin_more_screen (طلبات المتجر: super_admin/orders_manager).
+    final bool canManageOrders =
+        ['admin', 'super_admin', 'orders_manager'].contains(widget.role);
+
     // For contracts, we'll use a snapshot count if available, or 0
     // (Note: In a real scenario, you'd add a listener for contracts too)
     
@@ -715,20 +744,22 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
           mainAxisSpacing: 12,
           childAspectRatio: MediaQuery.of(context).size.width > 600 ? 1.3 : 1.15,
           children: [
-            _buildLuxuryRequestCard(
-              title: "خدمات بالساعة",
-              count: cleaningNew,
-              icon: Icons.cleaning_services_rounded,
-              gradient: const [Color(0xFF1E293B), Color(0xFF475569)], // Gray/Slate
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminOrdersScreen())),
-            ),
-            _buildLuxuryRequestCard(
-              title: "طلبات المتجر",
-              count: storeNew,
-              icon: Icons.shopping_basket_rounded,
-              gradient: const [Color(0xFF1E1B4B), Color(0xFF312E81)], // Deep Indigo
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminStoreOrdersScreen())),
-            ),
+            if (canManageOrders) ...[
+              _buildLuxuryRequestCard(
+                title: "خدمات بالساعة",
+                count: cleaningNew,
+                icon: Icons.cleaning_services_rounded,
+                gradient: const [Color(0xFF1E293B), Color(0xFF475569)], // Gray/Slate
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminOrdersScreen())),
+              ),
+              _buildLuxuryRequestCard(
+                title: "طلبات المتجر",
+                count: storeNew,
+                icon: Icons.shopping_basket_rounded,
+                gradient: const [Color(0xFF1E1B4B), Color(0xFF312E81)], // Deep Indigo
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminStoreOrdersScreen())),
+              ),
+            ],
             _buildLuxuryRequestCard(
               title: "عقود تنفيذية",
               count: 0, 
@@ -931,7 +962,9 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
                 subtitle: "الحالة: ممتازة (Real-time Sync)",
                 icon: Icons.cloud_done_rounded,
                 color: Colors.blue,
-                onTap: () {},
+                // صفّ حالةٍ فقط بلا وجهة — null يخفي السهم ويعطّل التموّج بدل
+                // onTap فارغ كان يوحي بإمكانية الفتح ولا يفعل شيئاً.
+                onTap: null,
               ),
             ],
           ),
@@ -940,7 +973,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     );
   }
 
-  Widget _buildHealthItem({required String title, required String subtitle, required IconData icon, required Color color, required VoidCallback onTap}) {
+  Widget _buildHealthItem({required String title, required String subtitle, required IconData icon, required Color color, required VoidCallback? onTap}) {
     return InkWell(
       onTap: onTap,
       child: Row(
@@ -960,7 +993,8 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
               ],
             ),
           ),
-          const Icon(Icons.chevron_left_rounded, color: Colors.grey),
+          // السهم للصفوف القابلة للفتح فقط — لا نعرض إيحاء تنقّلٍ لصفوف الحالة.
+          if (onTap != null) const Icon(Icons.chevron_left_rounded, color: Colors.grey),
         ],
       ),
     );

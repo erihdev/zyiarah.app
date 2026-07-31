@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:image_picker/image_picker.dart';
@@ -20,6 +21,31 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
 
   final TextEditingController _searchCtrl = TextEditingController();
   String _search = '';
+
+  // دور الأدمن الحالي: الشاشة متاحة لـ orders_manager أيضاً، لكن قواعد Firestore
+  // تسمح له بإنشاء حسابات بدور 'driver' فقط — تسجيل 'worker' مرفوض خادمياً،
+  // فنحجبه في الواجهة برسالة واضحة بدل خطأ permission-denied غامض.
+  String _role = 'none';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchAdminRole();
+  }
+
+  Future<void> _fetchAdminRole() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      final role = await _firebaseService.getUserRole(user.uid) ?? 'none';
+      if (mounted) {
+        // توحيد admin القديم إلى super_admin (نفس نمط admin_dashboard_screen)
+        setState(() => _role = role == 'admin' ? 'super_admin' : role);
+      }
+    } catch (_) {
+      // فشل جلب الدور لا يعطّل الشاشة — الحارس أدناه يتساهل والقواعد هي الفيصل.
+    }
+  }
 
   @override
   void dispose() {
@@ -299,6 +325,17 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                   
                                   if (name.isEmpty || email.isEmpty) {
                                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الاسم والبريد الإلكتروني متطلبات أساسية')));
+                                    return;
+                                  }
+
+                                  // قواعد Firestore تسمح لمدير العمليات بإنشاء users بدور
+                                  // 'driver' فقط؛ تسجيل 'worker' يُرفض خادمياً بعد إنشاء
+                                  // حساب Auth — نمنعه هنا قبل أي إنشاء برسالة مفهومة.
+                                  if (docId == null && type == 'worker' && _role == 'orders_manager') {
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                      content: Text('تسجيل كوادر التنظيف يتطلب صلاحية الإدارة العليا — يمكنك تسجيل سائقي التوصيل فقط'),
+                                      backgroundColor: Colors.red,
+                                    ));
                                     return;
                                   }
 

@@ -264,7 +264,17 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
         _attemptAutoLocation();
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      // **لا نبتلع فشل جلب المناطق بصمت** (كما أُصلح جلب الإتاحة أعلاه): كان
+      // الـ catch يكتفي بإطفاء الدوّار فتُرسم الشاشة طبيعية بقائمة مناطق فارغة —
+      // زر «حدّد موقعي» يصبح ميتاً وكل موقع يُتَّهم زوراً «خارج نطاق الخدمة».
+      debugPrint('[Hourly] fetchZones failed: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('تعذّر تحميل مناطق الخدمة: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
     }
   }
 
@@ -281,7 +291,26 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   /// (تبقى المنطقة الحالية)، ولا إشعار إلا إن تغيّرت المنطقة فعلاً.
   Future<void> _attemptAutoLocation(
       {bool userInitiated = false, bool silent = false}) async {
-    if (!mounted || _zones.isEmpty) return;
+    if (!mounted) return;
+    // مناطق فارغة = فشل جلبها عند الفتح غالباً — كان return الصامت يجعل زرّ
+    // «حدّد موقعي تلقائياً» ميتاً بلا أي أثر. عند طلبٍ صريح نعيد الجلب، وإن
+    // استمر الفشل نعرض سبباً قابلاً لإعادة المحاولة بدل الصمت.
+    if (_zones.isEmpty) {
+      if (!userInitiated) return;
+      try {
+        _zones = await ZyiarahZoneLocator.fetchZones();
+      } catch (e) {
+        debugPrint('[Hourly] fetchZones retry failed: $e');
+      }
+      if (!mounted) return;
+      if (_zones.isEmpty) {
+        setState(() {
+          _isLocating = false;
+          _locateFailure = LocateFailure.unknown;
+        });
+        return;
+      }
+    }
     // اختيار يدوي قائم: المراقبة الصامتة لا تكتبه أبداً. الطلب الصريح يلغيه.
     if (silent && _manualLocationOverride) return;
     if (userInitiated) _manualLocationOverride = false;
@@ -344,6 +373,24 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     GeoPoint loc = result;
     // اختيارٌ يدوي صريح — أوقف الكتابة الصامتة فوقه (يحجز لبيته من مكان عمله).
     _manualLocationOverride = true;
+
+    // قائمة مناطق فارغة (فشل جلبها عند الفتح) تجعل matchZone يُرجع null لكل
+    // نقطة — فيُتَّهم عميلٌ داخل النطاق زوراً بأنه «خارج نطاق الخدمة» ويُحجب
+    // الحجز بسببٍ كاذب. نعيد الجلب أولاً، وإن استمر الفشل نقول السبب الحقيقي.
+    if (_zones.isEmpty) {
+      try {
+        _zones = await ZyiarahZoneLocator.fetchZones();
+      } catch (e) {
+        debugPrint('[Hourly] fetchZones retry failed: $e');
+      }
+      if (!mounted) return;
+      if (_zones.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('تعذّر تحميل مناطق الخدمة — تحقّق من اتصالك وأعد المحاولة'),
+            backgroundColor: Colors.red));
+        return;
+      }
+    }
 
     // مطابقة المنطقة من المصدر المشترك — كانت منسوخة حرفياً في ثلاث شاشات.
     final matchedZone = ZyiarahZoneLocator.matchZone(loc, _zones);

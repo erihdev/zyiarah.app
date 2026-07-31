@@ -40,7 +40,13 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("حدث خطأ أثناء التحديث")));
+        // تحديث store_orders حكر على مديري الطلبات (firestore.rules) — الرسالة
+        // العامة كانت تبتلع permission-denied فيُعيد الأدمن المحاولة بلا جدوى.
+        final String msg = e is FirebaseException && e.code == 'permission-denied'
+            ? 'لا تملك صلاحية تحديث طلبات المتجر'
+            : 'حدث خطأ أثناء التحديث: $e';
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg), backgroundColor: Colors.red));
       }
     }
   }
@@ -210,7 +216,15 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
                 stream: FirebaseFirestore.instance.collection('store_orders').orderBy('created_at', descending: true).limit(100).snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-                  if (snapshot.hasError) return const Center(child: Text("تعذّر تحميل الطلبات، تحقّق من الاتصال"));
+                  if (snapshot.hasError) {
+                    // قراءة store_orders كاملةً حكر على مديري الطلبات (firestore.rules)
+                    // — رفض القواعد كان يُعرَض «تحقّق من الاتصال» فيلوم الشبكة زوراً.
+                    final err = snapshot.error;
+                    return Center(
+                        child: Text(err is FirebaseException && err.code == 'permission-denied'
+                            ? 'لا تملك صلاحية عرض طلبات المتجر — هذه الشاشة لمديري الطلبات فقط'
+                            : 'تعذّر تحميل الطلبات، تحقّق من الاتصال'));
+                  }
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("لا توجد طلبات في المتجر حتى الآن"));
 
                   final query = _search.trim().toLowerCase();
@@ -318,12 +332,28 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
                             child: TextButton.icon(
                               icon: const Icon(Icons.location_on_outlined, size: 18),
                               label: const Text('عنوان التوصيل على الخريطة'),
-                              onPressed: () {
+                              onPressed: () async {
                                 final gp = order['delivery_location'] as GeoPoint;
-                                launchUrl(
-                                    Uri.parse(
-                                        'https://maps.google.com/?q=${gp.latitude},${gp.longitude}'),
-                                    mode: LaunchMode.externalApplication);
+                                // launchUrl كانت تُطلَق وتُنسى — فشلها (لا معالج خرائط/متصفح)
+                                // يتبخّر بلا أي إشعار. ننتظرها ونُظهر الخطأ كنمط
+                                // _updateOrderStatus في نفس الملف.
+                                try {
+                                  final ok = await launchUrl(
+                                      Uri.parse(
+                                          'https://maps.google.com/?q=${gp.latitude},${gp.longitude}'),
+                                      mode: LaunchMode.externalApplication);
+                                  if (!ok && context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                        content: Text('تعذّر فتح الخريطة'),
+                                        backgroundColor: Colors.red));
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                        content: Text('تعذّر فتح الخريطة: $e'),
+                                        backgroundColor: Colors.red));
+                                  }
+                                }
                               },
                             ),
                           )

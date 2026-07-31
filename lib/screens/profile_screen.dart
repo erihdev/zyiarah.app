@@ -1171,8 +1171,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
           }),
           _divider(),
           _menuRow(Icons.shield_outlined, 'سياسة الخصوصية', _brand, () {
-            launchUrl(Uri.parse('https://zyiarah.com/privacy'),
-                mode: LaunchMode.externalApplication);
+            _openExternalUrl('https://zyiarah.com/privacy');
           }),
           _divider(),
           _menuRow(Icons.logout_rounded, 'تسجيل الخروج', Colors.orange,
@@ -1203,10 +1202,28 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
     );
   }
 
+  /// فتح رابط خارجي مع إبلاغ مرئي عند الفشل (كان النداء بلا await ولا رسالة:
+  /// الفشل يُبتلع في Crashlytics والعميل يظنّ الصفّ معطّلاً). نفحص القيمة
+  /// الراجعة من launchUrl لا canLaunchUrl — الأخيرة تُرجع false زوراً على
+  /// منصّاتنا (انظر app_update_service).
+  Future<void> _openExternalUrl(String url) async {
+    bool ok = false;
+    try {
+      ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (_) {
+      ok = false;
+    }
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('تعذّر فتح الرابط', style: GoogleFonts.tajawal()),
+        backgroundColor: Colors.red,
+      ));
+    }
+  }
+
   Widget _buildFooter() {
     return GestureDetector(
-      onTap: () => launchUrl(Uri.parse('https://erihdev.com'),
-          mode: LaunchMode.externalApplication),
+      onTap: () => _openExternalUrl('https://erihdev.com'),
       onLongPress: () => _showThankYouMessage(context),
       child: Text.rich(
         TextSpan(

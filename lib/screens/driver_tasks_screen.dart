@@ -70,8 +70,9 @@ class _DriverTasksScreenState extends State<DriverTasksScreen>
     }
 
     // التوجيه المباشر يستخدم scheduled→on_the_way→in_progress (+accepted القديمة).
-    // كانت 'assigned' حالة غير مُستخدمة، وكان scheduled/on_the_way يختفيان من الشاشة.
-    final activeStatuses = ['scheduled', 'accepted', 'on_the_way', 'in_progress'];
+    // 'assigned' ليست من مسار التوجيه لكنّ الأدمن يكتبها يدوياً من شاشة تفاصيل
+    // الطلب — كانت مستثناة هنا فيختفي الطلب من «النشطة» بينما يظهر على اللوحة.
+    final activeStatuses = ['assigned', 'scheduled', 'accepted', 'on_the_way', 'in_progress'];
     final historyStatuses = ['completed', 'cancelled'];
 
     return StreamBuilder<QuerySnapshot>(
@@ -175,6 +176,12 @@ class _DriverTasksScreenState extends State<DriverTasksScreen>
         statusColor = const Color(0xFF660033);
         statusLabel = 'مجدولة';
         statusIcon = Icons.event_available_outlined;
+        break;
+      case 'assigned':
+        // إسناد يدوي من الأدمن — بانتظار الجدولة (لا يستطيع السائق تقديمها بنفسه)
+        statusColor = Colors.orange;
+        statusLabel = 'مُسنَدة — بانتظار الجدولة';
+        statusIcon = Icons.assignment_ind_outlined;
         break;
       case 'on_the_way':
       case 'accepted':

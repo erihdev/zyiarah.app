@@ -11,6 +11,9 @@ class AdminStaffPerformanceScreen extends StatefulWidget {
 
 class _AdminStaffPerformanceScreenState extends State<AdminStaffPerformanceScreen> {
   bool _isLoading = true;
+  // فشل الجلب كان يعرض قائمة فارغة مطابقة تماماً لحالة «لا يوجد سائقون» بلا أي
+  // وسيلة إعادة محاولة — نميّز الفشل لعرض رسالة خطأ + زر إعادة.
+  bool _loadFailed = false;
   List<Map<String, dynamic>> _staffStats = [];
 
   @override
@@ -56,11 +59,22 @@ class _AdminStaffPerformanceScreenState extends State<AdminStaffPerformanceScree
         setState(() {
           _staffStats = stats;
           _isLoading = false;
+          _loadFailed = false;
         });
       }
     } catch (e) {
-      // لا تُبقِ الشاشة على سبينر لانهائي عند أي خطأ (فهرس مفقود/اتصال).
-      if (mounted) setState(() => _isLoading = false);
+      // لا تُبقِ الشاشة على سبينر لانهائي عند أي خطأ (فهرس مفقود/اتصال) —
+      // ونعلن الفشل بدل قائمة فارغة تُوهم أن لا سائقين.
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _loadFailed = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('فشل تحميل بيانات الأداء: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
     }
   }
 
@@ -76,18 +90,62 @@ class _AdminStaffPerformanceScreenState extends State<AdminStaffPerformanceScree
           foregroundColor: Colors.white,
           elevation: 0,
         ),
-        body: _isLoading 
+        body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Color(0xFF1E293B)))
-          : ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                _buildEliteHeroSection(),
-                const SizedBox(height: 25),
-                Text("ترتيب الكفاءة", style: GoogleFonts.tajawal(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 15),
-                ..._staffStats.asMap().entries.map((entry) => _buildStaffCard(entry.value, entry.key + 1)),
-              ],
+          : _loadFailed
+            ? _buildErrorState()
+            : RefreshIndicator(
+                // سحب للتحديث — لم يكن للشاشة أي وسيلة تحديث سوى إعادة فتحها.
+                onRefresh: _calculatePerformance,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(20),
+                  children: [
+                    _buildEliteHeroSection(),
+                    const SizedBox(height: 25),
+                    Text("ترتيب الكفاءة", style: GoogleFonts.tajawal(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 15),
+                    if (_staffStats.isEmpty)
+                      // حالة فارغة صريحة — كي لا تُقرأ القائمة الخالية كعطل.
+                      Padding(
+                        padding: const EdgeInsets.only(top: 40),
+                        child: Center(
+                          child: Text("لا يوجد سائقون مسجّلون بعد",
+                              style: GoogleFonts.tajawal(color: Colors.grey)),
+                        ),
+                      )
+                    else
+                      ..._staffStats.asMap().entries.map((entry) => _buildStaffCard(entry.value, entry.key + 1)),
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.cloud_off_rounded, size: 60, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          Text("تعذّر تحميل بيانات الأداء",
+              style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: () {
+              setState(() => _isLoading = true);
+              _calculatePerformance();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF660033),
+              foregroundColor: Colors.white,
             ),
+            icon: const Icon(Icons.refresh_rounded),
+            label: Text("إعادة المحاولة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }

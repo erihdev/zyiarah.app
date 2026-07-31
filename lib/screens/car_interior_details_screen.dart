@@ -60,8 +60,18 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
       });
       _attemptAutoLocation();
     } catch (e) {
+      // **لا نبتلع فشل جلب المناطق بصمت**: كان الـ catch يكتفي بإطفاء الدوّار
+      // فتُرسم الشاشة طبيعية بقائمة مناطق فارغة — زر «حدّد موقعي» يصبح ميتاً
+      // وكل موقع يُتَّهم زوراً «خارج نطاق خدماتنا».
       debugPrint('[CarInterior] fetchZones failed: $e');
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('تعذّر تحميل مناطق الخدمة: $e',
+              style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.red,
+        ));
+      }
     }
   }
 
@@ -90,7 +100,26 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
   bool get _anyEnabled => CarSize.values.any(_isEnabled);
 
   Future<void> _attemptAutoLocation({bool userInitiated = false}) async {
-    if (!mounted || _zones.isEmpty) return;
+    if (!mounted) return;
+    // مناطق فارغة = فشل جلبها عند الفتح غالباً — كان return الصامت يجعل زرّ
+    // «حدّد موقعي تلقائياً» ميتاً بلا أي أثر. عند طلبٍ صريح نعيد الجلب، وإن
+    // استمر الفشل نعرض سبباً قابلاً لإعادة المحاولة بدل الصمت.
+    if (_zones.isEmpty) {
+      if (!userInitiated) return;
+      try {
+        _zones = await ZyiarahZoneLocator.fetchZones();
+      } catch (e) {
+        debugPrint('[CarInterior] fetchZones retry failed: $e');
+      }
+      if (!mounted) return;
+      if (_zones.isEmpty) {
+        setState(() {
+          _isLocating = false;
+          _locateFailure = LocateFailure.unknown;
+        });
+        return;
+      }
+    }
     setState(() {
       _isLocating = true;
       _locateFailure = null;
@@ -136,6 +165,26 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
       ),
     );
     if (!mounted || result is! GeoPoint) return;
+
+    // قائمة مناطق فارغة (فشل جلبها) تجعل matchZone يُرجع null لكل نقطة —
+    // فتُتَّهم عميلة داخل النطاق زوراً بأنها «خارج نطاق خدماتنا». نعيد الجلب
+    // أولاً، وإن استمر الفشل نقول السبب الحقيقي.
+    if (_zones.isEmpty) {
+      try {
+        _zones = await ZyiarahZoneLocator.fetchZones();
+      } catch (e) {
+        debugPrint('[CarInterior] fetchZones retry failed: $e');
+      }
+      if (!mounted) return;
+      if (_zones.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('تعذّر تحميل مناطق الخدمة — تحقّقي من اتصالك وأعيدي المحاولة',
+              style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.red,
+        ));
+        return;
+      }
+    }
 
     final zone = ZyiarahZoneLocator.matchZone(result, _zones);
     if (zone == null) {
