@@ -21,10 +21,11 @@ const moyasarWebhookSecret = defineSecret("MOYASAR_WEBHOOK_SECRET");
 const tabbyWebhookSecret = defineSecret("TABBY_WEBHOOK_SECRET");
 
 // (#1 Phase 2) بوّابة إنفاذ التسعير الخادمي (Tier B): استرداد/إلغاء آليّ عند دفعٍ ناقص
-// صارخ. **مطفأة افتراضياً** — نُشغّل أوّلاً Tier A (تعليم + تنبيه إداري مع خدمة العميل)
-// ونراقب سجلّات [price-shadow] حتى نتأكّد ألّا طلبَ شرعيّاً يبلغ ratio<0.2، ثم نُفعّلها.
-// تفعيلها بحركة مالٍ آلية قبل إثبات التكافؤ في السجلّات = خطر ردّ عميلٍ شرعي.
-const ENFORCE_PRICE_TIER_B = false;
+// صارخ. **فُعّلت بقرار المالك (2026-07-31)** بعد مراجعة سجلّات [price-shadow]:
+// صفر إنذارات (كاذبة أو حقيقية) طوال فترة المراقبة. حرّاسها الثلاثة يبقون:
+// ratio<0.2 فقط + طلب حديث موثوق الحساب + متوقَّع ≥ 5 ر.س (فأسعار الإطلاق
+// التجريبي 1 ر.س خارج مداها أصلاً — تصبح فاعلة مع التسعير الحقيقي).
+const ENFORCE_PRICE_TIER_B = true;
 
 // 1. Notify user when admin replies to a support ticket
 exports.sendNotificationOnTicketReply = onDocumentCreated({document: "support_tickets/{ticketId}/messages/{messageId}", cpu: 0.083},
