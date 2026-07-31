@@ -478,7 +478,11 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
         context,
         MaterialPageRoute(
           builder: (context) => PaymentSummaryScreen(
-            serviceName: widget.serviceName,
+            // اسم وصفي بالباقة المختارة — يظهر في الإيميلات وفاتورة ZATCA وقوائم
+            // الإدارة بدل «نظافة بالساعة» العامة. **بلا كلمة «باقة»**: مُصالح
+            // الدفعات اليتيمة يتخطى أي service_name يحويها (فلتر الاشتراكات).
+            serviceName:
+                'تنظيف منزلي — ${kHomeTypeLabels[_selectedType]} (${crewLabel(_selectedCrews!)})',
             amount: grandTotal, // الأساس + 15% — شاشة الدفع تعامله كإجمالي
             location: _selectedLocation!,
             // مدة الجدولة (تحجز فترة السائق وتفحصها السعة) — من الباقة لا من العميل.

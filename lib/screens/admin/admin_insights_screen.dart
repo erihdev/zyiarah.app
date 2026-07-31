@@ -129,6 +129,10 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
                   ],
                 ),
                 const SizedBox(height: 20),
+                // (دمج من لوحة الويب — Accountants) لوحة مالية مصغّرة: صافي الإيراد
+                // بعد الضريبة + توزيع طرق الدفع بعدد المعاملات ومبالغها.
+                _buildFinanceCard(stats),
+                const SizedBox(height: 20),
                 _buildRecentActivityList(_orders, _maintenance),
                 const SizedBox(height: 20),
                 _buildSystemHealthSection(_drivers),
@@ -200,6 +204,43 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     // VAT in KSA is 15% inclusive. Tax = Total - (Total / 1.15)
     final double vatLiability = totalRevenue - (totalRevenue / 1.15);
 
+    // (دمج من لوحة الويب) نمو شهري: الشهر التقويمي الحالي مقابل السابق، من نفس
+    // العيّنة المجلوبة (آخر 500) — حدّها حدّ بقية الإحصاءات هنا، لا استعلامات إضافية.
+    final now = DateTime.now();
+    final curStart = DateTime(now.year, now.month, 1);
+    final prevStart = DateTime(now.year, now.month - 1, 1);
+    DateTime? createdOf(Map<String, dynamic> data) {
+      final v = data['created_at'];
+      return v is Timestamp ? v.toDate() : null;
+    }
+
+    double revCur = 0, revPrev = 0;
+    int ordCur = 0, ordPrev = 0;
+    void tally(Iterable<DocumentSnapshot> docs, {required bool store}) {
+      for (final doc in docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        if ((data['status'] ?? '') == 'cancelled') continue;
+        final t = createdOf(data);
+        if (t == null || t.isBefore(prevStart)) continue;
+        final amount = d(store
+            ? (data['final_amount'] ?? data['total_amount'] ?? data['total_price'])
+            : (data['final_amount'] ?? data['amount']));
+        if (t.isBefore(curStart)) {
+          revPrev += amount;
+          ordPrev++;
+        } else {
+          revCur += amount;
+          ordCur++;
+        }
+      }
+    }
+
+    tally(orders, store: false);
+    tally(storeOrders, store: true);
+    // null = لا أساس للمقارنة (شهر سابق فارغ) — البطاقة تُخفي الشارة بدل «∞%».
+    double? growth(num cur, num prev) =>
+        prev <= 0 ? null : (cur - prev) / prev * 100;
+
     return {
       'revenue': totalRevenue,
       'vat': vatLiability,
@@ -208,6 +249,8 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       'store': storeRevenue,
       'active': activeOrders,
       'users': _userCount,
+      'revenueGrowth': growth(revCur, revPrev),
+      'ordersGrowth': growth(ordCur, ordPrev),
     };
   }
 
@@ -219,13 +262,13 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     return Column(
       children: [
         SizedBox(
-          height: 110,
+          height: 124,
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: [
-              _buildStatCard("إجمالي الإيرادات", "${stats['revenue'].toStringAsFixed(0)} ر.س", const Color(0xFF059669), Icons.account_balance_wallet_rounded),
+              _buildStatCard("إجمالي الإيرادات", "${stats['revenue'].toStringAsFixed(0)} ر.س", const Color(0xFF059669), Icons.account_balance_wallet_rounded, growth: stats['revenueGrowth']),
               _buildStatCard("الوعاء الضريبي (VAT)", "${stats['vat'].toStringAsFixed(0)} ر.س", const Color(0xFFD97706), Icons.account_balance_rounded),
-              _buildStatCard("طلبات نشطة", stats['active'].toString(), const Color(0xFF2563EB), Icons.speed_rounded),
+              _buildStatCard("طلبات نشطة", stats['active'].toString(), const Color(0xFF2563EB), Icons.speed_rounded, growth: stats['ordersGrowth']),
               _buildStatCard("إجمالي العملاء", stats['users'].toString(), const Color(0xFF7C3AED), Icons.people_alt_rounded),
             ],
           ),
@@ -256,7 +299,9 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     );
   }
 
-  Widget _buildStatCard(String label, String value, Color color, IconData icon) {
+  Widget _buildStatCard(String label, String value, Color color, IconData icon,
+      {double? growth}) {
+    final bool up = (growth ?? 0) >= 0;
     return Container(
       width: 160,
       margin: const EdgeInsets.only(left: 15),
@@ -279,6 +324,135 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
           ),
           const SizedBox(height: 8),
           Text(value, style: GoogleFonts.tajawal(fontSize: 20, fontWeight: FontWeight.w900, color: const Color(0xFF0F172A))),
+          // (دمج من لوحة الويب) شارة النمو الشهري — تُخفى بلا شهرٍ سابقٍ يُقارن به.
+          if (growth != null) ...[
+            const SizedBox(height: 3),
+            Text(
+              "${up ? '▲' : '▼'} ${growth.abs().toStringAsFixed(0)}% عن الشهر الماضي",
+              style: GoogleFonts.tajawal(
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  color: up ? const Color(0xFF059669) : const Color(0xFFDC2626)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// (دمج من لوحة الويب) اللوحة المالية: صافي الإيراد بعد الضريبة + توزيع طرق
+  /// الدفع (عدد المعاملات والمبلغ ونسبته) من الطلبات المدفوعة في العيّنة المجلوبة.
+  Widget _buildFinanceCard(Map<String, dynamic> stats) {
+    double d(dynamic v) => v is num ? v.toDouble() : (double.tryParse('$v') ?? 0.0);
+    const labels = {
+      'moyasar': 'بطاقة (ميسر)',
+      'credit_card': 'بطاقة (ميسر)',
+      'creditcard': 'بطاقة (ميسر)',
+      'apple_pay': 'Apple Pay',
+      'applepay': 'Apple Pay',
+      'stc_pay': 'STC Pay',
+      'stcpay': 'STC Pay',
+      'samsung_pay': 'Samsung Pay',
+      'google_pay': 'Google Pay',
+      'wallet': 'المحفظة',
+      'tamara': 'تمارا',
+      'tabby': 'تابي',
+      'subscription': 'اشتراك',
+    };
+    final Map<String, double> amounts = {};
+    final Map<String, int> counts = {};
+    void tally(Iterable<DocumentSnapshot> docs) {
+      for (final doc in docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        if ((data['status'] ?? '') == 'cancelled') continue;
+        if (data['is_paid'] != true) continue;
+        final raw = '${data['payment_method'] ?? ''}'.toLowerCase().trim();
+        final label = labels[raw] ?? (raw.isEmpty ? 'غير محدد' : raw);
+        final amount = d(data['final_amount'] ??
+            data['amount'] ??
+            data['total_amount'] ??
+            data['total_price']);
+        amounts[label] = (amounts[label] ?? 0) + amount;
+        counts[label] = (counts[label] ?? 0) + 1;
+      }
+    }
+
+    tally(_orders);
+    tally(_storeOrders);
+    final entries = amounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final double maxAmount =
+        entries.isEmpty ? 1 : (entries.first.value <= 0 ? 1 : entries.first.value);
+    final double net = (stats['revenue'] as double) - (stats['vat'] as double);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 15, offset: const Offset(0, 8))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("اللوحة المالية", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),
+          Text("صافي الإيراد وتوزيع طرق الدفع (المدفوع فقط)", style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey)),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              const Icon(Icons.savings_rounded, size: 18, color: Color(0xFF660033)),
+              const SizedBox(width: 8),
+              Text("صافي الإيراد بعد الضريبة:",
+                  style: GoogleFonts.tajawal(fontSize: 13, color: const Color(0xFF334155))),
+              const Spacer(),
+              Text("${net.toStringAsFixed(0)} ر.س",
+                  style: GoogleFonts.tajawal(
+                      fontSize: 15, fontWeight: FontWeight.w900, color: const Color(0xFF660033))),
+            ],
+          ),
+          const Divider(height: 22),
+          if (entries.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text("لا معاملات مدفوعة بعد",
+                    style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 12)),
+              ),
+            )
+          else
+            ...entries.map((e) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(e.key,
+                              style: GoogleFonts.tajawal(
+                                  fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                          const SizedBox(width: 6),
+                          Text("×${counts[e.key]} معاملة",
+                              style: GoogleFonts.tajawal(fontSize: 10, color: Colors.grey)),
+                          const Spacer(),
+                          Text("${e.value.toStringAsFixed(0)} ر.س",
+                              style: GoogleFonts.tajawal(
+                                  fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF660033))),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: (e.value / maxAmount).clamp(0.0, 1.0),
+                          minHeight: 5,
+                          backgroundColor: const Color(0xFFF2DEE9),
+                          valueColor: const AlwaysStoppedAnimation(Color(0xFF8E2B5C)),
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
         ],
       ),
     );
