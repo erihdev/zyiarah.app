@@ -23,10 +23,6 @@ class AdminHourlyZonesScreen extends StatefulWidget {
 }
 
 class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
-  /// مجموعة الساعات المعروضة كحقول أسعار — يجب أن تحتوي كل خيارات «الساعات
-  /// المتاحة للعميل» في إعدادات النظام (يفرضه اختبار zone_schedule_test).
-  static const List<int> kZoneHourOptions = [1, 2, 4, 5, 6, 7, 8];
-
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   Future<void> _toggleZoneEnabled(String id, bool currentValue) async {
@@ -221,22 +217,9 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     final nameCtrl = TextEditingController(text: data?['name'] ?? '');
     final radiusCtrl = TextEditingController(text: data?['radiusKm']?.toString() ?? '15');
     
-    // حقول أسعار الساعات **تتولّد من مجموعة الساعات** لا من قائمة يدوية.
-    // كانت مثبّتة (1،4،5،6،8) بينما شرائح العميل من الإعدادات — فلما فعّل المالك
-    // «ساعتين» صارت شريحةً بلا حقل سعر: تُقرأ صفراً ⇒ «غير مسعّرة» ولا يمكن بيعها،
-    // ولا يملك الأدمن مكاناً يسعّرها منه أصلاً. الاتحاد مع مفاتيح المنطقة القائمة
-    // يُبقي أي ساعة مسعّرة تاريخياً قابلةً للتعديل.
-    final Map<String, dynamic> existingPrices =
-        stringKeyedMap(data?['prices']) ?? {};
-    final hourSet = <int>{
-      ...kZoneHourOptions,
-      ...existingPrices.keys.map((k) => int.tryParse(k) ?? -1).where((h) => h > 0),
-    }.toList()
-      ..sort();
-    final Map<int, TextEditingController> hourCtrls = {
-      for (final h in hourSet)
-        h: TextEditingController(text: existingPrices['$h']?.toString() ?? ''),
-    };
+    // أسعار الساعات (prices) حُذفت من الحوار بطلب المالك — النظافة المنزلية صارت
+    // «باقات السكن». الحفظ لا يكتب prices إطلاقاً فلا يمسّ ما لدى المناطق القائمة
+    // (تقرؤه النسخ القديمة وزيارات العقود فقط).
 
     // sofaPrice/rugPrice (المتر الطولي) أُزيلا بقرار المالك: «المتر الطولي يختفي».
     // لم يعد لهما حقلٌ هنا ولا قارئ في التطبيق — نظام تسعير واحد فقط، بالمتر المربع.
@@ -437,8 +420,6 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                                   final src = docs
                                       .firstWhere((d) => d.id == id)
                                       .data();
-                                  final prices =
-                                      stringKeyedMap(src['prices']) ?? {};
                                   String n(dynamic v) => v == null
                                       ? ''
                                       : (v is num
@@ -448,27 +429,6 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                                           : v.toString());
                                   setDialogState(() {
                                     copiedFromId = id;
-                                    // تفريغ كل حقول الساعات أولاً: ساعةٌ مسعّرة
-                                    // في النموذج وغائبة عن المصدر كانت تبقى —
-                                    // فيُحفظ خليطُ منطقتين كأنه تسعيرة المصدر
-                                    // (بقية المجموعات تُصفَّر أصلاً — هذه الوحيدة
-                                    // التي كانت تفلت).
-                                    for (final c in hourCtrls.values) {
-                                      c.text = '';
-                                    }
-                                    for (final e in prices.entries) {
-                                      final h = int.tryParse(e.key);
-                                      if (h == null) continue;
-                                      hourCtrls
-                                          .putIfAbsent(h,
-                                              () => TextEditingController())
-                                          .text = n(e.value);
-                                      if (!hourSet.contains(h)) {
-                                        hourSet
-                                          ..add(h)
-                                          ..sort();
-                                      }
-                                    }
                                     pSofaSqmCtrl.text = n(src['sofaSqmPrice']);
                                     pRugSqmCtrl.text = n(src['rugSqmPrice']);
                                     pAcMaintWinCtrl.text =
@@ -527,31 +487,6 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                         );
                       },
                     ),
-                    const SizedBox(height: 12),
-                    const Text("أسعار النظافة بالساعة — نظام قديم:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
-                    const Text(
-                        "⚠️ لا يقرؤها عملاء النسخة الحالية — تسعير النظافة المنزلية صار في «باقات السكن» أدناه. تبقى للنسخ السابقة فقط.",
-                        style: TextStyle(fontSize: 11, color: Colors.orange)),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final h in hourSet)
-                          SizedBox(
-                            width: 168,
-                            child: TextField(
-                              controller: hourCtrls[h],
-                              keyboardType: TextInputType.number,
-                              decoration: InputDecoration(
-                                  labelText: h == 1 ? 'ساعة' : '$h ساعات',
-                                  border: const OutlineInputBorder(),
-                                  isDense: true),
-                            ),
-                          ),
-                      ],
-                    ),
-
                     const Divider(height: 30),
                     const Text("أسعار الكنب (بالمتر الطولي) والسجاد (بالمتر المربع):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     const Text("الكنب يُحسب بالطول فقط (متر طولي)، والسجاد بالطول × العرض (متر مربع). صفر = تعطيل الخدمة في هذه المنطقة.",
@@ -709,10 +644,6 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                           setDialogState(() => isSaving = true);
                           try {
                             final n = await _applyPricesToZones(targets, {
-                              'prices': {
-                                for (final e in hourCtrls.entries)
-                                  '${e.key}': double.tryParse(e.value.text) ?? 0,
-                              },
                               'sofaSqmPrice': double.tryParse(pSofaSqmCtrl.text) ?? 0,
                               'rugSqmPrice': double.tryParse(pRugSqmCtrl.text) ?? 0,
                               'acMaintWindowPrice': double.tryParse(pAcMaintWinCtrl.text) ?? 0,
@@ -760,10 +691,6 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                         'name': nameCtrl.text.trim(),
                         'centerLoc': selectedGeo,
                         'radiusKm': double.tryParse(radiusCtrl.text) ?? 15.0,
-                        'prices': {
-                          for (final e in hourCtrls.entries)
-                            '${e.key}': double.tryParse(e.value.text) ?? 0,
-                        },
                         // صفر = «غير مسعّرة» فتُعطَّل الخدمة بدل بيعها بسعر افتراضي.
                         // (sofaPrice/rugPrice الطوليان لم يعودا يُكتبان — النظام أُلغي.
                         //  نتركهما في المستندات القائمة بلا مساس: لا قارئ لهما، وحذفهما
@@ -838,9 +765,6 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
       nameDebounce?.cancel();
       nameCtrl.dispose();
       radiusCtrl.dispose();
-      for (final c in hourCtrls.values) {
-        c.dispose();
-      }
       // الستة الجديدة كانت تُسرَّب في كل فتح/إغلاق للحوار — أُضيفت الحقول ونُسي التخلّص.
       pSofaSqmCtrl.dispose();
       pRugSqmCtrl.dispose();
