@@ -388,7 +388,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     const Divider(height: 30),
                     // «نسخ الأسعار من منطقة سابقة» (طلب المالك): عند إضافة مدينة
                     // جديدة يختار مدينة قائمة فتُنسخ أسعارها **إلى الحقول فوراً**
-                    // (الساعات + م² + المكيفات) ثم يعدّل ما شاء ويحفظ عادي.
+                    // (م² + المكيفات + السيارات + الباقات) ثم يعدّل ما شاء ويحفظ.
                     // لا كتابة على أي منطقة أخرى — تعبئة نموذج فحسب.
                     FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
                       future: zonesFuture,
