@@ -86,7 +86,6 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
       {'value': '/hourly_cleaning', 'label': 'خدمة النظافة بالساعة'},
       {'value': '/sofa_cleaning', 'label': 'خدمة تنظيف الكنب'},
       {'value': '/rug_cleaning', 'label': 'خدمة تنظيف الزل'},
-      {'value': '/maintenance', 'label': 'طلب صيانة'},
       {'value': '/store', 'label': 'المتجر'},
       {'value': '/subscriptions', 'label': 'باقات الاشتراك'},
       {'value': '/support', 'label': 'الدعم الفني'},
@@ -108,7 +107,7 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (isSaving || isUploading)
-                      const Padding(padding: EdgeInsets.only(bottom: 15), child: LinearProgressIndicator(color: Color(0xFF2563EB))),
+                      const Padding(padding: EdgeInsets.only(bottom: 15), child: LinearProgressIndicator(color: Color(0xFF660033))),
                     
                     Container(
                       padding: const EdgeInsets.all(10),

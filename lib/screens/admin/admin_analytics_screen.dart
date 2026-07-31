@@ -145,14 +145,14 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+            colors: [Color(0xFF660033), Color(0xFF4D0026)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF2563EB).withValues(alpha: 0.3),
+              color: const Color(0xFF660033).withValues(alpha: 0.3),
               blurRadius: 15,
               offset: const Offset(0, 8),
             )

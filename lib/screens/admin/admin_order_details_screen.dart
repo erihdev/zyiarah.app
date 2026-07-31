@@ -44,6 +44,10 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
     'on_the_way', 'in_progress', 'completed', 'cancelled',
   ];
 
+  /// المجموعة التي جاء منها المستند (orders أو maintenance_requests) — كل
+  /// الكتابات المباشرة تستهدفها، والنداءات الخادمية للطلبات فقط.
+  String _srcCollection = 'orders';
+
   List<String> get _statuses => [
         ..._baseStatuses,
         if (!_baseStatuses.contains(_currentStatus)) _currentStatus,
@@ -63,11 +67,14 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
     if (mounted) setState(() { _isLoading = true; _fetchError = false; });
     try {
       final doc = await _db.collection('orders').doc(widget.orderId).get();
-      
+
       // Try maintenance collection if not in orders
       DocumentSnapshot? finalDoc = doc;
       if (!finalDoc.exists) {
         finalDoc = await _db.collection('maintenance_requests').doc(widget.orderId).get();
+        // كل الكتابات أدناه كانت تستهدف orders دائماً — حفظ تعديلٍ على طلب صيانة
+        // كان يرمي not-found بصمت. نتتبع المجموعة المصدر ونكتب عليها هي.
+        if (finalDoc.exists) _srcCollection = 'maintenance_requests';
       }
 
       if (finalDoc.exists && mounted) {
@@ -116,32 +123,24 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
 
   Future<void> _fetchDrivers() async {
     try {
-      final snapshotF = _db.collection('drivers').where('is_active', isEqualTo: true).get();
-      final activeOrdersF = _db.collection('orders')
-          // كل الحالات النشطة الفعلية — لولا scheduled/on_the_way/accepted يظهر
-          // سائق مشغول كأنه متاح ويُحجز مرتين.
-          .where('status', whereIn: ['assigned', 'scheduled', 'on_the_way', 'in_progress', 'accepted'])
+      // **كل السائقين النشطين** — كان الفلتر يُخفي أي سائق له طلب نشط بأي تاريخ،
+      // فمع حجوزات الباقات المسبقة (أيام مقدماً) تُفرَّغ القائمة كلها ويستحيل
+      // الإسناد. فحص التعارض الحقيقي **زمنيّ النطاق وذرّي** في الخادم
+      // (approveAndAssignOrder/rescheduleAssignedOrder) ويرفض برسالة واضحة —
+      // القائمة للعرض، والخادم هو الحارس.
+      final snapshot = await _db
+          .collection('drivers')
+          .where('is_active', isEqualTo: true)
           .get();
-      final results = await Future.wait([snapshotF, activeOrdersF]);
-      final snapshot = results[0];
-      final activeOrders = results[1];
-
-      // نستثني الطلب الحالي: سائقه المُسنَد ليس «مشغولاً» بالنسبة لهذا الطلب، وإلا
-      // اختفى من القائمة وظهر المنسدل فارغاً ولم يعُد الأدمن يرى من هو المُعيَّن.
-      final busyDriverIds = activeOrders.docs
-          .where((d) => d.id != widget.orderId)
-          .map((d) => d.data()['driver_id'] as String?)
-          .whereType<String>()
-          .toSet();
 
       if (mounted) {
         setState(() {
           _drivers = snapshot.docs
-              .where((doc) => !busyDriverIds.contains(doc.id))
               .map((doc) => {
-                'id': doc.id,
-                'name': doc.data()['name'] ?? 'بدون اسم',
-              }).toList();
+                    'id': doc.id,
+                    'name': doc.data()['name'] ?? 'بدون اسم',
+                  })
+              .toList();
           _isLoadingDrivers = false;
         });
       }
@@ -178,11 +177,27 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
             _editedSchedule != null && _editedSchedule != originalSchedule;
         final DateTime? effectiveSchedule = _editedSchedule ?? originalSchedule;
 
+        final bool isOrdersDoc = _srcCollection == 'orders';
+
+        // (#9) إسناد سائق لطلب pending **بلا موعد**: كان يمرّ من المسار المباشر
+        // متجاوزاً فحص التعارض الذرّي بأكمله — نوقفه ونطلب الموعد أولاً.
+        if (isOrdersDoc &&
+            _selectedDriverId != null &&
+            _currentStatus == 'pending' &&
+            effectiveSchedule == null) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('حدد موعد الزيارة أولاً قبل إسناد السائق'),
+              backgroundColor: Colors.red));
+          return;
+        }
+
         // (#22) الإسناد الابتدائي (طلب pending + سائق + موعد) يمرّ عبر approveAndAssignOrder
         // الذي يعيد فحص التعارض **داخل معاملة** فيمنع الحجز المزدوج عند إسناد مديرَين نفس
         // السائق لفترتين متداخلتين معاً — بدل كتابة driver_id مباشرةً بلا فحص ذرّي. الدالة
         // تكتب status/driver/service_date/scheduled_at/booking من scheduledIso (أكمل من المباشر).
-        if (_selectedDriverId != null &&
+        if (isOrdersDoc &&
+            _selectedDriverId != null &&
             _currentStatus == 'pending' &&
             effectiveSchedule != null) {
           await FirebaseFunctions.instance
@@ -193,8 +208,11 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
             'scheduledIso': effectiveSchedule.toIso8601String(),
           });
           if (mounted) setState(() => _currentStatus = 'scheduled');
-        } else if ((_orderData?['driver_id'] ?? '').toString().isNotEmpty &&
-            ['scheduled', 'accepted', 'on_the_way', 'in_progress']
+        } else if (isOrdersDoc &&
+            (_orderData?['driver_id'] ?? '').toString().isNotEmpty &&
+            // 'assigned' كانت خارج القائمة فتُعدَّل زيارتها بالكتابة المباشرة
+            // متجاوزةً فحص التعارض — وهي حالة نشطة يحملها السائق في كل الشاشات.
+            ['scheduled', 'assigned', 'accepted', 'on_the_way', 'in_progress']
                 .contains(_orderData?['status']) &&
             (scheduleChanged || isNewAssignment)) {
           // (#23/D) طلب مُسنَد نشط: إعادة جدولة و/أو إعادة إسناد لسائق آخر — كلاهما عبر
@@ -216,15 +234,27 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                 .update({'status': _currentStatus});
           }
         } else {
-          // المسار المباشر: تغيير حالة، أو تعديل موعد بلا سائق، أو إعادة إسناد لطلب
-          // غير pending. تعديل الموعد يُطبَّق بصرف النظر عن السائق (كان محبوساً بشرطه).
+          // المسار المباشر: تغيير حالة، أو تعديل موعد بلا سائق، أو مستند صيانة.
+          // تعديل الموعد يُطبَّق بصرف النظر عن السائق (كان محبوساً بشرطه).
           final Map<String, dynamic> updatePayload = {'status': _currentStatus};
           if (scheduleChanged) {
             final ts = Timestamp.fromDate(_editedSchedule!);
             updatePayload['service_date'] = ts;
             updatePayload['scheduled_at'] = ts;
+            // (#7/#22) حقول الحجز المشتقة يقرؤها عدّ السعة والتذكيرات — تركُها
+            // على اليوم القديم كان يستهلك سعة يومٍ لم يعد للطلب، ويُذكّر بموعدٍ
+            // مضى. نعيد اشتقاقها محلياً (جهاز الأدمن بتوقيت الرياض) ونصفّر
+            // أعلام التذكير ليُعاد إرسالها للموعد الجديد — كما يفعل الخادم.
+            final d = _editedSchedule!;
+            updatePayload['booking_date'] =
+                '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+            updatePayload['booking_time_slot'] =
+                '${d.hour.toString().padLeft(2, '0')}:00';
+            updatePayload['reminder_sent'] = false;
+            updatePayload['client_reminder_24h_sent'] = false;
+            updatePayload['client_reminder_soon_sent'] = false;
           }
-          if (_selectedDriverId != null) {
+          if (_selectedDriverId != null && isOrdersDoc) {
             updatePayload['driver_id'] = _selectedDriverId!;
             updatePayload['driver_name'] = _selectedDriverName ?? '';
             updatePayload['assigned_driver'] = _selectedDriverName ?? '';
@@ -237,7 +267,12 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
               if (mounted) setState(() => _currentStatus = 'scheduled');
             }
           }
-          await _db.collection('orders').doc(widget.orderId).update(updatePayload);
+          // (#10) الكتابة على المجموعة المصدر — مستند صيانة كان يُكتب على orders
+          // فيرمي not-found بصمت ويظن الأدمن أن التعديل حُفظ.
+          await _db
+              .collection(_srcCollection)
+              .doc(widget.orderId)
+              .update(updatePayload);
         }
       }
 

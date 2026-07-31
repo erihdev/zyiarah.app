@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Save, Bell, Shield, Wallet, MapPin, Search, Smartphone, Loader2, CheckCircle2, ChevronLeft, CreditCard, Activity, Globe, Database, KeyRound, ArrowRight, Plus, Navigation, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
+import { Save, Bell, Shield, Wallet, MapPin, Search, Smartphone, Loader2, CheckCircle2, ChevronLeft, CreditCard, Activity, Globe, Database, KeyRound, ArrowRight, Plus, Navigation, ToggleLeft, ToggleRight, Trash2, Pencil, CalendarClock } from 'lucide-react';
 import { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, GeoPoint, serverTimestamp } from 'firebase/firestore';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -153,6 +153,14 @@ export default function Settings() {
     const [newZone, setNewZone] = useState(emptyZoneForm);
     const [isAddingZone, setIsAddingZone] = useState(false);
     const [showAddForm, setShowAddForm] = useState(false);
+    // تعديل محافظة قائمة: النموذج نفسه يُعبَّأ من مستندها ويُحفَظ بـ updateDoc —
+    // كانت اللوحة تضيف فقط، وأي تصحيح سعر/موقع يستلزم فتح تطبيق الأدمن.
+    const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
+    const [editingZoneName, setEditingZoneName] = useState('');
+    // الطاقة الاستيعابية اليومية (سقف الطلبات المجدولة) — يقرؤها العميل والخادم
+    // من system_configs/hourly_settings؛ كانت تُضبط من التطبيق فقط.
+    const [maxOrdersPerDay, setMaxOrdersPerDay] = useState('');
+    const [isSavingCapacity, setIsSavingCapacity] = useState(false);
     // true فقط عند فشل قراءة الإعدادات (لا عند غيابها لأول مرة) — يمنع الحفظ فوق
     // الإعدادات الإنتاجية بالقيم الافتراضية المعروضة بعد قراءة فاشلة.
     const [loadFailed, setLoadFailed] = useState(false);
@@ -171,13 +179,16 @@ export default function Settings() {
             try {
                 const docRef = doc(db, 'system_configs', 'main_settings');
                 const updRef = doc(db, 'system_configs', 'app_update');
-                const [docSnap, updSnap] = await Promise.all([getDoc(docRef), getDoc(updRef)]);
+                const capRef = doc(db, 'system_configs', 'hourly_settings');
+                const [docSnap, updSnap, capSnap] = await Promise.all([getDoc(docRef), getDoc(updRef), getDoc(capRef)]);
                 if (docSnap.exists()) {
                     setSettings({ ...defaultSettings, ...docSnap.data() } as SystemSettings);
                 }
                 if (updSnap.exists()) {
                     setAppUpdate({ ...defaultAppUpdate, ...updSnap.data() } as AppUpdateConfig);
                 }
+                const cap = capSnap.exists() ? capSnap.data().max_orders_per_day : undefined;
+                if (typeof cap === 'number' && cap > 0) setMaxOrdersPerDay(String(cap));
             } catch (error) {
                 console.error("Error fetching settings:", error);
                 setLoadFailed(true);
@@ -324,12 +335,10 @@ export default function Settings() {
             // نفس مخطط حفظ تطبيق الأدمن حرفياً — التسعير الخادمي يقرأ هذه الحقول.
             // فارغ/غير رقمي = 0 = «غير مسعّرة» فتُعطَّل الخدمة/الشريحة بدل بيعها بسعر لم يُعتمد.
             const num = (s: string) => { const v = parseFloat(s); return isNaN(v) ? 0 : v; };
-            await addDoc(collection(db, 'service_zones'), {
+            const payload = {
                 name: newZone.name.trim(),
                 centerLoc: new GeoPoint(lat, lng),
                 radiusKm: radius,
-                enabled: true,
-                rank: zones.length + 1,
                 prices: Object.fromEntries(
                     ZONE_HOUR_OPTIONS.map(h => [String(h), num(newZone.hourPrices[String(h)])])),
                 sofaSqmPrice: num(newZone.sofaSqmPrice),
@@ -356,15 +365,90 @@ export default function Settings() {
                     }];
                 })),
                 updated_at: serverTimestamp(),
-            });
+            };
+            if (editingZoneId) {
+                // تحديث الحقول المعروضة فقط — schedule/enabled/rank لا تُلمَس فلا يُمسح
+                // جدول دوام المحافظة أو ترتيبها بحفظ تعديل سعر.
+                await updateDoc(doc(db, 'service_zones', editingZoneId), payload);
+                toast.success(`تم تحديث ${payload.name} بنجاح`);
+            } else {
+                await addDoc(collection(db, 'service_zones'), { ...payload, enabled: true, rank: zones.length + 1 });
+                toast.success(`تمت إضافة ${payload.name} بنجاح`);
+            }
             setNewZone(emptyZoneForm);
             setShowAddForm(false);
-            toast.success(`تمت إضافة ${newZone.name.trim()} بنجاح`);
+            setEditingZoneId(null);
+            setEditingZoneName('');
         } catch (e) {
             console.error(e);
-            toast.error('حدث خطأ أثناء الإضافة');
+            toast.error(editingZoneId ? 'حدث خطأ أثناء التحديث' : 'حدث خطأ أثناء الإضافة');
         } finally {
             setIsAddingZone(false);
+        }
+    };
+
+    // فتح النموذج مُعبّأً من مستند المحافظة كاملاً (الاسم/الموقع/الأسعار/الباقات) للتعديل.
+    const handleEditZone = async (zone: CoverageZone) => {
+        try {
+            const snap = await getDoc(doc(db, 'service_zones', zone.id));
+            if (!snap.exists()) { toast.error('المحافظة لم تعد موجودة'); return; }
+            const d = snap.data() as Record<string, unknown>;
+            const p = (d.prices ?? {}) as Record<string, unknown>;
+            const s = (v: unknown) => (v === undefined || v === null ? '' : String(v));
+            const srcPkgs = (d.packages ?? {}) as Record<string, {
+                desc?: string; durationHours?: number;
+                crews?: Record<string, { price?: number; enabled?: boolean }>;
+            }>;
+            const packages: Record<string, PkgForm> = Object.fromEntries(
+                HOME_TYPES.map(t => {
+                    const sp = srcPkgs[t.key] ?? {};
+                    const crews = sp.crews ?? {};
+                    return [t.key, {
+                        desc: (sp.desc ?? '').trim() || t.desc,
+                        dur: String(sp.durationHours ?? t.dur),
+                        crews: Object.fromEntries(['1', '2', '3', '4'].map(n => [n, {
+                            price: s(crews[n]?.price),
+                            enabled: crews[n]?.enabled === true,
+                        }])),
+                    }];
+                }));
+            setNewZone({
+                name: s(d.name),
+                latitude: zone.latitude ? zone.latitude.toFixed(5) : '',
+                longitude: zone.longitude ? zone.longitude.toFixed(5) : '',
+                radiusKm: s(d.radiusKm) || '15',
+                hourPrices: Object.fromEntries(
+                    ZONE_HOUR_OPTIONS.map(h => [String(h), s(p[String(h)])])) as Record<string, string>,
+                sofaSqmPrice: s(d.sofaSqmPrice), rugSqmPrice: s(d.rugSqmPrice),
+                acMaintWindowPrice: s(d.acMaintWindowPrice), acMaintSplitPrice: s(d.acMaintSplitPrice),
+                acWashWindowPrice: s(d.acWashWindowPrice), acWashSplitPrice: s(d.acWashSplitPrice),
+                carSmallPrice: s(d.carSmallPrice), carMediumPrice: s(d.carMediumPrice), carLargePrice: s(d.carLargePrice),
+                packages,
+            });
+            setEditingZoneId(zone.id);
+            setEditingZoneName(s(d.name));
+            setShowAddForm(true);
+            setTimeout(() => zoneNameRef.current?.focus(), 50);
+        } catch (e) {
+            console.error(e);
+            toast.error('تعذّر تحميل بيانات المحافظة');
+        }
+    };
+
+    // سقف الطلبات اليومي — merge حتى لا تُمسح بقية إعدادات hourly_settings.
+    const handleSaveCapacity = async () => {
+        const n = parseInt(maxOrdersPerDay);
+        if (isNaN(n) || n < 1) { toast.error('أدخل رقماً صحيحاً (1 فأكثر)'); return; }
+        setIsSavingCapacity(true);
+        try {
+            await setDoc(doc(db, 'system_configs', 'hourly_settings'),
+                { max_orders_per_day: n, updated_at: serverTimestamp() }, { merge: true });
+            toast.success(`تم الحفظ — سقف الطلبات اليومي: ${n}`);
+        } catch (e) {
+            console.error(e);
+            toast.error('تعذّر حفظ الطاقة الاستيعابية');
+        } finally {
+            setIsSavingCapacity(false);
         }
     };
 
@@ -916,7 +1000,12 @@ export default function Settings() {
                                         </div>
                                         <button
                                             type="button"
-                                            onClick={() => { setShowAddForm(v => !v); setTimeout(() => zoneNameRef.current?.focus(), 50); }}
+                                            onClick={() => {
+                                                // فتح «إضافة» بعد جلسة تعديل يبدأ بنموذج نظيف — لا بقايا محافظة سابقة.
+                                                if (!showAddForm && editingZoneId) { setNewZone(emptyZoneForm); setEditingZoneId(null); setEditingZoneName(''); }
+                                                setShowAddForm(v => !v);
+                                                setTimeout(() => zoneNameRef.current?.focus(), 50);
+                                            }}
                                             className="flex items-center gap-2 px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl transition-all shadow-sm"
                                         >
                                             <Plus size={18} />
@@ -926,10 +1015,44 @@ export default function Settings() {
                                 </div>
 
                                 <div className="p-8 space-y-6 overflow-y-auto">
+                                    {/* (تكافؤ التطبيق) الطاقة الاستيعابية اليومية — سقف الطلبات المجدولة في اليوم الواحد،
+                                        يقرؤه العميل (الإتاحة) والخادم (التحقق) من system_configs/hourly_settings */}
+                                    <div className="bg-white border-2 border-rose-100 rounded-[2rem] p-6">
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl">
+                                                <CalendarClock size={20} strokeWidth={2.5} />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-black text-slate-800">الطاقة الاستيعابية اليومية</h4>
+                                                <p className="text-xs text-slate-500 font-medium">سقف الطلبات المجدولة في اليوم الواحد — عند بلوغه يظهر اليوم غير متاح للعملاء</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3 flex-wrap">
+                                            <input
+                                                type="number" dir="ltr" min="1" step="1"
+                                                value={maxOrdersPerDay}
+                                                onChange={e => setMaxOrdersPerDay(e.target.value)}
+                                                placeholder="مثال: 20"
+                                                className="w-40 bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 transition-all"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={handleSaveCapacity}
+                                                disabled={isSavingCapacity}
+                                                className="flex items-center gap-2 px-5 py-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white font-bold rounded-xl transition-all"
+                                            >
+                                                {isSavingCapacity ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                                                حفظ السقف
+                                            </button>
+                                        </div>
+                                    </div>
+
                                     {/* Add zone form */}
                                     {showAddForm && (
                                         <div className="bg-rose-50 border-2 border-rose-200 rounded-[2rem] p-6 space-y-4">
-                                            <h4 className="font-black text-slate-800 text-lg">بيانات المحافظة الجديدة</h4>
+                                            <h4 className="font-black text-slate-800 text-lg">
+                                                {editingZoneId ? `تعديل محافظة: ${editingZoneName}` : 'بيانات المحافظة الجديدة'}
+                                            </h4>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                 <div>
                                                     <label className="block text-xs font-bold text-slate-600 mb-1">اسم المحافظة أو القرية</label>
@@ -1144,10 +1267,10 @@ export default function Settings() {
                                                     disabled={isAddingZone}
                                                     className="flex items-center gap-2 px-6 py-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white font-bold rounded-xl transition-all"
                                                 >
-                                                    {isAddingZone ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                                                    حفظ المحافظة
+                                                    {isAddingZone ? <Loader2 size={16} className="animate-spin" /> : (editingZoneId ? <Pencil size={16} /> : <Plus size={16} />)}
+                                                    {editingZoneId ? 'حفظ التعديلات' : 'حفظ المحافظة'}
                                                 </button>
-                                                <button type="button" onClick={() => setShowAddForm(false)} className="px-6 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all">
+                                                <button type="button" onClick={() => { setShowAddForm(false); setEditingZoneId(null); setEditingZoneName(''); setNewZone(emptyZoneForm); }} className="px-6 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all">
                                                     إلغاء
                                                 </button>
                                             </div>
@@ -1179,6 +1302,14 @@ export default function Settings() {
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleEditZone(zone)}
+                                                                className="p-1.5 rounded-lg text-slate-400 hover:text-[#660033] hover:bg-rose-50 transition-all"
+                                                                title="تعديل"
+                                                            >
+                                                                <Pencil size={16} />
+                                                            </button>
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleToggleZone(zone)}
@@ -1232,9 +1363,18 @@ function SettingsIcon({ activeTab }: { activeTab: TabType }) {
     }
 }
 
+// فئات حرفية لكل ثيمة: Tailwind لا يولّد فئاتٍ مبنيّة بالاستيفاء وقت التشغيل
+// (`bg-${x}-500` لا تُبنى) — فكانت المفاتيح المفعّلة رمادية بلا لون ولا إطار.
+const NOTIF_THEME: Record<string, { border: string; shadow: string; knob: string }> = {
+    blue: { border: 'border-rose-200', shadow: 'shadow-rose-500/5', knob: 'peer-checked:bg-rose-500' },
+    emerald: { border: 'border-emerald-200', shadow: 'shadow-emerald-500/5', knob: 'peer-checked:bg-emerald-500' },
+    orange: { border: 'border-orange-200', shadow: 'shadow-orange-500/5', knob: 'peer-checked:bg-orange-500' },
+};
+
 function NotificationRow({ title, desc, checked, onChange, icon, colorTheme }: { title: string, desc: string, checked: boolean, onChange: (val: boolean) => void, icon: React.ReactNode, colorTheme: string }) {
+    const theme = NOTIF_THEME[colorTheme] ?? NOTIF_THEME.blue;
     return (
-        <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-white border-2 rounded-3xl transition-all duration-300 ${checked ? `border-${colorTheme}-200 shadow-lg shadow-${colorTheme}-500/5` : 'border-slate-100 hover:border-slate-200'} group`}>
+        <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-white border-2 rounded-3xl transition-all duration-300 ${checked ? `${theme.border} shadow-lg ${theme.shadow}` : 'border-slate-100 hover:border-slate-200'} group`}>
             <div className="flex items-center gap-5 pr-2">
                 <div className={`p-4 rounded-2xl bg-slate-50 border border-slate-100 group-hover:bg-white group-hover:shadow-sm transition-all`}>
                     {icon}
@@ -1247,7 +1387,7 @@ function NotificationRow({ title, desc, checked, onChange, icon, colorTheme }: {
             <div className="mt-4 sm:mt-0 mr-14 sm:mr-0 pl-2">
                 <label className="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" aria-label={title} className="sr-only peer" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-                    <div className={`w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all after:shadow-sm peer-checked:bg-${colorTheme}-500`}></div>
+                    <div className={`w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all after:shadow-sm ${theme.knob}`}></div>
                 </label>
             </div>
         </div>

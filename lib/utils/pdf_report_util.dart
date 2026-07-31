@@ -78,7 +78,7 @@ class ZyiarahPdfReportUtil {
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Text('ZYIARAH ENTERPRISE', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+            pw.Text('ZYIARAH ENTERPRISE', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: const PdfColor.fromInt(0xFF660033))),
             pw.Text('Official Financial Performance Report', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
           ],
         ),

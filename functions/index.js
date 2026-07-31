@@ -3292,7 +3292,9 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
   }
   const db = admin.firestore();
   const orderRef = db.collection("orders").doc(orderId);
-  const active = ["scheduled", "accepted", "on_the_way", "in_progress"];
+  // 'assigned' حالة نشطة يحملها السائق في كل الشاشات — استبعادها كان يدفع تعديل
+  // زيارتها للمسار المباشر غير الذرّي في لوحتي الأدمن.
+  const active = ["scheduled", "assigned", "accepted", "on_the_way", "in_progress"];
 
   // إعادة الإسناد لسائق آخر: تأكّد أنه موجود ونشط (قراءة قبل المعاملة كافية).
   let newDriverName = null;

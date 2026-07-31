@@ -16,7 +16,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   bool _isSaving = false;
   late AnimationController _fadeController;
 
-  final TextEditingController _maxWorkerCtrl = TextEditingController();
   final TextEditingController _maxOrdersPerDayCtrl = TextEditingController();
   final TextEditingController _merchantNameCtrl = TextEditingController();
   final TextEditingController _vatNumberCtrl = TextEditingController();
@@ -33,7 +32,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   bool _updateEnabled = false;
   bool _updateForce = false;
   bool _maintenanceMode = false;
-  List<int> _selectedHours = [4, 5, 6, 8];
 
   @override
   void initState() {
@@ -65,30 +63,15 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
             _isLoading = false;
           });
           
+          // (باقات السكن) لم يتبقَّ من hourly_settings إلا **السعة اليومية** —
+          // allowed_hours/max_workers كانا يُعرضان ويُحفظان بلا أي قارئ (العميل
+          // صار يختار باقةً وكوادرها من تسعير المنطقة، لا ساعات ولا عدد عاملات).
           final hourlyDoc = await _db.collection('system_configs').doc('hourly_settings').get();
-          if (hourlyDoc.exists) {
-            final List<dynamic>? hoursList = hourlyDoc.data()?['allowed_hours'];
-            if (hoursList != null && mounted) {
-              setState(() {
-                // تحويل دفاعي: القيم قد تصل double/نصّاً (كتابة قديمة/من الويب)، و cast<int>
-                // كان يرمي TypeError عند القراءة فيُسقط شاشة الإعدادات كلّها.
-                _selectedHours = hoursList
-                    .map((e) => int.tryParse('$e') ?? 0)
-                    .where((h) => h > 0)
-                    .toList();
-              });
-            }
-            if (mounted) {
-              setState(() {
-                _maxWorkerCtrl.text = (hourlyDoc.data()?['max_workers'] ?? 5).toString();
-                _maxOrdersPerDayCtrl.text = (hourlyDoc.data()?['max_orders_per_day'] ?? 10).toString();
-              });
-            }
-          }
-          else {
-             _selectedHours = [4, 5, 6, 8];
-             _maxWorkerCtrl.text = '5';
-             _maxOrdersPerDayCtrl.text = '10';
+          if (mounted) {
+            setState(() {
+              _maxOrdersPerDayCtrl.text =
+                  (hourlyDoc.data()?['max_orders_per_day'] ?? 10).toString();
+            });
           }
 
           // (دمج من الويب) إعداد التحديث الإجباري — system_configs/app_update
@@ -138,12 +121,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         'maintenance_mode': _maintenanceMode,
       }, SetOptions(merge: true));
 
-      List<int> validHours = List<int>.from(_selectedHours)..sort();
-      if (validHours.isEmpty) validHours = [4];
-
       await _db.collection('system_configs').doc('hourly_settings').set({
-        'allowed_hours': validHours,
-        'max_workers': int.tryParse(_maxWorkerCtrl.text) ?? 5,
         'max_orders_per_day': int.tryParse(_maxOrdersPerDayCtrl.text) ?? 10,
       }, SetOptions(merge: true));
 
@@ -190,7 +168,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   @override
   void dispose() {
     _fadeController.dispose();
-    _maxWorkerCtrl.dispose();
     _maxOrdersPerDayCtrl.dispose();
     _merchantNameCtrl.dispose();
     _vatNumberCtrl.dispose();
@@ -349,15 +326,14 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                       
                       // Packages Pricing Card
                       _buildSectionCard(
-                        title: "إعدادات باقات النظام والسعة الاستيعابية",
+                        title: "الطاقة الاستيعابية اليومية",
                         icon: Icons.timelapse_rounded,
                         color: const Color(0xFFEC4899),
                         children: [
-                          _buildHoursToggles(),
-                          const SizedBox(height: 24),
-                          _buildPremiumField("الحد الأقصى لعدد العاملات في الطلب الواحد", "عاملات", _maxWorkerCtrl, Icons.group_add_rounded),
-                          const SizedBox(height: 16),
-                          _buildPremiumField("الحد الأقصى للطلبات اليومية الاستيعابية", "طلبات/يوم", _maxOrdersPerDayCtrl, Icons.calendar_month_rounded),
+                          // هذا هو **الضابط الوحيد** لسعة الحجز اليومي في نظام
+                          // باقات السكن: العميل يختار اليوم فقط، واليوم يمتلئ
+                          // عند بلوغ هذا السقف (مع شرط توفر سائق لمدة الباقة).
+                          _buildPremiumField("سقف الطلبات المجدولة في اليوم الواحد", "طلبات/يوم", _maxOrdersPerDayCtrl, Icons.calendar_month_rounded),
                           const SizedBox(height: 16),
                           // السعة المتزامنة تُحسب تلقائياً = عدد السائقين النشطين (لا رقم يدوي)
                           Container(
@@ -590,50 +566,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildHoursToggles() {
-    final allHours = [1, 2, 4, 5, 6, 7, 8];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(right: 4, bottom: 12),
-          child: Text("الساعات المتاحة للعميل (إظهار/إخفاء)", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
-        ),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: allHours.map((h) {
-            final isSelected = _selectedHours.contains(h);
-            return FilterChip(
-              label: Text("$h ساعة"),
-              selected: isSelected,
-              onSelected: (val) {
-                setState(() {
-                  if (val) {
-                    _selectedHours.add(h);
-                  } else {
-                    _selectedHours.remove(h);
-                  }
-                });
-              },
-              selectedColor: const Color(0xFF6366F1).withValues(alpha: 0.2),
-              checkmarkColor: const Color(0xFF6366F1),
-              labelStyle: TextStyle(
-                color: isSelected ? const Color(0xFF6366F1) : const Color(0xFF64748B),
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              ),
-              backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: isSelected ? const Color(0xFF6366F1) : const Color(0xFFE2E8F0)),
-              ),
-            );
-          }).toList(),
-        ),
-      ],
     );
   }
 

@@ -32,7 +32,21 @@ interface OrderRecord {
     payment_method?: string;
     is_paid?: boolean;
     service_date?: Timestamp;
+    // (باقات السكن) تفصيل الباقة — يظهر تحت نوع الخدمة وفي نافذتي التعيين/التعديل.
+    service_meta?: { kind?: string; homeLabel?: string; crewCount?: number; durationHours?: number };
+    worker_count?: number;
+    hours_contracted?: number;
 }
+
+// «شقة متوسطة • كادران • 6س» — يعرفها الأدمن قبل اختيار السائق والموعد.
+const pkgSummary = (o: OrderRecord): string | null => {
+    const m = o.service_meta;
+    if (!m || m.kind !== 'home_package' || !m.homeLabel) return null;
+    const crews = Number(m.crewCount) || 0;
+    const crewsLabel = crews === 1 ? 'كادر واحد' : crews === 2 ? 'كادران' : `${crews} كوادر`;
+    const dur = Number(m.durationHours) || 0;
+    return `${m.homeLabel} • ${crewsLabel}${dur > 0 ? ` • ${dur}س` : ''}`;
+};
 
 interface DriverOption { id: string; name: string; is_available: boolean; is_active: boolean; }
 
@@ -68,6 +82,9 @@ export default function Orders() {
     // «تعديل الزيارة»: تغيير الموعد و/أو السائق لطلبٍ قائم.
     const [editModal, setEditModal] = useState<OrderRecord | null>(null);
     const [editScheduledAt, setEditScheduledAt] = useState('');
+    // قيمة الحقل لحظة الفتح: نُرسل الموعد **فقط إن تغيّر** — إرساله دائماً كان
+    // يجعل تبديل السائق وحده «إعادة جدولة» فتُصفَّر أعلام التذكير وتُعاد التذكيرات.
+    const [editOriginalAt, setEditOriginalAt] = useState('');
     const [editDriverId, setEditDriverId] = useState('');
     const [isEditing, setIsEditing] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
@@ -77,7 +94,10 @@ export default function Orders() {
         const unsub = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
             setOrders(snapshot.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => {
                 const d = doc.data() as Partial<OrderRecord>;
+                // الانتشار **أولاً** ثم الحقول المشتقة: كان ...d في الآخر فيدهس
+                // amount المنسّق برقم المستند الخام — عمود المبلغ بلا «ر.س».
                 return {
+                    ...d,
                     id: doc.id,
                     customer: d.client_name || d.client_id || 'غير متوفر',
                     driver: d.assigned_driver || (d.status === 'pending' ? 'بانتظار سائق' : '-'),
@@ -85,7 +105,6 @@ export default function Orders() {
                     amount: `${d.amount || 0} ر.س`,
                     date: d.created_at instanceof Timestamp ? d.created_at.toDate().toLocaleDateString('ar-EG') : 'غير متاح',
                     type: d.service_type || 'خدمة عامة',
-                    ...d,
                 } as OrderRecord;
             }));
             setLoading(false);
@@ -116,7 +135,9 @@ export default function Orders() {
             await httpsCallable(functions, 'approveAndAssignOrder')({
                 orderId: assignModal.id,
                 driverId: selectedDriverId,
-                scheduledIso: new Date(scheduledAt).toISOString(),
+                // سلسلة محلية بلا منطقة: الخادم (_parseKsaIso) يفسّرها توقيت الرياض
+                // دائماً — بصرف النظر عن منطقة متصفح الأدمن.
+                scheduledIso: scheduledAt,
             });
             setAssignModal(null);
             setSelectedDriverId('');
@@ -144,7 +165,13 @@ export default function Orders() {
                 const payload: { orderId: string; scheduledIso?: string; newDriverId?: string } = {
                     orderId: editModal.id,
                 };
-                if (editScheduledAt) payload.scheduledIso = new Date(editScheduledAt).toISOString();
+                // نُرسل الموعد فقط إن **تغيّر** فعلاً (تبديل سائق وحده ≠ إعادة جدولة)،
+                // وكسلسلة محلية **بلا منطقة زمنية**: _parseKsaIso الخادمية تفسّرها
+                // توقيتَ الرياض دائماً — toISOString كانت تفسّر الحائط بمنطقة المتصفح،
+                // فمتصفحٌ خارج السعودية يخزّن لحظةً مختلفة عن تطبيق الأدمن لنفس «14:00».
+                if (editScheduledAt && editScheduledAt !== editOriginalAt) {
+                    payload.scheduledIso = editScheduledAt;
+                }
                 if (editDriverId && editDriverId !== editModal.driver_id) payload.newDriverId = editDriverId;
                 if (!payload.scheduledIso && !payload.newDriverId) {
                     toast.error('لا تغيير — عدّل الموعد أو اختر سائقاً آخر');
@@ -296,7 +323,12 @@ export default function Orders() {
                                         <td className="px-6 py-4">
                                             <span className={`font-medium ${!order.driver_id ? 'text-amber-500' : 'text-slate-600'}`}>{order.driver}</span>
                                         </td>
-                                        <td className="px-6 py-4 font-medium text-slate-600">{order.type}</td>
+                                        <td className="px-6 py-4 font-medium text-slate-600">
+                                            {order.type}
+                                            {pkgSummary(order) && (
+                                                <div className="text-[11px] font-bold text-[#660033] mt-0.5">{pkgSummary(order)}</div>
+                                            )}
+                                        </td>
                                         <td className="px-6 py-4 font-bold text-emerald-600">{order.amount}</td>
                                         <td className="px-6 py-4 font-medium text-slate-500 text-sm">{order.date}</td>
                                         <td className="px-6 py-4"><StatusBadge status={order.status} /></td>
@@ -350,8 +382,10 @@ export default function Orders() {
                                                         type="button"
                                                         onClick={() => {
                                                             setEditModal(order);
-                                                            setEditScheduledAt(order.service_date instanceof Timestamp
-                                                                ? toDatetimeLocal(order.service_date.toDate()) : '');
+                                                            const cur = order.service_date instanceof Timestamp
+                                                                ? toDatetimeLocal(order.service_date.toDate()) : '';
+                                                            setEditScheduledAt(cur);
+                                                            setEditOriginalAt(cur);
                                                             setEditDriverId(order.driver_id || '');
                                                             setActionMenuId(null);
                                                         }}
@@ -386,6 +420,9 @@ export default function Orders() {
                             <div>
                                 <h3 className="text-xl font-extrabold text-slate-800">تعيين سائق</h3>
                                 <p className="text-sm text-slate-500 mt-0.5">الطلب #{assignModal.code || assignModal.id.substring(0, 6).toUpperCase()} — {assignModal.customer}</p>
+                                {pkgSummary(assignModal) && (
+                                    <p className="text-xs font-bold text-[#660033] mt-1">{pkgSummary(assignModal)}</p>
+                                )}
                             </div>
                             <button type="button" title="إغلاق" onClick={() => setAssignModal(null)} className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors">
                                 <X size={20} />
@@ -443,6 +480,9 @@ export default function Orders() {
                             <div>
                                 <h3 className="text-xl font-extrabold text-slate-800">تعديل الزيارة</h3>
                                 <p className="text-sm text-slate-500 mt-0.5">الطلب #{editModal.code || editModal.id.substring(0, 6).toUpperCase()} — {editModal.customer}</p>
+                                {pkgSummary(editModal) && (
+                                    <p className="text-xs font-bold text-[#660033] mt-1">{pkgSummary(editModal)}</p>
+                                )}
                             </div>
                             <button type="button" title="إغلاق" onClick={() => setEditModal(null)} className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors">
                                 <X size={20} />

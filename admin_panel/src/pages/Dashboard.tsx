@@ -119,7 +119,12 @@ export default function Dashboard() {
             }
         });
         const unsubOrders = onSnapshot(
-            query(collection(db, 'orders'), where('status', 'in', ['pending', 'in_progress', 'accepted'])),
+            // كل الحالات غير المنتهية فعلاً — كانت [pending, in_progress, accepted] فقط،
+            // فيسقط الطلب من «الطلبات النشطة» لحظةَ إسناده (scheduled) وهو أنشط ما يكون.
+            query(collection(db, 'orders'), where('status', 'in', [
+                'pending', 'pending_admin_approval', 'under_review', 'awaiting_payment',
+                'scheduled', 'assigned', 'accepted', 'on_the_way', 'in_progress',
+            ])),
             (snap: QuerySnapshot<DocumentData>) => setActiveOrders(snap.size.toString())
         );
         const unsubDrivers = onSnapshot(
@@ -195,11 +200,26 @@ export default function Dashboard() {
     }, []);
 
     const getStatusBadge = (status: string) => {
+        // كانت تعرف 3 حالات فقط وتُعيد null لغيرها — فمعظم صفوف «أحدث الطلبات»
+        // بعد السبرنت (scheduled/on_the_way/…) كانت بخانة حالة فارغة.
+        const chip = (bg: string, text: string, border: string, label: string) => (
+            <span className={`px-3 py-1.5 rounded-xl ${bg} ${text} text-xs font-bold flex items-center w-fit border ${border}`}>
+                <Clock size={14} strokeWidth={2.5} className="ml-1.5" /> {label}
+            </span>
+        );
         switch (status) {
             case 'completed': return <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-600 text-xs font-bold flex items-center w-fit border border-emerald-100"><CheckCircle2 size={14} strokeWidth={2.5} className="ml-1.5" /> مكتمل</span>;
-            case 'active': return <span className="px-3 py-1.5 rounded-xl bg-[#FAF1F6] text-[#660033] text-xs font-bold flex items-center w-fit border border-[#F2DEE9]"><Clock size={14} strokeWidth={2.5} className="ml-1.5" /> جاري التنفيذ</span>;
-            case 'pending': return <span className="px-3 py-1.5 rounded-xl bg-orange-50 text-orange-600 text-xs font-bold flex items-center w-fit border border-orange-100"><Clock size={14} strokeWidth={2.5} className="ml-1.5" /> قيد الانتظار</span>;
-            default: return null;
+            case 'in_progress': return chip('bg-[#FAF1F6]', 'text-[#660033]', 'border-[#F2DEE9]', 'جاري التنفيذ');
+            case 'on_the_way': return chip('bg-cyan-50', 'text-cyan-700', 'border-cyan-100', 'في الطريق');
+            case 'scheduled':
+            case 'assigned': return chip('bg-teal-50', 'text-teal-700', 'border-teal-100', 'تم تعيين السائق');
+            case 'accepted': return chip('bg-[#FAF1F6]', 'text-[#660033]', 'border-[#F2DEE9]', 'تم القبول');
+            case 'under_review':
+            case 'pending_admin_approval': return chip('bg-orange-50', 'text-orange-600', 'border-orange-100', 'تحت المراجعة');
+            case 'awaiting_payment': return chip('bg-amber-50', 'text-amber-700', 'border-amber-100', 'بانتظار الدفع');
+            case 'cancelled': return chip('bg-rose-50', 'text-rose-600', 'border-rose-100', 'ملغي');
+            case 'pending': return chip('bg-orange-50', 'text-orange-600', 'border-orange-100', 'قيد الانتظار');
+            default: return chip('bg-slate-50', 'text-slate-600', 'border-slate-200', status);
         }
     };
 

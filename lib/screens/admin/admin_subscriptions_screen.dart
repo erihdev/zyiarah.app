@@ -124,6 +124,18 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                         'updated_at': FieldValue.serverTimestamp(),
                       };
                       if (doc == null) {
+                        // باقة جديدة تُذيَّل القائمة (أعلى rank + 1) — الافتراضي 0 كان
+                        // يجعلها تتصدّر فوق كل الباقات القائمة.
+                        final top = await _db
+                            .collection('subscription_packages')
+                            .orderBy('rank', descending: true)
+                            .limit(1)
+                            .get();
+                        final maxRank = top.docs.isEmpty
+                            ? 0
+                            : (top.docs.first.data()['rank'] as num? ?? 0)
+                                .toInt();
+                        newData['rank'] = maxRank + 1;
                         await _db.collection('subscription_packages').add(newData);
                       } else {
                         await _db.collection('subscription_packages').doc(doc.id).update(newData);

@@ -41,9 +41,11 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
 
     final db = FirebaseFirestore.instance;
     try {
-      // Fire all 5 requests in parallel; limit keeps memory and cost bounded.
+      // Fire all requests in parallel; limit keeps memory and cost bounded.
+      // (خدمة الصيانة حُذفت من الجذور — لم نعد نجلب maintenance_requests: بقاياها
+      // اليتيمتان under_review كانتا تُضخّمان «طلبات نشطة» وترسمان شريحة «صيانة»
+      // وهمية للأبد. القائمة تبقى فارغة فتصفر كل مشتقاتها تلقائياً.)
       final ordersF     = db.collection('orders').orderBy('created_at', descending: true).limit(500).get();
-      final maintenanceF = db.collection('maintenance_requests').orderBy('createdAt', descending: true).limit(500).get();
       // عملاء فقط: مجموعة users تضمّ سائقين وإداريين (يُكتبون فيها أيضاً)، فعدّها كاملةً
       // كان يضخّم «إجمالي العملاء». (حسابات العملاء تُكتب بـ role='client'.)
       final usersF      = db.collection('users').where('role', isEqualTo: 'client').count().get();
@@ -51,7 +53,6 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       final storeF      = db.collection('store_orders').orderBy('created_at', descending: true).limit(500).get();
 
       final ordersSnap      = await ordersF;
-      final maintenanceSnap = await maintenanceF;
       final usersSnap       = await usersF;
       final driversSnap     = await driversF;
       final storeSnap       = await storeF;
@@ -59,7 +60,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       if (!mounted) return;
       setState(() {
         _orders      = ordersSnap.docs;
-        _maintenance = maintenanceSnap.docs;
+        _maintenance = [];
         _userCount   = usersSnap.count ?? 0;
         _drivers     = driversSnap.docs;
         _storeOrders = storeSnap.docs;
@@ -373,11 +374,16 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
 
   Widget _buildServicePieChart(List<DocumentSnapshot> orders, List<DocumentSnapshot> maintenance) {
     int maintenanceCount = maintenance.length;
+    // طلبات متجر العملاء تعيش في orders بوسم service_meta.kind='store_products'
+    // (منذ ad1b5ec) — كانت تُحسب «خدمات أخرى» بينما شريحة «المتجر» تعدّ متجر
+    // الشركات فقط. نصنّفها متجراً كما تفعل بطاقات الإيراد في نفس الشاشة.
+    int clientStoreCount = orders.where((d) {
+      final meta = (d.data() as Map)['service_meta'];
+      return meta is Map && meta['kind'] == 'store_products';
+    }).length;
     int cleaningCount = orders.where((d) => (d.data() as Map)['service_name']?.toString().contains('نظافة') ?? false).length;
-    int otherServicesCount = orders.length - cleaningCount;
-    // المتجر مجموعة منفصلة (_storeOrders) — كان storeCount = orders.length - cleaningCount
-    // يحسب طلبات الخدمات غير التنظيفية (كنب/تكييف) كأنها متجر ويتجاهل طلبات المتجر الحقيقية.
-    int storeCount = _storeOrders.length;
+    int otherServicesCount = orders.length - cleaningCount - clientStoreCount;
+    int storeCount = _storeOrders.length + clientStoreCount;
     int total = (maintenanceCount + cleaningCount + otherServicesCount + storeCount);
     if (total == 0) return const Center(child: Text("لا توجد بيانات"));
 
@@ -386,10 +392,11 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
         sectionsSpace: 2,
         centerSpaceRadius: 40,
         sections: [
-          PieChartSectionData(color: const Color(0xFF2563EB), value: cleaningCount.toDouble(), title: 'تنظيف', radius: 50, titleStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
+          PieChartSectionData(color: const Color(0xFF660033), value: cleaningCount.toDouble(), title: 'تنظيف', radius: 50, titleStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
           if (otherServicesCount > 0)
-            PieChartSectionData(color: const Color(0xFF0EA5E9), value: otherServicesCount.toDouble(), title: 'خدمات أخرى', radius: 50, titleStyle: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)),
-          PieChartSectionData(color: const Color(0xFFF59E0B), value: maintenanceCount.toDouble(), title: 'صيانة', radius: 50, titleStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
+            PieChartSectionData(color: const Color(0xFF8E2B5C), value: otherServicesCount.toDouble(), title: 'خدمات أخرى', radius: 50, titleStyle: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)),
+          if (maintenanceCount > 0)
+            PieChartSectionData(color: const Color(0xFFF59E0B), value: maintenanceCount.toDouble(), title: 'صيانة', radius: 50, titleStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
           PieChartSectionData(color: const Color(0xFF7C3AED), value: storeCount.toDouble(), title: 'المتجر', radius: 50, titleStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
         ],
       ),

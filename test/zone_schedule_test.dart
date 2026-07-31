@@ -230,8 +230,10 @@ void main() {
     // ملاحظة المالك «أضف 7 ساعات» كشفت انفصالاً: شرائح العميل من الإعدادات
     // (وفيها 2) بينما حقول أسعار المنطقة قائمة يدوية (بلا 2) — شريحة بلا مفتاح
     // سعر تُقرأ صفراً = «غير مسعّرة» ولا مكان لتسعيرها. المولّد يمنع الانفصال.
+    // (تحديث «باقات السكن») شرائح الساعات لم تعد تُعرض للعميل — حُذفت
+    // FilterChips من الإعدادات (allowed_hours بلا قارئ)، فبقي المرجع الوحيد
+    // للمجموعة هو kZoneHourOptions نفسها، ويُتحقق من تغطيتها في بذر التثبيت.
     final zones = File('lib/screens/admin/admin_hourly_zones_screen.dart').readAsStringSync();
-    final settings = File('lib/screens/admin/admin_settings_screen.dart').readAsStringSync();
 
     RegExp listOf(String name) => RegExp(name + r'\s*=\s*\[([^\]]+)\]');
     List<int> parse(String src, String name) {
@@ -240,18 +242,13 @@ void main() {
     }
 
     final zoneHours = parse(zones, 'kZoneHourOptions');
-    final chipHours = parse(settings, 'allHours');
-    expect(chipHours.contains(7), isTrue, reason: 'طلب المالك: خيار 7 ساعات');
-    for (final h in chipHours) {
-      expect(zoneHours.contains(h), isTrue,
-          reason: 'الساعة $h شريحة للعميل بلا حقل سعر في المنطقة ⇒ غير قابلة للبيع');
-    }
+    expect(zoneHours.contains(7), isTrue, reason: 'طلب المالك: خيار 7 ساعات');
     // الحقول مولّدة لا يدوية، والحفظ يبني الخريطة من المتحكّمات.
     expect(zones.contains('for (final h in hourSet)'), isTrue);
     expect(zones.contains(r"'${e.key}': double.tryParse(e.value.text) ?? 0"), isTrue);
     // بذر التثبيت الجديد يغطي المجموعة كلها.
     final seed = File('lib/services/geofence_service.dart').readAsStringSync();
-    for (final h in chipHours) {
+    for (final h in zoneHours) {
       expect(seed.contains("'$h':"), isTrue, reason: 'مفتاح $h غائب من بذر التثبيت الجديد');
     }
   });

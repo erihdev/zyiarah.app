@@ -162,7 +162,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      'تُنسخ الأسعار فقط — الأسماء والمواقع والجداول لا تتأثر.',
+                      'تُنسخ الأسعار والباقات (بأوصافها ومددها) — الأسماء والمواقع والجداول لا تتأثر.',
                       style: TextStyle(fontSize: 11, color: Colors.grey),
                     ),
                   ],
@@ -448,6 +448,14 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                                           : v.toString());
                                   setDialogState(() {
                                     copiedFromId = id;
+                                    // تفريغ كل حقول الساعات أولاً: ساعةٌ مسعّرة
+                                    // في النموذج وغائبة عن المصدر كانت تبقى —
+                                    // فيُحفظ خليطُ منطقتين كأنه تسعيرة المصدر
+                                    // (بقية المجموعات تُصفَّر أصلاً — هذه الوحيدة
+                                    // التي كانت تفلت).
+                                    for (final c in hourCtrls.values) {
+                                      c.text = '';
+                                    }
                                     for (final e in prices.entries) {
                                       final h = int.tryParse(e.key);
                                       if (h == null) continue;
@@ -520,7 +528,10 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                       },
                     ),
                     const SizedBox(height: 12),
-                    const Text("أسعار النظافة بالساعة (ر.س):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Text("أسعار النظافة بالساعة — نظام قديم:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                    const Text(
+                        "⚠️ لا يقرؤها عملاء النسخة الحالية — تسعير النظافة المنزلية صار في «باقات السكن» أدناه. تبقى للنسخ السابقة فقط.",
+                        style: TextStyle(fontSize: 11, color: Colors.orange)),
                     const SizedBox(height: 10),
                     Wrap(
                       spacing: 8,
@@ -714,10 +725,14 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                               // (باقات السكن) تُنسخ مع الأسعار — تفعيلاتها وأسعارها ومددها.
                               'packages': buildPackages(),
                             });
+                            // نُبقي الحوار مفتوحاً: إغلاقه كان **يُسقط** تعديلات
+                            // المنطقة المفتوحة غير المحفوظة (اسم/موقع/جدول) —
+                            // «حفظ المنطقة» يبقى قرار الأدمن الصريح.
                             if (ctx.mounted) {
-                              Navigator.pop(ctx);
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                  content: Text('حُفظت الأسعار في $n منطقة ✅'),
+                              setDialogState(() => isSaving = false);
+                              ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                                  content: Text(
+                                      'حُفظت الأسعار في $n منطقة ✅ — لحفظ تعديلات هذه المنطقة اضغط «حفظ المنطقة»'),
                                   backgroundColor: Colors.green));
                             }
                           } catch (e) {
@@ -773,11 +788,23 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                       };
 
                       if (doc == null) {
+                        // منطقة جديدة تُذيَّل القائمة (أعلى rank + 1) — تكافؤ مع لوحة
+                        // الويب؛ كان الافتراضي 0 فتتصدّر الجديدة فوق كل المناطق.
+                        final top = await _db
+                            .collection('service_zones')
+                            .orderBy('rank', descending: true)
+                            .limit(1)
+                            .get();
+                        final maxRank = top.docs.isEmpty
+                            ? 0
+                            : (top.docs.first.data()['rank'] as num? ?? 0)
+                                .toInt();
+                        newData['rank'] = maxRank + 1;
                         await _db.collection('service_zones').add(newData);
                       } else {
                         await _db.collection('service_zones').doc(doc.id).update(newData);
                       }
-                      
+
                       ZyiarahAuditService().logAction(
                         action: doc == null ? 'CREATE_ZONE' : 'UPDATE_ZONE',
                         details: {
@@ -789,7 +816,14 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
 
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {
+                      // فشل الحفظ كان صامتاً تماماً (يتوقف الدوار فقط) — فيُغلق
+                      // الأدمن الحوار ظاناً أن الأسعار حُفظت.
                       setDialogState(() => isSaving = false);
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                            content: Text('تعذّر حفظ المنطقة: $e'),
+                            backgroundColor: Colors.red));
+                      }
                     }
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF660033), foregroundColor: Colors.white),

@@ -164,7 +164,14 @@ class ZyiarahServiceMetaView extends StatelessWidget {
     }
     if (m['kind'] == 'home_package') {
       final h = _num(m['durationHours']).toInt();
-      return h > 0 ? 'مدة الجدولة $h ساعات' : '';
+      if (h <= 0) return '';
+      final label = switch (h) {
+        1 => 'ساعة واحدة',
+        2 => 'ساعتان',
+        >= 3 && <= 10 => '$h ساعات',
+        _ => '$h ساعة',
+      };
+      return 'مدة الجدولة $label';
     }
     return '';
   }
