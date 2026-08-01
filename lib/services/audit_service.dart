@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 class ZyiarahAuditService {
   static final ZyiarahAuditService _instance = ZyiarahAuditService._internal();
@@ -31,9 +32,16 @@ class ZyiarahAuditService {
         'platform': 'Admin Dashboard (Mobile/Native)',
       });
     } catch (e) {
-      // We don't want to crash the main app if logging fails, 
-      // but in a production environment, you might want to log this error to a crash reporter.
-      // print('Audit Log Error: $e');
+      // التدقيق أفضل-جهد: لا يُسقط التدفّق الرئيسي أبداً.
+      // قواعد Firestore تقصر إنشاء audit_logs على الأدمن، والاستدعاءات من تدفّقات
+      // العميل (توقيع العقد/تفعيل تمارا/استبدال قطرات...) تُرفَض بشكل متوقَّع —
+      // نتخطّاها بصمت كي لا تُلوّث السجلات بأخطاء وهمية، ونُبقي وسماً مميّزاً
+      // لغير الرفض حتى لا يضيع خلل حقيقي (شبكة/تهيئة).
+      if (e is FirebaseException && e.code == 'permission-denied') {
+        debugPrint('AUDIT_SKIPPED_NON_ADMIN: $action');
+      } else {
+        debugPrint('AUDIT_LOG_ERROR: $action — $e');
+      }
     }
   }
 

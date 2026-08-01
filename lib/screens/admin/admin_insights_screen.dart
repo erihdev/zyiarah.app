@@ -714,9 +714,12 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     final bool canManageOrders =
         ['admin', 'super_admin', 'orders_manager'].contains(widget.role);
 
-    // For contracts, we'll use a snapshot count if available, or 0
-    // (Note: In a real scenario, you'd add a listener for contracts too)
-    
+    // بطاقة «عقود تنفيذية» بدورها تفتح شاشة اعتماد/حذف عقود حكرها على مديري
+    // الطلبات — كانت خارج البوّابة فيصل المحاسب/التسويق لإجراءاتٍ مرفوضة.
+    // بحجبها لم يبقَ في الرادار شيء لهذه الأدوار، فنُخفي القسم كاملاً بدل
+    // عنوانٍ فوق شبكة فارغة.
+    if (!canManageOrders) return const SizedBox.shrink();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -744,22 +747,20 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
           mainAxisSpacing: 12,
           childAspectRatio: MediaQuery.of(context).size.width > 600 ? 1.3 : 1.15,
           children: [
-            if (canManageOrders) ...[
-              _buildLuxuryRequestCard(
-                title: "خدمات بالساعة",
-                count: cleaningNew,
-                icon: Icons.cleaning_services_rounded,
-                gradient: const [Color(0xFF1E293B), Color(0xFF475569)], // Gray/Slate
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminOrdersScreen())),
-              ),
-              _buildLuxuryRequestCard(
-                title: "طلبات المتجر",
-                count: storeNew,
-                icon: Icons.shopping_basket_rounded,
-                gradient: const [Color(0xFF1E1B4B), Color(0xFF312E81)], // Deep Indigo
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminStoreOrdersScreen())),
-              ),
-            ],
+            _buildLuxuryRequestCard(
+              title: "خدمات بالساعة",
+              count: cleaningNew,
+              icon: Icons.cleaning_services_rounded,
+              gradient: const [Color(0xFF1E293B), Color(0xFF475569)], // Gray/Slate
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminOrdersScreen())),
+            ),
+            _buildLuxuryRequestCard(
+              title: "طلبات المتجر",
+              count: storeNew,
+              icon: Icons.shopping_basket_rounded,
+              gradient: const [Color(0xFF1E1B4B), Color(0xFF312E81)], // Deep Indigo
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminStoreOrdersScreen())),
+            ),
             _buildLuxuryRequestCard(
               title: "عقود تنفيذية",
               count: 0, 

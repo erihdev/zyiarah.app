@@ -611,6 +611,11 @@ class _ClientDashboardState extends State<ClientDashboard> {
                     child: CachedNetworkImage(
                       imageUrl: imageUrl,
                       fit: BoxFit.cover,
+                      // سقف فك الترميز بعرض الشاشة: البنرات تُرفع بدقة الكاميرا الكاملة
+                      // وفكّها كاملةً لخانة 160px يستهلك عشرات الميغابايت ويقطّع التمرير.
+                      memCacheWidth: (MediaQuery.of(context).size.width *
+                              MediaQuery.of(context).devicePixelRatio)
+                          .round(),
                       placeholder: (context, url) => Container(
                         color: Colors.grey.shade200,
                         child: const Center(child: CircularProgressIndicator()),
@@ -768,6 +773,10 @@ class _ClientDashboardState extends State<ClientDashboard> {
                   height: 90,
                   width: double.infinity,
                   fit: BoxFit.cover,
+                  // فك الترميز بارتفاع وجهة الـ Hero (220px) بدل الأصل 640-1024px:
+                  // يقلّص ذاكرة الصور ~10x ويُبقي انتقال Hero حاداً في شاشة التفاصيل.
+                  cacheHeight:
+                      (220 * MediaQuery.of(context).devicePixelRatio).round(),
                   errorBuilder: (context, error, stackTrace) => Container(
                     height: 90,
                     width: double.infinity,

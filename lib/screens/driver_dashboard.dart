@@ -110,6 +110,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
   StreamSubscription<Position>? _posSub;
   bool _posTracking = false;
   bool _hasLocationStream = false;
+  // حارس تداخل: نداءان متزامنان لـ _startPositionStream (طلب الإذن + مزامنة المهمة)
+  // كانا يُنشئان اشتراكين ويُيتّمان أحدهما (تسريب GPS لا يُلغى أبداً). لا يُنشئ
+  // الاشتراك إلا حامل أحدث جيل، ويُرفع الجيل في dispose فلا يُنشأ اشتراك بعد الإغلاق.
+  int _posStreamGen = 0;
   final StreamController<Position> _posHub = StreamController<Position>.broadcast();
   bool _locationDenied = false;
 
@@ -149,10 +153,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
   /// إعادة الإنشاء إلزامي: geolocator يتجاهل إعدادات تدفّق قائم.
   Future<void> _startPositionStream({required bool tracking}) async {
     if (_posSub != null && _posTracking == tracking) return;
-    await _posSub?.cancel();
-    _posSub = null;
+    final gen = ++_posStreamGen;
     _posTracking = tracking;
     _hasLocationStream = true;
+    await _posSub?.cancel();
+    _posSub = null;
+    // نداء أحدث (أو dispose) سبقنا أثناء انتظار الإلغاء — لا نُنشئ اشتراكاً يتيماً.
+    if (gen != _posStreamGen) return;
     _posSub = Geolocator.getPositionStream(
       locationSettings: tracking ? _trackingSettings() : _lightSettings(),
     ).listen((pos) {
@@ -196,6 +203,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
   @override
   void dispose() {
+    // رفع الجيل يمنع نداء _startPositionStream معلّقاً من إنشاء اشتراك بعد التخلص.
+    _posStreamGen++;
     _posSub?.cancel();
     _activeOrderId = null;
     _posHub.close();
@@ -426,55 +435,98 @@ class _DriverDashboardState extends State<DriverDashboard> {
     if (mounted) context.go('/login');
   }
 
-  // DRIVER-009: error state returns zero values instead of silent crash
-  Widget _buildStatsRow() {
-    if (_currentDriverId == null) return const SizedBox.shrink();
+  // (تدقيق السائق) إحصاءات الإكمال من نافذة محدودة بدل بثّ **كل** الطلبات المكتملة
+  // مدى الحياة (كان يُنزّل كل المستندات كاملةً عند كل فتح وتتضخم الكلفة مع الزمن).
+  // النافذة: من بداية الشهر بهامش 45 يوماً للخلف (حجوزات أُنشئت قبل شهر إكمالها)
+  // بحدّ 500 مستند، ثم تُحتسب اليوم/الأسبوع/الشهر محلياً من end_time. يخدمها فهرس
+  // (driver_id, created_at) القائم — count() تجميعي على مدى end_time كان يحتاج
+  // فهرساً مركّباً (driver_id, status, end_time) غير موجود.
+  Future<List<int>>? _statsFuture;
 
+  Future<List<int>> _loadStats() async {
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
     // يُقتطع لمنتصف الليل أولاً — بدونه يبدأ الأسبوع من ساعة اللحظة الحالية،
     // فتُحتسب إكمالات الصباح الباكر من اليوم نفسه ناقصةً.
     final weekStart = todayStart.subtract(Duration(days: now.weekday - 1));
     final monthStart = DateTime(now.year, now.month, 1);
+    final windowStart = monthStart.subtract(const Duration(days: 45));
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('orders')
-          .where('driver_id', isEqualTo: _currentDriverId)
-          .where('status', isEqualTo: 'completed')
-          .snapshots(),
-      builder: (context, allSnapshot) {
-        if (allSnapshot.hasError) {
-          return Row(
-            children: [
-              _buildCompactStat("اليوم", "0", Icons.today_outlined, Colors.blue),
-              const SizedBox(width: 10),
-              _buildCompactStat("الأسبوع", "0", Icons.date_range_outlined, Colors.green),
-              const SizedBox(width: 10),
-              _buildCompactStat("الشهر", "0", Icons.calendar_month_outlined, Colors.orange),
-            ],
+    final snap = await FirebaseFirestore.instance
+        .collection('orders')
+        .where('driver_id', isEqualTo: _currentDriverId)
+        .where('created_at',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(windowStart))
+        .orderBy('created_at', descending: true)
+        .limit(500)
+        .get();
+
+    int todayTasks = 0, weeklyTasks = 0, monthlyTasks = 0;
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      if (data['status'] != 'completed') continue;
+      final endTime = (data['end_time'] as Timestamp?)?.toDate();
+      if (endTime == null) continue;
+      if (endTime.isAfter(todayStart)) todayTasks++;
+      if (endTime.isAfter(weekStart)) weeklyTasks++;
+      if (endTime.isAfter(monthStart)) monthlyTasks++;
+    }
+    return [todayTasks, weeklyTasks, monthlyTasks];
+  }
+
+  Widget _buildStatsRow() {
+    if (_currentDriverId == null) return const SizedBox.shrink();
+    _statsFuture ??= _loadStats();
+
+    return FutureBuilder<List<int>>(
+      future: _statsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          // لا أصفار كاذبة عند الفشل (كانت تُعرض "0" فيظنّ السائق سجلّه صُفّر) —
+          // لافتة خطأ حمراء + إعادة المحاولة.
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.red.shade200),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline,
+                    color: Colors.redAccent, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('تعذّر تحميل الإحصاءات',
+                      style: GoogleFonts.tajawal(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red.shade800)),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      setState(() => _statsFuture = _loadStats()),
+                  child: Text('إعادة المحاولة',
+                      style: GoogleFonts.tajawal(
+                          fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
           );
         }
 
-        final allOrders = allSnapshot.data?.docs ?? [];
-
-        int todayTasks = 0, weeklyTasks = 0, monthlyTasks = 0;
-        for (final doc in allOrders) {
-          final data = doc.data() as Map<String, dynamic>;
-          final endTime = (data['end_time'] as Timestamp?)?.toDate();
-          if (endTime == null) continue;
-          if (endTime.isAfter(todayStart)) todayTasks++;
-          if (endTime.isAfter(weekStart)) weeklyTasks++;
-          if (endTime.isAfter(monthStart)) monthlyTasks++;
-        }
-
+        final s = snapshot.data;
         return Row(
           children: [
-            _buildCompactStat("اليوم", "$todayTasks", Icons.today_outlined, Colors.blue),
+            _buildCompactStat("اليوم", s == null ? "—" : "${s[0]}",
+                Icons.today_outlined, Colors.blue),
             const SizedBox(width: 10),
-            _buildCompactStat("الأسبوع", "$weeklyTasks", Icons.date_range_outlined, Colors.green),
+            _buildCompactStat("الأسبوع", s == null ? "—" : "${s[1]}",
+                Icons.date_range_outlined, Colors.green),
             const SizedBox(width: 10),
-            _buildCompactStat("الشهر", "$monthlyTasks", Icons.calendar_month_outlined, Colors.orange),
+            _buildCompactStat("الشهر", s == null ? "—" : "${s[2]}",
+                Icons.calendar_month_outlined, Colors.orange),
           ],
         );
       },
@@ -1081,7 +1133,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
           // تفصيل الخدمة: كم قطعة ومقاسها / كم مكيفاً ونوعه. كان السائق يصل ولا يعرف
           // ما يحمل من عُدّة — الطلب يحمل مبلغاً واسم خدمة فقط.
           ZyiarahServiceMetaView(meta: data['service_meta']),
-          if (data['client_id'] != null) _buildHouseRulesAlert(data['client_id']),
+          _buildHouseRulesAlert(data),
           if (data['client_id'] != null) const Divider(height: 28),
           if (status == 'in_progress' && data['start_time'] is Timestamp)
             _buildTimer((data['start_time'] as Timestamp).toDate(),
@@ -1144,41 +1196,38 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
-  Widget _buildHouseRulesAlert(String clientId) {
-    return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection('users').doc(clientId).get(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox.shrink();
-        final docData = snapshot.data?.data() as Map<String, dynamic>?;
-        final rules = docData?['house_rules'] as String?;
-        if (rules == null || rules.isEmpty) return const SizedBox.shrink();
+  /// قوانين البيت من حقل الطلب نفسه — الدالة الخادمية تنسخ house_rules من مستند
+  /// العميل إلى الطلب عند الإسناد. القراءة المباشرة لـ users/{clientId} مرفوضة
+  /// بقواعد Firestore للسائق فكانت اللوحة تُخفى دائماً (فشل الجلب = لا بيانات).
+  /// عند غياب الحقل (طلبات قديمة قبل النسخ) تُخفى بصمت — لا شيء يُعرض خطأً.
+  Widget _buildHouseRulesAlert(Map<String, dynamic> orderData) {
+    final rules = (orderData['house_rules'] as String?)?.trim();
+    if (rules == null || rules.isEmpty) return const SizedBox.shrink();
 
-        return Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.amber.shade50,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.amber.shade200),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.amber.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.tips_and_updates, color: Colors.amber, size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    "قوانين البيت وتفضيلات العميل:",
-                    style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.orange.shade900),
-                  ),
-                ],
+              const Icon(Icons.tips_and_updates, color: Colors.amber, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                "قوانين البيت وتفضيلات العميل:",
+                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.orange.shade900),
               ),
-              const SizedBox(height: 6),
-              Text(rules, style: const TextStyle(fontSize: 12, color: Colors.black87)),
             ],
           ),
-        );
-      },
+          const SizedBox(height: 6),
+          Text(rules, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+        ],
+      ),
     );
   }
 
@@ -1418,6 +1467,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
           );
         }
       }
+
+      // إعادة تحميل الإحصاءات بعد الإكمال — صارت جلبة واحدة مخبّأة لا بثّاً حيّاً،
+      // فبدون التصفير تبقى أرقام اليوم/الأسبوع/الشهر قديمة حتى إعادة فتح اللوحة.
+      if (status == 'completed') _statsFuture = null;
 
       // (C) Optimistic UI: لا تُعرض Lottie إلا بعد نجاح Transaction الإكمال فعلياً.
       // الـ Transaction يفشل دون اتصال (يرمي استثناءً) فينتقل للـ catch بلا نجاح كاذب.

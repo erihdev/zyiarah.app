@@ -74,10 +74,31 @@ flutter:
     - assets/images/car_cleaning.png
     - assets/images/store.png
     - assets/payment/
-    # خطوط الـ PDF — مضمّنة محلياً. تنزيلها من الشبكة (PdfGoogleFonts) كان يعلّق
-    # توليد الفواتير والعقود إلى الأبد عند ضعف الاتصال.
+    # خطوط Tajawal — مضمّنة محلياً لواجهة التطبيق كلها + الـ PDF. تنزيلها من
+    # الشبكة (google_fonts/PdfGoogleFonts) كان يعلّق توليد الفواتير ويُظهر خطاً
+    # بديلاً في أول تشغيل بلا إنترنت. يجب أن تبقى في assets (لا fonts فقط) لأن
+    # google_fonts يبحث عن Tajawal-<Variant>.ttf في AssetManifest قبل أي جلب شبكي.
+    # الأوزان الأربعة تغطي كل الاستخدامات: 400 (وأي normal)، 500 (يلتقط w500/w600)،
+    # 700 (bold)، 900 (w900) — نقص أي وزن مستخدَم = استثناء لأن الجلب الشبكي مُعطَّل.
     - assets/fonts/Tajawal-Regular.ttf
+    - assets/fonts/Tajawal-Medium.ttf
     - assets/fonts/Tajawal-Bold.ttf
+    - assets/fonts/Tajawal-Black.ttf
+    # رخصة OFL للخط — تُسجَّل في LicenseRegistry (شرط الترخيص عند تضمين الخط).
+    - assets/fonts/OFL.txt
+  # التصريح كعائلة خطوط نظامية باسم 'Tajawal' — يطابق fontFamilyFallback الذي
+  # يضبطه GoogleFonts.tajawal، فأي وزن غير مضمّن يسقط على أقرب وزن هنا بدل خط النظام.
+  fonts:
+    - family: Tajawal
+      fonts:
+        - asset: assets/fonts/Tajawal-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Tajawal-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Tajawal-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Tajawal-Black.ttf
+          weight: 900
 
 flutter_launcher_icons:
   android: "launcher_icon"

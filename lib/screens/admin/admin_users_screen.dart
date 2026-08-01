@@ -130,6 +130,14 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   // user_provider يفحص status=='banned' أو is_blocked==true فيُسجّل خروجه ويمنعه.
   Future<void> _toggleBan(BuildContext context, String uid, String name,
       bool isBanned, bool hasBlockedFlag) async {
+    // القواعد صارت تحصر كتابة users.status (علم الحظر المُنفَّذ) بالمدير العام —
+    // حارس مبكر برسالة واضحة بدل permission-denied خام بعد التأكيد.
+    if (_role != 'super_admin') {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('الحظر ورفعه صلاحية الإدارة العليا فقط'),
+          backgroundColor: Colors.red));
+      return;
+    }
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -242,6 +250,15 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator(color: Color(0xFF6366F1)));
+            }
+            // فشل البث كان يُعرض كقائمة فارغة — خطأ صريح مع إعادة محاولة.
+            if (snapshot.hasError) {
+              return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.cloud_off_rounded, size: 48, color: Colors.redAccent),
+                const SizedBox(height: 10),
+                Text('تعذّر تحميل البيانات', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.red)),
+                TextButton(onPressed: () => setState(() {}), child: const Text('إعادة المحاولة')),
+              ]));
             }
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
               return Center(
@@ -431,15 +448,18 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                               }
                             },
                             itemBuilder: (ctx) => [
-                              PopupMenuItem<String>(
-                                value: 'ban',
-                                child: Row(children: [
-                                  Icon(isBanned ? Icons.lock_open_rounded : Icons.block_rounded,
-                                      color: isBanned ? Colors.green : Colors.orange.shade700, size: 20),
-                                  const SizedBox(width: 10),
-                                  Text(isBanned ? 'رفع الحظر' : 'حظر المستخدم'),
-                                ]),
-                              ),
+                              // كتابة users.status محصورة قاعدياً بالمدير العام —
+                              // لا نعرض الخيار لمن سيُرفض حتماً.
+                              if (_role == 'super_admin')
+                                PopupMenuItem<String>(
+                                  value: 'ban',
+                                  child: Row(children: [
+                                    Icon(isBanned ? Icons.lock_open_rounded : Icons.block_rounded,
+                                        color: isBanned ? Colors.green : Colors.orange.shade700, size: 20),
+                                    const SizedBox(width: 10),
+                                    Text(isBanned ? 'رفع الحظر' : 'حظر المستخدم'),
+                                  ]),
+                                ),
                               // الحذف النهائي يكتب account_deletions والقواعد تحصره
                               // بالمدير العام — إظهاره لمدير العمليات كان زراً معطوباً
                               // ينتهي دوماً بـ permission-denied.

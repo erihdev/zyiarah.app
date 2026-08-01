@@ -46,6 +46,16 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
                     return const Center(child: CircularProgressIndicator(color: Color(0xFF1E293B)));
                   }
 
+                  // فشل البث كان يُعرض كقائمة فارغة — خطأ صريح مع إعادة محاولة.
+                  if (snapshot.hasError) {
+                    return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.cloud_off_rounded, size: 48, color: Colors.redAccent),
+                      const SizedBox(height: 10),
+                      Text('تعذّر تحميل البيانات', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.red)),
+                      TextButton(onPressed: () => setState(() {}), child: const Text('إعادة المحاولة')),
+                    ]));
+                  }
+
                   final logs = _applyFilter(snapshot.data?.docs ?? []);
                   if (logs.isEmpty) {
                     return Center(

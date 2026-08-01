@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, Filter, MoreVertical, CheckCircle2, Clock, XCircle, Package, UserCheck, X, Loader2, CalendarClock } from 'lucide-react';
 import {
-    collection, onSnapshot, query, orderBy, doc, Timestamp, updateDoc,
+    collection, onSnapshot, query, orderBy, where, limit, doc, Timestamp, updateDoc, runTransaction,
     type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
@@ -73,6 +73,12 @@ export default function Orders() {
     const [orders, setOrders] = useState<OrderRecord[]>([]);
     const [drivers, setDrivers] = useState<DriverOption[]>([]);
     const [loading, setLoading] = useState(true);
+    // فشل المستمع نهائي (Firestore لا يعيد الاشتراك) — كان الدوّار يعلق للأبد بلا
+    // رسالة ولا زر إعادة؛ retryKey يعيد تشغيل الاشتراك عند طلب المستخدم.
+    const [loadError, setLoadError] = useState(false);
+    const [retryKey, setRetryKey] = useState(0);
+    // عدّاد «انتظار» من مستمع مقيّد بالحالة — يبقى دقيقاً رغم سقف الـ300 أدناه.
+    const [pendingCount, setPendingCount] = useState<number | null>(null);
     const [actionMenuId, setActionMenuId] = useState<string | null>(null);
     const [assignModal, setAssignModal] = useState<OrderRecord | null>(null);
     const [selectedDriverId, setSelectedDriverId] = useState('');
@@ -90,7 +96,9 @@ export default function Orders() {
     const menuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        const q = query(collection(db, 'orders'), orderBy('created_at', 'desc'));
+        // (أداء) أحدث 300 فقط — كانت المجموعة كلها تُقرأ وتُبقى حيّة بلا حد،
+        // فتتضخم القراءات مع كل طلب جديد (تكافؤ سقف تطبيق الأدمن).
+        const q = query(collection(db, 'orders'), orderBy('created_at', 'desc'), limit(300));
         const unsub = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
             setOrders(snapshot.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => {
                 const d = doc.data() as Partial<OrderRecord>;
@@ -108,14 +116,25 @@ export default function Orders() {
                 } as OrderRecord;
             }));
             setLoading(false);
+        }, (e) => {
+            // لا فشل صامت: خطأ المستمع (صلاحيات/جلسة منتهية) يُظهر حالة خطأ بزر إعادة.
+            console.error('Orders listener error:', e);
+            setLoading(false);
+            setLoadError(true);
         });
+
+        const pendingUnsub = onSnapshot(
+            query(collection(db, 'orders'), where('status', '==', 'pending')),
+            (snap) => setPendingCount(snap.size),
+            (e) => console.error('Pending count listener error:', e)
+        );
 
         const driversUnsub = onSnapshot(collection(db, 'drivers'), (snap) => {
             setDrivers(snap.docs.map(d => ({ id: d.id, name: d.data().name || 'سائق', is_available: d.data().is_available || false, is_active: d.data().is_active !== false })));
-        });
+        }, (e) => console.error('Drivers listener error:', e));
 
-        return () => { unsub(); driversUnsub(); };
-    }, []);
+        return () => { unsub(); pendingUnsub(); driversUnsub(); };
+    }, [retryKey]);
 
     useEffect(() => {
         const handler = (e: MouseEvent) => {
@@ -210,14 +229,25 @@ export default function Orders() {
     // (_advanceManagedOrder). كانت اللوحة تعرض حالتها بالإنجليزية بلا زر تقدّم.
     const handleAdvanceManaged = async (order: OrderRecord, next: 'in_progress' | 'completed') => {
         try {
-            await updateDoc(doc(db, 'orders', order.id), {
-                status: next,
-                ...(next === 'completed' ? { completed_at: Timestamp.now() } : {}),
-                updated_at: Timestamp.now(),
+            // معاملة بقراءة حديثة لا كتابة عمياء: الحالة قد تتغير بين رسم القائمة
+            // والضغطة — لا تقدّم لطلب اكتمل أو أُلغي في هذه النافذة.
+            await runTransaction(db, async (tx) => {
+                const ref = doc(db, 'orders', order.id);
+                const snap = await tx.get(ref);
+                if (!snap.exists()) throw new Error('الطلب لم يعد موجوداً');
+                const current = (snap.data() as { status?: string }).status;
+                if (current === 'completed' || current === 'cancelled') {
+                    throw new Error('الطلب اكتمل أو أُلغي بالفعل — لا يمكن تحديث حالته');
+                }
+                tx.update(ref, {
+                    status: next,
+                    ...(next === 'completed' ? { completed_at: Timestamp.now() } : {}),
+                    updated_at: Timestamp.now(),
+                });
             });
         } catch (err) {
             console.error('Error advancing order:', err);
-            toast.error('تعذّر تحديث الحالة');
+            toast.error(err instanceof Error ? err.message : 'تعذّر تحديث الحالة');
         } finally {
             setActionMenuId(null);
         }
@@ -227,20 +257,33 @@ export default function Orders() {
         if (!await confirm(`هل أنت متأكد من إلغاء الطلب #${order.code || order.id.substring(0, 6).toUpperCase()}؟`)) return;
         setIsCancelling(true);
         try {
+            // معاملة بقراءة حديثة لا كتابة عمياء: أثناء نافذة التأكيد قد يُكمل السائق
+            // الطلب — الكتابة القديمة كانت تقلب completed إلى cancelled وتصرف استرداداً
+            // كاملاً للمحفظة عن خدمة نُفّذت فعلاً (تكافؤ حارس order_service.dart).
             // needs_refund only for actually-paid orders; rewards_handled_by:'server'
             // lets onOrderRewards credit the wallet refund. Driver release is handled
             // server-side by freeDriverOnOrderCancel (guards on current_order_id, so it
             // won't free a driver who has since moved on to another order).
-            await updateDoc(doc(db, 'orders', order.id), {
-                status: 'cancelled',
-                cancelled_at: Timestamp.now(),
-                cancelled_by: 'admin',
-                needs_refund: order.is_paid === true,
-                rewards_handled_by: 'server',
+            await runTransaction(db, async (tx) => {
+                const ref = doc(db, 'orders', order.id);
+                const snap = await tx.get(ref);
+                if (!snap.exists()) throw new Error('الطلب لم يعد موجوداً');
+                const current = snap.data() as { status?: string; is_paid?: boolean };
+                if (current.status === 'completed' || current.status === 'cancelled') {
+                    throw new Error('لا يمكن إلغاء طلب مكتمل أو ملغي بالفعل');
+                }
+                tx.update(ref, {
+                    status: 'cancelled',
+                    cancelled_at: Timestamp.now(),
+                    cancelled_by: 'admin',
+                    // من اللقطة الحديثة لا من إغلاق قديم أُسر قبل نافذة التأكيد.
+                    needs_refund: current.is_paid === true,
+                    rewards_handled_by: 'server',
+                });
             });
         } catch (err) {
             console.error('Error cancelling order:', err);
-            toast.error('حدث خطأ أثناء الإلغاء');
+            toast.error(err instanceof Error ? err.message : 'حدث خطأ أثناء الإلغاء');
         } finally {
             setIsCancelling(false);
             setActionMenuId(null);
@@ -261,7 +304,7 @@ export default function Orders() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">إدارة الطلبات المباشرة</h2>
-                    <p className="text-slate-500 font-medium text-sm mt-1">متابعة حالة الطلبات وتفاصيلها لحظة بلحظة</p>
+                    <p className="text-slate-500 font-medium text-sm mt-1">متابعة حالة الطلبات وتفاصيلها لحظة بلحظة — يعرض أحدث 300 طلب</p>
                 </div>
                 <button type="button" className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors shadow-sm">
                     <Filter size={18} />تصفية
@@ -282,7 +325,7 @@ export default function Orders() {
                     </div>
                     <div className="flex gap-2 text-sm">
                         <button type="button" className="px-4 py-2 bg-[#FAF1F6] text-[#4D0026] font-bold rounded-lg border border-[#F2DEE9]">الكل ({orders.length})</button>
-                        <button type="button" className="px-4 py-2 bg-amber-50 text-amber-700 font-bold rounded-lg border border-amber-100">انتظار ({orders.filter(o => o.status === 'pending').length})</button>
+                        <button type="button" className="px-4 py-2 bg-amber-50 text-amber-700 font-bold rounded-lg border border-amber-100">انتظار ({pendingCount ?? orders.filter(o => o.status === 'pending').length})</button>
                     </div>
                 </div>
 
@@ -291,6 +334,18 @@ export default function Orders() {
                         <div className="flex flex-col items-center justify-center h-64">
                             <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#660033] border-t-transparent"></div>
                             <p className="text-slate-500 mt-4 font-bold">جاري جلب الطلبات...</p>
+                        </div>
+                    ) : loadError ? (
+                        // حالة خطأ صريحة لا «لا توجد طلبات» — الفراغ عند الفشل يوهم بخلو النظام.
+                        <div className="flex flex-col items-center justify-center h-64 gap-4 bg-rose-50/40 m-6 rounded-2xl border border-rose-100">
+                            <p className="text-rose-600 font-bold">تعذّر تحميل الطلبات — تحقّق من الاتصال أو الصلاحيات</p>
+                            <button
+                                type="button"
+                                onClick={() => { setLoadError(false); setLoading(true); setRetryKey(k => k + 1); }}
+                                className="px-5 py-2.5 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-colors"
+                            >
+                                إعادة المحاولة
+                            </button>
                         </div>
                     ) : (
                         <table className="w-full text-right border-collapse">

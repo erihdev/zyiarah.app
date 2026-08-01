@@ -191,13 +191,18 @@ class ZyiarahPdfService {
     } catch (e) {
       debugPrint('Error generating/uploading ZATCA invoice: $e');
       // نعلّم الوثيقة بالفشل حتى تُظهر الواجهة زرّ إعادة المحاولة بدل دوّار أبدي.
+      // ملاحظة: يتطلب سماح قواعد Firestore بمفتاح invoice_pdf_status ضمن تعديلات
+      // العميل (orders وstore_orders) — بدونه يُرفَض الوسم ولا يظهر زر الإعادة.
       try {
         await FirebaseFirestore.instance
             .collection(collectionPath)
             .doc(orderId)
             .update({'invoice_pdf_status': 'failed'}).timeout(
                 const Duration(seconds: 10));
-      } catch (_) {}
+      } catch (statusErr) {
+        // لا نبتلعه بصمت: رفض الصلاحيات هنا يعني بقاء العميل على دوّار الفاتورة.
+        debugPrint('INVOICE_STATUS_WRITE_FAILED [$collectionPath/$orderId]: $statusErr');
+      }
       return null;
     }
   }

@@ -94,15 +94,20 @@ service cloud.firestore {
         // (getUserRole trusts it first), so only a super_admin may set it — a sub-admin
         // must not self-escalate. visits_remaining is a prepaid subscription-credit
         // counter (server-managed) and must not be granted outside payment.
+        // SECURITY: `status` هو علم الحظر الثاني (user_provider يطرد status=='banned') —
+        // الحظر/رفعه قرار للمدير العام وحده، أسوةً بـ is_blocked.
         (isAdmin() &&
           !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['role', 'staff_role', 'wallet', 'is_blocked', 'visits_remaining'])) ||
+            .hasAny(['role', 'staff_role', 'wallet', 'is_blocked', 'status',
+                     'visits_remaining'])) ||
         // Owner: own non-sensitive fields only. visits_remaining / subscription credits
         // are server-only (they represent paid subscription visits — never client-writable).
         (isOwner(userId) &&
           !request.resource.data.diff(resource.data).affectedKeys()
+            // SECURITY: `status` محظور على المالك أيضاً — وإلا رفع المحظور حظره بنفسه
+            // بكتابة status:'active' (user_provider يفحص status=='banned').
             .hasAny(['role', 'staff_role', 'wallet', 'rating_avg', 'rating_count',
-                     'total_orders', 'is_blocked', 'visits_remaining',
+                     'total_orders', 'is_blocked', 'status', 'visits_remaining',
                      'subscription_expiry', 'subscription_total_visits',
                      // خادمية فقط (activateContractOnPaid) — منعُ تزييف بطاقة اشتراك.
                      'has_active_subscription', 'subscription_type']));
@@ -181,6 +186,10 @@ service cloud.firestore {
         !request.resource.data.keys().hasAny([
           'needs_refund', 'refund_credited', 'rewards_handled_by',
           'qatrat_granted', 'visit_counted', 'coupon_counted', 'paid_confirmed',
+          // SECURITY: الإسناد قرار خادمي/إداري حصراً — عميلٌ يكتب driver_id عند الإنشاء
+          // كان يزرع سائقاً من اختياره في مهامّه ويتجاوز محرّك التوزيع (لا مسار شرعي
+          // في التطبيق يكتبه عند الإنشاء).
+          'driver_id',
         ]);
 
       // Orders manager: full update (approve, assign driver -> scheduled, override status)
@@ -228,9 +237,11 @@ service cloud.firestore {
              .hasOnly(['status', 'cancelled_at', 'cancelled_by', 'needs_refund', 'rewards_handled_by']) &&
            request.resource.data.status == 'cancelled')
           ||
-          // 2. Invoice PDF URL update flow
+          // 2. Invoice PDF URL update flow — يشمل invoice_pdf_status: مولّد
+          //    الفاتورة يكتب حالة إعادة المحاولة، وكانت خارج القائمة فتُرفض
+          //    المعاملة كاملة ويتعطل مسار إعادة توليد الفاتورة.
           (request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['invoice_pdf_url']))
+             .hasOnly(['invoice_pdf_url', 'invoice_pdf_status']))
           ||
           // 3. Rating flow (only allowed once rating is not already set)
           (resource.data.get('rating', null) == null &&
@@ -303,12 +314,31 @@ service cloud.firestore {
     // client could activate their own contract and get free subscription visits.
     // Activation/payment must be server- or admin-gated (mirrors the Stage-C order model).
     match /contracts/{contractId} {
+      // SECURITY (CRITICAL): العقد ينشئه العميل موقَّعاً بحقول planPrice/planVisits من
+      // الواجهة، والخادم يحاسبه على planPrice كما هو (verifyMoyasarPayment /
+      // payContractWithWallet تقرآن planPrice من المستند). لا يمكن للقواعد مطابقة السعر
+      // مع subscription_packages (لا معرّف باقة على العقد)، فنحصر الإنشاء في الشكل
+      // الشرعي الوحيد (contract_signing_screen): status=='pending'، غير مدفوع، أرقام
+      // موجبة، وبلا أي حقل ثقة خادمي (التفعيل/التوليد/الأرصدة يكتبها الخادم فقط).
+      // ⚠️ الحسم النهائي لسعر الباقة يبقى تحققاً خادمياً (انظر تقرير التدقيق).
       allow create: if isLoggedIn() &&
         request.resource.data.get('userId', '') == request.auth.uid &&
-        request.resource.data.get('is_paid', false) == false;
+        request.resource.data.get('is_paid', false) == false &&
+        request.resource.data.get('status', 'pending') == 'pending' &&
+        request.resource.data.get('planPrice', 0) is number &&
+        request.resource.data.get('planPrice', 0) > 0 &&
+        request.resource.data.get('planVisits', 0) is number &&
+        request.resource.data.get('planVisits', 0) > 0 &&
+        !request.resource.data.keys().hasAny([
+          'paid_confirmed', 'visits_generated', 'visits_generated_at',
+          'activatedAt', 'activated_at', 'adminApprovedAt', 'paid_at',
+          'visits_remaining', 'visits_total', 'expiry', 'amount',
+        ]);
       allow read: if isLoggedIn() &&
         (request.auth.uid == resource.data.userId || isAdmin());
-      allow update: if isAdmin() ||
+      // العقود إدارة طلبات: المالك + مدير الطلبات فقط (كان isAdmin يفتحها للمسوّق
+      // والمحاسب رغم أن شاشة العقود محصورة بـ super_admin/orders_manager).
+      allow update: if isOrdersManager() ||
         (isLoggedIn() && request.auth.uid == resource.data.userId &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny([
             'status', 'is_paid', 'paid_confirmed', 'planVisits', 'planPrice',
@@ -344,13 +374,10 @@ service cloud.firestore {
     }
     match /promo_codes/{codeId} {
       allow read: if isLoggedIn();
-      // Marketing admin may edit any field (activate/deactivate, extend expiry, adjust limits);
-      // regular users can ONLY increment `uses` by exactly 1 — prevents abuse.
-      allow update: if isMarketingAdmin() ||
-        (isLoggedIn() &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uses']) &&
-         request.resource.data.uses == resource.data.uses + 1);
-      allow create, delete: if isMarketingAdmin();
+      // SECURITY: عدّ الاستخدام صار خادمياً حصراً (countCouponUseOnOrderCreate عند تأكيد
+      // الدفع، عبر Admin SDK المتجاوز للقواعد) — ولا كود عميل في التطبيق يزيد `uses`.
+      // سماح «+1 لأي مستخدم» القديم كان باباً لإحراق أي كوبون حتى maxUses بلا شراء.
+      allow update, create, delete: if isMarketingAdmin();
     }
     match /coupons/{couponId} {
       allow read: if isLoggedIn();
@@ -419,6 +446,11 @@ service cloud.firestore {
       // restricted to payment-completion fields and status -> processing only, so a paid
       // store order is no longer stuck after checkout. Full control stays with the manager.
       allow update: if isOrdersManager() ||
+        // فرع الفاتورة وحده: بعد تأكيد الدفع خادمياً يكتب العميل رابط فاتورة
+        // ZATCA وحالتها — الفرع العام أدناه يشترط is_paid==false فكان يحجبها.
+        (isLoggedIn() && request.auth.uid == resource.data.client_id &&
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['invoice_pdf_url', 'invoice_pdf_status'])) ||
         (isLoggedIn() && request.auth.uid == resource.data.client_id &&
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(
            ['payment_method', 'is_paid', 'payment_status', 'status',
@@ -448,7 +480,9 @@ service cloud.firestore {
       // سجلّ تدقيق إداري — الكتابة للأدمن فقط (كان أي مستخدم يكتب إدخالات باسمه = تلويث).
       allow create: if isAdmin() &&
         request.resource.data.get('admin_uid', request.auth.uid) == request.auth.uid;
-      allow read: if isAccountantAdmin();
+      // قراءة سجلّ التدقيق للمدير العام وحده — شاشة «سجل العمليات الإدارية» محصورة به
+      // أصلاً في الواجهة، وكان isAccountantAdmin يفتح تتبّع أفعال الإدارة لغير المخوَّل.
+      allow read: if isSuperAdmin();
       allow delete: if isSuperAdmin();
     }
 
@@ -460,7 +494,14 @@ service cloud.firestore {
     }
 
     match /notifications_log/{logId} {
-      allow read: if isAccountantAdmin();
+      // 1) الإعلان المنبثق (type=='popup') يقرؤه كل مستخدم مسجّل — popup_service يستعلم
+      //    where(type=='popup') فيثبت الشرط على مستوى الاستعلام (فهرس type+sent_at قائم).
+      //    كانت القراءة محصورة بالمحاسب/المدير فلا يظهر المنبثق لأي عميل إطلاقاً.
+      // 2) طابور الجدولة (status=='scheduled') يعيش هنا أيضاً: كل دور يستطيع الإنشاء
+      //    (write: isAdmin) يجب أن يقرأ/يلغي طابوره — كان orders_manager/marketing_admin
+      //    يجدولان ثم تختفي قائمتهما بـ permission-denied.
+      allow read: if isAdmin() ||
+        (isLoggedIn() && resource.data.type == 'popup');
       allow write: if isAdmin();
     }
     // سجلّ تنبيهات الإدارة (ADMIN_BROADCAST) — تستمع إليه لوحة الويب. خادمي الكتابة.

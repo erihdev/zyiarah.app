@@ -199,6 +199,15 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
           stream: _db.collection('subscription_packages').orderBy('rank').snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+            // فشل البث كان يُعرض كقائمة فارغة — خطأ صريح مع إعادة محاولة.
+            if (snapshot.hasError) {
+              return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.cloud_off_rounded, size: 48, color: Colors.redAccent),
+                const SizedBox(height: 10),
+                Text('تعذّر تحميل البيانات', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.red)),
+                TextButton(onPressed: () => setState(() {}), child: const Text('إعادة المحاولة')),
+              ]));
+            }
             final docs = snapshot.data?.docs ?? [];
             if (docs.isEmpty) return const Center(child: Text("لا توجد باقات متاحة حالياً"));
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Save, Bell, Shield, Wallet, MapPin, Search, Smartphone, Loader2, CheckCircle2, ChevronLeft, CreditCard, Activity, Globe, Database, KeyRound, ArrowRight, Plus, Navigation, ToggleLeft, ToggleRight, Trash2, Pencil, CalendarClock } from 'lucide-react';
+import { Save, Shield, Wallet, MapPin, Search, Smartphone, Loader2, CheckCircle2, ChevronLeft, CreditCard, Activity, Database, KeyRound, ArrowRight, Plus, Navigation, ToggleLeft, ToggleRight, Trash2, Pencil, CalendarClock } from 'lucide-react';
 import { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, GeoPoint, serverTimestamp } from 'firebase/firestore';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -15,16 +15,12 @@ interface SystemSettings {
     privacy_policy: string;
     maintenance_mode: boolean;
 
-    // Payments
+    // Payments — أزيلت vat_rate/min_wallet_balance ومفاتيح الإشعارات الثلاثة:
+    // لا قارئ لها في التطبيق أو الدوال (الضريبة مثبّتة 15% في functions/pricing.js)،
+    // فكان الأدمن «يحفظها بنجاح» بلا أي أثر تشغيلي. tamara_enabled حيّ فعلاً
+    // (payment_summary_screen / store_payment_screen).
     commission_rate: number;
-    vat_rate: number;
-    min_wallet_balance: number;
     tamara_enabled: boolean;
-
-    // Notifications
-    sms_on_order: boolean;
-    push_on_assign: boolean;
-    push_on_completed: boolean;
 }
 
 interface CoverageZone {
@@ -128,15 +124,10 @@ const defaultSettings: SystemSettings = {
     privacy_policy: "نحن في تطبيق زيارة نلتزم بحماية بياناتك الشخصية...",
     maintenance_mode: false,
     commission_rate: 15,
-    vat_rate: 15,
-    min_wallet_balance: -50,
     tamara_enabled: false,
-    sms_on_order: true,
-    push_on_assign: true,
-    push_on_completed: true,
 };
 
-type TabType = 'general' | 'payments' | 'notifications' | 'coverage';
+type TabType = 'general' | 'payments' | 'coverage';
 
 export default function Settings() {
     const { toast } = useNotification();
@@ -376,7 +367,11 @@ export default function Settings() {
                 await updateDoc(doc(db, 'service_zones', editingZoneId), payload);
                 toast.success(`تم تحديث ${payload.name} بنجاح`);
             } else {
-                await addDoc(collection(db, 'service_zones'), { ...payload, enabled: true, rank: zones.length + 1 });
+                // منطقة جديدة تُذيَّل القائمة (أعلى rank + 1) — تكافؤ حقيقي مع تطبيق
+                // الأدمن: zones.length + 1 كانت تكرّر رتبة قائمة بعد أي حذف
+                // (رتب {1,3,4} ⇒ الطول+1 = 4 مكرّرة) فيتذبذب ترتيب القوائم.
+                const nextRank = zones.reduce((m, z) => Math.max(m, z.rank || 0), 0) + 1;
+                await addDoc(collection(db, 'service_zones'), { ...payload, enabled: true, rank: nextRank });
                 toast.success(`تمت إضافة ${payload.name} بنجاح`);
             }
             setNewZone(emptyZoneForm);
@@ -580,7 +575,6 @@ export default function Settings() {
     const tabs = [
         { id: 'general', label: 'عام وأمان', icon: Shield, color: 'from-[#660033] to-[#660033]', bg: 'bg-[#FAF1F6]/50', border: 'border-[#F2DEE9]', text: 'text-[#4D0026]' },
         { id: 'payments', label: 'المدفوعات', icon: Wallet, color: 'from-emerald-500 to-green-600', bg: 'bg-emerald-50/50', border: 'border-emerald-100', text: 'text-emerald-700' },
-        { id: 'notifications', label: 'الإشعارات', icon: Bell, color: 'from-orange-500 to-amber-600', bg: 'bg-orange-50/50', border: 'border-orange-100', text: 'text-orange-700' },
         { id: 'coverage', label: 'التغطية', icon: MapPin, color: 'from-rose-500 to-lime-600', bg: 'bg-rose-50/50', border: 'border-rose-100', text: 'text-rose-700' },
     ] as const;
 
@@ -888,38 +882,10 @@ export default function Settings() {
                                     </div>
                                 </div>
                                 <div className="p-10 space-y-8 overflow-y-auto">
-                                    
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                        <div className="bg-white border border-slate-200 p-8 rounded-[2rem] shadow-sm relative overflow-hidden group hover:border-emerald-200 hover:shadow-md transition-all">
-                                            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Activity size={64} /></div>
-                                            <label htmlFor="vat-rate" className="block text-sm font-bold text-slate-800 mb-2 relative z-10">ضريبة القيمة المضافة (VAT)</label>
-                                            <p className="text-xs text-slate-500 font-medium mb-4 h-8 relative z-10">تضاف على تكلفة الخدمة كرسوم إضافية.</p>
-                                            <div className="relative z-10 flex items-center">
-                                                <input
-                                                    id="vat-rate"
-                                                    type="number" value={settings.vat_rate} onChange={(e) => handleChange('vat_rate', Number(e.target.value))}
-                                                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 font-black text-2xl rounded-xl px-5 py-4 outline-none focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all text-center"
-                                                    dir="ltr"
-                                                />
-                                                <span className="absolute left-6 text-slate-400 font-black text-xl pointer-events-none">%</span>
-                                            </div>
-                                        </div>
 
-                                        <div className="bg-white border border-red-100 p-8 rounded-[2rem] shadow-sm relative overflow-hidden group hover:border-red-300 hover:shadow-md transition-all">
-                                            <div className="absolute top-0 right-0 p-4 text-red-500 opacity-5 group-hover:opacity-10 transition-opacity"><ArrowRight size={64} className="rotate-90" /></div>
-                                            <label htmlFor="min-wallet" className="block text-sm font-bold text-slate-800 mb-2 relative z-10">الحد الأدنى للمحفظة</label>
-                                            <p className="text-xs text-slate-500 font-medium mb-4 h-8 relative z-10">حد المديونية الذي يتم عنده إيقاف السائق.</p>
-                                            <div className="relative z-10 flex items-center">
-                                                <input
-                                                    id="min-wallet"
-                                                    type="number" value={settings.min_wallet_balance} onChange={(e) => handleChange('min_wallet_balance', Number(e.target.value))}
-                                                    className="w-full bg-red-50 border border-red-200 text-red-700 font-black text-2xl rounded-xl px-5 py-4 outline-none focus:bg-white focus:border-red-500 focus:ring-4 focus:ring-red-500/10 transition-all text-center"
-                                                    dir="ltr"
-                                                />
-                                                <span className="absolute left-6 text-red-400 font-bold text-sm pointer-events-none">SAR</span>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    {/* أزيلت بطاقتا VAT والحد الأدنى للمحفظة: حقول ميتة بلا قارئ —
+                                        الضريبة مثبّتة 15% خادمياً (functions/pricing.js) وكان تعديلها
+                                        هنا «ينجح» بلا أثر، وهو أخطر من غيابه. */}
 
                                     {/* Tamara Section */}
                                     <div className="bg-slate-50/50 border border-slate-200 rounded-[2.5rem] p-8">
@@ -947,49 +913,10 @@ export default function Settings() {
                             </div>
                         )}
 
-                        {activeTab === 'notifications' && (
-                            <div className="flex flex-col h-full">
-                                <div className="px-10 py-8 border-b border-orange-50 bg-white/80 backdrop-blur-xl sticky top-0 z-20">
-                                    <div className="flex items-center gap-4">
-                                        <div className="p-3 bg-orange-50 text-orange-600 rounded-2xl">
-                                            <Bell size={28} strokeWidth={2.5} />
-                                        </div>
-                                        <div>
-                                            <h3 className="text-2xl font-black text-slate-800">توجيه الرسائل والإشعارات</h3>
-                                            <p className="text-sm text-slate-500 font-medium mt-1">التحكم في تنبيهات النظام المعززة لتحسين تواصل العملاء والسائقين.</p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="p-10">
-                                    <div className="space-y-4 max-w-4xl mx-auto">
-                                        <NotificationRow 
-                                            title="رسالة نصية SMS للمستفيد بالفاتورة"
-                                            desc="تفعيل إرسال رسالة SMS للعميل تتضمن رابط الفاتورة وحالة الطلب."
-                                            checked={settings.sms_on_order}
-                                            onChange={(val) => handleChange('sms_on_order', val)}
-                                            icon={<Smartphone className="text-[#660033]" />}
-                                            colorTheme="blue"
-                                        />
-                                        <NotificationRow 
-                                            title="إشعار Push للسائقين بالطلبات القريبة"
-                                            desc="إرسال تنبيه في الوقت الفعلي للسائقين المتاحين في نفس المنطقة."
-                                            checked={settings.push_on_assign}
-                                            onChange={(val) => handleChange('push_on_assign', val)}
-                                            icon={<Globe className="text-emerald-500" />}
-                                            colorTheme="emerald"
-                                        />
-                                        <NotificationRow 
-                                            title="تنبيه Push للعميل للإفادة بالانتهاء"
-                                            desc="تحفيز العميل لتقييم الخدمة فور انتهاء السائق من تنفيذها."
-                                            checked={settings.push_on_completed}
-                                            onChange={(val) => handleChange('push_on_completed', val)}
-                                            icon={<CheckCircle2 className="text-orange-500" />}
-                                            colorTheme="orange"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                        {/* أزيل تبويب الإشعارات بمفاتيحه الثلاثة (sms_on_order/push_on_assign/
+                            push_on_completed): لا قارئ لها في التطبيق أو الدوال — الإشعارات
+                            الفعلية تديرها مُشغّلات functions/index.js بلا هذه الأعلام، فكان
+                            «تعطيلها» يوهم الأدمن بأثر لا يحدث. */}
 
                         {activeTab === 'coverage' && (
                             <div className="flex flex-col h-full">
@@ -1383,40 +1310,9 @@ function SettingsIcon({ activeTab }: { activeTab: TabType }) {
     switch (activeTab) {
         case 'general': return <Shield size={32} className="text-[#660033]" strokeWidth={2} />;
         case 'payments': return <Wallet size={32} className="text-emerald-500" strokeWidth={2} />;
-        case 'notifications': return <Bell size={32} className="text-orange-500" strokeWidth={2} />;
         case 'coverage': return <MapPin size={32} className="text-rose-600" strokeWidth={2} />;
         default: return <Shield size={32} className="text-[#660033]" strokeWidth={2} />;
     }
 }
 
-// فئات حرفية لكل ثيمة: Tailwind لا يولّد فئاتٍ مبنيّة بالاستيفاء وقت التشغيل
-// (`bg-${x}-500` لا تُبنى) — فكانت المفاتيح المفعّلة رمادية بلا لون ولا إطار.
-const NOTIF_THEME: Record<string, { border: string; shadow: string; knob: string }> = {
-    blue: { border: 'border-rose-200', shadow: 'shadow-rose-500/5', knob: 'peer-checked:bg-rose-500' },
-    emerald: { border: 'border-emerald-200', shadow: 'shadow-emerald-500/5', knob: 'peer-checked:bg-emerald-500' },
-    orange: { border: 'border-orange-200', shadow: 'shadow-orange-500/5', knob: 'peer-checked:bg-orange-500' },
-};
-
-function NotificationRow({ title, desc, checked, onChange, icon, colorTheme }: { title: string, desc: string, checked: boolean, onChange: (val: boolean) => void, icon: React.ReactNode, colorTheme: string }) {
-    const theme = NOTIF_THEME[colorTheme] ?? NOTIF_THEME.blue;
-    return (
-        <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-white border-2 rounded-3xl transition-all duration-300 ${checked ? `${theme.border} shadow-lg ${theme.shadow}` : 'border-slate-100 hover:border-slate-200'} group`}>
-            <div className="flex items-center gap-5 pr-2">
-                <div className={`p-4 rounded-2xl bg-slate-50 border border-slate-100 group-hover:bg-white group-hover:shadow-sm transition-all`}>
-                    {icon}
-                </div>
-                <div>
-                    <h4 className="text-lg font-bold text-slate-800 mb-1">{title}</h4>
-                    <p className="text-sm font-medium text-slate-500 leading-relaxed max-w-lg">{desc}</p>
-                </div>
-            </div>
-            <div className="mt-4 sm:mt-0 mr-14 sm:mr-0 pl-2">
-                <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" aria-label={title} className="sr-only peer" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-                    <div className={`w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all after:shadow-sm ${theme.knob}`}></div>
-                </label>
-            </div>
-        </div>
-    );
-}
 

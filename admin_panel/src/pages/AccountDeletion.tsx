@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { ShieldAlert, Trash2, Search, CheckCircle2, XCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import {
     collection, onSnapshot, updateDoc, deleteDoc,
-    doc, orderBy, query
+    doc, orderBy, query, limit
 } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
@@ -31,15 +31,24 @@ export default function AccountDeletion() {
     const [requests, setRequests] = useState<DeletionRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const [processingId, setProcessingId] = useState<string | null>(null);
+    // فشل المستمع نهائي — حالة خطأ صريحة بزر إعادة بدل «لا توجد طلبات» المضلّلة.
+    const [loadError, setLoadError] = useState(false);
+    const [retryKey, setRetryKey] = useState(0);
 
     useEffect(() => {
-        const q = query(collection(db, 'account_deletions'), orderBy('requested_at', 'desc'));
+        // (أداء) أحدث 300 فقط — السجلات المعالَجة تتراكم للأبد (متطلب آبل يحفظها)
+        // وكانت تُقرأ كلها مع كل فتح للصفحة.
+        const q = query(collection(db, 'account_deletions'), orderBy('requested_at', 'desc'), limit(300));
         const unsub = onSnapshot(q, (snap) => {
             setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() } as DeletionRequest)));
             setLoading(false);
-        }, () => setLoading(false));
+        }, (e) => {
+            console.error('AccountDeletion listener error:', e);
+            setLoading(false);
+            setLoadError(true);
+        });
         return unsub;
-    }, []);
+    }, [retryKey]);
 
     const filtered = requests.filter(r =>
         r.name?.includes(searchTerm) ||
@@ -121,13 +130,25 @@ export default function AccountDeletion() {
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
-                    <span className="text-xs text-slate-400 font-medium">{requests.length} طلب</span>
+                    <span className="text-xs text-slate-400 font-medium">{requests.length} طلب — يعرض أحدث 300</span>
                 </div>
 
                 {loading ? (
                     <div className="flex items-center justify-center py-16 text-slate-400 gap-2">
                         <Loader2 size={20} className="animate-spin" />
                         <span className="text-sm font-medium">جاري التحميل...</span>
+                    </div>
+                ) : loadError ? (
+                    // حالة خطأ صريحة لا «لا توجد طلبات» — الفراغ عند الفشل خطير في مسار امتثال آبل.
+                    <div className="flex flex-col items-center justify-center py-16 gap-4 bg-rose-50/40 m-6 rounded-2xl border border-rose-100">
+                        <p className="text-rose-600 font-bold">تعذّر تحميل طلبات الحذف — تحقّق من الاتصال أو الصلاحيات</p>
+                        <button
+                            type="button"
+                            onClick={() => { setLoadError(false); setLoading(true); setRetryKey(k => k + 1); }}
+                            className="px-5 py-2.5 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-colors"
+                        >
+                            إعادة المحاولة
+                        </button>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">

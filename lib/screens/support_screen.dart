@@ -208,7 +208,35 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
           .orderBy('sentAt', descending: false)
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox();
+        // خطأ البث كان يُخفي المحادثة وصندوق الرد معاً بصمت (SizedBox فارغ).
+        if (snapshot.hasError) {
+          return Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                const Text('تعذّر تحميل الرسائل',
+                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                // setState يعيد بناء الاستعلام فيُعاد الاشتراك بالبث.
+                TextButton(
+                  onPressed: () => setState(() {}),
+                  child: const Text('إعادة المحاولة',
+                      style: TextStyle(color: Color(0xFF660033))),
+                ),
+              ],
+            ),
+          );
+        }
+        if (!snapshot.hasData) {
+          // تمييز التحميل عن «لا رسائل» — كان كلاهما فراغاً.
+          return const Padding(
+            padding: EdgeInsets.all(12),
+            child: Center(
+                child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2))),
+          );
+        }
         final messages = snapshot.data!.docs;
 
         return StatefulBuilder(

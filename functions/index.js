@@ -360,6 +360,47 @@ exports.notifyAdminOnLowRating = onDocumentUpdated(
       return null;
     });
 
+// مُجمّع تقييم السائق: العميل يكتب rating على الطلب فقط (القواعد تمنعه من مستند
+// السائق)، ولم يكن ثمة أي مُجمّع — rating_avg/rating_count على السائق لا تتراكم
+// أبداً وبطاقات «التقييم 5» تعرض قيمة البذر الثابتة. يعمل مرة واحدة لكل طلب
+// (before.rating غائب) بمعاملة ذرّية على مستند السائق.
+exports.aggregateDriverRating = onDocumentUpdated(
+    {document: "orders/{orderId}", cpu: 0.083},
+    async (event) => {
+      const change = event.data;
+      if (!change) return null;
+      const before = change.before.data() || {};
+      const after = change.after.data() || {};
+      const r = Number(after.rating);
+      if (isNaN(r) || r < 1 || r > 5) return null;
+      if (before.rating != null) return null; // تقييم سابق — لا تكرار
+      const driverId = after.driver_id;
+      if (!driverId) return null;
+      const db = admin.firestore();
+      const ref = db.collection("drivers").doc(driverId);
+      try {
+        await db.runTransaction(async (tx) => {
+          const snap = await tx.get(ref);
+          if (!snap.exists) return;
+          const d = snap.data();
+          const count = Number(d.rating_count || 0);
+          // البذر الثابت (rating: 5 بلا عدّاد) لا يدخل المتوسط — أول تقييم حقيقي
+          // يؤسس المتوسط من الصفر.
+          const avg = count > 0 ? Number(d.rating_avg || d.rating || 0) : 0;
+          const newCount = count + 1;
+          const newAvg = Math.round(((avg * count + r) / newCount) * 100) / 100;
+          tx.update(ref, {
+            rating_count: newCount,
+            rating_avg: newAvg,
+            rating: newAvg, // الحقل الذي تعرضه بطاقات الإدارة والعميل حالياً
+          });
+        });
+      } catch (e) {
+        console.error(`aggregateDriverRating: ${event.params.orderId} -> ${driverId} failed:`, e.message);
+      }
+      return null;
+    });
+
 // إشعار عميل المتجر بتغيّر حالة طلبه (تحضير/شحن/تسليم) — كانت التغييرات صامتة،
 // فلا يعرف العميل مصير طلبه بعد الدفع حتى يصله.
 exports.notifyClientOnStoreOrderStatus = onDocumentUpdated({document: "store_orders/{orderId}", cpu: 0.083},
@@ -2829,9 +2870,20 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
       if (startDateTime < oEnd && oStart < slotEnd) return false; // تعارض زمني — لا تُسنِد
     }
 
+    // (تعليمات المنزل) ننسخ house_rules من مستند العميل إلى الطلب عند الإسناد —
+    // قواعد Firestore تمنع السائق من قراءة مستندات users الأخرى، فكانت التعليمات
+    // لا تصله. تطبيق السائق يقرؤها من الطلب مباشرةً.
+    let houseRules = null;
+    if (cur.client_id) {
+      const uSnap = await tx.get(db.collection("users").doc(cur.client_id));
+      const hr = uSnap.exists ? uSnap.data().house_rules : null;
+      if (typeof hr === "string" && hr.trim()) houseRules = hr.trim();
+    }
+
     tx.update(orderRef, {
       status: "scheduled",
       driver_id: driverDoc.id,
+      ...(houseRules ? {house_rules: houseRules} : {}),
       driver_name: d.name || "سائق",
       // assigned_driver: شاشات تتبّع العميل تقرأ هذا الحقل — لولاه تُظهر «جاري
       // تعيين سائق» للأبد رغم إسناد السائق.
@@ -2847,6 +2899,52 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
     return true;
   });
   return {driverId: driverDoc.id, driverName: d.name || "سائق", assigned};
+}
+
+/**
+ * (تسعير خادمي — إغلاق ثغرة العقد المُسعَّر عميلياً) العقد يُنشأ من جهاز العميل،
+ * فكان بوسع عميل معدَّل كتابة planPrice=1 مع planVisits=100 ثم دفع ريال واحد
+ * وتوليد كل الزيارات. نتحقّق هنا أن سعر/زيارات العقد يطابقان باقة
+ * subscription_packages الحقيقية قبل أي توليد. المطابقة بالاسم (title) لأن العقد
+ * لا يخزّن معرّف الباقة. يرمي HttpsError عند أي انحراف.
+ * @param {admin.firestore.Firestore} db
+ * @param {object} c بيانات العقد
+ * @param {FirebaseFirestore.Transaction} [tx] معاملة اختيارية (القراءة داخلها)
+ * @return {Promise<void>}
+ */
+async function _validateContractPlan(db, c, tx) {
+  const q = db.collection("subscription_packages")
+      .where("title", "==", String(c.planName || "")).limit(1);
+  const snap = tx ? await tx.get(q) : await q.get();
+  if (snap.empty) {
+    throw new HttpsError("failed-precondition",
+        "باقة العقد غير موجودة في قائمة الباقات — رُفض توليد الزيارات");
+  }
+  const pkg = snap.docs[0].data();
+  // السعر المتوقّع = سعر الباقة + 15% ضريبة بنفس تقريب العميل لسنتين عشريتين
+  // (انظر contract_signing_screen: _grossedPlanPrice) — سماحية قرش واحد للتعويم.
+  const base = Number(pkg.price || 0);
+  const expected = Math.round(base * 1.15 * 100) / 100;
+  const actual = Number(c.planPrice || 0);
+  if (!(base > 0) || Math.abs(actual - expected) > 0.01) {
+    throw new HttpsError("failed-precondition",
+        `سعر العقد (${actual}) لا يطابق سعر الباقة شامل الضريبة (${expected}) — ` +
+        "رُفض توليد الزيارات");
+  }
+  // عدد الزيارات: الحقل الرقمي في الباقة، أو (كما تستخرجه واجهة العميل احتياطياً)
+  // العدد المجاور لكلمة «زيار» في العنوان/العنوان الفرعي/المزايا إن غاب الحقل.
+  let pkgVisits = Number(pkg.visits || 0);
+  if (pkgVisits <= 0) {
+    const features = Array.isArray(pkg.features) ? pkg.features.join(" ") : "";
+    const m = /(\d+)\s*زيار/.exec(
+        `${pkg.title || ""} ${pkg.subtitle || ""} ${features}`);
+    if (m) pkgVisits = Number(m[1]);
+  }
+  if (pkgVisits > 0 && Number(c.planVisits || 0) !== pkgVisits) {
+    throw new HttpsError("failed-precondition",
+        `عدد زيارات العقد (${Number(c.planVisits || 0)}) لا يطابق الباقة ` +
+        `(${pkgVisits}) — رُفض توليد الزيارات`);
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -2884,6 +2982,9 @@ exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
     if (data.status !== "active") {
       throw new HttpsError("failed-precondition", "لا تُولَّد الزيارات إلا بعد تفعيل العقد");
     }
+    // تحقّق السعر/الزيارات ضد الباقة قبل المطالبة — الرمي هنا يُبطل المعاملة فلا
+    // تُختَم visits_generated ويبقى العقد قابلاً للمعالجة الإدارية.
+    await _validateContractPlan(db, data, tx);
     tx.update(contractRef, {
       visits_generated: true,
       visits_generated_at: admin.firestore.FieldValue.serverTimestamp(),
@@ -3068,6 +3169,19 @@ exports.activateContractOnPaid = onDocumentUpdated({document: "contracts/{contra
         const s = await tx.get(contractRef);
         const c = s.data() || {};
         if (c.visits_generated === true) return null;
+        // (إغلاق ثغرة العقد المُسعَّر عميلياً) نتحقّق من السعر/الزيارات ضد الباقة
+        // قبل التفعيل — عقد بسعر مُتلاعَب به يُختَم بالفشل ولا يُفعَّل ولا تُمنح زيارات،
+        // ويُنبَّه الأدمن (لا نرمي: مشغّلات Firestore لا تُعيد المحاولة فيضيع الخطأ صامتاً).
+        try {
+          await _validateContractPlan(db, c, tx);
+        } catch (e) {
+          tx.update(contractRef, {
+            plan_validation_failed: true,
+            plan_validation_error: String(e.message || e),
+            plan_validation_at: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          return {__invalid: String(e.message || e)};
+        }
         tx.update(contractRef, {
           status: "active",
           activated_at: admin.firestore.FieldValue.serverTimestamp(),
@@ -3117,6 +3231,16 @@ exports.activateContractOnPaid = onDocumentUpdated({document: "contracts/{contra
         return c;
       });
       if (!claim) return null;
+      if (claim.__invalid) {
+        console.error(`activateContractOnPaid: plan validation failed for ` +
+          `${event.params.contractId}: ${claim.__invalid}`);
+        await queuePush("ADMIN_BROADCAST", "عقد مدفوع بسعر لا يطابق الباقة ⚠️",
+            `العقد ${event.params.contractId} دُفع لكن سعره/زياراته لا تطابق الباقة ` +
+            `(${claim.__invalid}). لم يُفعَّل — راجعه يدوياً.`,
+            "contract_plan_mismatch", {contractId: event.params.contractId},
+            ["orders_manager"]).catch(() => {});
+        return null;
+      }
       // المعرّفات حتمية فإعادة التوليد idempotent. لا نُعيد راية visits_generated عند
       // الفشل حتى لا يتكرّر منح الزيارات — أي نقص يُكمِله مسار إداري.
       try {
@@ -3225,6 +3349,15 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
     `${String(riyadh.getUTCDate()).padStart(2, "0")}`;
   const timeSlot = `${String(riyadh.getUTCHours()).padStart(2, "0")}:00`;
 
+  // (تعليمات المنزل) ننسخها من مستند العميل إلى الطلب عند الإسناد اليدوي — نفس
+  // منطق _assignDriverScheduled: السائق لا يستطيع قراءة users الأخرى بالقواعد.
+  let houseRules = null;
+  if (orderData.client_id) {
+    const uSnap = await db.collection("users").doc(orderData.client_id).get();
+    const hr = uSnap.exists ? uSnap.data().house_rules : null;
+    if (typeof hr === "string" && hr.trim()) houseRules = hr.trim();
+  }
+
   await db.runTransaction(async (tx) => {
     const fresh = await tx.get(orderRef);
     const st = fresh.data()?.status;
@@ -3255,6 +3388,7 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
     tx.update(orderRef, {
       status: "scheduled",
       driver_id: driverId,
+      ...(houseRules ? {house_rules: houseRules} : {}),
       driver_name: d.name || "سائق",
       // assigned_driver: شاشات التتبّع تقرأ هذا الحقل — بدونه يعلق العميل على «جاري
       // تعيين سائق» للأبد في مسار الاعتماد اليدوي (كنب/مكيفات/متجر).
@@ -4527,6 +4661,23 @@ exports.notifyDriverOnAssignment = onDocumentUpdated({document: "orders/{orderId
       // Check if driver_id was changed and is not null
       if (afterData.driver_id && beforeData.driver_id !== afterData.driver_id) {
         const driverId = afterData.driver_id;
+
+        // (تعليمات المنزل — شبكة أمان) بعض مسارات الإسناد تكتب driver_id مباشرةً من
+        // لوحات الأدمن دون المرور بـ_assignDriverScheduled/approveAndAssignOrder؛
+        // نستكمل نسخ house_rules من مستند العميل هنا كي تصل السائق في كل المسارات.
+        if (afterData.house_rules === undefined && afterData.client_id) {
+          try {
+            const uSnap = await admin.firestore()
+                .collection("users").doc(afterData.client_id).get();
+            const hr = uSnap.exists ? uSnap.data().house_rules : null;
+            if (typeof hr === "string" && hr.trim()) {
+              await change.after.ref.update({house_rules: hr.trim()});
+            }
+          } catch (e) {
+            console.error("house_rules backfill:", e.message);
+          }
+        }
+
         const displayCode = afterData.code || orderId.substring(0, 6).toUpperCase();
         const title = "تم تعيين طلب جديد لك! 🚚";
         const body = `تم تعيينك للطلب #${displayCode}. يرجى التحقق من تفاصيل الرحلة في لوحة التحكم.`;
@@ -5035,31 +5186,59 @@ exports.moyasarRefundPayment = onCall(
       // Guard against a DOUBLE refund: if this order was already refunded to the
       // wallet (onOrderRewards sets refund_credited) or already refunded via the
       // gateway, reject before hitting Moyasar again.
+      // (سباق النقرتين) الفحص ثم النداء كان يسمح لأدمنَين متزامنَين بتمرير الفحص معاً
+      // فيُردّ المبلغ مرتين — نطالب براية refund_claimed ذرّياً داخل معاملة قبل نداء
+      // Moyasar (نفس نمط المطالبة الذرّية في generateSubscriptionVisits/onOrderRewards)،
+      // ونحرّرها عند فشل البوابة كي تبقى إعادة المحاولة ممكنة.
       const existing = await _findOrder(orderId);
       if (existing) {
-        if (existing.data.refund_credited === true) {
-          throw new HttpsError("failed-precondition",
-              "سبق ردّ هذا الطلب إلى محفظة العميل — لا يمكن ردّه عبر البوابة أيضاً");
-        }
-        if (existing.data.payment_status === "refunded") {
-          throw new HttpsError("failed-precondition", "سبق استرداد هذا الطلب");
-        }
+        await admin.firestore().runTransaction(async (tx) => {
+          const snap = await tx.get(existing.ref);
+          const cur = snap.data() || {};
+          if (cur.refund_credited === true) {
+            throw new HttpsError("failed-precondition",
+                "سبق ردّ هذا الطلب إلى محفظة العميل — لا يمكن ردّه عبر البوابة أيضاً");
+          }
+          if (cur.payment_status === "refunded" || cur.refund_claimed === true) {
+            throw new HttpsError("failed-precondition",
+                "سبق استرداد هذا الطلب (أو استردادٌ آخر قيد التنفيذ)");
+          }
+          tx.update(existing.ref, {
+            refund_claimed: true,
+            refund_claimed_at: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        });
       }
+
+      // تحرير المطالبة عند أي فشل قبل/من البوابة — وإلا بقيت الراية عالقة وتعذّر
+      // الاسترداد نهائياً.
+      const releaseClaim = async () => {
+        if (!existing) return;
+        await existing.ref.update({refund_claimed: false})
+            .catch((e) => console.error("moyasarRefund release claim:", e.message));
+      };
 
       const body = amountHalalas ? JSON.stringify({amount: amountHalalas}) : undefined;
 
-      const response = await fetch(`https://api.moyasar.com/v1/payments/${paymentId}/refund`, {
-        method: "POST",
-        headers: {
-          "Authorization": _moyasarAuthHeader(secret),
-          ...(body ? {"Content-Type": "application/json"} : {}),
-        },
-        ...(body ? {body} : {}),
-      });
-
-      const result = await response.json();
+      let response; let result;
+      try {
+        response = await fetch(`https://api.moyasar.com/v1/payments/${paymentId}/refund`, {
+          method: "POST",
+          headers: {
+            "Authorization": _moyasarAuthHeader(secret),
+            ...(body ? {"Content-Type": "application/json"} : {}),
+          },
+          ...(body ? {body} : {}),
+        });
+        result = await response.json();
+      } catch (e) {
+        await releaseClaim();
+        console.error("moyasarRefund network error:", e.message);
+        throw new HttpsError("internal", "تعذّر الاتصال ببوابة Moyasar — أعد المحاولة");
+      }
 
       if (!response.ok) {
+        await releaseClaim();
         console.error(`moyasarRefund failed ${response.status}:`, result);
         throw new HttpsError("internal", result.message ?? "فشل استرداد المبلغ من Moyasar");
       }

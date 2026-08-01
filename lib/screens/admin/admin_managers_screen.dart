@@ -66,6 +66,15 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
           stream: FirebaseFirestore.instance.collection('admins').snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Color(0xFF1E293B)));
+            // فشل البث كان يُعرض كقائمة فارغة — خطأ صريح مع إعادة محاولة.
+            if (snapshot.hasError) {
+              return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.cloud_off_rounded, size: 48, color: Colors.redAccent),
+                const SizedBox(height: 10),
+                Text('تعذّر تحميل البيانات', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.red)),
+                TextButton(onPressed: () => setState(() {}), child: const Text('إعادة المحاولة')),
+              ]));
+            }
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
               return Center(
                 child: Column(

@@ -99,6 +99,24 @@ class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
               child: StreamBuilder<QuerySnapshot>(
                 stream: _db.collection('support_tickets').doc(widget.ticketId).collection('messages').orderBy('sentAt', descending: true).snapshots(),
                 builder: (context, snapshot) {
+                  // فشل تدفق الرسائل كان يترك سبينر أبدياً يوحي بأن العميل لم يراسل —
+                  // نعرض خطأً بإعادة محاولة (setState يعيد إنشاء التدفق لأنه يُبنى داخل build).
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red, size: 40),
+                          const SizedBox(height: 10),
+                          const Text('تعذّر تحميل الرسائل', style: TextStyle(color: Colors.red)),
+                          TextButton(
+                            onPressed: () => setState(() {}),
+                            child: const Text('إعادة المحاولة', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
                   if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                   final docs = snapshot.data!.docs;
 

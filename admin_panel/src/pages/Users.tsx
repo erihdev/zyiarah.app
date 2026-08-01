@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Search, Filter, UserCheck, UserX, Mail, Phone, Users as UsersIcon } from 'lucide-react';
-import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, limit, Timestamp, doc, updateDoc, getCountFromServer, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
 
@@ -34,10 +34,17 @@ export default function Users() {
     const [searchTerm, setSearchTerm] = useState('');
     const [users, setUsers] = useState<UserRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    // إجمالي المستخدمين بتجميع count() خادمي — كان يُشتق من طول قائمةٍ تقرأ
+    // المجموعة كلها، والآن القائمة مقيّدة بأحدث 300 فلا يصلح طولها كإجمالي.
+    const [totalCount, setTotalCount] = useState<number | null>(null);
+    // فشل المستمع نهائي (لا يُعاد الاشتراك) — نُظهر حالة خطأ بزر إعادة بدل جدول فارغ.
+    const [loadError, setLoadError] = useState(false);
+    const [retryKey, setRetryKey] = useState(0);
     const { confirm, toast } = useNotification();
 
     useEffect(() => {
-        const q = query(collection(db, 'users'), orderBy('created_at', 'desc'));
+        // (أداء) أحدث 300 فقط — كانت مجموعة users كلها (الأسرع نمواً) تُقرأ بلا حد.
+        const q = query(collection(db, 'users'), orderBy('created_at', 'desc'), limit(300));
         const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
             const fetched = snapshot.docs.map((d: QueryDocumentSnapshot<DocumentData>) => {
                 const data = d.data() as Partial<UserRecord>;
@@ -49,10 +56,21 @@ export default function Users() {
             });
             setUsers(fetched);
             setLoading(false);
-        }, () => setLoading(false));
+        }, (e) => {
+            console.error('Users listener error:', e);
+            setLoading(false);
+            setLoadError(true);
+        });
+
+        getCountFromServer(collection(db, 'users'))
+            .then(s => setTotalCount(s.data().count))
+            .catch(e => {
+                // فشل العدّاد وحده لا يحجب قائمةً حُمّلت بنجاح — يبقى «...» لا صفراً كاذباً.
+                console.error('Users count error:', e);
+            });
 
         return () => unsubscribe();
-    }, []);
+    }, [retryKey]);
 
     const filteredUsers = users.filter(u =>
         (u.name || '').includes(searchTerm) ||
@@ -79,11 +97,11 @@ export default function Users() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">إدارة المستخدمين (حي)</h2>
-                    <p className="text-slate-500 font-medium text-sm mt-1">قائمة حية بكل المستخدمين المسجلين عبر التطبيق</p>
+                    <p className="text-slate-500 font-medium text-sm mt-1">قائمة حية بالمستخدمين المسجلين — يعرض أحدث 300</p>
                 </div>
                 <div className="flex items-center gap-3">
                     <span className="px-4 py-2 bg-[#FAF1F6] text-[#4D0026] font-bold rounded-xl border border-[#F2DEE9] text-sm">
-                        إجمالي: {users.length} مستخدم
+                        إجمالي: {totalCount ?? '...'} مستخدم
                     </span>
                     <button type="button" className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors shadow-sm">
                         <Filter size={18} /> تصفية
@@ -110,6 +128,18 @@ export default function Users() {
                         <div className="flex flex-col items-center justify-center h-64">
                             <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#660033] border-t-transparent" />
                             <p className="text-slate-500 mt-4 font-bold">جاري جلب بيانات المستخدمين...</p>
+                        </div>
+                    ) : loadError ? (
+                        // حالة خطأ صريحة لا «لا يوجد مستخدمون» — الفراغ عند الفشل مضلّل.
+                        <div className="flex flex-col items-center justify-center h-64 gap-4 bg-rose-50/40 m-6 rounded-2xl border border-rose-100">
+                            <p className="text-rose-600 font-bold">تعذّر تحميل المستخدمين — تحقّق من الاتصال أو الصلاحيات</p>
+                            <button
+                                type="button"
+                                onClick={() => { setLoadError(false); setLoading(true); setRetryKey(k => k + 1); }}
+                                className="px-5 py-2.5 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-colors"
+                            >
+                                إعادة المحاولة
+                            </button>
                         </div>
                     ) : (
                         <table className="w-full text-right border-collapse">

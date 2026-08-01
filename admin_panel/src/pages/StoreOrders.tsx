@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { 
-  collection, 
-  query, 
-  onSnapshot, 
-  updateDoc, 
-  doc, 
+import {
+  collection,
+  query,
+  onSnapshot,
+  updateDoc,
+  doc,
   orderBy,
-  Timestamp 
+  limit,
+  Timestamp
 } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import {
@@ -63,10 +64,14 @@ function statusTone(status: string): 'green' | 'red' | 'blue' | 'amber' {
 export default function StoreOrders() {
   const [orders, setOrders] = useState<StoreOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  // فشل المستمع نهائي — حالة خطأ صريحة بزر إعادة بدل «لا توجد طلبات» المضلّلة.
+  const [loadError, setLoadError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    const q = query(collection(db, 'store_orders'), orderBy('created_at', 'desc'));
+    // (أداء) أحدث 300 فقط — كانت المجموعة كلها تُقرأ بلا حد مع كل فتح للصفحة.
+    const q = query(collection(db, 'store_orders'), orderBy('created_at', 'desc'), limit(300));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const ords: StoreOrder[] = [];
       snapshot.forEach((doc) => {
@@ -79,9 +84,10 @@ export default function StoreOrders() {
       // فيعلق الدوّار عند فشل المستمع. مكانه الصحيح الوسيط الثالث لـ onSnapshot.
       console.error("StoreOrders listener error:", e);
       setLoading(false);
+      setLoadError(true);
     });
     return () => unsubscribe();
-  }, []);
+  }, [retryKey]);
 
   const handleStatusUpdate = async (id: string, newStatus: string) => {
     try {
@@ -121,12 +127,24 @@ export default function StoreOrders() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-black text-slate-800">طلبات المتجر</h1>
-        <p className="text-slate-500 text-sm mt-1">إدارة طلبات شراء الأدوات ومواد التنظيف</p>
+        <p className="text-slate-500 text-sm mt-1">إدارة طلبات شراء الأدوات ومواد التنظيف — يعرض أحدث 300 طلب</p>
       </div>
 
       {/* Orders List */}
       <div className="space-y-4">
-        {orders.length === 0 ? (
+        {loadError ? (
+          // حالة خطأ صريحة لا «لا توجد طلبات» — الفراغ عند الفشل يوهم بخلو المتجر.
+          <div className="bg-rose-50 rounded-[2rem] p-12 text-center border border-rose-200">
+            <p className="text-rose-600 font-bold text-lg mb-4">تعذّر تحميل طلبات المتجر — تحقّق من الاتصال أو الصلاحيات</p>
+            <button
+              type="button"
+              onClick={() => { setLoadError(false); setLoading(true); setRetryKey(k => k + 1); }}
+              className="px-6 py-3 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-colors"
+            >
+              إعادة المحاولة
+            </button>
+          </div>
+        ) : orders.length === 0 ? (
           <div className="bg-white rounded-[2rem] p-16 text-center border border-slate-100 shadow-sm">
             <ShoppingBag className="mx-auto text-slate-200 mb-4" size={60} />
             <p className="text-slate-500 font-bold text-lg">لا توجد طلبات متجر حالياً</p>

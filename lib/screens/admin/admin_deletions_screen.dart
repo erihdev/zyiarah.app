@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-class AdminDeletionsScreen extends StatelessWidget {
+// StatefulWidget كي تعمل «إعادة المحاولة» بإعادة إنشاء التدفق عند فشل القراءة.
+class AdminDeletionsScreen extends StatefulWidget {
   const AdminDeletionsScreen({super.key});
 
+  @override
+  State<AdminDeletionsScreen> createState() => _AdminDeletionsScreenState();
+}
+
+class _AdminDeletionsScreenState extends State<AdminDeletionsScreen> {
   // (دمج من لوحة الويب) رفض طلب حذف الحساب — بدل إجبار الأدمن على الحذف أو تركه معلّقاً.
   // يضبط status='rejected' (الشاشة تعرضه أصلاً). لا يُحذف الحساب.
   Widget _rejectButton(BuildContext context, String docId) {
@@ -68,9 +74,28 @@ class AdminDeletionsScreen extends StatelessWidget {
           foregroundColor: Colors.white,
         ),
         body: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('account_deletions').orderBy('requested_at', descending: true).snapshots(),
+          // نافذة محدودة (300) مثل لوحة الويب — لا نحمّل الأرشيف كله في بثّ حي.
+          stream: FirebaseFirestore.instance.collection('account_deletions').orderBy('requested_at', descending: true).limit(300).snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+            // فشل القراءة كان يظهر كقائمة فارغة نظيفة — خطر على مهلة معالجة
+            // طلبات الحذف (متطلب Apple)، فنعرض خطأً صريحاً بإعادة محاولة.
+            if (snapshot.hasError) {
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red, size: 40),
+                    const SizedBox(height: 10),
+                    const Text("تعذّر تحميل طلبات حذف الحسابات", style: TextStyle(color: Colors.red)),
+                    TextButton(
+                      onPressed: () => setState(() {}),
+                      child: const Text("إعادة المحاولة", style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              );
+            }
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("لا توجد طلبات حذف حساب حالياً"));
 
             return ListView.builder(

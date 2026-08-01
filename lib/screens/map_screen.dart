@@ -45,8 +45,15 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
             if (snapshot.hasError) {
               return const Center(child: Text("تعذّر تحميل بيانات التتبع", style: TextStyle(color: Colors.grey)));
             }
-            if (!snapshot.hasData || !snapshot.data!.exists) {
+            if (!snapshot.hasData) {
               return const Center(child: CircularProgressIndicator(color: Color(0xFF660033)));
+            }
+            // طلب محذوف/غير موجود ≠ تحميل: الدوّار الأبدي كان يخفي غياب المستند.
+            if (!snapshot.data!.exists) {
+              return Center(
+                child: Text('الطلب غير موجود',
+                    style: GoogleFonts.tajawal(color: Colors.grey)),
+              );
             }
 
             final data = snapshot.data!.data() as Map<String, dynamic>;

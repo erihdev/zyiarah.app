@@ -897,7 +897,11 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
               ),
             ),
             // ── Moyasar Payment Operations ──────────────────────────────────────
-            if (data['moyasar_payment_id'] != null) ...[
+            // دوال ميسر (استرداد/إلغاء/تحصيل) تتحقق خادمياً من _assertAdmin الذي
+            // يقصرها على admin/super_admin/orders_manager — عرض البطاقة للمحاسب/
+            // التسويق كان يَعِد بعملياتٍ مصيرها الرفض الحتمي، فنقيسها على نفس
+            // بوّابة لوحة التعديل (_canEditOrders).
+            if (data['moyasar_payment_id'] != null && _canEditOrders) ...[
               const SizedBox(height: 15),
               _buildMoyasarOperationsCard(data),
             ],

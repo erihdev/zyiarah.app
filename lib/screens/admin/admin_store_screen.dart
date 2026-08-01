@@ -156,7 +156,9 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                         );
 
                         if (source != null) {
-                          final file = await _picker.pickImage(source: source, imageQuality: 70);
+                          // maxWidth/maxHeight: imageQuality وحده يضغط JPEG دون تصغير الأبعاد —
+                          // صور المنتجات كانت تُرفع بدقة الكاميرا الكاملة ويحمّلها كل عميل في الشبكة.
+                          final file = await _picker.pickImage(source: source, imageQuality: 70, maxWidth: 1600, maxHeight: 1600);
                           if (file != null) {
                             setDialogState(() {
                               isUploading = true;
@@ -347,6 +349,16 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
+            }
+
+            // فشل البث كان يُعرض كقائمة فارغة — خطأ صريح مع إعادة محاولة.
+            if (snapshot.hasError) {
+              return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.cloud_off_rounded, size: 48, color: Colors.redAccent),
+                const SizedBox(height: 10),
+                Text('تعذّر تحميل البيانات', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.red)),
+                TextButton(onPressed: () => setState(() {}), child: const Text('إعادة المحاولة')),
+              ]));
             }
 
             final docs = snapshot.data?.docs ?? [];

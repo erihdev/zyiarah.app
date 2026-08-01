@@ -158,6 +158,14 @@ class ZyiarahOrderService {
         throw Exception("لا يمكن إكمال الطلب قبل بدء الخدمة");
       }
 
+      // (حارس الازدواج) نقرأ مستند السائق داخل المعاملة قبل أي كتابة (شرط Firestore:
+      // كل القراءات قبل الكتابات) — كي لا نُحرّر/نُعيد توجيه سائق منشغل بطلب آخر.
+      DocumentSnapshot? driverSnap;
+      if (driverId != null) {
+        driverSnap =
+            await transaction.get(_db.collection('drivers').doc(driverId));
+      }
+
       final Map<String, dynamic> updates = {
         'status': status,
         if (driverId != null) 'driver_id': driverId,
@@ -185,14 +193,25 @@ class ZyiarahOrderService {
         if (status == 'accepted' || status == 'on_the_way') driverStatus = 'en_route';
         if (status == 'in_progress') driverStatus = 'in_service';
 
-        transaction.update(driverRef, {
-          'status': driverStatus,
-          'current_order_id': status == 'completed' ? null : orderId,
-          'is_available': status == 'completed',
+        // (حارس التطابق) لا نلمس حالة السائق إلا إن كان منشغلاً بهذا الطلب تحديداً
+        // أو حرّاً — نفس حارس المُشغّلات الخادمية (freeDriverOnOrderCancel). بدونه
+        // كان إكمال الأدمن لطلب قديم عالق يُحرّر سائقاً في منتصف خدمة طلب آخر
+        // (is_available:true + current_order_id:null) فيقبل طلباً ثانياً — حجز مزدوج.
+        final dCur = (driverSnap?.data() as Map<String, dynamic>?)?['current_order_id'];
+        final bool ownsDriver = dCur == null || dCur == '' || dCur == orderId;
+
+        final Map<String, dynamic> driverUpdates = {
+          if (ownsDriver) 'status': driverStatus,
+          if (ownsDriver) 'current_order_id': status == 'completed' ? null : orderId,
+          if (ownsDriver) 'is_available': status == 'completed',
           // عدّاد المهام المنجزة الدائم — كان غير موجود إطلاقاً، فشاشة أداء الكوادر
-          // ولوحة السائق تعرضان صفراً دائماً وترتيب الكفاءة بلا معنى. نزيده عند الإكمال.
+          // ولوحة السائق تعرضان صفراً دائماً وترتيب الكفاءة بلا معنى. نزيده عند الإكمال
+          // دون شرط الحارس: الإنجاز محسوب له حتى لو انتقل لمهمة أخرى.
           if (status == 'completed') 'completed_orders_count': FieldValue.increment(1),
-        });
+        };
+        if (driverUpdates.isNotEmpty) {
+          transaction.update(driverRef, driverUpdates);
+        }
       }
 
       // ملاحظة: مزامنة السجلات المرتبطة (حالة طلب الصيانة + خصم زيارات الاشتراك)
@@ -304,62 +323,12 @@ class ZyiarahOrderService {
       debugPrint('No available driver to assign directly: ${data['error']}');
       return false;
     } catch (e) {
-      debugPrint('Error calling autoAssignDriverDirectly Cloud Function, falling back: $e');
-      return await _fallbackSmartDispatch(
-        orderId: orderId,
-        startDateTime: startDateTime,
-        durationHours: durationHours,
-      );
-    }
-  }
-
-  // التوزيع الاحتياطي الذكي في حال تعذر التعيين المباشر
-  Future<bool> _fallbackSmartDispatch({
-    required String orderId,
-    required DateTime startDateTime,
-    required int durationHours,
-  }) async {
-    try {
-      final orderDoc = await _db.collection('orders').doc(orderId).get();
-      if (!orderDoc.exists) return false;
-      
-      final location = orderDoc.data()?['location'] as GeoPoint?;
-      final serviceDate = orderDoc.data()?['service_date'] as Timestamp?;
-      
-      if (location == null) return false;
-
-      final result = await FirebaseFunctions.instance.httpsCallable('findNearestDrivers').call({
-        'lat': location.latitude,
-        'lng': location.longitude,
-      });
-      
-      final List<dynamic> drivers = result.data['drivers'] ?? [];
-      if (drivers.isEmpty) return false;
-
-      // أسند لأقرب سائق واحد فعليّاً (كتابة driver_id تُطلق إشعار التعيين خادميّاً
-      // عبر notifyDriverOnAssignment). البثّ السابق كان يُشعِر عدة سائقين بأنهم
-      // "مُسندون" دون كتابة driver_id — تعيينات وهمية وطلب يبقى بلا سائق.
-      final String driverId = drivers.first.toString();
-      String driverName = '';
-      try {
-        final dDoc = await _db.collection('drivers').doc(driverId).get();
-        driverName = (dDoc.data()?['name'] as String?) ?? '';
-        if (driverName.isEmpty) {
-          final uDoc = await _db.collection('users').doc(driverId).get();
-          driverName = (uDoc.data()?['name'] as String?) ?? '';
-        }
-      } catch (_) {}
-      await _db.collection('orders').doc(orderId).update({
-        'driver_id': driverId,
-        'driver_name': driverName,
-        'assigned_driver': driverName,
-        'status': 'scheduled',
-        'assigned_at': FieldValue.serverTimestamp(),
-        if (serviceDate != null) 'scheduled_at': serviceDate,
-      });
-      return true;
-    } catch (e) {
-      debugPrint('Error in Fallback Smart Dispatch: $e');
+      // لا توزيع احتياطي من العميل: كان هنا `_fallbackSmartDispatch` يقرأ مستندات
+      // السائقين ويكتب driver_id/status على الطلب — وكلها ممنوعة على العميل بقواعد
+      // Firestore، فكل محاولة تنتهي permission-denied وشبكة أمان وهمية. المكنسة
+      // الخادمية sweepUnassignedPaidOrders هي المسؤولة عن إسناد/تصعيد الطلبات
+      // المدفوعة العالقة.
+      debugPrint('Error calling autoAssignDriverDirectly Cloud Function: $e');
       return false;
     }
   }
@@ -478,26 +447,36 @@ class ZyiarahOrderService {
       );
     }
 
-    // 2. تحديث معدل تقييم الكادر (Atomic Calculation)
+    // 2. تحديث معدل تقييم الكادر (أفضل-جهد): قواعد Firestore تمنع العميل من قراءة/تعديل
+    //    مستند السائق (rating_avg/rating_count محجوزة)، فكان الرفض يتسرّب من هنا
+    //    **بعد** حفظ التقييم على الطلب — فيرى العميل «تعذّر إرسال التقييم» بالأحمر
+    //    لتقييم مُسجَّل فعلاً. نبتلع الفشل: نجاح كتابة الطلب هو نجاح التقييم.
+    //    ملاحظة: لا يوجد Cloud Function يُجمِّع التقييمات حالياً — التجميعة الخادمية
+    //    مطلوبة لاحقاً (backlog) كي تتحرّك rating_avg/rating_count فعلياً.
     if (driverId != null) {
       final driverRef = _db.collection('drivers').doc(driverId);
-      
-      await _db.runTransaction((transaction) async {
-        final driverSnap = await transaction.get(driverRef);
-        if (!driverSnap.exists) return;
 
-        final driverData = driverSnap.data() as Map<String, dynamic>;
-        double currentAvg = (driverData['rating_avg'] ?? 5.0).toDouble();
-        int currentCount = (driverData['rating_count'] ?? 0).toInt();
+      try {
+        await _db.runTransaction((transaction) async {
+          final driverSnap = await transaction.get(driverRef);
+          if (!driverSnap.exists) return;
 
-        // حساب المعدل الجديد: (المعدل القديم * العدد القديم + التقييم الجديد) / (العدد الجديد)
-        double newAvg = ((currentAvg * currentCount) + rating) / (currentCount + 1);
-        
-        transaction.update(driverRef, {
-          'rating_avg': newAvg,
-          'rating_count': currentCount + 1,
+          final driverData = driverSnap.data() as Map<String, dynamic>;
+          double currentAvg = (driverData['rating_avg'] ?? 5.0).toDouble();
+          int currentCount = (driverData['rating_count'] ?? 0).toInt();
+
+          // حساب المعدل الجديد: (المعدل القديم * العدد القديم + التقييم الجديد) / (العدد الجديد)
+          double newAvg = ((currentAvg * currentCount) + rating) / (currentCount + 1);
+
+          transaction.update(driverRef, {
+            'rating_avg': newAvg,
+            'rating_count': currentCount + 1,
+          });
         });
-      });
+      } catch (e) {
+        // متوقَّع للعميل (permission-denied) — التقييم نفسه محفوظ على الطلب.
+        debugPrint('RATING_AGGREGATE_SKIPPED: $e');
+      }
     }
   }
 }

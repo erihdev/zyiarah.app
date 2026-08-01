@@ -1,5 +1,8 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, LicenseRegistry, LicenseEntryWithLineBreaks;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/screens/onboarding_screen.dart';
@@ -32,6 +35,17 @@ final GlobalKey<ScaffoldMessengerState> messengerKey = GlobalKey<ScaffoldMesseng
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // خط Tajawal مضمّن محلياً (assets/fonts) بكل الأوزان المستخدمة — نمنع google_fonts
+  // من أي جلب شبكي: كان أول تشغيل بلا إنترنت (أو خلف حجب fonts.gstatic) يعرض
+  // خطاً بديلاً مشوّهاً في كل الواجهة إلى أن ينجح التنزيل.
+  GoogleFonts.config.allowRuntimeFetching = false;
+  // شرط رخصة OFL عند تضمين الخط داخل التطبيق: تسجيلها في سجلّ تراخيص Flutter.
+  LicenseRegistry.addLicense(() async* {
+    final license = await rootBundle.loadString('assets/fonts/OFL.txt');
+    yield LicenseEntryWithLineBreaks(const ['google_fonts'], license);
+  });
+
   await dotenv.load(fileName: ".env");
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
@@ -52,7 +66,13 @@ void main() async {
       FirebaseCrashlytics.instance.recordFlutterFatalError(details);
     };
     PlatformDispatcher.instance.onError = (error, stack) {
-      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      // بعد تعطيل الجلب الشبكي، أي عائلة/وزن غير مضمّن في الأصول يرمي google_fonts
+      // استثناءً غير ملتقَط (والنص يُعرض بالخط الاحتياطي بشكل سليم) — نسجّله
+      // كغير قاتل حتى لا يلوّث نسبة الجلسات الخالية من الانهيار في Crashlytics.
+      final errText = error.toString();
+      final isFontMiss = error is Exception &&
+          (errText.contains('GoogleFonts') || errText.contains('google_fonts'));
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: !isFontMiss);
       return true;
     };
   }

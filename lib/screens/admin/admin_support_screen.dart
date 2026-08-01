@@ -54,16 +54,33 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
 
   Widget _buildTicketsList(BuildContext context, List<String> statuses) {
     return StreamBuilder<QuerySnapshot>(
+      // حدّ 200 مع ترتيب خادمي: الأرشيف مجموعة تنمو بلا سقف — بدون limit تُقرأ
+      // كل التذاكر المغلقة تاريخياً عند كل فتح (فهرس status+createdAt في firestore.indexes.json).
       stream: FirebaseFirestore.instance
           .collection('support_tickets')
           .where('status', whereIn: statuses)
+          .orderBy('createdAt', descending: true)
+          .limit(200)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return ZyiarahShimmer.buildListSkeleton(count: 5);
         }
         if (snapshot.hasError) {
-          return const Center(child: Text("تعذّر تحميل التذاكر، تحقّق من الاتصال"));
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.red, size: 40),
+                const SizedBox(height: 10),
+                const Text("تعذّر تحميل التذاكر، تحقّق من الاتصال", style: TextStyle(color: Colors.red)),
+                TextButton(
+                  onPressed: () => setState(() {}),
+                  child: const Text("إعادة المحاولة", style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          );
         }
 
         final docs = snapshot.data?.docs ?? [];
@@ -131,6 +148,13 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
                 ),
               ),
             ),
+            // تنبيه الاقتطاع: عند بلوغ الحدّ قد توجد تذاكر أقدم غير معروضة
+            if (docs.length >= 200)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text("يعرض أحدث 200 تذكرة",
+                    style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 11)),
+              ),
             Expanded(child: _buildResults(context, sortedDocs, filteredDocs)),
           ],
         );

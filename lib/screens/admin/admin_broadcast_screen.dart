@@ -1,8 +1,11 @@
 import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:provider/provider.dart';
+import 'package:zyiarah/providers/user_provider.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:zyiarah/services/audit_service.dart';
 
@@ -496,6 +499,9 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
           body: _bodyCtrl.text.trim(),
           target: _target,
           scheduledAt: _scheduledTime!,
+          // uid الفعلي لا 'Admin': القواعد تسمح لمدير الطلبات/التسويق برؤية
+          // وإلغاء مجدولاته هو فقط (created_by == uid) — بدونه يختفي عنه ما جدوله.
+          createdBy: FirebaseAuth.instance.currentUser?.uid,
         );
       } else {
         // 1. تسجيل العملية في سجل البث (History)
@@ -627,17 +633,25 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
   }
 
   Widget _buildScheduledQueueList() {
+    // الطابور الفعلي في notifications_log بحالة 'scheduled' (يكتبه scheduleBroadcast
+    // ويعالجه releaseScheduledNotifications). القواعد الجديدة: super_admin/accountant_admin
+    // يقرآن كل السجلّ، بينما orders_manager/marketing_admin يقرآن مجدولاتهم فقط
+    // (created_by == uid) — فنطابق الاستعلام مع القاعدة وإلا رُفض بالكامل.
+    final String? role = context.watch<ZyiarahUserProvider>().role;
+    final bool seesAll =
+        role == 'admin' || role == 'super_admin' || role == 'accountant_admin';
+    Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+        .collection('notifications_log')
+        .where('status', isEqualTo: 'scheduled');
+    if (!seesAll) {
+      query = query.where('created_by',
+          isEqualTo: FirebaseAuth.instance.currentUser?.uid ?? '');
+    }
     return StreamBuilder<QuerySnapshot>(
-      // الطابور الفعلي في notifications_log بحالة 'scheduled' (يكتبه scheduleBroadcast
-      // ويعالجه releaseScheduledNotifications) — كان يقرأ scheduled_notifications الفارغة.
-      stream: FirebaseFirestore.instance.collection('notifications_log')
-          .where('status', isEqualTo: 'scheduled')
-          .snapshots(),
+      stream: query.snapshots(),
       builder: (context, snapshot) {
-        // قراءة notifications_log مقصورة بالقواعد على admin/super_admin/accountant_admin،
-        // بينما الشاشة متاحة أيضاً لـ orders_manager/marketing_admin: كان permission-denied
-        // يُبتلع (!hasData → shrink) فتختفي القائمة وزر الإلغاء بصمت رغم قدرة الدور
-        // على الجدولة نفسها — نُظهر السبب بدل الفراغ المضلِّل.
+        // كان permission-denied يُبتلع (!hasData → shrink) فتختفي القائمة وزر
+        // الإلغاء بصمت رغم قدرة الدور على الجدولة نفسها — نُظهر السبب بدل الفراغ.
         if (snapshot.hasError) {
           final bool denied = snapshot.error is FirebaseException &&
               (snapshot.error as FirebaseException).code == 'permission-denied';
@@ -650,12 +664,22 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
               border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
             ),
             child: Center(
-              child: Text(
-                denied
-                    ? "لا تملك صلاحية عرض الإشعارات المجدولة أو إلغائها — هذه القائمة متاحة للمشرف العام والمحاسب فقط."
-                    : "تعذّر تحميل قائمة الإشعارات المجدولة: ${snapshot.error}",
-                style: GoogleFonts.tajawal(color: Colors.red[800], fontSize: 12, height: 1.6),
-                textAlign: TextAlign.center,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    denied
+                        ? "لا تملك صلاحية عرض هذه القائمة — يعرض كل دور مجدولاته فقط، وللمشرف العام والمحاسب القائمة كاملة."
+                        : "تعذّر تحميل قائمة الإشعارات المجدولة: ${snapshot.error}",
+                    style: GoogleFonts.tajawal(color: Colors.red[800], fontSize: 12, height: 1.6),
+                    textAlign: TextAlign.center,
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() {}),
+                    child: Text("إعادة المحاولة",
+                        style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                  ),
+                ],
               ),
             ),
           );

@@ -42,6 +42,8 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
   double _walletBalance = 0.0;
   int _qatratPoints = 0;
   bool _walletLoaded = false;
+  // فشل جلب المحفظة: بدونها كان الرصيد يُعرض 0.00 كقيمة حقيقية عند أي خطأ شبكة.
+  bool _walletError = false;
   bool _isRedeeming = false;
 
   // Referral state
@@ -101,6 +103,13 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
   }
 
   Future<void> _loadWallet(String uid) async {
+    // عند إعادة المحاولة: صفّر علامة الخطأ وأعد الـ shimmer أثناء الجلب.
+    if (mounted && _walletError) {
+      setState(() {
+        _walletError = false;
+        _walletLoaded = false;
+      });
+    }
     try {
       final wallet = await ZyiarahWalletService().getOrCreateWallet(uid);
       if (mounted) {
@@ -108,10 +117,17 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
           _walletBalance = wallet.balance;
           _qatratPoints = wallet.qatratPoints;
           _walletLoaded = true;
+          _walletError = false;
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _walletLoaded = true);
+      // لا نعرض 0.00 كرصيد حقيقي عند الفشل — نُعلّم الخطأ ليظهر «—» مع إعادة المحاولة.
+      if (mounted) {
+        setState(() {
+          _walletLoaded = true;
+          _walletError = true;
+        });
+      }
     }
   }
 
@@ -131,7 +147,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
 
   Future<void> _redeemQatrat() async {
     final uid = _auth.currentUser?.uid;
-    if (uid == null || _isRedeeming || _qatratPoints < 50) return;
+    if (uid == null || _isRedeeming || _walletError || _qatratPoints < 50) return;
 
     HapticFeedback.mediumImpact();
     setState(() => _isRedeeming = true);
@@ -754,10 +770,11 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                           child: child,
                         ),
                       ),
-                      child: _walletLoaded
+                      child: _walletError
+                          // فشل الجلب: «—» بدل 0.00 حتى لا يظن العميل أن رصيده صفر.
                           ? Text(
-                              '${_walletBalance.toStringAsFixed(2)} ر.س',
-                              key: ValueKey(_walletBalance),
+                              '— ر.س',
+                              key: const ValueKey('wallet_error'),
                               style: GoogleFonts.tajawal(
                                 color: Colors.white,
                                 fontSize: 32,
@@ -765,16 +782,49 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                                 height: 1.1,
                               ),
                             )
-                          : _balanceShimmer(),
+                          : _walletLoaded
+                              ? Text(
+                                  '${_walletBalance.toStringAsFixed(2)} ر.س',
+                                  key: ValueKey(_walletBalance),
+                                  style: GoogleFonts.tajawal(
+                                    color: Colors.white,
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.w900,
+                                    height: 1.1,
+                                  ),
+                                )
+                              : _balanceShimmer(),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      'الرصيد المتاح',
-                      style: GoogleFonts.tajawal(
-                          color: Colors.white38,
-                          fontSize: 11,
-                          letterSpacing: 0.4),
-                    ),
+                    _walletError
+                        ? InkWell(
+                            onTap: () {
+                              final uid = _auth.currentUser?.uid;
+                              if (uid != null) _loadWallet(uid);
+                            },
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.refresh_rounded,
+                                    color: Color(0xFFFCA5A5), size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'تعذّر تحميل الرصيد — إعادة المحاولة',
+                                  style: GoogleFonts.tajawal(
+                                      color: const Color(0xFFFCA5A5),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          )
+                        : Text(
+                            'الرصيد المتاح',
+                            style: GoogleFonts.tajawal(
+                                color: Colors.white38,
+                                fontSize: 11,
+                                letterSpacing: 0.4),
+                          ),
                   ],
                 ),
               ),
@@ -805,7 +855,8 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
   }
 
   Widget _buildQatratCard() {
-    final canRedeem = _qatratPoints >= 50;
+    // عند فشل جلب المحفظة لا استبدال: القيمة صفر افتراضية لا حقيقية.
+    final canRedeem = !_walletError && _qatratPoints >= 50;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
@@ -852,21 +903,32 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                   scale: anim,
                   child: FadeTransition(opacity: anim, child: child),
                 ),
-                child: _walletLoaded
+                child: _walletError
+                    // فشل الجلب: «—» بدل 0 نقاط وهمية.
                     ? Text(
-                        '$_qatratPoints',
-                        key: ValueKey(_qatratPoints),
+                        '—',
+                        key: const ValueKey('qatrat_error'),
                         style: GoogleFonts.tajawal(
                           color: const Color(0xFFFBBF24),
                           fontSize: 28,
                           fontWeight: FontWeight.w900,
                         ),
                       )
-                    : const SizedBox(
-                        key: ValueKey('qshimmer'),
-                        width: 60,
-                        height: 30,
-                      ),
+                    : _walletLoaded
+                        ? Text(
+                            '$_qatratPoints',
+                            key: ValueKey(_qatratPoints),
+                            style: GoogleFonts.tajawal(
+                              color: const Color(0xFFFBBF24),
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          )
+                        : const SizedBox(
+                            key: ValueKey('qshimmer'),
+                            width: 60,
+                            height: 30,
+                          ),
               ),
               const SizedBox(height: 10),
               // Redeem button with AnimatedSwitcher loading state
@@ -895,7 +957,11 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                             ),
                           )
                         : Text(
-                            canRedeem ? 'استبدال' : '${50 - _qatratPoints} نقطة',
+                            _walletError
+                                ? '—'
+                                : canRedeem
+                                    ? 'استبدال'
+                                    : '${50 - _qatratPoints} نقطة',
                             key: ValueKey(canRedeem),
                             style: GoogleFonts.tajawal(
                               fontSize: 11,

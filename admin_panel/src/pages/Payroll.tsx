@@ -60,6 +60,10 @@ export default function Payroll() {
     const [loadingRecords, setLoadingRecords] = useState(true);
     const [payingId, setPayingId] = useState<string | null>(null);
     const [payingAll, setPayingAll] = useState(false);
+    // فشل المستمع نهائي (لا يُعاد الاشتراك) — كان المحاسب يعلق على دوّار أبدي لا
+    // يفرّق بين «رواتب غير مصروفة» و«صفحة معطوبة». حالة خطأ صريحة بزر إعادة.
+    const [loadError, setLoadError] = useState(false);
+    const [retryKey, setRetryKey] = useState(0);
 
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'drivers'), snap => {
@@ -74,9 +78,13 @@ export default function Payroll() {
                 };
             }));
             setLoadingDrivers(false);
+        }, err => {
+            console.error('Payroll drivers listener error:', err);
+            setLoadingDrivers(false);
+            setLoadError(true);
         });
         return unsub;
-    }, []);
+    }, [retryKey]);
 
     useEffect(() => {
         setLoadingRecords(true);
@@ -89,9 +97,13 @@ export default function Payroll() {
             });
             setPayrollRecords(map);
             setLoadingRecords(false);
+        }, err => {
+            console.error('Payroll records listener error:', err);
+            setLoadingRecords(false);
+            setLoadError(true);
         });
         return unsub;
-    }, [currentMonth]);
+    }, [currentMonth, retryKey]);
 
     const rows: DriverPayrollRow[] = drivers.map(d => {
         const rec = payrollRecords[d.id];
@@ -259,7 +271,20 @@ export default function Payroll() {
                     )}
                 </div>
 
-                {loading ? (
+                {loadError ? (
+                    // حالة خطأ صريحة لا دوّار أبدي ولا «لا يوجد موظفون» — صفحة مالية،
+                    // الغموض بين «غير مصروف» و«معطوب» غير مقبول.
+                    <div className="flex flex-col items-center justify-center py-20 gap-4 bg-rose-50/40 m-6 rounded-2xl border border-rose-100">
+                        <p className="text-rose-600 font-bold">تعذّر تحميل بيانات الرواتب — تحقّق من الاتصال أو الصلاحيات</p>
+                        <button
+                            type="button"
+                            onClick={() => { setLoadError(false); setLoadingDrivers(true); setLoadingRecords(true); setRetryKey(k => k + 1); }}
+                            className="px-5 py-2.5 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-colors"
+                        >
+                            إعادة المحاولة
+                        </button>
+                    </div>
+                ) : loading ? (
                     <div className="flex items-center justify-center py-20 text-slate-400 gap-2">
                         <Loader2 size={22} className="animate-spin" />
                         <span className="text-sm font-medium">جاري التحميل...</span>

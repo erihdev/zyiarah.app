@@ -53,32 +53,78 @@ class ZyiarahSupportFab extends StatelessWidget {
             
             // الرقم الثابت القديم كان placeholder لا يصل لأحد — نقرأ من نفس مفاتيح
             // settings_screen (system_configs/main_settings) ليكون مصدر الرقم واحداً ويُحدَّث من اللوحة.
-            StreamBuilder<DocumentSnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('system_configs')
-                  .doc('main_settings')
-                  .snapshots(),
-              builder: (context, snapshot) {
-                final data = snapshot.data?.data() as Map<String, dynamic>?;
-                final whatsapp = data?['support_whatsapp'] ?? '966500000000';
-                final phone = data?['support_phone'] ?? '920000000';
-                return Column(
-                  children: [
-                    _buildOption(
-                      icon: Icons.chat_bubble_outline_rounded,
-                      title: "تحدث معنا عبر الواتساب",
-                      color: const Color(0xFF25D366),
-                      onTap: () => _launchSupportUrl(ctx, 'https://wa.me/$whatsapp'),
-                    ),
-                    _buildOption(
-                      icon: Icons.phone_in_talk_rounded,
-                      title: "اتصال هاتفي مباشر",
-                      color: const Color(0xFF3B82F6),
-                      onTap: () => _launchSupportUrl(ctx, 'tel:$phone'),
-                    ),
-                  ],
-                );
-              },
+            // StatefulBuilder ليتاح «إعادة المحاولة» عند فشل البث (يعيد الاشتراك بالاستعلام).
+            StatefulBuilder(
+              builder: (context, setSheetState) => StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('system_configs')
+                    .doc('main_settings')
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  // فشل قراءة الإعدادات: لا أزرار بأرقام placeholder ميتة —
+                  // صف خطأ مع إعادة محاولة، والتذكرة أدناه تبقى المسار المضمون.
+                  if (snapshot.hasError) {
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline_rounded, color: Colors.red, size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text('تعذّر تحميل أرقام التواصل',
+                                style: GoogleFonts.tajawal(fontSize: 12, color: Colors.red)),
+                          ),
+                          TextButton(
+                            onPressed: () => setSheetState(() {}),
+                            child: Text('إعادة المحاولة',
+                                style: GoogleFonts.tajawal(
+                                    fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF660033))),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  if (!snapshot.hasData) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(
+                          child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2))),
+                    );
+                  }
+                  final data = snapshot.data?.data() as Map<String, dynamic>?;
+                  // لا قيم افتراضية بعد اليوم: زر غائب خير من رقم يتصل بلا أحد.
+                  // toString لا cast: لو خُزّن الرقم كـ num من اللوحة لا نريد استثناء cast.
+                  final whatsapp = data?['support_whatsapp']?.toString().trim();
+                  final phone = data?['support_phone']?.toString().trim();
+                  return Column(
+                    children: [
+                      if (whatsapp != null && whatsapp.isNotEmpty)
+                        _buildOption(
+                          icon: Icons.chat_bubble_outline_rounded,
+                          title: "تحدث معنا عبر الواتساب",
+                          color: const Color(0xFF25D366),
+                          onTap: () => _launchSupportUrl(ctx, 'https://wa.me/$whatsapp'),
+                        ),
+                      if (phone != null && phone.isNotEmpty)
+                        _buildOption(
+                          icon: Icons.phone_in_talk_rounded,
+                          title: "اتصال هاتفي مباشر",
+                          color: const Color(0xFF3B82F6),
+                          onTap: () => _launchSupportUrl(ctx, 'tel:$phone'),
+                        ),
+                    ],
+                  );
+                },
+              ),
             ),
             _buildOption(
               icon: Icons.support_agent_rounded,

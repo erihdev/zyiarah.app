@@ -30,7 +30,14 @@ class ZyiarahPopupService {
         }
       }
     }).catchError((e) {
-      debugPrint('POPUP_SERVICE_ERROR: $e');
+      // صامت للمستخدم دائماً (الإعلان تحسين لا خدمة أساسية) — لكن نميّز رفض
+      // الصلاحيات بوسمٍ خاص: رفضٌ هنا يعني انحدار قواعد Firestore يُخفي الإعلانات
+      // المنبثقة عن كل العملاء بصمت بينما الأدمن يرى «تم النشر» (حدث فعلاً سابقاً).
+      if (e is FirebaseException && e.code == 'permission-denied') {
+        debugPrint('POPUP_SERVICE_PERMISSION_DENIED: قواعد Firestore تمنع قراءة الإعلان المنبثق — $e');
+      } else {
+        debugPrint('POPUP_SERVICE_ERROR: $e');
+      }
     });
   }
 

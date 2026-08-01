@@ -166,11 +166,16 @@ class _MoyasarStcScreenState extends State<MoyasarStcScreen> {
       paymentRequest: request,
     );
 
-    if (!mounted) return;
-    setState(() => _isSubmitting = false);
+    // لا نربط مصير النتيجة بحياة الشاشة: `if (!mounted) return` المبكر كان
+    // يُسقط رد النداء كلياً إن رجعت المستخدمة أثناء الانتظار. ردود onSuccess/
+    // onFailure تخاطب حالة **الأب** (ما زال حيّاً على شاشة الملخص) ولا تحتاج
+    // هذه الشاشة — حارس mounted لأعمال الواجهة المحلية فقط.
+    if (mounted) setState(() => _isSubmitting = false);
 
     if (result is PaymentResponse &&
         result.status == PaymentStatus.initiated) {
+      // لم تكتمل دفعة بعد (مجرد إرسال OTP) — الرجوع هنا إلغاء مقصود بلا خصم.
+      if (!mounted) return;
       final src = result.source as StcResponseSource;
       _transactionUrl = src.transactionUrl ?? '';
       setState(() => _phase = _Phase.otp);
@@ -194,8 +199,11 @@ class _MoyasarStcScreenState extends State<MoyasarStcScreen> {
       otpRequest: otpRequest,
     );
 
-    if (!mounted) return;
-    setState(() => _isSubmitting = false);
+    // حرج: `if (!mounted) return` كان **قبل** onSuccess — رجوعٌ أثناء نافذة
+    // التحقق (1–3ث تبدو تعليقاً) كان يُسقط صامتاً دفعةً خصمتها ميسر فعلاً:
+    // لا شاشة نجاح ولا تأكيد فوري، وتظنّها المستخدمة أُلغيت فتحجز من جديد
+    // وتُخصم مرتين. الرد يخاطب حالة الأب الحيّة — يُستدعى دون شرط mounted.
+    if (mounted) setState(() => _isSubmitting = false);
 
     if (result is PaymentResponse && result.status == PaymentStatus.paid) {
       widget.onSuccess(result.id);
@@ -203,7 +211,7 @@ class _MoyasarStcScreenState extends State<MoyasarStcScreen> {
     } else if (result is PaymentResponse &&
         result.status == PaymentStatus.initiated) {
       // Still pending — show message and let user retry
-      _showSnack('رمز التحقق غير صحيح، يرجى المحاولة مجدداً');
+      if (mounted) _showSnack('رمز التحقق غير صحيح، يرجى المحاولة مجدداً');
     } else {
       final msg = _errorMessage(result);
       widget.onFailure(msg);
@@ -240,7 +248,12 @@ class _MoyasarStcScreenState extends State<MoyasarStcScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    // منع الرجوع أثناء إرسال/تحقق جارٍ: النتيجة قيد الوصول من ميسر — الخروج في
+    // منتصفها يوحي بالإلغاء بينما قد تكون الدفعة خُصمت فعلاً (فتحجز المستخدمة
+    // من جديد وتُخصم مرتين). يُفتح الرجوع تلقائياً فور انتهاء العملية.
+    return PopScope(
+      canPop: !_isSubmitting,
+      child: Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         backgroundColor: _brand,
@@ -281,6 +294,7 @@ class _MoyasarStcScreenState extends State<MoyasarStcScreen> {
                   onSubmit: _verifyOtp,
                 ),
         ),
+      ),
       ),
     );
   }

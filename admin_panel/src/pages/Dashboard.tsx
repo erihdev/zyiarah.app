@@ -2,7 +2,7 @@ import { TrendingUp, Users, CarFront, CheckCircle2, Clock, ChevronLeft, ArrowUpR
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, onSnapshot, query, where, orderBy, limit, Timestamp, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, orderBy, limit, Timestamp, getCountFromServer, getAggregateFromServer, sum, or, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 
 interface RecentOrder {
@@ -82,14 +82,20 @@ export default function Dashboard() {
     const [totalUsers, setTotalUsers] = useState('...');
     const [activeOrders, setActiveOrders] = useState('...');
     const [availableDrivers, setAvailableDrivers] = useState('...');
-    const [totalRevenue, setTotalRevenue] = useState(0);
-    const [storeRevenue, setStoreRevenue] = useState(0);
+    // null = «لم يُحمَّل بعد»: الإيرادات كانت تبدأ بـ0 فيظهر «0 ر.س» كرقم حقيقي
+    // عند فشل التحميل — لا نعرض صفراً إلا إن جاء من الخادم فعلاً.
+    const [totalRevenue, setTotalRevenue] = useState<number | null>(null);
+    const [storeRevenue, setStoreRevenue] = useState<number | null>(null);
     // إيراد متجر الأدوات والتنظيف صار في `orders` (طلبات مجدولة) — نجمعه منفصلاً كي
     // يُنسب لإيراد المتجر لا الخدمات. متجر الشركات يبقى في store_orders (storeRevenue).
-    const [clientStoreRevenue, setClientStoreRevenue] = useState(0);
+    const [clientStoreRevenue, setClientStoreRevenue] = useState<number | null>(null);
     const [pendingStoreOrders, setPendingStoreOrders] = useState('...');
     const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
-    
+    // خطأ أي مستمع/تجميع يرفع لافتة خطأ بزر إعادة — كانت البطاقات تتجمد على «...»
+    // للأبد بلا أي مؤشر (أخطاء مستمعي Firestore نهائية ولا يُعاد الاشتراك تلقائياً).
+    const [loadError, setLoadError] = useState(false);
+    const [retryKey, setRetryKey] = useState(0);
+
     // Trend state
     const [revenueTrend, setRevenueTrend] = useState('0');
     const [ordersTrend, setOrdersTrend] = useState('0');
@@ -104,20 +110,29 @@ export default function Dashboard() {
         const thisMonthTs = Timestamp.fromDate(thisMonthStart);
         const lastMonthTs = Timestamp.fromDate(lastMonthStart);
 
-        const unsubUsers = onSnapshot(collection(db, 'users'), (snap: QuerySnapshot<DocumentData>) => {
-            const total = snap.size;
-            setTotalUsers(total.toString());
-            let thisMonth = 0, lastMonth = 0;
-            snap.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
-                const createdAt = (doc.data() as { created_at?: Timestamp }).created_at;
-                if (createdAt && createdAt >= thisMonthTs) thisMonth++;
-                else if (createdAt && createdAt >= lastMonthTs) lastMonth++;
-            });
-            if (lastMonth > 0) {
-                const pct = (((thisMonth - lastMonth) / lastMonth) * 100).toFixed(1);
-                setUsersTrend(pct);
-            }
-        });
+        // معالج خطأ موحّد: لا فشل صامت — أي مستمع/تجميع يفشل يرفع لافتة الخطأ.
+        const onErr = (label: string) => (e: unknown) => {
+            console.error(`Dashboard ${label} error:`, e);
+            setLoadError(true);
+        };
+
+        // (أداء) كانت اللوحة تستمع لمجموعة users كاملة لمجرّد العدّ — الآن استعلامات
+        // تجميع count() خادمية: قراءة فهرس واحدة لكل 1000 مستند بدل قراءة كل مستند.
+        (async () => {
+            try {
+                const usersCol = collection(db, 'users');
+                const [totalSnap, thisSnap, lastSnap] = await Promise.all([
+                    getCountFromServer(usersCol),
+                    getCountFromServer(query(usersCol, where('created_at', '>=', thisMonthTs))),
+                    getCountFromServer(query(usersCol, where('created_at', '>=', lastMonthTs), where('created_at', '<', thisMonthTs))),
+                ]);
+                setTotalUsers(totalSnap.data().count.toString());
+                const thisMonth = thisSnap.data().count, lastMonth = lastSnap.data().count;
+                if (lastMonth > 0) {
+                    setUsersTrend((((thisMonth - lastMonth) / lastMonth) * 100).toFixed(1));
+                }
+            } catch (e) { onErr('users count')(e); }
+        })();
         const unsubOrders = onSnapshot(
             // كل الحالات غير المنتهية فعلاً — كانت [pending, in_progress, accepted] فقط،
             // فيسقط الطلب من «الطلبات النشطة» لحظةَ إسناده (scheduled) وهو أنشط ما يكون.
@@ -125,40 +140,58 @@ export default function Dashboard() {
                 'pending', 'pending_admin_approval', 'under_review', 'awaiting_payment',
                 'scheduled', 'assigned', 'accepted', 'on_the_way', 'in_progress',
             ])),
-            (snap: QuerySnapshot<DocumentData>) => setActiveOrders(snap.size.toString())
+            (snap: QuerySnapshot<DocumentData>) => setActiveOrders(snap.size.toString()),
+            onErr('active orders')
         );
         const unsubDrivers = onSnapshot(
             query(collection(db, 'drivers'), where('is_available', '==', true)),
-            (snap: QuerySnapshot<DocumentData>) => setAvailableDrivers(snap.size.toString())
+            (snap: QuerySnapshot<DocumentData>) => setAvailableDrivers(snap.size.toString()),
+            onErr('drivers')
         );
-        const unsubCompletedOrders = onSnapshot(
-            query(collection(db, 'orders'), where('status', '==', 'completed')),
+        // (أداء) الإيراد الكلي كان يُجمَع بالاستماع لكل الطلبات المكتملة منذ الأزل
+        // (قراءات تنمو للأبد مع كل فتح للوحة) — الآن تجميع sum() خادمي: استعلامان
+        // بمساواة فقط (لا فهرس مركّب)، وطلبات متجر الأدوات تُطرح لتُنسب للمتجر.
+        (async () => {
+            try {
+                const completedQ = query(collection(db, 'orders'), where('status', '==', 'completed'));
+                const storeKindQ = query(
+                    collection(db, 'orders'),
+                    where('status', '==', 'completed'),
+                    where('service_meta.kind', '==', 'store_products'),
+                );
+                const [allAgg, storeAgg] = await Promise.all([
+                    getAggregateFromServer(completedQ, { total: sum('amount') }),
+                    getAggregateFromServer(storeKindQ, { total: sum('amount') }),
+                ]);
+                const storeRev = storeAgg.data().total || 0;
+                setClientStoreRevenue(storeRev);
+                setTotalRevenue((allAgg.data().total || 0) - storeRev);
+            } catch (e) { onErr('revenue aggregate')(e); }
+        })();
+        // اتجاهات الشهر: نافذة محدودة (شهران فقط) بدل كامل التاريخ — نطاق created_at
+        // فهرس أحادي لا يحتاج فهرساً مركّباً، والفلترة تتم محلياً على النافذة الصغيرة.
+        const unsubTrends = onSnapshot(
+            query(collection(db, 'orders'), where('created_at', '>=', lastMonthTs)),
             (snap: QuerySnapshot<DocumentData>) => {
-                let revenue = 0, clientStoreRev = 0, thisMonthRev = 0, lastMonthRev = 0;
-                let thisMonthOrders = 0, lastMonthOrders = 0;
+                let thisMonthRev = 0, lastMonthRev = 0, thisMonthOrders = 0, lastMonthOrders = 0;
                 snap.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
-                    const d = doc.data() as { amount?: number; created_at?: Timestamp; service_meta?: { kind?: string } };
-                    const amt = d.amount || 0;
+                    const d = doc.data() as { amount?: number; status?: string; created_at?: Timestamp; service_meta?: { kind?: string } };
                     // طلبات متجر الأدوات (service_meta.kind == 'store_products') مبيعات متجر لا
-                    // خدمات — تُنسب لإيراد المتجر ولا تدخل بطاقة/اتجاه إيرادات الخدمات.
-                    if (d.service_meta?.kind === 'store_products') {
-                        clientStoreRev += amt;
-                        return;
-                    }
-                    revenue += amt;
+                    // خدمات — لا تدخل اتجاه إيرادات الخدمات.
+                    if (d.status !== 'completed' || d.service_meta?.kind === 'store_products') return;
+                    const amt = d.amount || 0;
                     if (d.created_at && d.created_at >= thisMonthTs) {
                         thisMonthRev += amt;
                         thisMonthOrders++;
-                    } else if (d.created_at && d.created_at >= lastMonthTs) {
+                    } else {
                         lastMonthRev += amt;
                         lastMonthOrders++;
                     }
                 });
-                setTotalRevenue(revenue);
-                setClientStoreRevenue(clientStoreRev);
                 if (lastMonthRev > 0) setRevenueTrend((((thisMonthRev - lastMonthRev) / lastMonthRev) * 100).toFixed(1));
                 if (lastMonthOrders > 0) setOrdersTrend((((thisMonthOrders - lastMonthOrders) / lastMonthOrders) * 100).toFixed(1));
-            }
+            },
+            onErr('month trends')
         );
         const unsubRecentOrders = onSnapshot(
             query(collection(db, 'orders'), orderBy('created_at', 'desc'), limit(5)),
@@ -177,27 +210,34 @@ export default function Dashboard() {
                     };
                 });
                 setRecentOrders(fetchedOrders);
-            }
+            },
+            onErr('recent orders')
         );
 
-        const unsubStoreOrders = onSnapshot(collection(db, 'store_orders'), (snap: QuerySnapshot<DocumentData>) => {
-            let sRev = 0;
-            let pendingCount = 0;
-            snap.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
-                const d = doc.data() as { total_amount?: number; status?: string; is_paid?: boolean };
-                // الطلب المدفوع يمرّ بـ processing/shipped/delivered — كان يُحسب approved فقط
-                // فتُستبعَد إيرادات المتجر المدفوعة من اللوحة.
-                if (d.is_paid === true || ['approved', 'processing', 'shipped', 'delivered', 'completed'].includes(d.status || '')) {
-                    sRev += d.total_amount || 0;
-                }
-                if (d.status === 'pending') pendingCount++;
-            });
-            setStoreRevenue(sRev);
-            setPendingStoreOrders(pendingCount.toString());
-        });
+        // (أداء) store_orders: كانت المجموعة كلها تُستمَع لاشتقاق رقمين فقط — الآن
+        // عدّاد المعلّق بمستمع مقيّد بالحالة (مجموعة صغيرة حيّة)، والإيراد بتجميع
+        // sum() خادمي بنفس شرط «مدفوع» السابق (الطلب المدفوع يمرّ بـ
+        // processing/shipped/delivered لا approved فقط).
+        const unsubPendingStore = onSnapshot(
+            query(collection(db, 'store_orders'), where('status', '==', 'pending')),
+            (snap: QuerySnapshot<DocumentData>) => setPendingStoreOrders(snap.size.toString()),
+            onErr('pending store orders')
+        );
+        (async () => {
+            try {
+                const agg = await getAggregateFromServer(
+                    query(collection(db, 'store_orders'), or(
+                        where('is_paid', '==', true),
+                        where('status', 'in', ['approved', 'processing', 'shipped', 'delivered', 'completed']),
+                    )),
+                    { total: sum('total_amount') }
+                );
+                setStoreRevenue(agg.data().total || 0);
+            } catch (e) { onErr('store revenue aggregate')(e); }
+        })();
 
-        return () => { unsubUsers(); unsubOrders(); unsubDrivers(); unsubCompletedOrders(); unsubRecentOrders(); unsubStoreOrders(); };
-    }, []);
+        return () => { unsubOrders(); unsubDrivers(); unsubTrends(); unsubRecentOrders(); unsubPendingStore(); };
+    }, [retryKey]);
 
     const getStatusBadge = (status: string) => {
         // كانت تعرف 3 حالات فقط وتُعيد null لغيرها — فمعظم صفوف «أحدث الطلبات»
@@ -223,6 +263,9 @@ export default function Dashboard() {
         }
     };
 
+    // لا نعرض «0 ر.س» قبل اكتمال التحميل أو بعد فشله — «...» حتى يصل رقم حقيقي.
+    const sar = (v: number | null) => v === null ? '...' : `${v.toFixed(0)} ر.س`;
+
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
 
@@ -233,9 +276,22 @@ export default function Dashboard() {
                 </div>
             </div>
 
+            {loadError && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl px-6 py-4">
+                    <span className="font-bold text-sm">تعذّر تحميل بعض إحصائيات اللوحة — الأرقام المعروضة قد تكون ناقصة.</span>
+                    <button
+                        type="button"
+                        onClick={() => { setLoadError(false); setRetryKey(k => k + 1); }}
+                        className="px-5 py-2.5 bg-rose-600 text-white rounded-xl font-bold text-sm hover:bg-rose-700 transition-colors shrink-0"
+                    >
+                        إعادة المحاولة
+                    </button>
+                </div>
+            )}
+
             {/* Services Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-                <StatCard title="إجمالي الإيرادات (الخدمات)" value={`${totalRevenue.toFixed(0)} ر.س`} icon={TrendingUp} trend={revenueTrend} trendUp={parseFloat(revenueTrend) >= 0} colorScheme="blue" />
+                <StatCard title="إجمالي الإيرادات (الخدمات)" value={sar(totalRevenue)} icon={TrendingUp} trend={revenueTrend} trendUp={parseFloat(revenueTrend) >= 0} colorScheme="blue" />
                 <StatCard title="الطلبات النشطة" value={activeOrders} icon={Clock} trend={ordersTrend} trendUp={parseFloat(ordersTrend) >= 0} colorScheme="orange" />
                 <StatCard title="السائقين المتاحين" value={availableDrivers} icon={CarFront} trend="0" trendUp colorScheme="indigo" />
                 <StatCard title="إجمالي المستخدمين" value={totalUsers} icon={Users} trend={usersTrend} trendUp={parseFloat(usersTrend) >= 0} colorScheme="emerald" />
@@ -247,9 +303,9 @@ export default function Dashboard() {
                     إحصائيات متجر الأدوات
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <StatCard title="إيرادات المتجر" value={`${(storeRevenue + clientStoreRevenue).toFixed(0)} ر.س`} icon={TrendingUp} trend="100" trendUp colorScheme="blue" />
+                    <StatCard title="إيرادات المتجر" value={storeRevenue === null || clientStoreRevenue === null ? '...' : sar(storeRevenue + clientStoreRevenue)} icon={TrendingUp} trend="100" trendUp colorScheme="blue" />
                     <StatCard title="طلبات بانتظار الموافقة" value={pendingStoreOrders} icon={Clock} trend="0" trendUp colorScheme="orange" />
-                    <StatCard title="إجمالي الدخل الكلي" value={`${(totalRevenue + storeRevenue + clientStoreRevenue).toFixed(0)} ر.س`} icon={TrendingUp} trend="+" trendUp colorScheme="emerald" />
+                    <StatCard title="إجمالي الدخل الكلي" value={totalRevenue === null || storeRevenue === null || clientStoreRevenue === null ? '...' : sar(totalRevenue + storeRevenue + clientStoreRevenue)} icon={TrendingUp} trend="+" trendUp colorScheme="emerald" />
                 </div>
             </div>
 

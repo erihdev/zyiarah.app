@@ -499,6 +499,25 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
+            // فشل قراءة الملخص كان يعرض إيراداً 0.00 وكأنه رقم حقيقي — نعرض
+            // حالة خطأ بإعادة محاولة بدل أصفار مضلِّلة على شاشة مالية.
+            if (snapshot.hasError) {
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red, size: 40),
+                    const SizedBox(height: 10),
+                    Text('تعذّر تحميل ملخص التحليلات',
+                        style: GoogleFonts.tajawal(fontSize: 15, color: Colors.red)),
+                    TextButton(
+                      onPressed: () => setState(() {}),
+                      child: Text('إعادة المحاولة', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              );
+            }
 
             final docData = snapshot.data?.data() as Map<String, dynamic>? ?? {};
             final double totalRevenue = (docData['total_revenue'] ?? 0.0).toDouble();

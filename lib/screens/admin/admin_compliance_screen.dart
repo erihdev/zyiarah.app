@@ -72,6 +72,14 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
                     return const Center(child: CircularProgressIndicator());
                   }
 
+                  // خطأ البثّ (رفض قواعد/فهرس مفقود) كان يسقط في حالة «نظامك سليم
+                  // تماماً!» الخضراء — إيهامٌ خطير بالامتثال على شاشة وثائق قانونية.
+                  // نُظهر خطأً صريحاً مع إعادة محاولة (خطأ الاستماع يُنهي البثّ
+                  // نهائياً، فـ setState يعيد الاشتراك ببثٍّ جديد).
+                  if (snapshot.hasError) {
+                    return _buildErrorState();
+                  }
+
                   final filteredDocs = snapshot.data?.docs ?? [];
 
                   if (filteredDocs.isEmpty) {
@@ -252,11 +260,15 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
                        }
                      }
                   }),
-                _buildActionBtn(Icons.edit_note_rounded, "تحديث البيانات", Colors.grey[700]!, () {
-                  // حوار تحديث بيانات السائق موجود في شاشة الكوادر — ننقل الأدمن إليها
-                  // فعلياً (كان الزر SnackBar إرشادياً فقط بلا أي فعل).
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminDriversScreen()));
-                }),
+                // شاشة الكوادر كلها كتابة (تعديل/تفعيل/إضافة) محكومة بـ isOrdersManager
+                // في القواعد — فتحها للمحاسب/التسويق كان طريقاً مسدوداً كل أزراره
+                // ترفض. نفس بوّابة زر الحظر أعلاه.
+                if (_canManageDrivers)
+                  _buildActionBtn(Icons.edit_note_rounded, "تحديث البيانات", Colors.grey[700]!, () {
+                    // حوار تحديث بيانات السائق موجود في شاشة الكوادر — ننقل الأدمن إليها
+                    // فعلياً (كان الزر SnackBar إرشادياً فقط بلا أي فعل).
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminDriversScreen()));
+                  }),
               ],
             )
           ],
@@ -287,6 +299,30 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
           const SizedBox(height: 20),
           Text("نظامك سليم تماماً!", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.green[700])),
           Text("لا توجد مخالفات امتثال حالياً", style: GoogleFonts.tajawal(color: Colors.grey)),
+        ],
+      ),
+    );
+  }
+
+  // خطأ ≠ فارغ: فشل الاستعلام يجب ألا يُعرض كامتثالٍ كامل — أيقونة حمراء
+  // ورسالة صريحة وزر إعادة محاولة يعيد الاشتراك في البثّ.
+  Widget _buildErrorState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline_rounded, size: 80, color: Colors.red[300]),
+          const SizedBox(height: 20),
+          Text("تعذّر تحميل بيانات الامتثال", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.red[700])),
+          const SizedBox(height: 6),
+          Text("لا يمكن التأكد من حالة الوثائق الآن", style: GoogleFonts.tajawal(color: Colors.grey)),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: () => setState(() {}),
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: Text("إعادة المحاولة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF660033), foregroundColor: Colors.white),
+          ),
         ],
       ),
     );

@@ -76,19 +76,71 @@ class _DriverTasksScreenState extends State<DriverTasksScreen>
     final historyStatuses = ['completed', 'cancelled'];
 
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('orders')
-          .where('driver_id', isEqualTo: _driverId)
-          .snapshots(),
+      // (تدقيق السائق) استعلامان محدودان بدل بثّ كل طلبات السائق مدى الحياة:
+      // النشطة بفلتر حالات خادمي (يخدمه فهرس driver_id+status القائم)، والسجل
+      // بأحدث 100 طلب (يخدمه فهرس driver_id+created_at القائم) ثم تصفية
+      // حالات السجل محلياً — إضافة whereIn فوق orderBy كانت ستتطلب فهرساً جديداً.
+      stream: active
+          ? FirebaseFirestore.instance
+              .collection('orders')
+              .where('driver_id', isEqualTo: _driverId)
+              .where('status', whereIn: activeStatuses)
+              .snapshots()
+          : FirebaseFirestore.instance
+              .collection('orders')
+              .where('driver_id', isEqualTo: _driverId)
+              .orderBy('created_at', descending: true)
+              .limit(100)
+              .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
               child: CircularProgressIndicator(color: Color(0xFF660033)));
         }
         if (snapshot.hasError) {
+          // لا «قائمة فارغة» كاذبة عند الفشل — لافتة خطأ + إعادة المحاولة
+          // (setState يعيد بناء التيار فيُعاد الاشتراك).
           return Center(
-              child: Text('خطأ في التحميل',
-                  style: GoogleFonts.tajawal(color: Colors.red)));
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline,
+                            color: Colors.redAccent, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text('تعذّر تحميل المهام — تحقّق من اتصالك',
+                              style: GoogleFonts.tajawal(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.red.shade800)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    onPressed: () => setState(() {}),
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: Text('إعادة المحاولة',
+                        style: GoogleFonts.tajawal(
+                            fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+          );
         }
 
         final all = snapshot.data?.docs ?? [];
@@ -130,11 +182,23 @@ class _DriverTasksScreenState extends State<DriverTasksScreen>
           );
         }
 
+        // ملاحظة الحدّ تظهر فقط عند بلوغ سقف الاستعلام (سجلّ أقدم مقصوص فعلاً).
+        final showBoundNote = !active && all.length >= 100;
         return ListView.builder(
           padding: const EdgeInsets.all(16),
-          itemCount: filtered.length,
+          itemCount: filtered.length + (showBoundNote ? 1 : 0),
           itemBuilder: (context, i) {
-            final data = filtered[i].data() as Map<String, dynamic>;
+            if (showBoundNote && i == 0) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text('يعرض أحدث 100 طلب',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.tajawal(
+                        fontSize: 11, color: Colors.grey)),
+              );
+            }
+            final data = filtered[i - (showBoundNote ? 1 : 0)].data()
+                as Map<String, dynamic>;
             return _buildTaskCard(data);
           },
         );

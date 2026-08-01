@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zyiarah/services/zatca_service.dart';
@@ -187,6 +188,11 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection(widget.invoiceCollection)
+          // قيد client_id إلزامي: قواعد Firestore ترفض جملةً أي استعلام لا يُثبت
+          // ملكية العميل (rules تشترط uid == client_id)، فكان الاستعلام بالكود وحده
+          // يُرفض permission-denied بعد كل دفعة ويختفي زر الفاتورة بصمت.
+          .where('client_id',
+              isEqualTo: FirebaseAuth.instance.currentUser?.uid ?? '')
           .where('code', isEqualTo: widget.orderCode)
           .limit(1)
           .snapshots(),
@@ -198,7 +204,18 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen> w
                 child: CircularProgressIndicator(strokeWidth: 2))),
           );
         }
-        if (snapshot.hasError || !snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        if (snapshot.hasError) {
+          // لا نُخفي فشل القراءة بعد الآن — رفض القواعد كان يختبئ خلف SizedBox.
+          debugPrint('invoice section stream error: ${snapshot.error}');
+          return TextButton.icon(
+            // setState يعيد بناء الاستعلام فيُعاد الاشتراك بالبث من جديد.
+            onPressed: () => setState(() {}),
+            icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.red),
+            label: Text("تعذّر تحميل الفاتورة — إعادة المحاولة",
+                style: GoogleFonts.tajawal(fontSize: 12, color: Colors.red)),
+          );
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const SizedBox();
         }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { LifeBuoy, Search, MessageSquare, AlertCircle, CheckCircle2, Send, Clock } from 'lucide-react';
-import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc, addDoc, serverTimestamp, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where, limit, Timestamp, doc, updateDoc, addDoc, serverTimestamp, getCountFromServer, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 
 // المجموعة الصحيحة هي support_tickets (يكتبها العميل في support_screen.dart والدوال في functions/index.js).
@@ -33,17 +33,46 @@ export default function Support() {
     const [selected, setSelected] = useState<Ticket | null>(null);
     const [reply, setReply] = useState('');
     const [sending, setSending] = useState(false);
+    // فشل المستمع نهائي — حالة خطأ صريحة بزر إعادة بدل «لا توجد تذاكر» المضلّلة.
+    const [loadError, setLoadError] = useState(false);
+    const [retryKey, setRetryKey] = useState(0);
+    // العدّادات بتجميع count() خادمي — القائمة صارت مقيّدة بأحدث 300 فلا يصلح
+    // العدّ المحلي فوقها (المُغلق القديم يسقط خارج النافذة).
+    const [openCount, setOpenCount] = useState<number | null>(null);
+    const [inProgressCount, setInProgressCount] = useState<number | null>(null);
+    const [closedCount, setClosedCount] = useState<number | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        const q = query(collection(db, 'support_tickets'), orderBy('createdAt', 'desc'));
+        // (أداء) أحدث 300 تذكرة فقط — كانت المجموعة كلها (بما فيها المحلولة منذ
+        // الأزل) تُقرأ مع كل فتح للصفحة.
+        const q = query(collection(db, 'support_tickets'), orderBy('createdAt', 'desc'), limit(300));
         const unsub = onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
             const data = snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Ticket));
             setTickets(data);
             setLoading(false);
-        }, () => setLoading(false));
+        }, (e) => {
+            console.error('Support tickets listener error:', e);
+            setLoading(false);
+            setLoadError(true);
+        });
+
+        const col = collection(db, 'support_tickets');
+        Promise.all([
+            getCountFromServer(query(col, where('status', '==', 'open'))),
+            getCountFromServer(query(col, where('status', '==', 'replied'))),
+            getCountFromServer(query(col, where('status', 'in', ['resolved', 'closed']))),
+        ]).then(([o, r, c]) => {
+            setOpenCount(o.data().count);
+            setInProgressCount(r.data().count);
+            setClosedCount(c.data().count);
+        }).catch((e) => {
+            // فشل العدّادات وحده لا يحجب قائمةً حُمّلت بنجاح — تبقى «...» لا صفراً كاذباً.
+            console.error('Support counters error:', e);
+        });
+
         return () => unsub();
-    }, []);
+    }, [retryKey]);
 
     // Load messages from subcollection whenever selected ticket changes
     useEffect(() => {
@@ -63,10 +92,6 @@ export default function Support() {
         (t.subject || '').includes(searchTerm) ||
         (t.userEmail || '').includes(searchTerm)
     );
-
-    const openCount = tickets.filter(t => t.status === 'open').length;
-    const inProgressCount = tickets.filter(t => t.status === 'replied').length;
-    const closedCount = tickets.filter(t => t.status === 'resolved' || t.status === 'closed').length;
 
     const isAdminMsg = (m: SupportMessage) => m.senderRole === 'admin' || m.senderId === 'admin';
 
@@ -124,7 +149,7 @@ export default function Support() {
                         <LifeBuoy className="text-[#660033]" />
                         الدعم الفني والشكاوى (حي)
                     </h2>
-                    <p className="text-slate-500 font-medium text-sm mt-1">إدارة تذاكر الدعم والمنازعات لحظة بلحظة من الفايربيس</p>
+                    <p className="text-slate-500 font-medium text-sm mt-1">إدارة تذاكر الدعم والمنازعات لحظة بلحظة — يعرض أحدث 300 تذكرة</p>
                 </div>
             </div>
 
@@ -136,7 +161,7 @@ export default function Support() {
                         <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded-md">عالية الأهمية</span>
                     </div>
                     <p className="text-sm font-bold text-slate-500 mb-1">تذاكر مفتوحة</p>
-                    <h3 className="text-3xl font-extrabold text-slate-800">{loading ? '...' : openCount}</h3>
+                    <h3 className="text-3xl font-extrabold text-slate-800">{openCount ?? '...'}</h3>
                 </div>
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] flex flex-col border-l-4 border-l-[#660033]">
                     <div className="flex justify-between items-start mb-4">
@@ -144,14 +169,14 @@ export default function Support() {
                         <Clock size={16} className="text-slate-300 mt-2" />
                     </div>
                     <p className="text-sm font-bold text-slate-500 mb-1">تم الرد عليها</p>
-                    <h3 className="text-3xl font-extrabold text-slate-800">{loading ? '...' : inProgressCount}</h3>
+                    <h3 className="text-3xl font-extrabold text-slate-800">{inProgressCount ?? '...'}</h3>
                 </div>
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] flex flex-col border-l-4 border-l-emerald-500">
                     <div className="flex justify-between items-start mb-4">
                         <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center"><CheckCircle2 size={20} /></div>
                     </div>
                     <p className="text-sm font-bold text-slate-500 mb-1">تم الحل / الإغلاق</p>
-                    <h3 className="text-3xl font-extrabold text-slate-800">{loading ? '...' : closedCount}</h3>
+                    <h3 className="text-3xl font-extrabold text-slate-800">{closedCount ?? '...'}</h3>
                 </div>
             </div>
 
@@ -170,6 +195,18 @@ export default function Support() {
                         {loading ? (
                             <div className="flex items-center justify-center h-40">
                                 <div className="animate-spin rounded-full h-8 w-8 border-4 border-[#660033] border-t-transparent" />
+                            </div>
+                        ) : loadError ? (
+                            // حالة خطأ صريحة لا «لا توجد تذاكر» — الفراغ عند الفشل مضلّل.
+                            <div className="flex flex-col items-center justify-center gap-3 py-10 px-4 bg-rose-50/60 rounded-xl border border-rose-100 m-2">
+                                <p className="text-rose-600 text-sm font-bold text-center">تعذّر تحميل التذاكر — تحقّق من الاتصال أو الصلاحيات</p>
+                                <button
+                                    type="button"
+                                    onClick={() => { setLoadError(false); setLoading(true); setRetryKey(k => k + 1); }}
+                                    className="px-4 py-2 bg-rose-600 text-white rounded-lg font-bold text-sm hover:bg-rose-700 transition-colors"
+                                >
+                                    إعادة المحاولة
+                                </button>
                             </div>
                         ) : filteredTickets.length === 0 ? (
                             <p className="text-center text-slate-400 text-sm py-10 font-bold">لا توجد تذاكر دعم حالياً</p>

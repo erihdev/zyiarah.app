@@ -86,8 +86,17 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   ZyiarahUser? _currentUser;
   bool _agreeToTerms = false;
   bool _tamaraEnabled = false;
-  double _walletBalance = 0.0;
+  // null = لم يُجلب بعد أو فشل الجلب — كان double بقيمة 0.0 فيُعرض «الرصيد: 0.00»
+  // كاذباً عند فشل الجلب ويُرفض الدفع بالمحفظة برسالة «رصيدك 0.00» لعميلٍ يملك
+  // رصيداً حقيقياً (الاسترداد يُقيَّد للمحفظة خادمياً). null يميّز «لا نعرف» عن «صفر».
+  double? _walletBalance;
+  bool _walletFetchFailed = false;
   double _surgeFactor = 1.0;
+
+  /// هل أُنشئ مستند orders/{_pendingOrderId} في محاولة دفع سابقة؟ إعادة كتابته
+  /// تُرفض من قواعد Firestore (permission-denied) ومبلغه مجمّد على قديمه —
+  /// فحين يصير المعرّف «محروقاً» نسكّ غيره (انظر _mintFreshPendingOrderId).
+  bool _pendingOrderCreated = false;
 
   final TextEditingController _couponController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
@@ -188,12 +197,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         });
 
         // Fetch wallet balance separately
-        try {
-          final wallet = await ZyiarahWalletService().getOrCreateWallet(user.uid);
-          if (mounted) setState(() => _walletBalance = wallet.balance);
-        } catch (e) {
-          debugPrint('Error fetching wallet balance: $e');
-        }
+        await _fetchWalletBalance();
 
         // Fetch surge pricing factor — يُطبَّق على المبلغ قبل عرضه للعميل
         try {
@@ -201,13 +205,54 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               .httpsCallable('getSurgePricingFactor').call();
           final factor = (surgeResult.data['surgeFactor'] as num? ?? 1.0).toDouble();
           if (mounted && factor != _surgeFactor) {
-            setState(() => _surgeFactor = factor);
+            setState(() {
+              _surgeFactor = factor;
+              // تغيّر الإجمالي بعد إنشاء مستند الطلب = مبلغه مجمّد متقادم — معرّف جديد.
+              if (_pendingOrderCreated) _mintFreshPendingOrderId();
+            });
           }
         } catch (e) {
           debugPrint('Surge pricing fetch failed, using 1.0: $e');
         }
       }
     }
+  }
+
+  /// جلب رصيد المحفظة — قابل لإعادة الاستدعاء من زر «إعادة المحاولة» في بطاقة
+  /// المحفظة. الفشل كان يُبتلع بـ debugPrint فقط فيبقى الرصيد 0.00 كاذباً بلا
+  /// أي مسار لإعادة الجلب.
+  Future<void> _fetchWalletBalance() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    if (mounted && _walletFetchFailed) {
+      // إظهار «جارٍ تحميل الرصيد…» أثناء إعادة المحاولة بدل إبقاء رسالة الفشل.
+      setState(() => _walletFetchFailed = false);
+    }
+    try {
+      final wallet = await ZyiarahWalletService().getOrCreateWallet(user.uid);
+      if (mounted) {
+        setState(() {
+          _walletBalance = wallet.balance;
+          _walletFetchFailed = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching wallet balance: $e');
+      if (mounted) setState(() => _walletFetchFailed = true);
+    }
+  }
+
+  /// يسكّ معرّف طلب جديداً (ومعه يتغيّر given_id المشتق منه لميسر) — يُستدعى حين
+  /// يصير المعرّف الحالي «محروقاً»:
+  ///  • مستنده أُنشئ في محاولة سابقة: إعادة كتابته تُرفض من قواعد Firestore
+  ///    (فكانت كل محاولة دفع ثانية تفشل بـ permission-denied)، ومبلغه مجمّد على
+  ///    قديمه فيرفض الخادم تطابق المبلغ إن تغيّر الإجمالي (كوبون/ذروة).
+  ///  • أو استهلكت دفعةٌ فاشلة نهائياً given_id المشتق منه لدى ميسر، فإعادة
+  ///    المحاولة بنفسه تُعيد الدفعة الفاشلة ذاتها.
+  /// يُستدعى داخل setState كي تُعاد بناء أزرار الدفع الأصلية بالمعرّف الجديد.
+  void _mintFreshPendingOrderId() {
+    _pendingOrderId = FirebaseFirestore.instance.collection('orders').doc().id;
+    _pendingOrderCreated = false;
   }
 
   // الحسابات المالية الصحيحة (بافتراض أن المبلغ شامل للضريبة، مع تطبيق Surge)
@@ -302,6 +347,13 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       String msg = 'فشل الدفع عبر Apple Pay';
       if (result is ApiError) msg = result.message;
       if (result is ValidationError) msg = result.message;
+      // فشل نهائي سجّلته ميسر (رفض/PaymentResponse غير مدفوعة أو ApiError)
+      // يستهلك given_id الحالي — إعادة المحاولة به تُعيد الدفعة الفاشلة نفسها.
+      // نسكّ معرّفاً جديداً للمحاولة التالية. (ValidationError محلي بلا سجل لدى
+      // ميسر، وNetworkError مجهول النتيجة — نُبقي المعرّف لمنع الشحن المزدوج.)
+      if (result is ApiError || result is PaymentResponse) {
+        setState(_mintFreshPendingOrderId);
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(msg, style: GoogleFonts.tajawal()),
@@ -328,6 +380,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       if (result is ApiError) msg = result.message;
       if (result is ValidationError) msg = result.message;
       if (result is NetworkError) msg = 'تعذّر الاتصال — يرجى المحاولة مجدداً';
+      // فشل نهائي سجّلته ميسر يستهلك given_id — معرّف جديد للمحاولة التالية
+      // (لا نسكّ على NetworkError: النتيجة مجهولة والثبات يمنع الشحن المزدوج).
+      if (result is ApiError || result is PaymentResponse) {
+        setState(_mintFreshPendingOrderId);
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(msg, style: GoogleFonts.tajawal()),
@@ -387,6 +444,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             const SnackBar(content: Text("كود الخصم غير صحيح أو منتهي"), backgroundColor: Colors.red),
           );
         }
+        // تغيّر الإجمالي (تطبيق/إبطال كوبون) بعد إنشاء مستند الطلب في محاولة
+        // سابقة: مبلغ المستند مجمّد على القديم والقواعد تمنع تحديثه من العميل —
+        // فالدفع الأصلي (Apple/Google/Samsung) يشحن الجديد ويرفض الخادم تطابق
+        // المبلغ فيبقى الطلب غير مؤكد رغم الخصم. معرّف جديد ⇒ ينشئ الخادم
+        // الطلب من metadata الدفعة بالمبلغ الصحيح.
+        if (_pendingOrderCreated) _mintFreshPendingOrderId();
       });
     }
   }
@@ -558,6 +621,15 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         });
       }
 
+      // (إعادة محاولة) مستند الطلب أُنشئ في محاولة سابقة فشلت/أُلغيت: إعادة
+      // كتابته كانت تُرفض من قواعد Firestore (permission-denied) فتفشل **كل**
+      // محاولة دفع ثانية من هذه الشاشة حتى يهجر العميل الحجز كاملاً. نسكّ
+      // معرّفاً جديداً للمحاولة — ومعه given_id جديد لميسر، فلا يصطدم بدفعة
+      // فاشلة استهلكت القديم، وبمبلغٍ حاضر لا مجمّد من المحاولة الأولى.
+      if (_pendingOrderCreated) {
+        setState(_mintFreshPendingOrderId);
+      }
+
       final String finalOrderId = _pendingOrderId;
 
       if (_selectedPaymentMethod == 'subscription') {
@@ -565,12 +637,28 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
       } else if (_selectedPaymentMethod == 'wallet') {
         // --- Wallet Payment: Atomic balance deduction ---
-        if (_walletBalance < totalWithVat) {
+        // رصيد غير مجلوب (فشل الجلب) ≠ رصيد صفري: لا نتهم العميل بأن «رصيدك
+        // 0.00» من قيمة لم تُجلب أصلاً — نعيد الجلب فعلياً ونطلب المحاولة.
+        if (_walletBalance == null) {
+          setState(() => _isLoading = false);
+          _fetchWalletBalance();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+              'تعذّر التحقق من رصيد محفظتك — يرجى المحاولة مجدداً',
+              style: GoogleFonts.tajawal(),
+            ),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ));
+          return;
+        }
+        if (_walletBalance! < totalWithVat) {
           setState(() => _isLoading = false);
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(
-              'رصيد محفظتك غير كافٍ. رصيدك الحالي: ${_walletBalance.toStringAsFixed(2)} ر.س',
+              'رصيد محفظتك غير كافٍ. رصيدك الحالي: ${_walletBalance!.toStringAsFixed(2)} ر.س',
               style: GoogleFonts.tajawal(),
             ),
             backgroundColor: Colors.red.shade700,
@@ -777,10 +865,17 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   /// بعد أن يقلب الـ webhook is_paid). checkout_screen يتخطّى الإنشاء إن وُجد.
   Future<void> _createUnpaidServiceOrder(String id, {String method = 'tamara'}) async {
     final bool isHourly = widget.hours != null && widget.serviceDate != null;
+    final orderRef = FirebaseFirestore.instance.collection('orders').doc(id);
     await FirebaseFirestore.instance.runTransaction((transaction) async {
+      // حارس وجود (كما في _processUnifiedSuccess): إعادة كتابة مستند قائم تُقيَّم
+      // كتحديث تمنعه قواعد Firestore فتفشل المعاملة كلها بـ permission-denied.
+      // القراءة قبل العدّاد (قراءات المعاملة قبل كتاباتها إلزاماً) — وتوفّر أيضاً
+      // حرق رقم طلب على محاولة مكررة (نقرة مزدوجة متسارعة مثلاً).
+      final snap = await transaction.get(orderRef);
+      if (snap.exists) return;
       final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
       final code = ZyiarahOrderUtil.formatSmartCode(nextId);
-      transaction.set(FirebaseFirestore.instance.collection('orders').doc(id), {
+      transaction.set(orderRef, {
         'code': code,
         'client_id': _currentUser?.uid,
         'client_name': _currentUser?.name ?? 'عميل زيارة',
@@ -811,6 +906,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         },
       });
     });
+    // المستند الآن قائم بمبلغ هذه اللحظة — أي محاولة/تغيير لاحق يسكّ معرّفاً جديداً.
+    _pendingOrderCreated = true;
   }
 
   /// بيانات الطلب الكاملة داخل metadata الدفعة — كي يستطيع verifyMoyasarPayment خادميّاً
@@ -967,7 +1064,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           await FirebaseFunctions.instance.httpsCallable('payContractWithWallet').call({
             'contractId': widget.contractId,
           });
-          if (mounted) setState(() => _walletBalance -= amountToSave);
+          if (mounted && _walletBalance != null) {
+            setState(() => _walletBalance = _walletBalance! - amountToSave);
+          }
         } else if (paymentId != null) {
           try {
             await FirebaseFunctions.instance.httpsCallable('verifyMoyasarPayment').call({
@@ -984,7 +1083,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           'orderId': id,
           'description': 'دفع خدمة: ${widget.serviceName}',
         });
-        if (mounted) setState(() => _walletBalance -= amountToSave);
+        if (mounted && _walletBalance != null) {
+          setState(() => _walletBalance = _walletBalance! - amountToSave);
+        }
       } else if (paymentId != null) {
         try {
           await FirebaseFunctions.instance.httpsCallable('verifyMoyasarPayment').call({
@@ -1373,6 +1474,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                       setState(() {
                         _appliedCoupon = null;
                         _discountAmount = 0.0;
+                        // الإجمالي تغيّر ومستند الطلب (إن وُجد) مجمّد على القديم.
+                        if (_pendingOrderCreated) _mintFreshPendingOrderId();
                       });
                     }
                   },
@@ -1616,7 +1719,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
   Widget _buildWalletPaymentOption() {
     final bool isSelected = _selectedPaymentMethod == 'wallet';
-    final bool hasSufficientBalance = _walletBalance >= totalWithVat;
+    final double? balance = _walletBalance;
+    final bool hasSufficientBalance = balance != null && balance >= totalWithVat;
     return InkWell(
       onTap: () => setState(() => _selectedPaymentMethod = 'wallet'),
       child: Container(
@@ -1654,26 +1758,65 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('محفظة زيارة', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 14)),
-                  Row(
-                    children: [
-                      Text(
-                        'الرصيد: ${_walletBalance.toStringAsFixed(2)} ر.س',
-                        style: GoogleFonts.tajawal(
-                          fontSize: 11,
-                          color: hasSufficientBalance ? Colors.green.shade700 : Colors.red.shade600,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      if (!hasSufficientBalance)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: Text(
-                            '(رصيد غير كافٍ)',
-                            style: GoogleFonts.tajawal(fontSize: 10, color: Colors.red.shade400),
+                  // ثلاث حالات صادقة بدل «0.00» الكاذبة عند فشل الجلب:
+                  // فشل ⇒ رسالة + «إعادة المحاولة» تعيد الجلب فعلاً؛ جارٍ ⇒ نص
+                  // تحميل؛ رصيد حقيقي ⇒ العرض المعتاد.
+                  if (balance == null && _walletFetchFailed)
+                    Row(
+                      children: [
+                        Text(
+                          'تعذّر جلب الرصيد',
+                          style: GoogleFonts.tajawal(
+                            fontSize: 11,
+                            color: Colors.red.shade600,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                    ],
-                  ),
+                        const SizedBox(width: 6),
+                        InkWell(
+                          onTap: _fetchWalletBalance,
+                          child: Text(
+                            'إعادة المحاولة',
+                            style: GoogleFonts.tajawal(
+                              fontSize: 11,
+                              color: const Color(0xFF660033),
+                              fontWeight: FontWeight.bold,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  else if (balance == null)
+                    Text(
+                      'جارٍ تحميل الرصيد…',
+                      style: GoogleFonts.tajawal(
+                        fontSize: 11,
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w600,
+                      ),
+                    )
+                  else
+                    Row(
+                      children: [
+                        Text(
+                          'الرصيد: ${balance.toStringAsFixed(2)} ر.س',
+                          style: GoogleFonts.tajawal(
+                            fontSize: 11,
+                            color: hasSufficientBalance ? Colors.green.shade700 : Colors.red.shade600,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (!hasSufficientBalance)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: Text(
+                              '(رصيد غير كافٍ)',
+                              style: GoogleFonts.tajawal(fontSize: 10, color: Colors.red.shade400),
+                            ),
+                          ),
+                      ],
+                    ),
                 ],
               ),
             ),

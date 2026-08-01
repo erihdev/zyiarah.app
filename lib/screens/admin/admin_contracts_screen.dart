@@ -29,6 +29,12 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
 
   bool get _canDeleteContracts => const ['admin', 'super_admin'].contains(_role);
 
+  // اعتماد العقد عملية إدارة طلبات (يغيّر status ويطلق إشعار العميل) — حكرها
+  // على مديري الطلبات كسائر إجراءات الإدارة، لا للمحاسب/التسويق الواصلَين من
+  // بطاقة الرؤى للعرض فقط.
+  bool get _canApproveContracts =>
+      const ['admin', 'super_admin', 'orders_manager'].contains(_role);
+
   @override
   void initState() {
     super.initState();
@@ -124,6 +130,13 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
+                  }
+
+                  // خطأ البثّ كان يُعرض «لا توجد عقود حالياً» — لا يميّزه الأدمن
+                  // عن مجموعة فارغة فعلاً. نُظهر خطأً صريحاً مع إعادة محاولة
+                  // (setState يعيد الاشتراك لأن خطأ الاستماع يُنهي البثّ نهائياً).
+                  if (snapshot.hasError) {
+                    return _buildErrorState();
                   }
 
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -229,7 +242,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Row(
               children: [
-                if (status == 'pending')
+                if (status == 'pending' && _canApproveContracts)
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () => _approveContract(doc),
@@ -492,6 +505,27 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
           Icon(Icons.description_outlined, size: 80, color: Colors.grey[200]),
           const SizedBox(height: 16),
           Text("لا توجد عقود حالياً", style: GoogleFonts.tajawal(fontSize: 18, color: Colors.grey, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  // خطأ ≠ فارغ: رسالة حمراء صريحة وزر إعادة محاولة يعيد الاشتراك في البثّ.
+  Widget _buildErrorState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline_rounded, size: 80, color: Colors.red[300]),
+          const SizedBox(height: 16),
+          Text("تعذّر تحميل العقود", style: GoogleFonts.tajawal(fontSize: 18, color: Colors.red[700], fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: () => setState(() {}),
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: Text("إعادة المحاولة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(backgroundColor: brandPurple, foregroundColor: Colors.white),
+          ),
         ],
       ),
     );

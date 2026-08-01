@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Search, FileSignature, CheckCircle2, Clock, XCircle, AlertCircle, Calendar, CreditCard, Trash2, Info, Package, Plus, Pencil, Star, Loader2 } from 'lucide-react';
-import { collection, onSnapshot, query, orderBy, Timestamp, doc, updateDoc, deleteDoc, addDoc, serverTimestamp, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, limit, Timestamp, doc, updateDoc, deleteDoc, addDoc, serverTimestamp, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
 
@@ -289,9 +289,14 @@ export default function Contracts() {
     const [searchTerm, setSearchTerm] = useState('');
     const [contracts, setContracts] = useState<ContractRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    // فشل المستمع نهائي — حالة خطأ صريحة بزر إعادة بدل «لا توجد سجلات» المضلّلة.
+    const [loadError, setLoadError] = useState(false);
+    const [retryKey, setRetryKey] = useState(0);
 
     useEffect(() => {
-        const q = query(collection(db, 'contracts'), orderBy('createdAt', 'desc'));
+        // (أداء) أحدث 300 عقد فقط — كانت المجموعة كلها تُقرأ بلا حد
+        // (تطبيق الأدمن مسقوف أصلاً في admin_contracts_screen).
+        const q = query(collection(db, 'contracts'), orderBy('createdAt', 'desc'), limit(300));
         const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
             const fetched = snapshot.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => ({
                 id: doc.id,
@@ -299,9 +304,13 @@ export default function Contracts() {
             }));
             setContracts(fetched);
             setLoading(false);
-        }, (e) => { console.error("Contracts listener error:", e); setLoading(false); });
+        }, (e) => {
+            console.error("Contracts listener error:", e);
+            setLoading(false);
+            setLoadError(true);
+        });
         return () => unsubscribe();
-    }, []);
+    }, [retryKey]);
 
     const handleApprove = async (id: string, planName: string, userId?: string) => {
         if (!await confirm(`هل أنت متأكد من رغبتك في اعتماد عقد (${planName})؟`)) return;
@@ -357,7 +366,7 @@ export default function Contracts() {
                     </div>
                     <div>
                         <h2 className="text-2xl font-black text-slate-800 tracking-tight">مركز العقود الرقمية</h2>
-                        <p className="text-slate-500 font-medium text-sm">إدارة واعتماد عقود الإشتراكات والخدمات المنزلية</p>
+                        <p className="text-slate-500 font-medium text-sm">إدارة واعتماد عقود الإشتراكات والخدمات المنزلية — يعرض أحدث 300 عقد</p>
                     </div>
                 </div>
             </div>
@@ -400,6 +409,18 @@ export default function Contracts() {
                 <div className="flex flex-col items-center justify-center h-64 bg-white rounded-[32px] border-2 border-dashed border-slate-100">
                     <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#660033] border-t-transparent shadow-md"></div>
                     <p className="text-slate-500 mt-6 font-black text-lg">جاري جرد العقود...</p>
+                </div>
+            ) : loadError ? (
+                // حالة خطأ صريحة لا «لا توجد سجلات» — الفراغ عند الفشل مضلّل.
+                <div className="flex flex-col items-center justify-center h-64 gap-4 bg-rose-50 rounded-[32px] border-2 border-rose-100">
+                    <p className="text-rose-600 font-bold">تعذّر تحميل العقود — تحقّق من الاتصال أو الصلاحيات</p>
+                    <button
+                        type="button"
+                        onClick={() => { setLoadError(false); setLoading(true); setRetryKey(k => k + 1); }}
+                        className="px-6 py-3 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-colors"
+                    >
+                        إعادة المحاولة
+                    </button>
                 </div>
             ) : filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-20 bg-white rounded-[32px] border-2 border-dashed border-slate-100">
