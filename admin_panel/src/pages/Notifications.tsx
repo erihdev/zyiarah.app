@@ -225,7 +225,7 @@ export default function Notifications() {
                                     <label className="block text-sm font-extrabold text-slate-700 mb-2">القسم المستهدف عند الضغط</label>
                                     <select title="القسم المستهدف" className="w-full bg-[#f8fafc] border border-slate-200 text-slate-700 text-xs rounded-xl px-4 py-3 outline-none focus:border-[#8E2B5C] font-bold" value={targetSection} onChange={e => setTargetSection(e.target.value)}>
                                         <option value="home">الرئيسية</option>
-                                        <option value="hourly">التنظيف بالساعة</option>
+                                        <option value="hourly">التنظيف المنزلي</option>
                                         <option value="family_basket">سلة العائلة (الباقات)</option>
                                         <option value="maintenance">قسم الصيانة</option>
                                         <option value="contracts">العقود الإلكترونية</option>

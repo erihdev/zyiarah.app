@@ -83,7 +83,7 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
 
     final List<Map<String, String>> routingOptions = [
       {'value': 'whatsapp', 'label': 'رابط واتساب (خارجي)'},
-      {'value': '/hourly_cleaning', 'label': 'خدمة النظافة بالساعة'},
+      {'value': '/hourly_cleaning', 'label': 'خدمة التنظيف المنزلي'},
       {'value': '/sofa_cleaning', 'label': 'خدمة تنظيف الكنب'},
       {'value': '/rug_cleaning', 'label': 'خدمة تنظيف الزل'},
       {'value': '/store', 'label': 'المتجر'},

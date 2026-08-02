@@ -537,7 +537,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     ),
 
                     const Divider(height: 30),
-                    const Text("باقات السكن — النظافة بالساعة (ر.س، قبل الضريبة):",
+                    const Text("باقات السكن — التنظيف المنزلي (ر.س، قبل الضريبة):",
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     const Text(
                         "السعر لكل خيار يشمل كامل الكوادر. المفتاح يفعّل/يعطّل الخيار لهذه المنطقة — المعطَّل/الصفر لا يظهر للعميل. «المدة» تحجز فترة السائق ولا تظهر للعميل.",

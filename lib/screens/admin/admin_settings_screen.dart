@@ -297,7 +297,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                           const Padding(
                             padding: EdgeInsets.only(top: 6, bottom: 4),
                             child: Text(
-                              "تُضاف على أسعار الطلبات عند الطلب (بالساعة والكنب والمكيفات) وتظهر للعميل في الفاتورة.\n"
+                              "تُضاف على أسعار الطلبات عند الطلب (التنظيف المنزلي والكنب والمكيفات) وتظهر للعميل في الفاتورة.\n"
                               "0 = بلا ذروة (السعر كما هو). مثال: 15 = زيادة 15%. الحد الأقصى 100.",
                               style: TextStyle(fontSize: 11, color: Colors.grey, height: 1.5),
                             ),

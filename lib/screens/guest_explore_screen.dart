@@ -11,9 +11,9 @@ class GuestExploreScreen extends StatelessWidget {
 
   static const List<_ServiceItem> _services = [
     _ServiceItem(
-      title: 'خدمة بالساعة',
-      subtitle: 'عاملة منزلية بالساعة',
-      price: 'من 50 ر.س',
+      title: 'تنظيف منزلي',
+      subtitle: 'باقة حسب نوع سكنك وعدد الكوادر',
+      price: 'حسب الباقة',
       themeColor: Color(0xFF10B981),
       iconBgColor: Color(0xFFE1F0E4),
       icon: Icons.access_time_filled,

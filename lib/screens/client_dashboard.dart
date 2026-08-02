@@ -581,7 +581,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
                       );
                     }
                   } else if (routeType == '/hourly_cleaning') {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const HourlyCleaningDetailsScreen(serviceName: "نظافة بالساعة")));
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const HourlyCleaningDetailsScreen(serviceName: "تنظيف منزلي")));
                   } else if (routeType == '/store') {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahStoreScreen()));
                   } else if (routeType == '/support') {
@@ -669,7 +669,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           icon: Icons.access_time_filled,
           iconBgColor: const Color(0xFFE1F0E4),
           imagePath: 'assets/images/hourly_cleaning.png',
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HourlyCleaningDetailsScreen(serviceName: "نظافة بالساعة"))),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HourlyCleaningDetailsScreen(serviceName: "تنظيف منزلي"))),
         ),
         _buildWebStyleServiceCard(
           title: "تنظيف الكنب والزل",

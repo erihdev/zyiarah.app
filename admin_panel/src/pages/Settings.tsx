@@ -1167,7 +1167,7 @@ export default function Settings() {
                                             </div>
 
                                             <div>
-                                                <h5 className="font-black text-slate-800 text-sm mb-1">باقات السكن — النظافة بالساعة (ر.س، قبل الضريبة)</h5>
+                                                <h5 className="font-black text-slate-800 text-sm mb-1">باقات السكن — التنظيف المنزلي (ر.س، قبل الضريبة)</h5>
                                                 <p className="text-xs text-slate-400 mb-2">السعر لكل خيار يشمل كامل الكوادر. المفتاح يفعّل/يعطّل الخيار لهذه المحافظة — المعطَّل أو الصفر لا يظهر للعميل. «المدة» تحجز فترة السائق ولا تظهر للعميل.</p>
                                                 <div className="space-y-3">
                                                     {HOME_TYPES.map(t => {

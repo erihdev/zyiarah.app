@@ -203,7 +203,7 @@ class ZyiarahPopupService {
       // نفس قاعدة 'maintenance' أدناه: بانر لا يفعل شيئاً = فشل صامت،
       // والشاشة حيّة ومستخدمة من client_dashboard بنفس الاستدعاء.
       case 'hourly':
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const HourlyCleaningDetailsScreen(serviceName: "نظافة بالساعة")));
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const HourlyCleaningDetailsScreen(serviceName: "تنظيف منزلي")));
         break;
       case 'family_basket':
         Navigator.push(context, MaterialPageRoute(builder: (context) => const ZyiarahSubscriptionPlansScreen()));

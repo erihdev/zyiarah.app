@@ -577,7 +577,16 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       final meta = (d.data() as Map)['service_meta'];
       return meta is Map && meta['kind'] == 'store_products';
     }).length;
-    int cleaningCount = orders.where((d) => (d.data() as Map)['service_name']?.toString().contains('نظافة') ?? false).length;
+    // التصنيف بالنوع أولاً (home_package) لا بالاسم: الاسم صار وصفياً
+    // («تنظيف منزلي — شقة …») فالمطابقة على «نظافة» وحدها كانت ستُسقِط
+    // كل الطلبات الجديدة من شريحة التنظيف. الاسم يبقى لالتقاط القديم.
+    int cleaningCount = orders.where((d) {
+      final data = d.data() as Map;
+      final meta = data['service_meta'];
+      if (meta is Map && meta['kind'] == 'home_package') return true;
+      final name = data['service_name']?.toString() ?? '';
+      return name.contains('نظافة') || name.contains('تنظيف منزلي');
+    }).length;
     int otherServicesCount = orders.length - cleaningCount - clientStoreCount;
     int storeCount = _storeOrders.length + clientStoreCount;
     int total = (maintenanceCount + cleaningCount + otherServicesCount + storeCount);
@@ -636,7 +645,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       final data = doc.data() as Map<String, dynamic>;
       activities.add({
         'title': data['service_name'] ?? 'خدمة عامة',
-        'subtitle': 'طلب نظافة جديد - ${data['amount']} ر.س',
+        'subtitle': 'طلب تنظيف جديد - ${data['amount']} ر.س',
         'time': data['created_at'],
         'icon': Icons.cleaning_services_rounded,
         'color': const Color(0xFF2563EB),
@@ -748,7 +757,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
           childAspectRatio: MediaQuery.of(context).size.width > 600 ? 1.3 : 1.15,
           children: [
             _buildLuxuryRequestCard(
-              title: "خدمات بالساعة",
+              title: "الطلبات المجدولة",
               count: cleaningNew,
               icon: Icons.cleaning_services_rounded,
               gradient: const [Color(0xFF1E293B), Color(0xFF475569)], // Gray/Slate

@@ -372,7 +372,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       context,
       MaterialPageRoute(
         builder: (context) => const LocationPickerScreen(
-          serviceName: "تحديد موقع النظافة بالساعة",
+          serviceName: "تحديد موقع التنظيف المنزلي",
         ),
       ),
     );
@@ -732,7 +732,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                         ),
                       ),
                     ] else ...[
-                       const Center(child: Text("يرجى تحديد الموقع الجغرافي لعرض باقات النظافة بالساعة والأسعار المخصصة لمنطقتك.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, height: 1.5))),
+                       const Center(child: Text("يرجى تحديد الموقع الجغرافي لعرض باقات التنظيف المنزلي والأسعار المخصصة لمنطقتك.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, height: 1.5))),
                     ]
                   ],
                 ),

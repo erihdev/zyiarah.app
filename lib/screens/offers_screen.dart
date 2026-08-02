@@ -35,7 +35,7 @@ class ZyiarahOffersScreen extends StatelessWidget {
     Widget? dest;
     switch (routeType) {
       case '/hourly_cleaning':
-        dest = const HourlyCleaningDetailsScreen(serviceName: 'نظافة بالساعة');
+        dest = const HourlyCleaningDetailsScreen(serviceName: 'تنظيف منزلي');
         break;
       case '/store':
         dest = const ZyiarahStoreScreen();
