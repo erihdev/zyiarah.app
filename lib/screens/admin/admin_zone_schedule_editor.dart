@@ -43,6 +43,10 @@ class _ZoneScheduleEditorState extends State<ZoneScheduleEditor> {
         open: w?['open'] == true,
         start: (w?['start'] as num?)?.toInt() ?? 8,
         end: (w?['end'] as num?)?.toInt() ?? 22,
+        // (تحكم المالك ساعة-بساعة) ساعات مقفلة داخل النطاق.
+        closed: ((w?['closed'] as List?) ?? [])
+            .map((h) => (h as num).toInt())
+            .toSet(),
       );
     }
     for (final b in (s?['blackouts'] as List?) ?? []) {
@@ -65,7 +69,17 @@ class _ZoneScheduleEditorState extends State<ZoneScheduleEditor> {
       'enabled': _enabled,
       'weekly': {
         for (final e in _weekly.entries)
-          '${e.key}': {'open': e.value.open, 'start': e.value.start, 'end': e.value.end},
+          '${e.key}': {
+            'open': e.value.open,
+            'start': e.value.start,
+            'end': e.value.end,
+            // تُحفظ فقط الساعات الواقعة داخل النطاق الحالي — تغيير النطاق
+            // لا يُبقي أشباح ساعات مقفلة خارج حدوده.
+            'closed': (e.value.closed
+                    .where((h) => h >= e.value.start && h < e.value.end)
+                    .toList()
+                  ..sort()),
+          },
       },
       'blackouts': List<String>.from(_blackouts),
       'windows': _windows
@@ -99,6 +113,9 @@ class _ZoneScheduleEditorState extends State<ZoneScheduleEditor> {
         ),
         if (_enabled) ...[
           _sectionLabel('أيام العمل الأسبوعية'),
+          Text('اضغط على أي ساعة أسفل اليوم لقفلها (تحمرّ) أو فتحها — المقفلة لا تُحجز.',
+              style: GoogleFonts.tajawal(fontSize: 10, color: Colors.grey)),
+          const SizedBox(height: 4),
           ...List.generate(7, _weeklyRow),
           const SizedBox(height: 12),
           _sectionLabel('فتح استثنائي بتواريخ محددة (يتجاوز الأسبوعي)'),
@@ -149,40 +166,92 @@ class _ZoneScheduleEditorState extends State<ZoneScheduleEditor> {
     final d = _weekly[day]!;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 74,
-            child: Text(_dayNames[day], style: GoogleFonts.tajawal(fontSize: 12)),
-          ),
-          Switch(
-            value: d.open,
-            activeThumbColor: const Color(0xFF059669),
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            onChanged: (v) => setState(() {
-              d.open = v;
-              _emit();
-            }),
-          ),
-          if (d.open) ...[
-            Expanded(child: _hourDropdown(d.start, (v) => setState(() {
-                  d.start = v;
-                  if (d.end <= v) d.end = (v + 1).clamp(1, 23);
+          Row(
+            children: [
+              SizedBox(
+                width: 74,
+                child:
+                    Text(_dayNames[day], style: GoogleFonts.tajawal(fontSize: 12)),
+              ),
+              Switch(
+                value: d.open,
+                activeThumbColor: const Color(0xFF059669),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                onChanged: (v) => setState(() {
+                  d.open = v;
                   _emit();
-                }))),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 4),
-              child: Text('→', style: TextStyle(color: Color(0xFF94A3B8))),
-            ),
-            Expanded(child: _hourDropdown(d.end, (v) => setState(() {
-                  d.end = v;
-                  if (d.start >= v) d.start = (v - 1).clamp(0, 22);
-                  _emit();
-                }))),
-          ] else
-            Expanded(
-              child: Text('مغلق',
-                  style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey)),
+                }),
+              ),
+              if (d.open) ...[
+                Expanded(child: _hourDropdown(d.start, (v) => setState(() {
+                      d.start = v;
+                      if (d.end <= v) d.end = (v + 1).clamp(1, 23);
+                      _emit();
+                    }))),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4),
+                  child: Text('→', style: TextStyle(color: Color(0xFF94A3B8))),
+                ),
+                Expanded(child: _hourDropdown(d.end, (v) => setState(() {
+                      d.end = v;
+                      if (d.start >= v) d.start = (v - 1).clamp(0, 22);
+                      _emit();
+                    }))),
+              ] else
+                Expanded(
+                  child: Text('مغلق',
+                      style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey)),
+                ),
+            ],
+          ),
+          // (طلب المالك) تحكم ساعة-بساعة داخل النطاق: نقرة تقفل الساعة (تحمرّ)
+          // ونقرة تفتحها — المقفلة تُعامل كممتلئة فلا يحجزها أحد.
+          if (d.open)
+            Padding(
+              padding: const EdgeInsets.only(right: 74, bottom: 6),
+              child: Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: [
+                  for (int h = d.start; h < d.end; h++)
+                    GestureDetector(
+                      onTap: () => setState(() {
+                        if (!d.closed.remove(h)) d.closed.add(h);
+                        _emit();
+                      }),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: d.closed.contains(h)
+                              ? const Color(0xFFFEE2E2)
+                              : const Color(0xFFF0FDF4),
+                          borderRadius: BorderRadius.circular(7),
+                          border: Border.all(
+                              color: d.closed.contains(h)
+                                  ? const Color(0xFFFCA5A5)
+                                  : const Color(0xFFBBF7D0)),
+                        ),
+                        child: Text(
+                          formatHour12(h),
+                          style: GoogleFonts.tajawal(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: d.closed.contains(h)
+                                ? const Color(0xFFDC2626)
+                                : const Color(0xFF15803D),
+                            decoration: d.closed.contains(h)
+                                ? TextDecoration.lineThrough
+                                : null,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
         ],
       ),
@@ -328,7 +397,15 @@ class _DayHours {
   bool open;
   int start;
   int end;
-  _DayHours({required this.open, required this.start, required this.end});
+
+  /// ساعات أقفلها المالك داخل النطاق — تُعامل كساعات ممتلئة فلا تُحجز.
+  Set<int> closed;
+  _DayHours(
+      {required this.open,
+      required this.start,
+      required this.end,
+      Set<int>? closed})
+      : closed = closed ?? {};
 }
 
 class _Window {

@@ -4509,13 +4509,20 @@ exports.checkHourlySlotAvailability = onCall({cpu: 0.25}, async (request) => {
 const DEFAULT_OPEN = [8, 22];
 
 /**
- * ساعات فتح المنطقة في تاريخ محدد، أو null إن كانت مغلقة.
+ * جدول المنطقة في تاريخ محدد: نطاق الفتح + الساعات المقفلة داخله، أو null (مغلق).
+ * `closed` (تحكم المالك ساعة-بساعة): ساعاتٌ داخل النطاق أقفلها من محرر الجدول —
+ * تُعامَل في كل الحسابات كساعةٍ ممتلئة فلا تُحجز.
  * @param {object|undefined} schedule
  * @param {string} dateStr yyyy-MM-dd
- * @return {number[]|null} [startHour, endHour] أو null (مغلق)
+ * @return {{range: number[], closed: number[]}|null}
  */
-function zoneOpenHoursForDate(schedule, dateStr) {
-  if (!schedule || schedule.enabled !== true) return DEFAULT_OPEN;
+function zoneDayScheduleForDate(schedule, dateStr) {
+  if (!schedule || schedule.enabled !== true) {
+    return {range: DEFAULT_OPEN, closed: []};
+  }
+
+  const closedOf = (entry) => (Array.isArray(entry.closed) ? entry.closed : [])
+      .map(Number).filter(Number.isInteger);
 
   const blackouts = Array.isArray(schedule.blackouts) ? schedule.blackouts : [];
   if (blackouts.includes(dateStr)) return null; // إغلاق صريح يتقدّم كل شيء
@@ -4525,7 +4532,9 @@ function zoneOpenHoursForDate(schedule, dateStr) {
   for (const w of windows) {
     if (w && w.from && w.to && dateStr >= w.from && dateStr <= w.to) {
       const s = Number(w.start); const e = Number(w.end);
-      if (Number.isInteger(s) && Number.isInteger(e) && e > s) return [s, e];
+      if (Number.isInteger(s) && Number.isInteger(e) && e > s) {
+        return {range: [s, e], closed: closedOf(w)};
+      }
     }
   }
 
@@ -4534,9 +4543,22 @@ function zoneOpenHoursForDate(schedule, dateStr) {
   const wk = schedule.weekly && schedule.weekly[String(weekday)];
   if (wk && wk.open === true) {
     const s = Number(wk.start); const e = Number(wk.end);
-    if (Number.isInteger(s) && Number.isInteger(e) && e > s) return [s, e];
+    if (Number.isInteger(s) && Number.isInteger(e) && e > s) {
+      return {range: [s, e], closed: closedOf(wk)};
+    }
   }
   return null; // جدولٌ مُفعَّل وهذا اليوم غير مشمول => مغلق
+}
+
+/**
+ * ساعات فتح المنطقة في تاريخ محدد، أو null إن كانت مغلقة (غلاف توافقي).
+ * @param {object|undefined} schedule
+ * @param {string} dateStr yyyy-MM-dd
+ * @return {number[]|null} [startHour, endHour] أو null (مغلق)
+ */
+function zoneOpenHoursForDate(schedule, dateStr) {
+  const day = zoneDayScheduleForDate(schedule, dateStr);
+  return day === null ? null : day.range;
 }
 
 exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
@@ -4628,6 +4650,7 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
   // 4. اشتقاق جدول الفتح لكل يوم في المدى — مرجعيّ، يرسم منه العميل ويفرضه الدفع.
   const openHours = {};   // "yyyy-MM-dd" -> [start, end]
   const closedDates = []; // أيام مغلقة كلياً بالجدول
+  const closedHours = {}; // "yyyy-MM-dd" -> [ساعات أقفلها المالك داخل النطاق]
   const start = new Date(`${startDate}T00:00:00`);
   const end = new Date(`${endDate}T00:00:00`);
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
@@ -4635,16 +4658,19 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
     const ds = `${y}-${m}-${day}`;
-    const hrs = zoneOpenHoursForDate(zoneSchedule, ds);
-    if (hrs === null) closedDates.push(ds);
-    else openHours[ds] = hrs;
+    const daySched = zoneDayScheduleForDate(zoneSchedule, ds);
+    if (daySched === null) closedDates.push(ds);
+    else {
+      openHours[ds] = daySched.range;
+      if (daySched.closed.length) closedHours[ds] = daySched.closed;
+    }
   }
 
   // maxTeamsPerSlot يعكس الآن عدد السائقين الحقيقي (لا قيمة ثابتة من الإعدادات)
   return {
     dailyCounts, slotCounts, maxOrdersPerDay, maxTeamsPerSlot: driverCount,
     scheduleEnabled: !!(zoneSchedule && zoneSchedule.enabled === true),
-    openHours, closedDates, defaultOpen: DEFAULT_OPEN,
+    openHours, closedDates, closedHours, defaultOpen: DEFAULT_OPEN,
   };
 });
 

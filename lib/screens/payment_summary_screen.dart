@@ -502,6 +502,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
     final Map daily = data['dailyCounts'] as Map? ?? {};
     final Map slots = data['slotCounts'] as Map? ?? {};
+    // (تحكم المالك ساعة-بساعة) الساعات المقفلة تُحقن كخانات ممتلئة —
+    // فيرفضها فحصا النافذة (المحدد واليومي) كأي ساعة مكتملة.
+    (data['closedHours'] as Map? ?? {}).forEach((date, hours) {
+      for (final h in (hours as List)) {
+        slots['${date}_${(h as num).toInt().toString().padLeft(2, '0')}:00'] =
+            999999;
+      }
+    });
     final int maxOrdersPerDay = (data['maxOrdersPerDay'] as num?)?.toInt() ?? 10;
     // maxTeamsPerSlot = عدد السائقين النشطين (بلا مناطق — تحسبه الدالة).
     final int maxTeamsPerSlot = (data['maxTeamsPerSlot'] as num?)?.toInt() ?? 0;

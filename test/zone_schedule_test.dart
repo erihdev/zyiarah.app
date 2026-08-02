@@ -28,13 +28,17 @@ void main() {
     final fn = _read('functions/index.js');
 
     test('يحسب ساعات الفتح لكل تاريخ', () {
-      expect(fn.contains('function zoneOpenHoursForDate'), isTrue);
+      expect(fn.contains('function zoneDayScheduleForDate'), isTrue);
+      expect(fn.contains('function zoneOpenHoursForDate'), isTrue,
+          reason: 'الغلاف التوافقي يبقى لأي مستهلك قديم');
       expect(fn.contains('closedDates'), isTrue);
       expect(fn.contains('openHours'), isTrue);
+      // (تحكم المالك ساعة-بساعة) الاستجابة تحمل الساعات المقفلة لكل تاريخ.
+      expect(fn.contains('closedHours'), isTrue);
     });
 
     test('الأولوية: إغلاق ثم نافذة فتح ثم أسبوعي', () {
-      final i = fn.indexOf('function zoneOpenHoursForDate');
+      final i = fn.indexOf('function zoneDayScheduleForDate');
       final body = fn.substring(i, fn.indexOf('\n}', i));
       // blackout يُفحص أولاً (يتقدّم)
       final blackoutAt = body.indexOf('blackouts');
@@ -47,10 +51,19 @@ void main() {
 
     test('توافق خلفي: بلا جدول ⇒ مفتوحة 8..22', () {
       expect(fn.contains('const DEFAULT_OPEN = [8, 22]'), isTrue);
-      final i = fn.indexOf('function zoneOpenHoursForDate');
+      final i = fn.indexOf('function zoneDayScheduleForDate');
       final body = fn.substring(i, fn.indexOf('\n}', i));
-      expect(body.contains('schedule.enabled !== true) return DEFAULT_OPEN'), isTrue,
+      expect(body.contains('{range: DEFAULT_OPEN, closed: []}'), isTrue,
           reason: 'المناطق القائمة بلا schedule يجب أن تبقى مفتوحة كما كانت');
+    });
+
+    test('الساعات المقفلة تُقرأ من weekly والنوافذ وتُبث للعميل', () {
+      final i = fn.indexOf('function zoneDayScheduleForDate');
+      final body = fn.substring(i, fn.indexOf('\n}', i));
+      expect(body.contains('closedOf'), isTrue,
+          reason: 'closed تُقرأ من مدخل اليوم/النافذة المطابق');
+      expect(fn.contains('closedHours[ds] = daySched.closed'), isTrue,
+          reason: 'الاستجابة تبث الساعات المقفلة لكل تاريخ');
     });
 
     test('zoneName تُستعمل للجدول لا لترشيح السائقين', () {
@@ -130,6 +143,29 @@ void main() {
       expect(zones.contains('ZoneScheduleEditor'), isTrue);
       expect(zones.contains("'schedule': scheduleData"), isTrue);
     });
+    test('تحكم ساعة-بساعة: المحرر يبني closed داخل النطاق فقط', () {
+      expect(ed.contains("'closed'"), isTrue,
+          reason: 'طلب المالك: قفل/فتح ساعات محددة لكل يوم');
+      expect(ed.contains('h >= e.value.start && h < e.value.end'), isTrue,
+          reason: 'تغيير النطاق لا يُبقي أشباح ساعات مقفلة خارجه');
+    });
+  });
+
+  group('الساعات المقفلة تُفرض على كل مستهلكي الإتاحة', () {
+    // الحقن كخانات ممتلئة (999999) يجعل كل منطق الجدوى/الشرائح القائم يستبعدها
+    // بلا أي تعديل — حارس ضد نسيان مستهلكٍ عند إضافة شاشة حجز جديدة.
+    for (final p in [
+      'lib/screens/hourly_details_screen.dart',
+      'lib/screens/payment_summary_screen.dart',
+      'lib/widgets/booking_slot_picker.dart',
+      'lib/screens/subscription_plans_screen.dart',
+    ]) {
+      test(p, () {
+        final s = _code(p);
+        expect(s.contains("data['closedHours']"), isTrue, reason: p);
+        expect(s.contains('999999'), isTrue, reason: p);
+      });
+    }
   });
 
   test('نسخ الأسعار لمناطق مختارة — الأسعار فقط، باختيار صريح من قائمة', () {

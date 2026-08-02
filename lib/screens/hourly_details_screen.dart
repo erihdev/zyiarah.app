@@ -201,6 +201,15 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       final Map<String, int> slots = rawSlots.map(
         (k, v) => MapEntry(k.toString(), (v as num).toInt()),
       );
+      // (تحكم المالك ساعة-بساعة) الساعات المقفلة من محرر الجدول تُحقن كخانات
+      // ممتلئة — فكل منطق الجدوى القائم (slot >= max) يستبعدها بلا تعديل.
+      final closedHrs = data['closedHours'] as Map? ?? {};
+      closedHrs.forEach((date, hours) {
+        for (final h in (hours as List)) {
+          slots['${date}_${(h as num).toInt().toString().padLeft(2, '0')}:00'] =
+              999999;
+        }
+      });
       final Map<String, List<int>> openHours =
           (data['openHours'] as Map? ?? {}).map((k, v) => MapEntry(
               k.toString(), (v as List).map((e) => (e as num).toInt()).toList()));

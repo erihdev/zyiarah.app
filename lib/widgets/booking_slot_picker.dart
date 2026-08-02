@@ -107,6 +107,14 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
           .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
       final slots = (data['slotCounts'] as Map? ?? {})
           .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
+      // (تحكم المالك ساعة-بساعة) الساعات المقفلة تُحقن كخانات ممتلئة —
+      // فتظهر شرائحها معطّلة كأي ساعة مكتملة الحجز.
+      (data['closedHours'] as Map? ?? {}).forEach((date, hours) {
+        for (final h in (hours as List)) {
+          slots['${date}_${(h as num).toInt().toString().padLeft(2, '0')}:00'] =
+              999999;
+        }
+      });
       // جدول الفتح المرجعيّ من الخادم — يرسم منه العرض ويفرضه الدفع.
       final openHours = (data['openHours'] as Map? ?? {}).map((k, v) =>
           MapEntry(k.toString(),
