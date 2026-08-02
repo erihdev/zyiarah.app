@@ -45,7 +45,8 @@ interface CoverageZone {
 const HOME_TYPES = [
     { key: 'small', label: 'شقة صغيرة', desc: '4 غرف + دورتا مياه', dur: 4 },
     { key: 'medium', label: 'شقة متوسطة', desc: '6 غرف + 3 دورات مياه', dur: 6 },
-    { key: 'villa', label: 'فيلا أو بيت كامل', desc: 'جميع الغرف ودورات المياه', dur: 8 },
+    // (ملاحظة العميل 2026-08-01) «فيلا أو دور» بلا كلمة «كامل».
+    { key: 'villa', label: 'فيلا أو دور', desc: 'جميع الغرف ودورات المياه', dur: 8 },
 ] as const;
 const CREW_LABELS: Record<string, string> = { '1': 'كادر واحد', '2': 'كادران', '3': '3 كوادر', '4': '4 كوادر' };
 type PkgCrewForm = { price: string; enabled: boolean };

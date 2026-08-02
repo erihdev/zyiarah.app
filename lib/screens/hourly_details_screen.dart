@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/location_picker_screen.dart';
+import 'package:zyiarah/screens/store_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/zone_locator_service.dart';
 import 'package:zyiarah/utils/home_packages.dart';
@@ -648,6 +649,60 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                                     fontSize: 12.5,
                                     color: Color(0xFF660033),
                                     height: 1.5),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // (ملاحظة العميل 2026-08-01) توضيح ما تشمله الخدمة: الضريبة
+                      // وأدوات التنظيف الأساسية مشمولة، ومواد التنظيف لا — مع
+                      // توجيه صريح لمتجر زيارة بدل ترك العميلة تكتشف يوم الزيارة.
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0FDF4),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFBBF7D0)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.cleaning_services_rounded,
+                                    color: Color(0xFF15803D), size: 20),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    "السعر شامل الضريبة وأدوات التنظيف الأساسية. مواد التنظيف غير مشمولة.",
+                                    style: TextStyle(
+                                        fontSize: 12.5,
+                                        color: Color(0xFF15803D),
+                                        fontWeight: FontWeight.w600,
+                                        height: 1.5),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            GestureDetector(
+                              onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                          const ZyiarahStoreScreen())),
+                              child: const Padding(
+                                padding: EdgeInsets.only(right: 30),
+                                child: Text(
+                                  "تحتاجين مواد تنظيف؟ تسوّقيها من متجر زيارة ←",
+                                  style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: Color(0xFF660033),
+                                      fontWeight: FontWeight.bold,
+                                      decoration: TextDecoration.underline),
+                                ),
                               ),
                             ),
                           ],
