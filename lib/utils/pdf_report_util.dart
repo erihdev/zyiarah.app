@@ -137,7 +137,6 @@ class ZyiarahPdfReportUtil {
         'in_progress' => 'قيد التنفيذ',
         'pending' => 'قيد الانتظار',
         'under_review' => 'قيد المراجعة',
-        'pending_admin_approval' => 'بانتظار الاعتماد',
         'awaiting_payment' => 'بانتظار الدفع',
         'cancelled' => 'ملغي',
         'rejected' => 'مرفوض',
