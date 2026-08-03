@@ -78,15 +78,20 @@ class ZyiarahPdfReportUtil {
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Text('ZYIARAH ENTERPRISE', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: const PdfColor.fromInt(0xFF660033))),
-            pw.Text('Official Financial Performance Report', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+            pw.Text('مؤسسة زيارة',
+                style: pw.TextStyle(
+                    fontSize: 24,
+                    fontWeight: pw.FontWeight.bold,
+                    color: const PdfColor.fromInt(0xFF660033))),
+            pw.Text('التقرير المالي الرسمي',
+                style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
           ],
         ),
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.end,
           children: [
-            pw.Text('Date: ${intl.DateFormat('yyyy-MM-dd').format(DateTime.now())}'),
-            pw.Text('Report ID: ZY-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}'),
+            pw.Text('التاريخ: ${intl.DateFormat('yyyy-MM-dd').format(DateTime.now())}'),
+            pw.Text('رقم التقرير: ZY-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}'),
           ],
         ),
       ],
@@ -102,10 +107,11 @@ class ZyiarahPdfReportUtil {
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
         children: [
-          _buildStatItem('Total Revenue', '${revenue.toStringAsFixed(2)} SAR'),
-          _buildStatItem('Active Orders', active.toString()),
-          _buildStatItem('Completed Orders', completed.toString()),
-          _buildStatItem('Estimated VAT (15%)', '${(revenue - revenue / 1.15).toStringAsFixed(2)} SAR'),
+          _buildStatItem('إجمالي الإيرادات', '${revenue.toStringAsFixed(2)} ر.س'),
+          _buildStatItem('الطلبات النشطة', active.toString()),
+          _buildStatItem('الطلبات المكتملة', completed.toString()),
+          _buildStatItem('ضريبة القيمة المضافة (15%)',
+              '${(revenue - revenue / 1.15).toStringAsFixed(2)} ر.س'),
         ],
       ),
     );
@@ -121,13 +127,35 @@ class ZyiarahPdfReportUtil {
     );
   }
 
+  /// ترجمة حالات الطلب للعرض — الحالة تُخزَّن إنجليزية في المستندات.
+  static String _statusAr(String s) => switch (s) {
+        'completed' => 'مكتمل',
+        'scheduled' => 'مجدول',
+        'assigned' => 'مُسند',
+        'accepted' => 'مقبول',
+        'on_the_way' => 'في الطريق',
+        'in_progress' => 'قيد التنفيذ',
+        'pending' => 'قيد الانتظار',
+        'under_review' => 'قيد المراجعة',
+        'pending_admin_approval' => 'بانتظار الاعتماد',
+        'awaiting_payment' => 'بانتظار الدفع',
+        'cancelled' => 'ملغي',
+        'rejected' => 'مرفوض',
+        _ => s,
+      };
+
   static pw.Widget _buildOrderList(List<DocumentSnapshot> docs) {
     final recentDocs = docs.take(15).toList();
-    
+
+    pw.Widget headerCell(String t) => pw.Padding(
+        padding: const pw.EdgeInsets.all(8),
+        child: pw.Text(t, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)));
+
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text('Recent Transactions Log', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+        pw.Text('سجل آخر المعاملات',
+            style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
         pw.SizedBox(height: 12),
         pw.Table(
           border: pw.TableBorder.all(color: PdfColors.grey300),
@@ -135,10 +163,10 @@ class ZyiarahPdfReportUtil {
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: PdfColors.grey200),
               children: [
-                pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Order ID', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Service', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Amount', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
-                pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Status', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+                headerCell('رقم الطلب'),
+                headerCell('الخدمة'),
+                headerCell('المبلغ'),
+                headerCell('الحالة'),
               ],
             ),
             ...recentDocs.map((doc) {
@@ -146,9 +174,9 @@ class ZyiarahPdfReportUtil {
               return pw.TableRow(
                 children: [
                   pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(data['code'] ?? doc.id.substring(0, 6))),
-                  pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(data['service_name'] ?? 'General')),
-                  pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('${data['amount'] ?? data['total_amount'] ?? data['final_amount'] ?? 0} SAR')),
-                  pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(data['status'] ?? 'pending')),
+                  pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(data['service_name'] ?? 'عامة')),
+                  pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('${data['amount'] ?? data['total_amount'] ?? data['final_amount'] ?? 0} ر.س')),
+                  pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_statusAr('${data['status'] ?? 'pending'}'))),
                 ],
               );
             }),
@@ -166,8 +194,10 @@ class ZyiarahPdfReportUtil {
         pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
-            pw.Text('Generated by Zyiarah Enterprise Dashboard', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
-            pw.Text('Page 1 of 1', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+            pw.Text('صادر من لوحة إدارة زيارة',
+                style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+            pw.Text('صفحة 1 من 1',
+                style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
           ],
         ),
       ],
