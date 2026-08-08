@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard.tsx';
 import Login from './pages/Login.tsx';
 import Settings from './pages/Settings.tsx';
 import Orders from './pages/Orders.tsx';
+import ScheduleBoard from './pages/ScheduleBoard.tsx';
 import Drivers from './pages/Drivers.tsx';
 import Users from './pages/Users.tsx';
 import Accountants from './pages/Accountants.tsx';
@@ -115,6 +116,7 @@ function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="orders" element={guard('/orders', <Orders />)} />
+          <Route path="schedule" element={guard('/schedule', <ScheduleBoard />)} />
           <Route path="drivers" element={guard('/drivers', <Drivers />)} />
           <Route path="users" element={guard('/users', <Users />)} />
           <Route path="accountants" element={guard('/accountants', <Accountants />)} />

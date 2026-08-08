@@ -91,6 +91,45 @@ void main() {
     expect(board.contains('تعذّر تحميل الجدول'), isTrue);
   });
 
+  group('تكافؤ لوحة الويب', () {
+    final web = File('admin_panel/src/pages/ScheduleBoard.tsx').readAsStringSync();
+
+    test('الجدول موجود في الويب أيضاً ومربوط بمسار وقائمة', () {
+      expect(File('admin_panel/src/App.tsx').readAsStringSync()
+          .contains('<ScheduleBoard />'), isTrue);
+      expect(File('admin_panel/src/components/Layout.tsx').readAsStringSync()
+          .contains("path: '/schedule'"), isTrue);
+      expect(File('admin_panel/src/config/access.ts').readAsStringSync()
+          .contains("'/schedule'"), isTrue, reason: 'بلا صلاحيات لا يفتحه أحد');
+    });
+
+    test('قاعدة «بلا سائق» مطابقة للتطبيق حرفياً', () {
+      // اختلافها بين الواجهتين يعني رقمين متناقضين لنفس اليوم.
+      expect(web.contains('needsDriver'), isTrue);
+      expect(web.contains('!o.service_date) return false'), isTrue);
+      expect(web.contains("o.is_paid === true || isSub(o)"), isTrue);
+      expect(web.contains('يُسنَد بعد الدفع'), isTrue);
+    });
+
+    test('نفس المدَيات ونفس الحدّ ونفس الحالات المنتهية', () {
+      for (final l in ['اليوم', 'الأسبوع', 'الشهر']) {
+        expect(web.contains("'$l'"), isTrue);
+      }
+      expect(web.contains('FETCH_LIMIT'), isTrue);
+      expect(web.contains('>= FETCH_LIMIT'), isTrue);
+      for (final s in ['cancelled', 'rejected', 'completed']) {
+        expect(web.contains("'$s'"), isTrue);
+      }
+    });
+
+    test('الطلبات نفسها ظاهرة ولا فشل صامت', () {
+      expect(web.contains('o.code'), isTrue);
+      expect(web.contains('o.client_phone'), isTrue);
+      expect(web.contains('statusAr'), isTrue);
+      expect(web.contains('تعذّر تحميل الجدول'), isTrue);
+    });
+  });
+
   test('مُدرَج في قائمة الإدارة بأدوار صحيحة', () {
     expect(more.contains('AdminScheduleBoardScreen'), isTrue);
     expect(more.contains('جدول المتابعة'), isTrue);

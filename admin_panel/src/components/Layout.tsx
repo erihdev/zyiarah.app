@@ -4,7 +4,7 @@ import {
     LayoutDashboard, Users, CarFront, ClipboardList, Settings, LogOut,
     Bell, Search, Calculator, Megaphone, BellRing, LifeBuoy, Shield,
     ShieldAlert, FileSignature, ShoppingBasket, ShoppingBag,
-    Banknote, Menu, X
+    Banknote, Menu, X, CalendarClock
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { canAccess } from '../config/access.ts';
@@ -40,6 +40,7 @@ const navGroups: NavGroup[] = [
         items: [
             { icon: LayoutDashboard, label: 'لوحة القيادة',         path: '/',               color: 'blue' },
             { icon: ClipboardList,   label: 'إدارة الطلبات',         path: '/orders',         color: 'orange' },
+            { icon: CalendarClock,   label: 'جدول المتابعة',          path: '/schedule',       color: 'violet' },
             { icon: FileSignature,   label: 'العقود الإلكترونية',    path: '/contracts',      color: 'teal' },
             { icon: ShoppingBasket,  label: 'إدارة المتجر',           path: '/store-products', color: 'green' },
             { icon: ShoppingBag,     label: 'طلبات المتجر',           path: '/store-orders',   color: 'emerald' },
@@ -70,6 +71,7 @@ const navGroups: NavGroup[] = [
 const pageTitles: Record<string, string> = {
     '/':                 'لوحة القيادة',
     '/orders':           'إدارة الطلبات',
+    '/schedule':         'جدول المتابعة',
     '/drivers':          'إدارة السائقين',
     '/users':            'إدارة العملاء',
     '/contracts':        'العقود الإلكترونية',

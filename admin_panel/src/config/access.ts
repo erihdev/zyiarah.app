@@ -6,6 +6,8 @@
 export const PAGE_ROLES: Record<string, string[]> = {
   '/':                 ['super_admin', 'admin', 'orders_manager', 'accountant_admin', 'marketing_admin'],
   '/orders':           ['super_admin', 'admin', 'orders_manager'],
+  // نفس أدوار «جدول المتابعة» في تطبيق الأدمن (admin_more_screen.dart).
+  '/schedule':         ['super_admin', 'admin', 'orders_manager', 'accountant_admin'],
   '/contracts':        ['super_admin', 'admin', 'orders_manager'],
   '/store-products':   ['super_admin', 'admin', 'marketing_admin'],
   '/store-orders':     ['super_admin', 'admin', 'orders_manager'],
