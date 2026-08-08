@@ -74,6 +74,19 @@ void main() {
     expect(web.contains('o.hours_contracted'), isFalse);
   });
 
+  test('حذف السائق: الواجهتان تنادِيان الدالة الخادمية نفسها', () {
+    // كان زر التطبيق يُعطّل فقط بينما يحذف الويب نهائياً — وأسوأ: يسجّل التعطيل
+    // في audit_logs باسم DELETE_DRIVER فلا يفرّق القارئ بين تعطيل وحذف.
+    // حذف Auth حكرٌ على Admin SDK، فأي حذف عميلي يترك الحساب حيّاً.
+    final app = codeOnly('lib/screens/admin/admin_drivers_screen.dart');
+    final web = codeOnly('admin_panel/src/pages/Drivers.tsx');
+    expect(app.contains("'deleteDriverAccount'"), isTrue);
+    expect(web.contains("'deleteDriverAccount'"), isTrue);
+    // ولا يحذف أيٌّ منهما مستند drivers مباشرةً بدلاً عن الدالة.
+    expect(app.contains("collection('drivers').doc(docId).delete()"), isFalse);
+    expect(web.contains("deleteDoc(doc(db, 'drivers'"), isFalse);
+  });
+
   test('مواد التنظيف تظهر في الواجهتين', () {
     expect(read('lib/widgets/service_meta_view.dart').contains('materials'),
         isTrue);

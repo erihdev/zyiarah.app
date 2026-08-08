@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:image_picker/image_picker.dart';
@@ -123,14 +124,14 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                           textDirection: TextDirection.rtl,
                                           child: AlertDialog(
                                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                            title: const Text("تأكيد التعطيل"),
-                                            content: const Text("سيُعطَّل هذا الكادر ويُمنع من الدخول للتطبيق. (لا يُحذف حسابه — يمكن إعادة تفعيله لاحقاً.)"),
+                                            title: const Text("حذف نهائي"),
+                                            content: const Text("سيُحذف هذا الكادر وحساب دخوله نهائياً ولن يظهر في القائمة. لا يمكن التراجع.\n\nللإيقاف المؤقّت القابل للتراجع استخدم مفتاح التفعيل في القائمة."),
                                             actions: [
                                               TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("إلغاء")),
                                               ElevatedButton(
                                                 onPressed: () => Navigator.pop(ctx, true),
                                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                                                child: const Text("تعطيل", style: TextStyle(color: Colors.white)),
+                                                child: const Text("تأكيد الحذف", style: TextStyle(color: Colors.white)),
                                               ),
                                             ],
                                           ),
@@ -140,13 +141,15 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                       if (confirm == true) {
                                         setDialogState(() => isSaving = true);
                                         try {
-                                          // تعطيل بدل حذف: حذف مستند drivers كان يترك حساب Auth
-                                          // حيّاً ويُعطّل بوّابة الطرد (تشترط وجود المستند). is_active=false
-                                          // يُبقي المستند فتطرده بوّابة driver_dashboard.
-                                          await FirebaseFirestore.instance.collection('drivers').doc(docId).update({
-                                            'is_active': false,
-                                            'disabled_at': FieldValue.serverTimestamp(),
-                                          });
+                                          // حذف نهائي عبر الدالة الخادمية — لا حذف مستند من العميل:
+                                          // حذف drivers وحده يترك حساب Auth حيّاً، وحذف Auth حكرٌ على
+                                          // Admin SDK. الدالة تحذف Auth + users + drivers + رموز
+                                          // الإشعارات معاً وترفض الحذف إن كان للسائق طلبات نشطة.
+                                          // (كان هذا الزر يُعطّل فقط — ومفتاح التفعيل في القائمة
+                                          //  يغطي التعطيل أصلاً، فكان زراً مكرَّراً بمسمّى مضلّل.)
+                                          await FirebaseFunctions.instance
+                                              .httpsCallable('deleteDriverAccount')
+                                              .call({'driverId': docId});
                                           await _audit.logAction(
                                             action: ZyiarahAuditService.actionDeleteDriver,
                                             details: {'id': docId},
@@ -154,7 +157,16 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                           );
                                           if (context.mounted) {
                                             Navigator.pop(ctx);
-                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم تعطيل الكادر — لن يستطيع الدخول")));
+                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الكادر نهائياً")));
+                                          }
+                                        } on FirebaseFunctionsException catch (e) {
+                                          // رسالة الدالة (طلبات نشطة/صلاحيات) أوضح بكثير من نص عام.
+                                          setDialogState(() => isSaving = false);
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                              content: Text(e.message ?? "تعذّر حذف الكادر"),
+                                              backgroundColor: Colors.red,
+                                            ));
                                           }
                                         } catch (e) {
                                           setDialogState(() => isSaving = false);
