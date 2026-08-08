@@ -4,7 +4,8 @@ import { collection, onSnapshot, setDoc, updateDoc, deleteDoc, doc, serverTimest
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import app, { db, storage } from '../services/firebase.ts';
+import { httpsCallable } from 'firebase/functions';
+import app, { db, storage, functions } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
 
 interface DriverData {
@@ -193,18 +194,18 @@ export default function Drivers() {
         if (!deleteTarget) return;
         setIsDeleting(true);
         try {
-            // تعطيل لا حذف — مطابق لتطبيق Flutter: حذف مستند drivers يترك حساب Auth حيّاً
-            // ويُعطّل بوّابة الطرد في لوحة السائق (تشترط وجود المستند)، فيبقى داخلاً بلا رقيب.
-            await updateDoc(doc(db, 'drivers', deleteTarget.id), {
-                is_active: false,
-                is_available: false,
-                is_suspended: true,
-            });
-            toast.success(`تم تعطيل ${deleteTarget.name} — لن يستطيع الدخول`);
+            // حذف نهائي عبر دالة خادمية — لا deleteDoc من العميل: حذف مستند drivers وحده
+            // يترك حساب Auth حيّاً وبوّابة الطرد في لوحة السائق تشترط وجود المستند فتفشل
+            // مفتوحةً. الدالة تحذف Auth + users + drivers + رموز الإشعارات معاً.
+            // (زر «إيقاف» يبقى للتعطيل المؤقّت القابل للتراجع.)
+            await httpsCallable(functions, 'deleteDriverAccount')({ driverId: deleteTarget.id });
+            toast.success(`تم حذف ${deleteTarget.name} نهائياً`);
             setDeleteTarget(null);
         } catch (err) {
             console.error(err);
-            toast.error('حدث خطأ أثناء التعطيل');
+            // رسالة الدالة (طلبات نشطة / صلاحيات) أوضح بكثير من نص عام.
+            const msg = (err as { message?: string })?.message;
+            toast.error(msg && !msg.startsWith('internal') ? msg : 'حدث خطأ أثناء الحذف');
         } finally {
             setIsDeleting(false);
         }
@@ -505,12 +506,12 @@ export default function Drivers() {
                         <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-5">
                             <Trash2 size={28} className="text-rose-500" />
                         </div>
-                        <h3 className="text-xl font-extrabold text-slate-800 mb-2">تعطيل السائق</h3>
-                        <p className="text-slate-500 text-sm mb-6">سيُعطَّل <span className="font-bold text-slate-700">{deleteTarget.name}</span> ويُمنع من الدخول للتطبيق. (لا يُحذف حسابه — يمكن إعادة تفعيله لاحقاً من زر الإيقاف.)</p>
+                        <h3 className="text-xl font-extrabold text-slate-800 mb-2">حذف السائق نهائياً</h3>
+                        <p className="text-slate-500 text-sm mb-6">سيُحذف <span className="font-bold text-slate-700">{deleteTarget.name}</span> وحساب دخوله نهائياً ولن يظهر في القائمة. لا يمكن التراجع. <span className="block mt-1 text-slate-400">للإيقاف المؤقّت القابل للتراجع استخدم زر «إيقاف».</span></p>
                         <div className="flex gap-3">
                             <button type="button" onClick={() => setDeleteTarget(null)} className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors">إلغاء</button>
                             <button type="button" disabled={isDeleting} onClick={handleDelete} className="flex-1 px-4 py-3 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-colors flex justify-center items-center disabled:opacity-70">
-                                {isDeleting ? <Loader2 className="animate-spin" size={20} /> : 'تأكيد التعطيل'}
+                                {isDeleting ? <Loader2 className="animate-spin" size={20} /> : 'تأكيد الحذف'}
                             </button>
                         </div>
                     </div>

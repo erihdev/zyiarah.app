@@ -234,9 +234,12 @@ class _DriverDashboardState extends State<DriverDashboard> {
             ),
           );
         }
-        if (snapshot.hasData && snapshot.data!.exists) {
-          final data = snapshot.data!.data() as Map<String, dynamic>;
-          final isActive = data['is_active'] ?? true;
+        if (snapshot.hasData) {
+          // الشرط كان `&& snapshot.data!.exists` فيفشل **مفتوحاً**: سائق حُذف مستنده
+          // يتخطّى بوّابة الطرد كلياً ويبقى داخل اللوحة. المستند المفقود = لم يعد سائقاً.
+          final exists = snapshot.data!.exists;
+          final data = exists ? snapshot.data!.data() as Map<String, dynamic> : null;
+          final isActive = exists && (data!['is_active'] ?? true);
 
           if (!isActive) {
             WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -244,11 +247,22 @@ class _DriverDashboardState extends State<DriverDashboard> {
               await ZyiarahFirebaseService().signOut();
               if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('تم تعطيل حسابك من قبل الإدارة.'), backgroundColor: Colors.red),
+                SnackBar(
+                  content: Text(exists
+                      ? 'تم تعطيل حسابك من قبل الإدارة.'
+                      : 'لم يعد حسابك مسجّلاً كسائق.'),
+                  backgroundColor: Colors.red,
+                ),
               );
               context.go('/login');
             });
-            return const Scaffold(body: Center(child: Text("تم حظر أو تعطيل حسابك.")));
+            return Scaffold(
+              body: Center(
+                child: Text(exists
+                    ? 'تم حظر أو تعطيل حسابك.'
+                    : 'لم يعد حسابك مسجّلاً كسائق.'),
+              ),
+            );
           }
         }
 

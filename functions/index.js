@@ -5157,6 +5157,72 @@ async function _notifyAutoRefund(clientId, code, orderId, amount, dest, adminTag
       "admin_order_alert", {orderId}).catch(() => {});
 }
 
+// حذف سائق نهائياً (بطلب المالك: أيقونة الحذف تحذف فعلاً ولا يبقى ظاهراً).
+// خادمي إجبارياً: حذف مستند drivers من العميل يترك حساب Auth حيّاً، وبوّابة الطرد
+// في لوحة السائق تشترط وجود المستند (`snapshot.data!.exists`) فتفشل مفتوحةً ويبقى
+// المطرود داخلاً. حذف حساب Auth هو ما يُغلق الباب فعلاً، وهو حكر على Admin SDK.
+exports.deleteDriverAccount = onCall({cpu: 0.083}, async (request) => {
+  await _assertAdmin(request);
+  const driverId = request.data && request.data.driverId;
+  if (!driverId) {
+    throw new HttpsError("invalid-argument", "معرّف السائق مطلوب");
+  }
+  const db = admin.firestore();
+  const driverRef = db.collection("drivers").doc(driverId);
+  const driverSnap = await driverRef.get();
+  if (!driverSnap.exists) {
+    throw new HttpsError("not-found", "السائق غير موجود");
+  }
+
+  // حارس تكامل: حذف سائق وسط مهمة حيّة يترك الطلب بلا منفّذ والعميل يتتبّع
+  // سائقاً غير موجود. نمنع الحذف ونطلب إعادة الإسناد أولاً — لا نحذف بصمت.
+  const ACTIVE = ["assigned", "accepted", "on_the_way", "in_progress", "scheduled"];
+  const activeSnaps = await Promise.all(
+      ["orders", "store_orders"].map((col) => db.collection(col)
+          .where("driver_id", "==", driverId)
+          .where("status", "in", ACTIVE)
+          .limit(5).get()),
+  );
+  const activeCount = activeSnaps.reduce((n, s) => n + s.size, 0);
+  if (activeCount > 0) {
+    throw new HttpsError("failed-precondition",
+        `لا يمكن حذف السائق: لديه ${activeCount} طلب نشط — أعد إسنادها لسائق آخر أولاً.`);
+  }
+
+  const name = driverSnap.data().name || driverId;
+
+  // 1) حساب Auth أولاً: لو فشل ما بعده نكون قد أغلقنا الدخول على أي حال.
+  let authDeleted = true;
+  try {
+    await admin.auth().deleteUser(driverId);
+  } catch (e) {
+    if (e.code === "auth/user-not-found") {
+      // سائق قديم أُضيف من لوحة الويب قبل إصلاح التوفير: مستند بلا حساب Auth.
+      authDeleted = false;
+    } else {
+      throw e;
+    }
+  }
+
+  // 2) المستندات + رموز الإشعارات (اسمَا المجموعة القديم والجديد).
+  await Promise.all([
+    driverRef.delete(),
+    db.collection("users").doc(driverId).delete().catch(() => {}),
+    db.collection("fcm_tokens").doc(driverId).delete().catch(() => {}),
+    db.collection("fcm_token").doc(driverId).delete().catch(() => {}),
+  ]);
+
+  await db.collection("audit_logs").add({
+    action: "delete_driver",
+    actor_id: request.auth.uid,
+    target_id: driverId,
+    details: {name, auth_deleted: authDeleted},
+    created_at: admin.firestore.FieldValue.serverTimestamp(),
+  }).catch(() => {});
+
+  return {deleted: true, name, authDeleted};
+});
+
 /** Helper: verify caller is admin (super_admin or orders_manager) */
 async function _assertAdmin(request) {
   if (!request.auth) {
