@@ -20,7 +20,11 @@ export const PAGE_ROLES: Record<string, string[]> = {
   '/account-deletion': ['super_admin', 'admin'],
   '/admins':           ['super_admin', 'admin'],
   '/notifications':    ['super_admin', 'admin', 'orders_manager', 'marketing_admin'],
-  '/settings':         ['super_admin', 'admin'],
+  // مدير العمليات يدخل لتبويب «نطاق التغطية» وحده — firestore.rules تسمح له
+  // بالكتابة على service_zones (:473) وتمنعه عن system_configs (:397)، والصفحة
+  // تُخفي عنه التبويبين الآخرين كي لا يرى أزراراً ترفضها القواعد دائماً.
+  // (تطبيق الأدمن يمنحه «المناطق والأسعار» أصلاً — هذا تكافؤ معه.)
+  '/settings':         ['super_admin', 'admin', 'orders_manager'],
 };
 
 export function canAccess(role: string | null | undefined, path: string): boolean {

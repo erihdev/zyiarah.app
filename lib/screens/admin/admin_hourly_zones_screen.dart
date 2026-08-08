@@ -303,11 +303,17 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     GeoPoint? selectedGeo = data?['centerLoc'] as GeoPoint?;
     bool isSaving = false;
 
-    // جدول فتح المنطقة — يبنيه المحرّر ويُكتب على المستند. null قبل أي تعديل =
-    // نُبقي القيمة الحالية كما هي (لا نكتب schedule إن لم يُلمَس).
+    // جدول فتح المنطقة — يبنيه المحرّر ويُكتب على المستند.
     // stringKeyedMap لا `as`: الخرائط المتداخلة تصل Map<Object?,Object?> والتحويل
     // الصلب كان يرمي **قبل** showDialog — فيموت زرّ التعديل بصمت لأي منطقة لها جدول.
     Map<String, dynamic>? scheduleData = stringKeyedMap(data?['schedule']);
+
+    // **فقدان بيانات صامت:** كان الحفظ يكتب `schedule` كلما كانت scheduleData
+    // غير فارغة — وهي كذلك دائماً لأي منطقة لها جدول، حتى لو لم يفتح الأدمن
+    // المحرّر إطلاقاً. فمَن يفتح الحوار ليعدّل سعراً فقط كان يُعيد كتابة الجدول
+    // **كما كان لحظة الفتح**، ماسحاً أي فتح/إقفال ساعة غيّره زميلٌ في هذه الأثناء.
+    // العلم يُرفع من onChanged وحده (المحرّر لا يُطلق _emit في initState).
+    bool scheduleTouched = false;
 
     showDialog(
       context: context,
@@ -649,7 +655,10 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     // جدول فتح المنطقة: أيام وساعات العمل + فتح/إغلاق تواريخ استثنائية.
                     ZoneScheduleEditor(
                       initial: scheduleData,
-                      onChanged: (s) => scheduleData = s,
+                      onChanged: (s) {
+                        scheduleData = s;
+                        scheduleTouched = true;
+                      },
                     ),
                   ],
                 ),
@@ -710,12 +719,23 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى إكمال البيانات وتحديد الموقع")));
                       return;
                     }
+                    // نصف القطر كان `tryParse ?? 15.0` بلا حدّ: حقلٌ فارغ يصبح 15كم
+                    // بصمت، و0 أو 500 يُحفظان كما هما — الأول يمنع كل الحجوزات
+                    // والثاني يبتلع المحافظات المجاورة في مطابقة المنطقة.
+                    final radiusVal = double.tryParse(radiusCtrl.text.trim());
+                    if (radiusVal == null || radiusVal < 1 || radiusVal > 100) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text("نصف القطر يجب أن يكون بين 1 و100 كم"),
+                        backgroundColor: Colors.red,
+                      ));
+                      return;
+                    }
                     setDialogState(() => isSaving = true);
                     try {
                       final newData = {
                         'name': nameCtrl.text.trim(),
                         'centerLoc': selectedGeo,
-                        'radiusKm': double.tryParse(radiusCtrl.text) ?? 15.0,
+                        'radiusKm': radiusVal,
                         // صفر = «غير مسعّرة» فتُعطَّل الخدمة بدل بيعها بسعر افتراضي.
                         // (sofaPrice/rugPrice الطوليان لم يعودا يُكتبان — النظام أُلغي.
                         //  نتركهما في المستندات القائمة بلا مساس: لا قارئ لهما، وحذفهما
@@ -735,9 +755,12 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                         'packages': buildPackages(),
                         'rank': rank,
                         'enabled': data?['enabled'] ?? true,
-                        // جدول الفتح — يُكتب متى لمس الأدمن المحرّر (scheduleData != null).
-                        // نُبقيه إن لم يُلمَس كي لا نمسح جدولاً قائماً بحفظٍ عابر.
-                        if (scheduleData != null) 'schedule': scheduleData,
+                        // جدول الفتح — يُكتب **فقط** إن لمس الأدمن المحرّر فعلاً.
+                        // الشرط القديم (scheduleData != null) كان صحيحاً للمنطقة
+                        // الجديدة وخاطئاً للقائمة: القيمة مُهيّأة من المستند فتُعاد
+                        // كتابتها بلقطة قديمة عند أي حفظ سعرٍ عابر.
+                        if (scheduleTouched && scheduleData != null)
+                          'schedule': scheduleData,
                         'updated_at': FieldValue.serverTimestamp(),
                       };
 

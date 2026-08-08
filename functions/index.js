@@ -5222,12 +5222,20 @@ exports.deleteDriverAccount = onCall({cpu: 0.083}, async (request) => {
     db.collection("fcm_token").doc(driverId).delete().catch(() => {}),
   ]);
 
+  // **مخطط السجل يجب أن يطابق كاتب العميل** (lib/services/audit_service.dart):
+  // كان يُكتب `created_at` واسم إجراء بأحرف صغيرة، وشاشة السجل تُرتّب على
+  // `timestamp` — وFirestore يستبعد المستندات التي لا تحمل حقل الترتيب، فكانت كل
+  // عمليات الحذف الخادمية **لا تظهر في السجل إطلاقاً**، والاسم الصغير لا يطابق
+  // مرشّحات الشاشة (تقارن بأحرف كبيرة) ولا خريطة تسمياتها العربية.
+  const actorEmail = (request.auth.token && request.auth.token.email) || "Unknown Admin";
   await db.collection("audit_logs").add({
-    action: "delete_driver",
+    action: "DELETE_DRIVER",
+    admin_email: actorEmail,
     actor_id: request.auth.uid,
     target_id: driverId,
     details: {name, auth_deleted: authDeleted},
-    created_at: admin.firestore.FieldValue.serverTimestamp(),
+    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+    platform: "Cloud Function (deleteDriverAccount)",
   }).catch(() => {});
 
   return {deleted: true, name, authDeleted};

@@ -6,6 +6,7 @@ import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import app, { db, storage, functions } from '../services/firebase.ts';
+import { logAudit, AUDIT } from '../services/audit.ts';
 import { useNotification } from '../components/Notification.tsx';
 
 interface DriverData {
@@ -39,7 +40,10 @@ export default function Drivers() {
     // Add
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isAdding, setIsAdding] = useState(false);
-    const [newDriver, setNewDriver] = useState({ name: '', phone: '', email: '', vehicle: '', monthly_salary: 0 });
+    const [newDriver, setNewDriver] = useState({
+        name: '', phone: '', email: '', vehicle: '', monthly_salary: 0,
+        type: 'driver', nationality: '', id_number: '', id_expiry: '', license_info: '',
+    });
 
     // Edit
     const [editDriver, setEditDriver] = useState<DriverData | null>(null);
@@ -100,10 +104,14 @@ export default function Drivers() {
             const cred = await createUserWithEmailAndPassword(secondaryAuth, email, randomPassword);
             const uid = cred.user.uid;
 
+            // تصنيف الكادر: كان مثبَّتاً على 'driver' فكل كادر تنظيف يُسجَّل من
+            // الويب يصير سائق توصيل — يدخل عدّاد السائقين وكشف الرواتب خطأً
+            // ويصله إسناد طلبات ليست له. (نظير «تصنيف الموظف» في التطبيق.)
+            const staffType = newDriver.type;
             try {
                 await setDoc(doc(db, 'users', uid), {
                     name,
-                    role: 'driver',
+                    role: staffType,
                     phone: newDriver.phone,
                     email,
                     created_at: serverTimestamp(),
@@ -115,12 +123,19 @@ export default function Drivers() {
                     name,
                     phone: newDriver.phone,
                     email,
-                    role: 'driver',
+                    role: staffType,
                     // type: يقرؤه عدّاد السائقين وكشف الرواتب — بدونه يُصنَّف الجميع افتراضياً.
-                    type: 'driver',
+                    type: staffType,
                     // car_info هو الحقل الذي يقرؤه التطبيق؛ vehicle للتوافق مع تعديل الويب.
                     car_info: newDriver.vehicle,
                     vehicle: newDriver.vehicle,
+                    // حقول الهوية والامتثال — كان الويب يُسقطها فيبقى الكادر بلا
+                    // جنسية ولا رقم هوية ولا تاريخ انتهاء، ولا سبيل لاستكمالها إلا
+                    // من التطبيق. (تُقرأ وتُكتب في تطبيق الأدمن.)
+                    nationality: newDriver.nationality.trim(),
+                    id_number: newDriver.id_number.trim(),
+                    id_expiry: newDriver.id_expiry.trim(),
+                    license_info: staffType === 'driver' ? newDriver.license_info.trim() : '',
                     is_available: false,
                     is_active: true,
                     is_suspended: false,
@@ -142,10 +157,14 @@ export default function Drivers() {
             }
             // يصله رابط تعيين كلمة مرور — لا كلمة مرور تُعرض أو تُخزَّن في أي مكان.
             await sendPasswordResetEmail(secondaryAuth, email);
+            await logAudit(AUDIT.REGISTER_DRIVER, { name, email, type: staffType }, uid);
 
             toast.success(`تم إنشاء حساب ${name} — أُرسل رابط تعيين كلمة المرور إلى ${email}`);
             setIsAddModalOpen(false);
-            setNewDriver({ name: '', phone: '', email: '', vehicle: '', monthly_salary: 0 });
+            setNewDriver({
+                name: '', phone: '', email: '', vehicle: '', monthly_salary: 0,
+                type: 'driver', nationality: '', id_number: '', id_expiry: '', license_info: '',
+            });
             setAddPhotoFile(null);
             setAddPhotoPreview(null);
         } catch (err) {
@@ -176,9 +195,15 @@ export default function Drivers() {
             await updateDoc(doc(db, 'drivers', editDriver.id), {
                 name: editForm.name,
                 phone: editForm.phone,
+                // car_info هو الحقل الذي يقرؤه التطبيق؛ vehicle للتوافق مع القراءة
+                // هنا. كتابة vehicle وحده كانت **تُظلّل** التطبيق للأبد: القراءة
+                // `vehicle || car_info` تُفضّل vehicle، فأول تعديل من الويب يُنشئه
+                // ثم يبقى أي تعديل لاحق من التطبيق (يكتب car_info) غير مرئي هنا.
                 vehicle: editForm.vehicle,
+                car_info: editForm.vehicle,
                 monthly_salary: editForm.monthly_salary,
             });
+            await logAudit(AUDIT.UPDATE_DRIVER, { name: editForm.name }, editDriver.id);
             toast.success('تم حفظ التعديلات');
             setEditDriver(null);
         } catch (err) {
@@ -258,6 +283,8 @@ export default function Drivers() {
         try {
             const nowSuspended = !driver.is_suspended;
             await updateDoc(doc(db, 'drivers', driver.id), { is_suspended: nowSuspended, is_available: nowSuspended ? false : driver.is_available, is_active: !nowSuspended });
+            await logAudit(AUDIT.TOGGLE_DRIVER_STATUS,
+                { name: driver.name, suspended: nowSuspended }, driver.id);
         } catch (err) {
             console.error(err);
             toast.error('حدث خطأ أثناء تعديل حالة السائق');
@@ -408,7 +435,15 @@ export default function Drivers() {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="block text-sm font-extrabold text-slate-700">اسم السائق الكامل</label>
+                                <label className="block text-sm font-extrabold text-slate-700">تصنيف الموظف</label>
+                                <select aria-label="تصنيف الموظف" value={newDriver.type} onChange={e => setNewDriver({ ...newDriver, type: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium">
+                                    <option value="driver">سائق توصيل (Delivery)</option>
+                                    <option value="worker">كادر تنظيف (Cleaning)</option>
+                                </select>
+                                <p className="text-xs text-slate-400">يحدّد من يدخل عدّاد السائقين وكشف الرواتب ومن تصله إسنادات الطلبات.</p>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="block text-sm font-extrabold text-slate-700">اسم الكادر الكامل</label>
                                 <input type="text" required placeholder="مثال: أحمد محمد" value={newDriver.name} onChange={e => setNewDriver({ ...newDriver, name: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium" />
                             </div>
                             <div className="space-y-2">
@@ -423,10 +458,33 @@ export default function Drivers() {
                                 <input type="email" required placeholder="driver@example.com" value={newDriver.email} onChange={e => setNewDriver({ ...newDriver, email: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium" dir="ltr" />
                                 <p className="text-xs text-slate-400">يُنشأ حساب دخول فعلي ويُرسَل للسائق رابط تعيين كلمة المرور على هذا البريد.</p>
                             </div>
-                            <div className="space-y-2">
-                                <label className="block text-sm font-extrabold text-slate-700">بيانات المركبة (اختياري)</label>
-                                <input type="text" placeholder="مثال: تويوتا كامري 2023 - أ ب ج ١٢٣٤" value={newDriver.vehicle} onChange={e => setNewDriver({ ...newDriver, vehicle: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium" />
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-extrabold text-slate-700">الجنسية</label>
+                                    <input type="text" placeholder="مثال: سعودي" value={newDriver.nationality} onChange={e => setNewDriver({ ...newDriver, nationality: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-extrabold text-slate-700">رقم الهوية / الإقامة</label>
+                                    <input type="text" placeholder="10 أرقام" value={newDriver.id_number} onChange={e => setNewDriver({ ...newDriver, id_number: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium" dir="ltr" />
+                                </div>
                             </div>
+                            <div className="space-y-2">
+                                <label className="block text-sm font-extrabold text-slate-700">تاريخ انتهاء الوثيقة</label>
+                                <input type="date" aria-label="تاريخ انتهاء الوثيقة" value={newDriver.id_expiry} onChange={e => setNewDriver({ ...newDriver, id_expiry: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium" dir="ltr" />
+                            </div>
+                            {/* المركبة والرخصة لسائق التوصيل فقط — كادر التنظيف لا يقود. */}
+                            {newDriver.type === 'driver' && (
+                                <>
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-extrabold text-slate-700">بيانات المركبة (اختياري)</label>
+                                        <input type="text" placeholder="مثال: تويوتا كامري 2023 - أ ب ج ١٢٣٤" value={newDriver.vehicle} onChange={e => setNewDriver({ ...newDriver, vehicle: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-extrabold text-slate-700">رقم رخصة القيادة (اختياري)</label>
+                                        <input type="text" value={newDriver.license_info} onChange={e => setNewDriver({ ...newDriver, license_info: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium" dir="ltr" />
+                                    </div>
+                                </>
+                            )}
                             <div className="space-y-2">
                                 <label className="block text-sm font-extrabold text-slate-700">الراتب الشهري (ر.س)</label>
                                 <input type="number" aria-label="الراتب الشهري" min="0" placeholder="مثال: 3000" value={newDriver.monthly_salary || ''} onChange={e => setNewDriver({ ...newDriver, monthly_salary: Number(e.target.value) })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium" dir="ltr" />

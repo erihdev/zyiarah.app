@@ -58,7 +58,10 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
     final TextEditingController nameCtrl = TextEditingController(text: currentData?['name'] ?? '');
     final TextEditingController phoneCtrl = TextEditingController(text: currentData?['phone'] ?? '');
     final TextEditingController emailCtrl = TextEditingController(text: currentData?['email'] ?? '');
-    final TextEditingController carInfoCtrl = TextEditingController(text: currentData?['car_info'] ?? '');
+    // نقرأ vehicle أيضاً: تعديلات لوحة الويب كانت تكتبه وحده، فسائقٌ عُدِّل هناك
+    // كان يفتح هنا بحقل مركبة فارغ ثم يُحفظ فارغاً فوق البيانات الصحيحة.
+    final TextEditingController carInfoCtrl = TextEditingController(
+        text: currentData?['car_info'] ?? currentData?['vehicle'] ?? '');
     final TextEditingController licenseCtrl = TextEditingController(text: currentData?['license_info'] ?? '');
     final TextEditingController nationalityCtrl = TextEditingController(text: currentData?['nationality'] ?? '');
     final TextEditingController idNumberCtrl = TextEditingController(text: currentData?['id_number'] ?? '');
@@ -150,11 +153,9 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                           await FirebaseFunctions.instance
                                               .httpsCallable('deleteDriverAccount')
                                               .call({'driverId': docId});
-                                          await _audit.logAction(
-                                            action: ZyiarahAuditService.actionDeleteDriver,
-                                            details: {'id': docId},
-                                            targetId: docId,
-                                          );
+                                          // لا تسجيل هنا: الدالة نفسها تكتب سجل
+                                          // التدقيق بمخطط الشاشة (timestamp + اسم
+                                          // كبير)، فتسجيلٌ ثانٍ = قيدان لعملية واحدة.
                                           if (context.mounted) {
                                             Navigator.pop(ctx);
                                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الكادر نهائياً")));
@@ -364,6 +365,9 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                         'name': name,
                                         'phone': phoneCtrl.text.trim(),
                                         'car_info': carInfoCtrl.text.trim(),
+                                        // نكتب الاسمين: لوحة الويب تقرأ vehicle أولاً،
+                                        // فتركُه قديماً يُظلّل هذا التعديل هناك للأبد.
+                                        'vehicle': carInfoCtrl.text.trim(),
                                         'license_info': licenseCtrl.text.trim(),
                                         'type': type,
                                         'nationality': nationalityCtrl.text.trim(),

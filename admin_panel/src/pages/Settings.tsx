@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { Save, Shield, Wallet, MapPin, Search, Smartphone, Loader2, CheckCircle2, ChevronLeft, CreditCard, Activity, Database, KeyRound, ArrowRight, Plus, Navigation, ToggleLeft, ToggleRight, Trash2, Pencil, CalendarClock } from 'lucide-react';
-import { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, GeoPoint, serverTimestamp } from 'firebase/firestore';
+import { Save, Shield, Wallet, MapPin, Search, Smartphone, Loader2, CheckCircle2, ChevronLeft, CreditCard, Activity, Database, KeyRound, ArrowRight, Plus, Navigation, ToggleLeft, ToggleRight, Trash2, Pencil, CalendarClock, Copy } from 'lucide-react';
+import { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, GeoPoint, serverTimestamp, writeBatch } from 'firebase/firestore';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
+import { logAudit, AUDIT } from '../services/audit.ts';
 import { arabizeMapLabels } from '../utils/mapboxArabic.ts';
 import { JAZAN_BBOX, jazanMaskGeoJSON, jazanOutlineGeoJSON, isInJazan } from '../utils/jazanBoundary.ts';
 
@@ -133,9 +134,17 @@ const defaultSettings: SystemSettings = {
 
 type TabType = 'general' | 'payments' | 'coverage';
 
-export default function Settings() {
+export default function Settings({ role }: { role?: string | null }) {
     const { toast } = useNotification();
-    const [activeTab, setActiveTab] = useState<TabType>('general');
+    // مدير العمليات يملك «نطاق التغطية» وحده: firestore.rules تسمح له بـservice_zones
+    // وتمنعه عن system_configs — فإظهار «عام وأمان» و«المدفوعات» له يعني أزراراً
+    // ترفضها القواعد دائماً. نفتح له التبويب المسموح مباشرةً.
+    const zonesOnly = role === 'orders_manager';
+    // نشر الأسعار على محافظات مختارة (نظير «تطبيق على مناطق…» في التطبيق).
+    const [showApplyPicker, setShowApplyPicker] = useState(false);
+    const [applyTargets, setApplyTargets] = useState<string[]>([]);
+    const [isApplying, setIsApplying] = useState(false);
+    const [activeTab, setActiveTab] = useState<TabType>(zonesOnly ? 'coverage' : 'general');
     const [settings, setSettings] = useState<SystemSettings>(defaultSettings);
     const [appUpdate, setAppUpdate] = useState<AppUpdateConfig>(defaultAppUpdate);
     const [isLoading, setIsLoading] = useState(true);
@@ -331,6 +340,19 @@ export default function Settings() {
             toast.error('يرجى إدخال جميع الحقول بشكل صحيح');
             return;
         }
+        // النقر على الخريطة محروس بـisInJazan، أما حقلا الإحداثيات اليدويان فلا —
+        // فكان رقمٌ مكتوب بالخطأ يُنشئ محافظة خارج جازان تماماً، ولا يكتشفها أحد
+        // إلا حين يُتَّهم موقع عميلة صحيح بأنه «خارج نطاق خدماتنا».
+        if (!isInJazan(lat, lng)) {
+            toast.error('الإحداثيات خارج منطقة جازان — حدّد الموقع من الخريطة');
+            return;
+        }
+        // الحدّان في وسم input لا يُفعَّلان أصلاً: الزرّ type="button" فلا يمرّ بتحقّق
+        // النموذج — فكان نصف قطر 0 أو سالب أو 500كم يُحفظ كما هو.
+        if (radius < 1 || radius > 100) {
+            toast.error('نصف القطر يجب أن يكون بين 1 و100 كم');
+            return;
+        }
         setIsAddingZone(true);
         try {
             // نفس مخطط حفظ تطبيق الأدمن حرفياً — التسعير الخادمي يقرأ هذه الحقول.
@@ -352,31 +374,22 @@ export default function Settings() {
                 eventWorkerHourPrice: num(newZone.eventWorkerHourPrice),
                 // (باقات السكن) نفس مخطط تطبيق الأدمن حرفياً — يقرؤه العميل
                 // ويتحقق منه التسعير الخادمي (functions/pricing.js).
-                packages: Object.fromEntries(HOME_TYPES.map(t => {
-                    const p = newZone.packages[t.key];
-                    return [t.key, {
-                        desc: p.desc.trim() || t.desc,
-                        // تثبيت 1..12 — سالب مكتوب يتجاوز min/max في HTML.
-                        durationHours: Math.min(12, Math.max(1, parseInt(p.dur) || t.dur)),
-                        crews: Object.fromEntries(['1', '2', '3', '4'].map(n => {
-                            const c = p.crews[n];
-                            return [n, { price: num(c.price), enabled: !!c.enabled }];
-                        })),
-                    }];
-                })),
+                packages: buildPackagesPayload(),
                 updated_at: serverTimestamp(),
             };
             if (editingZoneId) {
                 // تحديث الحقول المعروضة فقط — schedule/enabled/rank لا تُلمَس فلا يُمسح
                 // جدول دوام المحافظة أو ترتيبها بحفظ تعديل سعر.
                 await updateDoc(doc(db, 'service_zones', editingZoneId), payload);
+                await logAudit(AUDIT.UPDATE_ZONE, { name: payload.name }, editingZoneId);
                 toast.success(`تم تحديث ${payload.name} بنجاح`);
             } else {
                 // منطقة جديدة تُذيَّل القائمة (أعلى rank + 1) — تكافؤ حقيقي مع تطبيق
                 // الأدمن: zones.length + 1 كانت تكرّر رتبة قائمة بعد أي حذف
                 // (رتب {1,3,4} ⇒ الطول+1 = 4 مكرّرة) فيتذبذب ترتيب القوائم.
                 const nextRank = zones.reduce((m, z) => Math.max(m, z.rank || 0), 0) + 1;
-                await addDoc(collection(db, 'service_zones'), { ...payload, enabled: true, rank: nextRank });
+                const ref = await addDoc(collection(db, 'service_zones'), { ...payload, enabled: true, rank: nextRank });
+                await logAudit(AUDIT.CREATE_ZONE, { name: payload.name }, ref.id);
                 toast.success(`تمت إضافة ${payload.name} بنجاح`);
             }
             setNewZone(emptyZoneForm);
@@ -438,6 +451,65 @@ export default function Settings() {
     };
 
     // سقف الطلبات اليومي — merge حتى لا تُمسح بقية إعدادات hourly_settings.
+    // مخطط الباقات — مصدر واحد يستعمله الحفظ المفرد ونشر الأسعار على محافظات معاً،
+    // فلا ينحرف أحدهما عن الآخر.
+    const buildPackagesPayload = () => {
+        const num = (s: string) => { const v = parseFloat(s); return isNaN(v) ? 0 : v; };
+        return Object.fromEntries(HOME_TYPES.map(t => {
+            const p = newZone.packages[t.key];
+            return [t.key, {
+                desc: p.desc.trim() || t.desc,
+                // تثبيت 1..12 — سالب مكتوب يتجاوز min/max في HTML.
+                durationHours: Math.min(12, Math.max(1, parseInt(p.dur) || t.dur)),
+                crews: Object.fromEntries(['1', '2', '3', '4'].map(n => {
+                    const c = p.crews[n];
+                    return [n, { price: num(c.price), enabled: !!c.enabled }];
+                })),
+            }];
+        }));
+    };
+
+    // نشر الأسعار على محافظات مختارة — نظير «تطبيق على مناطق…» في تطبيق الأدمن.
+    // كان الويب يملك نصف العملية فقط (النسخ **من** محافظة إلى النموذج) بلا نشر
+    // **إلى** محافظات، فتغيير سعر في 10 محافظات = فتح وحفظ 10 مرات يدوياً.
+    // دفعة واحدة تكتب الأسعار والباقات فقط — لا الاسم ولا الموقع ولا نصف القطر
+    // ولا التفعيل ولا الجدول، كي لا يمسح النشرُ خصوصيةَ كل محافظة.
+    const handleApplyPricesToZones = async () => {
+        const targets = zones.filter(z => applyTargets.includes(z.id));
+        if (targets.length === 0) { toast.error('اختر محافظة واحدة على الأقل'); return; }
+        setIsApplying(true);
+        try {
+            const num = (s: string) => { const v = parseFloat(s); return isNaN(v) ? 0 : v; };
+            const prices = {
+                sofaSqmPrice: num(newZone.sofaSqmPrice),
+                rugSqmPrice: num(newZone.rugSqmPrice),
+                acMaintWindowPrice: num(newZone.acMaintWindowPrice),
+                acMaintSplitPrice: num(newZone.acMaintSplitPrice),
+                acWashWindowPrice: num(newZone.acWashWindowPrice),
+                acWashSplitPrice: num(newZone.acWashSplitPrice),
+                carSmallPrice: num(newZone.carSmallPrice),
+                carMediumPrice: num(newZone.carMediumPrice),
+                carLargePrice: num(newZone.carLargePrice),
+                eventWorkerHourPrice: num(newZone.eventWorkerHourPrice),
+                packages: buildPackagesPayload(),
+                updated_at: serverTimestamp(),
+            };
+            const batch = writeBatch(db);
+            for (const z of targets) batch.update(doc(db, 'service_zones', z.id), prices);
+            await batch.commit();
+            await logAudit(AUDIT.APPLY_PRICES_TO_ZONES,
+                { count: targets.length, zones: targets.map(z => z.name) });
+            toast.success(`طُبِّقت الأسعار على ${targets.length} محافظة`);
+            setApplyTargets([]);
+            setShowApplyPicker(false);
+        } catch (e) {
+            console.error(e);
+            toast.error('تعذّر تطبيق الأسعار');
+        } finally {
+            setIsApplying(false);
+        }
+    };
+
     const handleSaveCapacity = async () => {
         const n = parseInt(maxOrdersPerDay);
         if (isNaN(n) || n < 1) { toast.error('أدخل رقماً صحيحاً (1 فأكثر)'); return; }
@@ -500,6 +572,8 @@ export default function Settings() {
     const handleToggleZone = async (zone: CoverageZone) => {
         try {
             await updateDoc(doc(db, 'service_zones', zone.id), { enabled: !zone.enabled });
+            await logAudit(AUDIT.TOGGLE_SERVICE_STATUS,
+                { name: zone.name, enabled: !zone.enabled }, zone.id);
         } catch (e) {
             console.error('toggle zone failed:', e);
             toast.error('حدث خطأ أثناء التحديث');
@@ -515,6 +589,7 @@ export default function Settings() {
         setIsDeletingZone(true);
         try {
             await deleteDoc(doc(db, 'service_zones', zone.id));
+            await logAudit(AUDIT.DELETE_ZONE, { name: zone.name }, zone.id);
             toast.success(`تم حذف «${zone.name}» نهائياً`);
             setDeleteTarget(null);
         } catch (e) {
@@ -580,11 +655,12 @@ export default function Settings() {
         );
     }
 
-    const tabs = [
+    const allTabs = [
         { id: 'general', label: 'عام وأمان', icon: Shield, color: 'from-[#660033] to-[#660033]', bg: 'bg-[#FAF1F6]/50', border: 'border-[#F2DEE9]', text: 'text-[#4D0026]' },
         { id: 'payments', label: 'المدفوعات', icon: Wallet, color: 'from-emerald-500 to-green-600', bg: 'bg-emerald-50/50', border: 'border-emerald-100', text: 'text-emerald-700' },
         { id: 'coverage', label: 'التغطية', icon: MapPin, color: 'from-rose-500 to-lime-600', bg: 'bg-rose-50/50', border: 'border-rose-100', text: 'text-rose-700' },
     ] as const;
+    const tabs = zonesOnly ? allTabs.filter(t => t.id === 'coverage') : allTabs;
 
     const currentTabColor = tabs.find(t => t.id === activeTab)?.color || tabs[0].color;
 
@@ -995,8 +1071,10 @@ export default function Settings() {
 
                                 <div className="p-8 space-y-6 overflow-y-auto">
                                     {/* (تكافؤ التطبيق) الطاقة الاستيعابية اليومية — سقف الطلبات المجدولة في اليوم الواحد،
-                                        يقرؤه العميل (الإتاحة) والخادم (التحقق) من system_configs/hourly_settings */}
-                                    <div className="bg-white border-2 border-rose-100 rounded-[2rem] p-6">
+                                        يقرؤه العميل (الإتاحة) والخادم (التحقق) من system_configs/hourly_settings.
+                                        مخفيّة عن مدير العمليات: القواعد تقصر كتابة system_configs على الإدارة
+                                        العليا (firestore.rules:397)، فزرّ الحفظ كان سيفشل له دائماً. */}
+                                    <div className={`bg-white border-2 border-rose-100 rounded-[2rem] p-6 ${zonesOnly ? 'hidden' : ''}`}>
                                         <div className="flex items-center gap-3 mb-3">
                                             <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl">
                                                 <CalendarClock size={20} strokeWidth={2.5} />
@@ -1107,7 +1185,7 @@ export default function Settings() {
                                             </div>
 
                                             {/* ═══ التسعير — تكافؤ كامل مع حوار التطبيق ═══ */}
-                                            {zones.length > 0 && (
+                                            {zones.some(z => z.id !== editingZoneId) && (
                                                 <div>
                                                     <label className="block text-xs font-bold text-slate-600 mb-1">نسخ الأسعار من محافظة سابقة (اختياري)</label>
                                                     <select
@@ -1117,7 +1195,11 @@ export default function Settings() {
                                                         dir="rtl"
                                                     >
                                                         <option value="">— اختر محافظة لنسخ أسعارها —</option>
-                                                        {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
+                                                        {/* نستبعد المحافظة قيد التعديل: كانت تظهر في قائمتها
+                                                            فيصير الخيار الوحيد «انسخ من نفسك» — يُعيد ملء
+                                                            النموذج بالقيم المحفوظة ويُلغي تعديلات لم تُحفظ بعد. */}
+                                                        {zones.filter(z => z.id !== editingZoneId)
+                                                            .map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
                                                     </select>
                                                 </div>
                                             )}
@@ -1247,10 +1329,60 @@ export default function Settings() {
                                                     {isAddingZone ? <Loader2 size={16} className="animate-spin" /> : (editingZoneId ? <Pencil size={16} /> : <Plus size={16} />)}
                                                     {editingZoneId ? 'حفظ التعديلات' : 'حفظ المحافظة'}
                                                 </button>
+                                                {/* نشر الأسعار على محافظات مختارة — الأسعار والباقات فقط،
+                                                    لا الاسم/الموقع/نصف القطر/التفعيل/الجدول. */}
+                                                {zones.length > 0 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowApplyPicker(true)}
+                                                        className="flex items-center gap-2 px-5 py-3 border border-rose-200 text-rose-700 font-bold rounded-xl hover:bg-rose-50 transition-all"
+                                                    >
+                                                        <Copy size={16} />
+                                                        تطبيق الأسعار على محافظات…
+                                                    </button>
+                                                )}
                                                 <button type="button" onClick={() => { setShowAddForm(false); setEditingZoneId(null); setEditingZoneName(''); setNewZone(emptyZoneForm); }} className="px-6 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all">
                                                     إلغاء
                                                 </button>
                                             </div>
+
+                                            {showApplyPicker && (
+                                                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+                                                    <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md max-h-[85vh] flex flex-col">
+                                                        <div className="p-6 border-b border-slate-100">
+                                                            <h3 className="text-lg font-extrabold text-slate-800">تطبيق الأسعار على محافظات</h3>
+                                                            <p className="text-xs text-slate-500 mt-1">تُنسخ الأسعار والباقات المعروضة في النموذج إلى المحافظات المختارة. الاسم والموقع ونصف القطر وجدول الساعات لا تُمسّ.</p>
+                                                        </div>
+                                                        <div className="p-4 overflow-y-auto flex-1 space-y-1">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setApplyTargets(applyTargets.length === zones.length ? [] : zones.map(z => z.id))}
+                                                                className="w-full text-right px-3 py-2 rounded-lg text-sm font-bold text-rose-700 hover:bg-rose-50"
+                                                            >
+                                                                {applyTargets.length === zones.length ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
+                                                            </button>
+                                                            {zones.map(z => (
+                                                                <label key={z.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 cursor-pointer">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={applyTargets.includes(z.id)}
+                                                                        onChange={e => setApplyTargets(prev => e.target.checked ? [...prev, z.id] : prev.filter(x => x !== z.id))}
+                                                                        className="w-4 h-4 accent-rose-600"
+                                                                    />
+                                                                    <span className="font-bold text-slate-700 text-sm">{z.name}</span>
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                        <div className="p-4 border-t border-slate-100 flex gap-3">
+                                                            <button type="button" onClick={() => { setShowApplyPicker(false); setApplyTargets([]); }} className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50">إلغاء</button>
+                                                            <button type="button" disabled={isApplying || applyTargets.length === 0} onClick={handleApplyPricesToZones} className="flex-1 px-4 py-3 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 disabled:opacity-60 flex justify-center items-center gap-2">
+                                                                {isApplying ? <Loader2 size={16} className="animate-spin" /> : null}
+                                                                حفظ ({applyTargets.length})
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 
@@ -1278,7 +1410,12 @@ export default function Settings() {
                                                                 <p className="text-xs text-slate-500 font-mono mt-0.5">{zone.radiusKm} كم</p>
                                                             </div>
                                                         </div>
-                                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        {/* ظاهرة دائماً على اللمس، وتخفت حتى التحويم على الفأرة فقط.
+                                                            Tailwind v4 يترجم hover داخل @media (hover: hover)، فعلى جهاز
+                                                            لمسي لم تكن القاعدة تُطابَق إطلاقاً — تبقى الأزرار بشفافية 0
+                                                            للأبد (بلا pointer-events-none، فهي غير مرئية لا معطّلة).
+                                                            زرّا التعديل والحذف كانا غير قابلين للاكتشاف على أي تابلت. */}
+                                                        <div className="flex items-center gap-1 opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 transition-opacity">
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleEditZone(zone)}

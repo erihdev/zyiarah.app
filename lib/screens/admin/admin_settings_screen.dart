@@ -141,8 +141,21 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         'maintenance_mode': _maintenanceMode,
       }, SetOptions(merge: true));
 
+      // السعة اليومية: كان `int.tryParse(...) ?? 10` بلا حدّ أدنى — فيُكتب 0 أو
+      // رقم سالب حرفياً، وحدٌّ صفر **يُغلق الحجز في كل المناطق** بلا رسالة خطأ.
+      // نرفض غير الصالح بدل ابتلاعه (لوحة الويب ترفضه أصلاً — هذا تكافؤ معها).
+      final capacity = int.tryParse(_maxOrdersPerDayCtrl.text.trim());
+      if (capacity == null || capacity < 1) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('الحد اليومي للطلبات يجب أن يكون رقماً أكبر من صفر'),
+            backgroundColor: Colors.red,
+          ));
+        }
+        return;
+      }
       await _db.collection('system_configs').doc('hourly_settings').set({
-        'max_orders_per_day': int.tryParse(_maxOrdersPerDayCtrl.text) ?? 10,
+        'max_orders_per_day': capacity,
       }, SetOptions(merge: true));
 
       // (دمج من الويب) نشر سياسة الخصوصية لمستند عام تقرأه zyiarah.com/privacy بلا دخول.
