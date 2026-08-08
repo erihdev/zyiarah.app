@@ -68,6 +68,19 @@ String? zyiarahServiceMetaSummary(dynamic meta) {
         2 => 'كادران',
         _ => '$crews كوادر',
       });
+      // تنبيه مبكّر في بطاقة القائمة: الطلب يحمل مواد يجب أن يجلبها السائق.
+      final mats = meta['materials'];
+      if (mats is List && mats.isNotEmpty) parts.add('+ ${mats.length} مادة');
+    case 'event_workers':
+      final w = ZyiarahServiceMetaView._num(meta['workers']).toInt();
+      final h = ZyiarahServiceMetaView._num(meta['event_hours']).toInt();
+      if (w <= 0 || h <= 0) return null;
+      parts.add(w == 1
+          ? 'عاملة واحدة'
+          : w == 2
+              ? 'عاملتان'
+              : '$w عاملات');
+      parts.add(h == 2 ? 'ساعتان' : '$h ساعات');
     default:
       return null;
   }
@@ -94,6 +107,7 @@ class ZyiarahServiceMetaView extends StatelessWidget {
       'car_interior' => _acRows(m), // بنود label/count/unit_price نفسها
       'store_products' => _storeRows(m),
       'home_package' => _homePackageRows(m),
+      'event_workers' => _eventWorkerRows(m),
 
       _ => const <_MetaRow>[],
     };
@@ -190,6 +204,50 @@ class ZyiarahServiceMetaView extends StatelessWidget {
     return [
       _MetaRow(label: 'نوع السكن', detail: '', total: label),
       _MetaRow(label: 'عدد الكوادر', detail: '', total: crewsLabel),
+      // مواد التنظيف المشتراة داخل الطلب نفسه — **يجب** أن يراها السائق وإلا
+      // وصل بلا المواد التي دفعت العميلة ثمنها ضمن الفاتورة.
+      ..._materialRows(m),
+    ];
+  }
+
+  /// بنود مواد التنظيف (إن أُضيفت للطلب) — تُستخدم مع باقات السكن.
+  List<_MetaRow> _materialRows(Map m) {
+    final items = m['materials'];
+    if (items is! List) return const [];
+    return items.whereType<Map>().map((it) {
+      final q = _num(it['quantity']).toInt();
+      final price = _num(it['price']);
+      return _MetaRow(
+        label: '🧴 ${it['name'] ?? '-'}',
+        detail: '$q × ${_t(price)}',
+        total: '${(q * price).toStringAsFixed(2)} ر.س',
+      );
+    }).toList();
+  }
+
+  /// (عاملات المناسبات) العدد والمدة — ليعرف السائق حجم الفريق قبل الوصول.
+  List<_MetaRow> _eventWorkerRows(Map m) {
+    final workers = _num(m['workers']).toInt();
+    final hours = _num(m['event_hours']).toInt();
+    if (workers <= 0 || hours <= 0) return const [];
+    return [
+      _MetaRow(
+          label: 'عدد العاملات',
+          detail: '',
+          total: switch (workers) {
+            1 => 'عاملة واحدة',
+            2 => 'عاملتان',
+            <= 10 => '$workers عاملات',
+            _ => '$workers عاملة',
+          }),
+      _MetaRow(
+          label: 'مدة المناسبة',
+          detail: '',
+          total: switch (hours) {
+            2 => 'ساعتان',
+            >= 3 && <= 10 => '$hours ساعات',
+            _ => '$hours ساعة',
+          }),
     ];
   }
 
