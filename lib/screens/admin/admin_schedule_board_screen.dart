@@ -190,24 +190,45 @@ class _AdminScheduleBoardScreenState extends State<AdminScheduleBoardScreen> {
       revenue += (m['amount'] as num?)?.toDouble() ?? 0;
     }
 
-    return Row(
+    // الأرقام ملخّص فوق الطلبات لا بديل عنها (تصحيح المالك): ثلاثة مؤشرات
+    // تشغيلية فقط، والإيراد سطر ثانوي أسفلها — الطلبات نفسها هي المحتوى.
+    return Column(
       children: [
-        Expanded(
-            child: _kpi('المواعيد', '${docs.length}', Icons.event_note_rounded,
-                const Color(0xFF334155))),
-        const SizedBox(width: 10),
-        Expanded(
-            child: _kpi('بلا سائق', '$unassigned',
-                Icons.person_off_outlined,
-                unassigned > 0 ? const Color(0xFFDC2626) : const Color(0xFF059669))),
-        const SizedBox(width: 10),
-        Expanded(
-            child: _kpi('غير مدفوعة', '$unpaid', Icons.pending_actions_rounded,
-                unpaid > 0 ? const Color(0xFFD97706) : const Color(0xFF059669))),
-        const SizedBox(width: 10),
-        Expanded(
-            child: _kpi('الإيراد المتوقع', revenue.toStringAsFixed(0),
-                Icons.payments_rounded, _brand)),
+        Row(
+          children: [
+            Expanded(
+                child: _kpi('الطلبات', '${docs.length}',
+                    Icons.event_note_rounded, const Color(0xFF334155))),
+            const SizedBox(width: 10),
+            Expanded(
+                child: _kpi(
+                    'بلا سائق',
+                    '$unassigned',
+                    Icons.person_off_outlined,
+                    unassigned > 0
+                        ? const Color(0xFFDC2626)
+                        : const Color(0xFF059669))),
+            const SizedBox(width: 10),
+            Expanded(
+                child: _kpi(
+                    'غير مدفوعة',
+                    '$unpaid',
+                    Icons.pending_actions_rounded,
+                    unpaid > 0
+                        ? const Color(0xFFD97706)
+                        : const Color(0xFF059669))),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: Text(
+              'الإيراد المتوقع: ${revenue.toStringAsFixed(2)} ر.س',
+              style: GoogleFonts.tajawal(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF64748B))),
+        ),
       ],
     );
   }
@@ -253,7 +274,9 @@ class _AdminScheduleBoardScreenState extends State<AdminScheduleBoardScreen> {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          initiallyExpanded: _range == BoardRange.day || isToday,
+          // مفتوحة دائماً: الغرض رؤية **الطلبات نفسها** لا عدّها. الطيّ الافتراضي
+          // كان يُظهر رقماً فقط فيبدو الجدول إحصاءً آخر (تصحيح المالك).
+          initiallyExpanded: true,
           tilePadding: const EdgeInsets.symmetric(horizontal: 16),
           childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
           title: Row(
@@ -342,42 +365,69 @@ class _AdminScheduleBoardScreenState extends State<AdminScheduleBoardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('${m['service_name'] ?? m['service_type'] ?? 'خدمة'}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.tajawal(
-                          fontSize: 13, fontWeight: FontWeight.bold)),
+                  Row(
+                    children: [
+                      // رقم الطلب أولاً: هو ما تُعرَّف به الطلبات في كل الشاشات
+                      // وفي الحديث بين الإدارة والسائق.
+                      Text('#${m['code'] ?? doc.id.substring(0, 6)}',
+                          style: GoogleFonts.tajawal(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                              color: const Color(0xFF94A3B8))),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                            '${m['service_name'] ?? m['service_type'] ?? 'خدمة'}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.tajawal(
+                                fontSize: 13, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
                   Text(
-                      '${m['client_name'] ?? '—'} • '
-                      '${m['zone_name'] ?? '—'}',
+                      '${m['client_name'] ?? '—'} • ${m['zone_name'] ?? '—'}'
+                      '${m['client_phone'] != null && '${m['client_phone']}'.isNotEmpty ? ' • ${m['client_phone']}' : ''}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.tajawal(
                           fontSize: 11, color: const Color(0xFF64748B))),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      _tag(_statusAr('${m['status'] ?? ''}'),
+                          const Color(0xFF334155)),
+                      if (driverId == null)
+                        _tag('بلا سائق', const Color(0xFFDC2626), strong: true)
+                      else
+                        _tag('${m['driver_name'] ?? 'مُسنَد'}',
+                            const Color(0xFF059669)),
+                      if (m['is_paid'] != true && !isSub)
+                        _tag('غير مدفوع', const Color(0xFFD97706)),
+                    ],
+                  ),
                 ],
               ),
             ),
-            if (driverId == null)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEE2E2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text('بلا سائق',
+            const SizedBox(width: 6),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                    isSub
+                        ? 'اشتراك'
+                        : '${((m['amount'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)} ر.س',
                     style: GoogleFonts.tajawal(
-                        fontSize: 10,
+                        fontSize: 12,
                         fontWeight: FontWeight.w900,
-                        color: const Color(0xFFDC2626))),
-              )
-            else
-              Text('${m['driver_name'] ?? 'مُسنَد'}',
-                  style: GoogleFonts.tajawal(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF059669))),
-            const Icon(Icons.chevron_left_rounded,
-                size: 18, color: Color(0xFF94A3B8)),
+                        color: isSub ? const Color(0xFF7C3AED) : _brand)),
+                const Icon(Icons.chevron_left_rounded,
+                    size: 18, color: Color(0xFF94A3B8)),
+              ],
+            ),
           ],
         ),
       ),
@@ -393,6 +443,33 @@ class _AdminScheduleBoardScreenState extends State<AdminScheduleBoardScreen> {
     final s = v?.toString().trim();
     return (s == null || s.isEmpty) ? null : s;
   }
+
+  /// الحالة تُخزَّن إنجليزية في المستند — تُعرض عربية كما في بقية شاشات الإدارة.
+  static String _statusAr(String s) => switch (s) {
+        'scheduled' => 'مجدول',
+        'assigned' => 'مُسند',
+        'accepted' => 'مقبول',
+        'on_the_way' => 'في الطريق',
+        'in_progress' => 'قيد التنفيذ',
+        'pending' => 'قيد الانتظار',
+        'under_review' => 'قيد المراجعة',
+        'awaiting_payment' => 'بانتظار الدفع',
+        '' => 'بلا حالة',
+        _ => s,
+      };
+
+  Widget _tag(String text, Color color, {bool strong = false}) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: strong ? 0.14 : 0.08),
+          borderRadius: BorderRadius.circular(7),
+        ),
+        child: Text(text,
+            style: GoogleFonts.tajawal(
+                fontSize: 10,
+                fontWeight: strong ? FontWeight.w900 : FontWeight.w700,
+                color: color)),
+      );
 
   static bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;

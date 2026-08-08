@@ -10,6 +10,22 @@ void main() {
   final more =
       File('lib/screens/admin/admin_more_screen.dart').readAsStringSync();
 
+  test('الطلبات نفسها ظاهرة لا أرقامها فقط', () {
+    // تصحيح المالك: «الجدول يظهر الطلبات ليس فقط الأسعار». الطيّ الافتراضي كان
+    // يُظهر عدداً لكل يوم، فيبدو الجدول إحصاءً آخر لا قائمة عمل.
+    expect(board.contains('initiallyExpanded: true'), isTrue);
+    // كل صف يحمل ما يُعرَّف به الطلب فعلاً.
+    expect(board.contains("m['code']"), isTrue, reason: 'رقم الطلب');
+    expect(board.contains("m['client_name']"), isTrue);
+    expect(board.contains("m['client_phone']"), isTrue);
+    expect(board.contains('_statusAr('), isTrue, reason: 'حالة الطلب بالعربية');
+  });
+
+  test('الإيراد ثانوي لا مؤشّر رئيسي', () {
+    expect(board.contains('الإيراد المتوقع: '), isTrue,
+        reason: 'سطر ملخّص أسفل المؤشرات لا بطاقة بحجمها');
+  });
+
   test('المدَيات الثلاثة موجودة', () {
     for (final r in ['day', 'week', 'month']) {
       expect(board.contains('BoardRange.$r'), isTrue);
