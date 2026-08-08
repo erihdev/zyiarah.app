@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, Filter, ShieldCheck, MapPin, Phone, Star, ShieldAlert, X, Loader2, ToggleLeft, ToggleRight, Pencil, Trash2, Camera, Upload } from 'lucide-react';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, setDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../services/firebase.ts';
+import { initializeApp, deleteApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import app, { db, storage } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
 
 interface DriverData {
@@ -36,7 +38,7 @@ export default function Drivers() {
     // Add
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isAdding, setIsAdding] = useState(false);
-    const [newDriver, setNewDriver] = useState({ name: '', phone: '', vehicle: '', monthly_salary: 0 });
+    const [newDriver, setNewDriver] = useState({ name: '', phone: '', email: '', vehicle: '', monthly_salary: 0 });
 
     // Edit
     const [editDriver, setEditDriver] = useState<DriverData | null>(null);
@@ -74,35 +76,87 @@ export default function Drivers() {
     }, []);
 
     // ── Add ──
+    // كانت addDoc تُنشئ مستند drivers فقط: بلا حساب Auth وبلا users/{uid}، فالسائق
+    // المُضاف من الويب لا يستطيع تسجيل الدخول أبداً (ومعرّف المستند لا يطابق uid فتفشل
+    // كل الاستعلامات التي تربط الطلب بالسائق). صار التوفير مطابقاً لـ
+    // createDriverAccountViaAdmin في تطبيق Flutter: Auth + users + drivers بنفس الـ uid.
     const handleAddDriver = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newDriver.name || !newDriver.phone) return;
+        const name = newDriver.name.trim();
+        const email = newDriver.email.trim().toLowerCase();
+        if (!name || !newDriver.phone || !email) return;
+
         setIsAdding(true);
+        // تطبيق ثانوي: إنشاء المستخدم على جلسة الأدمن الحالية كان سيُسجّل خروجه ويُدخل السائق مكانه.
+        // نأخذ الإعداد من app.options لا من ملف firebase.ts (مُستثنى من git — لا نضيف له تصديراً جديداً).
+        const secondaryApp = initializeApp(app.options, `provision_${Date.now()}`);
+        const secondaryAuth = getAuth(secondaryApp);
         try {
-            const docRef = await addDoc(collection(db, 'drivers'), {
-                name: newDriver.name,
-                phone: newDriver.phone,
-                vehicle: newDriver.vehicle,
-                is_available: false,
-                is_active: true,
-                is_suspended: false,
-                rating: 5.0,
-                rides: 0,
-                monthly_salary: newDriver.monthly_salary,
-                created_at: serverTimestamp(),
-            });
-            if (addPhotoFile) {
-                await uploadPhoto(addPhotoFile, docRef.id);
+            const randomPassword = Array.from(
+                crypto.getRandomValues(new Uint32Array(4)),
+                (n) => n.toString(36),
+            ).join('') + 'A1!';
+            const cred = await createUserWithEmailAndPassword(secondaryAuth, email, randomPassword);
+            const uid = cred.user.uid;
+
+            try {
+                await setDoc(doc(db, 'users', uid), {
+                    name,
+                    role: 'driver',
+                    phone: newDriver.phone,
+                    email,
+                    created_at: serverTimestamp(),
+                    is_verified: true,
+                    entity: 'مؤسسة معاذ يحي محمد المالكي',
+                }, { merge: true });
+
+                await setDoc(doc(db, 'drivers', uid), {
+                    name,
+                    phone: newDriver.phone,
+                    email,
+                    role: 'driver',
+                    // type: يقرؤه عدّاد السائقين وكشف الرواتب — بدونه يُصنَّف الجميع افتراضياً.
+                    type: 'driver',
+                    // car_info هو الحقل الذي يقرؤه التطبيق؛ vehicle للتوافق مع تعديل الويب.
+                    car_info: newDriver.vehicle,
+                    vehicle: newDriver.vehicle,
+                    is_available: false,
+                    is_active: true,
+                    is_suspended: false,
+                    rating: 5.0,
+                    rides: 0,
+                    monthly_salary: newDriver.monthly_salary,
+                    created_at: serverTimestamp(),
+                });
+            } catch (writeErr) {
+                // فشل Firestore بعد إنشاء حساب Auth كان يحرق البريد نهائياً
+                // (كل إعادة محاولة → email-already-in-use). نتراجع كما يفعل التطبيق.
+                try { await deleteDoc(doc(db, 'users', uid)); } catch { /* لم يُكتب أصلاً */ }
+                try { await cred.user.delete(); } catch { /* فشل التعويض — نُبقي الخطأ الأصلي */ }
+                throw writeErr;
             }
-            toast.success('تم إضافة السائق بنجاح');
+
+            if (addPhotoFile) {
+                await uploadPhoto(addPhotoFile, uid);
+            }
+            // يصله رابط تعيين كلمة مرور — لا كلمة مرور تُعرض أو تُخزَّن في أي مكان.
+            await sendPasswordResetEmail(secondaryAuth, email);
+
+            toast.success(`تم إنشاء حساب ${name} — أُرسل رابط تعيين كلمة المرور إلى ${email}`);
             setIsAddModalOpen(false);
-            setNewDriver({ name: '', phone: '', vehicle: '', monthly_salary: 0 });
+            setNewDriver({ name: '', phone: '', email: '', vehicle: '', monthly_salary: 0 });
             setAddPhotoFile(null);
             setAddPhotoPreview(null);
         } catch (err) {
             console.error(err);
-            toast.error('حدث خطأ أثناء إضافة السائق');
+            const code = (err as { code?: string })?.code ?? '';
+            toast.error(
+                code === 'auth/email-already-in-use' ? 'هذا البريد مسجَّل بالفعل — استخدم بريداً آخر'
+                    : code === 'auth/invalid-email' ? 'صيغة البريد الإلكتروني غير صحيحة'
+                        : 'حدث خطأ أثناء إضافة السائق',
+            );
         } finally {
+            await deleteApp(secondaryApp).catch(() => { /* تنظيف فقط */ });
             setIsAdding(false);
         }
     };
@@ -139,12 +193,18 @@ export default function Drivers() {
         if (!deleteTarget) return;
         setIsDeleting(true);
         try {
-            await deleteDoc(doc(db, 'drivers', deleteTarget.id));
-            toast.success(`تم حذف السائق ${deleteTarget.name}`);
+            // تعطيل لا حذف — مطابق لتطبيق Flutter: حذف مستند drivers يترك حساب Auth حيّاً
+            // ويُعطّل بوّابة الطرد في لوحة السائق (تشترط وجود المستند)، فيبقى داخلاً بلا رقيب.
+            await updateDoc(doc(db, 'drivers', deleteTarget.id), {
+                is_active: false,
+                is_available: false,
+                is_suspended: true,
+            });
+            toast.success(`تم تعطيل ${deleteTarget.name} — لن يستطيع الدخول`);
             setDeleteTarget(null);
         } catch (err) {
             console.error(err);
-            toast.error('حدث خطأ أثناء الحذف');
+            toast.error('حدث خطأ أثناء التعطيل');
         } finally {
             setIsDeleting(false);
         }
@@ -358,6 +418,11 @@ export default function Drivers() {
                                 </div>
                             </div>
                             <div className="space-y-2">
+                                <label className="block text-sm font-extrabold text-slate-700">البريد الإلكتروني (حساب الدخول)</label>
+                                <input type="email" required placeholder="driver@example.com" value={newDriver.email} onChange={e => setNewDriver({ ...newDriver, email: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium" dir="ltr" />
+                                <p className="text-xs text-slate-400">يُنشأ حساب دخول فعلي ويُرسَل للسائق رابط تعيين كلمة المرور على هذا البريد.</p>
+                            </div>
+                            <div className="space-y-2">
                                 <label className="block text-sm font-extrabold text-slate-700">بيانات المركبة (اختياري)</label>
                                 <input type="text" placeholder="مثال: تويوتا كامري 2023 - أ ب ج ١٢٣٤" value={newDriver.vehicle} onChange={e => setNewDriver({ ...newDriver, vehicle: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium" />
                             </div>
@@ -440,12 +505,12 @@ export default function Drivers() {
                         <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-5">
                             <Trash2 size={28} className="text-rose-500" />
                         </div>
-                        <h3 className="text-xl font-extrabold text-slate-800 mb-2">حذف السائق</h3>
-                        <p className="text-slate-500 text-sm mb-6">هل أنت متأكد من حذف <span className="font-bold text-slate-700">{deleteTarget.name}</span>؟ لا يمكن التراجع عن هذا الإجراء.</p>
+                        <h3 className="text-xl font-extrabold text-slate-800 mb-2">تعطيل السائق</h3>
+                        <p className="text-slate-500 text-sm mb-6">سيُعطَّل <span className="font-bold text-slate-700">{deleteTarget.name}</span> ويُمنع من الدخول للتطبيق. (لا يُحذف حسابه — يمكن إعادة تفعيله لاحقاً من زر الإيقاف.)</p>
                         <div className="flex gap-3">
                             <button type="button" onClick={() => setDeleteTarget(null)} className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors">إلغاء</button>
                             <button type="button" disabled={isDeleting} onClick={handleDelete} className="flex-1 px-4 py-3 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-colors flex justify-center items-center disabled:opacity-70">
-                                {isDeleting ? <Loader2 className="animate-spin" size={20} /> : 'تأكيد الحذف'}
+                                {isDeleting ? <Loader2 className="animate-spin" size={20} /> : 'تأكيد التعطيل'}
                             </button>
                         </div>
                     </div>
