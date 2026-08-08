@@ -64,6 +64,9 @@ const emptyZoneForm = {
     acMaintWindowPrice: '100', acMaintSplitPrice: '150',
     acWashWindowPrice: '80', acWashSplitPrice: '120',
     carSmallPrice: '100', carMediumPrice: '150', carLargePrice: '200',
+    // (عاملات المناسبات) سعر ساعة العاملة قبل الضريبة — بلا افتراضي: الفراغ/الصفر
+    // = الخدمة غير مسعّرة ⇒ لا تظهر للعميل في هذه المنطقة.
+    eventWorkerHourPrice: '',
     packages: emptyPackagesForm(),
 };
 
@@ -346,6 +349,7 @@ export default function Settings() {
                 carSmallPrice: num(newZone.carSmallPrice),
                 carMediumPrice: num(newZone.carMediumPrice),
                 carLargePrice: num(newZone.carLargePrice),
+                eventWorkerHourPrice: num(newZone.eventWorkerHourPrice),
                 // (باقات السكن) نفس مخطط تطبيق الأدمن حرفياً — يقرؤه العميل
                 // ويتحقق منه التسعير الخادمي (functions/pricing.js).
                 packages: Object.fromEntries(HOME_TYPES.map(t => {
@@ -420,6 +424,7 @@ export default function Settings() {
                 acMaintWindowPrice: s(d.acMaintWindowPrice), acMaintSplitPrice: s(d.acMaintSplitPrice),
                 acWashWindowPrice: s(d.acWashWindowPrice), acWashSplitPrice: s(d.acWashSplitPrice),
                 carSmallPrice: s(d.carSmallPrice), carMediumPrice: s(d.carMediumPrice), carLargePrice: s(d.carLargePrice),
+                eventWorkerHourPrice: s(d.eventWorkerHourPrice),
                 packages,
             });
             setEditingZoneId(zone.id);
@@ -482,6 +487,7 @@ export default function Settings() {
                 acMaintWindowPrice: s(d.acMaintWindowPrice), acMaintSplitPrice: s(d.acMaintSplitPrice),
                 acWashWindowPrice: s(d.acWashWindowPrice), acWashSplitPrice: s(d.acWashSplitPrice),
                 carSmallPrice: s(d.carSmallPrice), carMediumPrice: s(d.carMediumPrice), carLargePrice: s(d.carLargePrice),
+                eventWorkerHourPrice: s(d.eventWorkerHourPrice),
                 packages,
             }));
             toast.success('نُسخت الأسعار إلى النموذج — راجعها ثم احفظ');
@@ -495,6 +501,7 @@ export default function Settings() {
         try {
             await updateDoc(doc(db, 'service_zones', zone.id), { enabled: !zone.enabled });
         } catch (e) {
+            console.error('toggle zone failed:', e);
             toast.error('حدث خطأ أثناء التحديث');
         }
     };
@@ -1163,6 +1170,22 @@ export default function Settings() {
                                                             />
                                                         </div>
                                                     ))}
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <h5 className="font-black text-slate-800 text-sm mb-1">عاملات للمناسبات — لكل عاملة/ساعة (ر.س، قبل الضريبة)</h5>
+                                                <p className="text-xs text-slate-400 mb-2">العميل يختار العدد والمدة واليوم والساعة، والسعر = العدد × الساعات × هذا السعر. اتركه فارغاً لتعطيل الخدمة في هذه المحافظة.</p>
+                                                <div className="grid grid-cols-3 gap-3">
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-slate-600 mb-1">سعر ساعة العاملة</label>
+                                                        <input
+                                                            type="number" dir="ltr" min="0" step="0.5"
+                                                            value={newZone.eventWorkerHourPrice}
+                                                            onChange={e => setNewZone(p => ({ ...p, eventWorkerHourPrice: e.target.value }))}
+                                                            className={zoneInputCls}
+                                                        />
+                                                    </div>
                                                 </div>
                                             </div>
 
