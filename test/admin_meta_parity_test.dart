@@ -74,6 +74,23 @@ void main() {
     expect(web.contains('o.hours_contracted'), isFalse);
   });
 
+  test('الويب يعرض الجدول التفصيلي لا الملخّص فقط', () {
+    // كان `pkgSummary` هو كل ما تملكه اللوحة: سطر واحد بلا مقاسات ولا أسعار
+    // وحدة ولا أصناف — فتعذّر على الإدارة التحقق من المبلغ إن اعترضت العميلة.
+    final rows = read('admin_panel/src/utils/serviceMeta.ts');
+    for (final k in kinds) {
+      expect(rows.contains("'$k'"), isTrue, reason: '$k بلا صفوف تفصيلية');
+    }
+    // مقاسات الكنب والسجاد بوحدتيهما، وأسعار الوحدة، والمواد.
+    expect(rows.contains('م.ط'), isTrue);
+    expect(rows.contains('م²'), isTrue);
+    expect(rows.contains('materialRows'), isTrue);
+    // ويظهر في نافذتَي القرار: تعيين السائق وتعديل الزيارة.
+    final orders = read('admin_panel/src/pages/Orders.tsx');
+    expect('<ServiceMetaTable'.allMatches(orders).length, greaterThanOrEqualTo(2),
+        reason: 'نافذة التعيين ونافذة التعديل');
+  });
+
   test('حذف السائق: الواجهتان تنادِيان الدالة الخادمية نفسها', () {
     // كان زر التطبيق يُعطّل فقط بينما يحذف الويب نهائياً — وأسوأ: يسجّل التعطيل
     // في audit_logs باسم DELETE_DRIVER فلا يفرّق القارئ بين تعطيل وحذف.

@@ -7,6 +7,7 @@ import {
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
+import ServiceMetaTable from '../components/ServiceMetaTable.tsx';
 
 // تنسيق تاريخ لحقل datetime-local (YYYY-MM-DDTHH:mm).
 const toDatetimeLocal = (dt: Date) => {
@@ -567,7 +568,11 @@ export default function Orders() {
                                 <X size={20} />
                             </button>
                         </div>
-                        <div className="p-6 space-y-4">
+                        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                            {/* التفصيل الكامل أمام الأدمن **وهو يختار السائق**: عدد
+                                المكيفات، مقاسات الكنب، مواد التنظيف التي يجب أن
+                                يحملها، وعدد عاملات المناسبة وساعاتها. */}
+                            <ServiceMetaTable meta={assignModal.service_meta} />
                             {availableDrivers.length === 0 ? (
                                 <p className="text-center text-amber-600 font-bold py-4">لا يوجد سائقون متاحون حالياً</p>
                             ) : (
@@ -627,7 +632,8 @@ export default function Orders() {
                                 <X size={20} />
                             </button>
                         </div>
-                        <div className="p-6 space-y-4">
+                        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                            <ServiceMetaTable meta={editModal.service_meta} />
                             <div className="space-y-2">
                                 <label className="block text-sm font-extrabold text-slate-700">موعد الزيارة الجديد</label>
                                 <input
