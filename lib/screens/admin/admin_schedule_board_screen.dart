@@ -185,7 +185,7 @@ class _AdminScheduleBoardScreenState extends State<AdminScheduleBoardScreen> {
     double revenue = 0;
     for (final d in docs) {
       final m = d.data() as Map<String, dynamic>;
-      if (_driverIdOf(m) == null) unassigned++;
+      if (_needsDriver(m)) unassigned++;
       if (m['is_paid'] != true) unpaid++;
       revenue += (m['amount'] as num?)?.toDouble() ?? 0;
     }
@@ -260,7 +260,7 @@ class _AdminScheduleBoardScreenState extends State<AdminScheduleBoardScreen> {
     final day = DateTime.parse(dayKey);
     final isToday = _isSameDay(day, DateTime.now());
     final unassigned = items
-        .where((d) => _driverIdOf(d.data() as Map<String, dynamic>) == null)
+        .where((d) => _needsDriver(d.data() as Map<String, dynamic>))
         .length;
 
     return Container(
@@ -400,11 +400,15 @@ class _AdminScheduleBoardScreenState extends State<AdminScheduleBoardScreen> {
                     children: [
                       _tag(_statusAr('${m['status'] ?? ''}'),
                           const Color(0xFF334155)),
-                      if (driverId == null)
+                      if (driverId != null)
+                        _tag('${m['driver_name'] ?? 'مُسنَد'}',
+                            const Color(0xFF059669))
+                      else if (_needsDriver(m))
                         _tag('بلا سائق', const Color(0xFFDC2626), strong: true)
                       else
-                        _tag('${m['driver_name'] ?? 'مُسنَد'}',
-                            const Color(0xFF059669)),
+                        // غيابه هنا متوقَّع: الإسناد يقع عند الدفع، أو الطلب
+                        // إداريّ بلا موعد — رمادي لا أحمر كي لا يُستنزف الانتباه.
+                        _tag('يُسنَد بعد الدفع', const Color(0xFF94A3B8)),
                       if (m['is_paid'] != true && !isSub)
                         _tag('غير مدفوع', const Color(0xFFD97706)),
                     ],
@@ -442,6 +446,22 @@ class _AdminScheduleBoardScreenState extends State<AdminScheduleBoardScreen> {
     final v = m['driver_id'] ?? m['driverId'];
     final s = v?.toString().trim();
     return (s == null || s.isEmpty) ? null : s;
+  }
+
+  /// **متى يكون غياب السائق خللاً فعلاً؟**
+  ///
+  /// الإسناد التلقائي يقع لحظة قلب الطلب إلى «مدفوع» (paid-flip في
+  /// onOrderWritten)، لا لحظة إنشائه. فالطلب غير المدفوع بلا سائق **سلوك صحيح**
+  /// لا نقص، وكذلك الطلب بلا موعد الذي يُحوَّل عمداً إلى under_review لتُسنده
+  /// الإدارة يدوياً. عدُّ هذين ضمن «بلا سائق» إنذارٌ كاذب يُفقد الرقم قيمته —
+  /// وهو ما كان يفعله هذا الجدول. المُقلِق وحده: طلبٌ **مدفوع** (أو زيارة اشتراك)
+  /// **بموعد** وما زال بلا سائق ⇒ فشل إسناد حقيقي تتابعه المكنسة كل 5 دقائق.
+  static bool _needsDriver(Map<String, dynamic> m) {
+    if (_driverIdOf(m) != null) return false;
+    if (m['service_date'] == null) return false; // إدارية بالتصميم
+    final isSub =
+        m['contract_id'] != null || m['payment_method'] == 'subscription';
+    return m['is_paid'] == true || isSub;
   }
 
   /// الحالة تُخزَّن إنجليزية في المستند — تُعرض عربية كما في بقية شاشات الإدارة.

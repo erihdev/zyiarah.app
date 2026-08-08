@@ -55,6 +55,22 @@ void main() {
     expect(board.contains('s.isEmpty) ? null : s'), isTrue);
   });
 
+  test('«بلا سائق» يُنذر على الفشل الحقيقي فقط لا على الطبيعي', () {
+    // الإسناد يقع عند قلب الطلب إلى «مدفوع» لا عند إنشائه؛ فغير المدفوع بلا سائق
+    // سلوك صحيح، والطلب بلا موعد يُحوَّل عمداً إلى under_review لتُسنده الإدارة.
+    // عدُّهما إنذاراً كاذباً يُفقد الرقم قيمته — وهو ما سأل عنه المالك.
+    expect(board.contains('static bool _needsDriver('), isTrue);
+    expect(board.contains("m['service_date'] == null) return false"), isTrue,
+        reason: 'الطلب الإداري بلا موعد ليس فشل إسناد');
+    expect(board.contains("m['is_paid'] == true || isSub"), isTrue,
+        reason: 'المدفوع وزيارة الاشتراك وحدهما يستحقان الإنذار');
+    // العدّاد وشارة اليوم ووسم الصف تستخدم القاعدة نفسها — وإلا تناقضت الأرقام.
+    expect('_needsDriver('.allMatches(board).length, greaterThanOrEqualTo(4),
+        reason: 'التعريف + العدّاد + شارة اليوم + وسم الصف');
+    expect(board.contains('يُسنَد بعد الدفع'), isTrue,
+        reason: 'وسم رمادي هادئ بدل الأحمر للحالة الطبيعية');
+  });
+
   test('الاشتراكات تُفصل عن الطلبات العادية', () {
     // زيارة الاشتراك بلا إيراد جديد لكنها تستهلك سائقاً — خلطها يخفي الضغط.
     expect(board.contains("m['contract_id'] != null"), isTrue);
