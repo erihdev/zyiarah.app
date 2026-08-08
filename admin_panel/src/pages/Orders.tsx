@@ -32,20 +32,104 @@ interface OrderRecord {
     payment_method?: string;
     is_paid?: boolean;
     service_date?: Timestamp;
-    // (باقات السكن) تفصيل الباقة — يظهر تحت نوع الخدمة وفي نافذتي التعيين/التعديل.
-    service_meta?: { kind?: string; homeLabel?: string; crewCount?: number; durationHours?: number };
+    // تفصيل الخدمة — يظهر تحت نوع الخدمة وفي نافذتي التعيين/التعديل.
+    // ستة أنواع يكتبها التطبيق؛ كانت اللوحة تقرأ home_package وحده.
+    service_meta?: {
+        kind?: string;
+        // home_package
+        homeLabel?: string; crewCount?: number; durationHours?: number;
+        materials?: { name?: string; quantity?: number }[];
+        // ac_service / car_interior
+        lines?: { label?: string; count?: number }[];
+        // sofa_rug_sqm
+        pieces?: { label?: string; billed_measure?: number; area_sqm?: number; uses_area?: boolean }[];
+        // store_products
+        items?: { name?: string; quantity?: number }[];
+        // event_workers
+        workers?: number; event_hours?: number;
+    };
     worker_count?: number;
     hours_contracted?: number;
 }
 
-// «شقة متوسطة • كادران • 6س» — يعرفها الأدمن قبل اختيار السائق والموعد.
+const n = (v: unknown): number => Number(v) || 0;
+
+/// ملخّص تفصيل الخدمة بسطر واحد — **مرآة** لـ zyiarahServiceMetaSummary في
+/// lib/widgets/service_meta_view.dart (مصدر الحقيقة). كانت هذه الدالة ترجع null
+/// لكل نوع عدا home_package، فيُسنِد الأدمن من الويب سائقاً وهو لا يرى عدد
+/// المكيفات ولا مقاسات الكنب ولا — الأخطر — عدد عاملات المناسبة وساعاتها،
+/// وهي جوهر الحجز نفسه.
+///
+/// ملاحظة: لا نستعمل o.worker_count / o.hours_contracted بديلاً؛ يحملهما **كل**
+/// طلب بقيم افتراضية (1 عاملة / 4 ساعات) فيطبعان بيانات كاذبة على غير محلّها.
 const pkgSummary = (o: OrderRecord): string | null => {
     const m = o.service_meta;
-    if (!m || m.kind !== 'home_package' || !m.homeLabel) return null;
-    const crews = Number(m.crewCount) || 0;
-    const crewsLabel = crews === 1 ? 'كادر واحد' : crews === 2 ? 'كادران' : `${crews} كوادر`;
-    const dur = Number(m.durationHours) || 0;
-    return `${m.homeLabel} • ${crewsLabel}${dur > 0 ? ` • ${dur}س` : ''}`;
+    if (!m) return null;
+    const parts: string[] = [];
+
+    switch (m.kind) {
+        // السيارات والمكيفات بنية بنود واحدة (label/count) — نفس الملخّص.
+        case 'ac_service':
+        case 'car_interior': {
+            if (!Array.isArray(m.lines)) return null;
+            for (const l of m.lines) {
+                const c = n(l?.count);
+                if (c > 0) parts.push(`${l?.label ?? '-'} ×${c}`);
+            }
+            break;
+        }
+        case 'sofa_rug_sqm': {
+            if (!Array.isArray(m.pieces)) return null;
+            // تجميع حسب النوع: العدد والمقدار المسعَّر (م² للسجاد، م.ط للكنب).
+            const count: Record<string, number> = {};
+            const measure: Record<string, number> = {};
+            const unit: Record<string, string> = {};
+            for (const p of m.pieces) {
+                const label = `${p?.label ?? '-'}`.split(' ')[0]; // «كنب 1» → «كنب»
+                count[label] = (count[label] ?? 0) + 1;
+                // الطلبات القديمة (بلا billed_measure/uses_area) كانت كلها بالمساحة.
+                measure[label] = (measure[label] ?? 0) + n(p?.billed_measure ?? p?.area_sqm);
+                unit[label] = p?.uses_area === false ? 'م.ط' : 'م²';
+            }
+            for (const label of Object.keys(count)) {
+                parts.push(`${label} ×${count[label]} (${measure[label].toFixed(2)} ${unit[label]})`);
+            }
+            break;
+        }
+        case 'store_products': {
+            if (!Array.isArray(m.items)) return null;
+            for (const it of m.items) {
+                const q = n(it?.quantity);
+                if (q > 0) parts.push(`${it?.name ?? '-'} ×${q}`);
+            }
+            break;
+        }
+        case 'home_package': {
+            if (!m.homeLabel) return null;
+            const crews = n(m.crewCount);
+            if (crews <= 0) return null;
+            parts.push(m.homeLabel);
+            parts.push(crews === 1 ? 'كادر واحد' : crews === 2 ? 'كادران' : `${crews} كوادر`);
+            const dur = n(m.durationHours);
+            if (dur > 0) parts.push(`${dur}س`);
+            // تنبيه مبكّر: الطلب يحمل مواد يجب أن يجلبها السائق.
+            if (Array.isArray(m.materials) && m.materials.length > 0) {
+                parts.push(`+ ${m.materials.length} مادة`);
+            }
+            break;
+        }
+        case 'event_workers': {
+            const w = n(m.workers);
+            const h = n(m.event_hours);
+            if (w <= 0 || h <= 0) return null;
+            parts.push(w === 1 ? 'عاملة واحدة' : w === 2 ? 'عاملتان' : `${w} عاملات`);
+            parts.push(h === 2 ? 'ساعتان' : `${h} ساعات`);
+            break;
+        }
+        default:
+            return null;
+    }
+    return parts.length ? parts.join(' • ') : null;
 };
 
 interface DriverOption { id: string; name: string; is_available: boolean; is_active: boolean; }
