@@ -64,8 +64,20 @@ void main() {
   test('ملخّص الدفع: يخفي «المدة» و«عدد العاملات» لطلب المتجر', () {
     // حقول خدمة التنظيف مضلّلة لتوصيل منتجات (عاملة واحدة/ساعتان).
     expect(pay.contains("kind'] == 'store_products'"), isTrue);
-    expect(pay.contains('!_isStoreOrder'), isTrue);
+    expect(pay.contains('!_hidesHourlyRows'), isTrue);
+    expect(pay.contains('_isStoreOrder || _isPerUnitService'), isTrue,
+        reason: 'الإخفاء يشمل المتجر والخدمات المُسعَّرة بالقطعة معاً');
     expect(pay.contains("_buildRowDetail('عدد المنتجات'"), isTrue,
         reason: 'يُعرض عدد المنتجات بدلاً من المدة/العاملات');
+  });
+
+  test('ملخّص الدفع: يخفيهما أيضاً في الخدمات المُسعَّرة بالقطعة', () {
+    // طلب المالك: الكنب/المراتب والمكيفات وداخلية السيارة تُسعَّر بالقطعة لا
+    // بالساعة — «المدة» و«عدد العاملات» رقمان داخليان لحجز السائق فقط، وإظهارهما
+    // يوهم العميل أن السعر محسوب بالساعة.
+    for (final kind in ['sofa_rug_sqm', 'ac_service', 'car_interior']) {
+      expect(pay.contains("'$kind'"), isTrue,
+          reason: '$kind يجب أن يكون ضمن _perUnitKinds');
+    }
   });
 }

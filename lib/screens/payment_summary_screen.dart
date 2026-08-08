@@ -281,9 +281,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       widget.serviceMeta!['kind'] == 'store_products';
 
   /// خدمات تُسعَّر **بالقطعة/الوحدة** لا بالساعة: الكنب والمراتب (sofa_rug_sqm)
-  /// والمكيفات (ac_service). «المدة» و«عدد العاملات» فيها رقمان داخليان لحجز
-  /// السائق فقط — إظهارهما للعميل يوهم أن السعر محسوب بالساعة (بطلب المالك).
-  static const _perUnitKinds = {'sofa_rug_sqm', 'ac_service'};
+  /// والمكيفات (ac_service) وداخلية السيارة (car_interior). «المدة» و«عدد
+  /// العاملات» فيها رقمان داخليان لحجز السائق فقط — إظهارهما للعميل يوهم أن
+  /// السعر محسوب بالساعة (بطلب المالك).
+  static const _perUnitKinds = {'sofa_rug_sqm', 'ac_service', 'car_interior'};
   bool get _isPerUnitService =>
       widget.serviceMeta != null &&
       _perUnitKinds.contains(widget.serviceMeta!['kind']);

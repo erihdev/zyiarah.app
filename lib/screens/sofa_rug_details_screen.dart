@@ -704,26 +704,30 @@ class _SofaRugCleaningDetailsScreenState
       child: Column(
         children: [
           _row('عدد القطع:', '$complete'),
-          const Divider(height: 22),
-          _row('المجموع الفرعي:', '${subTotal.toStringAsFixed(2)} ر.س'),
-          const SizedBox(height: 8),
-          _row('ضريبة القيمة المضافة (15%):', '${vat.toStringAsFixed(2)} ر.س',
-              muted: true),
           const Divider(height: 22, thickness: 2, color: Color(0xFFE2E8F0)),
+          // كل الأسعار المعروضة للعميل **قبل الضريبة** (قرار المالك)؛ الضريبة
+          // والإجمالي الشامل يظهران في «تفاصيل الفاتورة» بشاشة إتمام الطلب فقط.
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('الإجمالي المطلوب:',
+              Text('الإجمالي قبل الضريبة:',
                   style: GoogleFonts.tajawal(
                       fontSize: 17,
                       fontWeight: FontWeight.bold,
                       color: const Color(0xFF1E293B))),
-              Text('${grandTotal.toStringAsFixed(2)} ر.س',
+              Text('${subTotal.toStringAsFixed(2)} ر.س',
                   style: GoogleFonts.tajawal(
                       fontSize: 21,
                       fontWeight: FontWeight.w900,
                       color: _brand)),
             ],
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text('تُضاف ضريبة القيمة المضافة 15% عند إتمام الطلب',
+                style: GoogleFonts.tajawal(
+                    fontSize: 11, color: const Color(0xFF94A3B8))),
           ),
         ],
       ),

@@ -873,7 +873,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                                       ? Colors.white
                                       : const Color(0xFF660033))),
                           const SizedBox(height: 2),
-                          Text("${formatSar(opt.grossPrice)} ر.س",
+                          // قبل الضريبة — الضريبة تظهر في تفاصيل الفاتورة فقط.
+                          Text("${formatSar(opt.basePrice)} ر.س",
                               style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w900,
@@ -1097,9 +1098,16 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("الإجمالي شامل الضريبة:", style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-              Text("${grandTotal.toStringAsFixed(2)} ر.س", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF660033))),
+              const Text("الإجمالي قبل الضريبة:", style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+              // قبل الضريبة (قرار المالك)؛ الضريبة والإجمالي الشامل في تفاصيل الفاتورة فقط.
+              Text("${totalAmount.toStringAsFixed(2)} ر.س", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF660033))),
             ],
+          ),
+          const SizedBox(height: 6),
+          const Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text('تُضاف ضريبة القيمة المضافة 15% عند إتمام الطلب',
+                style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
           )
         ],
       ),
