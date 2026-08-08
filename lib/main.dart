@@ -116,8 +116,19 @@ class ZyiarahApp extends StatelessWidget {
         // (#16) بوّابة الصيانة الشاملة: في MaterialApp.builder فوق كل المسارات
         // **والروابط العميقة** المدفوعة على الـ navigator الجذري — بدل حصرها في فرع
         // '/' داخل AuthWrapper (الذي كان يُتجاوَز برابط عميق أو URL مباشر على الويب).
-        final gated = _maintenanceGate(context, child);
-        final mq = MediaQuery.of(context);
+        final gated0 = _maintenanceGate(context, child);
+        final mq0 = MediaQuery.of(context);
+
+        // (طلب المالك) تكبير الخطوط في كل التطبيق كي تتضح العناوين والفرعية.
+        // السلّم العام هو الوسيلة الوحيدة الفعّالة: مئات الشاشات تكتب fontSize
+        // صراحةً فلا يمسّها textTheme إطلاقاً. والحدّ الأعلى يمنع أن يجمع مستخدمٌ
+        // ضبط نظامه الضخم مع تكبيرنا فينكسر تخطيط الصفوف الضيّقة.
+        const kTextBoost = 1.12;
+        const kMaxScale = 1.35;
+        final boosted = (mq0.textScaler.scale(1.0) * kTextBoost).clamp(kTextBoost, kMaxScale);
+        final mq = mq0.copyWith(textScaler: TextScaler.linear(boosted));
+        final gated = MediaQuery(data: mq, child: gated0);
+
         const maxWidth = 600.0;
         if (mq.size.width <= maxWidth) return gated; // هاتف: بلا حصر
         return ColoredBox(

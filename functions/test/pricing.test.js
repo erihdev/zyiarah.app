@@ -140,4 +140,60 @@ t("home_package: zero/invalid price => null (unpriced = not sellable)", () => {
   }, {packages: {small: {crews: {"1": {price: 0, enabled: true}}}}}), null);
 });
 
+// ── (عاملات المناسبات) event_workers: العدد × الساعات × سعر ساعة المنطقة ──
+const evZone = {eventWorkerHourPrice: 35};
+
+t("event_workers = workers * hours * zone rate", () => {
+  assert.strictEqual(computeExpectedBasePrice({
+    service_meta: {kind: "event_workers", workers: 3, event_hours: 4},
+  }, evZone), 420); // 3 * 4 * 35
+});
+
+t("event_workers: client-supplied hour_rate is ignored", () => {
+  // سعر مُلفَّق على الطلب يجب ألا يغيّر شيئاً — المرجع وثيقة المنطقة وحدها.
+  assert.strictEqual(computeExpectedBasePrice({
+    service_meta: {
+      kind: "event_workers", workers: 2, event_hours: 2, hour_rate: 1,
+    },
+  }, evZone), 140); // 2 * 2 * 35 لا 2*2*1
+});
+
+t("event_workers: unpriced zone => null (not sellable)", () => {
+  assert.strictEqual(computeExpectedBasePrice({
+    service_meta: {kind: "event_workers", workers: 2, event_hours: 2},
+  }, {eventWorkerHourPrice: 0}), null);
+  assert.strictEqual(computeExpectedBasePrice({
+    service_meta: {kind: "event_workers", workers: 2, event_hours: 2},
+  }, zone), null); // منطقة بلا الحقل إطلاقاً
+});
+
+t("event_workers: out-of-range quantities => null", () => {
+  // حدود الشاشة (1..10 عاملات، 2..12 ساعة) مُنفَّذة خادمياً أيضاً — وإلا مرّ
+  // طلبٌ مُلفَّق بساعات/عدد خياليين فحُسب له أساسٌ ضخم أو تافه.
+  for (const meta of [
+    {kind: "event_workers", workers: 0, event_hours: 4},
+    {kind: "event_workers", workers: 11, event_hours: 4},
+    {kind: "event_workers", workers: 2, event_hours: 1},
+    {kind: "event_workers", workers: 2, event_hours: 13},
+  ]) {
+    assert.strictEqual(computeExpectedBasePrice({service_meta: meta}, evZone),
+        null);
+  }
+});
+
+// ── (فاتورة واحدة) مواد التنظيف داخل طلب التنظيف المنزلي ──
+t("home_package + materials: base = package + resolved materials", () => {
+  // materials_base_resolved يحقنه index.js بعد قراءته من products الموثوقة.
+  assert.strictEqual(computeExpectedBasePrice({
+    materials_base_resolved: 55,
+    service_meta: {kind: "home_package", homeType: "small", crewCount: 2},
+  }, pkgZone), 365); // 310 + 55
+});
+
+t("home_package: no materials => unchanged package price", () => {
+  assert.strictEqual(computeExpectedBasePrice({
+    service_meta: {kind: "home_package", homeType: "small", crewCount: 2},
+  }, pkgZone), 310);
+});
+
 console.log(`\n${passed} pricing tests passed.`);

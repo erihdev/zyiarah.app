@@ -14,6 +14,8 @@ import 'package:zyiarah/utils/firestore_maps.dart';
 import 'package:zyiarah/screens/admin/admin_zone_schedule_editor.dart';
 import 'package:zyiarah/utils/jazan_boundary.dart';
 import 'package:zyiarah/utils/home_packages.dart';
+import 'package:zyiarah/screens/event_workers_details_screen.dart'
+    show kEventWorkerHourPriceField;
 
 class AdminHourlyZonesScreen extends StatefulWidget {
   const AdminHourlyZonesScreen({super.key});
@@ -234,6 +236,10 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     final pCarSmallCtrl = TextEditingController(text: (data?['carSmallPrice'] ?? kDefaultCarSmallPrice).toString());
     final pCarMediumCtrl = TextEditingController(text: (data?['carMediumPrice'] ?? kDefaultCarMediumPrice).toString());
     final pCarLargeCtrl = TextEditingController(text: (data?['carLargePrice'] ?? kDefaultCarLargePrice).toString());
+    // (عاملات المناسبات) سعر ساعة العاملة الواحدة — قبل الضريبة. لا قيمة
+    // افتراضية: الفراغ/الصفر = الخدمة غير مسعّرة ⇒ لا تُباع في هذه المنطقة.
+    final pEventWorkerCtrl = TextEditingController(
+        text: (data?[kEventWorkerHourPriceField] ?? '').toString());
 
     // (باقات السكن — النظام الجديد للنظافة بالساعة) لكل نوع: وصف + مدة جدولة +
     // 4 خيارات كوادر، كلٌّ بسعرٍ ومفتاح تفعيل يتحكم به الأدمن **لكل منطقة**.
@@ -445,6 +451,8 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                                         n(src['carMediumPrice']);
                                     pCarLargeCtrl.text =
                                         n(src['carLargePrice']);
+                                    pEventWorkerCtrl.text =
+                                        n(src[kEventWorkerHourPriceField]);
                                     // (باقات السكن) تعبئة من المنطقة المصدر.
                                     final sp =
                                         stringKeyedMap(src['packages']) ?? {};
@@ -535,6 +543,21 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                         Expanded(child: TextField(controller: pCarLargeCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'كبيرة', border: OutlineInputBorder()))),
                       ],
                     ),
+
+                    const Divider(height: 30),
+                    const Text("عاملات للمناسبات — لكل عاملة/ساعة (ر.س، قبل الضريبة):",
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Text(
+                        "العميل يختار العدد والمدة واليوم والساعة، والسعر = العدد × الساعات × هذا السعر. اتركه فارغاً لتعطيل الخدمة في هذه المنطقة.",
+                        style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    const SizedBox(height: 10),
+                    TextField(
+                        controller: pEventWorkerCtrl,
+                        keyboardType:
+                            const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                            labelText: 'سعر ساعة العاملة',
+                            border: OutlineInputBorder())),
 
                     const Divider(height: 30),
                     const Text("باقات السكن — التنظيف المنزلي (ر.س، قبل الضريبة):",
@@ -653,6 +676,8 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                               'carSmallPrice': double.tryParse(pCarSmallCtrl.text) ?? 0,
                               'carMediumPrice': double.tryParse(pCarMediumCtrl.text) ?? 0,
                               'carLargePrice': double.tryParse(pCarLargeCtrl.text) ?? 0,
+                              kEventWorkerHourPriceField:
+                                  double.tryParse(pEventWorkerCtrl.text) ?? 0,
                               // (باقات السكن) تُنسخ مع الأسعار — تفعيلاتها وأسعارها ومددها.
                               'packages': buildPackages(),
                             });
@@ -704,6 +729,8 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                         'carSmallPrice': double.tryParse(pCarSmallCtrl.text) ?? 0,
                         'carMediumPrice': double.tryParse(pCarMediumCtrl.text) ?? 0,
                         'carLargePrice': double.tryParse(pCarLargeCtrl.text) ?? 0,
+                        kEventWorkerHourPriceField:
+                            double.tryParse(pEventWorkerCtrl.text) ?? 0,
                         // (باقات السكن) أسعار (نوع × كوادر) + تفعيلاتها + مدد الجدولة.
                         'packages': buildPackages(),
                         'rank': rank,
@@ -772,6 +799,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
       pAcMaintSplitCtrl.dispose();
       pAcWashWinCtrl.dispose();
       pAcWashSplitCtrl.dispose();
+      pEventWorkerCtrl.dispose();
       pCarSmallCtrl.dispose();
       pCarMediumCtrl.dispose();
       pCarLargeCtrl.dispose();

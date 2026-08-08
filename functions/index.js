@@ -7,7 +7,7 @@ const {getFunctions} = require("firebase-admin/functions");
 const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const geofire = require("geofire-common");
-const {computeExpectedBasePrice} = require("./pricing");
+const {computeExpectedBasePrice, resolveMaterialsBase} = require("./pricing");
 admin.initializeApp();
 
 // Secrets — stored in Firebase Secret Manager, never in source code
@@ -1885,7 +1885,12 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
         const zq = await db.collection("service_zones")
             .where("name", "==", od.zone_name).limit(1).get();
         if (!zq.empty) {
-          const base = computeExpectedBasePrice(od, zq.docs[0].data());
+          // مواد التنظيف داخل الطلب: تُسعَّر من products قبل الحساب. null =
+          // تعذّر التحقق ⇒ نترك pkgExpectedGross فارغاً (لا نرفض بلا يقين).
+          const matBase = await resolveMaterialsBase(db, od.service_meta);
+          const base = matBase === null ? null :
+            computeExpectedBasePrice(
+                {...od, materials_base_resolved: matBase}, zq.docs[0].data());
           if (base && base > 0) {
             const surge = await _readSurgeFactor(db);
             pkgExpectedGross = Math.round(base * 1.15 * surge * 100) / 100;
@@ -2264,7 +2269,12 @@ exports.verifyMoyasarPayment = onCall(
                   .where("name", "==", od.zone_name).limit(1).get();
               if (!zq.empty) zoneData = zq.docs[0].data();
             }
-            const base = zoneData ? computeExpectedBasePrice(od, zoneData) : null;
+            // مواد التنظيف المضافة داخل الطلب تُسعَّر من products قبل الحساب؛
+            // null = تعذّر التحقق ⇒ لا نُعيد تسعيراً ولا نرفض دفعاً بلا يقين.
+            const matBase = await resolveMaterialsBase(db, od.service_meta);
+            const base = (zoneData && matBase !== null) ?
+              computeExpectedBasePrice(
+                  {...od, materials_base_resolved: matBase}, zoneData) : null;
             if (base && base > 0) {
               const surge = await _readSurgeFactor(db);
               const expected = Math.round(base * 1.15 * surge * 100) / 100;

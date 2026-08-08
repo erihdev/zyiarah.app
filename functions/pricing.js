@@ -75,6 +75,19 @@ function computeExpectedBasePrice(order, zone) {
     return base > 0 ? base : null;
   }
 
+  // (عاملات المناسبات) الأساس = العدد × الساعات × سعر ساعة العاملة في المنطقة.
+  // الكمّيات من الطلب والسعر من وثيقة المنطقة — لا يُقرأ meta.hour_rate إطلاقاً
+  // (يكتبه العميل). حدود مطابقة للشاشة تمنع طلباً مُلفَّقاً بساعات خيالية.
+  if (kind === "event_workers") {
+    const rate = Number(zone.eventWorkerHourPrice);
+    if (!rate || isNaN(rate) || rate <= 0) return null;
+    const workers = Number(meta.workers);
+    const hours = Number(meta.event_hours);
+    if (!workers || workers < 1 || workers > 10) return null;
+    if (!hours || hours < 2 || hours > 12) return null;
+    return workers * hours * rate;
+  }
+
   // (باقات السكن) السعر من zone.packages[نوع السكن].crews[عدد الكوادر] الموثوق —
   // يشمل الكوادر سلفاً فلا يُضرب بأي عدد. خيارٌ معطَّل/غير مسعَّر = يتعذّر التحقق (null)
   // فلا يُقبل سعرُ عميلٍ لخيارٍ أطفأه الأدمن لمنطقته.
@@ -86,7 +99,11 @@ function computeExpectedBasePrice(order, zone) {
     if (!opt || opt.enabled !== true) return null;
     const price = Number(opt.price);
     if (!price || isNaN(price) || price <= 0) return null;
-    return price;
+    // مواد التنظيف المضافة داخل الطلب نفسه (فاتورة واحدة بطلب واحد — طلب المالك):
+    // أسعارها تأتي محلولةً من `products` عبر resolveMaterialsBase قبل النداء،
+    // لأن هذه الدالة نقيّة بلا وصول لقاعدة البيانات. غيابها = صفر (طلب بلا مواد).
+    const materialsBase = Number(order.materials_base_resolved) || 0;
+    return price + materialsBase;
   }
 
   // store_products: عناصر service_meta بلا معرّف منتج → يتعذّر إعادة التسعير الموثوق.
@@ -94,4 +111,30 @@ function computeExpectedBasePrice(order, zone) {
   return null;
 }
 
-module.exports = { computeExpectedBasePrice, acPriceField, carPriceField };
+// مواد التنظيف داخل طلب التنظيف المنزلي: تُسعَّر من مستندات `products` الموثوقة
+// لا من السلة التي يكتبها العميل. تُعيد الأساس (قبل الضريبة)، أو null إن تعذّر
+// التحقق (منتج مفقود/بلا سعر) كي لا يمرّ سعرٌ غير قابل لإعادة الحساب.
+// مفصولة عن computeExpectedBasePrice لأن تلك نقيّة بلا تبعيات؛ هذه تقرأ Firestore.
+async function resolveMaterialsBase(db, meta) {
+  const items = meta && Array.isArray(meta.materials) ? meta.materials : [];
+  if (items.length === 0) return 0;
+  let base = 0;
+  for (const it of items) {
+    const id = it && it.product_id;
+    const qty = Number(it && it.quantity) || 0;
+    if (!id || qty <= 0) return null;
+    const snap = await db.collection("products").doc(String(id)).get();
+    if (!snap.exists) return null;
+    const price = Number(snap.data().price);
+    if (!price || isNaN(price) || price <= 0) return null;
+    base += price * qty;
+  }
+  return base;
+}
+
+module.exports = {
+  computeExpectedBasePrice,
+  resolveMaterialsBase,
+  acPriceField,
+  carPriceField,
+};

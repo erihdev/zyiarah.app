@@ -7,8 +7,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/location_picker_screen.dart';
-import 'package:zyiarah/screens/store_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
+import 'package:zyiarah/services/store_service.dart';
 import 'package:zyiarah/services/zone_locator_service.dart';
 import 'package:zyiarah/utils/home_packages.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
@@ -82,6 +82,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     // إعادة تحديد صامتة دورية: إن تنقّل العميل لمحافظة أخرى تتبدّل المنطقة تلقائياً.
     _zoneWatch = Timer.periodic(
         const Duration(seconds: 45), (_) => _attemptAutoLocation(silent: true));
+    _fetchMaterials();
     // شرط الخدمة: يجب أن تُقرّ العميلة بوجود سيدة في المنزل قبل طلب العاملات.
     // «إلغاء» يعيدها للرئيسية فلا تُكمل الطلب؛ «نعم» يتيح المتابعة.
     WidgetsBinding.instance.addPostFrameCallback((_) => _confirmWomanPresent());
@@ -499,8 +500,54 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     return _firstFeasibleStart(d) == null; // لا سائق يتسع جدوله = غير متاح
   }
 
+  // ── مواد التنظيف داخل الطلب نفسه (طلب المالك: فاتورة واحدة بطلب واحد) ──
+  // كانت المواد تُشترى من المتجر كـ store_order منفصل بفاتورة ثانية وموعد ثانٍ.
+  // الآن تُضاف داخل هذا الطلب: سعرها يدخل الأساس، والخادم يعيد تسعيرها من
+  // مستندات `products` (resolveMaterialsBase) فلا يُقبل سعرٌ يكتبه العميل.
+  final Map<String, int> _materialQty = {}; // product_id → الكمية
+  List<StoreProduct> _materials = [];
+  bool _materialsLoading = true;
+
+  /// منتجات المتجر الموجّهة للعميل. الفشل لا يُعطّل الحجز — المواد اختيارية،
+  /// فنُطفئ القسم بصمت بدل منع الطلب كلّه.
+  Future<void> _fetchMaterials() async {
+    try {
+      final list =
+          await ZyiarahStoreService().streamProducts(audience: 'client').first;
+      if (!mounted) return;
+      setState(() {
+        _materials = list;
+        _materialsLoading = false;
+      });
+    } catch (e) {
+      debugPrint('[HomePackage] fetchMaterials failed: $e');
+      if (mounted) setState(() => _materialsLoading = false);
+    }
+  }
+
+  double get _materialsTotal => _materials.fold(0.0, (acc, p) {
+        final q = _materialQty[p.id] ?? 0;
+        return acc + q * p.price;
+      });
+
+  int get _materialsCount =>
+      _materialQty.values.fold(0, (a, v) => a + v);
+
+  void _setMaterialQty(StoreProduct p, int v) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      final q = v.clamp(0, 20);
+      if (q == 0) {
+        _materialQty.remove(p.id);
+      } else {
+        _materialQty[p.id] = q;
+      }
+    });
+  }
+
   // (باقات السكن) سعر الخيار المختار يشمل عدد الكوادر سلفاً — لا ضرب بعدد عاملات.
-  double get totalAmount => _basePrice;
+  // المواد المضافة تُجمع فوقه في الأساس نفسه (فاتورة واحدة).
+  double get totalAmount => _basePrice + _materialsTotal;
 
   // الأساس من اللوحة؛ الضريبة 15% تُضاف فوقه (قرار المالك) — المعروض «شامل الضريبة».
   double get grandTotal => ((totalAmount * 1.15) * 100).roundToDouble() / 100;
@@ -554,6 +601,20 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
               'homeLabel': kHomeTypeLabels[_selectedType],
               'crewCount': _selectedCrews,
               'durationHours': _durationHours,
+              // مواد التنظيف المضافة — بفاتورة الطلب نفسه لا بطلب متجر منفصل.
+              // product_id هو ما يعيد به الخادم التسعير؛ الاسم/السعر للعرض فقط.
+              if (_materialsCount > 0)
+                'materials': [
+                  for (final p in _materials)
+                    if ((_materialQty[p.id] ?? 0) > 0)
+                      {
+                        'product_id': p.id,
+                        'name': p.name,
+                        'quantity': _materialQty[p.id],
+                        'price': p.price,
+                      },
+                ],
+              if (_materialsCount > 0) 'materials_total': _materialsTotal,
             },
           ),
         ),
@@ -667,7 +728,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
 
                       // (ملاحظة العميل 2026-08-01) توضيح ما تشمله الخدمة: الضريبة
                       // وأدوات التنظيف الأساسية مشمولة، ومواد التنظيف لا — مع
-                      // توجيه صريح لمتجر زيارة بدل ترك العميلة تكتشف يوم الزيارة.
+                      // توجيه صريح لإضافتها داخل الطلب بدل ترك العميلة تكتشف يوم الزيارة.
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -675,17 +736,19 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(color: const Color(0xFFBBF7D0)),
                         ),
-                        child: Column(
+                        child: const Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Row(
+                            Row(
                               children: [
                                 Icon(Icons.cleaning_services_rounded,
                                     color: Color(0xFF15803D), size: 20),
                                 SizedBox(width: 10),
                                 Expanded(
+                                  // السعر صار يُعرض **قبل** الضريبة في كل الشاشات،
+                                  // فالنص القديم «شامل الضريبة» صار مناقضاً لما تراه.
                                   child: Text(
-                                    "السعر شامل الضريبة وأدوات التنظيف الأساسية. مواد التنظيف غير مشمولة.",
+                                    "السعر قبل الضريبة ويشمل أدوات التنظيف الأساسية. مواد التنظيف غير مشمولة — أضيفيها أدناه لتصل مع الفريق في الطلب نفسه.",
                                     style: TextStyle(
                                         fontSize: 12.5,
                                         color: Color(0xFF15803D),
@@ -695,28 +758,14 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 6),
-                            GestureDetector(
-                              onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (_) =>
-                                          const ZyiarahStoreScreen())),
-                              child: const Padding(
-                                padding: EdgeInsets.only(right: 30),
-                                child: Text(
-                                  "تحتاجين مواد تنظيف؟ تسوّقيها من متجر زيارة ←",
-                                  style: TextStyle(
-                                      fontSize: 12.5,
-                                      color: Color(0xFF660033),
-                                      fontWeight: FontWeight.bold,
-                                      decoration: TextDecoration.underline),
-                                ),
-                              ),
-                            ),
                           ],
                         ),
                       ),
+                      const SizedBox(height: 24),
+
+                      // (طلب المالك) مواد التنظيف داخل الطلب نفسه — فاتورة واحدة
+                      // وموعد واحد، بدل طلب متجر منفصل بفاتورة وموعد ثانيين.
+                      _buildMaterialsSection(),
                       const SizedBox(height: 30),
 
                       _buildSummaryCard(),
@@ -1068,6 +1117,145 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     decoration: BoxDecoration(color: color, shape: BoxShape.circle, border: Border.all(color: border ?? color)),
   );
 
+  /// قسم مواد التنظيف — اختياري تماماً. ما يُضاف هنا يدخل **نفس** الطلب ونفس
+  /// الفاتورة ويصل مع الفريق في الموعد، بدل طلب متجر منفصل.
+  Widget _buildMaterialsSection() {
+    if (_materialsLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+            child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Color(0xFF660033)))),
+      );
+    }
+    if (_materials.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.shopping_basket_rounded,
+                color: Color(0xFF660033), size: 20),
+            const SizedBox(width: 8),
+            const Text("مواد التنظيف (اختياري)",
+                style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B))),
+            const Spacer(),
+            if (_materialsCount > 0)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF660033).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text("$_materialsCount",
+                    style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF660033))),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        const Text("تصل مع الفريق في نفس الموعد وضمن نفس الفاتورة.",
+            style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+        const SizedBox(height: 12),
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _materials.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          itemBuilder: (_, i) {
+            final p = _materials[i];
+            final q = _materialQty[p.id] ?? 0;
+            return Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                    color: q > 0
+                        ? const Color(0xFF660033).withValues(alpha: 0.35)
+                        : const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: p.imageUrl.isEmpty
+                        ? const SizedBox(
+                            width: 46,
+                            height: 46,
+                            child: Icon(Icons.inventory_2_outlined,
+                                color: Color(0xFF94A3B8)))
+                        : Image.network(p.imageUrl,
+                            width: 46,
+                            height: 46,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const SizedBox(
+                                width: 46,
+                                height: 46,
+                                child: Icon(Icons.inventory_2_outlined,
+                                    color: Color(0xFF94A3B8)))),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(p.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 13)),
+                        const SizedBox(height: 2),
+                        // قبل الضريبة كبقية الأسعار المعروضة.
+                        Text("${formatSar(p.price)} ر.س",
+                            style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF660033))),
+                      ],
+                    ),
+                  ),
+                  if (q == 0)
+                    TextButton(
+                      onPressed: () => _setMaterialQty(p, 1),
+                      child: const Text("إضافة"),
+                    )
+                  else ...[
+                    IconButton(
+                      onPressed: () => _setMaterialQty(p, q - 1),
+                      icon: const Icon(Icons.remove_circle_outline,
+                          color: Color(0xFF64748B)),
+                      tooltip: 'إنقاص',
+                    ),
+                    Text("$q",
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w900, fontSize: 15)),
+                    IconButton(
+                      onPressed: () => _setMaterialQty(p, q + 1),
+                      icon: const Icon(Icons.add_circle,
+                          color: Color(0xFF660033)),
+                      tooltip: 'زيادة',
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
   Widget _buildSummaryCard() {
     final String pkgLabel = _selectedType == null
         ? '—'
@@ -1094,6 +1282,17 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
               Text(crewsLabel, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
             ],
           ),
+          if (_materialsCount > 0) ...[
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text("مواد التنظيف:", style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+                Text("$_materialsCount قطعة · ${formatSar(_materialsTotal)} ر.س",
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+              ],
+            ),
+          ],
           const Divider(height: 20, thickness: 1),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

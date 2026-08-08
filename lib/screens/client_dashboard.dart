@@ -17,6 +17,7 @@ import 'package:zyiarah/screens/sofa_rug_details_screen.dart';
 import 'package:zyiarah/screens/subscription_plans_screen.dart';
 import 'package:zyiarah/screens/ac_service_details_screen.dart';
 import 'package:zyiarah/screens/car_interior_details_screen.dart';
+import 'package:zyiarah/screens/event_workers_details_screen.dart';
 import 'package:zyiarah/widgets/support_fab.dart';
 import 'package:zyiarah/screens/client_notifications_screen.dart';
 
@@ -715,6 +716,17 @@ class _ClientDashboardState extends State<ClientDashboard> {
           iconBgColor: const Color(0xFFE0F2FE),
           imagePath: 'assets/images/car_cleaning.png',
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CarInteriorDetailsScreen())),
+        ),
+        _buildWebStyleServiceCard(
+          title: "عاملات للمناسبات",
+          subtitle: "تقديم وضيافة وترتيب",
+          price: "تختارين العدد والساعات",
+          numericPrice: 0.0,
+          themeColor: const Color(0xFF9333EA),
+          icon: Icons.celebration_rounded,
+          iconBgColor: const Color(0xFFF3E8FF),
+          imagePath: 'assets/images/cleaning_hero.png',
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EventWorkersDetailsScreen())),
         ),
         _buildWebStyleServiceCard(
           title: "متجر المنظفات",
