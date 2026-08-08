@@ -16,6 +16,7 @@ import 'package:zyiarah/screens/admin/admin_hourly_zones_screen.dart';
 import 'package:zyiarah/screens/admin/admin_subscriptions_screen.dart';
 import 'package:zyiarah/screens/admin/admin_audit_logs_screen.dart';
 import 'package:zyiarah/screens/admin/admin_analytics_screen.dart';
+import 'package:zyiarah/screens/admin/admin_schedule_board_screen.dart';
 import 'package:zyiarah/screens/admin/admin_broadcast_screen.dart';
 import 'package:zyiarah/utils/pdf_report_util.dart';
 import 'package:zyiarah/utils/zyiarah_strings.dart';
@@ -164,6 +165,14 @@ class AdminMoreScreen extends StatelessWidget {
         'icon': Icons.bar_chart_outlined,
         'color': Colors.teal,
         'items': [
+          {
+            // استشرافي لا تقريري: «ماذا أمامنا» مقابل «كم ربحنا» في لوحة الإحصائيات.
+            'title': 'جدول المتابعة (يومي/أسبوعي/شهري)',
+            'icon': Icons.event_note_rounded,
+            'color': const Color(0xFF7C3AED),
+            'page': const AdminScheduleBoardScreen(),
+            'roles': ['super_admin', 'accountant_admin', 'orders_manager'],
+          },
           {
             'title': 'لوحة الإحصائيات والأرباح',
             'icon': Icons.insert_chart_outlined,
