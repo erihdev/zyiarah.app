@@ -280,6 +280,17 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       widget.serviceMeta != null &&
       widget.serviceMeta!['kind'] == 'store_products';
 
+  /// خدمات تُسعَّر **بالقطعة/الوحدة** لا بالساعة: الكنب والمراتب (sofa_rug_sqm)
+  /// والمكيفات (ac_service). «المدة» و«عدد العاملات» فيها رقمان داخليان لحجز
+  /// السائق فقط — إظهارهما للعميل يوهم أن السعر محسوب بالساعة (بطلب المالك).
+  static const _perUnitKinds = {'sofa_rug_sqm', 'ac_service'};
+  bool get _isPerUnitService =>
+      widget.serviceMeta != null &&
+      _perUnitKinds.contains(widget.serviceMeta!['kind']);
+
+  /// تُخفى صفوف الساعات/العاملات في طلبات المتجر وفي الخدمات المُسعَّرة بالقطعة.
+  bool get _hidesHourlyRows => _isStoreOrder || _isPerUnitService;
+
   /// سبب منع الدفع الأصلي (Apple/Google/Samsung) — نفس فحوص _handlePayment
   /// المتزامنة (الشروط/الهاتف/المستخدم). لولاها تتجاوز الأزرار الأصلية الفحوص
   /// لأنها تستدعي النجاح مباشرةً.
@@ -1398,9 +1409,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           _buildRowDetail('الخدمة', widget.serviceName),
           if (_isStoreOrder)
             _buildRowDetail('عدد المنتجات', '${widget.serviceMeta!['total_qty'] ?? ''}'),
-          if (widget.hours != null && !_isStoreOrder)
+          if (widget.hours != null && !_hidesHourlyRows)
             _buildRowDetail('المدة', '${widget.hours} ساعات'),
-          if (!_isStoreOrder)
+          if (!_hidesHourlyRows)
             _buildRowDetail('عدد العاملات',
                 widget.workerCount == 1
                     ? 'عاملة واحدة'
