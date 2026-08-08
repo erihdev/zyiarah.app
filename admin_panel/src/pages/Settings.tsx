@@ -6,6 +6,8 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/Notification.tsx';
 import { logAudit, AUDIT } from '../services/audit.ts';
+import ZoneScheduleEditor from '../components/ZoneScheduleEditor.tsx';
+import { type ZoneSchedule } from '../utils/zoneSchedule.ts';
 import { arabizeMapLabels } from '../utils/mapboxArabic.ts';
 import { JAZAN_BBOX, jazanMaskGeoJSON, jazanOutlineGeoJSON, isInJazan } from '../utils/jazanBoundary.ts';
 
@@ -144,6 +146,10 @@ export default function Settings({ role }: { role?: string | null }) {
     const [showApplyPicker, setShowApplyPicker] = useState(false);
     const [applyTargets, setApplyTargets] = useState<string[]>([]);
     const [isApplying, setIsApplying] = useState(false);
+    // جدول ساعات المحافظة. null = لم يُلمَس المحرّر ⇒ **لا نكتب schedule إطلاقاً**،
+    // فحفظُ سعرٍ عابر لا يُعيد كتابة جدول بلقطة قديمة (نفس الخلل الذي أُصلح في التطبيق).
+    const [scheduleDraft, setScheduleDraft] = useState<ZoneSchedule | null>(null);
+    const [scheduleInitial, setScheduleInitial] = useState<unknown>(undefined);
     const [activeTab, setActiveTab] = useState<TabType>(zonesOnly ? 'coverage' : 'general');
     const [settings, setSettings] = useState<SystemSettings>(defaultSettings);
     const [appUpdate, setAppUpdate] = useState<AppUpdateConfig>(defaultAppUpdate);
@@ -375,6 +381,8 @@ export default function Settings({ role }: { role?: string | null }) {
                 // (باقات السكن) نفس مخطط تطبيق الأدمن حرفياً — يقرؤه العميل
                 // ويتحقق منه التسعير الخادمي (functions/pricing.js).
                 packages: buildPackagesPayload(),
+                // جدول الساعات — يُكتب **فقط** إن لمس الأدمن المحرّر فعلاً.
+                ...(scheduleDraft ? { schedule: scheduleDraft } : {}),
                 updated_at: serverTimestamp(),
             };
             if (editingZoneId) {
@@ -440,6 +448,9 @@ export default function Settings({ role }: { role?: string | null }) {
                 eventWorkerHourPrice: s(d.eventWorkerHourPrice),
                 packages,
             });
+            // الجدول القائم يُعرض في المحرّر، والمسوّدة تبقى null حتى يُلمَس فعلاً.
+            setScheduleInitial(d.schedule);
+            setScheduleDraft(null);
             setEditingZoneId(zone.id);
             setEditingZoneName(s(d.name));
             setShowAddForm(true);
@@ -1318,6 +1329,14 @@ export default function Settings({ role }: { role?: string | null }) {
                                                     })}
                                                 </div>
                                             </div>
+
+                                            {/* جدول ساعات المحافظة — فتح/إقفال كل ساعة، فترات
+                                                استثنائية، وأيام إغلاق كامل. كان في التطبيق وحده. */}
+                                            <ZoneScheduleEditor
+                                                key={editingZoneId ?? 'new'}
+                                                initial={scheduleInitial}
+                                                onChange={setScheduleDraft}
+                                            />
 
                                             <div className="flex gap-3">
                                                 <button

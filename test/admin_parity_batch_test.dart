@@ -113,6 +113,34 @@ void main() {
     }
   });
 
+  test('محرّر جدول الساعات موجود في الويب بنفس مخطط التطبيق', () {
+    final web = read('admin_panel/src/utils/zoneSchedule.ts');
+    final editor = read('admin_panel/src/components/ZoneScheduleEditor.tsx');
+    // نفس المفاتيح حرفياً — الخادم (getHourlyAvailability) يقرؤها كما هي.
+    for (final k in ['enabled', 'weekly', 'blackouts', 'windows', 'closed']) {
+      expect(web.contains(k), isTrue, reason: '$k مفقود في مخطط الويب');
+    }
+    // الساعات تُخزَّن 24 وتُعرَض 12 — تخزين نصّي يكسر حساب الإتاحة بصمت.
+    expect(web.contains('formatHour12'), isTrue);
+    // قصّ الساعات المقفلة على النطاق — نفس قاعدة _emit في التطبيق.
+    expect(web.contains('h >= v.start && h < v.end'), isTrue);
+    expect(read('lib/screens/admin/admin_zone_schedule_editor.dart')
+        .contains('h >= e.value.start && h < e.value.end'), isTrue,
+        reason: 'المصدر الذي نطابقه');
+    // فتح/إقفال ساعة بعينها + الفترات الاستثنائية + أيام الإغلاق.
+    expect(editor.contains('toggleHour'), isTrue);
+    expect(editor.contains('فترات فتح استثنائية'), isTrue);
+    expect(editor.contains('أيام إغلاق كامل'), isTrue);
+  });
+
+  test('الويب أيضاً لا يكتب الجدول إلا إن لُمس', () {
+    // نفس فقدان البيانات الذي أُصلح في التطبيق — لا نكرّره في الويب.
+    expect(webSettings.contains('scheduleDraft ? { schedule: scheduleDraft } : {}'),
+        isTrue);
+    expect(webSettings.contains('setScheduleDraft(null)'), isTrue,
+        reason: 'فتح محافظة للتعديل يبدأ بمسوّدة فارغة');
+  });
+
   test('مدير العمليات يصل نطاق التغطية ولا يرى ما ترفضه القواعد', () {
     // firestore.rules: service_zones = isOrdersManager، system_configs = super_admin.
     expect(read('admin_panel/src/config/access.ts')
