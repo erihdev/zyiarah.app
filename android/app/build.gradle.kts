@@ -42,7 +42,10 @@ android {
     defaultConfig {
         applicationId = "com.zyiarah.zyiarah"
         minSdk = flutter.minSdkVersion // Force 21 to match local.properties
-        targetSdk = 35
+        // Android 16 (API 36) — إلزامي في Google Play اعتباراً من 31 أغسطس 2026،
+        // وإلا امتنع نشر أي تحديث. نأخذه من Flutter بدل رقمٍ ثابت (3.41.2 = 36)
+        // كي لا يتخلّف عند الترقية القادمة ويُفاجئنا بالمهلة مرة أخرى.
+        targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true
