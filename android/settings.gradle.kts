@@ -19,7 +19,9 @@ pluginManagement {
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
-    id("com.android.application") version "8.9.1" apply false
+    // 8.11.1 = الحدّ الأدنى الذي يفرضه Flutter 3.47. نبقى داخل 8.x عمداً:
+    // Flutter يحذّر أن AGP 9 يقرأ الواجهة الجديدة وحدها فتنكسر إضافته.
+    id("com.android.application") version "8.11.1" apply false
     // START: FlutterFire Configuration
     id("com.google.gms.google-services") version "4.4.1" apply false
     // END: FlutterFire Configuration
