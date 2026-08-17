@@ -41,8 +41,12 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   // current status (e.g. scheduled / on_the_way / pending_admin_approval / accepted
   // from the Direct Dispatch flow) is always merged in below so the dropdown never
   // throws an assertion when the value isn't in this base list.
+  // 'assigned' حُذفت من الخيارات اليدوية عمداً: قواعد Firestore لا تسمح للسائق
+  // بتقديمها (scheduled→on_the_way فقط) فاختيارها يجمّد الطلب على السائق بلا
+  // مخرج إلا عودة الأدمن. طلبٌ حالته 'assigned' أصلاً يُدمج في القائمة أدناه
+  // للعرض، وإسنادُ سائقٍ له يقدّمه إلى scheduled في مسار الحفظ.
   final List<String> _baseStatuses = [
-    'pending', 'under_review', 'scheduled', 'assigned', 'accepted',
+    'pending', 'under_review', 'scheduled', 'accepted',
     'on_the_way', 'in_progress', 'completed', 'cancelled',
   ];
 
@@ -167,6 +171,9 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
               .map((doc) => {
                     'id': doc.id,
                     'name': doc.data()['name'] ?? 'بدون اسم',
+                    // زر «اتصال بالسائق» عند العميل يقرأ driver_phone من الطلب —
+                    // بدونه يظهر «رقم اتصال السائق غير متوفر» في المسار المباشر.
+                    'phone': doc.data()['phone'] ?? '',
                   })
               .toList();
           _isLoadingDrivers = false;
@@ -300,11 +307,21 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
             updatePayload['driver_id'] = _selectedDriverId!;
             updatePayload['driver_name'] = _selectedDriverName ?? '';
             updatePayload['assigned_driver'] = _selectedDriverName ?? '';
+            // بدون driver_phone كان زر اتصال العميل يعرض «رقم غير متوفر».
+            updatePayload['driver_phone'] = _drivers.firstWhere(
+                  (d) => d['id'] == _selectedDriverId,
+                  orElse: () => {'phone': ''},
+                )['phone'] ??
+                '';
             updatePayload['assigned_at'] = FieldValue.serverTimestamp();
             if (!scheduleChanged && sd is Timestamp) {
               updatePayload['scheduled_at'] = sd;
             }
-            if (_currentStatus == 'pending') {
+            // إسناد سائق لطلب حالته لا تظهر في استعلام لوحة السائق = إشعارٌ يصل
+            // لمهمة غير مرئية. كل حالة «قبل التنفيذ» تتقدّم إلى scheduled — الحالات
+            // النشطة (accepted/on_the_way/in_progress) تمرّ من المسار الذرّي أعلاه.
+            const preDispatch = {'pending', 'under_review', 'awaiting_payment', 'assigned'};
+            if (preDispatch.contains(_currentStatus)) {
               updatePayload['status'] = 'scheduled';
               if (mounted) setState(() => _currentStatus = 'scheduled');
             }
@@ -517,12 +534,20 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
     final double amount = double.tryParse('${data['final_amount'] ?? data['amount'] ?? 0}') ?? 0.0;
 
     // Determine available operations per Moyasar docs
-    final bool canVoid = moyasarStatus == 'authorized' ||
-        moyasarStatus == 'paid' ||
-        moyasarStatus == 'captured';
-    final bool canRefund = moyasarStatus == 'paid' || moyasarStatus == 'captured';
+    // refund_credited: المبلغ رُدّ لمحفظة العميل داخل التطبيق (مسار الإلغاء) —
+    // الدالة الخادمية ترفض استرداد البوابة بعدها رفضاً حتمياً، فكانت الأزرار
+    // تبقى ظاهرة وتفشل دائماً برسالة مبهمة. نخفيها ونعرض السبب بدلاً منها.
+    final bool walletRefunded = data['refund_credited'] == true;
+    final bool canVoid = !walletRefunded &&
+        (moyasarStatus == 'authorized' ||
+            moyasarStatus == 'paid' ||
+            moyasarStatus == 'captured');
+    final bool canRefund = !walletRefunded &&
+        (moyasarStatus == 'paid' || moyasarStatus == 'captured');
     final bool canCapture = moyasarStatus == 'authorized';
-    final bool alreadyFinal = moyasarStatus == 'refunded' || moyasarStatus == 'voided';
+    final bool alreadyFinal = moyasarStatus == 'refunded' ||
+        moyasarStatus == 'voided' ||
+        walletRefunded;
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -591,7 +616,9 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Text(
-                  'تمت المعالجة النهائية لهذه العملية (${_moyasarStatusLabel(moyasarStatus)})',
+                  walletRefunded && moyasarStatus != 'refunded'
+                      ? 'المبلغ رُدّ لمحفظة العميل داخل التطبيق عند الإلغاء — استرداد البوابة لم يعد ممكناً (يُرفض خادمياً منعاً للردّ المزدوج)'
+                      : 'تمت المعالجة النهائية لهذه العملية (${_moyasarStatusLabel(moyasarStatus)})',
                   style: GoogleFonts.tajawal(color: Colors.grey.shade600, fontSize: 13),
                 ),
               )

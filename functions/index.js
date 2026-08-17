@@ -1880,8 +1880,11 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
     try {
       const pre = await orderRef.get();
       const od = pre.exists ? pre.data() : null;
-      if (od && od.service_meta && od.service_meta.kind === "home_package" &&
-          od.zone_name) {
+      // كل الأنواع تُعاد تسعيرتها — كان الشرط `kind === 'home_package'` يترك بقية
+      // الخدمات (بالساعة/الكنب/المكيفات/السيارات/المناسبات) تُدفع من المحفظة بأي
+      // مبلغ يكتبه العميل. computeExpectedBasePrice تُرجع null لغير القابل للتحقق
+      // (المتجر) فلا يُرفض دفعٌ بلا يقين — نفس سلوك مسار ميسر تماماً.
+      if (od && od.zone_name) {
         const zq = await db.collection("service_zones")
             .where("name", "==", od.zone_name).limit(1).get();
         if (!zq.empty) {
@@ -1903,7 +1906,7 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
   }
   if (pkgExpectedGross && amount < pkgExpectedGross * 0.2) {
     throw new HttpsError("failed-precondition",
-        "المبلغ لا يطابق سعر الباقة في منطقتك");
+        "المبلغ لا يطابق السعر المعتمد لمنطقتك");
   }
   if (pkgExpectedGross && amount < pkgExpectedGross * 0.5) {
     await orderRef.update({
@@ -2502,7 +2505,9 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
   // المكنسة. آمنٌ من التسلسل: الطلب المُسنَد هنا مدفوع سلفاً (paidFlipped=false)
   // وdriver_id يمتلئ، فلا يعيد إطلاق أيٍّ من الكتلتين.
   try {
-    const ACTIVE_WITH_DRIVER = ["scheduled", "accepted", "on_the_way", "in_progress"];
+    // 'assigned' ضمن الحالات النشطة — استبعادها كان يجعل السائق «المُسنَد» حرّاً
+    // في كل استعلامات الانشغال فيُحجَز لمهمتين متداخلتين.
+    const ACTIVE_WITH_DRIVER = ["scheduled", "assigned", "accepted", "on_the_way", "in_progress"];
     const driverFreed = beforeData && afterData &&
         beforeData.driver_id && ACTIVE_WITH_DRIVER.includes(beforeData.status) &&
         (afterData.status === "cancelled" || afterData.status === "completed");
@@ -2770,7 +2775,7 @@ async function _findFreeDriverForSlot(db, {startDateTime, endDateTime}) {
   const ordersSnap = await db.collection("orders")
       .where("service_date", ">=", admin.firestore.Timestamp.fromDate(winStart))
       .where("service_date", "<", admin.firestore.Timestamp.fromDate(endDateTime))
-      .where("status", "in", ["scheduled", "on_the_way", "in_progress", "accepted"])
+      .where("status", "in", ["scheduled", "assigned", "on_the_way", "in_progress", "accepted"])
       .get();
 
   const busy = new Set();
@@ -2813,7 +2818,7 @@ async function _isDriverFreeForSlot(db, driverId, startDateTime, endDateTime) {
   const ordersSnap = await db.collection("orders")
       .where("service_date", ">=", admin.firestore.Timestamp.fromDate(winStart))
       .where("service_date", "<", admin.firestore.Timestamp.fromDate(endDateTime))
-      .where("status", "in", ["scheduled", "on_the_way", "in_progress", "accepted"])
+      .where("status", "in", ["scheduled", "assigned", "on_the_way", "in_progress", "accepted"])
       .get();
 
   for (const doc of ordersSnap.docs) {
@@ -2870,7 +2875,7 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
     const dayQ = db.collection("orders")
         .where("service_date", ">=", admin.firestore.Timestamp.fromDate(winStart))
         .where("service_date", "<", admin.firestore.Timestamp.fromDate(slotEnd))
-        .where("status", "in", ["scheduled", "on_the_way", "in_progress", "accepted"]);
+        .where("status", "in", ["scheduled", "assigned", "on_the_way", "in_progress", "accepted"]);
     const daySnap = await tx.get(dayQ);
     for (const d2 of daySnap.docs) {
       const od = d2.data();
@@ -3383,7 +3388,7 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
     const conflictQ = db.collection("orders")
         .where("service_date", ">=", admin.firestore.Timestamp.fromDate(winStart))
         .where("service_date", "<", admin.firestore.Timestamp.fromDate(slotEnd))
-        .where("status", "in", ["scheduled", "on_the_way", "in_progress", "accepted"]);
+        .where("status", "in", ["scheduled", "assigned", "on_the_way", "in_progress", "accepted"]);
     const conflictSnap = await tx.get(conflictQ);
     for (const d2 of conflictSnap.docs) {
       const od = d2.data();
@@ -3446,6 +3451,7 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
 
   // إعادة الإسناد لسائق آخر: تأكّد أنه موجود ونشط (قراءة قبل المعاملة كافية).
   let newDriverName = null;
+  let newDriverPhone = null;
   if (newDriverId) {
     const dSnap = await db.collection("drivers").doc(newDriverId).get();
     if (!dSnap.exists) throw new HttpsError("not-found", "السائق غير موجود");
@@ -3453,6 +3459,7 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
       throw new HttpsError("failed-precondition", "السائق غير نشط");
     }
     newDriverName = dSnap.data().name || "سائق";
+    newDriverPhone = dSnap.data().phone || "000000000";
   }
 
   return await db.runTransaction(async (tx) => {
@@ -3512,6 +3519,9 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
       upd.driver_id = newDriverId;
       upd.driver_name = newDriverName;
       upd.assigned_driver = newDriverName;
+      // زر «اتصال بالسائق» عند العميل يقرأ driver_phone — تركه القديم كان يجعل
+      // العميل يهاتف السائق **السابق** بعد كل تبديل.
+      upd.driver_phone = newDriverPhone;
       upd.assigned_at = admin.firestore.FieldValue.serverTimestamp();
       // status يبقى نشطاً؛ إشعار السائق الجديد يُطلقه notifyDriverOnAssignment،
       // وتحرير السائق القديم يتكفّل به freeOldDriverOnReassign.
@@ -3569,6 +3579,61 @@ exports.freeDriverOnOrderCancel = onDocumentUpdated(
           `(order ${event.params.orderId} cancelled)`);
     },
 );
+
+// ════════════════════════════════════════════════════════════════════════
+// تعطيل/إيقاف سائق كان يترك مهامه **المستقبلية** مسندةً له: لا أحد ينفّذها،
+// ولا مكنسة تلتقطها (driver_id ممتلئ)، والعميل ينتظر سائقاً لن يأتي. نفكّ
+// إسناد غير المبدوءة فور التعطيل فتعود «قيد الانتظار» وتلتقطها مكنسة الإسناد،
+// وننبّه الإدارة بعددها. الجارية فعلاً (on_the_way/in_progress) تُترك عمداً —
+// قرارها بشري: قد يُكملها السائق قبل مغادرته.
+// ════════════════════════════════════════════════════════════════════════
+exports.unassignJobsOnDriverDisable = onDocumentUpdated(
+    {document: "drivers/{driverId}", cpu: 0.083},
+    async (event) => {
+      const before = event.data.before.data() || {};
+      const after = event.data.after.data() || {};
+      const wasUsable = before.is_active !== false && before.is_suspended !== true;
+      const nowDisabled = after.is_active === false || after.is_suspended === true;
+      if (!wasUsable || !nowDisabled) return null;
+
+      const driverId = event.params.driverId;
+      const db = admin.firestore();
+      const nowMs = Date.now();
+      // نفس شكل فهرس لوحة السائق (driver_id + status in).
+      const snap = await db.collection("orders")
+          .where("driver_id", "==", driverId)
+          .where("status", "in", ["scheduled", "assigned", "accepted"])
+          .get();
+
+      let n = 0;
+      for (const doc of snap.docs) {
+        const d = doc.data();
+        const sd = d.service_date && d.service_date.toDate ?
+          d.service_date.toDate().getTime() : null;
+        if (sd !== null && sd < nowMs) continue; // فات موعدها — شأن مكانس الإنقاذ
+        await doc.ref.update({
+          driver_id: admin.firestore.FieldValue.delete(),
+          driver_name: admin.firestore.FieldValue.delete(),
+          assigned_driver: admin.firestore.FieldValue.delete(),
+          driver_phone: admin.firestore.FieldValue.delete(),
+          // pending المدفوع تلتقطه sweepUnassignedPaidOrders كل 5 دقائق.
+          status: "pending",
+          unassigned_reason: "driver_disabled",
+          updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        }).catch((e) =>
+          console.error(`unassignJobsOnDriverDisable ${doc.id}:`, e.message));
+        n++;
+      }
+
+      if (n > 0) {
+        await queuePush("ADMIN_BROADCAST", "فُكّ إسناد مهام سائق معطَّل ⚠️",
+            `عُطّل السائق ${after.name || driverId} وله ${n} مهمة مستقبلية — ` +
+            "أُعيدت لقائمة الإسناد وستُوزَّع تلقائياً أو يدوياً.",
+            "admin_order_alert", {driverId}).catch(() => {});
+      }
+      console.log(`unassignJobsOnDriverDisable: ${driverId} → ${n} unassigned`);
+      return null;
+    });
 
 // ════════════════════════════════════════════════════════════════════════
 // تحرير السائق **السابق** آلياً عند إعادة إسناد الطلب لسائق آخر. إعادة الإسناد
@@ -5356,18 +5421,32 @@ exports.moyasarRefundPayment = onCall(
       // Update Firestore
       const order = await _findOrder(orderId);
       if (order) {
+        const refundedAmount = amountHalalas ? amountHalalas / 100 :
+          Number(order.data.final_amount ?? order.data.total_amount ??
+            order.data.planPrice ?? order.data.amount ?? 0);
         await order.ref.update({
           payment_status: "refunded",
           // نختم refund_credited أيضاً كي يمنع حارسُ onOrderRewards (refund_credited)
           // إيداعاً ثانياً في المحفظة — الطرفان الآن متماثلان ضدّ الاسترداد المزدوج.
           refund_credited: true,
+          // كان الطلب يبقى «مدفوعاً وحيّاً» بعد الاسترداد: is_paid ظلّت true
+          // فتَعِد التقارير بمالٍ رُدّ فعلاً، والحالة النشطة تُبقيه في لوحة السائق.
+          is_paid: false,
           moyasar_status: result.status,
           refunded_at: admin.firestore.FieldValue.serverTimestamp(),
           // المبلغ الحقيقي يختلف بالمجموعة: store=total_amount، عقد=planPrice، غيرها=amount.
-          refunded_amount: amountHalalas ? amountHalalas / 100 :
-            Number(order.data.final_amount ?? order.data.total_amount ??
-              order.data.planPrice ?? order.data.amount ?? 0),
+          refunded_amount: refundedAmount,
         });
+        // العميل كان لا يُشعر بشيء عند استرداد الأدمن من البوابة — بينما كل مسارات
+        // الاسترداد الأخرى (webhook/الآلي) تُشعره. رسالة واحدة بنفس صيغتها.
+        const clientId = order.data.client_id || order.data.userId;
+        const code = order.data.code || orderId;
+        if (clientId) {
+          await queuePush(clientId, "تم استرداد مبلغك 💳",
+              `أُعيد مبلغ ${refundedAmount.toFixed(2)} ر.س للطلب #${code} ` +
+              "إلى وسيلة الدفع الأصلية. قد يستغرق الظهور 5-10 أيام عمل حسب البنك.",
+              "order_refunded", {orderId}).catch(() => {});
+        }
       }
 
       console.log(`moyasarRefund: payment ${paymentId} refunded — status: ${result.status}`);

@@ -3,8 +3,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
-import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/screens/store_payment_screen.dart';
+import 'package:zyiarah/screens/hourly_details_screen.dart';
+import 'package:zyiarah/screens/sofa_rug_details_screen.dart';
+import 'package:zyiarah/screens/ac_service_details_screen.dart';
+import 'package:zyiarah/screens/car_interior_details_screen.dart';
+import 'package:zyiarah/screens/event_workers_details_screen.dart';
+import 'package:zyiarah/screens/store_screen.dart';
 import 'package:zyiarah/widgets/shimmer_loading.dart';
 import 'package:zyiarah/utils/status_util.dart';
 import 'package:zyiarah/services/order_service.dart';
@@ -536,14 +541,45 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
             children: [
               Text('${_asDouble(order['amount']).toStringAsFixed(2)} ر.س',
                 style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF660033))),
+              if (status == 'completed' && order['rating'] == null)
+                TextButton.icon(
+                  // مدخل التقييم الوحيد كان إشعار الدفع لمرة واحدة — من فاته
+                  // الإشعار لا يجد أي زرّ تقييم في التطبيق كله. شاشة التتبّع
+                  // تفتح حوار التقييم تلقائياً للطلب المكتمل غير المُقيَّم.
+                  onPressed: () {
+                    ZyiarahCoreService.triggerHapticLight();
+                    context.push('/track/$docId');
+                  },
+                  icon: const Icon(Icons.star_rate_rounded, size: 16),
+                  label: Text('قيّم الخدمة',
+                      style: GoogleFonts.tajawal(fontSize: 12)),
+                  style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFFD97706)),
+                ),
               if (status == 'completed')
                 TextButton.icon(
+                  // «أعد الطلب» يفتح **شاشة الخدمة** ليُعاد الاختيار من الصفر — كان
+                  // يدفع مباشرةً إلى شاشة الدفع بلا موعد ولا service_meta ولا منطقة،
+                  // فيسكّ طلباً مدفوعاً بلا إسناد **لا يراه أي مسار خادمي** (مكانس
+                  // الإنقاذ تصفّي على service_date وFirestore يستبعد null من المدى)،
+                  // وبسعر تاريخي قد يخالف تسعيرة اليوم.
                   onPressed: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => PaymentSummaryScreen(
-                      serviceName: order['service_type'] ?? 'خدمة عامة',
-                      amount: _asDouble(order['amount']),
-                      location: order['location'],
-                    )));
+                    final kind = (order['service_meta'] is Map)
+                        ? (order['service_meta'] as Map)['kind']?.toString()
+                        : null;
+                    final Widget screen = switch (kind) {
+                      'sofa_rug_sqm' => const SofaRugCleaningDetailsScreen(
+                          serviceName: 'تنظيف الكنب والزل'),
+                      'ac_service' => const AcServiceDetailsScreen(),
+                      'car_interior' => const CarInteriorDetailsScreen(),
+                      'event_workers' => const EventWorkersDetailsScreen(),
+                      'store_products' => const ZyiarahStoreScreen(),
+                      // home_package والطلبات القديمة بلا meta = تنظيف منزلي.
+                      _ => const HourlyCleaningDetailsScreen(
+                          serviceName: 'تنظيف منزلي'),
+                    };
+                    Navigator.push(
+                        context, MaterialPageRoute(builder: (_) => screen));
                   },
                   icon: const Icon(Icons.replay, size: 16),
                   label: Text('أعد الطلب', style: GoogleFonts.tajawal(fontSize: 12)),

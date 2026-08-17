@@ -334,6 +334,9 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
       await _db.collection('orders').doc(orderId).update({
         'status': next,
         if (next == 'completed') 'completed_at': FieldValue.serverTimestamp(),
+        // onOrderRewards لا يمنح نقاط قطرات/مكافأة الإحالة إلا إذا حمل الطلب
+        // مميّز الخادم لحظة الإكمال — إكمال الأدمن بدونه كان يُسقطها بصمت.
+        if (next == 'completed') 'rewards_handled_by': 'server',
         'updated_at': FieldValue.serverTimestamp(),
       });
       await ZyiarahAuditService().logAction(

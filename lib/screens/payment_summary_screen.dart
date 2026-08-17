@@ -274,6 +274,24 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   double get subtotal => totalWithVat / 1.15;
   double get vatAmount => totalWithVat - subtotal;
 
+  // ── صفوف العرض في «تفاصيل الفاتورة» ──
+  // القاعدة: الصفوف يجب أن **تُجمَع** على الإجمالي المستحق. كان «المبلغ الأساسي»
+  // يُعرض صافياً بعد الخصم والذروة ثم يُعرض الخصم/الذروة **مرة ثانية** كصفوف —
+  // فتقرأ العميلة أرقاماً لا تساوي ما دُفع وتخالف فاتورة ZATCA المرسلة.
+  // الحل: الأساس والذروة والخصم تُعرض كلها قبل الضريبة (نفس عُرف فاتورة ZATCA):
+  //   الأساس + الذروة − الخصم = الصافي، والصافي + الضريبة = الإجمالي.
+  bool get _isFixedPrice => widget.contractId != null;
+  double get _rowBase => widget.amount / 1.15;
+  double get _rowSurge => _isFixedPrice
+      ? 0.0
+      : (widget.amount * (_surgeFactor - 1)) / 1.15;
+  // الخصم مقصوص على المبلغ (كوبون أكبر من الطلب لا يُظهر صفاً أكبر من الفاتورة).
+  double get _rowDiscount {
+    if (_isFixedPrice) return 0.0;
+    final capped = _discountAmount.clamp(0.0, widget.amount * _surgeFactor);
+    return capped / 1.15;
+  }
+
   /// طلب متجر (توصيل منتجات) — نخفي «المدة» و«عدد العاملات» فهما مضلّلان هنا،
   /// ونعرض «عدد المنتجات» بدلاً منهما. يُكتشف من نوع service_meta.
   bool get _isStoreOrder =>
@@ -1424,15 +1442,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 intl.DateFormat('yyyy-MM-dd').format(widget.serviceDate!)),
           if (widget.zoneName != null) _buildRowDetail('المنطقة', widget.zoneName!),
           const Divider(height: 30),
-          _buildRowDetail('المبلغ الأساسي', '${subtotal.toStringAsFixed(2)} ر.س'),
-          if (_surgeFactor > 1.0)
+          // الصفوف تُجمَع على الإجمالي: أساس + ذروة − خصم = صافٍ، + ضريبة = مستحق.
+          _buildRowDetail('المبلغ الأساسي', '${_rowBase.toStringAsFixed(2)} ر.س'),
+          if (_rowSurge > 0)
             _buildRowDetail(
               '🔥 تسعيرة ذروة (+${((_surgeFactor - 1) * 100).toStringAsFixed(0)}%)',
-              '+${(widget.amount * (_surgeFactor - 1)).toStringAsFixed(2)} ر.س',
+              '+${_rowSurge.toStringAsFixed(2)} ر.س',
               isSurge: true,
             ),
-          if (_discountAmount > 0)
-            _buildRowDetail('الخصم ($_appliedCoupon)', '-${_discountAmount.toStringAsFixed(2)} ر.س', isDiscount: true),
+          if (_rowDiscount > 0)
+            _buildRowDetail('الخصم ($_appliedCoupon)', '-${_rowDiscount.toStringAsFixed(2)} ر.س', isDiscount: true),
           _buildRowDetail('الضريبة (15%)', '${vatAmount.toStringAsFixed(2)} ر.س'),
           const SizedBox(height: 10),
           Row(

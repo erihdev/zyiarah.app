@@ -1423,6 +1423,12 @@ class _DriverDashboardState extends State<DriverDashboard> {
       double? completionDistanceM;
       if (status == 'completed') {
         final GeoPoint? loc = data['location'] as GeoPoint?;
+        // زيارات الاشتراك موقعها موروث لا مُختار: مركز المنطقة (نصف قطر حتى
+        // 15كم) أو نقطة افتراضية — فبوّابة الـ1كم كانت **تمنع إغلاقها نهائياً**
+        // من الميدان مهما اقترب السائق. نستثنيها من المنع ونُبقي تسجيل المسافة
+        // (completed_distance_m) لمراجعة الإدارة كما هو.
+        final bool inheritedLocation = data['contract_id'] != null ||
+            data['payment_method'] == 'subscription';
         if (loc != null) {
           try {
             final pos = await Geolocator.getCurrentPosition(
@@ -1430,7 +1436,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
             ).timeout(const Duration(seconds: 8));
             completionDistanceM = Geolocator.distanceBetween(
                 pos.latitude, pos.longitude, loc.latitude, loc.longitude);
-            if (completionDistanceM > 1000 && pos.accuracy <= 100) {
+            if (!inheritedLocation &&
+                completionDistanceM > 1000 &&
+                pos.accuracy <= 100) {
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: Text(

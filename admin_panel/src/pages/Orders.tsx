@@ -326,7 +326,11 @@ export default function Orders() {
                 }
                 tx.update(ref, {
                     status: next,
-                    ...(next === 'completed' ? { completed_at: Timestamp.now() } : {}),
+                    // onOrderRewards يشترط مميّز الخادم لحظة الإكمال — بدونه تسقط
+                    // نقاط قطرات ومكافأة الإحالة بصمت (نفس إصلاح تطبيق الأدمن).
+                    ...(next === 'completed'
+                        ? { completed_at: Timestamp.now(), rewards_handled_by: 'server' }
+                        : {}),
                     updated_at: Timestamp.now(),
                 });
             });
