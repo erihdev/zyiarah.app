@@ -4,8 +4,77 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 
-class ClientNotificationsScreen extends StatelessWidget {
+class ClientNotificationsScreen extends StatefulWidget {
   const ClientNotificationsScreen({super.key});
+
+  @override
+  State<ClientNotificationsScreen> createState() =>
+      _ClientNotificationsScreenState();
+}
+
+class _ClientNotificationsScreenState extends State<ClientNotificationsScreen> {
+  // ترقيم السجل: نافذة البث الحيّ تبقى limit(50)، والصفحات الأقدم تُجلب مرة
+  // واحدة عبر startAfterDocument وتبقى ثابتة (زر «عرض المزيد»).
+  // الاستعلام بلا orderBy (الفرز محلي) فالمؤشر يتبع ترتيب Firestore الضمني
+  // بمعرّف المستند — الفرز الزمني المحلي يدمج الصفحات في مكانها الصحيح.
+  static const int _pageSize = 50;
+  final List<QueryDocumentSnapshot> _olderDocs = [];
+  // مستندات get() الثابتة لا يصلها تحديث البث — نعلّم المقروء محلياً ليختفي فوراً.
+  final Set<String> _readLocally = {};
+  bool _loadingMore = false;
+  bool _exhausted = false;
+
+  Future<void> _loadMore(String uid, DocumentSnapshot cursor) async {
+    if (_loadingMore || _exhausted) return;
+    setState(() => _loadingMore = true);
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('notifications')
+          .where('userId', isEqualTo: uid)
+          .startAfterDocument(cursor)
+          .limit(_pageSize)
+          .get();
+      if (!mounted) return;
+      setState(() {
+        _olderDocs.addAll(snap.docs);
+        if (snap.docs.length < _pageSize) _exhausted = true;
+      });
+    } catch (e) {
+      debugPrint("Error loading more notifications: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('تعذّر تحميل المزيد من الإشعارات'),
+            backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  /// زر «عرض المزيد» — حالة تحميل صغيرة أثناء جلب الصفحة الأقدم.
+  Widget _buildLoadMoreFooter(String uid, DocumentSnapshot cursor) {
+    return Center(
+      child: _loadingMore
+          ? const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2.5, color: Color(0xFF660033)),
+              ),
+            )
+          : TextButton.icon(
+              onPressed: () => _loadMore(uid, cursor),
+              icon: const Icon(Icons.expand_more_rounded,
+                  color: Color(0xFF660033), size: 20),
+              label: Text('عرض المزيد',
+                  style: GoogleFonts.tajawal(
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF660033))),
+            ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +97,7 @@ class ClientNotificationsScreen extends StatelessWidget {
                 stream: FirebaseFirestore.instance
                     .collection('notifications')
                     .where('userId', isEqualTo: uid)
-                    .limit(50)
+                    .limit(_pageSize)
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
@@ -51,8 +120,22 @@ class ClientNotificationsScreen extends StatelessWidget {
                     );
                   }
 
-                  final allDocs = (snapshot.data?.docs ?? [])
-                    ..sort((a, b) {
+                  // المؤشر يُلتقط من ترتيب Firestore الخام قبل الفرز المحلي.
+                  final streamDocs =
+                      snapshot.data?.docs ?? <QueryDocumentSnapshot>[];
+                  final DocumentSnapshot? cursor = _olderDocs.isNotEmpty
+                      ? _olderDocs.last
+                      : (streamDocs.isNotEmpty ? streamDocs.last : null);
+                  final canLoadMore = !_exhausted &&
+                      streamDocs.length >= _pageSize &&
+                      cursor != null;
+
+                  // دمج نافذة البث مع الصفحات الأقدم مع منع تكرار المستندات.
+                  final seen = streamDocs.map((d) => d.id).toSet();
+                  final allDocs = <QueryDocumentSnapshot>[
+                    ...streamDocs,
+                    ..._olderDocs.where((d) => seen.add(d.id)),
+                  ]..sort((a, b) {
                       final aData = a.data() as Map<String, dynamic>;
                       final bData = b.data() as Map<String, dynamic>;
                       final aT = (aData['created_at'] ?? aData['sentAt'] ?? aData['sent_at']) as Timestamp?;
@@ -64,6 +147,7 @@ class ClientNotificationsScreen extends StatelessWidget {
                     });
                   // تُعرض غير المقروءة فقط — النقر يُعلّم الإشعار كمقروء فيختفي مباشرةً
                   final docs = allDocs.where((d) {
+                    if (_readLocally.contains(d.id)) return false;
                     final m = d.data() as Map<String, dynamic>;
                     return m['isRead'] != true && m['is_read'] != true;
                   }).toList();
@@ -79,6 +163,11 @@ class ClientNotificationsScreen extends StatelessWidget {
                           Text('لا توجد إشعارات بعد',
                               style: GoogleFonts.tajawal(
                                   color: Colors.grey, fontSize: 15)),
+                          // قد تختبئ إشعارات أقدم خلف نافذة الخمسين المقروءة.
+                          if (canLoadMore) ...[
+                            const SizedBox(height: 8),
+                            _buildLoadMoreFooter(uid, cursor),
+                          ],
                         ],
                       ),
                     );
@@ -86,9 +175,12 @@ class ClientNotificationsScreen extends StatelessWidget {
 
                   return ListView.separated(
                     padding: const EdgeInsets.all(16),
-                    itemCount: docs.length,
+                    itemCount: docs.length + (canLoadMore ? 1 : 0),
                     separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (context, i) {
+                      if (i == docs.length) {
+                        return _buildLoadMoreFooter(uid, cursor!);
+                      }
                       final doc = docs[i];
                       final data = doc.data() as Map<String, dynamic>;
                       return GestureDetector(
@@ -99,6 +191,10 @@ class ClientNotificationsScreen extends StatelessWidget {
                                 .collection('notifications')
                                 .doc(doc.id)
                                 .update({'isRead': true, 'is_read': true});
+                            // نسخة get() الثابتة لا يصلها التحديث — علّمها محلياً
+                            if (mounted) {
+                              setState(() => _readLocally.add(doc.id));
+                            }
                           } catch (e) {
                             debugPrint("Error marking notification as read: $e");
                           }

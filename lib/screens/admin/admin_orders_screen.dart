@@ -24,10 +24,44 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _search = '';
 
+  // ترقيم السجل: نافذة البث الحيّ تبقى limit(50) للأحدث، والصفحات الأقدم
+  // تُجلب مرة واحدة عبر startAfterDocument وتبقى ثابتة (زر «عرض المزيد»).
+  static const int _pageSize = 50;
+  final List<QueryDocumentSnapshot> _olderDocs = [];
+  bool _loadingMore = false;
+  bool _exhausted = false;
+
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  /// جلب صفحة أقدم من آخر مستند معروض — بنفس ترتيب الاستعلام الأساسي.
+  Future<void> _loadMoreOrders(DocumentSnapshot cursor) async {
+    if (_loadingMore || _exhausted) return;
+    setState(() => _loadingMore = true);
+    try {
+      final snap = await _db
+          .collection('orders')
+          .orderBy('created_at', descending: true)
+          .startAfterDocument(cursor)
+          .limit(_pageSize)
+          .get();
+      if (!mounted) return;
+      setState(() {
+        _olderDocs.addAll(snap.docs);
+        if (snap.docs.length < _pageSize) _exhausted = true;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text("تعذّر تحميل المزيد من الطلبات: $e"),
+            backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
   }
 
   Color _getStatusColor(String status) {
@@ -55,10 +89,18 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: StreamBuilder<QuerySnapshot>(
-        stream: _db.collection('orders').orderBy('created_at', descending: true).limit(50).snapshots(),
+        stream: _db.collection('orders').orderBy('created_at', descending: true).limit(_pageSize).snapshots(),
         builder: (context, snapshot) {
-          final docs = snapshot.data?.docs ?? [];
-          
+          final streamDocs = snapshot.data?.docs ?? [];
+          // دمج نافذة البث الحيّ مع الصفحات الأقدم مع منع تكرار المستندات
+          // (الترتيب محفوظ: الصفحات الأقدم كلها بعد آخر مستند في النافذة).
+          final seen = streamDocs.map((d) => d.id).toSet();
+          final docs = <QueryDocumentSnapshot>[
+            ...streamDocs,
+            ..._olderDocs.where((d) => seen.add(d.id)),
+          ];
+          final canLoadMore = !_exhausted && streamDocs.length >= _pageSize;
+
           return Scaffold(
             backgroundColor: const Color(0xFFF8FAFC),
             appBar: AppBar(
@@ -85,14 +127,14 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                   )
               ],
             ),
-            body: _buildBody(snapshot, docs),
+            body: _buildBody(snapshot, docs, canLoadMore: canLoadMore),
           );
         },
       ),
     );
   }
 
-  Widget _buildBody(AsyncSnapshot<QuerySnapshot> snapshot, List<QueryDocumentSnapshot> docs) {
+  Widget _buildBody(AsyncSnapshot<QuerySnapshot> snapshot, List<QueryDocumentSnapshot> docs, {required bool canLoadMore}) {
     if (snapshot.connectionState == ConnectionState.waiting) {
       return _buildShimmerLoading();
     }
@@ -145,6 +187,10 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                 service.contains(query);
           }).toList();
 
+    // المؤشر هو أقدم مستند محمّل (آخر القائمة المدموجة تنازلياً بلا فلترة بحث).
+    final Widget? loadMoreFooter =
+        canLoadMore && docs.isNotEmpty ? _buildLoadMoreFooter(docs.last) : null;
+
     return Column(
       children: [
         Padding(
@@ -191,20 +237,51 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                       const SizedBox(height: 16),
                       Text("لا نتائج للبحث «${_search.trim()}»",
                           style: GoogleFonts.tajawal(color: Colors.grey)),
+                      // البحث لا يفتّش إلا القائمة المحمّلة — أتِح جلب الأقدم.
+                      if (loadMoreFooter != null) ...[
+                        const SizedBox(height: 8),
+                        loadMoreFooter,
+                      ],
                     ],
                   ),
                 )
-              : _buildOrdersList(filtered),
+              : _buildOrdersList(filtered, footer: loadMoreFooter),
         ),
       ],
     );
   }
 
-  Widget _buildOrdersList(List<QueryDocumentSnapshot> docs) {
+  /// زر «عرض المزيد» — حالة تحميل صغيرة أثناء جلب الصفحة الأقدم.
+  Widget _buildLoadMoreFooter(DocumentSnapshot cursor) {
+    return Center(
+      child: _loadingMore
+          ? const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2.5, color: Color(0xFF660033)),
+              ),
+            )
+          : TextButton.icon(
+              onPressed: () => _loadMoreOrders(cursor),
+              icon: const Icon(Icons.expand_more_rounded,
+                  color: Color(0xFF660033), size: 20),
+              label: Text("عرض المزيد",
+                  style: GoogleFonts.tajawal(
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF660033))),
+            ),
+    );
+  }
+
+  Widget _buildOrdersList(List<QueryDocumentSnapshot> docs, {Widget? footer}) {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: docs.length,
+      itemCount: docs.length + (footer == null ? 0 : 1),
       itemBuilder: (context, index) {
+        if (index == docs.length) return footer!;
         final data = docs[index].data() as Map<String, dynamic>;
         final status = data['status'] ?? 'pending';
         

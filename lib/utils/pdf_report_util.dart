@@ -107,7 +107,10 @@ class ZyiarahPdfReportUtil {
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
         children: [
-          _buildStatItem('إجمالي الإيرادات', '${revenue.toStringAsFixed(2)} ر.س'),
+          // النموذج المعتمد: المبالغ المخزَّنة شاملة الضريبة — الصافي = الإجمالي ÷ 1.15
+          // والضريبة = الإجمالي − الصافي.
+          _buildStatItem('الإيراد الإجمالي (شامل الضريبة)', '${revenue.toStringAsFixed(2)} ر.س'),
+          _buildStatItem('الصافي قبل الضريبة', '${(revenue / 1.15).toStringAsFixed(2)} ر.س'),
           _buildStatItem('الطلبات النشطة', active.toString()),
           _buildStatItem('الطلبات المكتملة', completed.toString()),
           _buildStatItem('ضريبة القيمة المضافة (15%)',

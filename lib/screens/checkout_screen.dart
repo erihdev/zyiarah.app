@@ -255,23 +255,37 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                 vatAmount: vatAmount,
               );
 
-              // جلب الكود المنشأ حديثاً لإدراجه في الفاتورة
-              final orderDoc = await FirebaseFirestore.instance.collection('orders').doc(newOrderId).get();
-              final String orderCode = orderDoc.data()?['code'] ?? newOrderId.substring(0, 8).toUpperCase();
+              // جلب الكود المنشأ حديثاً لإدراجه في الفاتورة. للاشتراك كودُه معرّفُ
+              // عقده — ولا نقرأ orders/{id} أصلاً: لا مستند طلب للعقد، وقراءة مستند
+              // معدوم تُرفض من القواعد (resource=null) فتقتل الإغلاق كاملاً قبل
+              // الفاتورة وشاشة النجاح.
+              String orderCode;
+              if (widget.contractId != null) {
+                orderCode = widget.contractId!;
+              } else {
+                final orderDoc = await FirebaseFirestore.instance.collection('orders').doc(newOrderId).get();
+                orderCode = orderDoc.data()?['code'] ?? newOrderId.substring(0, 8).toUpperCase();
+              }
 
+              // للاشتراك تُكتب الفاتورة على مستند العقد الحقيقي contracts/{contractId} —
+              // كان المعرّف العشوائي newOrderId (لا مستند عقد به) فتضيع فاتورة الاشتراك.
+              final String invoiceCollection =
+                  widget.contractId != null ? 'contracts' : 'orders';
+              final String invoiceDocId = widget.contractId ?? newOrderId;
               ZyiarahPdfService.generateAndUploadInvoice(
-                orderId: newOrderId,
+                orderId: invoiceDocId,
                 orderCode: orderCode,
                 amount: widget.amount,
                 qrData: qrData,
                 serviceName: widget.serviceType,
                 discountAmount: widget.discountAmount,
                 couponCode: widget.couponCode,
+                collectionPath: invoiceCollection,
               ).then((downloadUrl) {
                 if (downloadUrl != null) {
                   FirebaseFirestore.instance
-                      .collection('orders')
-                      .doc(newOrderId)
+                      .collection(invoiceCollection)
+                      .doc(invoiceDocId)
                       .update({
                     'invoice_pdf_url': downloadUrl,
                   });

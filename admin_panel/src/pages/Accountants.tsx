@@ -135,7 +135,7 @@ export default function Accountants() {
                         </span>
                     </div>
                     <div className="relative z-10">
-                        <p className="text-emerald-100 text-sm font-medium mb-1">إجمالي الإيرادات</p>
+                        <p className="text-emerald-100 text-sm font-medium mb-1">الإيراد الإجمالي (شامل الضريبة)</p>
                         {loading ? (
                             <div className="h-8 w-32 bg-white/20 rounded-lg animate-pulse"></div>
                         ) : (
@@ -151,7 +151,7 @@ export default function Accountants() {
                             <TrendingUp size={22} strokeWidth={2.5} />
                         </div>
                     </div>
-                    <p className="text-slate-500 text-sm font-medium mb-1">صافي الأرباح (بعد الرواتب)</p>
+                    <p className="text-slate-500 text-sm font-medium mb-1">صافي الأرباح (بعد خصم الضريبة والرواتب)</p>
                     {loading ? (
                         <div className="h-7 w-28 bg-slate-100 rounded-lg animate-pulse"></div>
                     ) : (

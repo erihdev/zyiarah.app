@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 
@@ -248,7 +249,30 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                         tooltip: 'التفاصيل',
                       ),
                     ],
-                  )
+                  ),
+                  // فاتورة ZATCA الضريبية للاشتراك — تُكتب بعد الدفع على مستند العقد
+                  // (invoice_pdf_url). بدون هذا الزر لا مسار للعميلة لتحميل فاتورتها.
+                  if (data['invoice_pdf_url'] is String) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => launchUrl(
+                          Uri.parse(data['invoice_pdf_url'] as String),
+                          mode: LaunchMode.externalApplication,
+                        ),
+                        icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                        label: Text('تحميل الفاتورة الضريبية',
+                            style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: brandPurple,
+                          side: BorderSide(color: brandPurple.withValues(alpha: 0.5), width: 1.5),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

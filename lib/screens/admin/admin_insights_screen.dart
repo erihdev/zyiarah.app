@@ -124,7 +124,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
                 
                 _buildChartCard(
                   title: "نمو الإيرادات (آخر 7 أيام)",
-                  subtitle: "إجمالي الدخل اليومي لجميع الخدمات",
+                  subtitle: "الدخل اليومي المدفوع (شامل الضريبة) لجميع الخدمات",
                   child: _buildRevenueLineChart(_orders, _maintenance),
                 ),
                 const SizedBox(height: 20),
@@ -151,8 +151,8 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
                   ],
                 ),
                 const SizedBox(height: 20),
-                // (دمج من لوحة الويب — Accountants) لوحة مالية مصغّرة: صافي الإيراد
-                // بعد الضريبة + توزيع طرق الدفع بعدد المعاملات ومبالغها.
+                // (دمج من لوحة الويب — Accountants) لوحة مالية مصغّرة: الصافي قبل
+                // الضريبة + توزيع طرق الدفع بعدد المعاملات ومبالغها.
                 _buildFinanceCard(stats),
                 const SizedBox(height: 20),
                 _buildRecentActivityList(_orders, _maintenance),
@@ -178,7 +178,9 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     for (var doc in orders) {
       final data = doc.data() as Map<String, dynamic>;
       final status = data['status'] ?? 'pending';
-      if (status != 'cancelled') {
+      // (توحيد التعريف المالي) الإيراد للمدفوع فقط — كان يجمع كل غير الملغى
+      // (بما فيه pending/awaiting_payment) فيتضخّم عن بقية اللوحات والمحاسبة.
+      if (data['is_paid'] == true || status == 'completed') {
         final amount = d(data['final_amount'] ?? data['amount']);
         // طلبات متجر الأدوات والتنظيف تعيش الآن في `orders` (صارت مجدولة كالخدمات)
         // لكنها مبيعات متجر — ننسبها لإيراد المتجر لا التنظيف كي تبقى بطاقة «إيرادات
@@ -241,17 +243,25 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     void tally(Iterable<DocumentSnapshot> docs, {required bool store}) {
       for (final doc in docs) {
         final data = doc.data() as Map<String, dynamic>;
-        if ((data['status'] ?? '') == 'cancelled') continue;
+        final status = '${data['status'] ?? ''}';
+        if (status == 'cancelled') continue;
         final t = createdOf(data);
         if (t == null || t.isBefore(prevStart)) continue;
         final amount = d(store
             ? (data['final_amount'] ?? data['total_amount'] ?? data['total_price'])
             : (data['final_amount'] ?? data['amount']));
+        // (توحيد التعريف المالي) نموّ الإيراد على المدفوع فقط كبطاقات الإيراد،
+        // بينما نموّ الطلبات يبقى على كل غير الملغى (مقياس طلبٍ لا تحصيل).
+        final bool isPaid = store
+            ? (data['is_paid'] == true ||
+                ['processing', 'shipped', 'delivered', 'completed', 'approved']
+                    .contains(status))
+            : (data['is_paid'] == true || status == 'completed');
         if (t.isBefore(curStart)) {
-          revPrev += amount;
+          if (isPaid) revPrev += amount;
           ordPrev++;
         } else {
-          revCur += amount;
+          if (isPaid) revCur += amount;
           ordCur++;
         }
       }
@@ -288,8 +298,10 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: [
-              _buildStatCard("إجمالي الإيرادات", "${stats['revenue'].toStringAsFixed(0)} ر.س", const Color(0xFF059669), Icons.account_balance_wallet_rounded, growth: stats['revenueGrowth']),
-              _buildStatCard("الوعاء الضريبي (VAT)", "${stats['vat'].toStringAsFixed(0)} ر.س", const Color(0xFFD97706), Icons.account_balance_rounded),
+              _buildStatCard("الإيراد الإجمالي (شامل الضريبة)", "${stats['revenue'].toStringAsFixed(0)} ر.س", const Color(0xFF059669), Icons.account_balance_wallet_rounded, growth: stats['revenueGrowth']),
+              // كانت «الوعاء الضريبي» — والوعاء هو الأساس قبل الضريبة، بينما الرقم
+              // المعروض هو حصة الضريبة نفسها (الإجمالي − الإجمالي ÷ 1.15).
+              _buildStatCard("ضريبة القيمة المضافة (15%)", "${stats['vat'].toStringAsFixed(0)} ر.س", const Color(0xFFD97706), Icons.account_balance_rounded),
               _buildStatCard("طلبات نشطة", stats['active'].toString(), const Color(0xFF2563EB), Icons.speed_rounded, growth: stats['ordersGrowth']),
               _buildStatCard("إجمالي العملاء", stats['users'].toString(), const Color(0xFF7C3AED), Icons.people_alt_rounded),
             ],
@@ -362,8 +374,9 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     );
   }
 
-  /// (دمج من لوحة الويب) اللوحة المالية: صافي الإيراد بعد الضريبة + توزيع طرق
-  /// الدفع (عدد المعاملات والمبلغ ونسبته) من الطلبات المدفوعة في العيّنة المجلوبة.
+  /// (دمج من لوحة الويب) اللوحة المالية: الصافي قبل الضريبة (الإجمالي ÷ 1.15)
+  /// + توزيع طرق الدفع (عدد المعاملات والمبلغ ونسبته) من الطلبات المدفوعة في
+  /// العيّنة المجلوبة.
   Widget _buildFinanceCard(Map<String, dynamic> stats) {
     double d(dynamic v) => v is num ? v.toDouble() : (double.tryParse('$v') ?? 0.0);
     const labels = {
@@ -419,13 +432,13 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text("اللوحة المالية", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),
-          Text("صافي الإيراد وتوزيع طرق الدفع (المدفوع فقط)", style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey)),
+          Text("الصافي قبل الضريبة وتوزيع طرق الدفع (المدفوع فقط)", style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey)),
           const SizedBox(height: 14),
           Row(
             children: [
               const Icon(Icons.savings_rounded, size: 18, color: Color(0xFF660033)),
               const SizedBox(width: 8),
-              Text("صافي الإيراد بعد الضريبة:",
+              Text("الصافي قبل الضريبة:",
                   style: GoogleFonts.tajawal(fontSize: 13, color: const Color(0xFF334155))),
               const Spacer(),
               Text("${net.toStringAsFixed(0)} ر.س",
@@ -509,9 +522,13 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       dailyRevenue[day] = 0.0;
     }
 
-    void processDocs(List<DocumentSnapshot> docs, String dateField, String amountField) {
+    void processDocs(List<DocumentSnapshot> docs, String dateField, String amountField,
+        bool Function(Map<String, dynamic>) isPaid) {
       for (var doc in docs) {
         final data = doc.data() as Map<String, dynamic>;
+        // (توحيد التعريف المالي) المدفوع فقط — كان يجمع كل الطلبات (حتى الملغاة
+        // وغير المدفوعة) فيتناقض المخطّط مع بطاقات الإيراد في نفس الشاشة.
+        if (!isPaid(data)) continue;
         final rawDate = data[dateField];
         if (rawDate is! Timestamp) continue; // تجاهل التواريخ النصّية/المفقودة بدل الانهيار
         DateTime date = rawDate.toDate();
@@ -523,9 +540,15 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
     }
 
     // كانت تقرأ final_amount/total_price (غير مكتوبة) فيظهر مخطّط الإيرادات مسطّحاً.
-    processDocs(orders, 'created_at', 'amount');
-    processDocs(maintenance, 'createdAt', 'amount');
-    processDocs(_storeOrders, 'created_at', 'total_amount');
+    processDocs(orders, 'created_at', 'amount',
+        (d) => d['is_paid'] == true || d['status'] == 'completed');
+    processDocs(maintenance, 'createdAt', 'amount',
+        (d) => ['paid', 'completed', 'approved'].contains(d['status']));
+    processDocs(_storeOrders, 'created_at', 'total_amount',
+        (d) =>
+            d['is_paid'] == true ||
+            ['processing', 'shipped', 'delivered', 'completed', 'approved']
+                .contains(d['status']));
 
     List<String> sortedDays = dailyRevenue.keys.toList().reversed.toList();
     List<FlSpot> spots = [];

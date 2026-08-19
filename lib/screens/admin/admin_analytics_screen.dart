@@ -172,13 +172,19 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                   child: const Icon(Icons.account_balance_wallet, color: Colors.white),
                 ),
                 const SizedBox(width: 12),
-                const Text('إجمالي الإيرادات (تقديري)', style: TextStyle(color: Colors.white, fontSize: 16)),
+                const Text('الإيراد الإجمالي (شامل الضريبة)', style: TextStyle(color: Colors.white, fontSize: 16)),
               ],
             ),
             const SizedBox(height: 20),
             Text(
               intl.NumberFormat.currency(symbol: 'ر.س ', decimalDigits: 0).format(totalRevenue),
               style: GoogleFonts.tajawal(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+            const SizedBox(height: 6),
+            // النموذج المعتمد: المخزَّن شامل الضريبة، فالصافي قبل الضريبة = الإجمالي ÷ 1.15.
+            Text(
+              'الصافي قبل الضريبة: ${intl.NumberFormat.currency(symbol: 'ر.س ', decimalDigits: 0).format(totalRevenue / 1.15)}',
+              style: GoogleFonts.tajawal(fontSize: 13, color: Colors.white70),
             ),
             const SizedBox(height: 10),
             const Text('محدث فورياً من قاعدة البيانات (انقر للتفاصيل)', style: TextStyle(color: Colors.white70, fontSize: 12)),

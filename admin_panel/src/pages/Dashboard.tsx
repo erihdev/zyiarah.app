@@ -291,7 +291,7 @@ export default function Dashboard() {
 
             {/* Services Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-                <StatCard title="إجمالي الإيرادات (الخدمات)" value={sar(totalRevenue)} icon={TrendingUp} trend={revenueTrend} trendUp={parseFloat(revenueTrend) >= 0} colorScheme="blue" />
+                <StatCard title="إيرادات الخدمات (شامل الضريبة)" value={sar(totalRevenue)} icon={TrendingUp} trend={revenueTrend} trendUp={parseFloat(revenueTrend) >= 0} colorScheme="blue" />
                 <StatCard title="الطلبات النشطة" value={activeOrders} icon={Clock} trend={ordersTrend} trendUp={parseFloat(ordersTrend) >= 0} colorScheme="orange" />
                 <StatCard title="السائقين المتاحين" value={availableDrivers} icon={CarFront} trend="0" trendUp colorScheme="indigo" />
                 <StatCard title="إجمالي المستخدمين" value={totalUsers} icon={Users} trend={usersTrend} trendUp={parseFloat(usersTrend) >= 0} colorScheme="emerald" />
@@ -303,9 +303,9 @@ export default function Dashboard() {
                     إحصائيات متجر الأدوات
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <StatCard title="إيرادات المتجر" value={storeRevenue === null || clientStoreRevenue === null ? '...' : sar(storeRevenue + clientStoreRevenue)} icon={TrendingUp} trend="100" trendUp colorScheme="blue" />
+                    <StatCard title="إيرادات المتجر (شامل الضريبة)" value={storeRevenue === null || clientStoreRevenue === null ? '...' : sar(storeRevenue + clientStoreRevenue)} icon={TrendingUp} trend="100" trendUp colorScheme="blue" />
                     <StatCard title="طلبات بانتظار الموافقة" value={pendingStoreOrders} icon={Clock} trend="0" trendUp colorScheme="orange" />
-                    <StatCard title="إجمالي الدخل الكلي" value={totalRevenue === null || storeRevenue === null || clientStoreRevenue === null ? '...' : sar(totalRevenue + storeRevenue + clientStoreRevenue)} icon={TrendingUp} trend="+" trendUp colorScheme="emerald" />
+                    <StatCard title="الإيراد الإجمالي الكلي (شامل الضريبة)" value={totalRevenue === null || storeRevenue === null || clientStoreRevenue === null ? '...' : sar(totalRevenue + storeRevenue + clientStoreRevenue)} icon={TrendingUp} trend="+" trendUp colorScheme="emerald" />
                 </div>
             </div>
 

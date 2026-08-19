@@ -214,7 +214,7 @@ export default function ScheduleBoard() {
                         <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-cyan-50 border border-cyan-200 font-bold text-cyan-700">
                             <span className="w-2 h-2 rounded-full bg-cyan-500" />طلبات وخدمات: {stats.regular}
                         </span>
-                        <span className="text-slate-500 font-bold">الإيراد المتوقع: {stats.revenue.toFixed(2)} ر.س</span>
+                        <span className="text-slate-500 font-bold">الإيراد المتوقع (شامل الضريبة): {stats.revenue.toFixed(2)} ر.س</span>
                     </div>
 
                     {rawCount >= FETCH_LIMIT && (

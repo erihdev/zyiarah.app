@@ -207,9 +207,14 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated({document: "orde
       } else if (afterData.status === "scheduled") {
         // المسرحية (18 طلباً): 12 طلباً أُسنِدت والعميل لم يسمع حرفاً — لا فرع
         // لتأكيد الحجز إطلاقاً. السائق يُشعَر (notifyDriverOnAssignment) والعميل لا.
-        targetUserId = afterData.client_id;
-        title = "تم تأكيد حجزكِ 🎉";
-        body = `${greet}دفعتكِ مؤكّدة وحُدِّد موعد خدمتكِ — فريق زيارة سيصلكِ في وقته.`;
+        // زيارات الاشتراك تُولَّد وتُسنَد دفعةً واحدة (باقة = عدة طلبات) فكان
+        // العميل يتلقّى «تم تأكيد حجزكِ» عن **كل** زيارة — يكفيه إشعار الملخّص
+        // الواحد من مسار التوليد/التفعيل، فنكتم زيارة العقد هنا.
+        if (!afterData.contract_id) {
+          targetUserId = afterData.client_id;
+          title = "تم تأكيد حجزكِ 🎉";
+          body = `${greet}دفعتكِ مؤكّدة وحُدِّد موعد خدمتكِ — فريق زيارة سيصلكِ في وقته.`;
+        }
       } else if (afterData.status === "under_review") {
         targetUserId = afterData.client_id;
         title = "تم استلام طلبكِ 🧾";
@@ -257,6 +262,15 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated({document: "orde
       }
 
       if (!targetUserId) return null;
+
+      // (توحيد إشعار الدفع) scheduled/under_review نقلتان تعقبان قلب is_paid
+      // مباشرةً (إسناد/ترقية فوريان بعد التأكيد) ونصّاهما «دفعتكِ مؤكّدة» — نفس
+      // مضمون دفعة «تم تأكيد دفعتكِ» من مسار verify/webhook. المطالبة الذرّية على
+      // الطلب تُبقي دفعة تأكيدٍ واحدة للعميل أيّاً كان المسار الأسبق.
+      if ((afterData.status === "scheduled" || afterData.status === "under_review") &&
+          !(await _claimPaymentPush("orders", orderId))) {
+        return null;
+      }
 
       // سجلّ الإشعارات داخل التطبيق يُكتب **دائماً وأولاً** — كان بعد فحص التوكن
       // وداخل try الإرسال: عميل بلا توكن FCM (ويب/جهاز جديد/رفض الإذن) لم يكن
@@ -440,6 +454,16 @@ exports.notifyClientOnStoreOrderStatus = onDocumentUpdated({document: "store_ord
       const m = map[after.status];
       if (!m) return null;
       const code = after.code || event.params.orderId.substring(0, 6);
+      // (توحيد إشعار الدفع) under_review صدى تأكيد الدفع (يرقّيها العميل/الخادم فور
+      // القلب) — تشارك مطالبة payment_push_sent كي لا تتكرّر دفعتها مع «تم تأكيد
+      // دفعتكِ» من مسار verify/webhook. عند خسارة السباق يُكتم **الدفع فقط**:
+      // النوع email يُبقي الإيميل (طلب المالك) وسجلّ الوارد. بقية النقلات إدارية
+      // لاحقة فلا تُمسّ.
+      let pushType = "store_update";
+      if (after.status === "under_review" &&
+          !(await _claimPaymentPush("store_orders", event.params.orderId))) {
+        pushType = "email";
+      }
       // إيميل + إشعار لكل نقلة (طلبها المالك): تحت المراجعة ⇒ جاري التوصيل ⇒ تم التسليم.
       // بريد العميل من الطلب (يُكتب عند الإنشاء) أو من users كاحتياط للطلبات القديمة؛
       // النوع store_update ضمن wantsEmail فيُرسَل الإيميل مع الإشعار.
@@ -450,7 +474,7 @@ exports.notifyClientOnStoreOrderStatus = onDocumentUpdated({document: "store_ord
           clientEmail = u.exists ? (u.data() && u.data().email) : null;
         } catch (_) { clientEmail = null; }
       }
-      await queuePush(clientId, m.t, `${m.b} (#${code})`, "store_update",
+      await queuePush(clientId, m.t, `${m.b} (#${code})`, pushType,
           {orderId: event.params.orderId}, null, clientEmail || undefined);
       return null;
     });
@@ -818,6 +842,34 @@ exports.createTamaraCheckout = onCall(
 
 // 5. Tamara Webhook Handler
 /**
+ * (توحيد إشعار الدفع) مطالبة ذرّية بدفعة تأكيد الدفع الوحيدة على مستند الطلب.
+ * ثلاثة مسارات كانت تتسابق فيصل العميل حتى 3 دفعات عن الدفعة الواحدة:
+ * verify/webhook («تم تأكيد دفعتكِ»)، ومُشغّل الحالة (scheduled/under_review —
+ * «دفعتكِ مؤكّدة»)، وإشعار التطبيق الذاتي («تم استلام طلبك» — notifyOrderCreated).
+ * راية payment_push_sent تُقلَب داخل معامَلة فلا يفوز إلا مسارٌ واحد مهما تسابقت
+ * المسارات أو أُعيدت المحاولة. فشل الحارس لا يمنع الإشعار (تكرارٌ نادر أهون من
+ * صمتٍ كامل).
+ * @param {string} col اسم المجموعة التي يوجد بها الطلب
+ * @param {string} orderId معرّف مستند الطلب
+ * @return {Promise<boolean>} true إن فاز النداء بحق إرسال الدفعة.
+ */
+async function _claimPaymentPush(col, orderId) {
+  try {
+    const ref = admin.firestore().collection(col).doc(orderId);
+    return await admin.firestore().runTransaction(async (tx) => {
+      const s = await tx.get(ref);
+      if (!s.exists) return true; // بلا مستند لا حارس — أرسِل
+      if (s.data().payment_push_sent === true) return false;
+      tx.update(ref, {payment_push_sent: true});
+      return true;
+    });
+  } catch (e) {
+    console.error("_claimPaymentPush:", e.message);
+    return true;
+  }
+}
+
+/**
  * (F2) إشعار العميل بنتيجة الدفع (نجاح/فشل) لأي بوابة.
  * يكتب إشعاراً داخل التطبيق ويرسل Push. آمن — يُستدعى بعد فحص is_paid (idempotent).
  * @param {string} col اسم المجموعة التي يوجد بها الطلب
@@ -829,6 +881,14 @@ async function notifyClientPaymentResult(col, orderId, data, success) {
   try {
     const clientUid = data?.client_id || data?.userId;
     if (!clientUid) return;
+
+    // (توحيد إشعار الدفع) دفعة النجاح تشارك المطالبة الذرّية — إن سبقنا مسارٌ
+    // آخر (مُشغّل الحالة أو إشعار التطبيق الذاتي) نصمت بدل التكرار. الفشل يمرّ
+    // دائماً (لا يتنافس مع تأكيدٍ لم يحدث).
+    if (success && !(await _claimPaymentPush(col, orderId))) {
+      console.log(`notifyClientPaymentResult: dedup — payment push already sent for ${col}/${orderId}`);
+      return;
+    }
 
     const code = data?.code || orderId;
     const rawName = (data?.client_name || "").trim();
@@ -873,7 +933,9 @@ async function notifyClientPaymentResult(col, orderId, data, success) {
 
 // يقلب is_paid على طلب تمارا (idempotent) بالبحث في orders ثم store_orders ثم
 // contracts (اشتراك) عبر order_reference_id (= معرّف مستند طلبنا/عقدنا).
-async function _tamaraFlipPaid(db, orderRef, eventType) {
+// tamaraOrderId (اختياري): معرّف الطلب لدى تمارا — يُخزَّن على المستند لأن
+// الاسترداد (tamaraRefundPayment) يخاطب تمارا به لا بمرجعنا.
+async function _tamaraFlipPaid(db, orderRef, eventType, tamaraOrderId) {
   for (const col of ["orders", "store_orders", "contracts"]) {
     const ref = db.collection(col).doc(orderRef);
     let data = null;
@@ -886,6 +948,7 @@ async function _tamaraFlipPaid(db, orderRef, eventType) {
         payment_status: "paid",
         is_paid: true,
         tamara_status: eventType,
+        ...(tamaraOrderId ? {tamara_order_id: String(tamaraOrderId)} : {}),
         updated_at: admin.firestore.FieldValue.serverTimestamp(),
       });
       return true;
@@ -951,10 +1014,10 @@ exports.tamaraWebhook = onRequest(
             console.error(`tamaraWebhook: authorise failed ${authRes.status}: ${await authRes.text()}`);
           } else {
             console.log(`tamaraWebhook: order ${tamaraOrderId} authorised`);
-            await _tamaraFlipPaid(db, orderRef, eventType);
+            await _tamaraFlipPaid(db, orderRef, eventType, tamaraOrderId);
           }
         } else if (eventType === "order_authorised" || eventType === "order_captured") {
-          await _tamaraFlipPaid(db, orderRef, eventType);
+          await _tamaraFlipPaid(db, orderRef, eventType, tamaraOrderId);
         } else if (eventType === "order_declined" ||
                    eventType === "order_expired" || eventType === "order_canceled") {
           for (const col of ["orders", "store_orders"]) {
@@ -1281,8 +1344,21 @@ exports.processNotificationTriggers = onDocumentCreated(
           console.log(`[EMAIL] Sent. Message ID: ${resendData.id}`);
         }
 
+        // (توحيد إشعار الدفع) «تم استلام طلبك» يكتبه التطبيق لنفسه بعد نجاح الدفع
+        // (notifyOrderCreated) — كان دفعةً ثالثة عن الدفعة الواحدة بعد «تم تأكيد
+        // دفعتكِ» و«تم تأكيد حجزكِ». يشارك في نفس المطالبة الذرّية على الطلب فلا
+        // يُدفَع إلا إن لم يسبقه مسارٌ خادمي. سجلّ الوارد (step 1) يبقى كما هو.
+        let paymentDedupSkip = false;
+        if (type === "order_update" && toUid && trigger.createdBy === toUid &&
+            data.orderId && trigger.pushSent !== true) {
+          paymentDedupSkip = !(await _claimPaymentPush("orders", String(data.orderId)));
+          if (paymentDedupSkip) {
+            await snap.ref.update({pushSent: true, pushSkipped: "payment_push_dedup"});
+          }
+        }
+
         // 3. Push Notification via FCM (حارس pushSent يمنع تكرار الدفع عند إعادة المحاولة)
-        if (type !== "email" && trigger.pushSent !== true) {
+        if (type !== "email" && !paymentDedupSkip && trigger.pushSent !== true) {
           let targetTokens = [];
           if (toUid === "ADMIN_BROADCAST") {
             const allAdminRoles = ["admin", "super_admin", "orders_manager", "accountant_admin", "marketing_admin"];
@@ -1295,8 +1371,19 @@ exports.processNotificationTriggers = onDocumentCreated(
                 admin.firestore().collection("fcm_tokens").where("role", "in", ["admin", "super_admin"]).get(),
               ]);
               const seen = new Set();
-              for (const d of [...byStaff.docs, ...bySuper.docs]) {
+              for (const d of byStaff.docs) {
                 const t = d.data()?.fcmToken || d.data()?.token;
+                if (t && !seen.has(t)) { seen.add(t); targetTokens.push(t); }
+              }
+              // (توجيه فعلي) كل الموظّفين يحملون role='admin' مع staff_role فرعي،
+              // فكان ضمّ استعلام role كاملاً يُعيد الجميع ويجعل targetRoles بلا أثر
+              // (الكل يستلم كل شيء). لا نضمّ منه إلا المدير الكبير الحقيقي: بلا
+              // staff_role (أو super_admin صراحةً) — يبقى يرى الكل كما في اللوحة.
+              for (const d of bySuper.docs) {
+                const sd = d.data() || {};
+                if (sd.staff_role && sd.staff_role !== "super_admin" &&
+                    !targetRoles.includes(sd.staff_role)) continue;
+                const t = sd.fcmToken || sd.token;
                 if (t && !seen.has(t)) { seen.add(t); targetTokens.push(t); }
               }
             } else {
@@ -3084,6 +3171,16 @@ exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
     }
   }
 
+  // إشعار موجز واحد للعميل عن دفعة التوليد كاملة — كان مُشغّل الحالة يدفع «تم
+  // تأكيد حجزكِ» عن **كل** زيارة تُسنَد فور توليدها، فيُغرَق العميل بعدد زيارات
+  // الباقة. (فرع scheduled يكتم زيارات العقود — هذا الملخّص يعوّضه.)
+  if (c.userId) {
+    await queuePush(c.userId, "تم جدولة زيارات باقتكِ 🗓️",
+        `تم جدولة ${schedule.length} من الزيارات لاشتراككِ (${planName}) — ` +
+        "تفاصيل المواعيد في قائمة طلباتكِ.",
+        "contract_visits_scheduled", {contractId: contractRef.id}).catch(() => {});
+  }
+
   return {generated: schedule.length, results};
 });
 
@@ -4276,12 +4373,12 @@ exports.confirmPendingTamaraOrders = onSchedule(
                   "Content-Type": "application/json",
                 }});
             if (a.ok) {
-              await _tamaraFlipPaid(db, doc.id, "order_authorised");
+              await _tamaraFlipPaid(db, doc.id, "order_authorised", to.order_id);
               justConfirmed = true;
             }
           } else if (["authorised", "captured", "fully_captured",
             "partially_captured"].includes(st)) {
-            await _tamaraFlipPaid(db, doc.id, "order_" + st);
+            await _tamaraFlipPaid(db, doc.id, "order_" + st, to.order_id);
             justConfirmed = true;
           } else if (["declined", "expired", "canceled"].includes(st)) {
             // نُلغي الطلب (لا نتركه pending) كي يحرّر خانة الحجز ويُصحّح العدّاد — كان
@@ -4344,12 +4441,12 @@ exports.confirmPendingTamaraOrders = onSchedule(
                     "Content-Type": "application/json",
                   }});
               if (a.ok) {
-                await _tamaraFlipPaid(db, cdoc.id, "order_authorised");
+                await _tamaraFlipPaid(db, cdoc.id, "order_authorised", to.order_id);
                 confirmed++;
               }
             } else if (["authorised", "captured", "fully_captured",
               "partially_captured"].includes(st)) {
-              await _tamaraFlipPaid(db, cdoc.id, "order_" + st);
+              await _tamaraFlipPaid(db, cdoc.id, "order_" + st, to.order_id);
               confirmed++;
             }
           } catch (e) {
@@ -5451,6 +5548,279 @@ exports.moyasarRefundPayment = onCall(
 
       console.log(`moyasarRefund: payment ${paymentId} refunded — status: ${result.status}`);
       return {success: true, status: result.status, refundedAmount: result.amount};
+    },
+);
+
+/**
+ * (استرداد BNPL) مطالبة ذرّية بالاسترداد على مستند الطلب — نفس حرّاس
+ * moyasarRefundPayment حرفياً (refund_credited/refunded/refund_claimed) كي يظلّ
+ * منع الاسترداد المزدوج موحّداً عبر البوابات الثلاث، ونفس التحرير عند فشل البوابة.
+ * @param {{ref: FirebaseFirestore.DocumentReference}} existing نتيجة _findOrder.
+ * @return {Promise<void>} يرمي HttpsError عند استردادٍ سابق/جارٍ.
+ */
+async function _claimRefund(existing) {
+  await admin.firestore().runTransaction(async (tx) => {
+    const snap = await tx.get(existing.ref);
+    const cur = snap.data() || {};
+    if (cur.refund_credited === true) {
+      throw new HttpsError("failed-precondition",
+          "سبق ردّ هذا الطلب إلى محفظة العميل — لا يمكن ردّه عبر البوابة أيضاً");
+    }
+    if (cur.payment_status === "refunded" || cur.refunded === true ||
+        cur.refund_claimed === true) {
+      throw new HttpsError("failed-precondition",
+          "سبق استرداد هذا الطلب (أو استردادٌ آخر قيد التنفيذ)");
+    }
+    tx.update(existing.ref, {
+      refund_claimed: true,
+      refund_claimed_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+}
+
+/**
+ * يحلّ المبلغ الكامل المستحقّ للاسترداد من مستند الطلب — نفس ترتيب حقول
+ * moyasarRefundPayment: store=final/total_amount، عقد=planPrice، غيرها=amount.
+ * @param {object} data بيانات مستند الطلب.
+ * @return {number} المبلغ بالريال (قد يكون 0 إن غابت الحقول).
+ */
+function _fullRefundAmount(data) {
+  return Number(data.final_amount ?? data.total_amount ??
+    data.planPrice ?? data.amount ?? 0);
+}
+
+// ── Tamara Refund ──────────────────────────────────────────────────────────────
+// استرداد كامل لدفعة تمارا (أقساط) — admin فقط. Required: order_id. Optional: reason.
+// يخاطب تمارا بمعرّفها (tamara_order_id المخزَّن عند التأكيد)، مع احتياطي استحضاره
+// بمرجعنا (طلبات أُكِّدت قبل تخزينه) — نفس نمط confirmPendingTamaraOrders، ونفس
+// السرّ TAMARA_API_TOKEN والقاعدة https://api.tamara.co المستخدمَين فيه.
+exports.tamaraRefundPayment = onCall(
+    {secrets: ["TAMARA_API_TOKEN"]},
+    async (request) => {
+      await _assertAdmin(request);
+
+      const orderId = request.data && request.data.order_id;
+      const reason = (request.data && request.data.reason) || "استرداد من إدارة زيارة";
+      if (!orderId) {
+        throw new HttpsError("invalid-argument", "order_id مطلوب");
+      }
+
+      const token = tamaraApiToken.value();
+      if (!token) {
+        throw new HttpsError("failed-precondition", "رمز تمارا غير مهيأ في الخادم");
+      }
+
+      const existing = await _findOrder(orderId);
+      if (!existing) {
+        throw new HttpsError("not-found", "لم يتم العثور على الطلب");
+      }
+      const isTamara = existing.data.payment_method === "tamara" ||
+        !!existing.data.tamara_status || !!existing.data.tamara_order_id;
+      if (!isTamara) {
+        throw new HttpsError("failed-precondition", "هذا الطلب لم يُدفع عبر تمارا");
+      }
+      const refundAmount = _fullRefundAmount(existing.data);
+      if (!(refundAmount > 0)) {
+        throw new HttpsError("failed-precondition", "لا مبلغ صالحاً على هذا الطلب لاسترداده");
+      }
+
+      // (سباق النقرتين) مطالبة ذرّية قبل نداء البوابة — كما في moyasarRefundPayment.
+      await _claimRefund(existing);
+      const releaseClaim = async () => {
+        await existing.ref.update({refund_claimed: false})
+            .catch((e) => console.error("tamaraRefund release claim:", e.message));
+      };
+
+      // معرّف تمارا: المخزَّن أولاً، وإلا نستحضره بمرجعنا (طلبات ما قبل التخزين).
+      let tamaraOrderId = existing.data.tamara_order_id;
+      if (!tamaraOrderId) {
+        try {
+          const r = await fetch(
+              `https://api.tamara.co/merchants/orders/reference-id/${orderId}`,
+              {headers: {Authorization: `Bearer ${token}`}});
+          if (r.ok) {
+            const to = await r.json();
+            tamaraOrderId = to.order_id;
+          }
+        } catch (e) {
+          console.error("tamaraRefund lookup:", e.message);
+        }
+      }
+      if (!tamaraOrderId) {
+        await releaseClaim();
+        throw new HttpsError("not-found",
+            "تعذّر العثور على معرّف طلب تمارا لهذا الطلب — تحقّق من لوحة تمارا");
+      }
+
+      let response; let result;
+      try {
+        response = await fetch(
+            `https://api.tamara.co/orders/${tamaraOrderId}/refunds`, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                total_amount: {amount: refundAmount, currency: "SAR"},
+                comment: reason,
+              }),
+            });
+        result = await response.json().catch(() => ({}));
+      } catch (e) {
+        await releaseClaim();
+        console.error("tamaraRefund network error:", e.message);
+        throw new HttpsError("internal", "تعذّر الاتصال ببوابة تمارا — أعد المحاولة");
+      }
+
+      if (!response.ok) {
+        await releaseClaim();
+        console.error(`tamaraRefund failed ${response.status}:`, result);
+        const msg = (response.status === 401 || response.status === 403) ?
+          "رفضت تمارا الاعتماد — تحقّق من رمز TAMARA_API_TOKEN" :
+          response.status === 409 ?
+          "ترفض تمارا الاسترداد — يبدو أنه سبق استرداد هذه الدفعة لديها" :
+          (result && result.message) ||
+            "فشل استرداد المبلغ من تمارا — تحقّق من حالة الطلب في لوحة تمارا";
+        throw new HttpsError("internal", msg);
+      }
+
+      const refundId = (result && result.refund_id) ||
+        (Array.isArray(result && result.refunds) && result.refunds[0] &&
+          result.refunds[0].refund_id) || null;
+      await existing.ref.update({
+        payment_status: "refunded",
+        // نختم refund_credited كي يمنع حارسُ onOrderRewards إيداعاً ثانياً في
+        // المحفظة — كما في moyasarRefundPayment تماماً.
+        refund_credited: true,
+        is_paid: false,
+        refunded: true,
+        tamara_status: "refunded",
+        refund_provider: "tamara",
+        ...(refundId ? {refund_id: refundId} : {}),
+        refund_reason: reason,
+        refunded_at: admin.firestore.FieldValue.serverTimestamp(),
+        refunded_amount: refundAmount,
+      });
+
+      const clientId = existing.data.client_id || existing.data.userId;
+      const code = existing.data.code || orderId;
+      if (clientId) {
+        await queuePush(clientId, "تم استرداد مبلغك 💳",
+            `أُعيد مبلغ ${refundAmount.toFixed(2)} ر.س للطلب #${code} ` +
+            "إلى وسيلة الدفع الأصلية. قد يستغرق الظهور 5-10 أيام عمل حسب البنك.",
+            "order_refunded", {orderId}).catch(() => {});
+      }
+
+      console.log(`tamaraRefund: order ${orderId} (tamara ${tamaraOrderId}) refunded ${refundAmount} SAR`);
+      return {success: true, refundedAmount: refundAmount,
+        ...(refundId ? {refundId} : {})};
+    },
+);
+
+// ── Tabby Refund ───────────────────────────────────────────────────────────────
+// استرداد كامل لدفعة تابي — admin فقط. Required: order_id. Optional: reason.
+// يعتمد tabby_payment_id الذي يخزّنه tabbyWebhook عند التأكيد، ونفس سرّ تابي
+// الوحيد المُهيّأ (TABBY_WEBHOOK_SECRET) والقاعدة https://api.tabby.ai.
+exports.tabbyRefundPayment = onCall(
+    {secrets: ["TABBY_WEBHOOK_SECRET"]},
+    async (request) => {
+      await _assertAdmin(request);
+
+      const orderId = request.data && request.data.order_id;
+      const reason = (request.data && request.data.reason) || "استرداد من إدارة زيارة";
+      if (!orderId) {
+        throw new HttpsError("invalid-argument", "order_id مطلوب");
+      }
+
+      const secret = tabbyWebhookSecret.value();
+      if (!secret) {
+        throw new HttpsError("failed-precondition", "مفتاح تابي غير مهيأ في الخادم");
+      }
+
+      const existing = await _findOrder(orderId);
+      if (!existing) {
+        throw new HttpsError("not-found", "لم يتم العثور على الطلب");
+      }
+      const tabbyPaymentId = existing.data.tabby_payment_id;
+      if (!tabbyPaymentId) {
+        throw new HttpsError("failed-precondition",
+            "هذا الطلب لم يُدفع عبر تابي (لا معرّف دفعة تابي عليه)");
+      }
+      const refundAmount = _fullRefundAmount(existing.data);
+      if (!(refundAmount > 0)) {
+        throw new HttpsError("failed-precondition", "لا مبلغ صالحاً على هذا الطلب لاسترداده");
+      }
+
+      // (سباق النقرتين) مطالبة ذرّية قبل نداء البوابة — كما في moyasarRefundPayment.
+      await _claimRefund(existing);
+      const releaseClaim = async () => {
+        await existing.ref.update({refund_claimed: false})
+            .catch((e) => console.error("tabbyRefund release claim:", e.message));
+      };
+
+      let response; let result;
+      try {
+        response = await fetch(
+            `https://api.tabby.ai/api/v2/payments/${tabbyPaymentId}/refunds`, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${secret}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                amount: refundAmount.toFixed(2),
+                reason: reason,
+              }),
+            });
+        result = await response.json().catch(() => ({}));
+      } catch (e) {
+        await releaseClaim();
+        console.error("tabbyRefund network error:", e.message);
+        throw new HttpsError("internal", "تعذّر الاتصال ببوابة تابي — أعد المحاولة");
+      }
+
+      if (!response.ok) {
+        await releaseClaim();
+        console.error(`tabbyRefund failed ${response.status}:`, result);
+        const msg = (response.status === 401 || response.status === 403) ?
+          "رفضت تابي الاعتماد — تحقّق من مفتاح تابي في الخادم" :
+          response.status === 409 ?
+          "ترفض تابي الاسترداد — يبدو أنه سبق استرداد هذه الدفعة لديها" :
+          (result && (result.error || result.message)) ||
+            "فشل استرداد المبلغ من تابي — تحقّق من حالة الدفعة في لوحة تابي";
+        throw new HttpsError("internal", msg);
+      }
+
+      const refunds = Array.isArray(result && result.refunds) ? result.refunds : [];
+      const refundId = (refunds.length && refunds[refunds.length - 1].id) || null;
+      await existing.ref.update({
+        payment_status: "refunded",
+        // نختم refund_credited كي يمنع حارسُ onOrderRewards إيداعاً ثانياً في
+        // المحفظة — كما في moyasarRefundPayment تماماً.
+        refund_credited: true,
+        is_paid: false,
+        refunded: true,
+        tabby_status: "refunded",
+        refund_provider: "tabby",
+        ...(refundId ? {refund_id: refundId} : {}),
+        refund_reason: reason,
+        refunded_at: admin.firestore.FieldValue.serverTimestamp(),
+        refunded_amount: refundAmount,
+      });
+
+      const clientId = existing.data.client_id || existing.data.userId;
+      const code = existing.data.code || orderId;
+      if (clientId) {
+        await queuePush(clientId, "تم استرداد مبلغك 💳",
+            `أُعيد مبلغ ${refundAmount.toFixed(2)} ر.س للطلب #${code} ` +
+            "إلى وسيلة الدفع الأصلية. قد يستغرق الظهور 5-10 أيام عمل حسب البنك.",
+            "order_refunded", {orderId}).catch(() => {});
+      }
+
+      console.log(`tabbyRefund: order ${orderId} (payment ${tabbyPaymentId}) refunded ${refundAmount} SAR`);
+      return {success: true, refundedAmount: refundAmount,
+        ...(refundId ? {refundId} : {})};
     },
 );
 

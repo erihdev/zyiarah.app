@@ -223,7 +223,7 @@ class _AdminScheduleBoardScreenState extends State<AdminScheduleBoardScreen> {
         Align(
           alignment: AlignmentDirectional.centerStart,
           child: Text(
-              'الإيراد المتوقع: ${revenue.toStringAsFixed(2)} ر.س',
+              'الإيراد المتوقع (شامل الضريبة): ${revenue.toStringAsFixed(2)} ر.س',
               style: GoogleFonts.tajawal(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,

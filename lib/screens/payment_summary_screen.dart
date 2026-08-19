@@ -1142,6 +1142,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     // بعد الانتقال مباشرةً. نلتقط القيم الأولية الآن لأن State يُتلَف عند الانتقال —
     // فلا نلمس widget/controllers داخل مهمة الخلفية.
     final String bgCollection = widget.contractId != null ? 'contracts' : 'orders';
+    // مستند الفاتورة: للاشتراك معرّف العقد الحقيقي (contracts/{contractId}) — كان
+    // يُمرَّر _pendingOrderId فتُكتب فاتورة ZATCA على contracts/{معرّف طلب} معدوم
+    // ويفشل التحديث بصمت فتضيع فاتورة الاشتراك الضريبية كلياً.
+    final String bgInvoiceDocId = widget.contractId ?? id;
     final double bgTotal = totalWithVat;
     final double bgVat = vatAmount;
     final double bgDiscount = _discountAmount;
@@ -1197,7 +1201,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           vatAmount: bgVat,
         );
         final String? invoiceUrl = await ZyiarahPdfService.generateAndUploadInvoice(
-          orderId: id,
+          orderId: bgInvoiceDocId,
           orderCode: code,
           amount: bgTotal,
           qrData: qrData,

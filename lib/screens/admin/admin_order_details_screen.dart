@@ -513,6 +513,68 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
     }
   }
 
+  /// Calls a BNPL (Tamara / Tabby) refund Cloud Function.
+  Future<void> _bnplRefundOperation({
+    required String functionName,
+    required String label,
+  }) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(label, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+        content: Text(
+          'هل أنت متأكد من تنفيذ "$label"؟ لا يمكن التراجع.',
+          style: GoogleFonts.tajawal(),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('إلغاء', style: GoogleFonts.tajawal())),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('تأكيد', style: GoogleFonts.tajawal(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable(functionName);
+      // عقد دالتي التقسيط snake_case (order_id) بخلاف دوال ميسر (orderId) —
+      // الاسترداد كامل المبلغ عبر بوابة المزوّد، وعند النجاح يكتب الخادم
+      // is_paid:false و refunded:true.
+      await callable.call({'order_id': widget.orderId});
+
+      // Refresh order data — refunded:true يُخفي البطاقة كمسار ميسر تماماً.
+      await _fetchOrder();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('تم تنفيذ "$label" بنجاح ✅', style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.green,
+        ));
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.message ?? 'فشل تنفيذ العملية', style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.red.shade700,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('خطأ غير متوقع: $e', style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.red.shade700,
+        ));
+      }
+    }
+  }
+
   Future<void> _openWhatsApp(String phone) async {
     try {
       final url = Uri.parse("https://wa.me/$phone");
@@ -691,6 +753,77 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                   style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey.shade600),
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// بطاقة استرداد مدفوعات التقسيط (تمارا / تابي). الاسترداد خادميّ بالكامل عبر
+  /// tamaraRefundPayment / tabbyRefundPayment، وعند النجاح يكتب الخادم
+  /// is_paid:false و refunded:true فتختفي البطاقة بعد التحديث — كإخفاء أزرار
+  /// ميسر بعد المعالجة النهائية.
+  Widget _buildBnplRefundCard(Map<String, dynamic> data) {
+    final bool isTamara = data['payment_method'] == 'tamara';
+    final String provider = isTamara ? 'تمارا' : 'تابي';
+    final String label = 'استرداد المبلغ ($provider)';
+    final double amount =
+        double.tryParse('${data['final_amount'] ?? data['amount'] ?? 0}') ?? 0.0;
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      color: const Color(0xFFF5F3FF),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.payment_rounded, color: Color(0xFF7C3AED), size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'عمليات الدفع — $provider',
+                  style: GoogleFonts.tajawal(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: const Color(0xFF6D28D9),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(),
+            if (amount > 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  'المبلغ المدفوع: ${amount.toStringAsFixed(2)} ر.س',
+                  style: GoogleFonts.tajawal(fontSize: 13, color: Colors.grey.shade700),
+                ),
+              ),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _operationButton(
+                  label: label,
+                  icon: Icons.undo_rounded,
+                  color: const Color(0xFFDC2626),
+                  onTap: () => _bnplRefundOperation(
+                    functionName:
+                        isTamara ? 'tamaraRefundPayment' : 'tabbyRefundPayment',
+                    label: label,
+                  ),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                '💡 الاسترداد كامل المبلغ ويُنفَّذ خادمياً عبر بوابة $provider',
+                style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey.shade600),
+              ),
+            ),
           ],
         ),
       ),
@@ -931,6 +1064,19 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
             if (data['moyasar_payment_id'] != null && _canEditOrders) ...[
               const SizedBox(height: 15),
               _buildMoyasarOperationsCard(data),
+            ],
+            // ── BNPL (Tamara / Tabby) Refund ────────────────────────────────────
+            // استرداد التقسيط خادميّ بالكامل — البطاقة تظهر لطلبٍ مدفوعٍ لم يُسترد
+            // بعد (لا refunded من البوابة ولا refund_credited للمحفظة — الثانية
+            // تعني أن استرداد البوابة سيُرفض خادمياً منعاً للردّ المزدوج)، وبنفس
+            // بوّابة عمليات ميسر (_canEditOrders).
+            if (const ['tamara', 'tabby'].contains(data['payment_method']) &&
+                data['is_paid'] == true &&
+                data['refunded'] != true &&
+                data['refund_credited'] != true &&
+                _canEditOrders) ...[
+              const SizedBox(height: 15),
+              _buildBnplRefundCard(data),
             ],
             const SizedBox(height: 15),
             // لوحة الإدارة تُستبدل بشارة «للقراءة فقط» حين تكون الكتابة محكومة

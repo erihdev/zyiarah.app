@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Filter, MoreVertical, CheckCircle2, Clock, XCircle, Package, UserCheck, X, Loader2, CalendarClock } from 'lucide-react';
+import { Search, Filter, MoreVertical, CheckCircle2, Clock, XCircle, Package, UserCheck, X, Loader2, CalendarClock, Undo2 } from 'lucide-react';
 import {
     collection, onSnapshot, query, orderBy, where, limit, doc, Timestamp, updateDoc, runTransaction,
     type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot
@@ -32,6 +32,11 @@ interface OrderRecord {
     code?: string;
     payment_method?: string;
     is_paid?: boolean;
+    // استرداد التقسيط: refunded يكتبها الخادم بعد استرداد البوابة، و
+    // refund_credited تعني أن المبلغ رُدّ لمحفظة العميل داخل التطبيق —
+    // كلتاهما تُخفيان زر الاسترداد (الخادم يرفضه بعدها منعاً للردّ المزدوج).
+    refunded?: boolean;
+    refund_credited?: boolean;
     service_date?: Timestamp;
     // تفصيل الخدمة — يظهر تحت نوع الخدمة وفي نافذتي التعيين/التعديل.
     // ستة أنواع يكتبها التطبيق؛ كانت اللوحة تقرأ home_package وحده.
@@ -170,6 +175,7 @@ export default function Orders() {
     const [scheduledAt, setScheduledAt] = useState('');
     const [isAssigning, setIsAssigning] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
+    const [isRefunding, setIsRefunding] = useState(false);
     // «تعديل الزيارة»: تغيير الموعد و/أو السائق لطلبٍ قائم.
     const [editModal, setEditModal] = useState<OrderRecord | null>(null);
     const [editScheduledAt, setEditScheduledAt] = useState('');
@@ -379,6 +385,36 @@ export default function Orders() {
         }
     };
 
+    // استرداد مدفوعات التقسيط (تمارا/تابي) — خادميّ بالكامل عبر
+    // tamaraRefundPayment/tabbyRefundPayment (عقدهما snake_case: order_id).
+    // الزر يظهر لطلبٍ مدفوعٍ لم يُسترد بعد؛ عند النجاح يكتب الخادم is_paid:false
+    // و refunded:true فيختفي الزر تلقائياً عبر المستمع الحي — كمسار تطبيق الأدمن.
+    const canBnplRefund = (o: OrderRecord) =>
+        (o.payment_method === 'tamara' || o.payment_method === 'tabby') &&
+        o.is_paid === true && o.refunded !== true && o.refund_credited !== true;
+    // الحالات النهائية: القائمة كانت تُخفى كلياً عندها — مع زر الاسترداد صارت
+    // تُفتح لها أيضاً (الاسترداد أكثر ما يلزم بعد الإلغاء/الإكمال)، فتُقصر بقية
+    // الإجراءات (تعديل الزيارة/الإلغاء) على غير النهائية كما كانت.
+    const isFinalStatus = (o: OrderRecord) => o.status === 'completed' || o.status === 'cancelled';
+    const handleBnplRefund = async (order: OrderRecord) => {
+        const provider = order.payment_method === 'tamara' ? 'تمارا' : 'تابي';
+        if (!await confirm(`هل أنت متأكد من استرداد مبلغ الطلب #${order.code || order.id.substring(0, 6).toUpperCase()} عبر ${provider}؟ لا يمكن التراجع.`)) return;
+        setIsRefunding(true);
+        try {
+            await httpsCallable(functions, order.payment_method === 'tamara' ? 'tamaraRefundPayment' : 'tabbyRefundPayment')({
+                order_id: order.id,
+            });
+            toast.success(`تم استرداد المبلغ عبر ${provider} بنجاح`);
+        } catch (err: unknown) {
+            console.error('Error refunding BNPL payment:', err);
+            // رسائل الدالة الخادمية عربية أصلاً (HttpsError) — نعرضها كما هي.
+            toast.error((err as { message?: string })?.message || 'تعذّر استرداد المبلغ');
+        } finally {
+            setIsRefunding(false);
+            setActionMenuId(null);
+        }
+    };
+
     const filteredOrders = orders.filter(o =>
         o.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         o.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -477,7 +513,7 @@ export default function Orders() {
                                         <td className="px-6 py-4 font-medium text-slate-500 text-sm">{order.date}</td>
                                         <td className="px-6 py-4"><StatusBadge status={order.status} /></td>
                                         <td className="px-6 py-4 text-center relative">
-                                            {order.status !== 'completed' && order.status !== 'cancelled' && (
+                                            {(!isFinalStatus(order) || canBnplRefund(order)) && (
                                                 <button
                                                     type="button"
                                                     title="الإجراءات"
@@ -522,29 +558,43 @@ export default function Orders() {
                                                             <CheckCircle2 size={16} />تم التنفيذ
                                                         </button>
                                                     )}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setEditModal(order);
-                                                            const cur = order.service_date instanceof Timestamp
-                                                                ? toDatetimeLocal(order.service_date.toDate()) : '';
-                                                            setEditScheduledAt(cur);
-                                                            setEditOriginalAt(cur);
-                                                            setEditDriverId(order.driver_id || '');
-                                                            setActionMenuId(null);
-                                                        }}
-                                                        className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-[#FAF1F6] hover:text-[#4D0026] transition-colors text-right"
-                                                    >
-                                                        <CalendarClock size={16} />تعديل الزيارة
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        disabled={isCancelling}
-                                                        onClick={() => handleCancelOrder(order)}
-                                                        className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-rose-600 hover:bg-rose-50 transition-colors text-right disabled:opacity-50"
-                                                    >
-                                                        <XCircle size={16} />إلغاء الطلب
-                                                    </button>
+                                                    {!isFinalStatus(order) && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setEditModal(order);
+                                                                const cur = order.service_date instanceof Timestamp
+                                                                    ? toDatetimeLocal(order.service_date.toDate()) : '';
+                                                                setEditScheduledAt(cur);
+                                                                setEditOriginalAt(cur);
+                                                                setEditDriverId(order.driver_id || '');
+                                                                setActionMenuId(null);
+                                                            }}
+                                                            className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-[#FAF1F6] hover:text-[#4D0026] transition-colors text-right"
+                                                        >
+                                                            <CalendarClock size={16} />تعديل الزيارة
+                                                        </button>
+                                                    )}
+                                                    {canBnplRefund(order) && (
+                                                        <button
+                                                            type="button"
+                                                            disabled={isRefunding}
+                                                            onClick={() => handleBnplRefund(order)}
+                                                            className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-rose-600 hover:bg-rose-50 transition-colors text-right disabled:opacity-50"
+                                                        >
+                                                            <Undo2 size={16} />{order.payment_method === 'tamara' ? 'استرداد المبلغ (تمارا)' : 'استرداد المبلغ (تابي)'}
+                                                        </button>
+                                                    )}
+                                                    {!isFinalStatus(order) && (
+                                                        <button
+                                                            type="button"
+                                                            disabled={isCancelling}
+                                                            onClick={() => handleCancelOrder(order)}
+                                                            className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-rose-600 hover:bg-rose-50 transition-colors text-right disabled:opacity-50"
+                                                        >
+                                                            <XCircle size={16} />إلغاء الطلب
+                                                        </button>
+                                                    )}
                                                 </div>
                                             )}
                                         </td>
