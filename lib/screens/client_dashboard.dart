@@ -725,7 +725,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           themeColor: const Color(0xFF9333EA),
           icon: Icons.celebration_rounded,
           iconBgColor: const Color(0xFFF3E8FF),
-          imagePath: 'assets/images/cleaning_hero.png',
+          imagePath: 'assets/images/event_workers.png',
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EventWorkerPackagesScreen())),
         ),
         _buildWebStyleServiceCard(
