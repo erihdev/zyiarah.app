@@ -14,8 +14,12 @@ import 'package:zyiarah/utils/firestore_maps.dart';
 import 'package:zyiarah/screens/admin/admin_zone_schedule_editor.dart';
 import 'package:zyiarah/utils/jazan_boundary.dart';
 import 'package:zyiarah/utils/home_packages.dart';
-import 'package:zyiarah/screens/event_workers_details_screen.dart'
-    show kEventWorkerHourPriceField;
+
+/// حقل سعر ساعة العاملة الواحدة في وثيقة المنطقة — **قبل الضريبة**.
+/// (منقول هنا بعد حذف lib/screens/event_workers_details_screen.dart —
+/// نفس الاسم والقيمة تماماً، الحقل نفسه يبقى معطّلاً غير مستخدَم في أي تدفّق
+/// عميل حالياً، خارج نطاق هذا التعديل تماماً كما كان.)
+const String kEventWorkerHourPriceField = 'eventWorkerHourPrice';
 
 class AdminHourlyZonesScreen extends StatefulWidget {
   const AdminHourlyZonesScreen({super.key});

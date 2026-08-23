@@ -14,6 +14,7 @@ import 'package:zyiarah/screens/admin/admin_deletions_screen.dart';
 import 'package:zyiarah/screens/admin/admin_store_orders_screen.dart';
 import 'package:zyiarah/screens/admin/admin_hourly_zones_screen.dart';
 import 'package:zyiarah/screens/admin/admin_subscriptions_screen.dart';
+import 'package:zyiarah/screens/admin/admin_event_worker_packages_screen.dart';
 import 'package:zyiarah/screens/admin/admin_audit_logs_screen.dart';
 import 'package:zyiarah/screens/admin/admin_analytics_screen.dart';
 import 'package:zyiarah/screens/admin/admin_schedule_board_screen.dart';
@@ -149,6 +150,14 @@ class AdminMoreScreen extends StatelessWidget {
             'color': Colors.deepPurple,
             'page': const AdminSubscriptionsScreen(),
             // القواعد: كتابة subscription_packages = isMarketingAdmin (لا المحاسب)
+            'roles': ['super_admin', 'marketing_admin'],
+          },
+          {
+            'title': 'باقات عاملات المناسبات',
+            'icon': Icons.celebration_rounded,
+            'color': Colors.pink,
+            'page': const AdminEventWorkerPackagesScreen(),
+            // القواعد: كتابة event_worker_packages = isMarketingAdmin (لا المحاسب)
             'roles': ['super_admin', 'marketing_admin'],
           },
           {

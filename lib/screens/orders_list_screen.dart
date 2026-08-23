@@ -8,7 +8,7 @@ import 'package:zyiarah/screens/hourly_details_screen.dart';
 import 'package:zyiarah/screens/sofa_rug_details_screen.dart';
 import 'package:zyiarah/screens/ac_service_details_screen.dart';
 import 'package:zyiarah/screens/car_interior_details_screen.dart';
-import 'package:zyiarah/screens/event_workers_details_screen.dart';
+import 'package:zyiarah/screens/event_worker_packages_screen.dart';
 import 'package:zyiarah/screens/store_screen.dart';
 import 'package:zyiarah/widgets/shimmer_loading.dart';
 import 'package:zyiarah/utils/status_util.dart';
@@ -572,7 +572,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                           serviceName: 'تنظيف الكنب والزل'),
                       'ac_service' => const AcServiceDetailsScreen(),
                       'car_interior' => const CarInteriorDetailsScreen(),
-                      'event_workers' => const EventWorkersDetailsScreen(),
+                      'event_workers' => const EventWorkerPackagesScreen(),
                       'store_products' => const ZyiarahStoreScreen(),
                       // home_package والطلبات القديمة بلا meta = تنظيف منزلي.
                       _ => const HourlyCleaningDetailsScreen(

@@ -1,0 +1,317 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:zyiarah/services/audit_service.dart';
+
+class AdminEventWorkerPackagesScreen extends StatefulWidget {
+  const AdminEventWorkerPackagesScreen({super.key});
+
+  @override
+  State<AdminEventWorkerPackagesScreen> createState() => _AdminEventWorkerPackagesScreenState();
+}
+
+class _AdminEventWorkerPackagesScreenState extends State<AdminEventWorkerPackagesScreen> {
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  Future<void> _deletePackage(String id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: Text("تأكيد الحذف", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+          content: const Text("هل أنت متأكد من حذف هذه الباقة؟ لن تظهر للعملاء الجدد، ولكن قد تظل نشطة للمشتركين الحاليين."),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("إلغاء")),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text("حذف الآن", style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await _db.collection('event_worker_packages').doc(id).delete();
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم حذف الباقة بنجاح")));
+
+        await ZyiarahAuditService().logAction(
+          action: 'DELETE_EVENT_WORKER_PACKAGE',
+          details: {'package_id': id},
+          targetId: id,
+        );
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ أثناء الحذف: $e")));
+      }
+    }
+  }
+
+  void _showPackageDialog({DocumentSnapshot? doc}) {
+    final Map<String, dynamic>? data = doc?.data() as Map<String, dynamic>?;
+    final titleCtrl = TextEditingController(text: data?['title'] ?? '');
+    final subtitleCtrl = TextEditingController(text: data?['subtitle'] ?? '');
+    final priceCtrl = TextEditingController(text: data?['price']?.toString() ?? '');
+    final visitsCtrl = TextEditingController(text: data?['visits']?.toString() ?? '');
+    final hoursCtrl = TextEditingController(text: data?['hours']?.toString() ?? '4');
+    final workersCtrl = TextEditingController(text: data?['workers']?.toString() ?? '');
+    final featuresCtrl = TextEditingController(text: (data?['features'] as List<dynamic>?)?.join('\n') ?? '');
+    bool isPremium = data?['isPremium'] ?? false;
+    int rank = data?['rank'] ?? 0;
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return Directionality(
+            textDirection: TextDirection.rtl,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text(doc == null ? "إضافة باقة عاملات مناسبات" : "تعديل الباقة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isSaving) const Padding(padding: EdgeInsets.only(bottom: 15), child: LinearProgressIndicator(color: Color(0xFF660033))),
+
+                    TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'اسم الباقة الرئيسية', border: OutlineInputBorder())),
+                    const SizedBox(height: 15),
+                    TextField(controller: subtitleCtrl, decoration: const InputDecoration(labelText: 'العنوان الفرعي/الوصف القصير', border: OutlineInputBorder())),
+                    const SizedBox(height: 15),
+                    TextField(controller: priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'السعر الإجمالي (ر.س)', border: OutlineInputBorder())),
+                    const SizedBox(height: 15),
+                    TextField(controller: visitsCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'عدد الزيارات المشمولة في الباقة', border: OutlineInputBorder())),
+                    const SizedBox(height: 15),
+                    TextField(controller: hoursCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'عدد الساعات لكل زيارة', border: OutlineInputBorder())),
+                    const SizedBox(height: 15),
+                    TextField(controller: workersCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'عدد العاملات لكل زيارة', border: OutlineInputBorder())),
+                    const SizedBox(height: 15),
+                    TextField(
+                      controller: featuresCtrl,
+                      maxLines: 4,
+                      decoration: const InputDecoration(labelText: 'الميزات (كل ميزة في سطر منفصل)', hintText: "مثال:\nفريق مُدرَّب\nتوفير 20%\nدعم فني", border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 10),
+                    SwitchListTile(
+                      title: const Text('باقة مميزة (Golden)؟'),
+                      value: isPremium,
+                      onChanged: (val) => setDialogState(() => isPremium = val),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: isSaving ? null : () => Navigator.pop(ctx), child: const Text("إلغاء")),
+                ElevatedButton(
+                  onPressed: isSaving ? null : () async {
+                    if (titleCtrl.text.isEmpty || priceCtrl.text.isEmpty || workersCtrl.text.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى إكمال البيانات الأساسية")));
+                      return;
+                    }
+                    setDialogState(() => isSaving = true);
+                    try {
+                      final newData = {
+                        'title': titleCtrl.text.trim(),
+                        'subtitle': subtitleCtrl.text.trim(),
+                        'price': double.tryParse(priceCtrl.text.trim()) ?? 0.0,
+                        'visits': int.tryParse(visitsCtrl.text.trim()) ?? 0,
+                        'hours': int.tryParse(hoursCtrl.text.trim()) ?? 4,
+                        'workers': int.tryParse(workersCtrl.text.trim()) ?? 0,
+                        'features': featuresCtrl.text.trim().split('\n').where((s) => s.isNotEmpty).toList(),
+                        'isPremium': isPremium,
+                        'rank': rank,
+                        'updated_at': FieldValue.serverTimestamp(),
+                      };
+                      if (doc == null) {
+                        // باقة جديدة تُذيَّل القائمة (أعلى rank + 1) — الافتراضي 0 كان
+                        // يجعلها تتصدّر فوق كل الباقات القائمة.
+                        final top = await _db
+                            .collection('event_worker_packages')
+                            .orderBy('rank', descending: true)
+                            .limit(1)
+                            .get();
+                        final maxRank = top.docs.isEmpty
+                            ? 0
+                            : (top.docs.first.data()['rank'] as num? ?? 0)
+                                .toInt();
+                        newData['rank'] = maxRank + 1;
+                        await _db.collection('event_worker_packages').add(newData);
+                      } else {
+                        await _db.collection('event_worker_packages').doc(doc.id).update(newData);
+                      }
+
+                      ZyiarahAuditService().logAction(
+                        action: doc == null ? 'CREATE_EVENT_WORKER_PACKAGE' : 'UPDATE_EVENT_WORKER_PACKAGE',
+                        details: {
+                          'title': newData['title'],
+                          'price': newData['price'],
+                        },
+                        targetId: doc?.id,
+                      );
+
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    } catch (e) {
+                      // كان الفشل صامتاً: يُعاد تفعيل الزر بلا أي رسالة فيظنّ الأدمن أن شيئاً لم يحدث.
+                      setDialogState(() => isSaving = false);
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(content: Text('تعذّر حفظ الباقة، تحقّق من اتصالك وحاول مجدداً'), backgroundColor: Colors.red),
+                        );
+                      }
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF660033), foregroundColor: Colors.white),
+                  child: Text(isSaving ? "جاري الحفظ..." : "حفظ الباقة"),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    ).whenComplete(() {
+      titleCtrl.dispose();
+      subtitleCtrl.dispose();
+      priceCtrl.dispose();
+      visitsCtrl.dispose();
+      hoursCtrl.dispose();
+      workersCtrl.dispose();
+      featuresCtrl.dispose();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          title: Text('إدارة باقات عاملات المناسبات', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+          backgroundColor: const Color(0xFF660033),
+          foregroundColor: Colors.white,
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => _showPackageDialog(),
+          backgroundColor: const Color(0xFF660033),
+          child: const Icon(Icons.add, color: Colors.white),
+        ),
+        body: StreamBuilder<QuerySnapshot>(
+          stream: _db.collection('event_worker_packages').orderBy('rank').snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+            // فشل البث كان يُعرض كقائمة فارغة — خطأ صريح مع إعادة محاولة.
+            if (snapshot.hasError) {
+              return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.cloud_off_rounded, size: 48, color: Colors.redAccent),
+                const SizedBox(height: 10),
+                Text('تعذّر تحميل البيانات', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.red)),
+                TextButton(onPressed: () => setState(() {}), child: const Text('إعادة المحاولة')),
+              ]));
+            }
+            final docs = snapshot.data?.docs ?? [];
+            if (docs.isEmpty) return const Center(child: Text("لا توجد باقات متاحة حالياً"));
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: docs.length,
+              itemBuilder: (context, index) {
+                final doc = docs[index];
+                final data = doc.data() as Map<String, dynamic>;
+                final bool isPremium = data['isPremium'] == true;
+                final List features = data['features'] ?? [];
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: BorderSide(color: isPremium ? Colors.amber : Colors.transparent, width: 2),
+                  ),
+                  elevation: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(child: Text(data['title'] ?? '', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF660033)))),
+                            Row(
+                              children: [
+                                IconButton(icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20), onPressed: () => _showPackageDialog(doc: doc)),
+                                IconButton(icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20), onPressed: () => _deletePackage(doc.id)),
+                              ],
+                            )
+                          ],
+                        ),
+                        Text(data['subtitle'] ?? '', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text("${data['price']} ر.س", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF660033).withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    "عدد الساعات: ${data['hours'] ?? 4} ساعات",
+                                    style: GoogleFonts.tajawal(
+                                      color: const Color(0xFF660033),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF660033).withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    "عدد العاملات: ${data['workers'] ?? 0}",
+                                    style: GoogleFonts.tajawal(
+                                      color: const Color(0xFF660033),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 24),
+                        ...features.map((f) => Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            children: [
+                              Icon(Icons.check_circle_outline, size: 16, color: isPremium ? Colors.amber : const Color(0xFF660033)),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(f.toString(), style: const TextStyle(fontSize: 12))),
+                            ],
+                          ),
+                        )),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+}

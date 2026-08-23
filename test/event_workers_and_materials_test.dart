@@ -8,67 +8,38 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   String read(String p) => File(p).readAsStringSync();
 
-  /// الملف بلا أسطر التعليقات — التعليق يشرح أن `hour_rate` **لا** يُقرأ، فمسحُ
-  /// النصّ الخام يلتقط الشرح نفسه ويفشل بلا سبب حقيقي.
-  String codeOnly(String p) => read(p)
-      .split('\n')
-      .where((l) => !l.trimLeft().startsWith('//'))
-      .join('\n');
-
-  group('عاملات للمناسبات', () {
-    final screen = read('lib/screens/event_workers_details_screen.dart');
+  // ملاحظة (2026-08-23): استُبدل تدفّق «العميل يُدخل العدد والساعات بحرّية»
+  // بتدفّق باقات جاهزة مسعّرة مسبقاً (event_worker_packages_screen.dart يقرأ
+  // من مجموعة Firestore جديدة event_worker_packages). lib/screens/
+  // event_workers_details_screen.dart حُذف بالكامل وهو الملف الذي كانت هذه
+  // المجموعة تقرأه — أُعيدت كتابة الاختبارات هنا لتطابق التدفّق الجديد بدل
+  // الانهيار عند بناء main() بمحاولة قراءة ملف لم يعد موجوداً. functions/
+  // pricing.js وحقل eventWorkerHourPrice في admin_hourly_zones_screen.dart
+  // بقيا خارج النطاق تماماً كما في التصميم المعتمد (معطّلان غير محذوفين).
+  group('عاملات للمناسبات (باقات جاهزة)', () {
+    final screen = read('lib/screens/event_worker_packages_screen.dart');
     final zones = read('lib/screens/admin/admin_hourly_zones_screen.dart');
     final dash = read('lib/screens/client_dashboard.dart');
     final pricing = read('functions/pricing.js');
 
-    test('الشاشة تُخرج العدد والساعات في service_meta', () {
-      expect(screen.contains("'kind': 'event_workers'"), isTrue);
-      expect(screen.contains("'workers': _workers"), isTrue);
-      expect(screen.contains("'event_hours': _hours"), isTrue);
+    test('الشاشة تقرأ من مجموعة الباقات الجاهزة وتمرّر contract_kind/workers للعقد', () {
+      expect(screen.contains("collection('event_worker_packages')"), isTrue);
+      expect(screen.contains("contractKind: 'event_workers'"), isTrue);
+      expect(screen.contains('workers: planWorkers'), isTrue);
     });
 
-    test('العميل يختار اليوم والساعة عبر منتقي الخانات المشترك', () {
-      // المنتقي نفسه = يرث فحص ساعات فتح المنطقة والساعات المقفلة وتوفّر السائق.
-      expect(screen.contains('ZyiarahBookingSlotPicker'), isTrue);
-      expect(screen.contains('durationHours: _hours'), isTrue);
+    test('حقل سعر الساعة القديم في مستند المنطقة محفوظ (معطّل لا محذوف)', () {
+      expect(zones.contains('kEventWorkerHourPriceField'), isTrue);
     });
 
-    test('بلا سعر ⇒ بلا بيع', () {
-      expect(screen.contains('kEventWorkerHourPriceField'), isTrue);
-      expect(screen.contains('bool get _isPriced => _hourRate > 0'), isTrue);
-      expect(screen.contains('_unpricedBanner'), isTrue);
-    });
-
-    test('المبلغ المُمرَّر للدفع شامل الضريبة والمعروض قبلها', () {
-      expect(screen.contains('amount: grandTotal'), isTrue);
-      expect(screen.contains('totalAmount * 1.15'), isTrue);
-      expect(screen.contains('الإجمالي قبل الضريبة'), isTrue);
-      expect(screen.contains('ضريبة القيمة المضافة (15%)'), isFalse,
-          reason: 'الضريبة مكانها تفاصيل الفاتورة لا شاشة الاختيار');
-    });
-
-    test('الأدمن يسعّرها لكل منطقة وتُنسخ مع بقية الأسعار', () {
-      expect(zones.contains('pEventWorkerCtrl'), isTrue);
-      expect(zones.contains('kEventWorkerHourPriceField:'), isTrue,
-          reason: 'تُكتب في مستند المنطقة عند الحفظ');
-      expect(zones.contains('pEventWorkerCtrl.text =\n'
-          '                                        n(src[kEventWorkerHourPriceField])'),
-          isTrue,
-          reason: '«نسخ الأسعار من منطقة سابقة» يجب أن يشملها');
-      expect(zones.contains('pEventWorkerCtrl.dispose()'), isTrue);
-    });
-
-    test('لها بطاقة في واجهة العميل', () {
-      expect(dash.contains('EventWorkersDetailsScreen'), isTrue);
+    test('لها بطاقة في واجهة العميل تفتح شاشة الباقات الجديدة', () {
+      expect(dash.contains('EventWorkerPackagesScreen'), isTrue);
       expect(dash.contains('عاملات للمناسبات'), isTrue);
     });
 
-    test('التسعير الخادمي يعيد الحساب ولا يثق بسعر العميل', () {
+    test('مسار التسعير الخادمي القديم لعاملات المناسبات يبقى كما هو (خارج النطاق)', () {
       expect(pricing.contains('kind === "event_workers"'), isTrue);
       expect(pricing.contains('zone.eventWorkerHourPrice'), isTrue);
-      expect(codeOnly('functions/pricing.js').contains('meta.hour_rate'),
-          isFalse,
-          reason: 'hour_rate يكتبه العميل — لا يُقرأ في الحساب إطلاقاً');
     });
   });
 

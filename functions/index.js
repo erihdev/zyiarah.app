@@ -3009,13 +3009,18 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
  * وتوليد كل الزيارات. نتحقّق هنا أن سعر/زيارات العقد يطابقان باقة
  * subscription_packages الحقيقية قبل أي توليد. المطابقة بالاسم (title) لأن العقد
  * لا يخزّن معرّف الباقة. يرمي HttpsError عند أي انحراف.
+ * إن كان c.contract_kind === 'event_workers' تُقرأ الباقة من event_worker_packages
+ * بدلاً من subscription_packages (نفس منطق السعر/الزيارات)، مع تحقّق إضافي لعدد
+ * العاملات إن حدّدته الباقة.
  * @param {admin.firestore.Firestore} db
  * @param {object} c بيانات العقد
  * @param {FirebaseFirestore.Transaction} [tx] معاملة اختيارية (القراءة داخلها)
  * @return {Promise<void>}
  */
 async function _validateContractPlan(db, c, tx) {
-  const q = db.collection("subscription_packages")
+  const isEventWorkers = c.contract_kind === "event_workers";
+  const col = isEventWorkers ? "event_worker_packages" : "subscription_packages";
+  const q = db.collection(col)
       .where("title", "==", String(c.planName || "")).limit(1);
   const snap = tx ? await tx.get(q) : await q.get();
   if (snap.empty) {
@@ -3046,6 +3051,14 @@ async function _validateContractPlan(db, c, tx) {
     throw new HttpsError("failed-precondition",
         `عدد زيارات العقد (${Number(c.planVisits || 0)}) لا يطابق الباقة ` +
         `(${pkgVisits}) — رُفض توليد الزيارات`);
+  }
+  // (عاملات المناسبات) تحقّق عدد العاملات إن حدّدته الباقة — نفس أسلوب تحقّق
+  // السعر/الزيارات أعلاه، مقصور على مسار event_workers فقط.
+  if (isEventWorkers && Number(pkg.workers || 0) > 0 &&
+      Number(c.workers || 0) !== Number(pkg.workers)) {
+    throw new HttpsError("failed-precondition",
+        `عدد عاملات العقد (${Number(c.workers || 0)}) لا يطابق الباقة ` +
+        `(${Number(pkg.workers)}) — رُفض توليد الزيارات`);
   }
 }
 
@@ -3159,6 +3172,11 @@ exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
       booking_time_slot: v.slot,
       created_at: admin.firestore.FieldValue.serverTimestamp(),
       reminder_sent: false,
+      // (عاملات المناسبات) يقرأه lib/widgets/service_meta_view.dart +
+      // admin_panel/src/utils/serviceMeta.ts لعرض العدد/الساعات على بطاقة الزيارة.
+      ...(c.contract_kind === "event_workers" ? {service_meta: {
+        kind: "event_workers", workers: Number(c.workers || 0), event_hours: hours,
+      }} : {}),
     });
 
     // محاولة الإسناد التلقائي (منطقة + فترة) → scheduled، وإلا تبقى للإدارة
@@ -3253,6 +3271,11 @@ async function _generateContractVisits(db, contractRef, c) {
       booking_time_slot: v.slot,
       created_at: admin.firestore.FieldValue.serverTimestamp(),
       reminder_sent: false,
+      // (عاملات المناسبات) نفس حقل service_meta الذي يكتبه generateSubscriptionVisits
+      // — تُقرأ من service_meta_view.dart + admin_panel serviceMeta.ts.
+      ...(c.contract_kind === "event_workers" ? {service_meta: {
+        kind: "event_workers", workers: Number(c.workers || 0), event_hours: hours,
+      }} : {}),
     });
     const driver = await _findFreeDriverForSlot(db, {startDateTime, endDateTime});
     if (driver) {

@@ -19,6 +19,11 @@ class ZyiarahContractSigningScreen extends StatefulWidget {
   final List<Map<String, String>>? scheduledVisits;
   final String? zoneName;
   final GeoPoint? location;
+  // مُميِّز نوع العقد — الافتراضي 'home_cleaning' يطابق سلوك الاشتراك المنزلي
+  // الحالي دون أي تغيير (شاشة باقات الاشتراك لا تمرّر هذين الحقلين إطلاقاً).
+  // باقات عاملات المناسبات تمرّر 'event_workers' + عدد العاملات في الباقة.
+  final String contractKind;
+  final int? workers;
   const ZyiarahContractSigningScreen({
     super.key,
     required this.planName,
@@ -30,6 +35,8 @@ class ZyiarahContractSigningScreen extends StatefulWidget {
     this.scheduledVisits,
     this.zoneName,
     this.location,
+    this.contractKind = 'home_cleaning',
+    this.workers,
   });
 
   @override
@@ -147,6 +154,8 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
         'scheduled_visits': widget.scheduledVisits,
         'zone_name': widget.zoneName,
         'location': widget.location,
+        'contract_kind': widget.contractKind,
+        if (widget.workers != null) 'workers': widget.workers,
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
         'signedAt': FieldValue.serverTimestamp(),

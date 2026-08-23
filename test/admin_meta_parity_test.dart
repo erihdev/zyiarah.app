@@ -32,16 +32,22 @@ void main() {
   ];
 
   test('كل نوع يكتبه التطبيق له كاتب فعلي', () {
-    // مصدر القائمة ليس افتراضاً: نتحقق أن كل نوع مكتوب في شاشة عميل ما.
-    final writers = Directory('lib/screens')
+    // مصدر القائمة ليس افتراضاً: نتحقق أن كل نوع مكتوب فعلاً — إمّا من شاشة
+    // عميل (Dart: 'kind': 'x') أو من الخادم (functions/index.js يكتب
+    // service_meta لزيارات عقود عاملات المناسبات المولَّدة من الباقات، بصيغة
+    // JS: kind: "x" — منذ استبدال الإدخال الحر بباقات جاهزة تُحجز عبر عقد).
+    final dartWriters = Directory('lib/screens')
         .listSync(recursive: true)
         .whereType<File>()
         .where((f) => f.path.endsWith('.dart'))
         .map((f) => f.readAsStringSync())
         .join('\n');
+    final serverWriters = read('functions/index.js');
     for (final k in kinds) {
-      expect(writers.contains("'kind': '$k'"), isTrue,
-          reason: '$k غير مكتوب في أي شاشة — القائمة أصبحت قديمة');
+      final writtenByClient = dartWriters.contains("'kind': '$k'");
+      final writtenByServer = serverWriters.contains('kind: "$k"');
+      expect(writtenByClient || writtenByServer, isTrue,
+          reason: '$k غير مكتوب في أي شاشة ولا في الخادم — القائمة أصبحت قديمة');
     }
   });
 

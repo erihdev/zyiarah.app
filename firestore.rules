@@ -368,6 +368,10 @@ service cloud.firestore {
       allow read: if isLoggedIn();
       allow write: if isMarketingAdmin();
     }
+    match /event_worker_packages/{packageId} {
+      allow read: if isLoggedIn();
+      allow write: if isMarketingAdmin();
+    }
     match /promo_banners/{bannerId} {
       allow read: if isLoggedIn();
       allow write: if isMarketingAdmin();
