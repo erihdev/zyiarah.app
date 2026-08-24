@@ -5,13 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 /// كل اختبار هنا يقابل خللاً **حقيقياً** كُشف بتدقيق 39 وكيلاً، لا مجرد تفضيل شكلي.
 void main() {
   String read(String p) => File(p).readAsStringSync();
-  String codeOnly(String p) => read(p)
-      .split('\n')
-      .where((l) {
-        final t = l.trimLeft();
-        return !t.startsWith('//') && !t.startsWith('///') && !t.startsWith('*');
-      })
-      .join('\n');
 
   final zones = read('lib/screens/admin/admin_hourly_zones_screen.dart');
   final webSettings = read('admin_panel/src/pages/Settings.tsx');
