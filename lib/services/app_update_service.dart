@@ -11,12 +11,19 @@ import 'package:url_launcher/url_launcher.dart';
 /// مستند الإعداد: system_configs/app_update
 /// {
 ///   "enabled": true,                 // تفعيل/تعطيل الإشعار
-///   "latest_build": 209,             // آخر رقم بناء منشور — يظهر الإشعار لمن بناؤه أقدم فقط
+///   "latest_build_android": 208,     // آخر بناء أندرويد منشور (عدّاد مستقل)
+///   "latest_build_ios": 261,         // آخر بناء iOS منشور (عدّاد مستقل)
+///   "latest_build": 208,             // احتياطي قديم — يُقرأ عند غياب حقل المنصة
 ///   "force": false,                  // true = إجباري (لا يمكن تجاهله)
 ///   "message": "نص الرسالة...",       // اختياري
 ///   "ios_url": "https://...",        // اختياري (افتراضي متجر آبل)
 ///   "android_url": "https://..."     // اختياري (افتراضي Google Play)
 /// }
+///
+/// ⚠️ عدّادا البناء منفصلان بين المنصتين (iOS بلغ 261 بينما أندرويد 208) —
+/// حقل latest_build الموحّد القديم ضُبط مرة على رقم iOS فرأى **كل** مختبري
+/// أندرويد على أحدث نسخة مطالبة تحديث إجبارية زائفة لأسابيع (اكتُشفت
+/// 2026-08-31). لذلك يقرأ الفحص حقل منصته أولاً ولا يسقط للموحّد إلا عند غيابه.
 class ZyiarahAppUpdateService {
   static const String _defaultIosUrl =
       'https://apps.apple.com/app/id6760955777';
@@ -35,7 +42,11 @@ class ZyiarahAppUpdateService {
       final d = doc.data()!;
       if (d['enabled'] != true) return;
 
-      final int latestBuild = (d['latest_build'] as num?)?.toInt() ?? 0;
+      final String platformField = defaultTargetPlatform == TargetPlatform.iOS
+          ? 'latest_build_ios'
+          : 'latest_build_android';
+      final int latestBuild =
+          ((d[platformField] ?? d['latest_build']) as num?)?.toInt() ?? 0;
       final info = await PackageInfo.fromPlatform();
       final int currentBuild = int.tryParse(info.buildNumber) ?? 0;
 
