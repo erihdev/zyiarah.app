@@ -1052,6 +1052,25 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                           );
                         },
                       ),
+                    // مسافة السائق عن موقع الطلب لحظة الإكمال — يسجّلها
+                    // driver_dashboard دائماً (completed_distance_m) ولم يكن
+                    // يقرؤها أحد. حمراء فوق 1كم (خارج نطاق بوّابة الإكمال).
+                    if (data['completed_distance_m'] is num)
+                      Builder(builder: (context) {
+                        final num distM = data['completed_distance_m'] as num;
+                        final bool far = distM > 1000;
+                        return ListTile(
+                          title: Text("مسافة السائق عند الإتمام",
+                              style: GoogleFonts.tajawal(fontWeight: FontWeight.w600)),
+                          subtitle: Text(
+                            '${distM.round()} م',
+                            style: GoogleFonts.tajawal(
+                              color: far ? Colors.red.shade700 : null,
+                              fontWeight: far ? FontWeight.bold : null,
+                            ),
+                          ),
+                        );
+                      }),
                   ],
                 ),
               ),

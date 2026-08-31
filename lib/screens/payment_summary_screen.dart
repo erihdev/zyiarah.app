@@ -733,7 +733,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 amount: totalWithVat,
                 orderId: finalOrderId,
                 serviceType: widget.serviceName,
-                location: widget.location ?? const GeoPoint(24.7136, 46.6753),
+                location: widget.location,
                 hours: widget.hours,
                 serviceDate: widget.serviceDate,
                 zoneName: widget.zoneName,
@@ -925,7 +925,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         'amount': totalWithVat,
         'is_paid': false,
         'status': 'pending',
-        'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
+        // موقع غائب ⇒ نُغفل الحقل (لا إحداثيات الرياض الوهمية) — المستهلكون يتحمّلون غيابه.
+        if (widget.location != null) 'location': widget.location,
         'payment_method': method,
         'created_at': FieldValue.serverTimestamp(),
         'hours_contracted': widget.hours ?? 4,
@@ -965,8 +966,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       'hours': (widget.hours ?? 4).toString(),
       'worker_count': widget.workerCount.toString(),
       'zone_name': widget.zoneName ?? '',
-      'lat': (widget.location?.latitude ?? 24.7136).toStringAsFixed(6),
-      'lng': (widget.location?.longitude ?? 46.6753).toStringAsFixed(6),
+      // موقع غائب ⇒ نُغفل lat/lng كلياً (لا "24.7136" الوهمية) — كي تعمل فحوص
+      // الغياب/isNaN خادميّاً بدل أن يظن الخادم أن الطلب في الرياض.
+      if (widget.location != null) ...{
+        'lat': widget.location!.latitude.toStringAsFixed(6),
+        'lng': widget.location!.longitude.toStringAsFixed(6),
+      },
       'service_date': widget.serviceDate?.toIso8601String() ?? '',
       'client_phone': _phoneController.text.trim(),
       // (تفصيل الخدمة عبر Apple/Google/Samsung Pay) نحمله كنصّ JSON كي يعيد الخادم
@@ -1046,7 +1051,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           // بعد أن صار يختار يوماً ووقتاً. ما يصل بلا موعد يبقى pending ويُسنَد يدوياً
           // من إدارة الطلبات (نظام الاعتمادات حُذف من الجذور — قرار المالك).
           'status': 'pending',
-          'location': widget.location ?? const GeoPoint(24.7136, 46.6753),
+          // موقع غائب ⇒ نُغفل الحقل (لا إحداثيات الرياض الوهمية) — المستهلكون يتحمّلون غيابه.
+          if (widget.location != null) 'location': widget.location,
           'payment_method': method,
           'created_at': FieldValue.serverTimestamp(),
           'hours_contracted': widget.hours ?? 4,

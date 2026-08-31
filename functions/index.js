@@ -1546,6 +1546,67 @@ async function queuePush(toUid, title, body, type, data, targetRoles, recipientE
 }
 
 /**
+ * مسافة هافرساين بالأمتار بين نقطتين (محلّية — بلا اعتماديات) — تُستخدم للتحقّق
+ * الهندسي من أن موقع الطلب داخل نصف قطر منطقته المُعلَنة.
+ * @param {number} lat1 خط عرض النقطة الأولى.
+ * @param {number} lng1 خط طول النقطة الأولى.
+ * @param {number} lat2 خط عرض النقطة الثانية.
+ * @param {number} lng2 خط طول النقطة الثانية.
+ * @return {number} المسافة بالأمتار.
+ */
+function _haversineM(lat1, lng1, lat2, lng2) {
+  const R = 6371000; // نصف قطر الأرض بالأمتار
+  const toRad = (d) => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/**
+ * فحص هندسي لمسار التسعير الظلّي: المنطقة تُحَلّ باسم يرسله العميل (zone_name)
+ * بلا أي تحقّق أن الموقع فعلاً داخلها — عميلٌ في منطقة أغلى يمكنه إرسال اسم
+ * منطقة أرخص. عند تجاوز نصف القطر بهامش 20% (لحالات الأطراف) لا نحجب الدفع:
+ * نَسِم الطلب zone_geo_mismatch + المسافة المقيسة وننبّه الإدارة (بنمط
+ * price_unverifiable). يتجاهل بأمان الطلبات/المناطق بلا إحداثيات.
+ * @param {FirebaseFirestore.DocumentReference} orderRef مرجع الطلب.
+ * @param {string} orderId معرّف الطلب (للتنبيه).
+ * @param {object} od بيانات الطلب (location, zone_name, code).
+ * @param {object} zoneData بيانات المنطقة (centerLoc, radiusKm).
+ * @return {Promise<number|null>} المسافة بالأمتار عند عدم التطابق، وإلا null.
+ */
+async function _flagZoneGeoMismatch(orderRef, orderId, od, zoneData) {
+  if (!od || !zoneData) return null;
+  if (od.zone_geo_mismatch === true) return null; // مُعلَّم ومُنبَّه سلفاً — لا تكرار
+  const loc = od.location;
+  const center = zoneData.centerLoc;
+  const radiusKm = Number(zoneData.radiusKm);
+  if (!loc || typeof loc.latitude !== "number" ||
+      typeof loc.longitude !== "number") return null;
+  if (!center || typeof center.latitude !== "number" ||
+      typeof center.longitude !== "number") return null;
+  if (!(radiusKm > 0)) return null;
+  const distM = _haversineM(
+      loc.latitude, loc.longitude, center.latitude, center.longitude);
+  if (distM <= radiusKm * 1000 * 1.2) return null; // داخل النطاق (+هامش 20%)
+  const distRounded = Math.round(distM);
+  console.warn(`[price-shadow] ZONE_GEO_MISMATCH ${orderId}: ` +
+      `${distRounded}m from «${od.zone_name || "?"}» center (radius ${radiusKm}km)`);
+  await orderRef.update({
+    zone_geo_mismatch: true,
+    zone_geo_distance_m: distRounded,
+  }).catch(() => {});
+  await queuePush("ADMIN_BROADCAST", "موقع طلب خارج منطقته ⚠️",
+      `الطلب #${od.code || orderId} موقعه يبعد ${(distM / 1000).toFixed(1)} كم عن ` +
+      `مركز منطقة «${od.zone_name || "؟"}» المُسعَّر بها — يُرجى التحقّق من العنوان.`,
+      "admin_price_review", {orderId, distanceM: String(distRounded)},
+      ["super_admin", "orders_manager"]).catch(() => {});
+  return distRounded;
+}
+
+/**
  * Race-safe first-completed-order referral payout. The referral doc's
  * pending->rewarded flip inside the transaction is the single-winner mutex;
  * the referrer credit, ledger row and coupon are all written in the SAME
@@ -1975,6 +2036,10 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
         const zq = await db.collection("service_zones")
             .where("name", "==", od.zone_name).limit(1).get();
         if (!zq.empty) {
+          // تحقّق هندسي (نفس مسار ميسر): وسم + تنبيه إداري عند موقعٍ خارج نصف
+          // قطر المنطقة المُعلَنة — لا يحجب الدفع.
+          await _flagZoneGeoMismatch(orderRef, orderId, od, zq.docs[0].data())
+              .catch((e) => console.error("[wallet-pricing] geo:", e.message));
           // مواد التنظيف داخل الطلب: تُسعَّر من products قبل الحساب. null =
           // تعذّر التحقق ⇒ نترك pkgExpectedGross فارغاً (لا نرفض بلا يقين).
           const matBase = await resolveMaterialsBase(db, od.service_meta);
@@ -2281,9 +2346,10 @@ exports.verifyMoyasarPayment = onCall(
             hours_contracted: Number(md.hours || 4),
             worker_count: Number(md.worker_count || 1),
             zone_name: md.zone_name || null,
-            location: (!isNaN(lat) && !isNaN(lng)) ?
-              new admin.firestore.GeoPoint(lat, lng) :
-              new admin.firestore.GeoPoint(24.7136, 46.6753),
+            // بلا إحداثيات في الـmetadata ⇒ بلا حقل location إطلاقاً (كان يُختم
+            // مركز الرياض زوراً) — الواجهات تُخفي الخرائط بأمان عند غيابه.
+            ...((!isNaN(lat) && !isNaN(lng)) ?
+              {location: new admin.firestore.GeoPoint(lat, lng)} : {}),
             created_at: FieldValue.serverTimestamp(),
             server_created_from_payment: true,
             // أعِد بناء تفصيل الخدمة من الـ metadata (وإلّا فُقِد على طلب Apple Pay).
@@ -2358,6 +2424,12 @@ exports.verifyMoyasarPayment = onCall(
               const zq = await db.collection("service_zones")
                   .where("name", "==", od.zone_name).limit(1).get();
               if (!zq.empty) zoneData = zq.docs[0].data();
+            }
+            // تحقّق هندسي أن موقع الطلب داخل نصف قطر المنطقة المُعلَنة — الاسم وحده
+            // كان يكفي لتسعير منطقةٍ أرخص لعنوان أبعد. لا يحجب الدفع (وسم + تنبيه).
+            if (zoneData) {
+              await _flagZoneGeoMismatch(orderRef, orderId, od, zoneData)
+                  .catch((e) => console.error(`[price-shadow] geo ${orderId}:`, e.message));
             }
             // مواد التنظيف المضافة داخل الطلب تُسعَّر من products قبل الحساب؛
             // null = تعذّر التحقق ⇒ لا نُعيد تسعيراً ولا نرفض دفعاً بلا يقين.
@@ -3134,10 +3206,23 @@ exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
   }
 
   const zoneName = c.zone_name || null;
-  const location = c.location || new admin.firestore.GeoPoint(24.7136, 46.6753);
+  // لا إحداثيات ملفّقة: عقد بلا موقع يولّد زياراته **بلا** حقل location (واجهة
+  // السائق تُخفي الخرائط بأمان عند غيابه) بدل ختم مركز الرياض على عقود جازان.
+  // location_inherited=false فقط عندما التُقط موقع حقيقي عند إنشاء العقد
+  // (location_captured) — الموقع الموروث/القديم قد يكون مركز منطقة لا عنوان العميل.
+  const location = c.location || null;
+  const locationInherited = !(location && c.location_captured === true);
   const hours = Number(c.hours || 4);
   const planName = c.planName || "باقة اشتراك";
   const results = [];
+  if (!location) {
+    // تنبيه إداري واحد لكل عقد (لا لكل زيارة — التوليد idempotent عبر visits_generated).
+    await queuePush("ADMIN_BROADCAST", "عقد بلا موقع محدّد ⚠️",
+        `العقد ${contractRef.id} (${planName}) بلا موقع حقيقي — وُلِّدت زياراته بلا ` +
+        "إحداثيات ويحتاج تأكيد العنوان يدوياً.",
+        "admin_contract_no_location", {contractId: contractRef.id},
+        ["super_admin", "orders_manager"]).catch(() => {});
+  }
 
   for (let i = 0; i < schedule.length; i++) {
     const v = schedule[i];
@@ -3164,7 +3249,8 @@ exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
       is_paid: true,
       payment_method: "subscription",
       status: "pending", // إسنادها لحظيّ (paid-flip في onOrderWritten) والمكنسة ضمان
-      location: location,
+      ...(location ? {location: location} : {}),
+      location_inherited: locationInherited,
       zone_name: zoneName,
       hours_contracted: hours,
       service_date: admin.firestore.Timestamp.fromDate(startDateTime),
@@ -3235,10 +3321,20 @@ async function _generateContractVisits(db, contractRef, c) {
     return {generated: 0, skipped: true, reason: "no_schedule"};
   }
   const zoneName = c.zone_name || null;
-  const location = c.location || new admin.firestore.GeoPoint(24.7136, 46.6753);
+  // لا إحداثيات ملفّقة (نفس منطق generateSubscriptionVisits): عقد بلا موقع يولّد
+  // زياراته بلا حقل location بدل ختم مركز الرياض، مع تنبيه إداري واحد لكل عقد.
+  const location = c.location || null;
+  const locationInherited = !(location && c.location_captured === true);
   const hours = Number(c.hours || 4);
   const planName = c.planName || "باقة اشتراك";
   const results = [];
+  if (!location) {
+    await queuePush("ADMIN_BROADCAST", "عقد بلا موقع محدّد ⚠️",
+        `العقد ${contractRef.id} (${planName}) بلا موقع حقيقي — وُلِّدت زياراته بلا ` +
+        "إحداثيات ويحتاج تأكيد العنوان يدوياً.",
+        "admin_contract_no_location", {contractId: contractRef.id},
+        ["super_admin", "orders_manager"]).catch(() => {});
+  }
   for (let i = 0; i < schedule.length; i++) {
     const v = schedule[i];
     const dp = String(v.date).split("-").map(Number);
@@ -3263,7 +3359,8 @@ async function _generateContractVisits(db, contractRef, c) {
       is_paid: true,
       payment_method: "subscription",
       status: "pending",
-      location: location,
+      ...(location ? {location: location} : {}),
+      location_inherited: locationInherited,
       zone_name: zoneName,
       hours_contracted: hours,
       service_date: admin.firestore.Timestamp.fromDate(startDateTime),
@@ -4328,8 +4425,10 @@ exports.reconcileOrphanPayments = onSchedule(
             payment_method: (p.source && p.source.type) || "applepay",
             hours_contracted: Number(md.hours || 4), worker_count: Number(md.worker_count || 1),
             zone_name: md.zone_name || null,
-            location: (!isNaN(lat) && !isNaN(lng)) ?
-              new admin.firestore.GeoPoint(lat, lng) : new admin.firestore.GeoPoint(24.7136, 46.6753),
+            // بلا إحداثيات في الـmetadata ⇒ بلا حقل location إطلاقاً (كان يُختم
+            // مركز الرياض زوراً) — الواجهات تُخفي الخرائط بأمان عند غيابه.
+            ...((!isNaN(lat) && !isNaN(lng)) ?
+              {location: new admin.firestore.GeoPoint(lat, lng)} : {}),
             created_at: admin.firestore.FieldValue.serverTimestamp(),
             server_created_from_payment: true, reconciled: true,
             // أعِد بناء تفصيل الخدمة من الـ metadata (وإلّا فُقِد على طلب Apple Pay).

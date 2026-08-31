@@ -17,7 +17,8 @@ class TamaraCheckoutScreen extends StatefulWidget {
   final double amount;
   final String orderId;
   final String serviceType;
-  final GeoPoint location;
+  // nullable: لا نستبدل موقعاً غائباً بإحداثيات الرياض الوهمية — يُغفل الحقل من الطلب.
+  final GeoPoint? location;
   final int? hours;
   final DateTime? serviceDate;
   final String? zoneName;
@@ -173,7 +174,8 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                         // is_paid يقلبه tamaraWebhook خادمياً — يوافق قاعدة Stage-C.
                         'is_paid': false,
                         'status': 'pending',
-                        'location': widget.location,
+                        // موقع غائب ⇒ نُغفل الحقل (لا إحداثيات وهمية) — المستهلكون يتحمّلون غيابه.
+                        if (widget.location != null) 'location': widget.location,
                         'payment_method': 'tamara',
                         'created_at': FieldValue.serverTimestamp(),
                         'hours_contracted': widget.hours ?? 4,

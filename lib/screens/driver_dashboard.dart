@@ -1423,12 +1423,19 @@ class _DriverDashboardState extends State<DriverDashboard> {
       double? completionDistanceM;
       if (status == 'completed') {
         final GeoPoint? loc = data['location'] as GeoPoint?;
-        // زيارات الاشتراك موقعها موروث لا مُختار: مركز المنطقة (نصف قطر حتى
-        // 15كم) أو نقطة افتراضية — فبوّابة الـ1كم كانت **تمنع إغلاقها نهائياً**
-        // من الميدان مهما اقترب السائق. نستثنيها من المنع ونُبقي تسجيل المسافة
-        // (completed_distance_m) لمراجعة الإدارة كما هو.
-        final bool inheritedLocation = data['contract_id'] != null ||
-            data['payment_method'] == 'subscription';
+        // كان الاستثناء شاملاً كل زيارات العقود (contract_id/subscription) لأن
+        // مواقعها كانت موروثة لا مُلتقطة. العقود الجديدة تلتقط GPS فعلياً ويختم
+        // الخادم location_inherited=false — فتخضع لبوّابة الـ1كم كأي طلب.
+        // الاستثناء الآن للموقع الموروث فقط (location_inherited=true؛ وغياب
+        // الموقع أصلاً يتخطى البوّابة بشرط loc != null أدناه)، مع بقاء تسجيل
+        // المسافة (completed_distance_m) لمراجعة الإدارة كما هو.
+        // توافق خلفي: زيارات العقود القديمة في القاعدة سبقت العلم (لا تحمل
+        // location_inherited أصلاً) ومواقعها موروثة فعلاً — غياب العلم على طلب
+        // عقدٍ/اشتراكٍ يُعامل كموروث، وإلا مُنع السائقون من إغلاقها من الميدان.
+        final bool inheritedLocation = data['location_inherited'] == true ||
+            (!data.containsKey('location_inherited') &&
+                (data['contract_id'] != null ||
+                    data['payment_method'] == 'subscription'));
         if (loc != null) {
           try {
             final pos = await Geolocator.getCurrentPosition(

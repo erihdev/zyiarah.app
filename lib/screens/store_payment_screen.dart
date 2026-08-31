@@ -47,6 +47,9 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
   bool _tamaraEnabled = false;
   // عنوان التوصيل — كان الطلب يُنشأ بموقع رياض ثابت (توصيل لمدينة خاطئة). نجمعه الآن.
   GeoPoint? _deliveryLocation;
+  // اسم منطقة الطلب السابق الذي وُرث عنوانه منه — للعرض فقط، كي ترى العميلة
+  // مصدر العنوان المقترَح وتغيّره إن لم يعد عنوانها. null عند الاختيار اليدوي.
+  String? _prefillZoneName;
 
   double get _vat => widget.total - (widget.total / 1.15);
   double get _subtotal => widget.total - _vat;
@@ -70,9 +73,21 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
           .limit(5)
           .get();
       for (final d in snap.docs) {
-        final loc = d.data()['location'];
+        final m = d.data();
+        // نتخطى زيارات الاشتراك المولّدة (sub_*) والمواقع الموروثة لا المُلتقطة
+        // (location_inherited=true): موقعها مركز منطقة/نقطة افتراضية لا عنوان
+        // العميلة الفعلي — وراثتها هنا تُديم حلقة التسميم على طلبات المتجر.
+        if (d.id.startsWith('sub_') || m['location_inherited'] == true) continue;
+        final loc = m['location'];
         if (loc is GeoPoint) {
-          if (mounted) setState(() => _deliveryLocation = loc);
+          final zn = m['zone_name'];
+          if (mounted) {
+            setState(() {
+              _deliveryLocation = loc;
+              _prefillZoneName =
+                  (zn is String && zn.trim().isNotEmpty) ? zn.trim() : null;
+            });
+          }
           return;
         }
       }
@@ -98,7 +113,11 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
       // awaiting_payment — فكل كتابة مسبقة كانت تُرفض permission-denied ويبتلعها
       // catchError فتبدو ناجحة وهي ميتة. العنوان يُكتب في _finalizeStorePayment
       // (الكتابة الوحيدة التي تجيزها القاعدة) مع إعادة محاولة كي لا يضيع.
-      setState(() => _deliveryLocation = loc);
+      setState(() {
+        _deliveryLocation = loc;
+        // عنوان مُختار يدوياً — لم يعد موروثاً من طلب سابق فنُخفي سطر المصدر.
+        _prefillZoneName = null;
+      });
     }
   }
 
@@ -390,17 +409,47 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
                                   : const Color(0xFF660033)),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: Text(
-                              _deliveryLocation == null
-                                  ? 'اضغط لتحديد عنوان التوصيل'
-                                  : 'تم تحديد عنوان التوصيل ✓ (اضغط للتغيير)',
-                              style: GoogleFonts.tajawal(
-                                  color: _deliveryLocation == null
-                                      ? Colors.red
-                                      : Colors.grey.shade700),
-                            ),
+                            child: _deliveryLocation == null
+                                ? Text(
+                                    'اضغط لتحديد عنوان التوصيل',
+                                    style: GoogleFonts.tajawal(color: Colors.red),
+                                  )
+                                : Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'تم تحديد عنوان التوصيل ✓',
+                                        style: GoogleFonts.tajawal(
+                                            color: Colors.grey.shade700),
+                                      ),
+                                      // مصدر العنوان المقترَح — كان التأكيد أعمى
+                                      // فتظن العميلة أنه عنوانها الحالي حتماً.
+                                      if (_prefillZoneName != null)
+                                        Text(
+                                          'العنوان من طلبك السابق — منطقة $_prefillZoneName',
+                                          style: GoogleFonts.tajawal(
+                                              fontSize: 11,
+                                              color: Colors.grey.shade500),
+                                        ),
+                                    ],
+                                  ),
                           ),
-                          const Icon(Icons.chevron_left, color: Colors.grey),
+                          if (_deliveryLocation != null)
+                            TextButton(
+                              onPressed: _pickAddress,
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                minimumSize: const Size(0, 36),
+                              ),
+                              child: Text(
+                                'تغيير',
+                                style: GoogleFonts.tajawal(
+                                    color: const Color(0xFF660033),
+                                    fontWeight: FontWeight.bold),
+                              ),
+                            )
+                          else
+                            const Icon(Icons.chevron_left, color: Colors.grey),
                         ],
                       ),
                     ),

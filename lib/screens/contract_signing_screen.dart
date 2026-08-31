@@ -15,7 +15,10 @@ class ZyiarahContractSigningScreen extends StatefulWidget {
   final int planHours;
   final DateTime? bookingDate;
   final String? bookingTimeSlot;
-  // (2c) مواعيد الزيارات المتعددة + المنطقة + الموقع — لتوليد وإسناد الزيارات جغرافياً
+  // (2c) مواعيد الزيارات المتعددة + المنطقة + الموقع — لتوليد وإسناد الزيارات جغرافياً.
+  // zoneName/location صارا **مطلوبين فعلياً**: شاشتا الباقات تحجبان المتابعة حتى
+  // يُلتقط موقع حقيقي بمنطقة مطابَقة هندسياً (لا وراثة من آخر طلب ولا «منطقة
+  // افتراضية»). يبقيان nullable في المُنشئ للتوافق الخلفي فقط.
   final List<Map<String, String>>? scheduledVisits;
   final String? zoneName;
   final GeoPoint? location;
@@ -154,6 +157,12 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
         'scheduled_visits': widget.scheduledVisits,
         'zone_name': widget.zoneName,
         'location': widget.location,
+        // موقع مُلتقط لحظياً (GPS/خريطة) لا موروثاً من طلب سابق — شاشتا الباقات
+        // تحجبان المتابعة حتى يُلتقط موقع حقيقي بمنطقة مطابَقة هندسياً، فالقيمة
+        // true لكل العقود الجديدة. يميّز الخادم وبوابة إتمام السائق بها العقود
+        // الحديثة عن القديمة الموروثة (المحسوب أصدق من ثابتٍ أعمى لو استُدعيت
+        // الشاشة يوماً بلا موقع).
+        'location_captured': widget.location != null && widget.zoneName != null,
         'contract_kind': widget.contractKind,
         if (widget.workers != null) 'workers': widget.workers,
         'status': 'pending',

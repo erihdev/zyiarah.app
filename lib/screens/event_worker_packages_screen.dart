@@ -6,8 +6,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:intl/intl.dart' as intl;
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/screens/contract_signing_screen.dart';
+import 'package:zyiarah/screens/location_picker_screen.dart';
+import 'package:zyiarah/services/zone_locator_service.dart';
+import 'package:zyiarah/widgets/zone_location_card.dart';
 
 /// باقات عاملات المناسبات — جاهزة ومسعّرة مسبقاً (بدل الإدخال الحر السابق):
 /// العميل يختار باقة بعدد عاملات وساعات وزيارات ثابتة، ثم يحدّد مواعيد الزيارات
@@ -38,9 +40,15 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
   // مواعيد الزيارات المتعددة المختارة — تُحفظ في scheduled_visits على العقد
   final List<Map<String, String>> _scheduledVisits = [];
 
+  // (التقاط الموقع الفعلي) كما في شاشات الخدمات الفردية تماماً: GPS لحظي أو
+  // اختيار يدوي من الخريطة + مطابقة هندسية بالمنطقة — **لا وراثة من آخر طلب
+  // ولا «منطقة افتراضية»**: العقد يوجّه زيارات لأسابيع، وموقع موروث خاطئ كان
+  // يرسل السائق لمنطقة أخرى (أو لإحداثيات الرياض الخادمية الافتراضية).
   String? _userZoneName;
   GeoPoint? _userLocation; // موقع العميل لإسناد الزيارات جغرافياً
-  bool _loadingZone = true;
+  bool _isLocating = false;
+  LocateFailure? _locateFailure;
+  List<Map<String, dynamic>> _zones = [];
 
   int _maxOrdersPerDay = 10;
   int _maxTeamsPerSlot = 5;
@@ -56,7 +64,7 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
   void initState() {
     super.initState();
     _fetchPackages();
-    _fetchUserDefaultZone();
+    _fetchZonesAndLocate();
     _loadAvailabilityFromServer();
   }
 
@@ -65,65 +73,125 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
     super.dispose();
   }
 
-  Future<void> _fetchUserDefaultZone() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
+  /// جلب مناطق الخدمة ثم محاولة تحديد تلقائي — بدل سلسلة الوراثة القديمة
+  /// (آخر طلب → أول منطقة مفعّلة → «المنطقة الافتراضية») التي كانت توقّع
+  /// العميل على عقدٍ بموقعٍ ليس موقعه أصلاً.
+  Future<void> _fetchZonesAndLocate() async {
+    try {
+      _zones = await ZyiarahZoneLocator.fetchZones();
+    } catch (e) {
+      debugPrint('[EventWorkerPackages] fetchZones failed: $e');
+    }
+    if (!mounted) return;
+    _attemptAutoLocation();
+  }
+
+  /// تحديد تلقائي **يقول السبب عند الفشل** (نمط hourly_details_screen).
+  ///
+  /// [userInitiated] عند الفتح نحاول بلا إظهار مربّع الإذن إن كان مرفوضاً سلفاً؛
+  /// وعند ضغط «حدّد موقعي تلقائياً» نطلبه صراحةً.
+  Future<void> _attemptAutoLocation({bool userInitiated = false}) async {
+    if (!mounted) return;
+    // مناطق فارغة = فشل جلبها عند الفتح غالباً — عند طلبٍ صريح نعيد الجلب،
+    // وإن استمر الفشل نعرض سبباً قابلاً لإعادة المحاولة بدل الصمت.
+    if (_zones.isEmpty) {
+      if (!userInitiated) return;
       try {
-        final ordersSnap = await _db
-            .collection('orders')
-            .where('client_id', isEqualTo: user.uid)
-            .orderBy('created_at', descending: true)
-            .limit(1)
-            .get();
-        if (ordersSnap.docs.isNotEmpty) {
-          final orderData = ordersSnap.docs.first.data();
-          final zone = orderData['zone_name'] as String?;
-          if (zone != null && zone.isNotEmpty) {
-            if (mounted) {
-              setState(() {
-                _userZoneName = zone;
-                _userLocation = orderData['location'] as GeoPoint?;
-                _loadingZone = false;
-              });
-            }
-            return;
-          }
-        }
+        _zones = await ZyiarahZoneLocator.fetchZones();
       } catch (e) {
-        debugPrint('Error getting user default zone: $e');
+        debugPrint('[EventWorkerPackages] fetchZones retry failed: $e');
+      }
+      if (!mounted) return;
+      if (_zones.isEmpty) {
+        setState(() {
+          _isLocating = false;
+          _locateFailure = LocateFailure.unknown;
+        });
+        return;
       }
     }
-    // Fallback to first enabled zone
-    try {
-      final zonesSnap = await _db
-          .collection('service_zones')
-          .where('enabled', isEqualTo: true)
-          .limit(1)
-          .get();
-      if (zonesSnap.docs.isNotEmpty) {
-        if (mounted) {
-          setState(() {
-            _userZoneName = zonesSnap.docs.first.data()['name'] as String?;
-            _userLocation =
-                zonesSnap.docs.first.data()['centerLoc'] as GeoPoint?;
-            _loadingZone = false;
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _userZoneName = 'المنطقة الافتراضية';
-            _loadingZone = false;
-          });
-        }
+    setState(() {
+      _isLocating = true;
+      _locateFailure = null;
+    });
+
+    final res = await ZyiarahZoneLocator.locate(_zones,
+        requestPermission: userInitiated);
+    if (!mounted) return;
+
+    if (!res.isSuccess) {
+      setState(() {
+        _isLocating = false;
+        _locateFailure = res.failure;
+        if (res.location != null) _userLocation = res.location; // خارج النطاق
+        if (res.failure == LocateFailure.outOfServiceArea) _userZoneName = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _userLocation = res.location;
+      _userZoneName = res.zoneName;
+      _isLocating = false;
+      _locateFailure = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text("تم تحديد موقعك تلقائياً: $_userZoneName"),
+      backgroundColor: _brand,
+      duration: const Duration(seconds: 2),
+    ));
+  }
+
+  /// اختيار يدوي من الخريطة + مطابقة المنطقة من المصدر المشترك — كما في
+  /// شاشات الخدمات الفردية.
+  Future<void> _pickLocation() async {
+    final dynamic result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const LocationPickerScreen(
+          serviceName: "تحديد موقع باقة العاملات",
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+    if (result == null || result is! GeoPoint) return;
+
+    final GeoPoint loc = result;
+    // قائمة مناطق فارغة تجعل matchZone يُرجع null لكل نقطة — نعيد الجلب أولاً،
+    // وإن استمر الفشل نقول السبب الحقيقي بدل «خارج نطاق الخدمة» زوراً.
+    if (_zones.isEmpty) {
+      try {
+        _zones = await ZyiarahZoneLocator.fetchZones();
+      } catch (e) {
+        debugPrint('[EventWorkerPackages] fetchZones retry failed: $e');
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _userZoneName = 'المنطقة الافتراضية';
-          _loadingZone = false;
-        });
+      if (!mounted) return;
+      if (_zones.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content:
+                Text('تعذّر تحميل مناطق الخدمة — تحقّق من اتصالك وأعد المحاولة'),
+            backgroundColor: Colors.red));
+        return;
       }
+    }
+
+    final matchedZone = ZyiarahZoneLocator.matchZone(loc, _zones);
+    if (matchedZone != null) {
+      setState(() {
+        _userLocation = loc;
+        _userZoneName = matchedZone['name'] as String?;
+        _locateFailure = null;
+      });
+    } else {
+      setState(() {
+        _userLocation = loc;
+        _userZoneName = null;
+        _locateFailure = LocateFailure.outOfServiceArea;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("نأسف، موقعك خارج نطاق الخدمة حالياً"),
+          backgroundColor: Colors.red));
     }
   }
 
@@ -542,47 +610,15 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
           ),
           const Divider(height: 32, color: Color(0xFFE2E8F0)),
 
-          // 1. عرض منطقة العميل
-          if (_loadingZone)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                children: [
-                  SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: _brand)),
-                  SizedBox(width: 10),
-                  Text('جاري التحقق من منطقتك المغطاة...',
-                      style: TextStyle(color: Colors.grey, fontSize: 13)),
-                ],
-              ),
-            )
-          else
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.location_on, color: Colors.green, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'تفعيل الباقة في منطقة التغطية: $_userZoneName',
-                      style: GoogleFonts.tajawal(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green.shade800,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          // 1. التقاط موقع العميل الفعلي — نفس بطاقة الخدمات الفردية:
+          // تحديد تلقائي (يشرح سبب الفشل) + اختيار يدوي من الخريطة.
+          ZyiarahZoneLocationCard(
+            isLocating: _isLocating,
+            zoneName: _userZoneName,
+            failure: _locateFailure,
+            onLocateMe: () => _attemptAutoLocation(userInitiated: true),
+            onPickManually: _pickLocation,
+          ),
           const SizedBox(height: 24),
 
           // 2. اختيار التاريخ
@@ -669,6 +705,15 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
                       _scheduledVisits.length != visits)
                   ? null // باقة بلا زيارات (بيانات ناقصة) → لا تُفعّل الزر
                   : () {
+                      // حارس الموقع (نمط _handleInitiateFlow في الخدمات الفردية):
+                      // لا توقيع عقد بلا موقع حقيقي ومنطقة مطابَقة هندسياً — كانت
+                      // الوراثة القديمة تمرّر موقعاً ليس موقع العميل أصلاً.
+                      if (_userLocation == null || _userZoneName == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text(
+                                "يرجى تحديد موقعك أولاً لتفعيل الباقة في منطقتك")));
+                        return;
+                      }
                       HapticFeedback.lightImpact();
                       final first = _scheduledVisits.first;
                       final fp = first['date']!.split('-').map(int.parse).toList();

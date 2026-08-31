@@ -40,11 +40,6 @@ class ZyiarahCoreService {
     return 12742 * asin(sqrt(a)) * 1000; // النتيجة بالمتر
   }
 
-  /// التحقق من الوجود الفعلي (نطاق 100 متر)
-  bool isDriverOnSite(double dLat, double dLon, double cLat, double cLon) {
-    return getDistanceInMeters(dLat, dLon, cLat, cLon) <= 100.0;
-  }
-
   /// حساب المسافة وعرضها بتنسيق مقروء (مثلاً: 2.5 كم)
   String getFormattedDistance(double distanceInMeters) {
     if (distanceInMeters < 1000) {
