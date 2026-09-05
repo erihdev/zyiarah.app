@@ -1,4 +1,4 @@
-// حارس: رقم الدعم في اللوحة يُخزَّن بعلامات اتجاه ومسافات («‭+966 53 048 9016‬»)
+// حارس: رقم الدعم في اللوحة يُخزَّن بعلامات اتجاه ومسافات («+966 53 048 9016»)
 // فكان رابط واتساب/الهاتف يُشفَّر إلى %E2%80%AD… ويُرفض. التنقية إلزامية.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zyiarah/services/zyiarah_messaging_service.dart';
@@ -6,7 +6,10 @@ import 'package:zyiarah/widgets/support_fab.dart';
 
 void main() {
   group('supportContactDigits', () {
-    const live = '‭+966 53 048 9016‬';
+    // U+202D … U+202C كما تُخزَّن في اللوحة (بلا الحرفين الخامين في المصدر).
+    final lro = String.fromCharCode(0x202D);
+    final pdf = String.fromCharCode(0x202C);
+    final live = '$lro+966 53 048 9016$pdf';
 
     test('الهاتف: أرقام فقط مع + في البداية', () {
       expect(supportContactDigits(live), '+966530489016');
@@ -25,7 +28,7 @@ void main() {
     test('قيمة فارغة أو بلا أرقام → "" فلا يظهر زر ميت', () {
       expect(supportContactDigits(null), '');
       expect(supportContactDigits('  '), '');
-      expect(supportContactDigits('‭‬'), '');
+      expect(supportContactDigits('$lro$pdf'), '');
     });
   });
 

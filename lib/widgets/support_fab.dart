@@ -5,7 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/screens/support_screen.dart';
 
 /// يُنقّي رقم الدعم المخزَّن في اللوحة إلى أرقام فقط (مع + اختيارية في البداية).
-/// القيمة الحيّة كانت «‭+966 53 048 9016‬» بعلامات اتجاه (U+202D/U+202C)
+/// القيمة الحيّة كانت «+966 53 048 9016» بعلامات اتجاه (U+202D/U+202C)
 /// ومسافات، فصار الرابط `wa.me/%E2%80%AD+966%2053…` ويرفضه واتساب والهاتف معاً.
 /// [forWhatsapp] يُسقط علامة + أيضاً لأن wa.me يقبل الأرقام الدولية العارية فقط.
 String supportContactDigits(String? raw, {bool forWhatsapp = false}) {
