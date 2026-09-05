@@ -1143,6 +1143,42 @@ async function _buildAdminAlertHtml(type, data) {
 </div>`;
 }
 
+/**
+ * يُنقّي بريداً قبل تسليمه لـ Resend: يُسقط كل ما ليس ASCII مطبوعاً (علامات
+ * الاتجاه U+200F/U+202D، المسافات، أحرف التحكم) ويُصغّر الحروف. بريدٌ بلا @ = "".
+ * @param {unknown} raw القيمة الخام.
+ * @return {string} البريد النظيف أو "".
+ */
+function _cleanEmail(raw) {
+  if (raw == null) return "";
+  const s = String(raw).replace(/[^\x21-\x7E]/g, "").toLowerCase();
+  return s.includes("@") ? s : "";
+}
+
+/**
+ * HTML بديل عند غياب قالب Resend: العنوان + متغيّرات القالب كجدول RTL، بهوية
+ * زيارة الخمرية. الأفضل من إسقاط الرسالة أو من نص عارٍ.
+ * @param {string} title عنوان الرسالة.
+ * @param {Object} variables متغيّرات القالب.
+ * @return {string} HTML.
+ */
+function _buildTemplateFallbackHtml(title, variables) {
+  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"}[c]));
+  const rows = Object.entries(variables || {})
+      .filter(([k]) => !/url|link/i.test(k))
+      .map(([k, v]) => `<tr><td style="padding:8px 12px;color:#64748b">${esc(k)}</td>` +
+        `<td style="padding:8px 12px;font-weight:600">${esc(v)}</td></tr>`).join("");
+  return `<!DOCTYPE html><html dir="rtl" lang="ar"><body style="margin:0;background:#f1f5f9;` +
+    `font-family:Arial,sans-serif"><div style="max-width:600px;margin:32px auto;background:#fff;` +
+    `border-radius:20px;overflow:hidden"><div style="background:#660033;color:#fff;padding:28px;` +
+    `text-align:center;font-size:20px;font-weight:700">${esc(title)}</div><div style="padding:24px">` +
+    `<p style="font-size:16px">${esc(variables?.greeting || "عزيزنا العميل،")}</p>` +
+    `<table style="width:100%;border-collapse:collapse;font-size:14px">${rows}</table>` +
+    `<p style="color:#64748b;font-size:13px;margin-top:24px">فريق زيارة — شكراً لثقتكم.</p>` +
+    `</div></div></body></html>`;
+}
+
 exports.processNotificationTriggers = onDocumentCreated(
     // retry: إعادة المحاولة عند فشل عابر (Resend/FCM) بدل فقد الإشعار للأبد. سجلّ
     // الصندوق (step 1) بمعرّف حتمي كي لا يتكرّر عند الإعادة.
@@ -1156,8 +1192,10 @@ exports.processNotificationTriggers = onDocumentCreated(
 
       const {toUid, title, body, type, template, data = {}, targetRoles} = trigger;
       const attachmentUrls = Array.isArray(trigger.attachmentUrls) ? trigger.attachmentUrls : [];
-      let recipientEmail =
-        trigger.recipientEmail || data.customerEmail || "admin@zyiarah.com";
+      // تنقية البريد: علامات الاتجاه (U+200F) والمسافات الملتصقة من اللصق كانت تُفشل
+      // Resend بـ «Invalid to field: non-ASCII» فيضيع الترحيب/تأكيد الطلب بصمت.
+      let recipientEmail = _cleanEmail(
+          trigger.recipientEmail || data.customerEmail || data.to) || "admin@zyiarah.com";
       // تنبيهات الإدارة تذهب لبريد الإدارة المُهيّأ (admin_email) لا لبريد العميل —
       // كان data.customerEmail قد يوجّه «تنبيه الإدارة» لبريد العميل بالخطأ.
       if (toUid === "ADMIN_BROADCAST") {
@@ -1331,7 +1369,17 @@ exports.processNotificationTriggers = onDocumentCreated(
             emailPayload.html = adminHtml || body;
           }
 
-          const {data: resendData, error: resendError} = await resend.emails.send(emailPayload);
+          let {data: resendData, error: resendError} = await resend.emails.send(emailPayload);
+          // قالب غير موجود في Resend (order-confirmation لم يُنشأ قط) → لا نُسقط
+          // الرسالة: نعيد الإرسال بـ HTML مبني من متغيّرات القالب نفسها.
+          if (resendError && emailPayload.template &&
+              /template not found/i.test(String(resendError.message))) {
+            console.warn(`[EMAIL] Template ${emailPayload.template.id} missing — html fallback`);
+            const fallback = {...emailPayload};
+            delete fallback.template;
+            fallback.html = _buildTemplateFallbackHtml(title, emailPayload.template.variables);
+            ({data: resendData, error: resendError} = await resend.emails.send(fallback));
+          }
           if (resendError) {
             throw new Error(`Resend Error: ${resendError.message}`);
           }
@@ -4316,6 +4364,33 @@ exports.opsHealthSweep = onSchedule(
         console.log(`opsHealthSweep: price_mismatch alerted=${n}`);
       } catch (e) {
         console.error("opsHealthSweep: price_mismatch check failed:", e.message);
+      }
+
+      // 6) إشعارات لم يلمسها processNotificationTriggers أصلاً (انقطاع الدوال 8–18
+      //    أغسطس ترك 122 ترحيباً بلا معالجة ولا خطأ): onDocumentCreated لا يعود لمستند
+      //    فاته الحدث، فنعيد إنشاءه نسخةً جديدة (تُطلق الحدث) ونوسم الأصل. مرة واحدة
+      //    فقط لكل مستند (redriven_from) كي لا يدور المكسور للأبد، وبنافذة 30 دقيقة
+      //    إلى 3 أيام: الأحدث ما زال قيد المعالجة، والأقدم بريدٌ فات أوانه.
+      try {
+        const snap = await db.collection("notification_triggers")
+            .where("processed", "==", false)
+            .where("createdAt", "<=", new Date(now - 30 * 60 * 1000))
+            .orderBy("createdAt", "asc").limit(100).get();
+        let redriven = 0;
+        for (const doc of snap.docs) {
+          const d = doc.data();
+          if (d.error || d.emailStatus || d.redriven_from) continue;
+          const ageMs = now - (d.createdAt?.toDate?.().getTime() || now);
+          if (ageMs > 3 * 24 * 60 * 60 * 1000) continue;
+          const copy = {...d, redriven_from: doc.id,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()};
+          await db.collection("notification_triggers").add(copy);
+          await doc.ref.update({processed: true, status: "redriven"});
+          redriven++;
+        }
+        console.log(`opsHealthSweep: stalled triggers redriven=${redriven}`);
+      } catch (e) {
+        console.error("opsHealthSweep: trigger redrive failed:", e.message);
       }
     },
 );

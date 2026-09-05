@@ -4,6 +4,18 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/screens/support_screen.dart';
 
+/// يُنقّي رقم الدعم المخزَّن في اللوحة إلى أرقام فقط (مع + اختيارية في البداية).
+/// القيمة الحيّة كانت «‭+966 53 048 9016‬» بعلامات اتجاه (U+202D/U+202C)
+/// ومسافات، فصار الرابط `wa.me/%E2%80%AD+966%2053…` ويرفضه واتساب والهاتف معاً.
+/// [forWhatsapp] يُسقط علامة + أيضاً لأن wa.me يقبل الأرقام الدولية العارية فقط.
+String supportContactDigits(String? raw, {bool forWhatsapp = false}) {
+  if (raw == null) return '';
+  final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+  if (digits.isEmpty) return '';
+  final plus = !forWhatsapp && raw.trim().contains('+') ? '+' : '';
+  return '$plus$digits';
+}
+
 class ZyiarahSupportFab extends StatelessWidget {
   const ZyiarahSupportFab({super.key});
 
@@ -103,18 +115,21 @@ class ZyiarahSupportFab extends StatelessWidget {
                   final data = snapshot.data?.data() as Map<String, dynamic>?;
                   // لا قيم افتراضية بعد اليوم: زر غائب خير من رقم يتصل بلا أحد.
                   // toString لا cast: لو خُزّن الرقم كـ num من اللوحة لا نريد استثناء cast.
-                  final whatsapp = data?['support_whatsapp']?.toString().trim();
-                  final phone = data?['support_phone']?.toString().trim();
+                  final whatsapp = supportContactDigits(
+                      data?['support_whatsapp']?.toString(),
+                      forWhatsapp: true);
+                  final phone =
+                      supportContactDigits(data?['support_phone']?.toString());
                   return Column(
                     children: [
-                      if (whatsapp != null && whatsapp.isNotEmpty)
+                      if (whatsapp.isNotEmpty)
                         _buildOption(
                           icon: Icons.chat_bubble_outline_rounded,
                           title: "تحدث معنا عبر الواتساب",
                           color: const Color(0xFF25D366),
                           onTap: () => _launchSupportUrl(ctx, 'https://wa.me/$whatsapp'),
                         ),
-                      if (phone != null && phone.isNotEmpty)
+                      if (phone.isNotEmpty)
                         _buildOption(
                           icon: Icons.phone_in_talk_rounded,
                           title: "اتصال هاتفي مباشر",

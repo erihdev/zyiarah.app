@@ -485,6 +485,12 @@ class ZyiarahMessagingService {
     );
   }
 
+  /// يُنقّي بريداً أدخله المستخدم: يُسقط علامات الاتجاه/التحكم (U+200F…) والمسافات
+  /// التي تلتصق باللصق من واتساب، ويُصغّر الحروف. Resend كان يرفض «‏user@x.com»
+  /// بـ «Invalid to field: non-ASCII» فيضيع الترحيب وتأكيد الطلب بصمت.
+  static String cleanEmail(String raw) =>
+      raw.replaceAll(RegExp(r'[^\x21-\x7E]'), '').toLowerCase();
+
   /// Sends an email using a Resend Template
   Future<void> sendTemplatedEmail({
     required String recipient,
@@ -493,10 +499,15 @@ class ZyiarahMessagingService {
     required Map<String, dynamic> variables,
     List<String>? attachmentUrls,
   }) async {
+    final to = cleanEmail(recipient);
+    if (to.isEmpty || !to.contains('@')) {
+      debugPrint('[Messaging] skipped templated email: invalid recipient');
+      return;
+    }
     await _queueNotification(
       action: 'SEND_TEMPLATED_EMAIL',
       payload: {
-        'to': recipient,
+        'to': to,
         'subject': subject,
         'template': {
           'id': templateId,
