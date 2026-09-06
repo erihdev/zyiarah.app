@@ -34,7 +34,7 @@ function extractBody(sig) {
   return src.slice(braceStart + 1, end);
 }
 
-const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
+const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 
 // الدوال قيد الاختبار (الاعتماديات الحرّة تُمرَّر معاملات إضافية):
 const haversineM = new Function("lat1", "lng1", "lat2", "lng2",

@@ -1,4 +1,3 @@
-/* eslint-disable max-len */
 const {onDocumentCreated, onDocumentUpdated, onDocumentWritten} = require("firebase-functions/v2/firestore");
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
@@ -472,7 +471,7 @@ exports.notifyClientOnStoreOrderStatus = onDocumentUpdated({document: "store_ord
         try {
           const u = await admin.firestore().collection("users").doc(clientId).get();
           clientEmail = u.exists ? (u.data() && u.data().email) : null;
-        } catch (_) { clientEmail = null; }
+        } catch { clientEmail = null; }
       }
       await queuePush(clientId, m.t, `${m.b} (#${code})`, pushType,
           {orderId: event.params.orderId}, null, clientEmail || undefined);
@@ -890,7 +889,6 @@ async function notifyClientPaymentResult(col, orderId, data, success) {
       return;
     }
 
-    const code = data?.code || orderId;
     const rawName = (data?.client_name || "").trim();
     const greet = ["", "عميل", "عميلة", "عميل زيارة", "عميلة زيارة"]
         .includes(rawName) ? "" : `${rawName}، `;
@@ -1062,7 +1060,7 @@ async function isAllowedEmailRecipient(email) {
     const cfg = await admin.firestore().collection("system_configs").doc("main_settings").get();
     const adminEmail = (cfg.exists && cfg.data()?.admin_email ? String(cfg.data().admin_email) : "").toLowerCase();
     if (lower === adminEmail || lower === "admin@zyiarah.com" || lower === "no-reply@zyiarah.com") return true;
-  } catch (e) {
+  } catch {
     // fall through to user/driver lookups
   }
   const u = await admin.firestore().collection("users").where("email", "==", email).limit(1).get();
@@ -1119,7 +1117,7 @@ async function _buildAdminAlertHtml(type, data) {
             ]);
           }
         }
-      } catch (_) { /* التفاصيل الأساسية تكفي إن تعذّر جلب الزيارات */ }
+      } catch { /* التفاصيل الأساسية تكفي إن تعذّر جلب الزيارات */ }
     } else {
       return null;
     }
@@ -1205,7 +1203,7 @@ exports.processNotificationTriggers = onDocumentCreated(
           const ae = (cfgA.exists && cfgA.data()?.admin_email) ?
             String(cfgA.data().admin_email).trim() : "";
           recipientEmail = ae || "admin@zyiarah.com";
-        } catch (_) { recipientEmail = "admin@zyiarah.com"; }
+        } catch { recipientEmail = "admin@zyiarah.com"; }
       }
 
       console.log(`Processing trigger ${event.params.id}`);
@@ -1223,7 +1221,7 @@ exports.processNotificationTriggers = onDocumentCreated(
                 .doc(String(trigger.createdBy)).get();
             const r = cu.exists ? cu.data().role : null;
             senderIsTrusted = r != null && r !== "client";
-          } catch (_) { senderIsTrusted = false; }
+          } catch { senderIsTrusted = false; }
         }
         const targetsOtherUser = toUid && toUid !== "ADMIN_BROADCAST" &&
           toUid !== trigger.createdBy;
@@ -1311,7 +1309,7 @@ exports.processNotificationTriggers = onDocumentCreated(
                 (!!cuEmail && !!recipientEmail &&
                   String(cuEmail).toLowerCase() ===
                     String(recipientEmail).toLowerCase());
-            } catch (_) {
+            } catch {
               emailSenderOk = false;
             }
           }
@@ -1570,7 +1568,7 @@ function _parseServiceMeta(s) {
   try {
     const o = JSON.parse(s);
     return (o && typeof o === "object" && !Array.isArray(o)) ? o : null;
-  } catch (_) {
+  } catch {
     return null;
   }
 }
@@ -1662,10 +1660,9 @@ async function _flagZoneGeoMismatch(orderRef, orderId, od, zoneData) {
  * ids make a redelivery a no-op.
  * @param {string} refereeUid The referee (new user) uid.
  * @param {string} orderId The completed order id.
- * @param {string} orderCode Human order code for messages.
  * @return {Promise<void>}
  */
-async function processReferralRewardServer(refereeUid, orderId, orderCode) {
+async function processReferralRewardServer(refereeUid, orderId) {
   const db = admin.firestore();
   const orderRef = db.collection("orders").doc(orderId);
 
@@ -1804,7 +1801,7 @@ exports.onOrderRewards = onDocumentUpdated({document: "orders/{orderId}", cpu: 0
           }
         }
         if (clientId) {
-          await processReferralRewardServer(clientId, orderId, code);
+          await processReferralRewardServer(clientId, orderId);
         }
       }
 
@@ -2207,7 +2204,7 @@ async function _readSurgeFactor(db) {
     if (!Number.isFinite(pct) || pct <= 0) return 1.0;
     const capped = Math.min(pct, 100);
     return Math.round((1 + capped / 100) * 100) / 100;
-  } catch (_) {
+  } catch {
     return 1.0;
   }
 }
@@ -2378,7 +2375,7 @@ exports.verifyMoyasarPayment = onCall(
               const uDoc = await admin.firestore().collection("users")
                   .doc(md.client_id || request.auth.uid).get();
               if (uDoc.exists) clientName = (uDoc.data().name || "").trim();
-            } catch (_) {}
+            } catch { /* اسم العميل تحسين اختياري — الإشعار يُرسَل بدونه */ }
           }
           const payload = {
             code,
@@ -4421,7 +4418,7 @@ exports.reconcileOrphanPayments = onSchedule(
           const rc = await db.collection("system_configs").doc("reconcile").get();
           const v = rc.exists ? rc.data().ignore_before : null;
           if (v) ignoreBeforeMs = new Date(v).getTime();
-        } catch (e) { /* افتراضياً بلا حدّ */ }
+        } catch { /* افتراضياً بلا حدّ */ }
         for (const p of (data.payments || [])) {
           if (p.status !== "paid") continue;
           // تجاهُل الدفعات الأقدم من نقطة التنظيف (طلبات اختبار مُزالة عمداً).
@@ -4489,7 +4486,7 @@ exports.reconcileOrphanPayments = onSchedule(
             try {
               const uDoc = await admin.firestore().collection("users").doc(md.client_id).get();
               if (uDoc.exists) clientName = (uDoc.data().name || "").trim();
-            } catch (_) {}
+            } catch { /* اسم العميل تحسين اختياري — الإشعار يُرسَل بدونه */ }
           }
           const payload = {
             code, client_id: md.client_id, client_name: clientName || "عميل زيارة", client_phone: md.client_phone || "",
@@ -4919,17 +4916,6 @@ function zoneDayScheduleForDate(schedule, dateStr) {
   return null; // جدولٌ مُفعَّل وهذا اليوم غير مشمول => مغلق
 }
 
-/**
- * ساعات فتح المنطقة في تاريخ محدد، أو null إن كانت مغلقة (غلاف توافقي).
- * @param {object|undefined} schedule
- * @param {string} dateStr yyyy-MM-dd
- * @return {number[]|null} [startHour, endHour] أو null (مغلق)
- */
-function zoneOpenHoursForDate(schedule, dateStr) {
-  const day = zoneDayScheduleForDate(schedule, dateStr);
-  return day === null ? null : day.range;
-}
-
 exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
@@ -4951,7 +4937,7 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
       const zq = await db.collection("service_zones")
           .where("name", "==", zoneName).limit(1).get();
       if (!zq.empty) zoneSchedule = zq.docs[0].data().schedule || null;
-    } catch (_) {}
+    } catch { /* تعذّر جلب جدول المنطقة — يُعامَل كغير مقيَّد بجدول */ }
   }
 
   // 1. السعة الحقيقية للفترة = عدد السائقين النشطين. **بلا مناطق** (قرار المالك):
@@ -4976,7 +4962,7 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
     if (hourlySnap.exists) {
       maxOrdersPerDay = hourlySnap.data().max_orders_per_day ?? 10;
     }
-  } catch (_) {}
+  } catch { /* تعذّر جلب الإعدادات — يبقى الحدّ الافتراضي أعلاه */ }
 
   // 3. عدّ الطلبات التي تستهلك سائقاً في كل فترة (غير الملغاة)
   const snap = await db.collection("orders")
@@ -5499,7 +5485,7 @@ async function _autoResolveUnfulfilledPaidOrder(db, secret, orderDoc) {
           admin.firestore.FieldValue.serverTimestamp(),
       });
     });
-  } catch (e) {
+  } catch {
     // البوابة نجحت لكن أُسنِد سائق لحظتها (نادر جداً): المال أُعيد فعلاً فنُكمل الإلغاء
     // (لا نُبقي طلباً «مدفوعاً» بلا مال) ونُعلّم التعارض للمراجعة.
     await orderRef.update({

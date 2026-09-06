@@ -40,7 +40,7 @@ function extractAsyncFn(name, params) {
   // HttpsError حرّة في نص الدالة الأصلية (مستوردة أعلى index.js) — نمرّرها
   // كمعامل إضافي هنا بدل استيراد كامل index.js (يتجنّب admin.initializeApp
   // وأسرار defineSecret وغيرها من التهيئة الثقيلة غير اللازمة لهذا الاختبار).
-  const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
+  const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
   return new AsyncFunction(...params, "HttpsError", body);
 }
 

@@ -1,4 +1,3 @@
-/* eslint-disable */
 // Emulator rules test: proves the Stage-C order-create rule closes wallet minting.
 // Run: firestore emulator on :8080, then `node test/rules.orders.test.js`.
 const fs = require("fs");
