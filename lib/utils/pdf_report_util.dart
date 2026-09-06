@@ -79,10 +79,10 @@ class ZyiarahPdfReportUtil {
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Text('مؤسسة زيارة',
-                style: pw.TextStyle(
+                style: const pw.TextStyle(
                     fontSize: 24,
                     fontWeight: pw.FontWeight.bold,
-                    color: const PdfColor.fromInt(0xFF660033))),
+                    color: PdfColor.fromInt(0xFF660033))),
             pw.Text('التقرير المالي الرسمي',
                 style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
           ],
@@ -125,7 +125,7 @@ class ZyiarahPdfReportUtil {
       children: [
         pw.Text(label, style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
         pw.SizedBox(height: 4),
-        pw.Text(value, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+        pw.Text(value, style: const pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
       ],
     );
   }
@@ -151,13 +151,13 @@ class ZyiarahPdfReportUtil {
 
     pw.Widget headerCell(String t) => pw.Padding(
         padding: const pw.EdgeInsets.all(8),
-        child: pw.Text(t, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)));
+        child: pw.Text(t, style: const pw.TextStyle(fontWeight: pw.FontWeight.bold)));
 
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text('سجل آخر المعاملات',
-            style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+            style: const pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
         pw.SizedBox(height: 12),
         pw.Table(
           border: pw.TableBorder.all(color: PdfColors.grey300),
