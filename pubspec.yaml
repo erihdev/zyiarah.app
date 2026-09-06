@@ -18,7 +18,12 @@ dependencies:
   latlong2: ^0.9.1
   google_fonts: ^8.1.0
   firebase_core: ^4.9.0
-  firebase_auth: ^6.5.1
+  # الحدّ الأعلى مقصود: firebase_auth 6.5.5 يستعمل FirebasePlugin بينما
+  # firebase_core_platform_interface 7.1.0 (أعلى ما يسمح به باقي الشجرة،
+  # وcloud_firestore مثبّتة عند 6.4.0) لا يعرّف إلا FirebasePluginPlatform.
+  # قيدُه المُعلَن ^7.1.0 مستوفى شكلاً فيمرّ الحلّ، ثم يفشل التصريف بـ
+  # «Type 'FirebasePlugin' not found». يُرفع عند ترقية cloud_firestore.
+  firebase_auth: ">=6.5.1 <6.5.5"
   cloud_firestore: 6.4.0
   flutter_map: ^7.0.2
   firebase_messaging: ^16.2.2

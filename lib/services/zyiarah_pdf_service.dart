@@ -82,8 +82,8 @@ class ZyiarahPdfService {
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text('Tax Invoice', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
-                    pw.Text(_ar('فاتورة ضريبية مبسطة'), style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                    pw.Text('Tax Invoice', style: const pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+                    pw.Text(_ar('فاتورة ضريبية مبسطة'), style: const pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
                   ],
                 ),
                 pw.Column(
@@ -116,8 +116,8 @@ class ZyiarahPdfService {
                 pw.TableRow(
                   decoration: const pw.BoxDecoration(color: PdfColors.grey100),
                   children: [
-                    pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_ar('الوصف / Description'), style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
-                    pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_ar('المجموع / Total'), style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_ar('الوصف / Description'), style: const pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_ar('المجموع / Total'), style: const pw.TextStyle(fontWeight: pw.FontWeight.bold))),
                   ],
                 ),
                 pw.TableRow(
@@ -231,7 +231,7 @@ class ZyiarahPdfService {
             child: pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
-                pw.Text(_ar("تقرير مبيعات زيارة - $periodName"), style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+                pw.Text(_ar("تقرير مبيعات زيارة - $periodName"), style: const pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
                 pw.Text(intl.DateFormat('yyyy-MM-dd').format(DateTime.now())),
               ],
             ),
@@ -254,7 +254,7 @@ class ZyiarahPdfService {
               "${o['final_amount'] ?? o['amount'] ?? 0} ر.س",
               _ar(o['status'] ?? '-'),
             ]).toList(),
-            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            headerStyle: const pw.TextStyle(fontWeight: pw.FontWeight.bold),
             cellAlignment: pw.Alignment.centerRight,
           ),
         ],
@@ -350,13 +350,13 @@ class ZyiarahPdfService {
               ],
             ),
             pw.SizedBox(height: 10),
-            pw.Center(child: pw.Text(_ar('عقد تقديم خدمات إلكتروني'), style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: const PdfColor.fromInt(0xFF660033)))),
+            pw.Center(child: pw.Text(_ar('عقد تقديم خدمات إلكتروني'), style: const pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: PdfColor.fromInt(0xFF660033)))),
             pw.SizedBox(height: 20),
             pw.Divider(color: const PdfColor.fromInt(0xFF8E2B5C)),
             pw.SizedBox(height: 20),
 
             // Parties
-            pw.Text(_ar('طرفي التعاقد / Parties to the Contract:'), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+            pw.Text(_ar('طرفي التعاقد / Parties to the Contract:'), style: const pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 10),
             pw.Container(
               padding: const pw.EdgeInsets.all(12),
@@ -374,7 +374,7 @@ class ZyiarahPdfService {
             pw.SizedBox(height: 30),
 
             // Contract Details Table
-            pw.Text(_ar('تفاصيل العقد / Contract Details:'), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+            pw.Text(_ar('تفاصيل العقد / Contract Details:'), style: const pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 10),
             pw.Table(
               border: pw.TableBorder.all(color: PdfColors.grey300),
@@ -382,8 +382,8 @@ class ZyiarahPdfService {
                 pw.TableRow(
                   decoration: const pw.BoxDecoration(color: PdfColors.grey100),
                   children: [
-                    pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_ar('الوصف / Description'), style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
-                    pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_ar('التفاصيل / Details'), style: pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_ar('الوصف / Description'), style: const pw.TextStyle(fontWeight: pw.FontWeight.bold))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_ar('التفاصيل / Details'), style: const pw.TextStyle(fontWeight: pw.FontWeight.bold))),
                   ]
                 ),
                 _buildTableRow(_ar('الباقة المشتراة / Service Plan'), _ar(planName)),
@@ -396,7 +396,7 @@ class ZyiarahPdfService {
 
             // Visit Schedule (جدول الزيارات — تاريخ ووقت كل زيارة)
             if (visitRows.isNotEmpty) ...[
-              pw.Text(_ar('جدول الزيارات / Visit Schedule:'), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+              pw.Text(_ar('جدول الزيارات / Visit Schedule:'), style: const pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 10),
               pw.Table(
                 border: pw.TableBorder.all(color: PdfColors.grey300),
@@ -409,9 +409,9 @@ class ZyiarahPdfService {
                   pw.TableRow(
                     decoration: const pw.BoxDecoration(color: PdfColors.grey100),
                     children: [
-                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_ar('الزيارة / Visit'), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
-                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_ar('التاريخ / Date'), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
-                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_ar('الوقت / Time'), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_ar('الزيارة / Visit'), style: const pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_ar('التاريخ / Date'), style: const pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_ar('الوقت / Time'), style: const pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
                     ],
                   ),
                   ...visitRows.map((r) => pw.TableRow(
@@ -427,7 +427,7 @@ class ZyiarahPdfService {
             ],
 
             // Terms
-            pw.Text(_ar('الشروط والأحكام / Terms and Conditions:'), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+            pw.Text(_ar('الشروط والأحكام / Terms and Conditions:'), style: const pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 10),
             pw.Container(
               padding: const pw.EdgeInsets.all(10),
@@ -453,14 +453,14 @@ class ZyiarahPdfService {
               children: [
                 pw.Column(
                   children: [
-                    pw.Text(_ar('ختم المنصة'), style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    pw.Text(_ar('ختم المنصة'), style: const pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                     pw.SizedBox(height: 5),
                     if (logoBytes != null) pw.Opacity(opacity: 0.5, child: pw.Image(pw.MemoryImage(logoBytes), width: 60)),
                   ],
                 ),
                 pw.Column(
                   children: [
-                    pw.Text(_ar('توقيع العميل (الطرف الثاني)'), style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    pw.Text(_ar('توقيع العميل (الطرف الثاني)'), style: const pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                     pw.SizedBox(height: 5),
                     if (signatureBytes != null)
                       pw.Image(pw.MemoryImage(signatureBytes), width: 100),
@@ -515,7 +515,7 @@ class ZyiarahPdfService {
       child: pw.Column(
         children: [
           pw.Text(label, style: const pw.TextStyle(fontSize: 12)),
-          pw.Text(value, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+          pw.Text(value, style: const pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
         ],
       ),
     );
