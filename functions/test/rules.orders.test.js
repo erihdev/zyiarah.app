@@ -62,9 +62,12 @@ const {setDoc, doc} = require("firebase/firestore");
       setDoc(doc(db, "orders/ok1"),
           {client_id: uid, status: "pending", is_paid: false, amount: 200}),
       true);
+  // awaiting_payment هي حالة الدخول الثانية المسموحة (يكتبها متجرُ العميل في
+  // store_service.dart). كانت هنا pending_admin_approval — وهي حالة ميتة حُذفت
+  // من الجذور، فكان الإنشاء يُرفض على الحالة لا على is_paid، ولم يُختبر الغياب أبداً.
   await check("legit: is_paid absent -> ALLOWED",
       setDoc(doc(db, "orders/ok2"),
-          {client_id: uid, status: "pending_admin_approval", amount: 200}),
+          {client_id: uid, status: "awaiting_payment", amount: 200}),
       true);
 
   // Existing protections still hold.
