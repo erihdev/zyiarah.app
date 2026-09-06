@@ -111,10 +111,8 @@ jobs:
           cache: 'npm'
           cache-dependency-path: admin_panel/package-lock.json
 
-      # --legacy-peer-deps: تعارض peer قائم بين @eslint/js@10 وeslint@9 في
-      # devDependencies يمنع npm ci العادي. الشجرة المثبَّتة هي شجرة القفل نفسها.
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm ci
         working-directory: admin_panel
 
       # src/services/firebase.ts مُستثنى من git (إعداد Firebase للويب). البناء
