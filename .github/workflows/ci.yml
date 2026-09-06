@@ -26,3 +26,127 @@ jobs:
 
       - name: Analyze
         run: flutter analyze --no-fatal-infos
+
+  # اختبارات التطبيق — لم تكن تُشغَّل في CI إطلاقاً رغم وجودها.
+  test:
+    name: Flutter Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      # .env مُعلَن كأصل في pubspec.yaml ومُستثنى من git (مفاتيح قابلة للنشر).
+      - name: Create placeholder .env
+        run: touch .env
+
+      - name: Test
+        run: flutter test
+
+  # اختبارات الدوال الخادمية: وحدات (تسعير، إشعارات، بريد) + محاكي
+  # (قواعد الطلبات، فصل أدوار الأدمن، خصم المحفظة).
+  functions:
+    name: Cloud Functions Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: functions/package-lock.json
+
+      # محاكي Firestore يعمل على JVM، وfirebase-tools@15 يشترط JDK 21 فأعلى
+      # («no longer supports Java version before 21») — لا تُخفَّض إلى 17.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: functions
+
+      - name: Lint
+        run: npm run lint
+        working-directory: functions
+
+      - name: Unit tests
+        run: npm test
+        working-directory: functions
+
+      # تخزين جرّة المحاكي (~60MB) حتى لا تُنزَّل في كل تشغيلة.
+      - name: Cache Firebase emulators
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}
+
+      # emulators:exec يُشغّل المحاكي، ينفّذ الأمر، ثم يُغلقه ويورّث رمز الخروج.
+      # يُنفَّذ من جذر المستودع لأن firebase.json هناك.
+      - name: Emulator tests (rules + roles + wallet)
+        run: >
+          npx -y firebase-tools@15 emulators:exec
+          --only firestore
+          --project demo-zyiarah-rules
+          'npm --prefix functions run test:emulator'
+
+  # بناء لوحة الإدارة — يفحص أنواع TypeScript في كل الصفحات (tsc -b) قبل الحزم.
+  admin-panel:
+    name: Admin Panel Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: admin_panel/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: admin_panel
+
+      # src/services/firebase.ts مُستثنى من git (إعداد Firebase للويب). البناء
+      # فحص أنواع وحزم لا اتصال فعلي، فتكفي قيم صوريّة.
+      - name: Create placeholder Firebase config
+        working-directory: admin_panel
+        run: |
+          cat > src/services/firebase.ts <<'EOF'
+          import { initializeApp } from 'firebase/app';
+          import { getAuth } from 'firebase/auth';
+          import { getFirestore } from 'firebase/firestore';
+          import { getStorage } from 'firebase/storage';
+          import { getFunctions } from 'firebase/functions';
+
+          const app = initializeApp({
+            apiKey: 'ci',
+            authDomain: 'ci.firebaseapp.com',
+            projectId: 'ci',
+            storageBucket: 'ci.appspot.com',
+            messagingSenderId: '0',
+            appId: 'ci',
+          });
+
+          export const auth = getAuth(app);
+          export const db = getFirestore(app);
+          export const storage = getStorage(app);
+          export const functions = getFunctions(app);
+          export default app;
+          EOF
+
+      - name: Lint
+        run: npm run lint
+        working-directory: admin_panel
+
+      - name: Build
+        run: npm run build
+        working-directory: admin_panel

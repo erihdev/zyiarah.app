@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Shield, Key, Search, UserPlus, Trash2, Edit, UserCheck, Loader2 } from 'lucide-react';
 import { collection, query, where, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
-import { useNotification } from '../components/Notification.tsx';
+import { useNotification } from '../components/notificationContext.ts';
 
 interface AdminUser {
     id: string;

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { LifeBuoy, Search, MessageSquare, AlertCircle, CheckCircle2, Send, Clock } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, where, limit, Timestamp, doc, updateDoc, addDoc, serverTimestamp, getCountFromServer, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
+import { useNow } from '../hooks/useNow.ts';
 
 // المجموعة الصحيحة هي support_tickets (يكتبها العميل في support_screen.dart والدوال في functions/index.js).
 // كانت اللوحة سابقاً مرتبطة بمجموعة وهمية 'tickets' بأسماء حقول خاطئة → صفحة الدعم فارغة دائماً
@@ -26,6 +27,8 @@ interface Ticket {
 }
 
 export default function Support() {
+    // ساعة متجدّدة بدل قراءة Date.now() أثناء الرندر (نصوص «منذ ...»).
+    const now = useNow();
     const [searchTerm, setSearchTerm] = useState('');
     const [tickets, setTickets] = useState<Ticket[]>([]);
     const [messages, setMessages] = useState<SupportMessage[]>([]);
@@ -74,15 +77,24 @@ export default function Support() {
         return () => unsub();
     }, [retryKey]);
 
+    // تفريغ رسائل التذكرة السابقة يتمّ أثناء الرندر عند تغيّر المُحدَّد لا في
+    // جسم الأثر: setState هناك يُسبّب رندراً متتالياً تظهر فيه رسائل التذكرة
+    // القديمة تحت عنوان التذكرة الجديدة.
+    const [selectedKey, setSelectedKey] = useState(selected?.id ?? null);
+    if (selectedKey !== (selected?.id ?? null)) {
+        setSelectedKey(selected?.id ?? null);
+        setMessages([]);
+    }
+
     // Load messages from subcollection whenever selected ticket changes
     useEffect(() => {
-        if (!selected) { setMessages([]); return; }
-        const q = query(collection(db, 'support_tickets', selected.id, 'messages'), orderBy('sentAt', 'asc'));
+        if (!selectedKey) return;
+        const q = query(collection(db, 'support_tickets', selectedKey, 'messages'), orderBy('sentAt', 'asc'));
         const unsub = onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
             setMessages(snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as SupportMessage)));
         }, (e) => { console.error("Support listener error:", e); });
         return () => unsub();
-    }, [selected?.id]);
+    }, [selectedKey]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -133,7 +145,6 @@ export default function Support() {
 
     const relativeTime = (ts?: Timestamp) => {
         if (!ts) return '';
-        const now = Date.now();
         const diff = Math.floor((now - ts.toDate().getTime()) / 1000);
         if (diff < 60) return 'منذ لحظات';
         if (diff < 3600) return `منذ ${Math.floor(diff / 60)} دقيقة`;

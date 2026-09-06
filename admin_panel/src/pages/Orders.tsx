@@ -6,7 +6,7 @@ import {
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../services/firebase.ts';
-import { useNotification } from '../components/Notification.tsx';
+import { useNotification } from '../components/notificationContext.ts';
 import ServiceMetaTable from '../components/ServiceMetaTable.tsx';
 
 // تنسيق تاريخ لحقل datetime-local (YYYY-MM-DDTHH:mm).

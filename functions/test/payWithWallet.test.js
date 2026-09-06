@@ -1,4 +1,3 @@
-/* eslint-disable */
 // Emulator function test: payWithWallet flips is_paid atomically, is idempotent,
 // and rejects cross-user / underfunded / amount-mismatch payments.
 // Run: firestore emulator on :8080, then `node test/payWithWallet.test.js`.

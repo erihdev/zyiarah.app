@@ -223,7 +223,6 @@ export default function Accountants() {
                                             </div>
                                             <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                                                 {/* dynamic width requires inline style — Tailwind cannot purge arbitrary runtime values */}
-                                                {/* eslint-disable-next-line */}
                                                 <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }}></div>
                                             </div>
                                             <p className="text-xs text-slate-400 mt-0.5 text-left">{formatCurrency(amount)} ر.س</p>

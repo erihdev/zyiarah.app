@@ -1,4 +1,3 @@
-/* eslint-disable */
 // Emulator rules test: verifies the deployed role-model fix — staff are separated
 // by their real sub-role (staff_role) instead of every staff = super_admin.
 // Run: firestore emulator on :8080, then `node test/rules.roles.test.js`.

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Tag, Trash2, PlusCircle, Calendar, Percent, X, Loader2 } from 'lucide-react';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { useNotification } from '../components/Notification.tsx';
+import { useNotification } from '../components/notificationContext.ts';
 
 interface PromoCode {
     id: string;

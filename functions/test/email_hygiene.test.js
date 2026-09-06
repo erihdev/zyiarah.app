@@ -31,9 +31,7 @@ const helperSrc = (name) => {
   const j = src.indexOf("\n}\n", i);
   return src.substring(i, j + 2);
 };
-// eslint-disable-next-line no-new-func
 const _cleanEmail = new Function(helperSrc("_cleanEmail") + "; return _cleanEmail;")();
-// eslint-disable-next-line no-new-func
 const _fallbackHtml = new Function(
     helperSrc("_buildTemplateFallbackHtml") + "; return _buildTemplateFallbackHtml;")();
 

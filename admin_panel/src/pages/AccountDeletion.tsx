@@ -5,7 +5,7 @@ import {
     doc, orderBy, query, limit
 } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
-import { useNotification } from '../components/Notification.tsx';
+import { useNotification } from '../components/notificationContext.ts';
 
 interface DeletionRequest {
     id: string;

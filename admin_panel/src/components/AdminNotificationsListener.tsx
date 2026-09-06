@@ -9,6 +9,14 @@ import { db } from '../services/firebase';
  */
 export default function AdminNotificationsListener({ role }: { role?: string | null }) {
     const initialized = useRef(false);
+    // مرآة للدور: الأثر يشترك مرة واحدة، وlambda الاشتراك كانت تأسر أول قيمة
+    // لـ role. إن وصل الدور بعد التركيب (وهو الشائع — يُقرأ من Firestore) بقيت
+    // null داخل المُرشِّح، فكل تنبيه موجَّه لأدوار محدَّدة يُسقَط بصمت.
+    // المرآة تُصلح ذلك بلا إعادة اشتراك: إضافة role إلى deps كانت ستُعيد
+    // الاشتراك، وinitialized.current تبقى true فلا تُتجاهَل اللقطة الأولى —
+    // فتنفجر عشرون إشعار متصفح للسجل القديم.
+    const roleRef = useRef(role);
+    useEffect(() => { roleRef.current = role; }, [role]);
 
     useEffect(() => {
         if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
@@ -34,8 +42,9 @@ export default function AdminNotificationsListener({ role }: { role?: string | n
                     // أدمن كل تنبيه بالمتصفح.
                     const target = d.targetRoles;
                     if (Array.isArray(target) && target.length > 0) {
-                        const isSuper = role === 'super_admin' || role === 'admin';
-                        if (!isSuper && !(role && target.includes(role))) return;
+                        const r = roleRef.current;
+                        const isSuper = r === 'super_admin' || r === 'admin';
+                        if (!isSuper && !(r && target.includes(r))) return;
                     }
                     try {
                         if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {

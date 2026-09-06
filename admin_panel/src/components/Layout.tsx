@@ -211,8 +211,14 @@ export default function Layout({ onLogout, role = null }: LayoutProps) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const visibleBottomNav = bottomNavItems.filter((item) => canAccess(role, item.path));
 
-    // Close drawer on navigation
-    useEffect(() => { setSidebarOpen(false); }, [location.pathname]);
+    // إغلاق الدرج عند التنقّل. الضبط أثناء الرندر عند تغيّر المسار — لا داخل
+    // أثر: setState في جسم الأثر يُسبّب رندراً متتالياً (ورندرة وسيطة بالدرج
+    // مفتوحاً على المسار الجديد). هذا هو النمط الذي توثّقه React لهذه الحالة.
+    const [prevPath, setPrevPath] = useState(location.pathname);
+    if (prevPath !== location.pathname) {
+        setPrevPath(location.pathname);
+        setSidebarOpen(false);
+    }
 
     // Lock body scroll when drawer is open
     useEffect(() => {
