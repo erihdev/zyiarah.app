@@ -65,7 +65,7 @@ jobs:
 
       # محاكي Firestore يعمل على JVM، وfirebase-tools@15 يشترط JDK 21 فأعلى
       # («no longer supports Java version before 21») — لا تُخفَّض إلى 17.
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: 'zulu'
           java-version: '21'
