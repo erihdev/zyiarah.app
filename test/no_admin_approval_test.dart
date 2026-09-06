@@ -53,6 +53,26 @@ void main() {
         reason: 'قائمة سماح في القواعد ما زالت تقبل حالة الاعتماد');
   });
 
+  // 2026-09-06: الحارس كان يفحص lib/ وindex.js وfirestore.rules فقط، فبقي
+  // functions/test/rules.orders.test.js يُنشئ طلباً بالحالة الميتة: القاعدة
+  // ترفضه على الحالة لا على is_paid، فيفشل الاختبار ويحجب — بسلسلة && —
+  // عشرة فحوص للمحفظة بعده. ملفات الاختبار جزء من الجذور التي يجب تنظيفها.
+  test('اختبارات المحاكي لا تستعمل الحالة الميتة', () {
+    final jsFiles = Directory('functions/test')
+        .listSync()
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.js'))
+        .toList();
+    // حارس ضد النجاح الكاذب: لو لم يُقرأ شيء فالفحص وهم.
+    expect(jsFiles.length, greaterThan(3));
+    for (final f in jsFiles) {
+      final code = _stripComments(f.readAsStringSync());
+      expect(code.contains('pending_admin_approval'), isFalse,
+          reason: '${f.path} يبني حالة اختبار على حالة اعتماد محذوفة — '
+              'القاعدة ترفضها فيفشل الاختبار لسبب غير الذي وُضع له');
+    }
+  });
+
   test('المنتجون يكتبون pending مباشرةً', () {
     final pay = File('lib/screens/payment_summary_screen.dart')
         .readAsStringSync();
