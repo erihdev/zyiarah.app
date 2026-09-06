@@ -7,7 +7,7 @@ import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail } from 
 import { httpsCallable } from 'firebase/functions';
 import app, { db, storage, functions } from '../services/firebase.ts';
 import { logAudit, AUDIT } from '../services/audit.ts';
-import { useNotification } from '../components/Notification.tsx';
+import { useNotification } from '../components/notificationContext.ts';
 
 interface DriverData {
     id: string;
@@ -94,6 +94,10 @@ export default function Drivers() {
         setIsAdding(true);
         // تطبيق ثانوي: إنشاء المستخدم على جلسة الأدمن الحالية كان سيُسجّل خروجه ويُدخل السائق مكانه.
         // نأخذ الإعداد من app.options لا من ملف firebase.ts (مُستثنى من git — لا نضيف له تصديراً جديداً).
+        // إيجابية كاذبة من react-hooks/purity: هذا داخل معالِج الإرسال
+        // (onSubmit={handleAddDriver}) لا أثناء الرندر، والمعالِجات يجوز أن
+        // تكون غير نقيّة. واسم التطبيق الثانوي يجب أن يكون فريداً لكل محاولة.
+        // eslint-disable-next-line react-hooks/purity
         const secondaryApp = initializeApp(app.options, `provision_${Date.now()}`);
         const secondaryAuth = getAuth(secondaryApp);
         try {

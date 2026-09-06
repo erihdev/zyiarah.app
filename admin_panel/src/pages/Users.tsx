@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Search, Filter, UserCheck, UserX, Mail, Phone, Users as UsersIcon } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, limit, Timestamp, doc, updateDoc, getCountFromServer, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
-import { useNotification } from '../components/Notification.tsx';
+import { useNotification } from '../components/notificationContext.ts';
 
 interface UserRecord {
     uid: string;

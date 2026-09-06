@@ -22,7 +22,7 @@ import {
   Save,
   Loader2
 } from 'lucide-react';
-import { useNotification } from '../components/Notification.tsx';
+import { useNotification } from '../components/notificationContext.ts';
 
 interface Product {
   id: string;

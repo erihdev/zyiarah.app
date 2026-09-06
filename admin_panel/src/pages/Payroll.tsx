@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Banknote, CheckCircle2, Clock, Users, ChevronRight, ChevronLeft, Loader2, BadgeCheck, Wallet } from 'lucide-react';
 import { collection, onSnapshot, query, doc, setDoc, serverTimestamp, where } from 'firebase/firestore';
 import { db, auth } from '../services/firebase.ts';
-import { useNotification } from '../components/Notification.tsx';
+import { useNotification } from '../components/notificationContext.ts';
 
 interface Driver {
     id: string;
@@ -86,8 +86,16 @@ export default function Payroll() {
         return unsub;
     }, [retryKey]);
 
-    useEffect(() => {
+    // إعادة ضبط «جارٍ التحميل» عند تبديل الشهر تتمّ أثناء الرندر لا في جسم
+    // الأثر: setState هناك يُسبّب رندراً متتالياً يعرض بيانات الشهر السابق
+    // للحظة بوصفها مُحمَّلة. القيمة الابتدائية للحالة true أصلاً.
+    const [recordsKey, setRecordsKey] = useState(`${currentMonth}|${retryKey}`);
+    if (recordsKey !== `${currentMonth}|${retryKey}`) {
+        setRecordsKey(`${currentMonth}|${retryKey}`);
         setLoadingRecords(true);
+    }
+
+    useEffect(() => {
         const q = query(collection(db, 'payroll_records'), where('month', '==', currentMonth));
         const unsub = onSnapshot(q, snap => {
             const map: Record<string, PayrollRecord> = {};

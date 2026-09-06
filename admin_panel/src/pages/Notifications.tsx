@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Send, BellRing, Smartphone, Users, UserRound, History, Clock, CheckCircle2, MessageSquare, Plus, Trash2, Globe, CalendarClock, X } from 'lucide-react';
 import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, limit, type Timestamp, type DocumentData, type QuerySnapshot, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
-import { useNotification } from '../components/Notification.tsx';
+import { useNotification } from '../components/notificationContext.ts';
+import { useNow } from '../hooks/useNow.ts';
 
 interface PopupButton {
     label: string;
@@ -38,6 +39,8 @@ function minScheduleValue() {
 }
 
 export default function Notifications() {
+    // ساعة متجدّدة بدل قراءة Date.now() أثناء الرندر (نصوص «منذ ...»).
+    const now = useNow();
     const { toast } = useNotification();
     const [target, setTarget] = useState('all');
     const [notifType, setNotifType] = useState<'push' | 'popup'>('push');
@@ -136,7 +139,7 @@ export default function Notifications() {
 
     const relativeTime = (ts: Timestamp | null) => {
         if (!ts?.toDate) return '';
-        const diff = Math.floor((Date.now() - ts.toDate().getTime()) / 1000);
+        const diff = Math.floor((now - ts.toDate().getTime()) / 1000);
         if (diff < 60) return 'منذ لحظات';
         if (diff < 3600) return `منذ ${Math.floor(diff / 60)} دقيقة`;
         if (diff < 86400) return `منذ ${Math.floor(diff / 3600)} ساعة`;

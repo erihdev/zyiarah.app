@@ -143,6 +143,10 @@ jobs:
           export default app;
           EOF
 
+      - name: Lint
+        run: npm run lint
+        working-directory: admin_panel
+
       - name: Build
         run: npm run build
         working-directory: admin_panel

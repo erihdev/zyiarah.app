@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
+import { NotificationContext } from './notificationContext.ts';
 import type { ReactNode } from 'react';
 import { CheckCircle2, XCircle, Info, X, AlertTriangle } from 'lucide-react';
 
@@ -16,22 +17,6 @@ interface ConfirmState {
     message: string;
     resolve: (value: boolean) => void;
 }
-
-interface NotificationContextType {
-    toast: {
-        success: (msg: string) => void;
-        error: (msg: string) => void;
-        info: (msg: string) => void;
-    };
-    confirm: (msg: string) => Promise<boolean>;
-}
-
-// ─── Context ──────────────────────────────────────────────────────────────────
-
-const NotificationContext = createContext<NotificationContextType>({
-    toast: { success: () => {}, error: () => {}, info: () => {} },
-    confirm: () => Promise.resolve(false),
-});
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
@@ -143,5 +128,3 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         </NotificationContext.Provider>
     );
 }
-
-export const useNotification = () => useContext(NotificationContext);

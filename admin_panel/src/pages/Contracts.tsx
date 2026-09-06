@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Search, FileSignature, CheckCircle2, Clock, XCircle, AlertCircle, Calendar, CreditCard, Trash2, Info, Package, Plus, Pencil, Star, Loader2, PartyPopper } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, limit, Timestamp, doc, updateDoc, deleteDoc, addDoc, serverTimestamp, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
-import { useNotification } from '../components/Notification.tsx';
+import { useNotification } from '../components/notificationContext.ts';
 
 interface ContractRecord {
     id: string;

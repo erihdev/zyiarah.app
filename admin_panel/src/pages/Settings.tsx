@@ -4,7 +4,7 @@ import { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc, onSnapsh
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { db } from '../services/firebase.ts';
-import { useNotification } from '../components/Notification.tsx';
+import { useNotification } from '../components/notificationContext.ts';
 import { logAudit, AUDIT } from '../services/audit.ts';
 import ZoneScheduleEditor from '../components/ZoneScheduleEditor.tsx';
 import { type ZoneSchedule } from '../utils/zoneSchedule.ts';
@@ -181,8 +181,11 @@ export default function Settings({ role }: { role?: string | null }) {
     const zoneMap = useRef<mapboxgl.Map | null>(null);
     const zoneMarker = useRef<mapboxgl.Marker | null>(null);
     // مرآة للنموذج تقرؤها معالِجات الخريطة (load/click) دون أسر state قديم.
+    // التحديث في أثر لا أثناء الرندر: الكتابة على ref أثناء الرندر غير آمنة في
+    // الرندر المتزامن (قد يُلغى الرندر أو يُعاد تشغيله). معالِجات الخريطة لا
+    // تعمل إلا بعد التركيب، فتقرأ القيمة المحدَّثة دائماً.
     const newZoneRef = useRef(newZone);
-    newZoneRef.current = newZone;
+    useEffect(() => { newZoneRef.current = newZone; }, [newZone]);
 
     useEffect(() => {
         const fetchSettings = async () => {
@@ -316,7 +319,6 @@ export default function Settings({ role }: { role?: string | null }) {
     // مزامنة الدبوس/الدائرة مع أي تغيير في الإحداثيات أو النطاق.
     useEffect(() => {
         syncZoneMapFromForm();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [newZone.latitude, newZone.longitude, newZone.radiusKm, showAddForm]);
 
     // (تكافؤ التطبيق) كتابة اسم المحافظة تنقل الخريطة إليه تلقائياً — geocoding بنفس التوكن،
