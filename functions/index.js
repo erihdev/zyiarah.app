@@ -4916,6 +4916,22 @@ function zoneDayScheduleForDate(schedule, dateStr) {
   return null; // جدولٌ مُفعَّل وهذا اليوم غير مشمول => مغلق
 }
 
+/**
+ * ساعات فتح المنطقة في تاريخ محدد، أو null إن كانت مغلقة (غلاف توافقي).
+ *
+ * لا يناديها شيء داخل هذا الملف، لكنها مقصودة: يحرسها
+ * test/zone_schedule_test.dart صراحةً («الغلاف التوافقي يبقى لأي مستهلك
+ * قديم»). لا تُحذف اتّكالاً على أن الفحص يقول إنها غير مستعمَلة.
+ * @param {object|undefined} schedule
+ * @param {string} dateStr yyyy-MM-dd
+ * @return {number[]|null} [startHour, endHour] أو null (مغلق)
+ */
+// eslint-disable-next-line no-unused-vars
+function zoneOpenHoursForDate(schedule, dateStr) {
+  const day = zoneDayScheduleForDate(schedule, dateStr);
+  return day === null ? null : day.range;
+}
+
 exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
