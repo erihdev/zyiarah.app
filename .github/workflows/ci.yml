@@ -84,7 +84,7 @@ jobs:
 
       # تخزين جرّة المحاكي (~60MB) حتى لا تُنزَّل في كل تشغيلة.
       - name: Cache Firebase emulators
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/firebase/emulators
           key: firebase-emulators-${{ runner.os }}
