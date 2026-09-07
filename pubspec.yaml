@@ -23,7 +23,7 @@ dependencies:
   # وcloud_firestore مثبّتة عند 6.4.0) لا يعرّف إلا FirebasePluginPlatform.
   # قيدُه المُعلَن ^7.1.0 مستوفى شكلاً فيمرّ الحلّ، ثم يفشل التصريف بـ
   # «Type 'FirebasePlugin' not found». يُرفع عند ترقية cloud_firestore.
-  firebase_auth: ">=6.5.1 <6.5.5"
+  firebase_auth: ^6.5.5
   cloud_firestore: 6.4.0
   flutter_map: ^7.0.2
   firebase_messaging: ^16.2.2
