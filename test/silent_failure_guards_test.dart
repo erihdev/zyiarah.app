@@ -118,4 +118,29 @@ void main() {
       expect(src.contains('للعرض فقط'), isTrue);
     });
   });
+
+  // BUG-003 من ZIYARAH_QA_AUDIT: زرّ الردّ في الدعم ينادي setInternalState داخل
+  // finally بعد انتظارَين شبكيَّين. إن أُغلقت البطاقة خلالهما صار عنصر
+  // StatefulBuilder مُتلَفاً و«setState() called after dispose()» ينفجر في وجه
+  // المستخدم. كتلة catch نالت حارسها في إصلاح سابق، وfinally بقيت بلا حارس.
+  group('ردّ الدعم لا ينفجر بعد إتلاف البطاقة', () {
+    final src = _code('lib/screens/support_screen.dart');
+
+    test('إطفاء مؤشّر الإرسال محروس بـ context.mounted', () {
+      const call = 'setInternalState(() => isSendingReply = false)';
+      final i = src.indexOf(call);
+      expect(i, greaterThan(-1),
+          reason: 'بنية زرّ الردّ تغيّرت — راجع هذا الحارس، لا تحذفه');
+      // النافذة تسبق النداء مباشرةً: الحارس يجب أن يلفّه لا أن يقع في مكان آخر.
+      final before = src.substring((i - 120).clamp(0, i), i);
+      expect(before.contains('context.mounted'), isTrue,
+          reason: 'النداء يقع في finally بعد انتظارَين شبكيَّين وبلا حارس — '
+              'بطاقة مُغلقة أثناءهما تعني setState() called after dispose()');
+    });
+
+    test('مسار الخطأ يُخبر المستخدم ولا يبتلع الفشل', () {
+      expect(src.contains('فشل إرسال الرسالة'), isTrue,
+          reason: 'فشل الإرسال صار صامتاً مجدداً');
+    });
+  });
 }
