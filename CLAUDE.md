@@ -99,7 +99,7 @@ All callable functions require authentication; sensitive ones also verify owners
 
 ## CI/CD
 
-Codemagic (`codemagic.yaml`) handles iOS releases — triggered automatically on every push to `main`:
+Codemagic (`codemagic.yaml`) handles iOS releases. The YAML *declares* a push-to-`main` trigger, but read the webhook caveat below: as of 2026-09-13 no automatic build has ever been recorded, and every build has been started by hand:
 1. Sets up signing from the "Zyiarah Key" integration + `appstore_credentials` group (App Store Connect API key)
 2. Injects payment/Mapbox keys from the `payment_keys` group into `.env` at build time
 3. Runs `flutter pub get` + `pod install`, builds IPA with auto-incremented build number
@@ -109,7 +109,9 @@ Any `AuthKey_*.p8` file at root is an App Store Connect API key — gitignored; 
 
 The match is purely textual and has no notion of quoting or intent: a commit message that merely *mentions* the bracketed marker — documenting it, or quoting it in a subject line — is skipped exactly like one that means it. (This paragraph exists because the commit that first documented the behaviour was silenced by the marker in its own title.) To write about it in a commit message, drop the brackets: bare `skip ci` matches nothing. The full set Actions recognises is `[skip ci]`, `[ci skip]`, `[no ci]`, `[skip actions]`, `[actions skip]` — all bracketed, all case-insensitive.
 
-The Android workflow (`android-release`) mirrors iOS: it triggers on every push to `main`, builds a signed AAB, and publishes to the Google Play **internal testing** track (public release stays manual). It publishes through the `google_play` variable group in Codemagic (`GCLOUD_SERVICE_ACCOUNT_CREDENTIALS`) — already configured and verified: build #30 (2026-08-31) completed its Publishing step and uploaded to the internal track. Android signing uses `android/key.properties` (gitignored) in local builds and the `android_credentials` group in CI.
+The Android workflow (`android-release`) mirrors iOS: it declares the same push-to-`main` trigger, builds a signed AAB, and publishes to the Google Play **internal testing** track (public release stays manual). It publishes through the `google_play` variable group in Codemagic (`GCLOUD_SERVICE_ACCOUNT_CREDENTIALS`) — already configured and verified: build #30 (2026-08-31) completed its Publishing step and uploaded to the internal track. Android signing uses `android/key.properties` (gitignored) in local builds and the `android_credentials` group in CI.
+
+**Automatic triggering does not currently work on either platform.** Both workflows declare `triggering` (iOS since 2026-07-25, Android since 2026-09-13), but Codemagic only learns about a push through a webhook on the GitHub repository, and that webhook is missing or not delivering: five clean pushes to `main` after the last recorded build (#30 / #208 on `4f33ce9`, 2026-08-31) produced zero builds, and build #30 itself reads `Started by: erihdev@gmail.com`. Until this is fixed a merge to `main` ships **nothing** — start builds by hand in the Codemagic dashboard. Fix (repo admin): GitHub → Settings → Webhooks must hold a Codemagic hook (payload URL copied from Codemagic → app settings → Webhooks, content type `application/json`, at least the `push` event) with green recent deliveries; an app added to Codemagic by repository URL rather than through the GitHub App integration never gets one created for it. The only proof is a build in the Builds list that nobody started by hand — when one appears, update this paragraph and the guide.
 
 Two other Android paths exist and do **not** reach Google Play: `.github/workflows/android_release.yml` builds an AAB on `v*` tags without publishing, and `distribute_android.bat` builds an APK for Firebase App Distribution (testers only).
 
