@@ -28,13 +28,24 @@ cd ios && pod install         # Sync iOS CocoaPods after pubspec changes
 npm run dev      # Dev server
 npm run build    # Production build (tsc + vite)
 npm run lint     # ESLint
+npm test         # Vitest (role-gate tests)
 ```
+`src/services/firebase.ts` is gitignored — create it locally (CI generates a placeholder) or the build fails.
 
 ### Firebase Functions (`functions/`)
 ```bash
-npm run serve    # Local emulator
-npm run deploy   # Deploy functions
-npm run logs     # Tail logs
+npm run lint            # ESLint (flat config)
+npm test                # Unit tests (pricing, notifications, email)
+npm run test:emulator   # Rules + roles + wallet — needs the Firestore emulator
+npm run serve           # Local emulator
+npm run deploy          # Deploy functions
+npm run logs            # Tail logs
+```
+Run the emulator suite from the repo root (that is where `firebase.json` lives), and note
+`firebase-tools@15` requires **JDK 21+**:
+```bash
+npx firebase-tools@15 emulators:exec --only firestore --project demo-zyiarah-rules \
+  'npm --prefix functions run test:emulator'
 ```
 
 ## Architecture
@@ -94,11 +105,11 @@ Codemagic (`codemagic.yaml`) handles iOS releases — triggered automatically on
 3. Runs `flutter pub get` + `pod install`, builds IPA with auto-incremented build number
 4. Publishes to **TestFlight** (public App Store release is manual)
 
-Any `AuthKey_*.p8` file at root is an App Store Connect API key — gitignored; never commit or expose it. Add `[skip ci]` to commit messages that shouldn't trigger an iOS build (docs, rules-only changes).
+Any `AuthKey_*.p8` file at root is an App Store Connect API key — gitignored; never commit or expose it. Add `[skip ci]` to commit messages that shouldn't trigger a build (docs, rules-only changes) — note this now skips **both** the iOS and Android Codemagic builds.
 
-The Android workflow (`android-release`) is manual-only and builds an AAB without publishing.
+The Android workflow (`android-release`) mirrors iOS: it triggers on every push to `main`, builds a signed AAB, and publishes to the Google Play **internal testing** track (public release stays manual). It requires a `google_play` variable group in Codemagic holding `GCLOUD_SERVICE_ACCOUNT_CREDENTIALS`; without it the publish step fails. Android signing uses `android/key.properties` (gitignored) in local builds and the `android_credentials` group in CI.
 
-Android signing uses `android/key.properties` (gitignored). Distribution can be triggered locally via `distribute_android.bat`.
+Two other Android paths exist and do **not** reach Google Play: `.github/workflows/android_release.yml` builds an AAB on `v*` tags without publishing, and `distribute_android.bat` builds an APK for Firebase App Distribution (testers only).
 
 ## Environment & Config
 

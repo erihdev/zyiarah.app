@@ -333,7 +333,14 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
                                 );
                               }
                             } finally {
-                              setInternalState(() => isSendingReply = false);
+                              // BUG-003: setInternalState هنا يقع بعد انتظارَين
+                              // شبكيَّين. لو أغلق المستخدم البطاقة أو انتقل خلالهما
+                              // صار عنصر StatefulBuilder مُتلَفاً، فينفجر
+                              // «setState() called after dispose()». الحارس يجعل
+                              // الفشل صامتاً بلا أثر بدل استثناء في Crashlytics.
+                              if (context.mounted) {
+                                setInternalState(() => isSendingReply = false);
+                              }
                             }
                           },
                         ),

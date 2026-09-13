@@ -234,6 +234,21 @@ workflows:
     name: Zyiarah Android Release
     max_build_duration: 120
     instance_type: linux_x2
+    # بناء ورفع تلقائي إلى مسار «الاختبار الداخلي» عند كل دمج إلى main — نظير
+    # ما يفعله ios-release مع TestFlight تماماً. كانت هذه المهمّة بلا triggering
+    # إطلاقاً، أي يدوية بالكامل: آخر وسم إصدار v1.2.2 بينما الإصدار 1.2.47،
+    # فبقي أندرويد خارج كل دورة نشر ٤٥ إصداراً.
+    #
+    # ⚠️ لا تعمل حتى تُنشأ مجموعة google_play في Codemagic ومعها
+    # GCLOUD_SERVICE_ACCOUNT_CREDENTIALS (حساب خدمة من Google Play Console).
+    # قبل ذلك تسقط المهمّة عند خطوة النشر — سقوط ظاهر لا صامت.
+    # النشر للجمهور (track: production) يبقى قراراً يدوياً كما هو في iOS.
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: 'main'
+          include: true
     environment:
       # مثبَّتة عمداً لا stable: ترقية stable الخارجية رفعت حدّي Gradle وAGP
       # فكسرت البناء بلا أي تغيير منّا — وهذا يقع في أسوأ وقت (مهلة Play).
