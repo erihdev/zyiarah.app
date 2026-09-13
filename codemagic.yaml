@@ -239,9 +239,11 @@ workflows:
     # إطلاقاً، أي يدوية بالكامل: آخر وسم إصدار v1.2.2 بينما الإصدار 1.2.47،
     # فبقي أندرويد خارج كل دورة نشر ٤٥ إصداراً.
     #
-    # ⚠️ لا تعمل حتى تُنشأ مجموعة google_play في Codemagic ومعها
-    # GCLOUD_SERVICE_ACCOUNT_CREDENTIALS (حساب خدمة من Google Play Console).
-    # قبل ذلك تسقط المهمّة عند خطوة النشر — سقوط ظاهر لا صامت.
+    # مجموعة google_play مُنشأة وتعمل — لا تُصدّق تحذيراً يقول غير ذلك: البناء
+    # رقم ٣٠ (4f33ce9، ٣١ أغسطس ٢٠٢٦) أنهى خطوة Publishing في ١م٨ث وحالته
+    # finished، أي رفعٌ ناجح إلى مسار الاختبار الداخلي. وقبله رفع بناءٌ آخر
+    # versionCode=191 فعلياً إلى Play (انظر الحارس في سكربت البناء أدناه) —
+    # والرفع مستحيل بلا حساب خدمة صالح. ما كان ناقصاً هو triggering وحده.
     # النشر للجمهور (track: production) يبقى قراراً يدوياً كما هو في iOS.
     triggering:
       events:
@@ -259,9 +261,9 @@ workflows:
                                 # ANDROID_KEY_ALIAS, ANDROID_KEYSTORE_BASE64, MAPBOX_TOKEN
         - payment_keys         # MOYASAR_PUBLISHABLE_KEY, MOYASAR_SECRET_KEY,
                                 # TABBY_PUBLIC_KEY, SAMSUNG_PAY_SERVICE_ID
-        - google_play          # ⚠️ يجب إنشاؤها: GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-                                # (محتوى JSON لحساب خدمة Google Play — مؤمَّن). بدونها
-                                # يفشل رفع versionCode والنشر التلقائي.
+        - google_play          # GCLOUD_SERVICE_ACCOUNT_CREDENTIALS (محتوى JSON لحساب
+                                # خدمة Google Play — مؤمَّن). مُنشأة ومُتحقَّق منها: يعتمد
+                                # عليها get-latest-build-number ورفعُ AAB معاً.
       vars:
         PACKAGE_NAME: "com.zyiarah.zyiarah"
     scripts:
