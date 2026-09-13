@@ -3,12 +3,11 @@ workflows:
     name: Zyiarah iOS Release
     max_build_duration: 120
     instance_type: mac_mini_m1
-    # triggering أدناه تطلب بناءً ورفعاً إلى TestFlight عند كل دفعة إلى main —
-    # لكن الطلب لا يُنفَّذ إلا إذا وصل حدث الدفعة من GitHub إلى Codemagic عبر
-    # webhook على المستودع. وحتى 2026-09-13 لم يُسجَّل بناء تلقائي واحد: الكتلة
-    # موجودة منذ 2026-07-25 (54fa155)، وخمس دفعات نظيفة إلى main بعد آخر بناء
-    # (#208 على 4f33ce9، ٣١ أغسطس) لم تُطلق شيئاً. راجع «الشرط المفقود» في
-    # production_deployment_guide.md. النشر للجمهور يبقى يدوياً.
+    # triggering أدناه تطلب بناءً ورفعاً إلى TestFlight عند كل دفعة إلى main.
+    # الطلب يصل عبر webhook من GitHub أُنشئ في 2026-09-13 (ping مقبول 202) —
+    # قبله لم يصل حدث واحد رغم أن الكتلة موجودة منذ 2026-07-25 (54fa155)، فكان
+    # كل بناء يدوياً. راجع «الـwebhook» في production_deployment_guide.md.
+    # النشر للجمهور يبقى يدوياً.
     triggering:
       events:
         - push
@@ -247,11 +246,11 @@ workflows:
     # أنهى خطوة Publishing في ١م٨ث بحالة finished، وقبله رفع بناءٌ آخر
     # versionCode=191 فعلياً إلى Play (انظر الحارس في سكربت البناء أدناه).
     #
-    # ⚠️ لكن triggering وحدها لا تكفي — لا هنا ولا في ios-release: الحدث يجب
-    # أن يصل من GitHub عبر webhook، وحتى 2026-09-13 لم يصل قطّ (خمس دفعات
-    # نظيفة بعد البناء ٣٠ بلا بناء واحد). البناء ٣٠ يقول Started by:
-    # erihdev@gmail.com، ولا دليل على أن أيّ بناء مسجَّل بُدئ آلياً. تعليقٌ سابق
-    # هنا قال «ما كان ناقصاً هو triggering وحده» — وكان ناقصاً بدوره.
+    # triggering وحدها لا تكفي — لا هنا ولا في ios-release: الحدث يجب أن يصل
+    # من GitHub عبر webhook. أُنشئ في 2026-09-13 (ping مقبول 202)؛ قبله لم يصل
+    # حدث واحد قطّ (Recent deliveries: No deliveries yet)، والبناء ٣٠ يقول
+    # Started by: erihdev@gmail.com. تعليقٌ سابق هنا قال «ما كان ناقصاً هو
+    # triggering وحده» — كان ناقصاً بدوره.
     # النشر للجمهور (track: production) يبقى قراراً يدوياً كما هو في iOS.
     triggering:
       events:
