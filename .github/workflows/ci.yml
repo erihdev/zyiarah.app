@@ -49,6 +49,31 @@ jobs:
       - name: Test
         run: flutter test
 
+  # تصريف التطبيق كاملاً. لا analyze ولا test يكشفان خطأ تصريف داخل مصدر
+  # اعتمادية: analyze يُبلّغ عن ملفات المشروع وحدها، وtest يصرّف ما تستورده
+  # الاختبارات فقط. 2026-09-13: خمس إضافات Firebase غير قابلة للتصريف مرّت على
+  # الاثنين أسبوعاً كاملاً (منذ #198) حتى كشفها أوّل بناء إصدار تلقائي (#31).
+  # build bundle يصرّف إغلاق main.dart كله ولا يحتاج Xcode.
+  build:
+    name: Flutter Build (full compile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Create placeholder .env
+        run: touch .env
+
+      - name: Compile whole app
+        run: flutter build bundle --release
+
   # اختبارات الدوال الخادمية: وحدات (تسعير، إشعارات، بريد) + محاكي
   # (قواعد الطلبات، فصل أدوار الأدمن، خصم المحفظة).
   functions:

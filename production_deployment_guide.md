@@ -71,12 +71,13 @@
 
 ## 2. حرّاس ما قبل الدمج
 
-`.github/workflows/ci.yml` يشغّل أربع مهامّ على كل طلب دمج، ولا يُدمج شيء وهي حمراء:
+`.github/workflows/ci.yml` يشغّل خمس مهامّ على كل طلب دمج، ولا يُدمج شيء وهي حمراء:
 
 | المهمّة | ما تفحصه |
 |---|---|
 | Flutter Analyze | `flutter analyze --no-fatal-infos` |
 | Flutter Test | ٣١٣ فحصاً |
+| Flutter Build (full compile) | `flutter build bundle --release` — تصريف إغلاق `main.dart` كله. الوحيد الذي يكشف خطأ تصريف **داخل اعتمادية**: analyze يُبلّغ عن ملفات المشروع وحدها، وtest يصرّف ما تستورده الاختبارات فقط (درس البناء ٣١) |
 | Cloud Functions Tests | lint + ٤٩ فحص وحدة + ٢٩ فحص محاكي (قواعد، أدوار، محفظة) |
 | Admin Panel Build | lint + Vitest + `tsc -b` + بناء |
 
