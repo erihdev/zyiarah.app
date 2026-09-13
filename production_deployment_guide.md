@@ -56,7 +56,7 @@
 | المهمّة | ما تفحصه |
 |---|---|
 | Flutter Analyze | `flutter analyze --no-fatal-infos` |
-| Flutter Test | ٣١٠ فحصاً |
+| Flutter Test | ٣١٣ فحصاً |
 | Cloud Functions Tests | lint + ٤٩ فحص وحدة + ٢٩ فحص محاكي (قواعد، أدوار، محفظة) |
 | Admin Panel Build | lint + Vitest + `tsc -b` + بناء |
 
