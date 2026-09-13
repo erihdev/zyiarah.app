@@ -18,13 +18,16 @@ dependencies:
   latlong2: ^0.9.1
   google_fonts: ^8.1.0
   firebase_core: ^4.9.0
-  # الحدّ الأعلى مقصود: firebase_auth 6.5.5 يستعمل FirebasePlugin بينما
-  # firebase_core_platform_interface 7.1.0 (أعلى ما يسمح به باقي الشجرة،
-  # وcloud_firestore مثبّتة عند 6.4.0) لا يعرّف إلا FirebasePluginPlatform.
-  # قيدُه المُعلَن ^7.1.0 مستوفى شكلاً فيمرّ الحلّ، ثم يفشل التصريف بـ
-  # «Type 'FirebasePlugin' not found». يُرفع عند ترقية cloud_firestore.
-  firebase_auth: ">=6.5.1 <6.5.5"
-  cloud_firestore: 6.4.0
+  # شجرة FlutterFire كلها على firebase_core_platform_interface 8.x. الدرس
+  # (2026-09-13، البناء ٣١ — أوّل بناء تلقائي): إضافات crashlytics 5.2.5
+  # وmessaging 16.4.2 وanalytics 12.4.4 وfunctions 6.3.4 وstorage 13.4.4 تستعمل
+  # FirebasePlugin (مُعرَّف في 8.0.0) وتعلن ^7.1.0 — قيدٌ رخو يمرّ به الحلّ ثم
+  # يفشل التصريف بـ «Type 'FirebasePlugin' not found». تثبيتُ cloud_firestore
+  # عند 6.4.0 كان يحبس الواجهة عند 7.1.0 فيجرّ الشجرة كلها إلى الفخّ، وحدُّ
+  # firebase_auth <6.5.5 السابق عالج عَرَضاً واحداً وترك خمسة.
+  # لا تُثبّت حزمة Firebase واحدة بمعزل عن أخواتها؛ ارفعها معاً.
+  firebase_auth: ^6.6.1
+  cloud_firestore: ^6.9.0
   flutter_map: ^7.0.2
   firebase_messaging: ^16.2.2
   flutter_local_notifications: ^18.0.1
