@@ -13,7 +13,7 @@
   "dependencies": {
     "mapbox-gl": "^3.19.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
+    "react-dom": "^19.3.0",
     "react-map-gl": "^8.1.0"
   },
   "devDependencies": {
@@ -23,7 +23,7 @@
     "@types/mapbox-gl": "^3.4.1",
     "@types/node": "^26.5.1",
     "@types/react": "^19.2.7",
-    "@types/react-dom": "^19.2.3",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.27",
     "eslint": "^9.39.1",
