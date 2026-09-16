@@ -178,13 +178,14 @@ Firestore
 │       ├── name, price, image_url, description
 │       └── is_hidden (bool)
 │
-├── promo_codes/              ← أكواد الخصم
+├── promo_codes/              ← أكواد الخصم (تُعرض للعميل في «العروض» عند show_in_offers)
 │   └── {codeId}/
-│       ├── code (string — searchable)
-│       ├── discount_type: percentage | fixed
-│       ├── discount_value (double)
-│       ├── uses (int — يزيد atomically)
-│       └── max_uses, expiry
+│       ├── code (string — searchable, uppercase)
+│       ├── type: percentage | fixed, value (num)
+│       ├── uses (int — يزيده الخادم فقط), maxUses (0 = بلا حدّ), expiry (Timestamp)
+│       ├── status: active | inactive, restricted_zones (list of zone names)
+│       ├── target_user_id (كوبون شخصي: إحالة/هدية — يراه صاحبه وحده), description
+│       └── show_in_offers (bool — الغياب = مخفي عن قسم العروض)
 │
 ├── metadata/
 │   └── order_counter/
