@@ -56,8 +56,9 @@ Entry point is `main.dart` (Firebase init + auth wrapper). Navigation is handled
 
 Key directories:
 - `lib/models/` — data models (User, Order, Service)
-- `lib/screens/` — client-facing screens
-- `lib/admin/` — admin-only screens (drivers, orders, coupons, contracts, analytics)
+- `lib/screens/` — client and driver screens
+- `lib/screens/admin/` — admin-only screens (orders, drivers, zones + pricing, coupons, contracts, policies, analytics, e-invoice log, fleet radar, broadcast)
+- `lib/utils/` — pure helpers shared by screens and tests (`day_capacity.dart`, `terrain_surcharge.dart`, `home_packages.dart`, `phone_format.dart`, …)
 - `lib/services/` — all business logic and integrations (see below)
 - `lib/providers/` — UserProvider, ConfigProvider, OrderProvider
 - `lib/widgets/` — reusable UI components
@@ -129,5 +130,10 @@ Two other Android paths exist and do **not** reach Google Play: `.github/workflo
 - **Role checks**: User role is stored in Firestore and accessed via `UserProvider`; always verify role before rendering admin-only UI
 - **Arabic support**: Use `arabic_reshaper` + `bidi` for any Arabic text rendering — do not use plain `Text()` for Arabic strings
 - **PDF generation**: Use existing service classes in `lib/services/`; they depend on the `pdf` and `printing` packages
-- **Payments**: Moyasar is primary (cards, STC Pay, Apple Pay); Tamara and Tabby handle installments; wallet and COD are also supported — all integrated with ZATCA for tax receipts
+- **Payments**: Moyasar is primary (cards, STC Pay, Apple Pay); Tamara and Tabby handle installments; wallet is supported. Cash on delivery was removed at the root by owner decision — `test/no_cod_test.dart` guards it; never reintroduce it. All paid orders get a ZATCA invoice
+- **Pricing is server-verified**: the client shows prices, but `functions/pricing.js` recomputes the base from the zone document (per-service rates, optional `terrain_surcharge_percent`) on every Moyasar/wallet payment and flags underpayment. `PriceBreakdown` (`lib/utils/terrain_surcharge.dart`) is the single client formula: base + terrain + surge − discount = net, + 15% VAT = total; fixed-price contracts skip all three
+- **Capacity**: drivers have no zones; capacity is one global daily cap plus the active-driver count, optionally tightened by a zone's `max_orders_per_day`. Every consumer of `getHourlyAvailability` decides day fullness through `dayIsFull` (`lib/utils/day_capacity.dart`). Home cleaning is day-only (no arrival slot for the client)
+- **Firestore queries**: do not add composite indexes casually — range/orderBy on one field and filter locally (see `firestore.indexes.json` for what exists)
+- **Notifications**: operational pushes go through `notification_triggers`; admin broadcasts (`notifications_log`) are marketing unless `operational: true`, and skip users with `notification_prefs.marketing == false`
+- **Testability**: models and helpers are pure; screens accept injectable streams/loaders/callbacks (`items`, `loader`, `clock`, `tileLayer`, …) so widget tests run without Firebase. Source-guard tests (`File(...).readAsStringSync()`) pin owner decisions — read the guard before changing what it protects
 - **Wallet integrity**: never write to `wallets/*` from the client — Firestore rules block it; all balance changes go through Cloud Functions
