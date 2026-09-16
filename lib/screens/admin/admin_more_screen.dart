@@ -7,6 +7,7 @@ import 'package:zyiarah/screens/admin/admin_users_screen.dart';
 import 'package:zyiarah/screens/admin/admin_drivers_screen.dart';
 import 'package:zyiarah/screens/admin/admin_support_screen.dart';
 import 'package:zyiarah/screens/admin/admin_banners_screen.dart';
+import 'package:zyiarah/screens/admin/admin_policies_screen.dart';
 import 'package:zyiarah/screens/admin/admin_coupons_screen.dart';
 import 'package:zyiarah/screens/admin/admin_contracts_screen.dart';
 import 'package:zyiarah/screens/admin/admin_managers_screen.dart';
@@ -223,6 +224,15 @@ class AdminMoreScreen extends StatelessWidget {
             'color': Colors.blueAccent,
             'page': const AdminHourlyZonesScreen(),
             'roles': ['super_admin', 'orders_manager'],
+          },
+          {
+            // (تصميم Stitch) بنود الشروط المصنَّفة — الكتابة للسوبر وحده في
+            // firestore.rules، فلا نعرضها لدور يعجز عن حفظ شيء.
+            'title': 'شروط وضوابط الخدمة',
+            'icon': Icons.gavel_rounded,
+            'color': Colors.brown,
+            'page': const AdminPoliciesScreen(),
+            'roles': ['super_admin'],
           },
           {
             'title': 'إعدادات النظام',
