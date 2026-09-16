@@ -18,6 +18,7 @@ import 'package:zyiarah/screens/admin/admin_subscriptions_screen.dart';
 import 'package:zyiarah/screens/admin/admin_event_worker_packages_screen.dart';
 import 'package:zyiarah/screens/admin/admin_audit_logs_screen.dart';
 import 'package:zyiarah/screens/admin/admin_analytics_screen.dart';
+import 'package:zyiarah/screens/admin/admin_fleet_map_screen.dart';
 import 'package:zyiarah/screens/admin/admin_invoices_screen.dart';
 import 'package:zyiarah/screens/admin/admin_schedule_board_screen.dart';
 import 'package:zyiarah/screens/admin/admin_broadcast_screen.dart';
@@ -183,6 +184,14 @@ class AdminMoreScreen extends StatelessWidget {
             'color': const Color(0xFF7C3AED),
             'page': const AdminScheduleBoardScreen(),
             'roles': ['super_admin', 'accountant_admin', 'orders_manager'],
+          },
+          {
+            // رادار الأسطول: كل سائق في مهمة الآن على خريطة واحدة (Stitch _21).
+            'title': 'رادار الأسطول المباشر',
+            'icon': Icons.radar_rounded,
+            'color': const Color(0xFF0369A1),
+            'page': const AdminFleetMapScreen(),
+            'roles': ['super_admin', 'orders_manager'],
           },
           {
             'title': 'لوحة الإحصائيات والأرباح',
