@@ -111,6 +111,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   final TextEditingController _phoneController = TextEditingController();
   double _discountAmount = 0.0;
   String? _appliedCoupon;
+  /// نسبة الكوبون المطبَّق (null = خصم ثابت أو لا كوبون) — لإعادة الحساب حين
+  /// تتغيّر الذروة أو الوعورة بعد التطبيق.
+  double? _couponPercent;
   bool _isValidatingCoupon = false;
   bool _needsPhoneUpdate = false;
 
@@ -221,6 +224,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           if (mounted && factor != _surgeFactor) {
             setState(() {
               _surgeFactor = factor;
+              _recomputePercentDiscount();
               // تغيّر الإجمالي بعد إنشاء مستند الطلب = مبلغه مجمّد متقادم — معرّف جديد.
               if (_pendingOrderCreated) _mintFreshPendingOrderId();
             });
@@ -281,10 +285,24 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           .get();
       if (q.docs.isEmpty) return;
       final pct = terrainPercentFrom(q.docs.first.data()['terrain_surcharge_percent']);
-      if (mounted && pct != _terrainPct) setState(() => _terrainPct = pct);
+      if (mounted && pct != _terrainPct) {
+        setState(() {
+          _terrainPct = pct;
+          _recomputePercentDiscount();
+          // تغيّر الإجمالي بعد إنشاء مستند الطلب = مبلغه مجمّد متقادم — معرّف جديد.
+          if (_pendingOrderCreated) _mintFreshPendingOrderId();
+        });
+      }
     } catch (e) {
       debugPrint('[terrain] zone fetch failed: $e');
     }
+  }
+
+  /// كوبون النسبة يُعاد حسابه حين تتغيّر الذروة أو الوعورة بعد تطبيقه — وإلا بقي
+  /// محسوباً على مشحونٍ قديم فخالف ما يحسبه الخادم في _computeTrustedDiscount.
+  void _recomputePercentDiscount() {
+    final p = _couponPercent;
+    if (p != null) _discountAmount = _breakdown.grossBeforeDiscount * (p / 100);
   }
 
   // الحسابات المالية الصحيحة (بافتراض أن المبلغ شامل للضريبة، مع تطبيق الوعورة
@@ -486,8 +504,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           if (couponData['type'] == 'percentage') {
             // النسبة على المشحون قبل الخصم (الوعورة ثم Surge — هو ما يُدفع فعلاً)،
             // كما يحسبها الخادم في _computeTrustedDiscount على الأساس المُرسَّم.
+            _couponPercent = value;
             _discountAmount = _breakdown.grossBeforeDiscount * (value / 100);
           } else {
+            _couponPercent = null;
             _discountAmount = value;
           }
           ScaffoldMessenger.of(context).showSnackBar(
@@ -495,6 +515,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           );
         } else {
           _appliedCoupon = null;
+          _couponPercent = null;
           _discountAmount = 0.0;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("كود الخصم غير صحيح أو منتهي"), backgroundColor: Colors.red),
@@ -1566,6 +1587,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                     if (_appliedCoupon != null) {
                       setState(() {
                         _appliedCoupon = null;
+                        _couponPercent = null;
                         _discountAmount = 0.0;
                         // الإجمالي تغيّر ومستند الطلب (إن وُجد) مجمّد على القديم.
                         if (_pendingOrderCreated) _mintFreshPendingOrderId();

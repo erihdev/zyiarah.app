@@ -28,6 +28,8 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
   final TextEditingController _imageCtrl = TextEditingController();
 
   bool _isScheduled = false;
+  // (تفضيلات التنبيهات) تشغيلي = يصل حتى لمن أوقف «العروض والتسويق»؛ افتراضياً تسويقي.
+  bool _operational = false;
   DateTime? _scheduledTime;
 
   @override
@@ -89,6 +91,8 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
               // الجدولة للإشعار (Push) فقط — الإعلان المنبثق يظهر عند فتح العميل للتطبيق.
               if (_notifType == 'push') ...[
                 const SizedBox(height: 30),
+                _buildOperationalToggle(),
+                const SizedBox(height: 30),
                 _buildSchedulingSection(),
               ],
               
@@ -107,6 +111,38 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// (تفضيلات التنبيهات — Stitch `_52`) البثّ تسويقي افتراضياً فلا يصل من أوقف
+  /// «العروض والتسويق» في تطبيقه؛ التشغيلي (صيانة/انقطاع/تنبيه مواعيد) يصل الجميع —
+  /// الخادم يقرأ `operational` من notifications_log.
+  Widget _buildOperationalToggle() {
+    const navy = Color(0xFF1E293B);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: _operational ? navy.withValues(alpha: 0.1) : Colors.transparent),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: SwitchListTile.adaptive(
+        value: _operational,
+        contentPadding: EdgeInsets.zero,
+        secondary: Icon(Icons.campaign_rounded, color: _operational ? navy : Colors.grey),
+        title: Text('إشعار تشغيلي (يصل حتى لمن أوقف العروض)',
+            style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 14, color: _operational ? navy : Colors.grey[700])),
+        subtitle: Text(
+          _operational
+              ? 'صيانة أو انقطاع أو تنبيه مواعيد — يصل كل المستهدفين'
+              : 'بثّ تسويقي: لا يصل من أوقف «العروض والتسويق» في تفضيلاته',
+          style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey[600]),
+        ),
+        activeTrackColor: navy.withValues(alpha: 0.5),
+        activeThumbColor: navy,
+        onChanged: (v) => setState(() => _operational = v),
       ),
     );
   }
@@ -502,6 +538,7 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
           // uid الفعلي لا 'Admin': القواعد تسمح لمدير الطلبات/التسويق برؤية
           // وإلغاء مجدولاته هو فقط (created_by == uid) — بدونه يختفي عنه ما جدوله.
           createdBy: FirebaseAuth.instance.currentUser?.uid,
+          operational: _operational,
         );
       } else {
         // 1. تسجيل العملية في سجل البث (History)
@@ -523,6 +560,7 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
           'target': mappedTarget,
           'created_at': FieldValue.serverTimestamp(),
           'type': 'admin_broadcast',
+          'operational': _operational,
         });
       }
 

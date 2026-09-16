@@ -137,6 +137,14 @@ void main() {
     expect(web.contains('governorate: newZone.governorate.trim(),'), isTrue);
     expect(web.contains("toast.error('رسوم الوعورة يجب أن تكون بين 0 و100%')"), isTrue);
 
+    // تفاصيل الطلب الإدارية تعرض سطر الوعورة إن وُجد.
+    final details = _read('lib/screens/admin/admin_order_details_screen.dart');
+    expect(details.contains('منها رسوم الوعورة (قبل الضريبة)'), isTrue);
+    // كوبون النسبة يُعاد حسابه حين تصل الوعورة/الذروة بعد تطبيقه.
+    expect(pay.contains('_recomputePercentDiscount();'), isTrue);
+    expect('_recomputePercentDiscount();'.allMatches(pay).length, 2,
+        reason: 'بعد جلب الذروة وبعد جلب الوعورة');
+
     // الموثَّق في المخطط.
     final bp = _read('ZIYARAH_BLUEPRINT.md');
     expect(bp.contains('terrain_surcharge_percent'), isTrue);

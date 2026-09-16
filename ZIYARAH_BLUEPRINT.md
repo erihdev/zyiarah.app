@@ -103,6 +103,7 @@ lib/
 ```
 Firestore
 ├── users/                    ← عملاء + مشرفون
+│   ├── {uid}.notification_prefs.marketing (bool، افتراضي true — العميل يوقف «العروض والتسويق» فقط؛ البثّ التشغيلي operational=true يصل دائماً)
 │   └── {uid}/
 │       ├── name, email, phone, role
 │       ├── has_active_subscription (bool)
