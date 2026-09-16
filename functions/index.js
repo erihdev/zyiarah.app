@@ -8,6 +8,7 @@ const admin = require("firebase-admin");
 const geofire = require("geofire-common");
 const {computeExpectedBasePrice, resolveMaterialsBase, applyTerrainSurcharge} =
   require("./pricing");
+const {isMarketingBroadcast, excludeOptedOut} = require("./notify_prefs");
 const {countBookings, zoneDailyCap} = require("./capacity");
 admin.initializeApp();
 
@@ -506,8 +507,18 @@ exports.notifyClientOnMaintenanceRejected = onDocumentUpdated(
  * @param {Object} data Notification payload (title, body, target).
  * @return {Promise<void>}
  */
+/** من أوقف «العروض والتسويق» في تفضيلاته (users.notification_prefs.marketing=false). */
+async function _marketingOptOutUids() {
+  const snap = await admin.firestore().collection("users")
+      .where("notification_prefs.marketing", "==", false).get();
+  return new Set(snap.docs.map((d) => d.id));
+}
+
 async function _deliverBroadcast(docRef, data) {
   const {title, body, target = "all"} = data;
+  // تفضيلات التنبيهات: البثّ التسويقي لا يصل (بوش ولا صندوق داخل التطبيق) لمن أوقف
+  // «العروض والتسويق»؛ التشغيلي (operational=true) يصل كل المستهدفين.
+  const optOut = isMarketingBroadcast(data) ? await _marketingOptOutUids() : new Set();
   const payload = {
     notification: {title, body},
     data: {click_action: "FLUTTER_NOTIFICATION_CLICK", type: "global_broadcast"},
@@ -524,8 +535,10 @@ async function _deliverBroadcast(docRef, data) {
       tokQuery = tokQuery.where("role", "in", ["admin", "super_admin"]);
     }
     const tokSnap = await tokQuery.get();
+    // fcm_tokens معرّفها uid (القواعد: request.auth.uid == tokenId) — فالإسقاط بالمعرّف.
     const uniqTokens = [...new Set(
-        tokSnap.docs.map((d) => d.data().token || d.data().fcmToken).filter(Boolean))];
+        excludeOptedOut(tokSnap.docs, optOut)
+            .map((d) => d.data().token || d.data().fcmToken).filter(Boolean))];
     let sent = 0; let failed = 0; const invalid = [];
     for (let i = 0; i < uniqTokens.length; i += 500) {
       const chunk = uniqTokens.slice(i, i + 500);
@@ -548,7 +561,7 @@ async function _deliverBroadcast(docRef, data) {
       const q = await admin.firestore().collection("fcm_tokens").where("token", "==", bad).limit(5).get();
       for (const dd of q.docs) await dd.ref.delete().catch(() => {});
     }
-    console.log(`broadcast(${target}) tokens: sent=${sent} failed=${failed} cleaned=${invalid.length}`);
+    console.log(`broadcast(${target}) tokens: sent=${sent} failed=${failed} cleaned=${invalid.length} optOut=${optOut.size}`);
 
     let query = admin.firestore().collection("users");
     if (target === "clients") {
@@ -559,7 +572,7 @@ async function _deliverBroadcast(docRef, data) {
     const usersSnap = await query.get();
     let batch = admin.firestore().batch();
     let count = 0;
-    for (const userDoc of usersSnap.docs) {
+    for (const userDoc of excludeOptedOut(usersSnap.docs, optOut)) {
       const notifRef = admin.firestore().collection("notifications").doc();
       batch.set(notifRef, {
         userId: userDoc.id, title, body,

@@ -342,6 +342,8 @@ class ZyiarahMessagingService {
     required String target,
     required DateTime scheduledAt,
     String? createdBy,
+    // (تفضيلات التنبيهات) تشغيلي = يصل حتى لمن أوقف «العروض والتسويق».
+    bool operational = false,
   }) async {
     try {
       // يجب أن تُكتب في notifications_log بحالة 'scheduled' — releaseScheduledNotifications
@@ -356,6 +358,7 @@ class ZyiarahMessagingService {
         'created_by': createdBy ?? 'Admin',
         'processed': false,
         'status': 'scheduled',
+        'operational': operational,
       });
     } catch (e) {
       debugPrint("Error scheduling broadcast: $e");

@@ -21,12 +21,18 @@ class ClientNotificationsScreen extends StatefulWidget {
   final Future<void> Function(List<String> ids)? markRead;
   final void Function(BuildContext context, String route)? navigate;
 
+  /// (تفضيلات التنبيهات) قراءة/حفظ مفتاح «العروض والتسويق» — للاختبارات.
+  final Future<bool> Function()? loadMarketingPref;
+  final Future<void> Function(bool enabled)? saveMarketingPref;
+
   const ClientNotificationsScreen({
     super.key,
     this.items,
     this.uid,
     this.markRead,
     this.navigate,
+    this.loadMarketingPref,
+    this.saveMarketingPref,
   });
 
   @override
@@ -262,7 +268,7 @@ class _ClientNotificationsScreenState extends State<ClientNotificationsScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _header(unread),
+        _header(uid, unread),
         const SizedBox(height: 10),
         _filterChips(countOf),
         const SizedBox(height: 12),
@@ -296,7 +302,7 @@ class _ClientNotificationsScreenState extends State<ClientNotificationsScreen> {
     }
   }
 
-  Widget _header(List<NotificationItem> unread) {
+  Widget _header(String uid, List<NotificationItem> unread) {
     return Row(children: [
       Expanded(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -325,7 +331,120 @@ class _ClientNotificationsScreenState extends State<ClientNotificationsScreen> {
           color: ZyiarahTheme.brand,
         ),
       ),
+      IconButton(
+        tooltip: 'تفضيلات التنبيهات',
+        onPressed: () => _openPrefs(uid),
+        icon: const Icon(Icons.tune_rounded, color: ZyiarahTheme.brand),
+      ),
     ]);
+  }
+
+  // ── تفضيلات التنبيهات (Stitch `_52` «تفضيلات تنبيهات الزيارة») ──
+  // مفتاح واحد: «العروض والتسويق». تنبيهات الطلبات والمدفوعات والمواعيد تصل دائماً
+  // (تُرسل عبر notification_triggers لا عبر البثّ). يُخزَّن في
+  // users/{uid}.notification_prefs.marketing ويقرؤه الخادم عند كل بثّ تسويقي.
+  Future<bool> _loadPref(String uid) async {
+    if (widget.loadMarketingPref != null) return widget.loadMarketingPref!();
+    final d = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final prefs = d.data()?['notification_prefs'];
+    return prefs is Map ? prefs['marketing'] != false : true;
+  }
+
+  Future<void> _savePref(String uid, bool enabled) async {
+    if (widget.saveMarketingPref != null) return widget.saveMarketingPref!(enabled);
+    await FirebaseFirestore.instance.collection('users').doc(uid).set(
+      {'notification_prefs': {'marketing': enabled}},
+      SetOptions(merge: true),
+    );
+  }
+
+  Future<void> _openPrefs(String uid) async {
+    bool current = true;
+    bool loadFailed = false;
+    try {
+      current = await _loadPref(uid);
+    } catch (e) {
+      debugPrint('[notification_prefs] load failed: $e');
+      loadFailed = true;
+    }
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (sheetCtx) {
+        bool value = current;
+        bool saving = false;
+        return StatefulBuilder(builder: (sheetCtx, setSheet) {
+          return Directionality(
+            textDirection: TextDirection.rtl,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('تفضيلات التنبيهات',
+                      style: GoogleFonts.tajawal(
+                          fontSize: 17, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'تنبيهات طلباتك ومدفوعاتك ومواعيدك تصلك دائماً — هنا تتحكّم بالعروض فقط.',
+                    style: GoogleFonts.tajawal(
+                        fontSize: 12, color: ZyiarahTheme.inkMuted),
+                  ),
+                  if (loadFailed)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text('تعذّر قراءة الإعداد الحالي — يُعرض الافتراضي.',
+                          style: GoogleFonts.tajawal(
+                              fontSize: 12, color: ZyiarahTheme.error)),
+                    ),
+                  const SizedBox(height: 8),
+                  SwitchListTile.adaptive(
+                    value: value,
+                    contentPadding: EdgeInsets.zero,
+                    activeThumbColor: ZyiarahTheme.brand,
+                    title: Text('العروض والتسويق',
+                        style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                    subtitle: Text(
+                      value
+                          ? 'تصلك الخصومات والباقات الجديدة'
+                          : 'لن يصلك أي بثّ تسويقي — التنبيهات التشغيلية فقط',
+                      style: GoogleFonts.tajawal(
+                          fontSize: 12, color: ZyiarahTheme.inkMuted),
+                    ),
+                    onChanged: saving
+                        ? null
+                        : (v) async {
+                            setSheet(() {
+                              value = v;
+                              saving = true;
+                            });
+                            try {
+                              await _savePref(uid, v);
+                            } catch (e) {
+                              debugPrint('[notification_prefs] save failed: $e');
+                              if (sheetCtx.mounted) setSheet(() => value = !v);
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text('تعذّر حفظ التفضيل — حاول مجدداً'),
+                                      backgroundColor: Colors.red),
+                                );
+                              }
+                            } finally {
+                              if (sheetCtx.mounted) setSheet(() => saving = false);
+                            }
+                          },
+                  ),
+                ],
+              ),
+            ),
+          );
+        });
+      },
+    );
   }
 
   Widget _filterChips(int Function(NotificationCategory?) countOf) {
