@@ -58,10 +58,6 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
     final TextEditingController nameCtrl = TextEditingController(text: currentData?['name'] ?? '');
     final TextEditingController phoneCtrl = TextEditingController(text: currentData?['phone'] ?? '');
     final TextEditingController emailCtrl = TextEditingController(text: currentData?['email'] ?? '');
-    // نقرأ vehicle أيضاً: تعديلات لوحة الويب كانت تكتبه وحده، فسائقٌ عُدِّل هناك
-    // كان يفتح هنا بحقل مركبة فارغ ثم يُحفظ فارغاً فوق البيانات الصحيحة.
-    final TextEditingController carInfoCtrl = TextEditingController(
-        text: currentData?['car_info'] ?? currentData?['vehicle'] ?? '');
     final TextEditingController licenseCtrl = TextEditingController(text: currentData?['license_info'] ?? '');
     final TextEditingController nationalityCtrl = TextEditingController(text: currentData?['nationality'] ?? '');
     final TextEditingController idNumberCtrl = TextEditingController(text: currentData?['id_number'] ?? '');
@@ -308,9 +304,9 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                           _buildLuxuryField(controller: idExpiryCtrl, label: "تاريخ انتهاء الوثيقة (YYYY-MM-DD)", icon: Icons.event_busy_rounded, enabled: !isSaving),
                           const SizedBox(height: 20),
                           
+                          // (قرار المالك، 2026-09-16) لا حقل مركبة: المركبات مركبات
+                          // المؤسسة لا السائق — بقيت رخصة القيادة لأنها صفة الشخص.
                           if (type == 'driver') ...[
-                            _buildLuxuryField(controller: carInfoCtrl, label: "بيانات المركبة (النوع واللوحة)", icon: Icons.minor_crash_rounded, enabled: !isSaving),
-                            const SizedBox(height: 20),
                             _buildLuxuryField(controller: licenseCtrl, label: "رقم رخصة القيادة", icon: Icons.checklist_rtl_rounded, enabled: !isSaving),
                           ],
                           const SizedBox(height: 20),
@@ -364,10 +360,6 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                       final data = {
                                         'name': name,
                                         'phone': phoneCtrl.text.trim(),
-                                        'car_info': carInfoCtrl.text.trim(),
-                                        // نكتب الاسمين: لوحة الويب تقرأ vehicle أولاً،
-                                        // فتركُه قديماً يُظلّل هذا التعديل هناك للأبد.
-                                        'vehicle': carInfoCtrl.text.trim(),
                                         'license_info': licenseCtrl.text.trim(),
                                         'type': type,
                                         'nationality': nationalityCtrl.text.trim(),
@@ -393,7 +385,6 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                         name: name,
                                         phone: phoneCtrl.text.trim(),
                                         email: email,
-                                        carInfo: carInfoCtrl.text.trim(),
                                         licenseInfo: licenseCtrl.text.trim(),
                                         role: type,
                                         isActive: true,
@@ -435,7 +426,6 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
       nameCtrl.dispose();
       phoneCtrl.dispose();
       emailCtrl.dispose();
-      carInfoCtrl.dispose();
       licenseCtrl.dispose();
       nationalityCtrl.dispose();
       idNumberCtrl.dispose();

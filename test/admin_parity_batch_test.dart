@@ -45,12 +45,17 @@ void main() {
     }
   });
 
-  test('حقل المركبة يُكتب بالاسمين فلا يُظلّل أحدهما الآخر', () {
-    // الويب يقرأ `vehicle || car_info`، فأول تعديل من الويب يُنشئ vehicle ثم
-    // يبقى كل تعديل لاحق من التطبيق (يكتب car_info) غير مرئي هناك للأبد.
-    expect(webDrivers.contains('car_info: editForm.vehicle'), isTrue);
-    expect(read('lib/screens/admin/admin_drivers_screen.dart')
-        .contains("'vehicle': carInfoCtrl.text.trim()"), isTrue);
+  test('لا حقل مركبة في أيٍّ من اللوحتين — المركبات مركبات المؤسسة', () {
+    // (قرار المالك 2026-09-16، مطابقةً لمواصفات Stitch) السائقون موظفون
+    // يقودون أسطول المؤسسة؛ حقل «بيانات المركبة» حُذف من التطبيق والويب معاً،
+    // وبقيت رخصة القيادة لأنها صفة الشخص. البيانات المخزَّنة لم تُمسّ.
+    final app = read('lib/screens/admin/admin_drivers_screen.dart');
+    expect(app.contains('carInfoCtrl'), isFalse);
+    expect(app.contains('بيانات المركبة'), isFalse);
+    expect(webDrivers.contains('vehicle'), isFalse);
+    expect(webDrivers.contains('car_info'), isFalse);
+    expect(webDrivers.contains('رقم رخصة القيادة'), isTrue,
+        reason: 'الرخصة باقية');
   });
 
   test('تصنيف الكادر وحقول الهوية موجودة في الويب', () {
