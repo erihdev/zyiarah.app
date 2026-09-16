@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/utils/terrain_surcharge.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/utils/service_pricing_defaults.dart';
 import 'package:zyiarah/utils/firestore_maps.dart';
@@ -227,6 +228,15 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
         text: ((data?['max_orders_per_day'] as num?)?.toInt() ?? 0) > 0
             ? (data!['max_orders_per_day'] as num).toInt().toString()
             : '');
+    // (تسعير القرى والوعورة — قرار المالك 2026-09-16) المحافظة الأم، طبيعة التضاريس،
+    // ورسوم الوعورة % فوق الأساس قبل الضريبة لطلبات هذه القرية (لا على العقود).
+    final governorateCtrl =
+        TextEditingController(text: (data?['governorate'] ?? '').toString());
+    String terrain = (data?['terrain'] ?? '').toString();
+    final double savedTerrainPct =
+        terrainPercentFrom(data?['terrain_surcharge_percent']);
+    final terrainPctCtrl = TextEditingController(
+        text: savedTerrainPct > 0 ? fmtPercent(savedTerrainPct) : '');
     
     // أسعار الساعات (prices) حُذفت من الحوار بطلب المالك — النظافة المنزلية صارت
     // «باقات السكن». الحفظ لا يكتب prices إطلاقاً فلا يمسّ ما لدى المناطق القائمة
@@ -392,6 +402,73 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                       decoration: const InputDecoration(
                         labelText: 'الحدّ اليومي للطلبات في هذه المنطقة (اختياري)',
                         helperText: 'فارغ = السقف العام في إعدادات النظام وحده',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // (تسعير القرى والوعورة) المحافظة الأم — تجمّع القائمة القرى
+                    // تحتها، ورقائق المحافظات القائمة تملأ الحقل بنقرة (تهجئة واحدة).
+                    TextField(
+                      controller: governorateCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'المحافظة التابعة لها (اختياري)',
+                        helperText: 'تُجمَّع القرى والمراكز تحت محافظتها في القائمة',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                      future: zonesFuture,
+                      builder: (_, snap) {
+                        final govs = <String>{};
+                        for (final d in snap.data?.docs ?? const []) {
+                          final g = (d.data()['governorate'] ?? '').toString().trim();
+                          if (g.isNotEmpty) govs.add(g);
+                        }
+                        if (govs.isEmpty) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: [
+                              for (final g in govs)
+                                ActionChip(
+                                  label: Text(g, style: GoogleFonts.tajawal(fontSize: 12)),
+                                  onPressed: () => setDialogState(
+                                      () => governorateCtrl.text = g),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    // طبيعة التضاريس (تصميم Stitch): مرتفعات جبلية / سهلية منبسطة.
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                            value: kTerrainMountain,
+                            label: Text('مرتفعات جبلية'),
+                            icon: Icon(Icons.terrain_rounded)),
+                        ButtonSegment(
+                            value: kTerrainPlain,
+                            label: Text('سهلية منبسطة'),
+                            icon: Icon(Icons.landscape_rounded)),
+                      ],
+                      selected: terrain.isEmpty ? const <String>{} : {terrain},
+                      emptySelectionAllowed: true,
+                      onSelectionChanged: (sel) => setDialogState(
+                          () => terrain = sel.isEmpty ? '' : sel.first),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: terrainPctCtrl,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'رسوم الوعورة % (اختياري)',
+                        helperText:
+                            'تُضاف على الأساس قبل الضريبة لطلبات هذه القرية (0–100) — لا على العقود',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -751,6 +828,15 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                       ));
                       return;
                     }
+                    // رسوم الوعورة: فارغ = 0، وإلا رقم بين 0 و100 (لا قصّ صامت لخطأ كتابة).
+                    final pctRaw = terrainPctCtrl.text.trim();
+                    final double? pctVal = pctRaw.isEmpty ? 0.0 : double.tryParse(pctRaw);
+                    if (pctVal == null || pctVal < 0 || pctVal > 100) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('رسوم الوعورة يجب أن تكون بين 0 و100%'),
+                          backgroundColor: Colors.red));
+                      return;
+                    }
                     setDialogState(() => isSaving = true);
                     try {
                       final newData = {
@@ -758,6 +844,10 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                         'centerLoc': selectedGeo,
                         'radiusKm': radiusVal,
                         'max_orders_per_day': int.tryParse(maxPerDayCtrl.text.trim()) ?? 0,
+                        // (تسعير القرى والوعورة) يقرؤها الخادم (pricing.js) وشاشة الدفع.
+                        'governorate': governorateCtrl.text.trim(),
+                        'terrain': terrain,
+                        'terrain_surcharge_percent': pctVal,
                         // صفر = «غير مسعّرة» فتُعطَّل الخدمة بدل بيعها بسعر افتراضي.
                         // (sofaPrice/rugPrice الطوليان لم يعودا يُكتبان — النظام أُلغي.
                         //  نتركهما في المستندات القائمة بلا مساس: لا قارئ لهما، وحذفهما
@@ -838,6 +928,8 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
       nameCtrl.dispose();
       radiusCtrl.dispose();
       maxPerDayCtrl.dispose();
+      governorateCtrl.dispose();
+      terrainPctCtrl.dispose();
       // الستة الجديدة كانت تُسرَّب في كل فتح/إغلاق للحوار — أُضيفت الحقول ونُسي التخلّص.
       pSofaSqmCtrl.dispose();
       pRugSqmCtrl.dispose();
@@ -888,14 +980,69 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
             final docs = snapshot.data?.docs ?? [];
             if (docs.isEmpty) return const Center(child: Text("لا توجد مناطق تغطية حالياً"));
 
+            // (تصميم Stitch «المحافظات والنطاقات النشطة») القرى تحت محافظاتها؛
+            // بلا أي محافظة مسجَّلة تبقى القائمة المسطّحة كما كانت.
+            final groups = groupByGovernorate<QueryDocumentSnapshot>(
+                docs,
+                (d) => ((d.data() as Map<String, dynamic>)['governorate'] ?? '')
+                    .toString());
+            final showHeaders = groups.any((g) => g.governorate != null);
+            final govCount = groups.where((g) => g.governorate != null).length;
+            final rows = <Object>[
+              if (showHeaders) '$govCount محافظات • ${docs.length} منطقة',
+              for (final g in groups) ...[if (showHeaders) g, ...g.zones],
+            ];
+
             return ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: docs.length,
+              itemCount: rows.length,
               itemBuilder: (context, index) {
-                final doc = docs[index];
+                final row = rows[index];
+                if (row is String) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Text(row,
+                        style: GoogleFonts.tajawal(
+                            fontWeight: FontWeight.w700, color: Colors.grey.shade700)),
+                  );
+                }
+                if (row is GovernorateGroup<QueryDocumentSnapshot>) {
+                  final n = row.zones.length;
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6, bottom: 8),
+                    child: Row(
+                      children: [
+                        Icon(row.governorate == null
+                                ? Icons.location_city_outlined
+                                : Icons.terrain_rounded,
+                            size: 18, color: const Color(0xFF660033)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                              row.governorate == null
+                                  ? 'بلا محافظة'
+                                  : 'محافظة ${row.governorate}',
+                              style: GoogleFonts.tajawal(
+                                  fontWeight: FontWeight.w800, fontSize: 15)),
+                        ),
+                        Text(n == 1 ? 'منطقة واحدة' : '$n مناطق',
+                            style: GoogleFonts.tajawal(
+                                fontSize: 12, color: Colors.grey.shade600)),
+                      ],
+                    ),
+                  );
+                }
+                final doc = row as QueryDocumentSnapshot;
                 final data = doc.data() as Map<String, dynamic>;
 
                 final isEnabled = data['enabled'] as bool? ?? true;
+                final double terrainPct =
+                    terrainPercentFrom(data['terrain_surcharge_percent']);
+                final String terrainKind = (data['terrain'] ?? '').toString();
+                final terrainInfo = [
+                  if (terrainKind.isNotEmpty) terrainLabel(terrainKind),
+                  if (terrainPct > 0) '⛰️ رسوم وعورة +${fmtPercent(terrainPct)}%',
+                ].join(' • ');
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -910,6 +1057,9 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text("نطاق التغطية: ${data['radiusKm']} كم", style: const TextStyle(fontSize: 12)),
+                        if (terrainInfo.isNotEmpty)
+                          Text(terrainInfo,
+                              style: const TextStyle(fontSize: 12, color: Color(0xFF7C2D12))),
                         const SizedBox(height: 2),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

@@ -6,7 +6,8 @@ const {getFunctions} = require("firebase-admin/functions");
 const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const geofire = require("geofire-common");
-const {computeExpectedBasePrice, resolveMaterialsBase} = require("./pricing");
+const {computeExpectedBasePrice, resolveMaterialsBase, applyTerrainSurcharge} =
+  require("./pricing");
 const {countBookings, zoneDailyCap} = require("./capacity");
 admin.initializeApp();
 
@@ -2089,9 +2090,12 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
           // مواد التنظيف داخل الطلب: تُسعَّر من products قبل الحساب. null =
           // تعذّر التحقق ⇒ نترك pkgExpectedGross فارغاً (لا نرفض بلا يقين).
           const matBase = await resolveMaterialsBase(db, od.service_meta);
-          const base = matBase === null ? null :
+          const base0 = matBase === null ? null :
             computeExpectedBasePrice(
                 {...od, materials_base_resolved: matBase}, zq.docs[0].data());
+          // رسوم الوعورة من مستند المنطقة (لا من الطلب) فوق الأساس قبل الضريبة.
+          const base = base0 && base0 > 0 ?
+            applyTerrainSurcharge(base0, zq.docs[0].data()) : base0;
           if (base && base > 0) {
             const surge = await _readSurgeFactor(db);
             pkgExpectedGross = Math.round(base * 1.15 * surge * 100) / 100;
@@ -2480,9 +2484,13 @@ exports.verifyMoyasarPayment = onCall(
             // مواد التنظيف المضافة داخل الطلب تُسعَّر من products قبل الحساب؛
             // null = تعذّر التحقق ⇒ لا نُعيد تسعيراً ولا نرفض دفعاً بلا يقين.
             const matBase = await resolveMaterialsBase(db, od.service_meta);
-            const base = (zoneData && matBase !== null) ?
+            const base0 = (zoneData && matBase !== null) ?
               computeExpectedBasePrice(
                   {...od, materials_base_resolved: matBase}, zoneData) : null;
+            // رسوم الوعورة (terrain_surcharge_percent على مستند المنطقة) فوق الأساس
+            // قبل الضريبة — الذروة والخصم الموثوق والضريبة تُحسب على الأساس المُرسَّم.
+            const base = base0 && base0 > 0 ?
+              applyTerrainSurcharge(base0, zoneData) : base0;
             if (base && base > 0) {
               const surge = await _readSurgeFactor(db);
               const expected = Math.round(base * 1.15 * surge * 100) / 100;
