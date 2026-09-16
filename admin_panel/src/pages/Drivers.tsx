@@ -13,7 +13,6 @@ interface DriverData {
     id: string;
     name: string;
     phone: string;
-    vehicle: string;
     is_available: boolean;
     is_active?: boolean;
     is_suspended?: boolean;
@@ -29,7 +28,7 @@ const StatusBadge = ({ is_available, is_suspended = false }: { is_available: boo
     return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-600 font-bold border border-slate-200 text-xs"><div className="w-2 h-2 rounded-full bg-slate-400"></div>غير متصل</span>;
 };
 
-const EMPTY_EDIT = { name: '', phone: '', vehicle: '', monthly_salary: 0 };
+const EMPTY_EDIT = { name: '', phone: '', monthly_salary: 0 };
 
 export default function Drivers() {
     const { toast } = useNotification();
@@ -41,7 +40,7 @@ export default function Drivers() {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isAdding, setIsAdding] = useState(false);
     const [newDriver, setNewDriver] = useState({
-        name: '', phone: '', email: '', vehicle: '', monthly_salary: 0,
+        name: '', phone: '', email: '', monthly_salary: 0,
         type: 'driver', nationality: '', id_number: '', id_expiry: '', license_info: '',
     });
 
@@ -72,7 +71,7 @@ export default function Drivers() {
             const fetched = snapshot.docs.map((d: QueryDocumentSnapshot<DocumentData>) => {
                 const data = d.data();
                 if (data.is_available) available++;
-                return { ...data, id: d.id, name: data.name || 'غير محدد', phone: data.phone || 'غير محدد', vehicle: data.vehicle || data.car_info || 'غير محدد', is_available: data.is_available || false, is_suspended: data.is_suspended || false, is_active: data.is_active !== false, rating: data.rating_avg ?? data.rating ?? 5.0, rides: data.rating_count ?? data.rides ?? 0, monthly_salary: data.monthly_salary || 0, photo_url: data.photo_url || '' } as DriverData;
+                return { ...data, id: d.id, name: data.name || 'غير محدد', phone: data.phone || 'غير محدد', is_available: data.is_available || false, is_suspended: data.is_suspended || false, is_active: data.is_active !== false, rating: data.rating_avg ?? data.rating ?? 5.0, rides: data.rating_count ?? data.rides ?? 0, monthly_salary: data.monthly_salary || 0, photo_url: data.photo_url || '' } as DriverData;
             });
             setDrivers(fetched);
             setIsAvailableCount(available);
@@ -130,9 +129,6 @@ export default function Drivers() {
                     role: staffType,
                     // type: يقرؤه عدّاد السائقين وكشف الرواتب — بدونه يُصنَّف الجميع افتراضياً.
                     type: staffType,
-                    // car_info هو الحقل الذي يقرؤه التطبيق؛ vehicle للتوافق مع تعديل الويب.
-                    car_info: newDriver.vehicle,
-                    vehicle: newDriver.vehicle,
                     // حقول الهوية والامتثال — كان الويب يُسقطها فيبقى الكادر بلا
                     // جنسية ولا رقم هوية ولا تاريخ انتهاء، ولا سبيل لاستكمالها إلا
                     // من التطبيق. (تُقرأ وتُكتب في تطبيق الأدمن.)
@@ -166,7 +162,7 @@ export default function Drivers() {
             toast.success(`تم إنشاء حساب ${name} — أُرسل رابط تعيين كلمة المرور إلى ${email}`);
             setIsAddModalOpen(false);
             setNewDriver({
-                name: '', phone: '', email: '', vehicle: '', monthly_salary: 0,
+                name: '', phone: '', email: '', monthly_salary: 0,
                 type: 'driver', nationality: '', id_number: '', id_expiry: '', license_info: '',
             });
             setAddPhotoFile(null);
@@ -188,7 +184,7 @@ export default function Drivers() {
     // ── Edit ──
     const openEdit = (driver: DriverData) => {
         setEditDriver(driver);
-        setEditForm({ name: driver.name, phone: driver.phone, vehicle: driver.vehicle, monthly_salary: driver.monthly_salary });
+        setEditForm({ name: driver.name, phone: driver.phone, monthly_salary: driver.monthly_salary });
     };
 
     const handleSaveEdit = async (e: React.FormEvent) => {
@@ -199,12 +195,6 @@ export default function Drivers() {
             await updateDoc(doc(db, 'drivers', editDriver.id), {
                 name: editForm.name,
                 phone: editForm.phone,
-                // car_info هو الحقل الذي يقرؤه التطبيق؛ vehicle للتوافق مع القراءة
-                // هنا. كتابة vehicle وحده كانت **تُظلّل** التطبيق للأبد: القراءة
-                // `vehicle || car_info` تُفضّل vehicle، فأول تعديل من الويب يُنشئه
-                // ثم يبقى أي تعديل لاحق من التطبيق (يكتب car_info) غير مرئي هنا.
-                vehicle: editForm.vehicle,
-                car_info: editForm.vehicle,
                 monthly_salary: editForm.monthly_salary,
             });
             await logAudit(AUDIT.UPDATE_DRIVER, { name: editForm.name }, editDriver.id);
@@ -374,7 +364,6 @@ export default function Drivers() {
 
                             <div className="space-y-3 mb-6">
                                 <div className="flex items-center gap-2 text-sm text-slate-600 font-medium"><Phone size={16} className="text-slate-400" /><span dir="ltr">{driver.phone}</span></div>
-                                <div className="flex items-center gap-2 text-sm text-slate-600 font-medium"><span className="text-slate-400 font-bold">المركبة:</span><span>{driver.vehicle}</span></div>
                             </div>
 
                             <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-4 mb-4">
@@ -476,13 +465,10 @@ export default function Drivers() {
                                 <label className="block text-sm font-extrabold text-slate-700">تاريخ انتهاء الوثيقة</label>
                                 <input type="date" aria-label="تاريخ انتهاء الوثيقة" value={newDriver.id_expiry} onChange={e => setNewDriver({ ...newDriver, id_expiry: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium" dir="ltr" />
                             </div>
-                            {/* المركبة والرخصة لسائق التوصيل فقط — كادر التنظيف لا يقود. */}
+                            {/* الرخصة لسائق التوصيل فقط — كادر التنظيف لا يقود. لا حقل مركبة:
+                                المركبات مركبات المؤسسة (قرار المالك 2026-09-16). */}
                             {newDriver.type === 'driver' && (
                                 <>
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-extrabold text-slate-700">بيانات المركبة (اختياري)</label>
-                                        <input type="text" placeholder="مثال: تويوتا كامري 2023 - أ ب ج ١٢٣٤" value={newDriver.vehicle} onChange={e => setNewDriver({ ...newDriver, vehicle: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium" />
-                                    </div>
                                     <div className="space-y-2">
                                         <label className="block text-sm font-extrabold text-slate-700">رقم رخصة القيادة (اختياري)</label>
                                         <input type="text" value={newDriver.license_info} onChange={e => setNewDriver({ ...newDriver, license_info: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium" dir="ltr" />
@@ -541,10 +527,6 @@ export default function Drivers() {
                             <div className="space-y-2">
                                 <label className="block text-sm font-extrabold text-slate-700">رقم الجوال</label>
                                 <input type="tel" required value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#660033] focus:ring-2 focus:ring-[#660033]/20 transition-all font-medium" dir="ltr" />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="block text-sm font-extrabold text-slate-700">بيانات المركبة</label>
-                                <input type="text" value={editForm.vehicle} onChange={e => setEditForm({ ...editForm, vehicle: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#660033] focus:ring-2 focus:ring-[#660033]/20 transition-all font-medium" />
                             </div>
                             <div className="space-y-2">
                                 <label className="block text-sm font-extrabold text-slate-700">الراتب الشهري (ر.س)</label>

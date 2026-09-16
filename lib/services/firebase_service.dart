@@ -388,7 +388,8 @@ class ZyiarahFirebaseService {
     required String name,
     required String phone,
     required String email,
-    required String carInfo,
+    // مركبات المؤسسة لا السائق — الحقل اختياري ولا يُكتب حين يغيب.
+    String carInfo = '',
     required String licenseInfo,
     required String role,
     required bool isActive,
@@ -404,7 +405,7 @@ class ZyiarahFirebaseService {
     role: role,
     isActive: isActive,
     extraData: {
-      'car_info': carInfo,
+      if (carInfo.trim().isNotEmpty) 'car_info': carInfo,
       'license_info': licenseInfo,
       'photo_url': photoUrl,
       'monthly_salary': monthlySalary,

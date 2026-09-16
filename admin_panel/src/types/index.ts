@@ -14,11 +14,6 @@ export interface Driver {
     id: string;
     name: string;
     phone: string;
-    vehicle: {
-        model: string;
-        plate: string;
-        year: string;
-    };
     status: 'online' | 'offline' | 'busy' | 'suspended';
     rating: number;
     totalRides: number;
