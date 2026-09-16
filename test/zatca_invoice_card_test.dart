@@ -84,8 +84,8 @@ void main() {
     expect(src.contains('InvoiceView.fromOrder(widget.orderCode, data)'), isTrue);
     expect(src.contains('ZatcaService.ensureConfigLoaded()'), isTrue,
         reason: 'بيانات المنشأة من إعدادات النظام لا الافتراضيات وحدها');
-    expect(src.contains('.refFromURL(url)'), isTrue);
-    expect(src.contains('Printing.sharePdf('), isTrue);
+    expect(src.contains('ZyiarahPdfService.shareUploadedInvoice('), isTrue,
+        reason: 'المشاركة عبر الخدمة المشتركة مع سجل الفواتير الإداري');
     expect(src.contains('"مشاركة الفاتورة"'), isTrue);
     expect(src.contains('if (invoiceUrl == null) {'), isTrue,
         reason: 'زرّا التحميل والمشاركة لا يظهران قبل رفع الملف');

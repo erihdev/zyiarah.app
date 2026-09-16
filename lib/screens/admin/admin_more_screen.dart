@@ -18,6 +18,7 @@ import 'package:zyiarah/screens/admin/admin_subscriptions_screen.dart';
 import 'package:zyiarah/screens/admin/admin_event_worker_packages_screen.dart';
 import 'package:zyiarah/screens/admin/admin_audit_logs_screen.dart';
 import 'package:zyiarah/screens/admin/admin_analytics_screen.dart';
+import 'package:zyiarah/screens/admin/admin_invoices_screen.dart';
 import 'package:zyiarah/screens/admin/admin_schedule_board_screen.dart';
 import 'package:zyiarah/screens/admin/admin_broadcast_screen.dart';
 import 'package:zyiarah/utils/pdf_report_util.dart';
@@ -189,6 +190,14 @@ class AdminMoreScreen extends StatelessWidget {
             'color': Colors.teal,
             'page': const AdminAnalyticsScreen(),
             'roles': ['super_admin', 'accountant_admin', 'orders_manager'],
+          },
+          {
+            // سجل فواتير ZATCA لكل الطلبات المدفوعة (خدمات ومتجر) بالشهر.
+            'title': 'سجل الفواتير الإلكترونية (ZATCA)',
+            'icon': Icons.receipt_long_outlined,
+            'color': const Color(0xFF0F766E),
+            'page': const AdminInvoicesScreen(),
+            'roles': ['super_admin', 'accountant_admin'],
           },
           {
             'title': 'سجل العمليات الإدارية',

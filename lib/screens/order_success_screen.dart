@@ -5,8 +5,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:go_router/go_router.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:printing/printing.dart';
 import 'package:zyiarah/models/invoice_view.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
@@ -48,13 +46,8 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen>
     if (_sharingInvoice) return;
     setState(() => _sharingInvoice = true);
     try {
-      final bytes = await FirebaseStorage.instance
-          .refFromURL(url)
-          .getData(10 * 1024 * 1024)
-          .timeout(const Duration(seconds: 30));
-      if (bytes == null) throw Exception('empty invoice file');
-      await Printing.sharePdf(
-          bytes: bytes, filename: 'Zyiarah_Invoice_${widget.orderCode}.pdf');
+      await ZyiarahPdfService.shareUploadedInvoice(
+          url: url, orderCode: widget.orderCode);
     } catch (e) {
       debugPrint('share invoice failed: $e');
       if (mounted) {
