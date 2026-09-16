@@ -222,6 +222,11 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     final Map<String, dynamic>? data = doc?.data() as Map<String, dynamic>?;
     final nameCtrl = TextEditingController(text: data?['name'] ?? '');
     final radiusCtrl = TextEditingController(text: data?['radiusKm']?.toString() ?? '15');
+    // سقف يومي خاص بالمنطقة (اختياري): فارغ/صفر = السقف العام وحده.
+    final maxPerDayCtrl = TextEditingController(
+        text: ((data?['max_orders_per_day'] as num?)?.toInt() ?? 0) > 0
+            ? (data!['max_orders_per_day'] as num).toInt().toString()
+            : '');
     
     // أسعار الساعات (prices) حُذفت من الحوار بطلب المالك — النظافة المنزلية صارت
     // «باقات السكن». الحفظ لا يكتب prices إطلاقاً فلا يمسّ ما لدى المناطق القائمة
@@ -377,6 +382,18 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                       decoration: const InputDecoration(labelText: 'نصف القطر للتغطية (كم)', border: OutlineInputBorder()),
                       // إعادة الرسم عند كل تغيير كي تتحدث دائرة التغطية حيّاً.
                       onChanged: (_) => setDialogState(() {}),
+                    ),
+                    const SizedBox(height: 10),
+                    // (قرار المالك 2026-09-16) سقف يومي خاص بالمنطقة يضيّق السقف
+                    // العام (إعدادات النظام) للمناطق البعيدة أو الوعرة — لا يوسّعه.
+                    TextField(
+                      controller: maxPerDayCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'الحدّ اليومي للطلبات في هذه المنطقة (اختياري)',
+                        helperText: 'فارغ = السقف العام في إعدادات النظام وحده',
+                        border: OutlineInputBorder(),
+                      ),
                     ),
                     const SizedBox(height: 10),
 
@@ -740,6 +757,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                         'name': nameCtrl.text.trim(),
                         'centerLoc': selectedGeo,
                         'radiusKm': radiusVal,
+                        'max_orders_per_day': int.tryParse(maxPerDayCtrl.text.trim()) ?? 0,
                         // صفر = «غير مسعّرة» فتُعطَّل الخدمة بدل بيعها بسعر افتراضي.
                         // (sofaPrice/rugPrice الطوليان لم يعودا يُكتبان — النظام أُلغي.
                         //  نتركهما في المستندات القائمة بلا مساس: لا قارئ لهما، وحذفهما
@@ -819,6 +837,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
       nameDebounce?.cancel();
       nameCtrl.dispose();
       radiusCtrl.dispose();
+      maxPerDayCtrl.dispose();
       // الستة الجديدة كانت تُسرَّب في كل فتح/إغلاق للحوار — أُضيفت الحقول ونُسي التخلّص.
       pSofaSqmCtrl.dispose();
       pRugSqmCtrl.dispose();
