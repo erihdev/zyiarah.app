@@ -9,6 +9,7 @@ import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/contract_signing_screen.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/services/zone_locator_service.dart';
+import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
 
 /// باقات عاملات المناسبات — جاهزة ومسعّرة مسبقاً (بدل الإدخال الحر السابق):
@@ -51,8 +52,10 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
   List<Map<String, dynamic>> _zones = [];
 
   int _maxOrdersPerDay = 10;
+  int? _zoneMaxOrdersPerDay; // سقف المنطقة الخاص (اختياري — يضيّق العام فقط)
   int _maxTeamsPerSlot = 5;
   Map<String, int> _dailyOrderCounts = {};
+  Map<String, int> _zoneDailyCounts = {}; // طلبات منطقة العميل وحدها بالتاريخ
   Map<String, int> _slotCounts = {}; // "yyyy-MM-dd_HH:00" → طلبات في الخانة
   bool _loadingDailyCounts = true;
   // فشل جلب الإتاحة: بدون هذا العلم كانت الخرائط تبقى فارغة فيُعرض كل يوم/خانة
@@ -129,12 +132,14 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
       return;
     }
 
+    final String? zoneBefore = _userZoneName;
     setState(() {
       _userLocation = res.location;
       _userZoneName = res.zoneName;
       _isLocating = false;
       _locateFailure = null;
     });
+    _reloadAvailabilityIfZoneChanged(zoneBefore);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text("تم تحديد موقعك تلقائياً: $_userZoneName"),
       backgroundColor: _brand,
@@ -177,12 +182,14 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
     }
 
     final matchedZone = ZyiarahZoneLocator.matchZone(loc, _zones);
+    final String? zoneBefore = _userZoneName;
     if (matchedZone != null) {
       setState(() {
         _userLocation = loc;
         _userZoneName = matchedZone['name'] as String?;
         _locateFailure = null;
       });
+      _reloadAvailabilityIfZoneChanged(zoneBefore);
     } else {
       setState(() {
         _userLocation = loc;
@@ -194,6 +201,20 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
           backgroundColor: Colors.red));
     }
   }
+
+  /// المنطقة تغيّرت ⇒ نعيد جلب الإتاحة، لأن سقفها اليومي الخاص وعدّها
+  /// يتبعان المنطقة (الإتاحة الأولى تُجلب عند الفتح قبل معرفة المنطقة).
+  void _reloadAvailabilityIfZoneChanged(String? before) {
+    if (before != _userZoneName) _loadAvailabilityFromServer();
+  }
+
+  /// اليوم ممتلئ بالسقف العام **أو** بسقف منطقة العميل الخاص (إن وُجد).
+  bool _dayCapacityFull(String dateStr) => dayIsFull(
+        count: _dailyOrderCounts[dateStr] ?? 0,
+        max: _maxOrdersPerDay,
+        zoneCount: _zoneDailyCounts[dateStr] ?? 0,
+        zoneMax: _zoneMaxOrdersPerDay,
+      );
 
   /// جلب بيانات الإتاحة عبر Cloud Function (Admin SDK — لا قيود صلاحيات).
   /// تُعيد الأعداد الحقيقية للطلبات لكل تاريخ وكل خانة زمنية.
@@ -211,7 +232,12 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
 
       final result = await FirebaseFunctions.instance
           .httpsCallable('getHourlyAvailability')
-          .call({'startDate': startDate, 'endDate': endDate});
+          .call({
+            'startDate': startDate,
+            'endDate': endDate,
+            // المنطقة لسقفها اليومي الخاص (لا لعدّ السائقين — هم بلا مناطق).
+            if (_userZoneName != null) 'zoneName': _userZoneName,
+          });
 
       final data = result.data as Map;
 
@@ -236,22 +262,27 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
       final int maxPerDay = ((data['maxOrdersPerDay'] as num?)?.toInt()) ?? 10;
       final int maxPerSlot =
           ((data['maxTeamsPerSlot'] as num?)?.toInt()) ?? 5;
+      final int? zoneMaxPerDay = (data['zoneMaxOrdersPerDay'] as num?)?.toInt();
+      final Map<String, int> zoneDaily = (data['zoneDailyCounts'] as Map? ?? {})
+          .map((k, v) => MapEntry(k.toString(), int.tryParse('$v') ?? 0));
 
       if (!mounted) return;
       setState(() {
         _dailyOrderCounts = daily;
         _slotCounts = slots;
         _maxOrdersPerDay = maxPerDay;
+        _zoneMaxOrdersPerDay = zoneMaxPerDay;
+        _zoneDailyCounts = zoneDaily;
         _maxTeamsPerSlot = maxPerSlot;
         _loadingDailyCounts = false;
 
         // انتقل تلقائياً لأول تاريخ متاح إذا كان المحدد ممتلئاً
         final String selStr = intl.DateFormat('yyyy-MM-dd').format(_selectedDate);
-        if ((daily[selStr] ?? 0) >= maxPerDay) {
+        if (_dayCapacityFull(selStr)) {
           for (int i = 0; i < 30; i++) {
             final candidate = now.add(Duration(days: i + 1));
             final candStr = intl.DateFormat('yyyy-MM-dd').format(candidate);
-            if ((daily[candStr] ?? 0) < maxPerDay) {
+            if (!_dayCapacityFull(candStr)) {
               _selectedDate = candidate;
               break;
             }
@@ -814,8 +845,7 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
           final isSelected = _isSameDay(_selectedDate, date);
 
           final dateStr = intl.DateFormat('yyyy-MM-dd').format(date);
-          final activeOrders = _dailyOrderCounts[dateStr] ?? 0;
-          final isFullyBooked = activeOrders >= _maxOrdersPerDay;
+          final isFullyBooked = _dayCapacityFull(dateStr);
 
           return GestureDetector(
             onTap: isFullyBooked

@@ -33,6 +33,7 @@ import 'package:provider/provider.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
 import 'package:zyiarah/services/counter_service.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:zyiarah/utils/day_capacity.dart';
 
 
 
@@ -517,7 +518,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     try {
       final result = await FirebaseFunctions.instance
           .httpsCallable('getHourlyAvailability')
-          // نمرّر المنطقة لجلب جدول فتحها (لا للسعة — السائقون بلا مناطق).
+          // نمرّر المنطقة لجلب جدول فتحها وسقفها اليومي الخاص (لا لعدّ
+          // السائقين — هم بلا مناطق).
           .call({
             'startDate': bookingDate,
             'endDate': bookingDate,
@@ -554,7 +556,15 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       return 'نعتذر، لا نخدم منطقتك في هذا اليوم. يرجى اختيار يوم آخر.';
     }
 
-    if (((daily[bookingDate] as num?)?.toInt() ?? 0) >= maxOrdersPerDay) {
+    // سقف المنطقة الخاص (إن ضبطه الأدمن) يضيّق السقف العام فقط — dayIsFull
+    // تجمع السقفين، وهي نفسها التي ترسم بها شاشات الحجز شريط الأيام.
+    final Map zoneDaily = data['zoneDailyCounts'] as Map? ?? {};
+    if (dayIsFull(
+      count: (daily[bookingDate] as num?)?.toInt() ?? 0,
+      max: maxOrdersPerDay,
+      zoneCount: (zoneDaily[bookingDate] as num?)?.toInt() ?? 0,
+      zoneMax: (data['zoneMaxOrdersPerDay'] as num?)?.toInt(),
+    )) {
       return 'نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.';
     }
 

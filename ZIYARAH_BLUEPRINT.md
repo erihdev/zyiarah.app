@@ -216,6 +216,7 @@ Firestore
 │       ├── name (string)
 │       ├── centerLoc (GeoPoint)
 │       ├── radiusKm (double)
+│       ├── max_orders_per_day (int, اختياري — سقف يومي خاص يضيّق السقف العام فقط)
 │       ├── enabled (bool)
 │       ├── rank (int)
 │       ├── prices (Map<String, double>)

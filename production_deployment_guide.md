@@ -76,7 +76,7 @@
 | المهمّة | ما تفحصه |
 |---|---|
 | Flutter Analyze | `flutter analyze --no-fatal-infos` |
-| Flutter Test | ٣٩٨ فحصاً |
+| Flutter Test | ٤٠٢ فحصاً |
 | Flutter Build (full compile) | `flutter build bundle --release` — تصريف إغلاق `main.dart` كله. الوحيد الذي يكشف خطأ تصريف **داخل اعتمادية**: analyze يُبلّغ عن ملفات المشروع وحدها، وtest يصرّف ما تستورده الاختبارات فقط (درس البناء ٣١) |
 | Cloud Functions Tests | lint + ٤٩ فحص وحدة + ٤٢ فحص محاكي (قواعد، أدوار، شروط الخدمة، محفظة) |
 | Admin Panel Build | lint + Vitest + `tsc -b` + بناء |

@@ -7,6 +7,7 @@ const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const geofire = require("geofire-common");
 const {computeExpectedBasePrice, resolveMaterialsBase} = require("./pricing");
+const {countBookings, zoneDailyCap} = require("./capacity");
 admin.initializeApp();
 
 // Secrets — stored in Firebase Secret Manager, never in source code
@@ -4946,13 +4947,19 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
 
   const db = admin.firestore();
 
-  // 0. جدول فتح المنطقة (إن وُجدت منطقة باسم zoneName ولها schedule).
+  // 0. جدول فتح المنطقة (إن وُجدت منطقة باسم zoneName ولها schedule) وسقفها
+  //    اليومي الخاص (max_orders_per_day على مستند المنطقة — اختياري، يضيّق السقف
+  //    العام فقط: قرار المالك 2026-09-16 لضبط المناطق البعيدة/الوعرة).
   let zoneSchedule = null;
+  let zoneMaxOrdersPerDay = null;
   if (zoneName) {
     try {
       const zq = await db.collection("service_zones")
           .where("name", "==", zoneName).limit(1).get();
-      if (!zq.empty) zoneSchedule = zq.docs[0].data().schedule || null;
+      if (!zq.empty) {
+        zoneSchedule = zq.docs[0].data().schedule || null;
+        zoneMaxOrdersPerDay = zoneDailyCap(zq.docs[0].data());
+      }
     } catch { /* تعذّر جلب جدول المنطقة — يُعامَل كغير مقيَّد بجدول */ }
   }
 
@@ -4986,37 +4993,11 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
       .where("booking_date", "<=", endDate)
       .get();
 
-  const dailyCounts = {};
-  const slotCounts = {};
-  for (const doc of snap.docs) {
-    const d = doc.data();
-    if (d.status === "cancelled" || d.status === "rejected") continue;
-    // لا نعدّ الطلبات غير المدفوعة: يُنشأ الطلب is_paid=false قبل بوابة الدفع، والمهجور
-    // منها (لم يُكمَل دفعه) كان يبقى pending أبداً فيستهلك سعة الخانة/اليوم ويحجب عملاء
-    // حقيقيين بلا خدمة فعلية. نعدّ فقط ما أكّده الخادم (is_paid===true).
-    if (d.is_paid !== true) continue;
-    // **نعدّ طلبات كل المناطق.** كان العدّ مقصوراً على منطقة الطلب بينما driverCount
-    // يشمل كل السائقين (لأنهم بلا مناطق) — فيُقاس بسطٌ منطقةٍ واحدة على مقامٍ عالمي:
-    // سائقان مشغولان بطلبَي «الدائر» الساعة 10، وعميلة «أبو السلع» ترى عدّادها صفراً
-    // فتحجز نفس الساعة ⇒ ثلاثة طلبات وسائقان ⇒ طلبٌ مدفوع بلا سائق. البسط والمقام
-    // يجب أن يكونا من العالم نفسه.
-    const bDate = d.booking_date;
-    if (!bDate) continue;
-    dailyCounts[bDate] = (dailyCounts[bDate] || 0) + 1;
-    const ts = d.booking_time_slot;
-    if (ts) {
-      // الطلب يشغل سائقاً طوال مدته — نعدّه في كل ساعة يشغلها كي يعكس التلوين
-      // الانشغال الحقيقي (كان يُعدّ في ساعة البدء فقط فتظهر ساعات لاحقة متاحة زوراً).
-      const startH = parseInt(String(ts).split(":")[0], 10);
-      const hrs = Number(d.hours_contracted || 4);
-      if (!isNaN(startH)) {
-        for (let h = startH; h < startH + hrs; h++) {
-          const key = `${bDate}_${String(h).padStart(2, "0")}:00`;
-          slotCounts[key] = (slotCounts[key] || 0) + 1;
-        }
-      }
-    }
-  }
+  // العدّ في capacity.js (نقيّ ومختبَر): نعدّ طلبات **كل المناطق** لأن السائقين
+  // بلا مناطق (driverCount عالمي — البسط والمقام من العالم نفسه)، ونعدّ طلبات
+  // المنطقة المطلوبة على حدة لسقفها الخاص إن وُجد.
+  const {dailyCounts, slotCounts, zoneDailyCounts} =
+    countBookings(snap.docs.map((doc) => doc.data()), {zoneName: zoneName || null});
 
   // 4. اشتقاق جدول الفتح لكل يوم في المدى — مرجعيّ، يرسم منه العميل ويفرضه الدفع.
   const openHours = {};   // "yyyy-MM-dd" -> [start, end]
@@ -5040,6 +5021,8 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
   // maxTeamsPerSlot يعكس الآن عدد السائقين الحقيقي (لا قيمة ثابتة من الإعدادات)
   return {
     dailyCounts, slotCounts, maxOrdersPerDay, maxTeamsPerSlot: driverCount,
+    // سقف المنطقة الخاص وعدّها: العميل يعدّ اليوم ممتلئاً إن بلغ أيّاً من السقفين.
+    zoneMaxOrdersPerDay, zoneDailyCounts,
     scheduleEnabled: !!(zoneSchedule && zoneSchedule.enabled === true),
     openHours, closedDates, closedHours, defaultOpen: DEFAULT_OPEN,
   };
