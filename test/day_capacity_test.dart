@@ -68,5 +68,9 @@ void main() {
     expect(admin.contains("'max_orders_per_day': int.tryParse(maxPerDayCtrl.text.trim()) ?? 0,"),
         isTrue);
     expect(admin.contains('الحدّ اليومي للطلبات في هذه المنطقة'), isTrue);
+    // لوحة الويب تكتب المفتاح نفسه (تكافؤ) — وإلا بقي السقف الخاص حكراً على التطبيق.
+    final web = File('admin_panel/src/pages/Settings.tsx').readAsStringSync();
+    expect(web.contains('max_orders_per_day: zoneMaxPerDay,'), isTrue);
+    expect(web.contains('الحدّ اليومي للطلبات في هذه المنطقة'), isTrue);
   });
 }
