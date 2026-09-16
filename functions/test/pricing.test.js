@@ -1,8 +1,8 @@
 "use strict";
 // اختبارات تكافؤ التسعير الخادمي — تشغيل: node test/pricing.test.js
 const assert = require("assert");
-const {computeExpectedBasePrice, acPriceField, carPriceField} =
-  require("../pricing");
+const {computeExpectedBasePrice, acPriceField, carPriceField,
+  terrainSurchargePercent, applyTerrainSurcharge} = require("../pricing");
 
 let passed = 0;
 function t(name, fn) {
@@ -194,6 +194,32 @@ t("home_package: no materials => unchanged package price", () => {
   assert.strictEqual(computeExpectedBasePrice({
     service_meta: {kind: "home_package", homeType: "small", crewCount: 2},
   }, pkgZone), 310);
+});
+
+// ── رسوم الوعورة (تسعير القرى والوعورة) ──
+t("terrain surcharge percent: clamped 0..100, non-numeric/negative = 0", () => {
+  assert.strictEqual(terrainSurchargePercent({terrain_surcharge_percent: 15}), 15);
+  assert.strictEqual(terrainSurchargePercent({terrain_surcharge_percent: "12.5"}), 12.5);
+  assert.strictEqual(terrainSurchargePercent({terrain_surcharge_percent: 250}), 100);
+  assert.strictEqual(terrainSurchargePercent({terrain_surcharge_percent: -3}), 0);
+  assert.strictEqual(terrainSurchargePercent({terrain_surcharge_percent: "abc"}), 0);
+  assert.strictEqual(terrainSurchargePercent({}), 0);
+  assert.strictEqual(terrainSurchargePercent(null), 0);
+});
+
+t("terrain surcharge applies on the pre-VAT base only; null/0 pass through", () => {
+  const t15 = applyTerrainSurcharge(200, {terrain_surcharge_percent: 15});
+  assert.ok(Math.abs(t15 - 230) < 1e-9, `got ${t15}`); // 200 × 1.15 (طفو)
+  assert.strictEqual(applyTerrainSurcharge(200, {}), 200);
+  assert.strictEqual(applyTerrainSurcharge(null, {terrain_surcharge_percent: 15}), null);
+  assert.strictEqual(applyTerrainSurcharge(0, {terrain_surcharge_percent: 15}), 0);
+  // مع الكنب: الأساس المحسوب من المنطقة ثم الوعورة فوقه — لا على الضريبة.
+  const base = computeExpectedBasePrice({
+    service_meta: {kind: "sofa_rug_sqm", pieces: [{kind: "sofa", length_m: 4}]},
+  }, zone); // 4 × 27 = 108
+  assert.strictEqual(base, 108);
+  const withTerrain = applyTerrainSurcharge(base, {...zone, terrain_surcharge_percent: 10});
+  assert.ok(Math.abs(withTerrain - 118.8) < 1e-9, `got ${withTerrain}`);
 });
 
 console.log(`\n${passed} pricing tests passed.`);
