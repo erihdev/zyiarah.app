@@ -453,8 +453,11 @@ service cloud.firestore {
         request.resource.data.client_id == request.auth.uid &&
         request.resource.data.get('is_paid', false) == false &&
         !request.resource.data.keys().hasAny(['paid_confirmed', 'moyasar_payment_id']);
+      // المحاسب يقرأ طلبات المتجر أيضاً: سجل الفواتير الإلكترونية يجمع فواتير
+      // الخدمات والمتجر معاً (يحرسه rules.roles.test.js). الكتابة كما كانت.
       allow read: if isLoggedIn() &&
-        (request.auth.uid == resource.data.client_id || isOrdersManager());
+        (request.auth.uid == resource.data.client_id || isOrdersManager() ||
+         isAccountantAdmin());
       // Client may finalise payment on their OWN order (mirrors the /orders trust model):
       // restricted to payment-completion fields and status -> processing only, so a paid
       // store order is no longer stuck after checkout. Full control stays with the manager.
