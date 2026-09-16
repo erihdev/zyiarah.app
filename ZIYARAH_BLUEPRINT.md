@@ -226,6 +226,13 @@ Firestore
 │       ├── checkoutButtonColor
 │       └── checkoutVariantName
 │
+├── service_policies/        ← شروط وضوابط الخدمة (بنود مصنَّفة — تصميم Stitch)
+│   └── {policyId}/           قراءة عامّة (شاشة الشروط قبل الدخول)، كتابة super_admin
+│       ├── title, body
+│       ├── category: contracts | privacy_safety | cancellation_scheduling | mountain_routes
+│       ├── enabled (bool), mandatory_before_booking (bool)
+│       └── order (int), updated_at
+│
 ├── system_configs/
 │   └── main_settings/       ← إعدادات النظام
 │       └── admin_email

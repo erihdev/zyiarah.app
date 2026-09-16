@@ -409,6 +409,15 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
+    // ─── شروط وضوابط الخدمة (بنود مصنَّفة قابلة للتفعيل) ─────────────────────
+    // تُعرض في شاشة الشروط التي تُفتح من التسجيل **قبل** الدخول، فالقراءة عامّة
+    // كـ public_content. الكتابة للسوبر وحده — تعديل الشروط قرار إداري أعلى.
+    // يحرسه functions/test/rules.policies.test.js.
+    match /service_policies/{policyId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
     // SECURITY: order/maintenance counters — read-only for users; write locked to increment-only.
     // Admins may also read aggregate docs (e.g. analytics_summary) written server-side.
     match /metadata/{docId} {

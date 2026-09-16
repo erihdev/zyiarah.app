@@ -36,7 +36,7 @@ npm test         # Vitest (role-gate tests)
 ```bash
 npm run lint            # ESLint (flat config)
 npm test                # Unit tests (pricing, notifications, email)
-npm run test:emulator   # Rules + roles + wallet — needs the Firestore emulator
+npm run test:emulator   # Rules + roles + policies + wallet — needs the Firestore emulator
 npm run serve           # Local emulator
 npm run deploy          # Deploy functions
 npm run logs            # Tail logs
