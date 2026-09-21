@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/firebase_service.dart';
+import 'package:zyiarah/utils/terrain_surcharge.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/widgets/service_meta_view.dart';
 import 'package:intl/intl.dart' hide TextDirection;
@@ -967,6 +968,15 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                       title: const Text("المبلغ الإجمالي"), 
                       subtitle: Text("${data['final_amount'] ?? data['amount'] ?? data['totalAmountPaid'] ?? data['quotePrice'] ?? 0} ر.س"),
                     ),
+                    // (تسعير القرى والوعورة) سطر الوعورة إن وُجد — كتبته شاشة الدفع
+                    // للعرض الإداري؛ الخادم يعيد حسابه من مستند المنطقة عند التحقق.
+                    if (((data['terrain_surcharge_amount'] as num?)?.toDouble() ?? 0) > 0)
+                      ListTile(
+                        title: const Text("منها رسوم الوعورة (قبل الضريبة)"),
+                        subtitle: Text(
+                            "${(data['terrain_surcharge_amount'] as num).toDouble().toStringAsFixed(2)} ر.س "
+                            "(+${fmtPercent(terrainPercentFrom(data['terrain_surcharge_percent']))}%)"),
+                      ),
                     ListTile(title: const Text("تاريخ إنشاء الطلب"), subtitle: Text(DateFormat('yyyy-MM-dd HH:mm').format(date))),
                     // (#43) مدّة الخدمة من مرساتَي start_time/end_time الخادميّتين: حيّة أثناء
                     // التنفيذ، ونهائية عند الإكمال. «—» إن غابت مرساة أو انعكس ترتيبها (طلب قديم).

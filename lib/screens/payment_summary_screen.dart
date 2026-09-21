@@ -33,6 +33,8 @@ import 'package:provider/provider.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
 import 'package:zyiarah/services/counter_service.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:zyiarah/utils/day_capacity.dart';
+import 'package:zyiarah/utils/terrain_surcharge.dart';
 
 
 
@@ -54,6 +56,10 @@ class PaymentSummaryScreen extends StatefulWidget {
   final String? contractId;
   final int? planVisits;
 
+  /// رسوم الوعورة % (للاختبارات/التجاوز). null = تُقرأ من مستند المنطقة باسم
+  /// [zoneName] عند الفتح — المصدر نفسه الذي يعيد الخادم الحساب منه.
+  final double? terrainSurchargePercent;
+
   const PaymentSummaryScreen({
     super.key,
     required this.serviceName,
@@ -66,6 +72,7 @@ class PaymentSummaryScreen extends StatefulWidget {
     this.workerCount = 1,
     this.contractId,
     this.planVisits,
+    this.terrainSurchargePercent,
   });
 
   @override
@@ -92,6 +99,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   double? _walletBalance;
   bool _walletFetchFailed = false;
   double _surgeFactor = 1.0;
+  /// رسوم الوعورة % من مستند المنطقة (0 = لا رسوم). لا تُطبَّق على السعر الثابت.
+  double _terrainPct = 0.0;
 
   /// هل أُنشئ مستند orders/{_pendingOrderId} في محاولة دفع سابقة؟ إعادة كتابته
   /// تُرفض من قواعد Firestore (permission-denied) ومبلغه مجمّد على قديمه —
@@ -102,6 +111,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   final TextEditingController _phoneController = TextEditingController();
   double _discountAmount = 0.0;
   String? _appliedCoupon;
+  /// نسبة الكوبون المطبَّق (null = خصم ثابت أو لا كوبون) — لإعادة الحساب حين
+  /// تتغيّر الذروة أو الوعورة بعد التطبيق.
+  double? _couponPercent;
   bool _isValidatingCoupon = false;
   bool _needsPhoneUpdate = false;
 
@@ -127,6 +139,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       _googlePayConfigFuture = null;
     }
     _loadUserData();
+    // رسوم الوعورة: من مستند المنطقة لا من شاشة الخدمة — كي لا تختلف باختلاف المسار.
+    _terrainPct = widget.terrainSurchargePercent ?? 0.0;
+    if (widget.terrainSurchargePercent == null && widget.zoneName != null) {
+      _loadTerrainSurcharge();
+    }
     // فحص السعة مبكّراً للطلبات بالساعة — كي نمنع أزرار الدفع الأصلية عند الامتلاء.
     // **ويتجدد دورياً**: أزرار Apple/Google/Samsung Pay تخصم قبل أي رد نداء لنا،
     // ففحصُ الفتح وحده كان يتقادم — يمتلئ اليوم والعميل على الشاشة فيدفع لحجزٍ
@@ -207,6 +224,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           if (mounted && factor != _surgeFactor) {
             setState(() {
               _surgeFactor = factor;
+              _recomputePercentDiscount();
               // تغيّر الإجمالي بعد إنشاء مستند الطلب = مبلغه مجمّد متقادم — معرّف جديد.
               if (_pendingOrderCreated) _mintFreshPendingOrderId();
             });
@@ -255,22 +273,52 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     _pendingOrderCreated = false;
   }
 
-  // الحسابات المالية الصحيحة (بافتراض أن المبلغ شامل للضريبة، مع تطبيق Surge)
-  // مقرّب لخانتين عشريتين — يمنع أرقاماً مثل 57.4999999999 في المبلغ المخزَّن/المعروض.
-  double get totalWithVat {
-    // Surge يُطبَّق فقط على الطلبات عند الطلب (بالساعة/الكنب) — لا على الأسعار الثابتة:
-    // الاشتراك (planPrice) والصيانة (quotePrice) أسعار معلَنة ثابتة، وضربُها في surge
-    // كان يفرض دفعاً زائداً + يجعل الخادم يرفض تطابق المبلغ فلا يُفعَّل العقد/الصيانة.
-    final bool fixedPrice = widget.contractId != null;
-    final double surge = fixedPrice ? 1.0 : _surgeFactor;
-    // الخصم (الكوبون) لا يُطبَّق على السعر الثابت (الاشتراك): الخادم يطابق planPrice
-    // بلا خصم بالضبط، فأي خصم يجعل المشحون ≠ planPrice → يُرفض الدفع ولا يُفعَّل العقد
-    // رغم خصم المال. ونحدّ الخصم بألا يتجاوز المبلغ (كوبون أكبر من الطلب = مبلغ سالب).
-    final double discount = fixedPrice ? 0.0 : _discountAmount;
-    final raw = (widget.amount * surge) - discount;
-    final clamped = raw < 0 ? 0.0 : raw;
-    return (clamped * 100).roundToDouble() / 100;
+  /// رسوم الوعورة من مستند المنطقة (`terrain_surcharge_percent`) — نفس المصدر الذي
+  /// يعيد الخادم الحساب منه (price-shadow) فلا يفاجأ العميل بفارق. التعذّر = 0 مع
+  /// تسجيل: لا يحجب الدفع، والخادم يحسبها على كل حال ويَسِم النقص للمراجعة.
+  Future<void> _loadTerrainSurcharge() async {
+    try {
+      final q = await FirebaseFirestore.instance
+          .collection('service_zones')
+          .where('name', isEqualTo: widget.zoneName)
+          .limit(1)
+          .get();
+      if (q.docs.isEmpty) return;
+      final pct = terrainPercentFrom(q.docs.first.data()['terrain_surcharge_percent']);
+      if (mounted && pct != _terrainPct) {
+        setState(() {
+          _terrainPct = pct;
+          _recomputePercentDiscount();
+          // تغيّر الإجمالي بعد إنشاء مستند الطلب = مبلغه مجمّد متقادم — معرّف جديد.
+          if (_pendingOrderCreated) _mintFreshPendingOrderId();
+        });
+      }
+    } catch (e) {
+      debugPrint('[terrain] zone fetch failed: $e');
+    }
   }
+
+  /// كوبون النسبة يُعاد حسابه حين تتغيّر الذروة أو الوعورة بعد تطبيقه — وإلا بقي
+  /// محسوباً على مشحونٍ قديم فخالف ما يحسبه الخادم في _computeTrustedDiscount.
+  void _recomputePercentDiscount() {
+    final p = _couponPercent;
+    if (p != null) _discountAmount = _breakdown.grossBeforeDiscount * (p / 100);
+  }
+
+  // الحسابات المالية الصحيحة (بافتراض أن المبلغ شامل للضريبة، مع تطبيق الوعورة
+  // ثم Surge ثم الخصم) — PriceBreakdown نقيّة ومختبَرة (terrain_surcharge_test).
+  // Surge والوعورة والخصم على الطلبات عند الطلب فقط — لا على الأسعار الثابتة:
+  // الاشتراك (planPrice) والصيانة (quotePrice) أسعار معلَنة ثابتة يطابقها الخادم
+  // حرفياً، فأي زيادة/خصم يجعل المشحون ≠ planPrice → يُرفض الدفع ولا يُفعَّل العقد.
+  PriceBreakdown get _breakdown => PriceBreakdown(
+        amount: widget.amount,
+        terrainPercent: _terrainPct,
+        surgeFactor: _surgeFactor,
+        discount: _discountAmount,
+        fixedPrice: widget.contractId != null,
+      );
+  // مقرّب لخانتين عشريتين — يمنع أرقاماً مثل 57.4999999999 في المبلغ المخزَّن/المعروض.
+  double get totalWithVat => _breakdown.total;
   double get subtotal => totalWithVat / 1.15;
   double get vatAmount => totalWithVat - subtotal;
 
@@ -281,16 +329,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   // الحل: الأساس والذروة والخصم تُعرض كلها قبل الضريبة (نفس عُرف فاتورة ZATCA):
   //   الأساس + الذروة − الخصم = الصافي، والصافي + الضريبة = الإجمالي.
   bool get _isFixedPrice => widget.contractId != null;
-  double get _rowBase => widget.amount / 1.15;
-  double get _rowSurge => _isFixedPrice
-      ? 0.0
-      : (widget.amount * (_surgeFactor - 1)) / 1.15;
+  double get _rowBase => _breakdown.rowBase;
+  // رسوم الوعورة (قبل الضريبة) — صفر للسعر الثابت أو منطقة بلا رسوم.
+  double get _rowTerrain => _breakdown.rowTerrain;
+  double get _rowSurge => _breakdown.rowSurge;
   // الخصم مقصوص على المبلغ (كوبون أكبر من الطلب لا يُظهر صفاً أكبر من الفاتورة).
-  double get _rowDiscount {
-    if (_isFixedPrice) return 0.0;
-    final capped = _discountAmount.clamp(0.0, widget.amount * _surgeFactor);
-    return capped / 1.15;
-  }
+  double get _rowDiscount => _breakdown.rowDiscount;
 
   /// طلب متجر (توصيل منتجات) — نخفي «المدة» و«عدد العاملات» فهما مضلّلان هنا،
   /// ونعرض «عدد المنتجات» بدلاً منهما. يُكتشف من نوع service_meta.
@@ -458,10 +502,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           _appliedCoupon = _couponController.text.toUpperCase();
           double value = ((couponData['value'] as num?) ?? 0).toDouble();
           if (couponData['type'] == 'percentage') {
-            // النسبة على المبلغ المُطبَّق عليه Surge (هو ما يُدفع فعلاً) — كان يُحسب على
-            // المبلغ قبل Surge فيُخصَم أقل من المُعلَن أثناء ذروة التسعير.
-            _discountAmount = widget.amount * _surgeFactor * (value / 100);
+            // النسبة على المشحون قبل الخصم (الوعورة ثم Surge — هو ما يُدفع فعلاً)،
+            // كما يحسبها الخادم في _computeTrustedDiscount على الأساس المُرسَّم.
+            _couponPercent = value;
+            _discountAmount = _breakdown.grossBeforeDiscount * (value / 100);
           } else {
+            _couponPercent = null;
             _discountAmount = value;
           }
           ScaffoldMessenger.of(context).showSnackBar(
@@ -469,6 +515,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           );
         } else {
           _appliedCoupon = null;
+          _couponPercent = null;
           _discountAmount = 0.0;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("كود الخصم غير صحيح أو منتهي"), backgroundColor: Colors.red),
@@ -517,7 +564,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     try {
       final result = await FirebaseFunctions.instance
           .httpsCallable('getHourlyAvailability')
-          // نمرّر المنطقة لجلب جدول فتحها (لا للسعة — السائقون بلا مناطق).
+          // نمرّر المنطقة لجلب جدول فتحها وسقفها اليومي الخاص (لا لعدّ
+          // السائقين — هم بلا مناطق).
           .call({
             'startDate': bookingDate,
             'endDate': bookingDate,
@@ -554,7 +602,15 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       return 'نعتذر، لا نخدم منطقتك في هذا اليوم. يرجى اختيار يوم آخر.';
     }
 
-    if (((daily[bookingDate] as num?)?.toInt() ?? 0) >= maxOrdersPerDay) {
+    // سقف المنطقة الخاص (إن ضبطه الأدمن) يضيّق السقف العام فقط — dayIsFull
+    // تجمع السقفين، وهي نفسها التي ترسم بها شاشات الحجز شريط الأيام.
+    final Map zoneDaily = data['zoneDailyCounts'] as Map? ?? {};
+    if (dayIsFull(
+      count: (daily[bookingDate] as num?)?.toInt() ?? 0,
+      max: maxOrdersPerDay,
+      zoneCount: (zoneDaily[bookingDate] as num?)?.toInt() ?? 0,
+      zoneMax: (data['zoneMaxOrdersPerDay'] as num?)?.toInt(),
+    )) {
       return 'نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.';
     }
 
@@ -935,6 +991,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         'worker_count': widget.workerCount,
         'coupon_code': _appliedCoupon,
         'discount_amount': _discountAmount,
+        // للعرض الإداري والفاتورة فقط — الخادم يعيد حساب الوعورة من مستند المنطقة.
+        'terrain_surcharge_percent': _isFixedPrice ? 0 : _terrainPct,
+        'terrain_surcharge_amount': (_rowTerrain * 100).roundToDouble() / 100,
         if (widget.serviceMeta != null) 'service_meta': widget.serviceMeta,
         if (isHourly && widget.serviceDate != null) ...{
           'booking_date': '${widget.serviceDate!.year}-'
@@ -1454,6 +1513,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           const Divider(height: 30),
           // الصفوف تُجمَع على الإجمالي: أساس + ذروة − خصم = صافٍ، + ضريبة = مستحق.
           _buildRowDetail('المبلغ الأساسي', '${_rowBase.toStringAsFixed(2)} ر.س'),
+          if (_rowTerrain > 0)
+            _buildRowDetail(
+              '⛰️ رسوم الوعورة والطرق الجبلية (+${fmtPercent(_terrainPct)}%)',
+              '+${_rowTerrain.toStringAsFixed(2)} ر.س',
+              isSurge: true,
+            ),
           if (_rowSurge > 0)
             _buildRowDetail(
               '🔥 تسعيرة ذروة (+${((_surgeFactor - 1) * 100).toStringAsFixed(0)}%)',
@@ -1522,6 +1587,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                     if (_appliedCoupon != null) {
                       setState(() {
                         _appliedCoupon = null;
+                        _couponPercent = null;
                         _discountAmount = 0.0;
                         // الإجمالي تغيّر ومستند الطلب (إن وُجد) مجمّد على القديم.
                         if (_pendingOrderCreated) _mintFreshPendingOrderId();

@@ -132,9 +132,28 @@ async function resolveMaterialsBase(db, meta) {
   return base;
 }
 
+// رسوم الوعورة (قرار المالك 2026-09-16 — تسعير القرى والوعورة): نسبة مئوية على
+// الأساس قبل الضريبة لطلبات القرى الجبلية/الوعرة. تُقرأ من مستند المنطقة الموثوق
+// فقط (terrain_surcharge_percent) — ما يكتبه الطلب/العميل لا يُقرأ. 0..100،
+// وغير الرقمي/السالب = 0 (لا رسوم). لا تُطبَّق على الأسعار الثابتة (العقود) لأن
+// تلك لا تمرّ بهذا المسار أصلاً (activateContractOnPaid يطابق planPrice حرفياً).
+function terrainSurchargePercent(zone) {
+  const n = Number(zone && zone.terrain_surcharge_percent);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(100, n);
+}
+
+// الأساس بعد الوعورة (قبل الضريبة والذروة والخصم) — null/0 يمرّان كما هما.
+function applyTerrainSurcharge(base, zone) {
+  if (!base || base <= 0) return base;
+  return base * (1 + terrainSurchargePercent(zone) / 100);
+}
+
 module.exports = {
   computeExpectedBasePrice,
   resolveMaterialsBase,
   acPriceField,
   carPriceField,
+  terrainSurchargePercent,
+  applyTerrainSurcharge,
 };

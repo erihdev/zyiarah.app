@@ -72,10 +72,19 @@ void main() {
     expect(body.contains('zoneName'), isTrue);
     expect(body.contains('.where("name", "==", zoneName)'), isTrue,
         reason: 'zoneName يجلب مستند المنطقة لقراءة جدولها');
-    // لكن لا تُرشِّح السائقين بها
-    final driverBlock = body.substring(body.indexOf('drivers'));
+    // لكن لا تُرشِّح السائقين بها: كتلة عدّ السائقين (من استعلام drivers حتى
+    // driverCount) لا تعرف zoneName إطلاقاً.
+    final driverBlock = body.substring(
+        body.indexOf('drivers'), body.indexOf('const driverCount'));
     expect(driverBlock.contains('zoneName'), isFalse,
         reason: 'عدّ السائقين يجب أن يبقى عالميّاً — المنطقة للجدول لا للسعة');
+    // ولا تُرشِّح استعلام الطلبات بها: العدّ العام (dailyCounts/slotCounts) يشمل
+    // **كل المناطق** لأن المقام (السائقون) عالمي. السقف الخاص بالمنطقة يُعدّ على
+    // حدة داخل countBookings (zoneDailyCounts) ولا يمسّ العدّ العام.
+    final ordersBlock = body.substring(body.indexOf('db.collection("orders")'));
+    expect(ordersBlock.contains('.where("zone_name"'), isFalse,
+        reason: 'ترشيح الطلبات بالمنطقة مقابل سائقين عالميين = حجز زائد');
+    expect(ordersBlock.contains('countBookings('), isTrue);
   });
 
   test('لا طلب مدفوع بلا سائق: الإسناد يُطلق خادمياً لحظة انقلاب is_paid', () {

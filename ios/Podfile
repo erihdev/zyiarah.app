@@ -16,12 +16,24 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 
 platform :ios, '15.0'
 
-# (إصلاح بناء iOS) تثبيت Firebase iOS SDK على 12.13.0.
-# cloud_functions 6.3.2 يفرض firebase_core 4.10.0 الذي يرفع Firebase SDK إلى 12.14.0،
-# لكن selector الـ Pipeline في cloud_firestore 6.4.x
-# (FIRCollectionSourceStageBridge initWithRef:firestore:) غير متوافق مع 12.14.0.
-# الـ podspecs تعطي الأولوية لهذا المتغيّر العام على الافتراضي.
-$FirebaseSDKVersion = '12.13.0'
+# لا تُثبِّت $FirebaseSDKVersion هنا. اترك firebase_core يفرض نسخته المعلَنة.
+#
+# الدرس (2026-09-13، البناء ٢١٠): كان هنا تثبيتٌ على 12.13.0 وُضع حين كانت
+# cloud_firestore 6.4.x تنادي selector الـPipeline القديم
+# (initWithRef:firestore:) الذي كسرته 12.14.0. ثم رُقّيت cloud_firestore إلى
+# 6.9.0، فصارت تنادي الصيغة الجديدة (initWithRef:firestore:forceIndex:)
+# المعرَّفة في 12.17.0 فأعلى — والتثبيت انقلب من علاجٍ إلى سببٍ للعطل:
+#
+#   No visible @interface for 'FIRCollectionSourceStageBridge'
+#   declares the selector 'initWithRef:firestore:forceIndex:'
+#
+# والسبب أن podspecs تعطي الأولوية لهذا المتغيّر العام على ما يعلنه
+# firebase_core (شرطُ `if defined?($FirebaseSDKVersion)` في كل podspec)،
+# فبقي التثبيت يشدّ SDK إلى الخلف بينما شجرة Dart تتقدّم — بصمت، لأن
+# التعارض لا يظهر إلا عند تصريف Objective-C في بناء iOS حقيقي.
+#
+# يحرس هذا test/ios_firebase_sdk_pin_test.dart: إن أُعيد التثبيت يوماً
+# لضرورة، يجب ألّا يكون أدنى مما يعلنه firebase_core.
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = '1'

@@ -88,6 +88,10 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
         : (data?['expiry'] != null ? DateTime.tryParse(data!['expiry'].toString()) ?? DateTime.now().add(const Duration(days: 30)) : DateTime.now().add(const Duration(days: 30)));
     bool isSaving = false;
     List<String> restrictedZones = List<String>.from(data?['restricted_zones'] ?? []);
+    // (تصميم Stitch «العروض») الظهور في قسم العروض قرار صريح: الكوبون الجديد
+    // معروض افتراضياً، والقديم مخفي حتى يُفعَّل — كي لا يُكشف كود قناة خاصة.
+    bool showInOffers = data == null ? true : data['show_in_offers'] == true;
+    final descCtrl = TextEditingController(text: data?['description'] ?? '');
     bool codeEmpty = false;
     bool codeDup = false; // (تحسين من الويب) الكود مكرّر.
     bool valueEmpty = false;
@@ -269,6 +273,34 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                         ),
                       ),
                       const SizedBox(height: 15),
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 10),
+                        decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(10)),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(showInOffers ? 'معروض في قسم العروض للعملاء' : 'مخفي عن قسم العروض (يعمل عند الدفع فقط)',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            ),
+                            Switch(
+                              value: showInOffers,
+                              activeThumbColor: Colors.green,
+                              onChanged: (v) => setDialogState(() => showInOffers = v),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+                      TextField(
+                        controller: descCtrl,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          labelText: 'وصف يظهر للعميل في العروض (اختياري)',
+                          hintText: 'مثال: على أول طلب تنظيف كنب وسجاد بالبخار',
+                        ),
+                      ),
+                      const SizedBox(height: 15),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.location_city, size: 18),
                         label: Text(restrictedZones.isEmpty ? 'متاح لكل المناطق' : 'محصور لـ ${restrictedZones.length} مناطق'),
@@ -373,6 +405,8 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                           'expiry': Timestamp.fromDate(expiryDate),
                           'status': status,
                           'restricted_zones': restrictedZones,
+                          'show_in_offers': showInOffers,
+                          'description': descCtrl.text.trim(),
                           'updatedAt': FieldValue.serverTimestamp(),
                         };
 
@@ -448,6 +482,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
       codeCtrl.dispose();
       valueCtrl.dispose();
       maxUsesCtrl.dispose();
+      descCtrl.dispose();
     });
   }
 
@@ -593,6 +628,16 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text('الخصم: ${data['value']} ${data['type'] == 'percentage' ? '%' : 'ر.س'}', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                              if (data['show_in_offers'] == true)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF660033).withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Text('في العروض',
+                                      style: TextStyle(color: Color(0xFF660033), fontSize: 12, fontWeight: FontWeight.bold)),
+                                ),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(

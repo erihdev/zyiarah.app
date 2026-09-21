@@ -12,6 +12,7 @@ import 'package:zyiarah/services/store_service.dart';
 import 'package:zyiarah/services/zone_locator_service.dart';
 import 'package:zyiarah/utils/home_packages.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
+import 'package:zyiarah/utils/day_capacity.dart';
 
 
 class HourlyCleaningDetailsScreen extends StatefulWidget {
@@ -47,6 +48,9 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   bool _manualLocationOverride = false;
 
   int _maxOrdersPerDay = 10;
+  // سقف المنطقة الخاص وعدّها (اختياري من مستند المنطقة) — يضيّق السقف العام فقط.
+  int? _zoneMaxOrdersPerDay;
+  Map<String, int> _zoneDailyCounts = {};
   Map<String, int> _dailyOrderCounts = {};   // "yyyy-MM-dd" → total orders
   // (إتاحة اليوم = سعة يومية **و** سائق متاح) عدّادات الساعات وعدد السائقين
   // النشطين — لا تُعرض كأوقات للعميل، بل تقرر داخلياً هل يتسع اليومُ لمدة الباقة.
@@ -220,6 +224,9 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
 
       final int maxPerDay = ((data['maxOrdersPerDay'] as num?)?.toInt()) ?? 10;
       final int maxPerSlot = ((data['maxTeamsPerSlot'] as num?)?.toInt()) ?? 5;
+      final int? zoneMax = (data['zoneMaxOrdersPerDay'] as num?)?.toInt();
+      final Map<String, int> zoneDaily = (data['zoneDailyCounts'] as Map? ?? {})
+          .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
 
       if (!mounted || reqId != _availabilityReqId) return;
       setState(() {
@@ -229,6 +236,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
         _closedDates = closed;
         _maxOrdersPerDay = maxPerDay;
         _maxTeamsPerSlot = maxPerSlot;
+        _zoneMaxOrdersPerDay = zoneMax;
+        _zoneDailyCounts = zoneDaily;
         _loadingDailyCounts = false;
 
         // انتقل تلقائياً لأول تاريخ متاح (سعةً وسائقين، وغير مغلق بالجدول).
@@ -244,7 +253,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       });
     } catch (e) {
       // **لا نبتلع الفشل بصمت.** كان هذا الـ catch يكتفي بإطفاء الدوّار، فتبقى
-      // ‎_dailyOrderCounts فارغة ⇒ ‎`activeOrders = 0` لكل تاريخ ⇒ ‎`0 >= _maxOrdersPerDay`
+      // ‎_dailyOrderCounts فارغة ⇒ عدّاد كل تاريخ = 0 ⇒ ‎`_dayCapacityFull`
       // = false ⇒ **كل التواريخ تظهر خضراء** والعميل يختار يوماً ممتلئاً.
       // الأخضر يجب أن يعني «متاح»، لا «لا نعرف».
       debugPrint('[getHourlyAvailability] error: $e');
@@ -491,12 +500,20 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     return null;
   }
 
+  /// السقف العام ثم سقف المنطقة الخاص (إن ضُبط) — انظر dayIsFull.
+  bool _dayCapacityFull(String dateStr) => dayIsFull(
+        count: _dailyOrderCounts[dateStr] ?? 0,
+        max: _maxOrdersPerDay,
+        zoneCount: _zoneDailyCounts[dateStr] ?? 0,
+        zoneMax: _zoneMaxOrdersPerDay,
+      );
+
   /// (قرار المالك) إتاحة اليوم = **سعة يومية تسمح + سائق متاح لمدة الباقة** —
   /// لا يكفي أحدهما. اليوم المغلق بجدول المنطقة غير متاح بداهةً.
   bool _dateUnavailable(DateTime d) {
     final s = intl.DateFormat('yyyy-MM-dd').format(d);
     if (_closedDates.contains(s)) return true;
-    if ((_dailyOrderCounts[s] ?? 0) >= _maxOrdersPerDay) return true;
+    if (_dayCapacityFull(s)) return true;
     return _firstFeasibleStart(d) == null; // لا سائق يتسع جدوله = غير متاح
   }
 
@@ -993,12 +1010,11 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           final isSelected = _isSameDay(_selectedDate, date);
           
           final dateStr = intl.DateFormat('yyyy-MM-dd').format(date);
-          final activeOrders = _dailyOrderCounts[dateStr] ?? 0;
           // مغلق بالجدول (رمادي) ≠ محجوز بالكامل (أحمر) — سببان مختلفان.
           // «محجوز» = سعة اليوم امتلأت **أو** لا سائق يتسع لمدة الباقة (قرار المالك).
           final isClosed = _closedDates.contains(dateStr);
           final isFullyBooked = !isClosed &&
-              (activeOrders >= _maxOrdersPerDay ||
+              (_dayCapacityFull(dateStr) ||
                   _firstFeasibleStart(date) == null);
           final unavailable = isClosed || isFullyBooked;
           final Color availBg = isClosed
