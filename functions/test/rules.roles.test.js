@@ -36,6 +36,7 @@ const {setDoc, doc, updateDoc, getDoc} = require("firebase/firestore");
     await setDoc(doc(db, "products/p1"), {name: "x", price: 10});
     await setDoc(doc(db, "orders/o1"), {client_id: "someone", status: "pending", amount: 100});
     await setDoc(doc(db, "payroll_records/r1"), {amount: 100});
+    await setDoc(doc(db, "store_orders/s1"), {client_id: "someone", is_paid: true, amount: 50});
   });
 
   const asUser = (uid) => testEnv.authenticatedContext(uid).firestore();
@@ -70,6 +71,13 @@ const {setDoc, doc, updateDoc, getDoc} = require("firebase/firestore");
       getDoc(doc(asUser("accountant"), "payroll_records/r1")), true);
   await check("accountant CANNOT update orders",
       updateDoc(doc(asUser("accountant"), "orders/o1"), {status: "completed"}), false);
+  // سجل الفواتير الإلكترونية يجمع فواتير المتجر أيضاً — قراءة فقط.
+  await check("accountant CAN read store_orders (invoice log)",
+      getDoc(doc(asUser("accountant"), "store_orders/s1")), true);
+  await check("accountant CANNOT update store_orders",
+      updateDoc(doc(asUser("accountant"), "store_orders/s1"), {status: "processing"}), false);
+  await check("marketing CANNOT read store_orders",
+      getDoc(doc(asUser("marketer"), "store_orders/s1")), false);
 
   // bootstrapped super admin (no staff_role): can do everything
   await check("super CAN write system_configs",

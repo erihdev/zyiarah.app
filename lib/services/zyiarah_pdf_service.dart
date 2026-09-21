@@ -35,6 +35,21 @@ class ZyiarahPdfService {
     return (base: _baseFont!, bold: _boldFont!);
   }
 
+  /// مشاركة ملف فاتورة مرفوع أصلاً في Storage (بلا إعادة توليد): تنزيل ثم
+  /// ورقة المشاركة عبر printing — النمط نفسه في العقود والتقارير (sharePdf).
+  /// تستعمله شاشة نجاح الطلب وسجل الفواتير الإداري.
+  static Future<void> shareUploadedInvoice({
+    required String url,
+    required String orderCode,
+  }) async {
+    final bytes = await FirebaseStorage.instance
+        .refFromURL(url)
+        .getData(10 * 1024 * 1024)
+        .timeout(const Duration(seconds: 30));
+    if (bytes == null) throw Exception('empty invoice file');
+    await Printing.sharePdf(bytes: bytes, filename: 'Zyiarah_Invoice_$orderCode.pdf');
+  }
+
   // ============================================================================
   // 1. توليد فاتورة ضريبية ZATCA (ZATCA Invoice)
   // ============================================================================

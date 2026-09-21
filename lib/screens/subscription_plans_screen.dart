@@ -10,6 +10,7 @@ import 'package:zyiarah/screens/contract_signing_screen.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/services/zone_locator_service.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
+import 'package:zyiarah/utils/day_capacity.dart';
 
 class ZyiarahSubscriptionPlansScreen extends StatefulWidget {
   const ZyiarahSubscriptionPlansScreen({super.key});
@@ -49,6 +50,8 @@ class _ZyiarahSubscriptionPlansScreenState
   List<Map<String, dynamic>> _zones = [];
 
   int _maxOrdersPerDay = 10;
+  int? _zoneMaxOrdersPerDay;
+  Map<String, int> _zoneDailyCounts = {};
   int _maxTeamsPerSlot = 5;
   Map<String, int> _dailyOrderCounts = {};
   Map<String, int> _slotCounts = {};          // "yyyy-MM-dd_HH:00" → orders in slot
@@ -205,7 +208,12 @@ class _ZyiarahSubscriptionPlansScreenState
 
       final result = await FirebaseFunctions.instance
           .httpsCallable('getHourlyAvailability')
-          .call({'startDate': startDate, 'endDate': endDate});
+          .call({
+            'startDate': startDate,
+            'endDate': endDate,
+            // منطقة العميل لجدول فتحها وسقفها اليومي الخاص (إن ضُبط).
+            if (_userZoneName != null) 'zoneName': _userZoneName,
+          });
 
       final data = result.data as Map;
 
@@ -229,6 +237,9 @@ class _ZyiarahSubscriptionPlansScreenState
 
       final int maxPerDay  = ((data['maxOrdersPerDay'] as num?)?.toInt()) ?? 10;
       final int maxPerSlot = ((data['maxTeamsPerSlot']  as num?)?.toInt()) ?? 5;
+      final int? zoneMax = (data['zoneMaxOrdersPerDay'] as num?)?.toInt();
+      final Map<String, int> zoneDaily = (data['zoneDailyCounts'] as Map? ?? {})
+          .map((k, v) => MapEntry(k.toString(), int.tryParse('$v') ?? 0));
 
       if (!mounted) return;
       setState(() {
@@ -236,15 +247,17 @@ class _ZyiarahSubscriptionPlansScreenState
         _slotCounts       = slots;
         _maxOrdersPerDay  = maxPerDay;
         _maxTeamsPerSlot  = maxPerSlot;
+        _zoneMaxOrdersPerDay = zoneMax;
+        _zoneDailyCounts = zoneDaily;
         _loadingDailyCounts = false;
 
         // انتقل تلقائياً لأول تاريخ متاح إذا كان المحدد ممتلئاً
         final String selStr = intl.DateFormat('yyyy-MM-dd').format(_selectedDate);
-        if ((daily[selStr] ?? 0) >= maxPerDay) {
+        if (_dayCapacityFull(selStr)) {
           for (int i = 0; i < 30; i++) {
             final candidate = now.add(Duration(days: i + 1));
             final candStr = intl.DateFormat('yyyy-MM-dd').format(candidate);
-            if ((daily[candStr] ?? 0) < maxPerDay) {
+            if (!_dayCapacityFull(candStr)) {
               _selectedDate = candidate;
               break;
             }
@@ -309,6 +322,14 @@ class _ZyiarahSubscriptionPlansScreenState
   }
 
   /// يحسب إتاحة الخانات الزمنية من الـ cache المحلي (لا يصدر أي طلب شبكة).
+  /// السقف العام ثم سقف المنطقة الخاص (إن ضُبط) — انظر dayIsFull.
+  bool _dayCapacityFull(String dateStr) => dayIsFull(
+        count: _dailyOrderCounts[dateStr] ?? 0,
+        max: _maxOrdersPerDay,
+        zoneCount: _zoneDailyCounts[dateStr] ?? 0,
+        zoneMax: _zoneMaxOrdersPerDay,
+      );
+
   void _buildSlotAvailabilityFromCache() {
     if (!mounted) return;
     final dateKey = intl.DateFormat('yyyy-MM-dd').format(_selectedDate);
@@ -798,8 +819,7 @@ class _ZyiarahSubscriptionPlansScreenState
           final isSelected = _isSameDay(_selectedDate, date);
           
           final dateStr = intl.DateFormat('yyyy-MM-dd').format(date);
-          final activeOrders = _dailyOrderCounts[dateStr] ?? 0;
-          final isFullyBooked = activeOrders >= _maxOrdersPerDay;
+          final isFullyBooked = _dayCapacityFull(dateStr);
 
           return GestureDetector(
             onTap: isFullyBooked

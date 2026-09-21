@@ -103,6 +103,7 @@ lib/
 ```
 Firestore
 ├── users/                    ← عملاء + مشرفون
+│   ├── {uid}.notification_prefs.marketing (bool، افتراضي true — العميل يوقف «العروض والتسويق» فقط؛ البثّ التشغيلي operational=true يصل دائماً)
 │   └── {uid}/
 │       ├── name, email, phone, role
 │       ├── has_active_subscription (bool)
@@ -178,13 +179,14 @@ Firestore
 │       ├── name, price, image_url, description
 │       └── is_hidden (bool)
 │
-├── promo_codes/              ← أكواد الخصم
+├── promo_codes/              ← أكواد الخصم (تُعرض للعميل في «العروض» عند show_in_offers)
 │   └── {codeId}/
-│       ├── code (string — searchable)
-│       ├── discount_type: percentage | fixed
-│       ├── discount_value (double)
-│       ├── uses (int — يزيد atomically)
-│       └── max_uses, expiry
+│       ├── code (string — searchable, uppercase)
+│       ├── type: percentage | fixed, value (num)
+│       ├── uses (int — يزيده الخادم فقط), maxUses (0 = بلا حدّ), expiry (Timestamp)
+│       ├── status: active | inactive, restricted_zones (list of zone names)
+│       ├── target_user_id (كوبون شخصي: إحالة/هدية — يراه صاحبه وحده), description
+│       └── show_in_offers (bool — الغياب = مخفي عن قسم العروض)
 │
 ├── metadata/
 │   └── order_counter/
@@ -215,6 +217,10 @@ Firestore
 │       ├── name (string)
 │       ├── centerLoc (GeoPoint)
 │       ├── radiusKm (double)
+│       ├── max_orders_per_day (int, اختياري — سقف يومي خاص يضيّق السقف العام فقط)
+│       ├── governorate (string, اختياري — المحافظة الأم لتجميع القرى والمراكز)
+│       ├── terrain (mountain | plain, اختياري — طبيعة التضاريس)
+│       ├── terrain_surcharge_percent (number 0–100, اختياري — رسوم الوعورة على الأساس قبل الضريبة، لا على العقود؛ يعيد الخادم حسابها من هنا)
 │       ├── enabled (bool)
 │       ├── rank (int)
 │       ├── prices (Map<String, double>)
@@ -225,6 +231,13 @@ Firestore
 │   └── ux_experiments/      ← إعدادات A/B Testing
 │       ├── checkoutButtonColor
 │       └── checkoutVariantName
+│
+├── service_policies/        ← شروط وضوابط الخدمة (بنود مصنَّفة — تصميم Stitch)
+│   └── {policyId}/           قراءة عامّة (شاشة الشروط قبل الدخول)، كتابة super_admin
+│       ├── title, body
+│       ├── category: contracts | privacy_safety | cancellation_scheduling | mountain_routes
+│       ├── enabled (bool), mandatory_before_booking (bool)
+│       └── order (int), updated_at
 │
 ├── system_configs/
 │   └── main_settings/       ← إعدادات النظام

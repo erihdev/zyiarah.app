@@ -6,7 +6,10 @@ const {getFunctions} = require("firebase-admin/functions");
 const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const geofire = require("geofire-common");
-const {computeExpectedBasePrice, resolveMaterialsBase} = require("./pricing");
+const {computeExpectedBasePrice, resolveMaterialsBase, applyTerrainSurcharge} =
+  require("./pricing");
+const {isMarketingBroadcast, excludeOptedOut} = require("./notify_prefs");
+const {countBookings, zoneDailyCap} = require("./capacity");
 admin.initializeApp();
 
 // Secrets — stored in Firebase Secret Manager, never in source code
@@ -504,8 +507,18 @@ exports.notifyClientOnMaintenanceRejected = onDocumentUpdated(
  * @param {Object} data Notification payload (title, body, target).
  * @return {Promise<void>}
  */
+/** من أوقف «العروض والتسويق» في تفضيلاته (users.notification_prefs.marketing=false). */
+async function _marketingOptOutUids() {
+  const snap = await admin.firestore().collection("users")
+      .where("notification_prefs.marketing", "==", false).get();
+  return new Set(snap.docs.map((d) => d.id));
+}
+
 async function _deliverBroadcast(docRef, data) {
   const {title, body, target = "all"} = data;
+  // تفضيلات التنبيهات: البثّ التسويقي لا يصل (بوش ولا صندوق داخل التطبيق) لمن أوقف
+  // «العروض والتسويق»؛ التشغيلي (operational=true) يصل كل المستهدفين.
+  const optOut = isMarketingBroadcast(data) ? await _marketingOptOutUids() : new Set();
   const payload = {
     notification: {title, body},
     data: {click_action: "FLUTTER_NOTIFICATION_CLICK", type: "global_broadcast"},
@@ -522,8 +535,10 @@ async function _deliverBroadcast(docRef, data) {
       tokQuery = tokQuery.where("role", "in", ["admin", "super_admin"]);
     }
     const tokSnap = await tokQuery.get();
+    // fcm_tokens معرّفها uid (القواعد: request.auth.uid == tokenId) — فالإسقاط بالمعرّف.
     const uniqTokens = [...new Set(
-        tokSnap.docs.map((d) => d.data().token || d.data().fcmToken).filter(Boolean))];
+        excludeOptedOut(tokSnap.docs, optOut)
+            .map((d) => d.data().token || d.data().fcmToken).filter(Boolean))];
     let sent = 0; let failed = 0; const invalid = [];
     for (let i = 0; i < uniqTokens.length; i += 500) {
       const chunk = uniqTokens.slice(i, i + 500);
@@ -546,7 +561,7 @@ async function _deliverBroadcast(docRef, data) {
       const q = await admin.firestore().collection("fcm_tokens").where("token", "==", bad).limit(5).get();
       for (const dd of q.docs) await dd.ref.delete().catch(() => {});
     }
-    console.log(`broadcast(${target}) tokens: sent=${sent} failed=${failed} cleaned=${invalid.length}`);
+    console.log(`broadcast(${target}) tokens: sent=${sent} failed=${failed} cleaned=${invalid.length} optOut=${optOut.size}`);
 
     let query = admin.firestore().collection("users");
     if (target === "clients") {
@@ -557,7 +572,7 @@ async function _deliverBroadcast(docRef, data) {
     const usersSnap = await query.get();
     let batch = admin.firestore().batch();
     let count = 0;
-    for (const userDoc of usersSnap.docs) {
+    for (const userDoc of excludeOptedOut(usersSnap.docs, optOut)) {
       const notifRef = admin.firestore().collection("notifications").doc();
       batch.set(notifRef, {
         userId: userDoc.id, title, body,
@@ -2088,9 +2103,12 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
           // مواد التنظيف داخل الطلب: تُسعَّر من products قبل الحساب. null =
           // تعذّر التحقق ⇒ نترك pkgExpectedGross فارغاً (لا نرفض بلا يقين).
           const matBase = await resolveMaterialsBase(db, od.service_meta);
-          const base = matBase === null ? null :
+          const base0 = matBase === null ? null :
             computeExpectedBasePrice(
                 {...od, materials_base_resolved: matBase}, zq.docs[0].data());
+          // رسوم الوعورة من مستند المنطقة (لا من الطلب) فوق الأساس قبل الضريبة.
+          const base = base0 && base0 > 0 ?
+            applyTerrainSurcharge(base0, zq.docs[0].data()) : base0;
           if (base && base > 0) {
             const surge = await _readSurgeFactor(db);
             pkgExpectedGross = Math.round(base * 1.15 * surge * 100) / 100;
@@ -2479,9 +2497,13 @@ exports.verifyMoyasarPayment = onCall(
             // مواد التنظيف المضافة داخل الطلب تُسعَّر من products قبل الحساب؛
             // null = تعذّر التحقق ⇒ لا نُعيد تسعيراً ولا نرفض دفعاً بلا يقين.
             const matBase = await resolveMaterialsBase(db, od.service_meta);
-            const base = (zoneData && matBase !== null) ?
+            const base0 = (zoneData && matBase !== null) ?
               computeExpectedBasePrice(
                   {...od, materials_base_resolved: matBase}, zoneData) : null;
+            // رسوم الوعورة (terrain_surcharge_percent على مستند المنطقة) فوق الأساس
+            // قبل الضريبة — الذروة والخصم الموثوق والضريبة تُحسب على الأساس المُرسَّم.
+            const base = base0 && base0 > 0 ?
+              applyTerrainSurcharge(base0, zoneData) : base0;
             if (base && base > 0) {
               const surge = await _readSurgeFactor(db);
               const expected = Math.round(base * 1.15 * surge * 100) / 100;
@@ -4946,13 +4968,19 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
 
   const db = admin.firestore();
 
-  // 0. جدول فتح المنطقة (إن وُجدت منطقة باسم zoneName ولها schedule).
+  // 0. جدول فتح المنطقة (إن وُجدت منطقة باسم zoneName ولها schedule) وسقفها
+  //    اليومي الخاص (max_orders_per_day على مستند المنطقة — اختياري، يضيّق السقف
+  //    العام فقط: قرار المالك 2026-09-16 لضبط المناطق البعيدة/الوعرة).
   let zoneSchedule = null;
+  let zoneMaxOrdersPerDay = null;
   if (zoneName) {
     try {
       const zq = await db.collection("service_zones")
           .where("name", "==", zoneName).limit(1).get();
-      if (!zq.empty) zoneSchedule = zq.docs[0].data().schedule || null;
+      if (!zq.empty) {
+        zoneSchedule = zq.docs[0].data().schedule || null;
+        zoneMaxOrdersPerDay = zoneDailyCap(zq.docs[0].data());
+      }
     } catch { /* تعذّر جلب جدول المنطقة — يُعامَل كغير مقيَّد بجدول */ }
   }
 
@@ -4986,37 +5014,11 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
       .where("booking_date", "<=", endDate)
       .get();
 
-  const dailyCounts = {};
-  const slotCounts = {};
-  for (const doc of snap.docs) {
-    const d = doc.data();
-    if (d.status === "cancelled" || d.status === "rejected") continue;
-    // لا نعدّ الطلبات غير المدفوعة: يُنشأ الطلب is_paid=false قبل بوابة الدفع، والمهجور
-    // منها (لم يُكمَل دفعه) كان يبقى pending أبداً فيستهلك سعة الخانة/اليوم ويحجب عملاء
-    // حقيقيين بلا خدمة فعلية. نعدّ فقط ما أكّده الخادم (is_paid===true).
-    if (d.is_paid !== true) continue;
-    // **نعدّ طلبات كل المناطق.** كان العدّ مقصوراً على منطقة الطلب بينما driverCount
-    // يشمل كل السائقين (لأنهم بلا مناطق) — فيُقاس بسطٌ منطقةٍ واحدة على مقامٍ عالمي:
-    // سائقان مشغولان بطلبَي «الدائر» الساعة 10، وعميلة «أبو السلع» ترى عدّادها صفراً
-    // فتحجز نفس الساعة ⇒ ثلاثة طلبات وسائقان ⇒ طلبٌ مدفوع بلا سائق. البسط والمقام
-    // يجب أن يكونا من العالم نفسه.
-    const bDate = d.booking_date;
-    if (!bDate) continue;
-    dailyCounts[bDate] = (dailyCounts[bDate] || 0) + 1;
-    const ts = d.booking_time_slot;
-    if (ts) {
-      // الطلب يشغل سائقاً طوال مدته — نعدّه في كل ساعة يشغلها كي يعكس التلوين
-      // الانشغال الحقيقي (كان يُعدّ في ساعة البدء فقط فتظهر ساعات لاحقة متاحة زوراً).
-      const startH = parseInt(String(ts).split(":")[0], 10);
-      const hrs = Number(d.hours_contracted || 4);
-      if (!isNaN(startH)) {
-        for (let h = startH; h < startH + hrs; h++) {
-          const key = `${bDate}_${String(h).padStart(2, "0")}:00`;
-          slotCounts[key] = (slotCounts[key] || 0) + 1;
-        }
-      }
-    }
-  }
+  // العدّ في capacity.js (نقيّ ومختبَر): نعدّ طلبات **كل المناطق** لأن السائقين
+  // بلا مناطق (driverCount عالمي — البسط والمقام من العالم نفسه)، ونعدّ طلبات
+  // المنطقة المطلوبة على حدة لسقفها الخاص إن وُجد.
+  const {dailyCounts, slotCounts, zoneDailyCounts} =
+    countBookings(snap.docs.map((doc) => doc.data()), {zoneName: zoneName || null});
 
   // 4. اشتقاق جدول الفتح لكل يوم في المدى — مرجعيّ، يرسم منه العميل ويفرضه الدفع.
   const openHours = {};   // "yyyy-MM-dd" -> [start, end]
@@ -5040,6 +5042,8 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
   // maxTeamsPerSlot يعكس الآن عدد السائقين الحقيقي (لا قيمة ثابتة من الإعدادات)
   return {
     dailyCounts, slotCounts, maxOrdersPerDay, maxTeamsPerSlot: driverCount,
+    // سقف المنطقة الخاص وعدّها: العميل يعدّ اليوم ممتلئاً إن بلغ أيّاً من السقفين.
+    zoneMaxOrdersPerDay, zoneDailyCounts,
     scheduleEnabled: !!(zoneSchedule && zoneSchedule.enabled === true),
     openHours, closedDates, closedHours, defaultOpen: DEFAULT_OPEN,
   };
