@@ -8,6 +8,8 @@ import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/widgets/rating_dialog.dart';
+import 'package:zyiarah/models/tracking_steps.dart';
+import 'package:zyiarah/utils/phone_format.dart';
 
 
 class OrderTrackingScreen extends StatefulWidget {
@@ -24,13 +26,6 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   final ZyiarahCoreService _coreService = ZyiarahCoreService();
   final MapController _mapController = MapController();
   bool _ratingPromptShown = false;
-
-  final List<Map<String, dynamic>> _steps = [
-    {'status': 'scheduled', 'label': 'تم تعيين السائق', 'icon': Icons.assignment_ind},
-    {'status': 'on_the_way', 'label': 'السائق في الطريق', 'icon': Icons.directions_car},
-    {'status': 'in_progress', 'label': 'وصل السائق وبدأ الخدمة', 'icon': Icons.cleaning_services},
-    {'status': 'completed', 'label': 'تمت المهمة بنجاح', 'icon': Icons.verified},
-  ];
 
   @override
   void dispose() {
@@ -149,6 +144,18 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           subdomains: const ['a', 'b', 'c'],
           userAgentPackageName: 'com.zyiarah.zyiarah',
         ),
+        // (تصميم Stitch) خط المسار بين السائق والعميل — كان في خريطة الإدارة
+        // (map_screen.dart) وحدها؛ شاشة العميل كانت علامتين بلا خط بينهما.
+        if (driverLatLng != null)
+          PolylineLayer(
+            polylines: [
+              Polyline(
+                points: [driverLatLng, clientLatLng],
+                color: const Color(0xFF660033),
+                strokeWidth: 3.0,
+              ),
+            ],
+          ),
         MarkerLayer(
           markers: [
             Marker(
@@ -237,23 +244,41 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                             strokeWidth: 3, color: Color(0xFF660033)),
                       ),
                     ]),
-                  IconButton(
-                    onPressed: () {
-                      final phone = data['driver_phone'] as String?;
-                      if (phone != null && phone.isNotEmpty) {
-                        _callDriver(phone);
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('عذراً، رقم اتصال السائق غير متوفر حالياً')),
-                        );
-                      }
-                    },
-                    icon: const CircleAvatar(backgroundColor: Colors.green, child: Icon(Icons.phone, color: Colors.white, size: 20)),
-                  ),
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    // (تصميم Stitch) محادثة واتساب بجانب الاتصال.
+                    IconButton(
+                      tooltip: 'محادثة واتساب',
+                      onPressed: () {
+                        final phone = data['driver_phone'] as String?;
+                        if (phone != null && phone.isNotEmpty) {
+                          _whatsappDriver(phone);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('عذراً، رقم السائق غير متوفر حالياً')),
+                          );
+                        }
+                      },
+                      icon: const CircleAvatar(backgroundColor: Color(0xFF25D366), child: Icon(Icons.chat_rounded, color: Colors.white, size: 20)),
+                    ),
+                    IconButton(
+                      tooltip: 'اتصال مباشر',
+                      onPressed: () {
+                        final phone = data['driver_phone'] as String?;
+                        if (phone != null && phone.isNotEmpty) {
+                          _callDriver(phone);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('عذراً، رقم اتصال السائق غير متوفر حالياً')),
+                          );
+                        }
+                      },
+                      icon: const CircleAvatar(backgroundColor: Colors.green, child: Icon(Icons.phone, color: Colors.white, size: 20)),
+                    ),
+                  ]),
                 ],
           ),
           const SizedBox(height: 25),
-          _buildStepper(status),
+          _buildStepper(status, data),
           const Divider(height: 40),
           _buildDriverInfo(data),
           const SizedBox(height: 20),
@@ -263,23 +288,17 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     );
   }
 
-  Widget _buildStepper(String currentStatus) {
-    // Map Firestore status to our UI steps (Direct Dispatch dialect included)
-    Map<String, int> stepMapping = {
-      'scheduled': 0,
-      'assigned': 0,
-      'accepted': 1, // legacy: driver en route
-      'on_the_way': 1,
-      'in_progress': 2,
-      'completed': 3,
-    };
-    int uiIndex = stepMapping[currentStatus] ?? -1;
+  Widget _buildStepper(String currentStatus, Map<String, dynamic> data) {
+    const steps = TrackingSteps.steps;
+    final uiIndex = TrackingSteps.indexFor(currentStatus);
 
     return Column(
-      children: List.generate(_steps.length, (index) {
-        final step = _steps[index];
+      children: List.generate(steps.length, (index) {
+        final step = steps[index];
         final isActive = index <= uiIndex;
-        final isLast = index == _steps.length - 1;
+        final isCurrent = index == uiIndex && currentStatus != 'completed';
+        final isLast = index == steps.length - 1;
+        final at = TrackingSteps.timeFor(index, data);
 
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -290,20 +309,46 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                   width: 25,
                   height: 25,
                   decoration: BoxDecoration(color: isActive ? Colors.green : Colors.grey.shade300, shape: BoxShape.circle),
-                  child: Icon(isActive ? Icons.check : step['icon'], color: Colors.white, size: 14),
+                  child: Icon(isActive ? Icons.check : step.icon, color: Colors.white, size: 14),
                 ),
                 if (!isLast) Container(width: 2, height: 35, color: index < uiIndex ? Colors.green : Colors.grey.shade200),
               ],
             ),
             const SizedBox(width: 15),
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                step['label'],
-                style: GoogleFonts.tajawal(
-                  fontSize: 14,
-                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                  color: isActive ? const Color(0xFF1E293B) : Colors.grey,
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Expanded(
+                        child: Text(
+                          step.label,
+                          style: GoogleFonts.tajawal(
+                            fontSize: 14,
+                            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                            color: isActive ? const Color(0xFF1E293B) : Colors.grey,
+                          ),
+                        ),
+                      ),
+                      if (isCurrent)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF660033).withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text('نشط الآن',
+                              style: GoogleFonts.tajawal(
+                                  fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF660033))),
+                        ),
+                    ]),
+                    // (تصميم Stitch) طابع كل مرحلة من حقول الطلب الخادميّة.
+                    if (isActive && at != null)
+                      Text(TrackingSteps.timeLabel(at),
+                          style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey)),
+                  ],
                 ),
               ),
             ),
@@ -397,6 +442,17 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
       );
     }
     return const SizedBox();
+  }
+
+  Future<void> _whatsappDriver(String phone) async {
+    final number = whatsappNumber(phone);
+    final uri = Uri.parse('https://wa.me/$number');
+    final ok = number.isNotEmpty && await canLaunchUrl(uri) &&
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذّر فتح واتساب — رقم السائق: $phone')));
+    }
   }
 
   void _callDriver(String phone) async {

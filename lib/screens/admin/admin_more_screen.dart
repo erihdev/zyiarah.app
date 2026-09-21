@@ -7,6 +7,7 @@ import 'package:zyiarah/screens/admin/admin_users_screen.dart';
 import 'package:zyiarah/screens/admin/admin_drivers_screen.dart';
 import 'package:zyiarah/screens/admin/admin_support_screen.dart';
 import 'package:zyiarah/screens/admin/admin_banners_screen.dart';
+import 'package:zyiarah/screens/admin/admin_policies_screen.dart';
 import 'package:zyiarah/screens/admin/admin_coupons_screen.dart';
 import 'package:zyiarah/screens/admin/admin_contracts_screen.dart';
 import 'package:zyiarah/screens/admin/admin_managers_screen.dart';
@@ -17,6 +18,8 @@ import 'package:zyiarah/screens/admin/admin_subscriptions_screen.dart';
 import 'package:zyiarah/screens/admin/admin_event_worker_packages_screen.dart';
 import 'package:zyiarah/screens/admin/admin_audit_logs_screen.dart';
 import 'package:zyiarah/screens/admin/admin_analytics_screen.dart';
+import 'package:zyiarah/screens/admin/admin_fleet_map_screen.dart';
+import 'package:zyiarah/screens/admin/admin_invoices_screen.dart';
 import 'package:zyiarah/screens/admin/admin_schedule_board_screen.dart';
 import 'package:zyiarah/screens/admin/admin_broadcast_screen.dart';
 import 'package:zyiarah/utils/pdf_report_util.dart';
@@ -183,11 +186,27 @@ class AdminMoreScreen extends StatelessWidget {
             'roles': ['super_admin', 'accountant_admin', 'orders_manager'],
           },
           {
+            // رادار الأسطول: كل سائق في مهمة الآن على خريطة واحدة (Stitch _21).
+            'title': 'رادار الأسطول المباشر',
+            'icon': Icons.radar_rounded,
+            'color': const Color(0xFF0369A1),
+            'page': const AdminFleetMapScreen(),
+            'roles': ['super_admin', 'orders_manager'],
+          },
+          {
             'title': 'لوحة الإحصائيات والأرباح',
             'icon': Icons.insert_chart_outlined,
             'color': Colors.teal,
             'page': const AdminAnalyticsScreen(),
             'roles': ['super_admin', 'accountant_admin', 'orders_manager'],
+          },
+          {
+            // سجل فواتير ZATCA لكل الطلبات المدفوعة (خدمات ومتجر) بالشهر.
+            'title': 'سجل الفواتير الإلكترونية (ZATCA)',
+            'icon': Icons.receipt_long_outlined,
+            'color': const Color(0xFF0F766E),
+            'page': const AdminInvoicesScreen(),
+            'roles': ['super_admin', 'accountant_admin'],
           },
           {
             'title': 'سجل العمليات الإدارية',
@@ -223,6 +242,15 @@ class AdminMoreScreen extends StatelessWidget {
             'color': Colors.blueAccent,
             'page': const AdminHourlyZonesScreen(),
             'roles': ['super_admin', 'orders_manager'],
+          },
+          {
+            // (تصميم Stitch) بنود الشروط المصنَّفة — الكتابة للسوبر وحده في
+            // firestore.rules، فلا نعرضها لدور يعجز عن حفظ شيء.
+            'title': 'شروط وضوابط الخدمة',
+            'icon': Icons.gavel_rounded,
+            'color': Colors.brown,
+            'page': const AdminPoliciesScreen(),
+            'roles': ['super_admin'],
           },
           {
             'title': 'إعدادات النظام',

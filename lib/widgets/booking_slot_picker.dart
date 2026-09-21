@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/time_format.dart';
 
 /// منتقي التاريخ والوقت مع الإتاحة الحقيقية من الخادم — **مصدر «اللون الأخضر» الوحيد.**
@@ -55,6 +56,8 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
   Map<String, List<int>> _openHours = {}; // yyyy-MM-dd -> [فتح، إغلاق]
   Set<String> _closedDates = {};          // أيام لا تُخدَم فيها المنطقة
   int _maxOrdersPerDay = 10;
+  int? _zoneMaxOrdersPerDay; // سقف المنطقة الخاص (اختياري — يضيّق العام فقط)
+  Map<String, int> _zoneDailyCounts = {};
   int _maxTeamsPerSlot = 0;
 
   late DateTime _selectedDate;
@@ -97,7 +100,8 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
           .call({
             'startDate': fmt.format(now),
             'endDate': fmt.format(now.add(const Duration(days: _horizonDays + 1))),
-            // المنطقة لجدول الفتح فقط (لا للسعة — السائقون بلا مناطق).
+            // المنطقة لجدول الفتح وسقفها اليومي الخاص (لا لعدّ السائقين —
+            // هم بلا مناطق).
             if (widget.zoneName != null) 'zoneName': widget.zoneName,
           })
           .timeout(const Duration(seconds: 20));
@@ -130,6 +134,9 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
         _openHours = openHours;
         _closedDates = closed;
         _maxOrdersPerDay = (data['maxOrdersPerDay'] as num?)?.toInt() ?? 10;
+        _zoneMaxOrdersPerDay = (data['zoneMaxOrdersPerDay'] as num?)?.toInt();
+        _zoneDailyCounts = (data['zoneDailyCounts'] as Map? ?? {})
+            .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
         _maxTeamsPerSlot = (data['maxTeamsPerSlot'] as num?)?.toInt() ?? 0;
         _loading = false;
         // لو صار التاريخ المختار ممتلئاً أو مغلقاً، انتقل لأول يوم صالح.
@@ -155,7 +162,13 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
 
   String _key(DateTime d) => intl.DateFormat('yyyy-MM-dd').format(d);
 
-  bool _isDayFull(DateTime d) => (_dailyCounts[_key(d)] ?? 0) >= _maxOrdersPerDay;
+  /// ممتلئ بالسقف العام **أو** بسقف منطقة العميل الخاص (إن ضبطه الأدمن).
+  bool _isDayFull(DateTime d) => dayIsFull(
+        count: _dailyCounts[_key(d)] ?? 0,
+        max: _maxOrdersPerDay,
+        zoneCount: _zoneDailyCounts[_key(d)] ?? 0,
+        zoneMax: _zoneMaxOrdersPerDay,
+      );
 
   /// اليوم مغلق بجدول المنطقة (لا نخدمها هذا اليوم) — **سبب مختلف عن الامتلاء.**
   bool _isDayClosed(DateTime d) => _closedDates.contains(_key(d));

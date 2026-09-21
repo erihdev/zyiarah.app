@@ -13,6 +13,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:zyiarah/utils/day_capacity.dart';
 
 /// نموذج مصغّر لمنطق البوابة بعد الإصلاح — يعكس lib/screens/payment_summary_screen.dart.
 String? capacityVerdict({
@@ -24,6 +25,8 @@ String? capacityVerdict({
   required String bookingDate,
   required int startHour,
   required int hours,
+  int zoneOrdersThatDay = 0,
+  int? zoneMaxOrdersPerDay,
 }) {
   if (!checkSucceeded) {
     return 'تعذّر التحقق من توفّر الموعد. تحقّق من اتصالك وأعد المحاولة.';
@@ -31,7 +34,12 @@ String? capacityVerdict({
   if (driversInZone <= 0) {
     return 'لا يوجد سائق متاح في منطقتك حالياً. تواصل معنا لتحديد موعد.';
   }
-  if (ordersThatDay >= maxOrdersPerDay) {
+  if (dayIsFull(
+    count: ordersThatDay,
+    max: maxOrdersPerDay,
+    zoneCount: zoneOrdersThatDay,
+    zoneMax: zoneMaxOrdersPerDay,
+  )) {
     return 'نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.';
   }
   for (int h = startHour; h < startHour + hours; h++) {
@@ -75,6 +83,26 @@ void main() {
         slotCounts: const {}, bookingDate: date, startHour: 9, hours: 4,
       );
       expect(v, contains('هذا اليوم محجوز'));
+    });
+
+    test('سقف المنطقة الخاص بلغ ⇒ رسالة اليوم ولو كان السقف العام متاحاً', () {
+      // منطقة بعيدة سقفها 2 يومياً (قرار المالك): طلبان فيها يغلقان يومها
+      // ولو كان النشاط كله عند 3 من 10.
+      final v = capacityVerdict(
+        checkSucceeded: true,
+        ordersThatDay: 3, maxOrdersPerDay: 10, driversInZone: 5,
+        zoneOrdersThatDay: 2, zoneMaxOrdersPerDay: 2,
+        slotCounts: const {}, bookingDate: date, startHour: 9, hours: 4,
+      );
+      expect(v, contains('هذا اليوم محجوز'));
+      // والسقف الخاص لا يوسّع: يوم ممتلئ عالمياً يبقى ممتلئاً ولو للمنطقة متسع.
+      final w = capacityVerdict(
+        checkSucceeded: true,
+        ordersThatDay: 10, maxOrdersPerDay: 10, driversInZone: 5,
+        zoneOrdersThatDay: 0, zoneMaxOrdersPerDay: 50,
+        slotCounts: const {}, bookingDate: date, startHour: 9, hours: 4,
+      );
+      expect(w, contains('هذا اليوم محجوز'));
     });
 
     test('ساعة داخل المدة ممتلئة ⇒ يُمنع، ولو كانت ساعة البدء متاحة', () {
@@ -134,5 +162,12 @@ void main() {
       isFalse,
       reason: 'ابتلاع صامت داخل البوابة = عودة العطل نفسه. الفشل يجب أن يُرجع رسالة مانعة.',
     );
+    // سقف المنطقة الخاص: البوابة تحكم بالدالة المشتركة نفسها التي ترسم بها
+    // الشاشات شريط الأيام — لا يوم أخضر في الشاشة تمنعه البوابة أو العكس.
+    expect(body.contains('dayIsFull('), isTrue,
+        reason: 'البوابة تجمع السقف العام وسقف المنطقة عبر dayIsFull');
+    expect(body.contains(">= maxOrdersPerDay"), isFalse,
+        reason: 'لا مقارنة مباشرة بالسقف العام وحده');
+    expect(body.contains("data['zoneMaxOrdersPerDay']"), isTrue);
   });
 }
