@@ -7,7 +7,7 @@ workflows:
     # الطلب يصل عبر webhook من GitHub أُنشئ في 2026-09-13 (ping مقبول 202) —
     # قبله لم يصل حدث واحد رغم أن الكتلة موجودة منذ 2026-07-25 (54fa155)، فكان
     # كل بناء يدوياً. راجع «الـwebhook» في production_deployment_guide.md.
-    # النشر للجمهور يبقى يدوياً.
+    # النشر للجمهور مُفعَّل منذ 2026-09-21 بقرار المالك: submit_to_app_store أدناه.
     triggering:
       events:
         - push
@@ -237,10 +237,15 @@ workflows:
           success: true
           failure: true
 
+      # النشر للجمهور مُفعَّل بقرار المالك 2026-09-21: كل دفعة إلى main تُرفع إلى
+      # TestFlight ثم تُقدَّم لمراجعة آبل، ولا تحتاج ضغطة في App Store Connect.
+      # للتراجع أعِد submit_to_app_store إلى false — يبقى الرفع إلى TestFlight وحده.
+      # سكربت «Cancel existing App Store review submissions» أعلاه يُلغي أيّ تقديم
+      # مفتوح قبل البناء، وهو شرط عملي لتقديمٍ آليّ عند كل دمج.
       app_store_connect:
         auth: integration
         submit_to_testflight: true
-        submit_to_app_store: false        # غيِّر إلى true للنشر المباشر على App Store
+        submit_to_app_store: true
 
   # ═══════════════════════════════════════════════════
   # Android Workflow — بدون تغيير
@@ -262,7 +267,7 @@ workflows:
     # حدث واحد قطّ (Recent deliveries: No deliveries yet)، والبناء ٣٠ يقول
     # Started by: erihdev@gmail.com. تعليقٌ سابق هنا قال «ما كان ناقصاً هو
     # triggering وحده» — كان ناقصاً بدوره.
-    # النشر للجمهور (track: production) يبقى قراراً يدوياً كما هو في iOS.
+    # النشر للجمهور (track: production) مُفعَّل منذ 2026-09-21 كما في iOS.
     triggering:
       events:
         - push
@@ -335,9 +340,12 @@ workflows:
           success: true
           failure: true
 
-      # نشر تلقائي إلى مسار «الاختبار الداخلي» (نظير TestFlight لـ iOS) — يظهر لمختبريك
-      # فوراً بلا مراجعة. للنشر المباشر للجمهور غيّر track إلى production (مراجعة ~7 أيام).
+      # نشر تلقائي إلى مسار الإنتاج — للجمهور مباشرةً بعد مراجعة قوقل (~7 أيام).
+      # مُفعَّل بقرار المالك 2026-09-21؛ قبله كان track: internal (مختبرون داخليون
+      # بلا مراجعة). للتراجع أعِد track إلى internal.
+      # submit_as_draft: false يعني أن الإصدار يمضي إلى المراجعة تلقائياً بلا
+      # مسوّدة تنتظر ضغطة في Play Console — وهو المقصود من الأتمتة.
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: internal
+        track: production
         submit_as_draft: false
