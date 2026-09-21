@@ -71,9 +71,14 @@ void main() {
     });
 
     test('الدالة الخادمية ما زالت تحلّل "HH:00"', () {
-      final fn = _code('functions/index.js');
-      expect(fn.contains('parseInt(String(ts).split(":")[0]'), isTrue,
+      // انتقل عدّ الفترات إلى functions/capacity.js (نقيّ ومختبَر بـ
+      // capacity.test.js) — index.js يستدعيه من getHourlyAvailability.
+      final cap = _code('functions/capacity.js');
+      expect(cap.contains('parseInt(String(ts).split(":")[0]'), isTrue,
           reason: 'إن تغيّر التحليل فقد يكون التخزين تغيّر — تأكّد يدوياً');
+      final fn = _code('functions/index.js');
+      expect(fn.contains('require("./capacity")'), isTrue,
+          reason: 'getHourlyAvailability يجب أن يعدّ عبر capacity.js');
     });
   });
 

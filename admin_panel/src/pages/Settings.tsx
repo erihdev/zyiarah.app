@@ -34,6 +34,13 @@ interface CoverageZone {
     radiusKm: number;
     enabled: boolean;
     rank: number;
+    // (تسعير القرى والوعورة — تكافؤ مع حوار التطبيق) المحافظة الأم وطبيعة التضاريس
+    // ورسوم الوعورة % فوق الأساس قبل الضريبة — يقرؤها التسعير الخادمي وشاشة الدفع.
+    governorate?: string;
+    terrain?: string;
+    terrainSurchargePercent?: number;
+    // سقف يومي خاص بالمنطقة (اختياري) — يضيّق السقف العام فقط (تكافؤ مع حوار التطبيق).
+    maxOrdersPerDay?: number;
 }
 
 // (تكافؤ مع تطبيق الأدمن — admin_hourly_zones_screen.dart) نفس حقول التسعير حرفياً:
@@ -62,6 +69,8 @@ const emptyPackagesForm = (): Record<string, PkgForm> => Object.fromEntries(
 
 const emptyZoneForm = {
     name: '', latitude: '', longitude: '', radiusKm: '15',
+    governorate: '', terrain: '', terrainSurchargePercent: '',
+    zoneMaxOrdersPerDay: '',
     // تُبذر بنفس افتراضيات التطبيق (service_pricing_defaults.dart).
     sofaSqmPrice: '35', rugSqmPrice: '15',
     acMaintWindowPrice: '100', acMaintSplitPrice: '150',
@@ -226,6 +235,10 @@ export default function Settings({ role }: { role?: string | null }) {
                     radiusKm: data.radiusKm || 15,
                     enabled: data.enabled !== false,
                     rank: data.rank || 0,
+                    governorate: data.governorate || '',
+                    terrain: data.terrain || '',
+                    terrainSurchargePercent: Number(data.terrain_surcharge_percent) || 0,
+                    maxOrdersPerDay: Number(data.max_orders_per_day) || 0,
                 } as CoverageZone;
             }));
         }, (err) => {
@@ -361,6 +374,18 @@ export default function Settings({ role }: { role?: string | null }) {
             toast.error('نصف القطر يجب أن يكون بين 1 و100 كم');
             return;
         }
+        // رسوم الوعورة: فارغ = 0، وإلا رقم بين 0 و100 (نفس حارس حوار التطبيق).
+        const terrainPct = newZone.terrainSurchargePercent.trim() === '' ? 0 : parseFloat(newZone.terrainSurchargePercent);
+        if (isNaN(terrainPct) || terrainPct < 0 || terrainPct > 100) {
+            toast.error('رسوم الوعورة يجب أن تكون بين 0 و100%');
+            return;
+        }
+        // السقف اليومي الخاص: فارغ = 0 = السقف العام وحده، وإلا عدد صحيح ≥ 0.
+        const zoneMaxPerDay = newZone.zoneMaxOrdersPerDay.trim() === '' ? 0 : parseInt(newZone.zoneMaxOrdersPerDay, 10);
+        if (isNaN(zoneMaxPerDay) || zoneMaxPerDay < 0) {
+            toast.error('الحدّ اليومي للطلبات يجب أن يكون عدداً صحيحاً (فارغ = السقف العام)');
+            return;
+        }
         setIsAddingZone(true);
         try {
             // نفس مخطط حفظ تطبيق الأدمن حرفياً — التسعير الخادمي يقرأ هذه الحقول.
@@ -370,6 +395,11 @@ export default function Settings({ role }: { role?: string | null }) {
                 name: newZone.name.trim(),
                 centerLoc: new GeoPoint(lat, lng),
                 radiusKm: radius,
+                // (تسعير القرى والوعورة) نفس مفاتيح حوار التطبيق حرفياً.
+                governorate: newZone.governorate.trim(),
+                terrain: newZone.terrain,
+                terrain_surcharge_percent: terrainPct,
+                max_orders_per_day: zoneMaxPerDay,
                 sofaSqmPrice: num(newZone.sofaSqmPrice),
                 rugSqmPrice: num(newZone.rugSqmPrice),
                 acMaintWindowPrice: num(newZone.acMaintWindowPrice),
@@ -443,6 +473,9 @@ export default function Settings({ role }: { role?: string | null }) {
                 latitude: zone.latitude ? zone.latitude.toFixed(5) : '',
                 longitude: zone.longitude ? zone.longitude.toFixed(5) : '',
                 radiusKm: s(d.radiusKm) || '15',
+                governorate: s(d.governorate), terrain: s(d.terrain),
+                terrainSurchargePercent: Number(d.terrain_surcharge_percent) > 0 ? s(d.terrain_surcharge_percent) : '',
+                zoneMaxOrdersPerDay: Number(d.max_orders_per_day) > 0 ? s(d.max_orders_per_day) : '',
                 sofaSqmPrice: s(d.sofaSqmPrice), rugSqmPrice: s(d.rugSqmPrice),
                 acMaintWindowPrice: s(d.acMaintWindowPrice), acMaintSplitPrice: s(d.acMaintSplitPrice),
                 acWashWindowPrice: s(d.acWashWindowPrice), acWashSplitPrice: s(d.acWashSplitPrice),
@@ -1149,6 +1182,60 @@ export default function Settings({ role }: { role?: string | null }) {
                                                     />
                                                 </div>
                                                 <div>
+                                                    <label className="block text-xs font-bold text-slate-600 mb-1">الحدّ اليومي للطلبات في هذه المنطقة (اختياري — فارغ = السقف العام)</label>
+                                                    <input
+                                                        type="number"
+                                                        value={newZone.zoneMaxOrdersPerDay}
+                                                        onChange={e => setNewZone(p => ({ ...p, zoneMaxOrdersPerDay: e.target.value }))}
+                                                        placeholder="مثال: 3"
+                                                        min="0" step="1"
+                                                        className={zoneInputCls}
+                                                        dir="ltr"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-600 mb-1">المحافظة التابعة لها (اختياري)</label>
+                                                    <input
+                                                        type="text"
+                                                        list="zone-governorates"
+                                                        value={newZone.governorate}
+                                                        onChange={e => setNewZone(p => ({ ...p, governorate: e.target.value }))}
+                                                        placeholder="مثال: الداير بني مالك"
+                                                        className={zoneInputCls}
+                                                        dir="rtl"
+                                                    />
+                                                    <datalist id="zone-governorates">
+                                                        {[...new Set(zones.map(z => (z.governorate || '').trim()).filter(Boolean))].map(g => (
+                                                            <option key={g} value={g} />
+                                                        ))}
+                                                    </datalist>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-600 mb-1">طبيعة التضاريس</label>
+                                                    <select
+                                                        value={newZone.terrain}
+                                                        onChange={e => setNewZone(p => ({ ...p, terrain: e.target.value }))}
+                                                        className={zoneInputCls}
+                                                        dir="rtl"
+                                                    >
+                                                        <option value="">غير محدّدة</option>
+                                                        <option value="mountain">مرتفعات جبلية</option>
+                                                        <option value="plain">سهلية منبسطة</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-600 mb-1">رسوم الوعورة % (اختياري — على الأساس قبل الضريبة، لا على العقود)</label>
+                                                    <input
+                                                        type="number"
+                                                        value={newZone.terrainSurchargePercent}
+                                                        onChange={e => setNewZone(p => ({ ...p, terrainSurchargePercent: e.target.value }))}
+                                                        placeholder="0"
+                                                        min="0" max="100" step="0.5"
+                                                        className={zoneInputCls}
+                                                        dir="ltr"
+                                                    />
+                                                </div>
+                                                <div>
                                                     <label className="block text-xs font-bold text-slate-600 mb-1">خط العرض (Latitude)</label>
                                                     <input
                                                         type="number"
@@ -1428,7 +1515,7 @@ export default function Settings({ role }: { role?: string | null }) {
                                                             </div>
                                                             <div>
                                                                 <p className="font-black text-slate-800">{zone.name}</p>
-                                                                <p className="text-xs text-slate-500 font-mono mt-0.5">{zone.radiusKm} كم</p>
+                                                                <p className="text-xs text-slate-500 font-mono mt-0.5">{zone.radiusKm} كم{zone.governorate ? ` • ${zone.governorate}` : ''}{zone.terrainSurchargePercent ? ` • وعورة +${zone.terrainSurchargePercent}%` : ''}{zone.maxOrdersPerDay ? ` • سقف ${zone.maxOrdersPerDay}/يوم` : ''}</p>
                                                             </div>
                                                         </div>
                                                         {/* ظاهرة دائماً على اللمس، وتخفت حتى التحويم على الفأرة فقط.

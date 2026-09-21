@@ -226,6 +226,17 @@ workflows:
       - $HOME/export_options.plist        # للتحقق من إعدادات التوقيع
 
     publishing:
+      # بريد عند انتهاء كل بناء — نجاحاً وفشلاً. أُضيف بطلب المالك 2026-09-13:
+      # هو القناة الوحيدة التي يبلغه منها نتيجةُ البناء وسجلُّ خطئه بلا أن
+      # ينسخهما بيده (واجهة Codemagic وحالة الالتزام على GitHub محجوبتان عن
+      # مساعد الجلسة). Codemagic ترسل الرابط والسجلّ في الرسالة.
+      email:
+        recipients:
+          - erihdev@gmail.com
+        notify:
+          success: true
+          failure: true
+
       app_store_connect:
         auth: integration
         submit_to_testflight: true
@@ -316,6 +327,14 @@ workflows:
       - build/app/outputs/bundle/release/*.aab
 
     publishing:
+      # بريد عند انتهاء كل بناء — نظير ما في ios-release أعلاه، وللسبب نفسه.
+      email:
+        recipients:
+          - erihdev@gmail.com
+        notify:
+          success: true
+          failure: true
+
       # نشر تلقائي إلى مسار «الاختبار الداخلي» (نظير TestFlight لـ iOS) — يظهر لمختبريك
       # فوراً بلا مراجعة. للنشر المباشر للجمهور غيّر track إلى production (مراجعة ~7 أيام).
       google_play:
