@@ -27,7 +27,7 @@ dependencies:
   # firebase_auth <6.5.5 السابق عالج عَرَضاً واحداً وترك خمسة.
   # لا تُثبّت حزمة Firebase واحدة بمعزل عن أخواتها؛ ارفعها معاً.
   firebase_auth: ^6.6.1
-  cloud_firestore: ^6.9.0
+  cloud_firestore: ^6.10.0
   flutter_map: ^8.3.2
   firebase_messaging: ^16.2.2
   flutter_local_notifications: ^18.0.1
