@@ -20,7 +20,7 @@
     "firebase-functions": "^7.4.0",
     "geofire-common": "^6.0.0",
     "handlebars": "^4.7.9",
-    "resend": "^6.28.1"
+    "resend": "^6.29.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
