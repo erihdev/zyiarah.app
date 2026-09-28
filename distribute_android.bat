@@ -32,7 +32,10 @@ echo.
 echo ====================================================
 echo   Step 1: Building APK (Release Mode)
 echo ====================================================
-call flutter build apk --release --clean
+:: "flutter build" has no --clean flag (the old line failed before building
+:: anything). Cleaning is its own command, run right before the build.
+call flutter clean
+call flutter build apk --release
 if %errorlevel% neq 0 (
     echo [ERROR] Flutter build failed. Stopping.
     pause
@@ -45,14 +48,21 @@ echo   Step 2: Uploading to Firebase App Distribution
 echo ====================================================
 echo [*] Uploading build...
 
-:: Firebase App ID from google-services.json
-set APP_ID=1:275681992607:android:369f833ebbd0a9f7b127aa
+:: Firebase App ID of the REAL app (package com.zyiarah.zyiarah) from
+:: android/app/google-services.json. The old value pointed at com.zyiarah.app,
+:: so every upload was rejected for a package mismatch. Kept in sync with
+:: codemagic.yaml by test/app_distribution_guard_test.dart.
+set APP_ID=1:275681992607:android:8359bdc64c9ac43fb127aa
 set APK_PATH=build\app\outputs\flutter-apk\app-release.apk
 
+:: Testers come from the App Distribution group "testers" - the same group
+:: codemagic.yaml publishes to on every build. testers.txt was never in the
+:: repo, so the old file-based tester list always failed. (Do not spell the
+:: old flag here: test/app_distribution_guard_test.dart matches text.)
 call firebase appdistribution:distribute %APK_PATH% ^
     --app %APP_ID% ^
-    --release-notes "!release_notes!" ^
-    --testers-file testers.txt
+    --groups testers ^
+    --release-notes "!release_notes!"
 
 if %errorlevel% neq 0 (
     echo.
