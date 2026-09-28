@@ -1,8 +1,8 @@
-const admin = require("firebase-admin");
+const {initializeApp, getApps} = require("firebase-admin/app");
 const {getFirestore} = require("firebase-admin/firestore");
 
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
 
 /** Reads and logs the email_settings config document from Firestore. */

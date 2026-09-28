@@ -3,12 +3,15 @@
 // Run: firestore emulator on :8080, then `node test/payWithWallet.test.js`.
 process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
 process.env.GCLOUD_PROJECT = "demo-zyiarah-rules";
+// ما كان firebase-functions-test يضبطه في init(): index.js يقرأه عند initializeApp().
+process.env.FIREBASE_CONFIG = JSON.stringify({projectId: "demo-zyiarah-rules"});
 
-const fft = require("firebase-functions-test")({projectId: "demo-zyiarah-rules"});
-const myFns = require("../index.js"); // initialises admin.initializeApp()
-const admin = require("firebase-admin");
-const db = admin.firestore();
-const payWithWallet = fft.wrap(myFns.payWithWallet);
+const myFns = require("../index.js"); // initialises initializeApp()
+const {getFirestore} = require("firebase-admin/firestore");
+const db = getFirestore();
+// onCall (v2) يعرض .run(request) — وهو كل ما كان fft.wrap() يفعله للدوال القابلة للنداء.
+// أُسقطت firebase-functions-test لأن نطاق peer فيها يقف عند firebase-admin 13.
+const payWithWallet = (req) => myFns.payWithWallet.run(req);
 
 let pass = 0; let fail = 0;
 const ok = (name, cond) => {
@@ -68,7 +71,6 @@ const expectThrow = async (name, fn) => {
     payWithWallet({data: {amount: 200, orderId: "o_poor"}, auth: {uid: "u_poor"}}));
 
   console.log(`\npayWithWallet test: ${pass} passed, ${fail} failed`);
-  await fft.cleanup();
   process.exit(fail === 0 ? 0 : 1);
 })().catch((e) => {
   console.error(e); process.exit(1);

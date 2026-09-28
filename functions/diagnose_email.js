@@ -1,8 +1,9 @@
-const admin = require("firebase-admin");
-admin.initializeApp({
+const {initializeApp} = require("firebase-admin/app");
+const {getFirestore} = require("firebase-admin/firestore");
+initializeApp({
   projectId: "zyiarah-app", // Ensure this is correct
 });
-const db = admin.firestore();
+const db = getFirestore();
 
 /** Diagnoses email settings and notification trigger documents in Firestore. */
 async function diagnose() {
