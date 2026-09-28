@@ -4,7 +4,7 @@
 //
 // بنمط event_worker_contract_validation.test.js: نقرأ نص index.js ونقتطع أجسام
 // الدوال الداخلية (غير exports.) بعدّ الأقواس ونبنيها دوالّ حقيقية عبر
-// AsyncFunction/Function مع تمرير الاعتماديات الحرّة (admin/queuePush/...) كوهميات —
+// AsyncFunction/Function مع تمرير الاعتماديات الحرّة (Timestamp/FieldValue/queuePush/...) كوهميات —
 // تحقّق سلوكي فعلي دون محاكي Firestore ودون تهيئة index.js الثقيلة.
 const assert = require("assert");
 const fs = require("fs");
@@ -44,16 +44,13 @@ const flagZoneGeoMismatch = new AsyncFunction(
     extractBody("async function _flagZoneGeoMismatch("));
 const generateContractVisits = new AsyncFunction(
     "db", "contractRef", "c",
-    "admin", "queuePush", "_findFreeDriverForSlot", "_assignDriverScheduled",
+    "Timestamp", "FieldValue", "queuePush", "_findFreeDriverForSlot", "_assignDriverScheduled",
     extractBody("async function _generateContractVisits("));
 
-// admin وهمي بالحدّ الأدنى الذي يلمسه جسم المولّد (بلا GeoPoint — أُزيل الملفّق).
-const fakeAdmin = {
-  firestore: {
-    Timestamp: {fromDate: (d) => ({__ms: d.getTime()})},
-    FieldValue: {serverTimestamp: () => "__server_ts__"},
-  },
-};
+// Timestamp وFieldValue وهميّان بالحدّ الأدنى الذي يلمسه جسم المولّد — بأسماء الواجهة
+// المعيارية (firebase-admin/firestore) التي يستوردها index.js (بلا GeoPoint — أُزيل الملفّق).
+const fakeTimestamp = {fromDate: (d) => ({__ms: d.getTime()})};
+const fakeFieldValue = {serverTimestamp: () => "__server_ts__"};
 
 /**
  * db وهمي للمولّد: يسجّل كل orders.doc(id).set(payload) في saved.
@@ -118,7 +115,7 @@ const JAZAN = {latitude: 16.8892, longitude: 42.5511};
       scheduled_visits: [
         {date: "2026-09-01", slot: "10:00"}, {date: "2026-09-08", slot: "12:00"},
       ],
-    }, fakeAdmin, pushRecorder(pushes), noDriver, noAssign);
+    }, fakeTimestamp, fakeFieldValue, pushRecorder(pushes), noDriver, noAssign);
     assert.strictEqual(r.generated, 2);
     for (const id of ["sub_C1_1", "sub_C1_2"]) {
       assert.ok(saved[id], `لم يُكتب ${id}`);
@@ -138,7 +135,7 @@ const JAZAN = {latitude: 16.8892, longitude: 42.5511};
     await generateContractVisits(fakeDb(saved), {id: "C2"}, {
       planVisits: 1, userId: "u1", location: JAZAN, location_captured: true,
       scheduled_visits: [{date: "2026-09-01", slot: "10:00"}],
-    }, fakeAdmin, pushRecorder(pushes), noDriver, noAssign);
+    }, fakeTimestamp, fakeFieldValue, pushRecorder(pushes), noDriver, noAssign);
     assert.deepStrictEqual(saved["sub_C2_1"].location, JAZAN);
     assert.strictEqual(saved["sub_C2_1"].location_inherited, false);
     assert.strictEqual(
@@ -152,7 +149,7 @@ const JAZAN = {latitude: 16.8892, longitude: 42.5511};
     await generateContractVisits(fakeDb(saved), {id: "C3"}, {
       planVisits: 1, userId: "u1", location: JAZAN,
       scheduled_visits: [{date: "2026-09-01", slot: "10:00"}],
-    }, fakeAdmin, pushRecorder(pushes), noDriver, noAssign);
+    }, fakeTimestamp, fakeFieldValue, pushRecorder(pushes), noDriver, noAssign);
     assert.deepStrictEqual(saved["sub_C3_1"].location, JAZAN);
     assert.strictEqual(saved["sub_C3_1"].location_inherited, true);
     assert.strictEqual(

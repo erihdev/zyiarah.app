@@ -38,7 +38,7 @@ function extractAsyncFn(name, params) {
   assert.ok(depth === 0, `أقواس غير متوازنة عند اقتطاع ${name}`);
   const body = src.slice(braceStart + 1, end);
   // HttpsError حرّة في نص الدالة الأصلية (مستوردة أعلى index.js) — نمرّرها
-  // كمعامل إضافي هنا بدل استيراد كامل index.js (يتجنّب admin.initializeApp
+  // كمعامل إضافي هنا بدل استيراد كامل index.js (يتجنّب initializeApp
   // وأسرار defineSecret وغيرها من التهيئة الثقيلة غير اللازمة لهذا الاختبار).
   const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
   return new AsyncFunction(...params, "HttpsError", body);

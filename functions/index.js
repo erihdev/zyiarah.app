@@ -4,13 +4,19 @@ const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {onTaskDispatched} = require("firebase-functions/v2/tasks");
 const {getFunctions} = require("firebase-admin/functions");
 const {defineSecret} = require("firebase-functions/params");
-const admin = require("firebase-admin");
+// الواجهة المعيارية وحدها (firebase-admin/<module>): firebase-admin 14 حذف الواجهة المُسمّاة
+// كلّها — firestore()/messaging()/auth() على التصدير الافتراضي القديم صارت undefined.
+// test/admin_modular_api.test.js يحرس ذلك (اقرأ رأسه قبل تغيير هذه الاستيرادات).
+const {initializeApp} = require("firebase-admin/app");
+const {getFirestore, FieldValue, Timestamp, GeoPoint} = require("firebase-admin/firestore");
+const {getMessaging} = require("firebase-admin/messaging");
+const {getAuth} = require("firebase-admin/auth");
 const geofire = require("geofire-common");
 const {computeExpectedBasePrice, resolveMaterialsBase, applyTerrainSurcharge} =
   require("./pricing");
 const {isMarketingBroadcast, excludeOptedOut} = require("./notify_prefs");
 const {countBookings, zoneDailyCap} = require("./capacity");
-admin.initializeApp();
+initializeApp();
 
 // Secrets — stored in Firebase Secret Manager, never in source code
 const tamaraApiToken = defineSecret("TAMARA_API_TOKEN");
@@ -37,7 +43,7 @@ exports.sendNotificationOnTicketReply = onDocumentCreated({document: "support_ti
 
       const newMessage = snap.data();
       const ticketId = event.params.ticketId;
-      const ticketDoc = await admin.firestore().collection("support_tickets")
+      const ticketDoc = await getFirestore().collection("support_tickets")
           .doc(ticketId).get();
       if (!ticketDoc.exists) return null;
       const ticketData = ticketDoc.data();
@@ -55,7 +61,7 @@ exports.sendNotificationOnTicketReply = onDocumentCreated({document: "support_ti
       } else {
         // رد العميل → أشعِر الإدارة. لكن تخطَّ الرسالة الأولى (نصّ التذكرة عند إنشائها)
         // لأن sendNotificationToAdminsOnNewTicket يُشعر الإدارة بها أصلاً — منعاً لتنبيهٍ مزدوج.
-        const msgs = await admin.firestore().collection("support_tickets")
+        const msgs = await getFirestore().collection("support_tickets")
             .doc(ticketId).collection("messages").limit(2).get();
         if (msgs.size <= 1) return null;
         await queuePush(
@@ -252,11 +258,11 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated({document: "orde
         if (afterData.status === "in_progress" &&
             !afterData.start_time && !afterData.end_time) {
           await change.after.ref.update({
-            start_time: admin.firestore.FieldValue.serverTimestamp(),
+            start_time: FieldValue.serverTimestamp(),
           });
         } else if (afterData.status === "completed" && !afterData.end_time) {
           await change.after.ref.update({
-            end_time: admin.firestore.FieldValue.serverTimestamp(),
+            end_time: FieldValue.serverTimestamp(),
           });
         }
       } catch (e) {
@@ -278,16 +284,16 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated({document: "orde
       // وداخل try الإرسال: عميل بلا توكن FCM (ويب/جهاز جديد/رفض الإذن) لم يكن
       // يفقد الدفعة فحسب بل حتى أثرها في صندوق إشعاراته (كشفته المسرحية: صفر
       // إشعارات سيارات لدى عميل الويب).
-      await admin.firestore().collection("notifications").add({
+      await getFirestore().collection("notifications").add({
         userId: targetUserId,
         title: title,
         body: body,
         type: "order_update",
         relatedId: orderId,
-        sentAt: admin.firestore.FieldValue.serverTimestamp(),
+        sentAt: FieldValue.serverTimestamp(),
       });
 
-      const tokenDoc = await admin.firestore().collection("fcm_tokens")
+      const tokenDoc = await getFirestore().collection("fcm_tokens")
           .doc(targetUserId).get();
       if (!tokenDoc.exists) return null;
 
@@ -308,7 +314,7 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated({document: "orde
       };
 
       try {
-        await admin.messaging().send(payload);
+        await getMessaging().send(payload);
         console.log(`Notification sent to ${targetUserId} for order ${orderId}`);
       } catch (error) {
         console.error("Error sending order notification:", error);
@@ -392,7 +398,7 @@ exports.aggregateDriverRating = onDocumentUpdated(
       if (before.rating != null) return null; // تقييم سابق — لا تكرار
       const driverId = after.driver_id;
       if (!driverId) return null;
-      const db = admin.firestore();
+      const db = getFirestore();
       const ref = db.collection("drivers").doc(driverId);
       try {
         await db.runTransaction(async (tx) => {
@@ -432,7 +438,7 @@ exports.notifyClientOnStoreOrderStatus = onDocumentUpdated({document: "store_ord
           after.status === "awaiting_payment") {
         await change.after.ref.update({
           status: "under_review",
-          updated_at: admin.firestore.FieldValue.serverTimestamp(),
+          updated_at: FieldValue.serverTimestamp(),
         });
         return null;
       }
@@ -472,7 +478,7 @@ exports.notifyClientOnStoreOrderStatus = onDocumentUpdated({document: "store_ord
       let clientEmail = after.client_email;
       if (!clientEmail) {
         try {
-          const u = await admin.firestore().collection("users").doc(clientId).get();
+          const u = await getFirestore().collection("users").doc(clientId).get();
           clientEmail = u.exists ? (u.data() && u.data().email) : null;
         } catch { clientEmail = null; }
       }
@@ -509,7 +515,7 @@ exports.notifyClientOnMaintenanceRejected = onDocumentUpdated(
  */
 /** من أوقف «العروض والتسويق» في تفضيلاته (users.notification_prefs.marketing=false). */
 async function _marketingOptOutUids() {
-  const snap = await admin.firestore().collection("users")
+  const snap = await getFirestore().collection("users")
       .where("notification_prefs.marketing", "==", false).get();
   return new Set(snap.docs.map((d) => d.id));
 }
@@ -526,7 +532,7 @@ async function _deliverBroadcast(docRef, data) {
   try {
     // إرسال لرموز الأجهزة مباشرةً بدل topic — أوثق بكثير: لا يعتمد على اشتراك المواضيع
     // ولا على تأخّر انتشارها (كان سبب عدم وصول البثّ لبعض الأجهزة رغم تسجيلها).
-    let tokQuery = admin.firestore().collection("fcm_tokens");
+    let tokQuery = getFirestore().collection("fcm_tokens");
     if (target === "clients") {
       tokQuery = tokQuery.where("role", "==", "client");
     } else if (target === "drivers") {
@@ -542,7 +548,7 @@ async function _deliverBroadcast(docRef, data) {
     let sent = 0; let failed = 0; const invalid = [];
     for (let i = 0; i < uniqTokens.length; i += 500) {
       const chunk = uniqTokens.slice(i, i + 500);
-      const resp = await admin.messaging().sendEachForMulticast({
+      const resp = await getMessaging().sendEachForMulticast({
         ...payload,
         tokens: chunk,
         apns: {payload: {aps: {sound: "default"}}},
@@ -558,31 +564,31 @@ async function _deliverBroadcast(docRef, data) {
     }
     // نظّف الرموز الميتة (أجهزة أُلغي تثبيتها) كي لا تتضخّم المجموعة
     for (const bad of invalid) {
-      const q = await admin.firestore().collection("fcm_tokens").where("token", "==", bad).limit(5).get();
+      const q = await getFirestore().collection("fcm_tokens").where("token", "==", bad).limit(5).get();
       for (const dd of q.docs) await dd.ref.delete().catch(() => {});
     }
     console.log(`broadcast(${target}) tokens: sent=${sent} failed=${failed} cleaned=${invalid.length} optOut=${optOut.size}`);
 
-    let query = admin.firestore().collection("users");
+    let query = getFirestore().collection("users");
     if (target === "clients") {
       query = query.where("role", "==", "client");
     } else if (target === "drivers") {
       query = query.where("role", "==", "driver");
     }
     const usersSnap = await query.get();
-    let batch = admin.firestore().batch();
+    let batch = getFirestore().batch();
     let count = 0;
     for (const userDoc of excludeOptedOut(usersSnap.docs, optOut)) {
-      const notifRef = admin.firestore().collection("notifications").doc();
+      const notifRef = getFirestore().collection("notifications").doc();
       batch.set(notifRef, {
         userId: userDoc.id, title, body,
         type: "global_broadcast", isRead: false,
-        sentAt: admin.firestore.FieldValue.serverTimestamp(),
+        sentAt: FieldValue.serverTimestamp(),
       });
       count++;
       if (count === 400) {
         await batch.commit();
-        batch = admin.firestore().batch();
+        batch = getFirestore().batch();
         count = 0;
       }
     }
@@ -590,7 +596,7 @@ async function _deliverBroadcast(docRef, data) {
 
     await docRef.update({
       processed: true, status: "sent",
-      processed_at: admin.firestore.FieldValue.serverTimestamp(),
+      processed_at: FieldValue.serverTimestamp(),
     });
     console.log(`Notification delivered for target: ${target}`);
   } catch (error) {
@@ -598,7 +604,7 @@ async function _deliverBroadcast(docRef, data) {
     await docRef.update({
       processed: true, status: "error",
       error: error.message || "Unknown error",
-      processed_at: admin.firestore.FieldValue.serverTimestamp(),
+      processed_at: FieldValue.serverTimestamp(),
     });
   }
 }
@@ -651,7 +657,7 @@ exports.deliverScheduledNotification = onTaskDispatched(
     async (req) => {
       const docId = req.data && req.data.docId;
       if (!docId) return;
-      const db = admin.firestore();
+      const db = getFirestore();
       const docRef = db.collection("notifications_log").doc(docId);
       const claimed = await db.runTransaction(async (tx) => {
         const s = await tx.get(docRef);
@@ -666,8 +672,8 @@ exports.deliverScheduledNotification = onTaskDispatched(
 // 3b. Release scheduled broadcasts whose time has come.
 exports.releaseScheduledNotifications = onSchedule({schedule: "every 1 minutes", cpu: 0.083},
     async () => {
-      const db = admin.firestore();
-      const now = admin.firestore.Timestamp.now();
+      const db = getFirestore();
+      const now = Timestamp.now();
       // Single-inequality query (auto-indexed); status is filtered in code so a
       // delivered doc (status:'sent') is never re-sent.
       const due = await db.collection("notifications_log")
@@ -708,7 +714,7 @@ exports.manualSendNotification = onCall({cpu: 0.083}, async (request) => {
     throw new HttpsError("invalid-argument", "هدف الإشعار غير صالح");
   }
 
-  const userDoc = await admin.firestore()
+  const userDoc = await getFirestore()
       .collection("users").doc(request.auth.uid).get();
   const role = userDoc.exists ? userDoc.data()?.role : null;
   const adminRoles = [
@@ -726,7 +732,7 @@ exports.manualSendNotification = onCall({cpu: 0.083}, async (request) => {
 
   try {
     const topic = target === "all" ? "all_users" : target;
-    await admin.messaging().send({...payload, topic});
+    await getMessaging().send({...payload, topic});
     return {success: true, topic, sentAt: new Date().toISOString()};
   } catch (error) {
     throw new HttpsError("internal", error.message);
@@ -750,12 +756,12 @@ exports.createTamaraCheckout = onCall(
       // Fetch the true price + info from Firestore (prevent client tampering)
       let trueAmount = null;
       let info = {};
-      const orderDoc = await admin.firestore().collection("orders").doc(orderId).get();
+      const orderDoc = await getFirestore().collection("orders").doc(orderId).get();
       if (orderDoc.exists) {
         info = orderDoc.data();
         trueAmount = Number(info.amount);
       } else {
-        const storeOrderDoc = await admin.firestore().collection("store_orders").doc(orderId).get();
+        const storeOrderDoc = await getFirestore().collection("store_orders").doc(orderId).get();
         if (storeOrderDoc.exists) {
           info = storeOrderDoc.data();
           // final_amount = السعر النهائي بعد تعديل الإدارة (رسوم توصيل مثلاً). كان
@@ -765,7 +771,7 @@ exports.createTamaraCheckout = onCall(
           // العقد/الاشتراك: يُمرَّر معرّفه كـ orderId ويعيش في contracts (planPrice شامل
           // الضريبة). بدون هذا الفرع كان دفع الاشتراك عبر تمارا يفشل بـ not-found — بينما
           // verifyMoyasarPayment و tamaraWebhook يعالجان العقود أصلاً (كان تناقضاً).
-          const contractDoc = await admin.firestore().collection("contracts").doc(orderId).get();
+          const contractDoc = await getFirestore().collection("contracts").doc(orderId).get();
           if (contractDoc.exists) {
             info = contractDoc.data();
             trueAmount = Number(info.planPrice);
@@ -869,8 +875,8 @@ exports.createTamaraCheckout = onCall(
  */
 async function _claimPaymentPush(col, orderId) {
   try {
-    const ref = admin.firestore().collection(col).doc(orderId);
-    return await admin.firestore().runTransaction(async (tx) => {
+    const ref = getFirestore().collection(col).doc(orderId);
+    return await getFirestore().runTransaction(async (tx) => {
       const s = await tx.get(ref);
       if (!s.exists) return true; // بلا مستند لا حارس — أرسِل
       if (s.data().payment_push_sent === true) return false;
@@ -913,23 +919,23 @@ async function notifyClientPaymentResult(col, orderId, data, success) {
       `${greet}لم تكتمل عملية الدفع. يمكنكِ إعادة المحاولة من التطبيق.`;
 
     // 1) إشعار داخل التطبيق (سجل)
-    await admin.firestore().collection("notifications").add({
+    await getFirestore().collection("notifications").add({
       userId: clientUid,
       title: title,
       body: body,
       type: "payment_update",
       relatedId: orderId,
-      sentAt: admin.firestore.FieldValue.serverTimestamp(),
+      sentAt: FieldValue.serverTimestamp(),
     });
 
     // 2) Push عبر FCM
-    const tokenDoc = await admin.firestore().collection("fcm_tokens")
+    const tokenDoc = await getFirestore().collection("fcm_tokens")
         .doc(clientUid).get();
     if (!tokenDoc.exists) return;
     const fcmToken = tokenDoc.data()?.fcmToken || tokenDoc.data()?.token;
     if (!fcmToken) return;
 
-    await admin.messaging().send({
+    await getMessaging().send({
       notification: {title: title, body: body},
       data: {
         click_action: "FLUTTER_NOTIFICATION_CLICK",
@@ -962,7 +968,7 @@ async function _tamaraFlipPaid(db, orderRef, eventType, tamaraOrderId) {
         is_paid: true,
         tamara_status: eventType,
         ...(tamaraOrderId ? {tamara_order_id: String(tamaraOrderId)} : {}),
-        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        updated_at: FieldValue.serverTimestamp(),
       });
       return true;
     });
@@ -1012,7 +1018,7 @@ exports.tamaraWebhook = onRequest(
         return;
       }
 
-      const db = admin.firestore();
+      const db = getFirestore();
       try {
         if (eventType === "order_approved") {
           // إلزامي: نقل approved→authorised عبر Authorize API، وإلا يبقى الطلب
@@ -1041,7 +1047,7 @@ exports.tamaraWebhook = onRequest(
                 await ref.update({
                   payment_status: "failed",
                   tamara_status: eventType,
-                  updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                  updated_at: FieldValue.serverTimestamp(),
                 });
                 await notifyClientPaymentResult(col, orderRef, doc.data(), false);
               }
@@ -1072,15 +1078,15 @@ async function isAllowedEmailRecipient(email) {
   if (!lower) return false;
   // Configured admin address + system fallbacks
   try {
-    const cfg = await admin.firestore().collection("system_configs").doc("main_settings").get();
+    const cfg = await getFirestore().collection("system_configs").doc("main_settings").get();
     const adminEmail = (cfg.exists && cfg.data()?.admin_email ? String(cfg.data().admin_email) : "").toLowerCase();
     if (lower === adminEmail || lower === "admin@zyiarah.com" || lower === "no-reply@zyiarah.com") return true;
   } catch {
     // fall through to user/driver lookups
   }
-  const u = await admin.firestore().collection("users").where("email", "==", email).limit(1).get();
+  const u = await getFirestore().collection("users").where("email", "==", email).limit(1).get();
   if (!u.empty) return true;
-  const d = await admin.firestore().collection("drivers").where("email", "==", email).limit(1).get();
+  const d = await getFirestore().collection("drivers").where("email", "==", email).limit(1).get();
   if (!d.empty) return true;
   return false;
 }
@@ -1088,7 +1094,7 @@ async function isAllowedEmailRecipient(email) {
 // يبني بريد HTML منسّقاً لتنبيهات الإدارة بتفاصيل الطلب/العميل بدل نصّ عارٍ.
 // يُرجع null إن لم يكن النوع تنبيهاً إدارياً معروفاً → يُستخدم النص العادي.
 async function _buildAdminAlertHtml(type, data) {
-  const db = admin.firestore();
+  const db = getFirestore();
   const d = data || {};
   let heading = "تنبيه إداري";
   let rows = [];
@@ -1213,7 +1219,7 @@ exports.processNotificationTriggers = onDocumentCreated(
       // كان data.customerEmail قد يوجّه «تنبيه الإدارة» لبريد العميل بالخطأ.
       if (toUid === "ADMIN_BROADCAST") {
         try {
-          const cfgA = await admin.firestore()
+          const cfgA = await getFirestore()
               .collection("system_configs").doc("main_settings").get();
           const ae = (cfgA.exists && cfgA.data()?.admin_email) ?
             String(cfgA.data().admin_email).trim() : "";
@@ -1232,7 +1238,7 @@ exports.processNotificationTriggers = onDocumentCreated(
         let senderIsTrusted = trigger.createdBy === "server";
         if (!senderIsTrusted && trigger.createdBy) {
           try {
-            const cu = await admin.firestore().collection("users")
+            const cu = await getFirestore().collection("users")
                 .doc(String(trigger.createdBy)).get();
             const r = cu.exists ? cu.data().role : null;
             senderIsTrusted = r != null && r !== "client";
@@ -1252,7 +1258,7 @@ exports.processNotificationTriggers = onDocumentCreated(
 
         // 1. Sync to In-App Notification History
         if (toUid && toUid !== "ADMIN_BROADCAST") {
-          await admin.firestore().collection("notifications")
+          await getFirestore().collection("notifications")
               .doc(`trig_${event.params.id}`).set({
                 userId: toUid,
                 title: title,
@@ -1260,13 +1266,13 @@ exports.processNotificationTriggers = onDocumentCreated(
                 type: type,
                 relatedId: data.orderId || data.code || event.params.id,
                 isRead: false,
-                sentAt: admin.firestore.FieldValue.serverTimestamp(),
+                sentAt: FieldValue.serverTimestamp(),
               });
         }
         // 1b. سجلّ تنبيهات الإدارة — تستمع إليه لوحة الويب لحظيّاً (لا FCM/VAPID).
         if (toUid === "ADMIN_BROADCAST") {
           // معرّف حتمي (بدل add): إعادة المحاولة تكتب فوق نفس المستند بدل تكرار التنبيه.
-          await admin.firestore().collection("admin_notifications")
+          await getFirestore().collection("admin_notifications")
               .doc(`admin_trig_${event.params.id}`).set({
                 title: title,
                 body: (body || "").replace(/<[^>]*>?/gm, ""),
@@ -1274,7 +1280,7 @@ exports.processNotificationTriggers = onDocumentCreated(
                 data: data || {},
                 targetRoles: Array.isArray(targetRoles) ? targetRoles : null,
                 relatedId: data.orderId || data.ticketId || data.code || event.params.id,
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                createdAt: FieldValue.serverTimestamp(),
               });
         }
 
@@ -1314,7 +1320,7 @@ exports.processNotificationTriggers = onDocumentCreated(
             emailSenderOk = false;
           } else {
             try {
-              const cu = await admin.firestore().collection("users").doc(String(cb)).get();
+              const cu = await getFirestore().collection("users").doc(String(cb)).get();
               const r = cu.exists ? cu.data().role : null;
               const cuEmail = cu.exists ?
                 (cu.data().email || cu.data().real_email) : null;
@@ -1342,7 +1348,7 @@ exports.processNotificationTriggers = onDocumentCreated(
 
           let fromName = "Zyiarah | زيارة";
           let fromEmail = "no-reply@zyiarah.com";
-          const configDoc = await admin.firestore()
+          const configDoc = await getFirestore()
               .collection("system_configs").doc("email_settings").get();
           if (configDoc.exists) {
             fromName = configDoc.data()?.fromName || fromName;
@@ -1400,7 +1406,7 @@ exports.processNotificationTriggers = onDocumentCreated(
             emailStatus: "sent",
             messageId: resendData.id,
             provider: "resend",
-            processedAt: admin.firestore.FieldValue.serverTimestamp(),
+            processedAt: FieldValue.serverTimestamp(),
           });
           console.log(`[EMAIL] Sent. Message ID: ${resendData.id}`);
         }
@@ -1428,8 +1434,8 @@ exports.processNotificationTriggers = onDocumentCreated(
               // التوكن) — الحقل role دائماً 'admin' للموظّفين فلا يصلح للتصفية. نضمّ
               // دائماً المدراء الكبار (role admin/super بلا staff_role) عبر استعلام ثانٍ.
               const [byStaff, bySuper] = await Promise.all([
-                admin.firestore().collection("fcm_tokens").where("staff_role", "in", targetRoles).get(),
-                admin.firestore().collection("fcm_tokens").where("role", "in", ["admin", "super_admin"]).get(),
+                getFirestore().collection("fcm_tokens").where("staff_role", "in", targetRoles).get(),
+                getFirestore().collection("fcm_tokens").where("role", "in", ["admin", "super_admin"]).get(),
               ]);
               const seen = new Set();
               for (const d of byStaff.docs) {
@@ -1448,14 +1454,14 @@ exports.processNotificationTriggers = onDocumentCreated(
                 if (t && !seen.has(t)) { seen.add(t); targetTokens.push(t); }
               }
             } else {
-              const snap2 = await admin.firestore()
+              const snap2 = await getFirestore()
                   .collection("fcm_tokens").where("role", "in", allAdminRoles).get();
               targetTokens = snap2.docs
                   .map((d) => d.data()?.fcmToken || d.data()?.token)
                   .filter((t) => !!t);
             }
           } else if (toUid) {
-            const tokenDoc = await admin.firestore()
+            const tokenDoc = await getFirestore()
                 .collection("fcm_tokens").doc(toUid).get();
             if (tokenDoc.exists) {
               const t = tokenDoc.data()?.fcmToken || tokenDoc.data()?.token;
@@ -1474,9 +1480,9 @@ exports.processNotificationTriggers = onDocumentCreated(
               data: strData,
             };
             if (targetTokens.length === 1) {
-              await admin.messaging().send({...pushMsg, token: targetTokens[0]});
+              await getMessaging().send({...pushMsg, token: targetTokens[0]});
             } else {
-              await admin.messaging().sendEachForMulticast({
+              await getMessaging().sendEachForMulticast({
                 tokens: targetTokens,
                 notification: pushMsg.notification,
                 data: pushMsg.data,
@@ -1489,7 +1495,7 @@ exports.processNotificationTriggers = onDocumentCreated(
 
         await snap.ref.update({
           processed: true,
-          processedAt: admin.firestore.FieldValue.serverTimestamp(),
+          processedAt: FieldValue.serverTimestamp(),
         });
       } catch (error) {
         console.error(`Error processing trigger ${event.params.id}:`, error);
@@ -1498,7 +1504,7 @@ exports.processNotificationTriggers = onDocumentCreated(
           processed: false,
           attempts,
           error: error.message,
-          lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+          lastAttemptAt: FieldValue.serverTimestamp(),
         });
         // إعادة محاولة محدودة: كل الخطوات أعلاه حتمية/محروسة (in-app بمعرّف حتمي،
         // admin_notifications بمعرّف حتمي، البريد بحارس emailStatus، الدفع بحارس
@@ -1524,10 +1530,10 @@ exports.redeemQatratPoints = onCall({cpu: 0.083}, async (request) => {
     throw new HttpsError("invalid-argument", "الحد الأدنى للاستبدال 50 نقطة");
   }
 
-  const walletRef = admin.firestore().collection("wallets").doc(uid);
+  const walletRef = getFirestore().collection("wallets").doc(uid);
   const txRef = walletRef.collection("transactions").doc();
 
-  const result = await admin.firestore().runTransaction(async (t) => {
+  const result = await getFirestore().runTransaction(async (t) => {
     const snap = await t.get(walletRef);
     const currentPoints = snap.exists ? Number(snap.data().qatrat_points || 0) : 0;
     const currentBalance = snap.exists ? Number(snap.data().balance || 0) : 0;
@@ -1538,14 +1544,14 @@ exports.redeemQatratPoints = onCall({cpu: 0.083}, async (request) => {
     t.set(walletRef, {
       qatrat_points: currentPoints - pointsToRedeem,
       balance: currentBalance + financialCredit,
-      last_updated: admin.firestore.FieldValue.serverTimestamp(),
+      last_updated: FieldValue.serverTimestamp(),
     }, {merge: true});
     t.set(txRef, {
       amount: financialCredit,
       points: -pointsToRedeem,
       type: "qatrat_redeem",
       description: `استبدال ${pointsToRedeem} نقطة زيارة برصيد مالي`,
-      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      created_at: FieldValue.serverTimestamp(),
     });
     return {newBalance: currentBalance + financialCredit, newPoints: currentPoints - pointsToRedeem};
   });
@@ -1589,7 +1595,7 @@ function _parseServiceMeta(s) {
 }
 
 async function queuePush(toUid, title, body, type, data, targetRoles, recipientEmail) {
-  await admin.firestore().collection("notification_triggers").add({
+  await getFirestore().collection("notification_triggers").add({
     toUid: toUid,
     title: title,
     body: body,
@@ -1601,7 +1607,7 @@ async function queuePush(toUid, title, body, type, data, targetRoles, recipientE
     // ثم على بريد الإدارة الافتراضي.
     ...(recipientEmail ? {recipientEmail} : {}),
     createdBy: "server",
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
     processed: false,
   });
 }
@@ -1678,7 +1684,7 @@ async function _flagZoneGeoMismatch(orderRef, orderId, od, zoneData) {
  * @return {Promise<void>}
  */
 async function processReferralRewardServer(refereeUid, orderId) {
-  const db = admin.firestore();
+  const db = getFirestore();
   const orderRef = db.collection("orders").doc(orderId);
 
   // Resolve the referral: deterministic id first, query fallback for legacy
@@ -1709,18 +1715,18 @@ async function processReferralRewardServer(refereeUid, orderId) {
       t.update(referralRef, {
         status: "rewarded",
         rewarded_on_order: orderId,
-        rewarded_at: admin.firestore.FieldValue.serverTimestamp(),
+        rewarded_at: FieldValue.serverTimestamp(),
       });
       t.update(orderRef, {referral_processed: true});
       t.set(referrerWallet, {
-        balance: admin.firestore.FieldValue.increment(REFERRER_REWARD),
-        last_updated: admin.firestore.FieldValue.serverTimestamp(),
+        balance: FieldValue.increment(REFERRER_REWARD),
+        last_updated: FieldValue.serverTimestamp(),
       }, {merge: true});
       t.create(bonusTx, {
         amount: REFERRER_REWARD, points: 0, type: "referral_reward",
         description: "مكافأة إحالة صديق أتمّ أول طلب",
         order_id: orderId,
-        created_at: admin.firestore.FieldValue.serverTimestamp(),
+        created_at: FieldValue.serverTimestamp(),
       });
       // يجب أن يطابق مخطّط الكوبونات الذي يقرؤه التطبيق (validateCoupon):
       // type/value/maxUses/status/expiry — كان يكتب discount_type/is_active/expires_at
@@ -1732,10 +1738,10 @@ async function processReferralRewardServer(refereeUid, orderId) {
         maxUses: 1,
         uses: 0,
         status: "active",
-        expiry: admin.firestore.Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        expiry: Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000),
         target_user_id: refereeUid,
         description: "خصم الإحالة 10% — مكافأة الانضمام",
-        created_at: admin.firestore.FieldValue.serverTimestamp(),
+        created_at: FieldValue.serverTimestamp(),
       }, {merge: true});
 
       return {referrerId, couponCode};
@@ -1773,7 +1779,7 @@ exports.onOrderRewards = onDocumentUpdated({document: "orders/{orderId}", cpu: 0
         return null;
       }
 
-      const db = admin.firestore();
+      const db = getFirestore();
       const orderRef = db.collection("orders").doc(orderId);
       const clientId = after.client_id;
       const amount = Number(after.amount || 0);
@@ -1791,18 +1797,18 @@ exports.onOrderRewards = onDocumentUpdated({document: "orders/{orderId}", cpu: 0
               const oSnap = await t.get(orderRef);
               if (oSnap.get("qatrat_granted") === true) return;
               t.set(walletRef, {
-                qatrat_points: admin.firestore.FieldValue.increment(points),
-                last_updated: admin.firestore.FieldValue.serverTimestamp(),
+                qatrat_points: FieldValue.increment(points),
+                last_updated: FieldValue.serverTimestamp(),
               }, {merge: true});
               t.create(txRef, {
                 amount: 0, points: points, type: "qatrat_reward",
                 description: `نقاط زيارة مكتسبة من الطلب المكتمل #${code}`,
                 order_id: orderId,
-                created_at: admin.firestore.FieldValue.serverTimestamp(),
+                created_at: FieldValue.serverTimestamp(),
               });
               t.update(orderRef, {
                 qatrat_granted: true,
-                qatrat_granted_at: admin.firestore.FieldValue.serverTimestamp(),
+                qatrat_granted_at: FieldValue.serverTimestamp(),
               });
               didFlip = true;
             });
@@ -1844,14 +1850,14 @@ exports.onOrderRewards = onDocumentUpdated({document: "orders/{orderId}", cpu: 0
                   // (يمنع دفعاً مزدوجاً: بطاقة + محفظة عند إلغاء العميل أثناء نافذة البوابة).
                   oSnap.get("auto_refund_processed") === true) return;
               t.set(walletRef, {
-                balance: admin.firestore.FieldValue.increment(amount),
-                last_updated: admin.firestore.FieldValue.serverTimestamp(),
+                balance: FieldValue.increment(amount),
+                last_updated: FieldValue.serverTimestamp(),
               }, {merge: true});
               t.create(txRef, {
                 amount: amount, points: 0, type: "refund",
                 description: `إعادة رصيد للطلب الملغي رقم #${code}`,
                 order_id: orderId,
-                created_at: admin.firestore.FieldValue.serverTimestamp(),
+                created_at: FieldValue.serverTimestamp(),
               });
               t.update(orderRef, {refund_credited: true});
               didFlip = true;
@@ -1888,7 +1894,7 @@ exports.syncOrderLinkedRecords = onDocumentUpdated({document: "orders/{orderId}"
       const afterStatus = after.status;
       if (beforeStatus === afterStatus) return null;
 
-      const db = admin.firestore();
+      const db = getFirestore();
       const orderRef = db.collection("orders").doc(orderId);
       const maintenanceId = after.maintenance_id;
       const isSubscription = after.payment_method === "subscription";
@@ -1900,12 +1906,12 @@ exports.syncOrderLinkedRecords = onDocumentUpdated({document: "orders/{orderId}"
           if (afterStatus === "in_progress") {
             await db.collection("maintenance_requests").doc(maintenanceId).set({
               status: "in_progress",
-              startedAt: admin.firestore.FieldValue.serverTimestamp(),
+              startedAt: FieldValue.serverTimestamp(),
             }, {merge: true});
           } else if (afterStatus === "completed") {
             await db.collection("maintenance_requests").doc(maintenanceId).set({
               status: "completed",
-              completedAt: admin.firestore.FieldValue.serverTimestamp(),
+              completedAt: FieldValue.serverTimestamp(),
             }, {merge: true});
           }
         } catch (e) {
@@ -1923,12 +1929,12 @@ exports.syncOrderLinkedRecords = onDocumentUpdated({document: "orders/{orderId}"
               if (oSnap.get("visit_counted") === true) return; // already counted
               const cId = oSnap.get("contract_id");
               t.set(userRef, {
-                visits_remaining: admin.firestore.FieldValue.increment(-1),
+                visits_remaining: FieldValue.increment(-1),
               }, {merge: true});
               // اخصم من عدّاد العقد نفسه أيضاً كي تعكس بطاقة الباقة رصيدها الفعلي
               if (cId) {
                 t.set(db.collection("contracts").doc(cId), {
-                  visits_remaining: admin.firestore.FieldValue.increment(-1),
+                  visits_remaining: FieldValue.increment(-1),
                 }, {merge: true});
               }
               t.update(orderRef, {visit_counted: true});
@@ -1941,11 +1947,11 @@ exports.syncOrderLinkedRecords = onDocumentUpdated({document: "orders/{orderId}"
               if (oSnap.get("visit_counted") !== true) return;
               const cId = oSnap.get("contract_id");
               t.set(userRef, {
-                visits_remaining: admin.firestore.FieldValue.increment(1),
+                visits_remaining: FieldValue.increment(1),
               }, {merge: true});
               if (cId) {
                 t.set(db.collection("contracts").doc(cId), {
-                  visits_remaining: admin.firestore.FieldValue.increment(1),
+                  visits_remaining: FieldValue.increment(1),
                 }, {merge: true});
               }
               t.update(orderRef, {visit_counted: false});
@@ -1973,7 +1979,7 @@ exports.countCouponUseOnOrderCreate = onDocumentUpdated({document: "orders/{orde
       const code = after.coupon_code;
       if (!code || typeof code !== "string" || !code.trim()) return null;
 
-      const db = admin.firestore();
+      const db = getFirestore();
       const orderRef = change.after.ref;
       const q = await db.collection("promo_codes")
           .where("code", "==", code.toUpperCase()).limit(1).get();
@@ -1991,7 +1997,7 @@ exports.countCouponUseOnOrderCreate = onDocumentUpdated({document: "orders/{orde
           const uses = Number(pSnap.get("uses") || 0);
           const maxUses = Number(pSnap.get("maxUses") || 0);
           const overLimit = maxUses > 0 && uses >= maxUses;
-          t.update(promoRef, {uses: admin.firestore.FieldValue.increment(1)});
+          t.update(promoRef, {uses: FieldValue.increment(1)});
           t.update(orderRef, overLimit ?
             {coupon_counted: true, coupon_overlimit: true} :
             {coupon_counted: true});
@@ -2072,7 +2078,7 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
     throw new HttpsError("invalid-argument", "المبلغ غير صالح");
   }
 
-  const db = admin.firestore();
+  const db = getFirestore();
   const walletRef = db.collection("wallets").doc(uid);
   const txRef = orderId ?
     walletRef.collection("transactions").doc(`wallet_pay_${orderId}`) :
@@ -2155,21 +2161,21 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
     }
     t.set(walletRef, {
       balance: balance - amount,
-      last_updated: admin.firestore.FieldValue.serverTimestamp(),
+      last_updated: FieldValue.serverTimestamp(),
     }, {merge: true});
     t.set(txRef, {
       amount: -amount, points: 0, type: "payment",
       description: note,
       ...(orderId ? {order_id: orderId} : {}),
-      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      created_at: FieldValue.serverTimestamp(),
     });
     if (orderRef) {
       t.update(orderRef, {
         is_paid: true,
         payment_status: "paid",
         payment_method: "wallet",
-        paid_at: admin.firestore.FieldValue.serverTimestamp(),
-        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        paid_at: FieldValue.serverTimestamp(),
+        updated_at: FieldValue.serverTimestamp(),
       });
     }
     return {success: true, newBalance: balance - amount};
@@ -2177,7 +2183,7 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
 
   // إشعار العميل بتأكيد الدفع بالمحفظة (كان صامتاً) — بعد نجاح المعاملة، وأول مرّة فقط.
   if (orderId && !result.alreadyPaid) {
-    admin.firestore().collection("orders").doc(orderId).get()
+    getFirestore().collection("orders").doc(orderId).get()
         .then((s) => s.exists &&
           notifyClientPaymentResult("orders", orderId, s.data(), true))
         .catch((e) => console.error("notify after wallet pay:", e));
@@ -2205,9 +2211,9 @@ function _reopenFieldsIfSystemCancelled(data) {
       data.cancel_reason === "unpaid_expired") {
     return {
       status: "pending",
-      cancel_reason: admin.firestore.FieldValue.delete(),
-      cancelled_by: admin.firestore.FieldValue.delete(),
-      cancelled_at: admin.firestore.FieldValue.delete(),
+      cancel_reason: FieldValue.delete(),
+      cancelled_by: FieldValue.delete(),
+      cancelled_at: FieldValue.delete(),
       reopened_after_late_payment: true,
     };
   }
@@ -2301,7 +2307,7 @@ async function _moyasarVoidOrRefund(db, secret, paymentId, orderRef) {
     moyasar_status: res.status, is_paid: false,
     tamper_blocked: true, refund_credited: true,
     [authorized ? "voided_at" : "refunded_at"]:
-      admin.firestore.FieldValue.serverTimestamp(),
+      FieldValue.serverTimestamp(),
   }).catch(() => {});
   return {done: true, action: authorized ? "voided" : "refunded"};
 }
@@ -2345,8 +2351,7 @@ exports.verifyMoyasarPayment = onCall(
         throw new HttpsError("failed-precondition", `حالة عملية الدفع ليست مدفوعة: ${paymentData.status}`);
       }
 
-      const db = admin.firestore();
-      const FieldValue = admin.firestore.FieldValue;
+      const db = getFirestore();
 
       // ابحث عن الطلب في المجموعات المعروفة (منع التلاعب: المبلغ المرجعي من الطلب).
       let trueAmount = null;
@@ -2390,7 +2395,7 @@ exports.verifyMoyasarPayment = onCall(
           let clientName = (md.client_name || "").trim();
           if (!clientName) {
             try {
-              const uDoc = await admin.firestore().collection("users")
+              const uDoc = await getFirestore().collection("users")
                   .doc(md.client_id || request.auth.uid).get();
               if (uDoc.exists) clientName = (uDoc.data().name || "").trim();
             } catch { /* اسم العميل تحسين اختياري — الإشعار يُرسَل بدونه */ }
@@ -2412,7 +2417,7 @@ exports.verifyMoyasarPayment = onCall(
             // بلا إحداثيات في الـmetadata ⇒ بلا حقل location إطلاقاً (كان يُختم
             // مركز الرياض زوراً) — الواجهات تُخفي الخرائط بأمان عند غيابه.
             ...((!isNaN(lat) && !isNaN(lng)) ?
-              {location: new admin.firestore.GeoPoint(lat, lng)} : {}),
+              {location: new GeoPoint(lat, lng)} : {}),
             created_at: FieldValue.serverTimestamp(),
             server_created_from_payment: true,
             // أعِد بناء تفصيل الخدمة من الـ metadata (وإلّا فُقِد على طلب Apple Pay).
@@ -2422,7 +2427,7 @@ exports.verifyMoyasarPayment = onCall(
           if (md.service_date) {
             const sd = _parseKsaIso(md.service_date);
             if (!isNaN(sd.getTime())) {
-              payload.service_date = admin.firestore.Timestamp.fromDate(sd);
+              payload.service_date = Timestamp.fromDate(sd);
               if (isHourly) {
                 const pad = (n) => String(n).padStart(2, "0");
                 payload.booking_date = `${sd.getFullYear()}-${pad(sd.getMonth() + 1)}-${pad(sd.getDate())}`;
@@ -2608,7 +2613,7 @@ async function processAccountDeletion(uid) {
   try {
     // 1. Delete user from Firebase Auth
     try {
-      await admin.auth().deleteUser(uid);
+      await getAuth().deleteUser(uid);
       console.log(`Successfully deleted auth user: ${uid}`);
     } catch (authErr) {
       if (authErr.code === "auth/user-not-found") {
@@ -2619,26 +2624,26 @@ async function processAccountDeletion(uid) {
     }
 
     // 2. Delete user's document from users collection
-    await admin.firestore().collection("users").doc(uid).delete();
+    await getFirestore().collection("users").doc(uid).delete();
     console.log(`Successfully deleted users/${uid} document`);
 
     // 3. Clean up associated FCM tokens (both legacy collection names)
-    await admin.firestore().collection("fcm_tokens").doc(uid).delete().catch(() => {});
-    await admin.firestore().collection("fcm_token").doc(uid).delete().catch(() => {});
+    await getFirestore().collection("fcm_tokens").doc(uid).delete().catch(() => {});
+    await getFirestore().collection("fcm_token").doc(uid).delete().catch(() => {});
 
     // 4. Mark the request fully processed
-    await admin.firestore().collection("account_deletions").doc(uid).update({
-      completed_at: admin.firestore.FieldValue.serverTimestamp(),
+    await getFirestore().collection("account_deletions").doc(uid).update({
+      completed_at: FieldValue.serverTimestamp(),
       status: "deleted_fully_processed",
     });
     console.log(`Successfully completed deletion workflow for ${uid}`);
   } catch (error) {
     console.error(`Error processing account deletion for user ${uid}:`, error);
     // Record the failure so it can be retried/inspected by an admin
-    await admin.firestore().collection("account_deletions").doc(uid).update({
+    await getFirestore().collection("account_deletions").doc(uid).update({
       error: error.message || "Unknown error",
       status: "failed_deletion",
-      failed_at: admin.firestore.FieldValue.serverTimestamp(),
+      failed_at: FieldValue.serverTimestamp(),
     });
   }
 }
@@ -2691,7 +2696,7 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
         (!beforeData || beforeData.is_paid !== true);
     if (paidFlipped && !afterData.driver_id &&
         afterData.status === "pending" && afterData.service_date) {
-      const db = admin.firestore();
+      const db = getFirestore();
       const start = afterData.service_date.toDate();
       const hours = Number(afterData.hours_contracted || 4);
       const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
@@ -2717,7 +2722,7 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
       // خادمي لكل نقلة (sendNotificationOnOrderStatusChange).
       await change.after.ref.update({
         status: "under_review",
-        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        updated_at: FieldValue.serverTimestamp(),
       });
       console.log(`onOrderWritten: dateless paid order ${event.params.orderId} -> under_review`);
     }
@@ -2738,9 +2743,9 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
         beforeData.driver_id && ACTIVE_WITH_DRIVER.includes(beforeData.status) &&
         (afterData.status === "cancelled" || afterData.status === "completed");
     if (driverFreed) {
-      const db = admin.firestore();
+      const db = getFirestore();
       // −13س كنافذة المكنسة: طلبٌ طويل فات بدؤه ونافذته قائمة يلتقط السائقَ المتحرر.
-      const cutoff = admin.firestore.Timestamp.fromDate(
+      const cutoff = Timestamp.fromDate(
           new Date(Date.now() - 13 * 60 * 60 * 1000));
       // نفس شكل استعلام المكنسة (فهرس status+service_date قائم).
       const snap = await db.collection("orders")
@@ -2855,12 +2860,12 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
   }
 
   // Update the analytics_summary document atomically
-  const summaryRef = admin.firestore().collection("metadata").doc("analytics_summary");
+  const summaryRef = getFirestore().collection("metadata").doc("analytics_summary");
 
   const updates = {};
-  if (deltaRevenue !== 0) updates.total_revenue = admin.firestore.FieldValue.increment(deltaRevenue);
-  if (deltaActive !== 0) updates.active_orders = admin.firestore.FieldValue.increment(deltaActive);
-  if (deltaCompleted !== 0) updates.completed_orders = admin.firestore.FieldValue.increment(deltaCompleted);
+  if (deltaRevenue !== 0) updates.total_revenue = FieldValue.increment(deltaRevenue);
+  if (deltaActive !== 0) updates.active_orders = FieldValue.increment(deltaActive);
+  if (deltaCompleted !== 0) updates.completed_orders = FieldValue.increment(deltaCompleted);
 
   if (Object.keys(updates).length > 0) {
     try {
@@ -2895,7 +2900,7 @@ exports.getSurgePricingFactor = onCall({cpu: 0.083}, async (request) => {
     throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
   }
   try {
-    const cfg = await admin.firestore()
+    const cfg = await getFirestore()
         .collection("system_configs").doc("main_settings").get();
     const pct = Number(cfg.exists ? cfg.data().surge_percent : 0);
     if (!Number.isFinite(pct) || pct <= 0) return {surgeFactor: 1.0};
@@ -2927,7 +2932,7 @@ exports.findNearestDrivers = onCall({cpu: 0.25}, async (request) => {
   const promises = [];
 
   for (const b of bounds) {
-    const q = admin.firestore().collection("users")
+    const q = getFirestore().collection("users")
         .where("role", "==", "driver")
         .where("status", "in", ["available", "online"])
         .where("geohash", ">=", b[0])
@@ -2981,7 +2986,7 @@ exports.findNearestDrivers = onCall({cpu: 0.25}, async (request) => {
  *   لم يُكتب في أي مكان — كان الترشيح يعمل دائماً على مسار «بلا منطقة».)
  * - الانشغال: السائق مشغول إن كان لديه طلب يتقاطع زمنياً بحالة
  *   scheduled/on_the_way/in_progress/accepted (لا يُحسب الانشغال "الآني" بل تقاطع الفترة).
- * @param {admin.firestore.Firestore} db
+ * @param {FirebaseFirestore.Firestore} db
  * @param {object} opts {startDateTime, endDateTime}
  * @return {Promise<FirebaseFirestore.QueryDocumentSnapshot|null>}
  */
@@ -2999,8 +3004,8 @@ async function _findFreeDriverForSlot(db, {startDateTime, endDateTime}) {
 
   // بناء مجموعة السائقين المشغولين بطلبات متقاطعة زمنياً
   const ordersSnap = await db.collection("orders")
-      .where("service_date", ">=", admin.firestore.Timestamp.fromDate(winStart))
-      .where("service_date", "<", admin.firestore.Timestamp.fromDate(endDateTime))
+      .where("service_date", ">=", Timestamp.fromDate(winStart))
+      .where("service_date", "<", Timestamp.fromDate(endDateTime))
       .where("status", "in", ["scheduled", "assigned", "on_the_way", "in_progress", "accepted"])
       .get();
 
@@ -3031,7 +3036,7 @@ async function _findFreeDriverForSlot(db, {startDateTime, endDateTime}) {
 /**
  * يتحقق هل سائق محدد حرّ في فترة زمنية (لا يتقاطع مع مهمة أخرى له).
  * يستخدم نفس فهرس مُحدِّد التوفّر (service_date + status) ويصفّي السائق في JS.
- * @param {admin.firestore.Firestore} db
+ * @param {FirebaseFirestore.Firestore} db
  * @param {string} driverId
  * @param {Date} startDateTime
  * @param {Date} endDateTime
@@ -3042,8 +3047,8 @@ async function _isDriverFreeForSlot(db, driverId, startDateTime, endDateTime) {
   const winStart = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
 
   const ordersSnap = await db.collection("orders")
-      .where("service_date", ">=", admin.firestore.Timestamp.fromDate(winStart))
-      .where("service_date", "<", admin.firestore.Timestamp.fromDate(endDateTime))
+      .where("service_date", ">=", Timestamp.fromDate(winStart))
+      .where("service_date", "<", Timestamp.fromDate(endDateTime))
       .where("status", "in", ["scheduled", "assigned", "on_the_way", "in_progress", "accepted"])
       .get();
 
@@ -3060,7 +3065,7 @@ async function _isDriverFreeForSlot(db, driverId, startDateTime, endDateTime) {
 /**
  * يُسنِد طلباً لسائق بحالة scheduled (التوجيه المباشر).
  * لا يُعدّ السائق مشغولاً الآن — يصبح مشغولاً فقط عند انتقاله إلى on_the_way.
- * @param {admin.firestore.Firestore} db
+ * @param {FirebaseFirestore.Firestore} db
  * @param {string} orderId
  * @param {FirebaseFirestore.DocumentSnapshot} driverDoc
  * @param {Date} startDateTime
@@ -3099,8 +3104,8 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
     // طويلة (hours_contracted > 8) تبدأ قبل السلوت بأكثر من 8 ساعات (كانت −8 تُفوّتها).
     const winStart = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
     const dayQ = db.collection("orders")
-        .where("service_date", ">=", admin.firestore.Timestamp.fromDate(winStart))
-        .where("service_date", "<", admin.firestore.Timestamp.fromDate(slotEnd))
+        .where("service_date", ">=", Timestamp.fromDate(winStart))
+        .where("service_date", "<", Timestamp.fromDate(slotEnd))
         .where("status", "in", ["scheduled", "assigned", "on_the_way", "in_progress", "accepted"]);
     const daySnap = await tx.get(dayQ);
     for (const d2 of daySnap.docs) {
@@ -3130,10 +3135,10 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
       // تعيين سائق» للأبد رغم إسناد السائق.
       assigned_driver: d.name || "سائق",
       driver_phone: d.phone || "000000000",
-      assigned_at: admin.firestore.FieldValue.serverTimestamp(),
-      scheduled_at: admin.firestore.Timestamp.fromDate(startDateTime),
+      assigned_at: FieldValue.serverTimestamp(),
+      scheduled_at: Timestamp.fromDate(startDateTime),
       // service_date مطلوب حتى يحتسب مُحدِّد التوفّر هذه المهمة ضمن انشغال السائق
-      service_date: admin.firestore.Timestamp.fromDate(startDateTime),
+      service_date: Timestamp.fromDate(startDateTime),
       booking_date: bookingDate,
       booking_time_slot: timeSlot,
     });
@@ -3151,7 +3156,7 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
  * إن كان c.contract_kind === 'event_workers' تُقرأ الباقة من event_worker_packages
  * بدلاً من subscription_packages (نفس منطق السعر/الزيارات)، مع تحقّق إضافي لعدد
  * العاملات إن حدّدته الباقة.
- * @param {admin.firestore.Firestore} db
+ * @param {FirebaseFirestore.Firestore} db
  * @param {object} c بيانات العقد
  * @param {FirebaseFirestore.Transaction} [tx] معاملة اختيارية (القراءة داخلها)
  * @return {Promise<void>}
@@ -3210,7 +3215,7 @@ exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
   }
   const {contractId} = request.data;
   if (!contractId) throw new HttpsError("invalid-argument", "معرف العقد مطلوب");
-  const db = admin.firestore();
+  const db = getFirestore();
 
   // العثور على العقد (قد يكون contractId هو معرّف المستند أو حقل contractId)
   let contractRef = db.collection("contracts").doc(contractId);
@@ -3241,7 +3246,7 @@ exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
     await _validateContractPlan(db, data, tx);
     tx.update(contractRef, {
       visits_generated: true,
-      visits_generated_at: admin.firestore.FieldValue.serverTimestamp(),
+      visits_generated_at: FieldValue.serverTimestamp(),
     });
     return true;
   });
@@ -3320,10 +3325,10 @@ exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
       location_inherited: locationInherited,
       zone_name: zoneName,
       hours_contracted: hours,
-      service_date: admin.firestore.Timestamp.fromDate(startDateTime),
+      service_date: Timestamp.fromDate(startDateTime),
       booking_date: v.date,
       booking_time_slot: v.slot,
-      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      created_at: FieldValue.serverTimestamp(),
       reminder_sent: false,
       // (عاملات المناسبات) يقرأه lib/widgets/service_meta_view.dart +
       // admin_panel/src/utils/serviceMeta.ts لعرض العدد/الساعات على بطاقة الزيارة.
@@ -3362,7 +3367,7 @@ exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
 
 /**
  * يولّد زيارات العقد (طلبات + إسناد سائقين). مشترك؛ لا يرمي — يُعيد {skipped}.
- * @param {admin.firestore.Firestore} db
+ * @param {FirebaseFirestore.Firestore} db
  * @param {FirebaseFirestore.DocumentReference} contractRef
  * @param {object} c بيانات العقد
  * @return {Promise<object>}
@@ -3430,10 +3435,10 @@ async function _generateContractVisits(db, contractRef, c) {
       location_inherited: locationInherited,
       zone_name: zoneName,
       hours_contracted: hours,
-      service_date: admin.firestore.Timestamp.fromDate(startDateTime),
+      service_date: Timestamp.fromDate(startDateTime),
       booking_date: v.date,
       booking_time_slot: v.slot,
-      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      created_at: FieldValue.serverTimestamp(),
       reminder_sent: false,
       // (عاملات المناسبات) نفس حقل service_meta الذي يكتبه generateSubscriptionVisits
       // — تُقرأ من service_meta_view.dart + admin_panel serviceMeta.ts.
@@ -3461,7 +3466,7 @@ exports.activateContractOnPaid = onDocumentUpdated({document: "contracts/{contra
       const before = change.before.data() || {};
       const after = change.after.data() || {};
       if (before.is_paid === true || after.is_paid !== true) return null;
-      const db = admin.firestore();
+      const db = getFirestore();
       const contractRef = change.after.ref;
       // مطالبة ذرّية (idempotent) بالتفعيل + التوليد
       const claim = await db.runTransaction(async (tx) => {
@@ -3477,15 +3482,15 @@ exports.activateContractOnPaid = onDocumentUpdated({document: "contracts/{contra
           tx.update(contractRef, {
             plan_validation_failed: true,
             plan_validation_error: String(e.message || e),
-            plan_validation_at: admin.firestore.FieldValue.serverTimestamp(),
+            plan_validation_at: FieldValue.serverTimestamp(),
           });
           return {__invalid: String(e.message || e)};
         }
         tx.update(contractRef, {
           status: "active",
-          activated_at: admin.firestore.FieldValue.serverTimestamp(),
+          activated_at: FieldValue.serverTimestamp(),
           visits_generated: true,
-          visits_generated_at: admin.firestore.FieldValue.serverTimestamp(),
+          visits_generated_at: FieldValue.serverTimestamp(),
         });
         // منح رصيد الزيارات + حقول عرض الاشتراك ذرّياً — بدونها كانت بطاقة الاشتراك
         // في لوحة العميل لا تظهر أبداً (has_active_subscription تبقى false).
@@ -3513,18 +3518,18 @@ exports.activateContractOnPaid = onDocumentUpdated({document: "contracts/{contra
               lastVisitMs + 7 * 24 * 60 * 60 * 1000, // مهلة بعد آخر زيارة
               Date.now() + 24 * 60 * 60 * 1000); // لا يقلّ عن يوم من الآن
           tx.set(db.collection("users").doc(c.userId), {
-            visits_remaining: admin.firestore.FieldValue.increment(pv),
+            visits_remaining: FieldValue.increment(pv),
             has_active_subscription: true,
             subscription_total_visits: pv,
             subscription_type: c.planName || "باقة زيارة",
-            subscription_expiry: admin.firestore.Timestamp.fromMillis(expiryMs),
+            subscription_expiry: Timestamp.fromMillis(expiryMs),
           }, {merge: true});
           // عدّادات مستقلّة لكل عقد — كي تعرض الرئيسية بطاقة منفصلة لكل باقة نشطة
           // (الشهرية + الأسبوعية معاً) بدل طمس حقول المستخدم المجمّعة بعضها بعضاً.
           tx.set(contractRef, {
             visits_remaining: pv,
             visits_total: pv,
-            expiry: admin.firestore.Timestamp.fromMillis(expiryMs),
+            expiry: Timestamp.fromMillis(expiryMs),
           }, {merge: true});
         }
         return c;
@@ -3570,7 +3575,7 @@ exports.payContractWithWallet = onCall({cpu: 0.083}, async (request) => {
   const uid = request.auth.uid;
   const contractId = request.data && request.data.contractId;
   if (!contractId) throw new HttpsError("invalid-argument", "معرف العقد مطلوب");
-  const db = admin.firestore();
+  const db = getFirestore();
   const contractRef = db.collection("contracts").doc(contractId);
   const walletRef = db.collection("wallets").doc(uid);
   return await db.runTransaction(async (t) => {
@@ -3586,12 +3591,12 @@ exports.payContractWithWallet = onCall({cpu: 0.083}, async (request) => {
     if (balance < price) throw new HttpsError("failed-precondition", "الرصيد غير كافٍ");
     const txRef = walletRef.collection("transactions").doc(`wallet_contract_${contractId}`);
     t.set(walletRef, {balance: balance - price,
-      last_updated: admin.firestore.FieldValue.serverTimestamp()}, {merge: true});
+      last_updated: FieldValue.serverTimestamp()}, {merge: true});
     t.set(txRef, {amount: -price, points: 0, type: "payment",
       description: "دفع باقة اشتراك", contract_id: contractId,
-      created_at: admin.firestore.FieldValue.serverTimestamp()});
+      created_at: FieldValue.serverTimestamp()});
     t.update(contractRef, {is_paid: true, payment_method: "wallet",
-      paid_at: admin.firestore.FieldValue.serverTimestamp()});
+      paid_at: FieldValue.serverTimestamp()});
     return {success: true, newBalance: balance - price};
   });
 });
@@ -3609,7 +3614,7 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   if (isNaN(startDateTime.getTime())) {
     throw new HttpsError("invalid-argument", "موعد غير صالح");
   }
-  const db = admin.firestore();
+  const db = getFirestore();
   const orderRef = db.collection("orders").doc(orderId);
 
   const [orderSnap, driverSnap] = await Promise.all([
@@ -3670,8 +3675,8 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
     const slotEnd = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
     const winStart = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
     const conflictQ = db.collection("orders")
-        .where("service_date", ">=", admin.firestore.Timestamp.fromDate(winStart))
-        .where("service_date", "<", admin.firestore.Timestamp.fromDate(slotEnd))
+        .where("service_date", ">=", Timestamp.fromDate(winStart))
+        .where("service_date", "<", Timestamp.fromDate(slotEnd))
         .where("status", "in", ["scheduled", "assigned", "on_the_way", "in_progress", "accepted"]);
     const conflictSnap = await tx.get(conflictQ);
     for (const d2 of conflictSnap.docs) {
@@ -3693,9 +3698,9 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
       // تعيين سائق» للأبد في مسار الاعتماد اليدوي (كنب/مكيفات/متجر).
       assigned_driver: d.name || "سائق",
       driver_phone: d.phone || "000000000",
-      assigned_at: admin.firestore.FieldValue.serverTimestamp(),
-      scheduled_at: admin.firestore.Timestamp.fromDate(startDateTime),
-      service_date: admin.firestore.Timestamp.fromDate(startDateTime),
+      assigned_at: FieldValue.serverTimestamp(),
+      scheduled_at: Timestamp.fromDate(startDateTime),
+      service_date: Timestamp.fromDate(startDateTime),
       booking_date: bookingDate,
       booking_time_slot: timeSlot,
     });
@@ -3727,7 +3732,7 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
       throw new HttpsError("invalid-argument", "موعد غير صالح");
     }
   }
-  const db = admin.firestore();
+  const db = getFirestore();
   const orderRef = db.collection("orders").doc(orderId);
   // 'assigned' حالة نشطة يحملها السائق في كل الشاشات — استبعادها كان يدفع تعديل
   // زيارتها للمسار المباشر غير الذرّي في لوحتي الأدمن.
@@ -3768,8 +3773,8 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
     // الموعد الجديد بأكثر من 8 ساعات — كانت −8 تُفوِّتها فيُحجَز السائق لمهمتين.
     const winStart = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
     const conflictQ = db.collection("orders")
-        .where("service_date", ">=", admin.firestore.Timestamp.fromDate(winStart))
-        .where("service_date", "<", admin.firestore.Timestamp.fromDate(slotEnd))
+        .where("service_date", ">=", Timestamp.fromDate(winStart))
+        .where("service_date", "<", Timestamp.fromDate(slotEnd))
         .where("status", "in", active);
     const conflictSnap = await tx.get(conflictQ);
     for (const d2 of conflictSnap.docs) {
@@ -3784,11 +3789,11 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
             "السائق مشغول بمهمة أخرى في هذا الوقت — اختر موعداً أو سائقاً آخر");
       }
     }
-    const upd = {rescheduled_at: admin.firestore.FieldValue.serverTimestamp()};
+    const upd = {rescheduled_at: FieldValue.serverTimestamp()};
     if (parsedStart) {
       const riyadh = new Date(startDateTime.getTime() + 3 * 60 * 60 * 1000);
-      upd.service_date = admin.firestore.Timestamp.fromDate(startDateTime);
-      upd.scheduled_at = admin.firestore.Timestamp.fromDate(startDateTime);
+      upd.service_date = Timestamp.fromDate(startDateTime);
+      upd.scheduled_at = Timestamp.fromDate(startDateTime);
       upd.booking_date = `${riyadh.getUTCFullYear()}-` +
         `${String(riyadh.getUTCMonth() + 1).padStart(2, "0")}-` +
         `${String(riyadh.getUTCDate()).padStart(2, "0")}`;
@@ -3806,7 +3811,7 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
       // زر «اتصال بالسائق» عند العميل يقرأ driver_phone — تركه القديم كان يجعل
       // العميل يهاتف السائق **السابق** بعد كل تبديل.
       upd.driver_phone = newDriverPhone;
-      upd.assigned_at = admin.firestore.FieldValue.serverTimestamp();
+      upd.assigned_at = FieldValue.serverTimestamp();
       // status يبقى نشطاً؛ إشعار السائق الجديد يُطلقه notifyDriverOnAssignment،
       // وتحرير السائق القديم يتكفّل به freeOldDriverOnReassign.
     }
@@ -3830,7 +3835,7 @@ exports.freeDriverOnOrderCancel = onDocumentUpdated(
       const driverId = after.driver_id || before.driver_id;
       if (!driverId) return; // لم يكن الطلب مُسنَداً لأي سائق
 
-      const db = admin.firestore();
+      const db = getFirestore();
       const driverRef = db.collection("drivers").doc(driverId);
 
       await db.runTransaction(async (tx) => {
@@ -3881,7 +3886,7 @@ exports.unassignJobsOnDriverDisable = onDocumentUpdated(
       if (!wasUsable || !nowDisabled) return null;
 
       const driverId = event.params.driverId;
-      const db = admin.firestore();
+      const db = getFirestore();
       const nowMs = Date.now();
       // نفس شكل فهرس لوحة السائق (driver_id + status in).
       const snap = await db.collection("orders")
@@ -3896,14 +3901,14 @@ exports.unassignJobsOnDriverDisable = onDocumentUpdated(
           d.service_date.toDate().getTime() : null;
         if (sd !== null && sd < nowMs) continue; // فات موعدها — شأن مكانس الإنقاذ
         await doc.ref.update({
-          driver_id: admin.firestore.FieldValue.delete(),
-          driver_name: admin.firestore.FieldValue.delete(),
-          assigned_driver: admin.firestore.FieldValue.delete(),
-          driver_phone: admin.firestore.FieldValue.delete(),
+          driver_id: FieldValue.delete(),
+          driver_name: FieldValue.delete(),
+          assigned_driver: FieldValue.delete(),
+          driver_phone: FieldValue.delete(),
           // pending المدفوع تلتقطه sweepUnassignedPaidOrders كل 5 دقائق.
           status: "pending",
           unassigned_reason: "driver_disabled",
-          updated_at: admin.firestore.FieldValue.serverTimestamp(),
+          updated_at: FieldValue.serverTimestamp(),
         }).catch((e) =>
           console.error(`unassignJobsOnDriverDisable ${doc.id}:`, e.message));
         n++;
@@ -3936,7 +3941,7 @@ exports.freeOldDriverOnReassign = onDocumentUpdated(
       // فقط عند تغيّر السائق فعلاً وكان هناك سائق سابق مختلف (null→A إسنادٌ جديد لا يعنينا).
       if (!oldDriver || oldDriver === newDriver) return;
 
-      const db = admin.firestore();
+      const db = getFirestore();
       const driverRef = db.collection("drivers").doc(oldDriver);
       const freed = await db.runTransaction(async (tx) => {
         const ds = await tx.get(driverRef);
@@ -3984,7 +3989,7 @@ exports.dedupeFcmToken = onDocumentWritten(
       const token = after.fcmToken || after.token;
       if (!token) return;
       const uid = event.params.uid;
-      const db = admin.firestore();
+      const db = getFirestore();
       const dupes = await db.collection("fcm_tokens")
           .where("fcmToken", "==", token).get();
       const batch = db.batch();
@@ -4009,15 +4014,15 @@ exports.dedupeFcmToken = onDocumentWritten(
 exports.remindDriversUpcomingTasks = onSchedule(
     {schedule: "every 15 minutes", timeZone: "Asia/Riyadh"},
     async () => {
-      const db = admin.firestore();
+      const db = getFirestore();
       const now = Date.now();
       const windowStart = new Date(now + 60 * 60 * 1000); // +1h
       const windowEnd = new Date(now + 75 * 60 * 1000); // +1h15m
 
       const snap = await db.collection("orders")
           .where("status", "==", "scheduled")
-          .where("scheduled_at", ">=", admin.firestore.Timestamp.fromDate(windowStart))
-          .where("scheduled_at", "<", admin.firestore.Timestamp.fromDate(windowEnd))
+          .where("scheduled_at", ">=", Timestamp.fromDate(windowStart))
+          .where("scheduled_at", "<", Timestamp.fromDate(windowEnd))
           .get();
 
       let sent = 0;
@@ -4058,13 +4063,13 @@ const _riyadhLocalDate = (ms) => {
 exports.remindClientsUpcomingAppointments = onSchedule(
     {schedule: "every 30 minutes", timeZone: "Asia/Riyadh"},
     async () => {
-      const db = admin.firestore();
+      const db = getFirestore();
       const now = Date.now();
       const in24h = new Date(now + 24 * 60 * 60 * 1000);
       // نطاق مفرد على service_date (مُفهرَس تلقائياً) — الحالة تُصفّى في الكود.
       const snap = await db.collection("orders")
-          .where("service_date", ">=", admin.firestore.Timestamp.fromDate(new Date(now)))
-          .where("service_date", "<=", admin.firestore.Timestamp.fromDate(in24h))
+          .where("service_date", ">=", Timestamp.fromDate(new Date(now)))
+          .where("service_date", "<=", Timestamp.fromDate(in24h))
           .get();
 
       const ACTIVE = ["pending", "scheduled", "assigned", "accepted"];
@@ -4142,12 +4147,12 @@ exports.sweepUnassignedPaidOrders = onSchedule(
     {schedule: "every 5 minutes", timeZone: "Asia/Riyadh",
       secrets: ["MOYASAR_SECRET_KEY"]},
     async () => {
-      const db = admin.firestore();
+      const db = getFirestore();
       const now = Date.now();
       // −13س (أطول باقة 12س + هامش): كانت −1س فتتوقف إعادة المحاولة بعد ساعة من
       // موعد البدء رغم أن الزيارة الطويلة ما تزال قابلة للإنقاذ طوال نافذتها —
       // «منطقة ميتة» بلا محاولة ولا تنبيه حتى استرداد نهاية النافذة.
-      const cutoff = admin.firestore.Timestamp.fromDate(
+      const cutoff = Timestamp.fromDate(
           new Date(now - 13 * 60 * 60 * 1000));
       // (حذف الاعتمادات — قرار المالك) كان هنا استعلام ثانٍ على حالة
       // pending_admin_approval لزيارات الاشتراك؛ حُذفت الحالة من الجذور وكل
@@ -4199,9 +4204,9 @@ exports.sweepUnassignedPaidOrders = onSchedule(
       // (تصعيد الطلب العالق) طلبٌ مدفوع بلا سائق فات موعده بأكثر من ساعة يخرج من
       // نافذة إعادة المحاولة أعلاه فلا يُسنَد ولا يُرى خادميّاً أبداً — مالٌ مقبوض
       // بلا خدمة. ننبّه الإدارة مرّة واحدة (علم stranded_alerted) لتتدخّل يدويّاً.
-      const strandFloor = admin.firestore.Timestamp.fromDate(
+      const strandFloor = Timestamp.fromDate(
           new Date(now - 24 * 60 * 60 * 1000));
-      const strandCeil = admin.firestore.Timestamp.fromDate(
+      const strandCeil = Timestamp.fromDate(
           new Date(now - 60 * 60 * 1000));
       const strandSnap = await db.collection("orders")
           .where("status", "==", "pending")
@@ -4256,7 +4261,7 @@ exports.sweepUnassignedPaidOrders = onSchedule(
 exports.opsHealthSweep = onSchedule(
     {schedule: "every 6 hours", timeZone: "Asia/Riyadh"},
     async () => {
-      const db = admin.firestore();
+      const db = getFirestore();
       const now = Date.now();
       const codeOf = (doc, d) => `#${d.code || doc.id}`;
 
@@ -4313,9 +4318,9 @@ exports.opsHealthSweep = onSchedule(
       // 3) عالق قيد التنفيذ: بدأ ولم يُكمَل حتى بعد نهاية النافذة + 12 ساعة —
       //    السائق نسي الإكمال فتتعطل إحصاءات اليوم وسعة الغد.
       try {
-        const floor = admin.firestore.Timestamp.fromDate(
+        const floor = Timestamp.fromDate(
             new Date(now - 72 * 60 * 60 * 1000));
-        const ceil = admin.firestore.Timestamp.fromDate(new Date(now));
+        const ceil = Timestamp.fromDate(new Date(now));
         const perStatus = await Promise.all(
             ["scheduled", "assigned", "accepted", "on_the_way", "in_progress"]
                 .map((s) => db.collection("orders")
@@ -4402,7 +4407,7 @@ exports.opsHealthSweep = onSchedule(
           const ageMs = now - (d.createdAt?.toDate?.().getTime() || now);
           if (ageMs > 3 * 24 * 60 * 60 * 1000) continue;
           const copy = {...d, redriven_from: doc.id,
-            createdAt: admin.firestore.FieldValue.serverTimestamp()};
+            createdAt: FieldValue.serverTimestamp()};
           await db.collection("notification_triggers").add(copy);
           await doc.ref.update({processed: true, status: "redriven"});
           redriven++;
@@ -4426,7 +4431,7 @@ exports.reconcileOrphanPayments = onSchedule(
       const secret = moyasarSecretKey.value();
       if (!secret) { console.error("[reconcile] Moyasar secret not set"); return null; }
       const authHeader = `Basic ${Buffer.from(secret + ":").toString("base64")}`;
-      const db = admin.firestore();
+      const db = getFirestore();
       let recovered = 0;
       try {
         const resp = await fetch("https://api.moyasar.com/v1/payments?per=25",
@@ -4473,7 +4478,7 @@ exports.reconcileOrphanPayments = onSchedule(
                 await foundRef.update({
                   is_paid: true, payment_status: "paid",
                   moyasar_payment_id: p.id, moyasar_status: "paid",
-                  updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                  updated_at: FieldValue.serverTimestamp(),
                   ..._reopenFieldsIfSystemCancelled(foundData),
                 });
                 console.log(`[reconcile] CONFIRMED existing ${oid} (paid ${paidH}/${expectedH})`);
@@ -4506,7 +4511,7 @@ exports.reconcileOrphanPayments = onSchedule(
           let clientName = (md.client_name || "").trim();
           if (!clientName && md.client_id) {
             try {
-              const uDoc = await admin.firestore().collection("users").doc(md.client_id).get();
+              const uDoc = await getFirestore().collection("users").doc(md.client_id).get();
               if (uDoc.exists) clientName = (uDoc.data().name || "").trim();
             } catch { /* اسم العميل تحسين اختياري — الإشعار يُرسَل بدونه */ }
           }
@@ -4522,8 +4527,8 @@ exports.reconcileOrphanPayments = onSchedule(
             // بلا إحداثيات في الـmetadata ⇒ بلا حقل location إطلاقاً (كان يُختم
             // مركز الرياض زوراً) — الواجهات تُخفي الخرائط بأمان عند غيابه.
             ...((!isNaN(lat) && !isNaN(lng)) ?
-              {location: new admin.firestore.GeoPoint(lat, lng)} : {}),
-            created_at: admin.firestore.FieldValue.serverTimestamp(),
+              {location: new GeoPoint(lat, lng)} : {}),
+            created_at: FieldValue.serverTimestamp(),
             server_created_from_payment: true, reconciled: true,
             // أعِد بناء تفصيل الخدمة من الـ metadata (وإلّا فُقِد على طلب Apple Pay).
             ...(_parseServiceMeta(md.service_meta_json) ?
@@ -4532,7 +4537,7 @@ exports.reconcileOrphanPayments = onSchedule(
           if (md.service_date) {
             const sd = _parseKsaIso(md.service_date);
             if (!isNaN(sd.getTime())) {
-              payload.service_date = admin.firestore.Timestamp.fromDate(sd);
+              payload.service_date = Timestamp.fromDate(sd);
               if (isHourly) {
                 const pad = (n) => String(n).padStart(2, "0");
                 payload.booking_date = `${sd.getFullYear()}-${pad(sd.getMonth() + 1)}-${pad(sd.getDate())}`;
@@ -4559,8 +4564,8 @@ exports.reconcileOrphanPayments = onSchedule(
 exports.confirmPendingTamaraOrders = onSchedule(
     {schedule: "every 3 minutes", secrets: ["TAMARA_API_TOKEN"], cpu: 0.083},
     async () => {
-      const db = admin.firestore();
-      const since = admin.firestore.Timestamp.fromDate(
+      const db = getFirestore();
+      const since = Timestamp.fromDate(
           new Date(Date.now() - 6 * 60 * 60 * 1000));
       const snap = await db.collection("orders")
           .where("payment_method", "==", "tamara")
@@ -4604,7 +4609,7 @@ exports.confirmPendingTamaraOrders = onSchedule(
               payment_status: "failed",
               cancel_reason: "tamara_" + st,
               tamara_status: "order_" + st,
-              updated_at: admin.firestore.FieldValue.serverTimestamp(),
+              updated_at: FieldValue.serverTimestamp(),
             });
           }
           if (justConfirmed) {
@@ -4635,7 +4640,7 @@ exports.confirmPendingTamaraOrders = onSchedule(
       // المؤكّدة الحديثة. العقد يستخدم createdAt (camelCase) وبلا payment_method، فنمرّ
       // على غير المدفوعة ونستعلم تمارا بمعرّفها (تعيد 404 لغير تمارا فنتخطّاه).
       try {
-        const sinceC = admin.firestore.Timestamp.fromDate(
+        const sinceC = Timestamp.fromDate(
             new Date(Date.now() - 6 * 60 * 60 * 1000));
         const csnap = await db.collection("contracts")
             .where("createdAt", ">=", sinceC).get();
@@ -4686,7 +4691,7 @@ exports.confirmPendingTamaraOrders = onSchedule(
 exports.cancelStaleUnpaidOrders = onSchedule(
     {schedule: "every 15 minutes", cpu: 0.083},
     async () => {
-      const db = admin.firestore();
+      const db = getFirestore();
       const cutoffMs = Date.now() - 30 * 60 * 1000;
       // استعلام أحادي الحقل (status) تفادياً لفهرس مركّب؛ نُرشّح is_paid+created_at كوداً.
       const snap = await db.collection("orders")
@@ -4708,7 +4713,7 @@ exports.cancelStaleUnpaidOrders = onSchedule(
             status: "cancelled",
             cancel_reason: "unpaid_expired",
             cancelled_by: "system", // إلغاء آلي — يُسكِت مُشغّلات تنبيه الإلغاء
-            cancelled_at: admin.firestore.FieldValue.serverTimestamp(),
+            cancelled_at: FieldValue.serverTimestamp(),
           });
           cancelled++;
         } catch (e) {
@@ -4759,7 +4764,7 @@ exports.applyReferralCode = onCall({cpu: 0.25}, async (request) => {
   const uid = request.auth.uid;
   const code = String(request.data && request.data.code || "").trim().toUpperCase();
   if (!code) throw new HttpsError("invalid-argument", "كود الإحالة مطلوب");
-  const db = admin.firestore();
+  const db = getFirestore();
 
   // (1) استخراج المُحيل من الكود خادمياً — لا يثق بأي referrer_id من العميل.
   const rq = await db.collection("users")
@@ -4780,7 +4785,7 @@ exports.applyReferralCode = onCall({cpu: 0.25}, async (request) => {
       referee_id: uid,
       referral_code: code,
       status: "pending",
-      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      created_at: FieldValue.serverTimestamp(),
       rewarded_at: null,
       rewarded_on_order: null,
     });
@@ -4801,7 +4806,7 @@ exports.autoAssignDriverDirectly = onCall({cpu: 0.25}, async (request) => {
     throw new HttpsError("invalid-argument", "معرف الطلب مطلوب");
   }
 
-  const db = admin.firestore();
+  const db = getFirestore();
 
   // 1. Fetch order details
   const orderDoc = await db.collection("orders").doc(orderId).get();
@@ -4860,7 +4865,7 @@ exports.checkHourlySlotAvailability = onCall({cpu: 0.25}, async (request) => {
   const startDateTime = new Date(startDateTimeIso);
   const hours = Number(durationHours || 4);
   const endDateTime = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
-  const db = admin.firestore();
+  const db = getFirestore();
 
   // (Direct Dispatch) التوفّر = وجود سائق حرّ في الفترة عبر نفس مُحدِّد الإسناد.
   const driver = await _findFreeDriverForSlot(db, {
@@ -4966,7 +4971,7 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
     throw new HttpsError("invalid-argument", "startDate و endDate مطلوبان");
   }
 
-  const db = admin.firestore();
+  const db = getFirestore();
 
   // 0. جدول فتح المنطقة (إن وُجدت منطقة باسم zoneName ولها schedule) وسقفها
   //    اليومي الخاص (max_orders_per_day على مستند المنطقة — اختياري، يضيّق السقف
@@ -5068,7 +5073,7 @@ exports.notifyDriverOnAssignment = onDocumentUpdated({document: "orders/{orderId
         // نستكمل نسخ house_rules من مستند العميل هنا كي تصل السائق في كل المسارات.
         if (afterData.house_rules === undefined && afterData.client_id) {
           try {
-            const uSnap = await admin.firestore()
+            const uSnap = await getFirestore()
                 .collection("users").doc(afterData.client_id).get();
             const hr = uSnap.exists ? uSnap.data().house_rules : null;
             if (typeof hr === "string" && hr.trim()) {
@@ -5084,18 +5089,18 @@ exports.notifyDriverOnAssignment = onDocumentUpdated({document: "orders/{orderId
         const body = `تم تعيينك للطلب #${displayCode}. يرجى التحقق من تفاصيل الرحلة في لوحة التحكم.`;
 
         // 1. Save to in-app notifications inbox
-        await admin.firestore().collection("notifications").add({
+        await getFirestore().collection("notifications").add({
           userId: driverId,
           title: title,
           body: body,
           type: "order_assignment",
           relatedId: orderId,
           isRead: false,
-          sentAt: admin.firestore.FieldValue.serverTimestamp(),
+          sentAt: FieldValue.serverTimestamp(),
         });
 
         // 2. Fetch driver's FCM token
-        const tokenDoc = await admin.firestore().collection("fcm_tokens").doc(driverId).get();
+        const tokenDoc = await getFirestore().collection("fcm_tokens").doc(driverId).get();
         if (tokenDoc.exists) {
           const fcmToken = tokenDoc.data()?.fcmToken || tokenDoc.data()?.token;
           if (fcmToken) {
@@ -5112,7 +5117,7 @@ exports.notifyDriverOnAssignment = onDocumentUpdated({document: "orders/{orderId
               token: fcmToken,
             };
             try {
-              await admin.messaging().send(payload);
+              await getMessaging().send(payload);
               console.log(`Assignment notification sent to driver ${driverId} for order ${orderId}`);
             } catch (error) {
               console.error("Error sending assignment FCM to driver:", error);
@@ -5126,11 +5131,11 @@ exports.notifyDriverOnAssignment = onDocumentUpdated({document: "orders/{orderId
         //    البريد على العنوان الإداري الافتراضي بالخطأ.
         try {
           let driverEmail = "";
-          const dv = await admin.firestore().collection("drivers").doc(driverId).get();
+          const dv = await getFirestore().collection("drivers").doc(driverId).get();
           if (dv.exists && dv.data()?.email) {
             driverEmail = String(dv.data().email).trim();
           } else {
-            const uv = await admin.firestore().collection("users").doc(driverId).get();
+            const uv = await getFirestore().collection("users").doc(driverId).get();
             if (uv.exists && uv.data()?.email) driverEmail = String(uv.data().email).trim();
           }
           if (driverEmail) {
@@ -5234,7 +5239,7 @@ exports.moyasarWebhook = onRequest(
           ];
 
           for (const {col, amountField} of collections) {
-            const ref = admin.firestore().collection(col).doc(orderId);
+            const ref = getFirestore().collection(col).doc(orderId);
             const doc = await ref.get();
             if (doc.exists) {
               const data = doc.data();
@@ -5250,7 +5255,7 @@ exports.moyasarWebhook = onRequest(
                     `paid ${verifiedPayment.amount} halalas, expected ${expectedHalalas}. NOT confirming.`);
                 await ref.update({
                   payment_amount_mismatch: true,
-                  updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                  updated_at: FieldValue.serverTimestamp(),
                 }).catch(() => {});
                 // أبلغ الإدارة — إشارة احتيال محتملة تحتاج مراجعة/تسوية يدوية.
                 await queuePush(
@@ -5264,7 +5269,7 @@ exports.moyasarWebhook = onRequest(
                 console.log(`moyasarWebhook: Order ${orderId} already paid — skipping (idempotent)`);
               } else {
                 // (سباق) فحص + تحديث داخل Transaction لمنع معالجة الدفعة مرتين
-                const flipped = await admin.firestore().runTransaction(async (tx) => {
+                const flipped = await getFirestore().runTransaction(async (tx) => {
                   const snap = await tx.get(ref);
                   const cur = snap.data() || {};
                   if (cur.is_paid) return false;
@@ -5279,7 +5284,7 @@ exports.moyasarWebhook = onRequest(
                     is_paid: true,
                     moyasar_payment_id: payment.id,
                     moyasar_status: verifiedPayment.status,
-                    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                    updated_at: FieldValue.serverTimestamp(),
                     ..._reopenFieldsIfSystemCancelled(snap.data()),
                   });
                   return true;
@@ -5305,7 +5310,7 @@ exports.moyasarWebhook = onRequest(
           // Find and mark the order as refunded
           const collections = ["orders", "store_orders", "maintenance_requests", "contracts"];
           for (const col of collections) {
-            const ref = admin.firestore().collection(col).doc(orderId);
+            const ref = getFirestore().collection(col).doc(orderId);
             const doc = await ref.get();
             if (doc.exists) {
               const rd = doc.data();
@@ -5314,7 +5319,7 @@ exports.moyasarWebhook = onRequest(
               await ref.update({
                 payment_status: "refunded",
                 moyasar_status: "refunded",
-                updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                updated_at: FieldValue.serverTimestamp(),
               });
               console.log(`moyasarWebhook: Order ${orderId} marked REFUNDED via webhook`);
               // إشعار العميل باسترداد البطاقة (كان صامتاً — المحفظة فقط تُشعر).
@@ -5431,19 +5436,19 @@ async function _autoResolveUnfulfilledPaidOrder(db, secret, orderDoc) {
         const s = await t.get(orderRef);
         if (s.get("driver_id")) throw new Error("assigned_midway");
         t.set(walletRef, {
-          balance: admin.firestore.FieldValue.increment(refundAmount),
-          last_updated: admin.firestore.FieldValue.serverTimestamp(),
+          balance: FieldValue.increment(refundAmount),
+          last_updated: FieldValue.serverTimestamp(),
         }, {merge: true});
         t.create(txRef, {
           amount: refundAmount, points: 0, type: "refund",
           description: `استرداد طلبٍ تعذّر تنفيذه #${code}`,
           order_id: orderDoc.id,
-          created_at: admin.firestore.FieldValue.serverTimestamp(),
+          created_at: FieldValue.serverTimestamp(),
         });
         t.update(orderRef, {
           status: "cancelled", cancelled_by: "system",
           cancel_reason: "unfulfilled_no_driver",
-          cancelled_at: admin.firestore.FieldValue.serverTimestamp(),
+          cancelled_at: FieldValue.serverTimestamp(),
           refund_credited: true, needs_refund: false,
           rewards_handled_by: "server", payment_status: "refunded", is_paid: false,
         });
@@ -5496,13 +5501,13 @@ async function _autoResolveUnfulfilledPaidOrder(db, secret, orderDoc) {
       t.update(orderRef, {
         status: "cancelled", cancelled_by: "system",
         cancel_reason: "unfulfilled_no_driver",
-        cancelled_at: admin.firestore.FieldValue.serverTimestamp(),
+        cancelled_at: FieldValue.serverTimestamp(),
         payment_status: action === "voided" ? "voided" : "refunded",
         moyasar_status: finalStatus, refund_credited: true, needs_refund: false,
         rewards_handled_by: "server", is_paid: false,
         refunded_amount: refundAmount,
         [action === "voided" ? "voided_at" : "refunded_at"]:
-          admin.firestore.FieldValue.serverTimestamp(),
+          FieldValue.serverTimestamp(),
       });
     });
   } catch {
@@ -5542,7 +5547,7 @@ exports.deleteDriverAccount = onCall({cpu: 0.083}, async (request) => {
   if (!driverId) {
     throw new HttpsError("invalid-argument", "معرّف السائق مطلوب");
   }
-  const db = admin.firestore();
+  const db = getFirestore();
   const driverRef = db.collection("drivers").doc(driverId);
   const driverSnap = await driverRef.get();
   if (!driverSnap.exists) {
@@ -5569,7 +5574,7 @@ exports.deleteDriverAccount = onCall({cpu: 0.083}, async (request) => {
   // 1) حساب Auth أولاً: لو فشل ما بعده نكون قد أغلقنا الدخول على أي حال.
   let authDeleted = true;
   try {
-    await admin.auth().deleteUser(driverId);
+    await getAuth().deleteUser(driverId);
   } catch (e) {
     if (e.code === "auth/user-not-found") {
       // سائق قديم أُضيف من لوحة الويب قبل إصلاح التوفير: مستند بلا حساب Auth.
@@ -5599,7 +5604,7 @@ exports.deleteDriverAccount = onCall({cpu: 0.083}, async (request) => {
     actor_id: request.auth.uid,
     target_id: driverId,
     details: {name, auth_deleted: authDeleted},
-    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+    timestamp: FieldValue.serverTimestamp(),
     platform: "Cloud Function (deleteDriverAccount)",
   }).catch(() => {});
 
@@ -5612,7 +5617,7 @@ async function _assertAdmin(request) {
     throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً");
   }
   const uid = request.auth.uid;
-  const userDoc = await admin.firestore().collection("users").doc(uid).get();
+  const userDoc = await getFirestore().collection("users").doc(uid).get();
   if (!userDoc.exists) {
     throw new HttpsError("permission-denied", "المستخدم غير موجود");
   }
@@ -5632,7 +5637,7 @@ async function _assertAdmin(request) {
 async function _findOrder(orderId) {
   const collections = ["orders", "store_orders", "maintenance_requests", "contracts"];
   for (const col of collections) {
-    const ref = admin.firestore().collection(col).doc(orderId);
+    const ref = getFirestore().collection(col).doc(orderId);
     const doc = await ref.get();
     if (doc.exists) return {ref, col, data: doc.data()};
   }
@@ -5667,7 +5672,7 @@ exports.moyasarRefundPayment = onCall(
       // ونحرّرها عند فشل البوابة كي تبقى إعادة المحاولة ممكنة.
       const existing = await _findOrder(orderId);
       if (existing) {
-        await admin.firestore().runTransaction(async (tx) => {
+        await getFirestore().runTransaction(async (tx) => {
           const snap = await tx.get(existing.ref);
           const cur = snap.data() || {};
           if (cur.refund_credited === true) {
@@ -5680,7 +5685,7 @@ exports.moyasarRefundPayment = onCall(
           }
           tx.update(existing.ref, {
             refund_claimed: true,
-            refund_claimed_at: admin.firestore.FieldValue.serverTimestamp(),
+            refund_claimed_at: FieldValue.serverTimestamp(),
           });
         });
       }
@@ -5733,7 +5738,7 @@ exports.moyasarRefundPayment = onCall(
           // فتَعِد التقارير بمالٍ رُدّ فعلاً، والحالة النشطة تُبقيه في لوحة السائق.
           is_paid: false,
           moyasar_status: result.status,
-          refunded_at: admin.firestore.FieldValue.serverTimestamp(),
+          refunded_at: FieldValue.serverTimestamp(),
           // المبلغ الحقيقي يختلف بالمجموعة: store=total_amount، عقد=planPrice، غيرها=amount.
           refunded_amount: refundedAmount,
         });
@@ -5762,7 +5767,7 @@ exports.moyasarRefundPayment = onCall(
  * @return {Promise<void>} يرمي HttpsError عند استردادٍ سابق/جارٍ.
  */
 async function _claimRefund(existing) {
-  await admin.firestore().runTransaction(async (tx) => {
+  await getFirestore().runTransaction(async (tx) => {
     const snap = await tx.get(existing.ref);
     const cur = snap.data() || {};
     if (cur.refund_credited === true) {
@@ -5776,7 +5781,7 @@ async function _claimRefund(existing) {
     }
     tx.update(existing.ref, {
       refund_claimed: true,
-      refund_claimed_at: admin.firestore.FieldValue.serverTimestamp(),
+      refund_claimed_at: FieldValue.serverTimestamp(),
     });
   });
 }
@@ -5902,7 +5907,7 @@ exports.tamaraRefundPayment = onCall(
         refund_provider: "tamara",
         ...(refundId ? {refund_id: refundId} : {}),
         refund_reason: reason,
-        refunded_at: admin.firestore.FieldValue.serverTimestamp(),
+        refunded_at: FieldValue.serverTimestamp(),
         refunded_amount: refundAmount,
       });
 
@@ -6008,7 +6013,7 @@ exports.tabbyRefundPayment = onCall(
         refund_provider: "tabby",
         ...(refundId ? {refund_id: refundId} : {}),
         refund_reason: reason,
-        refunded_at: admin.firestore.FieldValue.serverTimestamp(),
+        refunded_at: FieldValue.serverTimestamp(),
         refunded_amount: refundAmount,
       });
 
@@ -6062,7 +6067,7 @@ exports.moyasarVoidPayment = onCall(
         await order.ref.update({
           payment_status: "voided",
           moyasar_status: result.status,
-          voided_at: admin.firestore.FieldValue.serverTimestamp(),
+          voided_at: FieldValue.serverTimestamp(),
           is_paid: false,
         });
       }
@@ -6115,7 +6120,7 @@ exports.moyasarCapturePayment = onCall(
           payment_status: "captured",
           is_paid: true,
           moyasar_status: result.status,
-          captured_at: admin.firestore.FieldValue.serverTimestamp(),
+          captured_at: FieldValue.serverTimestamp(),
         });
       }
 
@@ -6192,7 +6197,7 @@ exports.tabbyWebhook = onRequest(
         if (eventType === "payment.authorized" || eventType === "payment.captured") {
           // Idempotent update — check is_paid first inside a Transaction to prevent
           // duplicate order creation if SDK callback and webhook arrive simultaneously
-          const db = admin.firestore();
+          const db = getFirestore();
           const collections = [
             "orders",
             "maintenance_requests",
@@ -6223,7 +6228,7 @@ exports.tabbyWebhook = onRequest(
                   if (expected <= 0 || Math.abs(paid - expected) > 0.01) {
                     tx.update(ref, {
                       payment_amount_mismatch: true,
-                      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                      updated_at: FieldValue.serverTimestamp(),
                     });
                     return "mismatch";
                   }
@@ -6232,7 +6237,7 @@ exports.tabbyWebhook = onRequest(
                     is_paid: true,
                     tabby_payment_id: paymentId,
                     tabby_status: eventType,
-                    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                    updated_at: FieldValue.serverTimestamp(),
                   });
                   return "paid";
                 });
@@ -6251,7 +6256,7 @@ exports.tabbyWebhook = onRequest(
           }
         } else if (eventType === "payment.rejected" || eventType === "payment.expired" || eventType === "payment.cancelled") {
           // فشل — يشمل كل المجموعات (كان يبحث في orders فقط فتفوت الصيانة/العقد).
-          const db = admin.firestore();
+          const db = getFirestore();
           for (const col of ["orders", "maintenance_requests", "contracts"]) {
             const ref = db.collection(col).doc(orderId);
             const doc = await ref.get();
@@ -6259,7 +6264,7 @@ exports.tabbyWebhook = onRequest(
               await ref.update({
                 payment_status: "failed",
                 tabby_status: eventType,
-                updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                updated_at: FieldValue.serverTimestamp(),
               });
               console.log(`tabbyWebhook: ${col}/${orderId} marked FAILED (${eventType})`);
               await notifyClientPaymentResult(col, orderId, doc.data(), false);
