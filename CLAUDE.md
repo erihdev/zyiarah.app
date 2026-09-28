@@ -106,7 +106,17 @@ Codemagic (`codemagic.yaml`) handles iOS releases — triggered on every push to
 3. Runs `flutter pub get` + `pod install`, builds IPA with auto-incremented build number
 4. Publishes to **TestFlight**, then submits the build to **App Store review** automatically
    (`submit_to_app_store: true` since 2026-09-21 — owner decision; before that the public
-   release was a manual click). Revert by setting it back to `false`.
+   release was a manual click). Revert by setting it back to `false`. **The submission needs
+   "What's New"**: from 2026-09-21 to 2026-09-28 every automatic submission stalled silently
+   at `PREPARE_FOR_SUBMISSION` because the `ar-SA` field was empty (1.2.46 stayed live while
+   every merge reached TestFlight only). Since 2026-09-28 the `Export What's New` step writes
+   `.github/whatsnew/whatsnew-ar` into `APP_STORE_CONNECT_WHATS_NEW` via `$CM_ENV` — the
+   CLI behind the `app_store_connect` block reads that variable — with
+   `cancel_previous_submissions: true` and `release_type: AFTER_APPROVAL`. **Edit that file
+   with every version bump**; `test/ios_auto_submit_guard_test.dart` pins the wiring. To check
+   the real state from the terminal (the dashboard only shows the upload), query App Store
+   Connect's `appStoreVersions` / `reviewSubmissions` with the API key — a `READY_FOR_REVIEW`
+   submission with no `submittedDate` means "created, never submitted".
 
 Any `AuthKey_*.p8` file at root is an App Store Connect API key — gitignored; never commit or expose it. Add `[skip ci]` to commit messages that shouldn't trigger a build (docs, rules-only changes) — note this skips **both** Codemagic builds (iOS and Android) **and all five GitHub Actions CI jobs**, because Actions honours the same marker natively. A PR whose head commit carries it shows *zero* checks, not green ones. So don't put it on a PR commit you still want guarded: leave the PR commits clean and put the marker in the **squash-merge message** instead — that skips the release build while the PR's own checks still ran.
 
