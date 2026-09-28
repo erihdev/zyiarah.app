@@ -45,6 +45,26 @@ workflows:
           echo "✓ .env created"
 
       # ─────────────────────────────────────────────
+      # 1.5 «ما الجديد» لمراجعة App Store — منذ 2026-09-28.
+      #     submit_to_app_store (09-21) كان يتوقّف صامتاً عند كل بناء لأن حقل «ما الجديد»
+      #     فارغ: النسخة تُنشأ ويُرفق البناء وتُفتح قشرة مراجعة ثم لا شيء — بقيت 1.2.47 في
+      #     PREPARE_FOR_SUBMISSION و1.2.46 هي العامّة. الأداة التي تلفّها Codemagic
+      #     (app-store-connect publish) تقرأ النصّ من APP_STORE_CONNECT_WHATS_NEW إن لم
+      #     يُمرَّر، فنصدّره من الملف عبر $CM_ENV (يصل مرحلة النشر).
+      #     **عدّل .github/whatsnew/whatsnew-ar مع كل رقم نسخة جديد.**
+      #     يحرسه test/ios_auto_submit_guard_test.dart.
+      # ─────────────────────────────────────────────
+      - name: Export What's New for App Store review
+        script: |
+          set -e
+          test -s .github/whatsnew/whatsnew-ar
+          echo "APP_STORE_CONNECT_WHATS_NEW<<WHATSNEW_EOF" >> $CM_ENV
+          cat .github/whatsnew/whatsnew-ar >> $CM_ENV
+          echo "" >> $CM_ENV
+          echo "WHATSNEW_EOF" >> $CM_ENV
+          echo "✓ What's New exported ($(wc -c < .github/whatsnew/whatsnew-ar) bytes)"
+
+      # ─────────────────────────────────────────────
       # 2. إلغاء أي submission مفتوح في App Store
       #    (ignore_failure لأن هذا ليس خطوة حرجة)
       # ─────────────────────────────────────────────
@@ -240,12 +260,19 @@ workflows:
       # النشر للجمهور مُفعَّل بقرار المالك 2026-09-21: كل دفعة إلى main تُرفع إلى
       # TestFlight ثم تُقدَّم لمراجعة آبل، ولا تحتاج ضغطة في App Store Connect.
       # للتراجع أعِد submit_to_app_store إلى false — يبقى الرفع إلى TestFlight وحده.
-      # سكربت «Cancel existing App Store review submissions» أعلاه يُلغي أيّ تقديم
-      # مفتوح قبل البناء، وهو شرط عملي لتقديمٍ آليّ عند كل دمج.
+      # (2026-09-28) اكتُشف بفحص App Store Connect API أن التقديم لم يعمل قطّ منذ 09-21:
+      # «ما الجديد» فارغ ⇒ النسخة تقف في PREPARE_FOR_SUBMISSION بلا خطأ ظاهر. العلاج:
+      # خطوة «Export What's New» أعلاه + المفتاحان أدناه. سكربت «Cancel existing …»
+      # أعلاه يضرب مساراً غير موجود في API (‎/actions/cancel) ويُخفي 404 بـignore_failure —
+      # أُبقي بلا أثر؛ cancel_previous_submissions هو ما يلغي القشور فعلاً.
       app_store_connect:
         auth: integration
         submit_to_testflight: true
         submit_to_app_store: true
+        # قشور المراجعة المفتوحة (READY_FOR_REVIEW بلا عناصر) تمنع تقديماً جديداً.
+        cancel_previous_submissions: true
+        # الافتراضي MANUAL يوقف النسخة بعد موافقة آبل بانتظار ضغطة — عكس قرار 09-21.
+        release_type: AFTER_APPROVAL
 
   # ═══════════════════════════════════════════════════
   # Android Workflow — بدون تغيير
