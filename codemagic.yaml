@@ -311,7 +311,7 @@ workflows:
       - name: Get Flutter dependencies
         script: flutter pub get
 
-      - name: Build Android App Bundle (AAB)
+      - name: Build Android App Bundle (AAB) + tester APK
         script: |
           set -e
           # versionCode تلقائي = آخر رقم منشور على Google Play (+1) — يمنع رفض
@@ -327,9 +327,15 @@ workflows:
           echo "Auto versionCode: $NEW_CODE (latest on Play: $LATEST)"
           flutter build appbundle --release --build-number=$NEW_CODE
           echo "✓ AAB built successfully (versionCode $NEW_CODE)"
+          # APK المختبرين بنفس versionCode — يذهب إلى Firebase App Distribution
+          # (كتلة firebase في publishing أدناه). توزيع AAB هناك يشترط ربط Firebase
+          # بـPlay وهو غير مُعدّ؛ APK يعمل بلا أي إعداد إضافي.
+          flutter build apk --release --build-number=$NEW_CODE
+          echo "✓ APK built successfully (versionCode $NEW_CODE)"
 
     artifacts:
       - build/app/outputs/bundle/release/*.aab
+      - build/app/outputs/flutter-apk/*.apk
 
     publishing:
       # بريد عند انتهاء كل بناء — نظير ما في ios-release أعلاه، وللسبب نفسه.
@@ -340,12 +346,32 @@ workflows:
           success: true
           failure: true
 
-      # نشر تلقائي إلى مسار الإنتاج — للجمهور مباشرةً بعد مراجعة قوقل (~7 أيام).
-      # مُفعَّل بقرار المالك 2026-09-21؛ قبله كان track: internal (مختبرون داخليون
-      # بلا مراجعة). للتراجع أعِد track إلى internal.
+      # المسار المغلق (alpha) لا الإنتاج — منذ 2026-09-28 بقرار المالك. Play يشترط
+      # للحساب الشخصي ١٢ مختبراً مشتركين في «الاختبار المغلق» ١٤ يوماً متواصلة قبل
+      # منح الوصول إلى الإنتاج، ولا يُحتسب إلا من ثبّت من Play عبر رابط الاشتراك
+      # (لا من Firebase أدناه). track: production الذي فُعّل في 2026-09-21 سبق منح
+      # الوصول؛ النشر إلى مسار غير ممنوح يفشل عند خطوة Publishing. بعد منح الوصول
+      # أعِده إلى production وحدّث test/app_distribution_guard_test.dart الذي يثبّت
+      # alpha عمداً حتى ذلك الحين. (قبل 09-21 كان internal.)
       # submit_as_draft: false يعني أن الإصدار يمضي إلى المراجعة تلقائياً بلا
       # مسوّدة تنتظر ضغطة في Play Console — وهو المقصود من الأتمتة.
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: production
+        track: alpha
         submit_as_draft: false
+
+      # قناة المختبرين الثانية — Firebase App Distribution (منذ 2026-09-28): كل بناء
+      # يرفع APK المختبرين (نفس versionCode) إلى مجموعة App Distribution «testers»
+      # — لمن لا يملك Play أو للملاحظات السريعة. لا يُحتسب لشرط الـ١٢ مختبراً أعلاه.
+      # حساب الخدمة هو حساب Play نفسه: مُنح دور Firebase App Distribution Admin في
+      # zyiarah-app بتاريخ 2026-09-28 (لحسابَي play-publisher كليهما).
+      # APK لا AAB: توزيع AAB يشترط ربط Firebase بـPlay وهو غير مُعدّ (تحسين لاحق:
+      # artifact_type: 'aab' بعد الربط من اللوحة). App ID = تطبيق com.zyiarah.zyiarah
+      # في google-services.json — يحرسه test/app_distribution_guard_test.dart.
+      firebase:
+        firebase_service_account: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        android:
+          app_id: 1:275681992607:android:8359bdc64c9ac43fb127aa
+          groups:
+            - testers
+          artifact_type: 'apk'
