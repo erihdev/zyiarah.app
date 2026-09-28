@@ -24,10 +24,12 @@ void main() {
     // الشاشة تُرتّب على timestamp — وFirestore يستبعد ما لا يحمل حقل الترتيب —
     // وتُطابق الأسماء بأحرف كبيرة. كانت الدالة تكتب created_at واسماً صغيراً،
     // فلم تظهر أي عملية حذف خادمية في السجل إطلاقاً.
+    // موضوع هذا الحارس هو **المخطط** (اسم الحقل timestamp + طابع خادمي + اسم
+    // عملية بأحرف كبيرة) لا تهجئة الـSDK: هاجرت الدوال إلى واجهة firebase-admin
+    // المعيارية، فصارت admin.firestore.FieldValue هي FieldValue وحدها.
     final fn = read('functions/index.js');
     expect(fn.contains('action: "DELETE_DRIVER"'), isTrue);
-    expect(fn.contains('timestamp: admin.firestore.FieldValue.serverTimestamp()'),
-        isTrue);
+    expect(fn.contains('timestamp: FieldValue.serverTimestamp()'), isTrue);
     expect(read('lib/services/audit_service.dart').contains("'timestamp'"), isTrue,
         reason: 'مصدر المخطط الذي نطابقه');
   });
