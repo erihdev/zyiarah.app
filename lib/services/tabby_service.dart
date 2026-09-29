@@ -8,15 +8,39 @@ import 'package:tabby_flutter_inapp_sdk/tabby_flutter_inapp_sdk.dart';
 class TabbyService {
   static bool _initialized = false;
 
+  /// مهلة إقلاع SDK. منذ 2.0.0 صار `setup()` نداءً شبكياً (يجلب عناوين
+  /// الخدمة المجزّأة من Tabby)، وهو يُنتظَر قبل `runApp` — فبلا مهلة قد يعلّق
+  /// إقلاع التطبيق كلّه على استجابة طرف ثالث.
+  static const Duration _setupTimeout = Duration(seconds: 8);
+
+  /// تهيئة SDK. **لا ترمي أبداً**: منذ 2.0.0 يفشل `setup()` فشلاً صريحاً
+  /// (ServerException عند غير 200، FormatException عند ردٍّ مشوَّه، وأخطاء
+  /// النقل تمرّ كما هي) بلا إعادة محاولة ولا احتياطي. وهي تُنتظَر في main قبل
+  /// `runApp`، فاستثناء غير ملتقَط = تطبيق لا يُقلع أصلاً لانقطاع شبكة عابر.
+  /// الفشل هنا يعني إخفاء تابي وحدها (isAvailable=false) وبقية وسائل الدفع تعمل.
   static Future<void> initialize() async {
     final apiKey = dotenv.env['TABBY_PUBLIC_KEY'] ?? '';
     if (apiKey.isEmpty) {
       debugPrint('[TabbyService] TABBY_PUBLIC_KEY not set — skipping init');
       return;
     }
-    TabbySDK().setup(withApiKey: apiKey);
-    _initialized = true;
-    debugPrint('[TabbyService] initialized');
+    try {
+      await TabbySDK().setup(withApiKey: apiKey).timeout(_setupTimeout);
+      _initialized = true;
+      debugPrint('[TabbyService] initialized');
+    } catch (e) {
+      _initialized = false;
+      debugPrint('[TabbyService] setup failed — Tabby hidden this session: $e');
+    }
+  }
+
+  /// إعادة محاولة كسولة: فشلُ الإقلاع عابرٌ غالباً (شبكة العميل لحظة الفتح)،
+  /// وبدون هذه لبقيت تابي مخفيّة طوال الجلسة. تُستدعى من شاشة الدفع.
+  /// تُعيد true إن صارت جاهزة.
+  static Future<bool> ensureInitialized() async {
+    if (_initialized) return true;
+    await initialize();
+    return _initialized;
   }
 
   static bool get isAvailable => _initialized;

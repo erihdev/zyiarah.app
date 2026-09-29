@@ -139,6 +139,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       _googlePayConfigFuture = null;
     }
     _loadUserData();
+    // (ترقية تابي 2.x) صار إقلاع SDK نداءً شبكياً قد يفشل لحظة فتح التطبيق،
+    // وفشلُه يُخفي تابي طوال الجلسة. نعيد المحاولة عند فتح شاشة الدفع — وهي
+    // اللحظة التي تُهمّ فيها فعلاً — فيعود الخيار إن كان الانقطاع عابراً.
+    if (!TabbyService.isAvailable) {
+      TabbyService.ensureInitialized().then((ready) {
+        if (ready && mounted) setState(() {});
+      });
+    }
     // رسوم الوعورة: من مستند المنطقة لا من شاشة الخدمة — كي لا تختلف باختلاف المسار.
     _terrainPct = widget.terrainSurchargePercent ?? 0.0;
     if (widget.terrainSurchargePercent == null && widget.zoneName != null) {
