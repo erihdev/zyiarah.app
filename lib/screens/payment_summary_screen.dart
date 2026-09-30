@@ -21,7 +21,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:pay/pay.dart';
 import 'package:zyiarah/services/moyasar_service.dart';
-import 'package:zyiarah/services/tabby_service.dart';
 import 'package:zyiarah/screens/moyasar_card_screen.dart';
 import 'package:zyiarah/screens/moyasar_stc_screen.dart';
 import 'package:moyasar/moyasar.dart';
@@ -84,7 +83,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   final ZyiarahOrderService _orderService = ZyiarahOrderService();
 
   // 'cod' أُزيل من الجذور: الدفع مقدَّم دائماً.
-  String _selectedPaymentMethod = 'card'; // card | apple_pay | google_pay | tamara | tabby | stc_pay | wallet | subscription
+  String _selectedPaymentMethod = 'card'; // card | apple_pay | google_pay | tamara | stc_pay | wallet | subscription
   bool _isLoading = false;
   // سبب امتلاء السعة (للطلبات بالساعة) — يُفحص عند فتح الشاشة ويُستخدم لمنع أزرار
   // الدفع الأصلية (Apple/Google/Samsung Pay) التي تخصم فوراً وتتجاوز فحص _handlePayment.
@@ -123,7 +122,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   // dart:io Platform **يرمي على الويب** (Unsupported operation: Platform._operatingSystem)
   // فيقتل الشاشة كاملة بشاشة حمراء لحظة فتحها. نحرسه بـ kIsWeb: على الويب لا
   // Apple/Google/Samsung Pay (حِزمها أصلية فقط) — تُخفى أزرارها وتبقى البطاقة
-  // وSTC وتمارا وتابي والمحفظة. iOS/أندرويد بلا تغيير.
+  // وSTC وتمارا والمحفظة. iOS/أندرويد بلا تغيير.
   static final bool _isNativeIOS = !kIsWeb && Platform.isIOS;
   static final bool _isNativeAndroid = !kIsWeb && Platform.isAndroid;
 
@@ -139,14 +138,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       _googlePayConfigFuture = null;
     }
     _loadUserData();
-    // (ترقية تابي 2.x) صار إقلاع SDK نداءً شبكياً قد يفشل لحظة فتح التطبيق،
-    // وفشلُه يُخفي تابي طوال الجلسة. نعيد المحاولة عند فتح شاشة الدفع — وهي
-    // اللحظة التي تُهمّ فيها فعلاً — فيعود الخيار إن كان الانقطاع عابراً.
-    if (!TabbyService.isAvailable) {
-      TabbyService.ensureInitialized().then((ready) {
-        if (ready && mounted) setState(() {});
-      });
-    }
     // رسوم الوعورة: من مستند المنطقة لا من شاشة الخدمة — كي لا تختلف باختلاف المسار.
     _terrainPct = widget.terrainSurchargePercent ?? 0.0;
     if (widget.terrainSurchargePercent == null && widget.zoneName != null) {
@@ -866,55 +857,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               },
             ),
           ),
-        );
-        return;
-
-      } else if (_selectedPaymentMethod == 'tabby') {
-        // Tabby BNPL — أنشئ الطلب is_paid=false قبل فتح تابي (كالبطاقة/تمارا) كي يجده
-        // الـ webhook ويؤكّده؛ بدونه دفعة تابي ناجحة قد لا تجد طلباً فيبقى يتيماً.
-        if (widget.contractId == null) {
-          await _createUnpaidServiceOrder(finalOrderId, method: 'tabby');
-        }
-        final webUrl = await TabbyService.createCheckoutUrl(
-          amountSAR: totalWithVat,
-          customerPhone: _phoneController.text.trim().isNotEmpty
-              ? _phoneController.text.trim()
-              : (_currentUser?.phone ?? '0500000000'),
-          customerName: _currentUser?.name ?? 'عميل زيارة',
-          customerEmail: _currentUser?.email ?? 'customer@zyiarah.com',
-          // للعقد: مرجع تابي = معرّف العقد كي يقلب الـ webhook is_paid عليه فيُفعّله (كتمارا).
-          orderId: widget.contractId ?? finalOrderId,
-        );
-
-        if (webUrl == null) {
-          setState(() => _isLoading = false);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('تابي غير متاح لهذا الطلب حالياً'),
-              backgroundColor: Colors.red,
-            ));
-          }
-          return;
-        }
-
-        setState(() => _isLoading = false);
-        if (!mounted) return;
-
-        TabbyService.showCheckout(
-          context: context,
-          webUrl: webUrl,
-          onSuccess: () async {
-            setState(() => _isLoading = true);
-            await _processUnifiedSuccess(finalOrderId, 'tabby');
-          },
-          onFailure: () {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('تم إلغاء الدفع عبر تابي'),
-                backgroundColor: Colors.orange,
-              ));
-            }
-          },
         );
         return;
 
@@ -1803,18 +1745,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             icon: Icons.timer_outlined,
             color: const Color(0xFFE5A170),
             logoAsset: 'assets/payment/tamara.jpg',
-          ),
-        ],
-
-        // --- Tabby ---
-        if (TabbyService.isAvailable && totalWithVat >= 100) ...[
-          const SizedBox(height: 12),
-          _buildPaymentOption(
-            id: 'tabby',
-            title: 'تابي | Tabby',
-            subtitle: 'اشتري الآن وادفع لاحقاً',
-            icon: Icons.calendar_month_outlined,
-            color: const Color(0xFF3DBEA3),
           ),
         ],
 

@@ -161,7 +161,7 @@ class _LegacyTerms extends StatelessWidget {
           const SizedBox(height: 20),
           _sectionTitle('3. سياسة الدفع'),
           _sectionText(
-              'يتم الدفع مقدَّماً عبر الوسائل المتاحة في التطبيق (مدى، فيزا، Apple Pay، STC Pay، تمارا، تابي، أو رصيد المحفظة)...'),
+              'يتم الدفع مقدَّماً عبر الوسائل المتاحة في التطبيق (مدى، فيزا، Apple Pay، STC Pay، تمارا، أو رصيد المحفظة)...'),
         ],
       ),
     );
