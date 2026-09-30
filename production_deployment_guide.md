@@ -31,14 +31,22 @@ production` الذي فُعّل في 09-21 سبق منح الوصول، والن
    للاثنين؛ مُنح دور App Distribution Admin في 2026-09-28. اختبار الدخان في القسم 3 صار
    على أندرويد من المسار المغلق. iOS لم يفقد شيئاً: `submit_to_testflight` باقٍ على
    `true`، فالبناء يصل TestFlight ثم يُقدَّم للمراجعة.
-2. **ملاحظات الإصدار — تحقّق التحذير وأُصلح (2026-09-28).** كل تقديم آليّ منذ 09-21 كان
-   يتوقّف **صامتاً** لغياب «ما الجديد»: النسخة 1.2.47 بقيت في `PREPARE_FOR_SUBMISSION`
-   (البناء مُرفق، قشرة مراجعة مفتوحة، لا خطأ في Codemagic) و1.2.46 هي العامّة، وكل ميزات
-   ما بعد 31 أغسطس وصلت TestFlight فقط. العلاج المُطبَّق: خطوة `Export What's New` في
-   `ios-release` تكتب `.github/whatsnew/whatsnew-ar` إلى `APP_STORE_CONNECT_WHATS_NEW`
-   عبر `$CM_ENV` (الأداة خلف كتلة `app_store_connect` تقرأ هذا المتغيّر)، مع
-   `cancel_previous_submissions: true` و`release_type: AFTER_APPROVAL`. **الملف صار مصدر
-   «ما الجديد» — عدّله مع كل رقم نسخة.** يحرسه `test/ios_auto_submit_guard_test.dart`.
+2. **ملاحظات الإصدار — تحقّق التحذير وأُصلح (2026-09-28)، ثم أُصلح العلاج نفسه (2026-09-30).**
+   كل تقديم آليّ منذ 09-21 كان يتوقّف **صامتاً** لغياب «ما الجديد»: النسخة 1.2.47 بقيت في
+   `PREPARE_FOR_SUBMISSION` (البناء مُرفق، قشرة مراجعة مفتوحة، لا خطأ في Codemagic)
+   و1.2.46 هي العامّة، وكل ميزات ما بعد 31 أغسطس وصلت TestFlight فقط. علاج 09-28 (تصدير
+   `APP_STORE_CONNECT_WHATS_NEW` عبر `$CM_ENV`) لم يعمل قطّ: Codemagic تنفّذ
+   `submit_to_app_store` في **post-processing** بعد تحرير جهاز البناء، فلا يصلها شيء من
+   CM_ENV، وفشل التقديم هناك لا يُفشل البناء — البناء #238 (1.2.48) ظهر ناجحاً وبقيت النسخة
+   بلا «ما الجديد» فقُدّمت يدوياً (و1.2.47 قُدّمت في 09-28 الساعة 08:15 UTC بمفتاح API ولا
+   بناء يعمل حينها — أي خارج Codemagic). العلاج الحالي: خطوة `Write release_notes.json` في
+   `ios-release` تولّد `release_notes.json` في جذر المشروع من `.github/whatsnew/whatsnew-ar`
+   (القناة الموثّقة عند Codemagic لحقل «ما الجديد»؛ اللغة `ar-SA`؛ الملف في `.gitignore`)،
+   مع `cancel_previous_submissions: true` و`release_type: AFTER_APPROVAL`. **الملف النصّي هو
+   مصدر «ما الجديد» — عدّله مع كل رقم نسخة.** يحرسه `test/ios_auto_submit_guard_test.dart`.
+   تنبيه: `cancel_previous_submissions` يلغي أيضاً تقديماً في `WAITING_FOR_REVIEW`/`IN_REVIEW`،
+   فكل دفعة إلى `main` أثناء مراجعة آبل تعيد المراجعة من الصفر بالبناء الجديد — أمسك الدمج
+   حتى تكتمل المراجعة.
    Play لا يشترط ملاحظات إصدار، فلا نظير له هناك. وللتحقّق من الحالة الحقيقية من الطرفية
    (اللوحة تُظهر الرفع فقط): استعلم `appStoreVersions`/`reviewSubmissions` بمفتاح API —
    تقديم `READY_FOR_REVIEW` بلا `submittedDate` = أُنشئ ولم يُقدَّم قطّ.

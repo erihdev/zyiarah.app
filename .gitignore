@@ -146,3 +146,8 @@ functions/_tmp_fcm.js
 functions/_tmp_apns.js
 functions/_tmp_realpush.js
 functions/_tmp_ord198.js
+
+# release_notes.json يُولَّد في بناء iOS على Codemagic من .github/whatsnew/whatsnew-ar
+# (خطوة «Write release_notes.json») — لا يُلتزم: لو وُجد في الجذر لطبّقته Codemagic على
+# نشر Play أيضاً.
+/release_notes.json
