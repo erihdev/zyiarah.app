@@ -27,7 +27,7 @@ workflows:
         - appstore_credentials         # APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_ID,
                                         # APP_STORE_CONNECT_PRIVATE_KEY, MAPBOX_TOKEN
         - payment_keys                 # MOYASAR_PUBLISHABLE_KEY, MOYASAR_SECRET_KEY,
-                                        # TABBY_PUBLIC_KEY, SAMSUNG_PAY_SERVICE_ID
+                                        # SAMSUNG_PAY_SERVICE_ID
       vars:
         BUNDLE_ID: "com.zyiarah.zyiarah"
         APP_STORE_APP_ID: "6760955777"
@@ -40,7 +40,6 @@ workflows:
         script: |
           echo "MAPBOX_TOKEN=$MAPBOX_TOKEN"                         > .env
           echo "MOYASAR_PUBLISHABLE_KEY=$MOYASAR_PUBLISHABLE_KEY"  >> .env
-          echo "TABBY_PUBLIC_KEY=$TABBY_PUBLIC_KEY"                >> .env
           echo "SAMSUNG_PAY_SERVICE_ID=$SAMSUNG_PAY_SERVICE_ID"    >> .env
           echo "✓ .env created"
 
@@ -310,7 +309,7 @@ workflows:
         - android_credentials  # ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_PASSWORD,
                                 # ANDROID_KEY_ALIAS, ANDROID_KEYSTORE_BASE64, MAPBOX_TOKEN
         - payment_keys         # MOYASAR_PUBLISHABLE_KEY, MOYASAR_SECRET_KEY,
-                                # TABBY_PUBLIC_KEY, SAMSUNG_PAY_SERVICE_ID
+                                # SAMSUNG_PAY_SERVICE_ID
         - google_play          # GCLOUD_SERVICE_ACCOUNT_CREDENTIALS (محتوى JSON لحساب
                                 # خدمة Google Play — مؤمَّن). مُنشأة ومُتحقَّق منها: يعتمد
                                 # عليها get-latest-build-number ورفعُ AAB معاً.
@@ -321,7 +320,6 @@ workflows:
         script: |
           echo "MAPBOX_TOKEN=$MAPBOX_TOKEN"                         > .env
           echo "MOYASAR_PUBLISHABLE_KEY=$MOYASAR_PUBLISHABLE_KEY"  >> .env
-          echo "TABBY_PUBLIC_KEY=$TABBY_PUBLIC_KEY"                >> .env
           echo "SAMSUNG_PAY_SERVICE_ID=$SAMSUNG_PAY_SERVICE_ID"    >> .env
 
       - name: Set up key.properties

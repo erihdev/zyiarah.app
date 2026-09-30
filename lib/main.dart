@@ -22,7 +22,6 @@ import 'package:zyiarah/screens/driver_dashboard.dart';
 import 'package:zyiarah/screens/admin/admin_dashboard_screen.dart';
 import 'package:zyiarah/services/deep_link_service.dart';
 import 'package:zyiarah/services/geofence_service.dart';
-import 'package:zyiarah/services/tabby_service.dart';
 import 'package:zyiarah/router.dart';
 
 import 'package:provider/provider.dart';
@@ -82,7 +81,6 @@ void main() async {
   await ZyiarahNotificationService().initialize();
   ZyiarahDeepLinkService().initialize(navigatorKey);
   await GeofenceService.initialize(); // تحميل مناطق التغطية من Firestore
-  await TabbyService.initialize(); // تهيئة Tabby BNPL
 
   runApp(
     MultiProvider(

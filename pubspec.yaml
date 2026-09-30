@@ -59,7 +59,6 @@ dependencies:
   bidi: ^2.0.13
   crypto: ^3.0.3
   moyasar: ^3.0.3
-  tabby_flutter_inapp_sdk: ^2.1.0
 
 dev_dependencies:
   flutter_test:

@@ -72,7 +72,7 @@ production` الذي فُعّل في 09-21 سبق منح الوصول، والن
 |---|---|---|
 | `appstore_credentials` | مفاتيح App Store Connect API + `MAPBOX_TOKEN` | iOS |
 | `android_credentials` | `ANDROID_KEYSTORE_BASE64`، كلمات مرور المفتاح، `MAPBOX_TOKEN` | Android |
-| `payment_keys` | مفاتيح ميسر وتابي وسامسونج باي القابلة للنشر | كلتاهما |
+| `payment_keys` | مفاتيح ميسر وسامسونج باي القابلة للنشر | كلتاهما |
 | `google_play` | `GCLOUD_SERVICE_ACCOUNT_CREDENTIALS` | Android |
 | تكامل `Zyiarah Key` | مفتاح App Store Connect | iOS |
 

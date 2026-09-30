@@ -73,7 +73,7 @@ Key directories:
 | `order_service.dart` | Order lifecycle + dispatch Cloud Function calls |
 | `notification_service.dart` + `zyiarah_messaging_service.dart` | FCM push + in-app notifications |
 | `moyasar_service.dart` | Primary payment gateway (Moyasar: cards, STC Pay, Apple Pay) |
-| `tamara_service.dart` + `tabby_service.dart` | Installment payments (BNPL) |
+| `tamara_service.dart` | Installment payments (BNPL — Tamara only) |
 | `zyiarah_wallet_service.dart` | Wallet (read-only client-side; writes via Cloud Functions) |
 | `zatca_service.dart` | Saudi ZATCA tax compliance (QR) |
 | `zyiarah_pdf_service.dart` | PDF invoices & contracts |
@@ -91,7 +91,7 @@ React 19 + TypeScript (Vite), Tailwind CSS, MapBox GL for map views. Connects to
 Node.js v22 Cloud Functions (~37 functions) handling:
 - FCM push notifications (Firestore triggers: orders, tickets, contracts, dispatch)
 - Email via Resend (through the `notification_triggers` queue — anti-relay guarded)
-- Payment webhooks & operations: Moyasar (primary; webhook + verify/refund/void/capture), Tamara, Tabby — all HMAC-verified and idempotent
+- Payment webhooks & operations: Moyasar (primary; webhook + verify/refund/void/capture), Tamara — all HMAC-verified and idempotent; a Tabby webhook/refund pair is kept only for orders paid before Tabby was removed from the app (2026-09-30)
 - Wallet operations (`payWithWallet`, `redeemQatratPoints`, `onOrderRewards`) — all wallet writes are server-side only
 - Direct Dispatch engine (driver assignment, slot availability, surge pricing)
 - Account deletion processing (Apple requirement)
@@ -130,7 +130,7 @@ Two other Android paths exist and do **not** reach Google Play: `.github/workflo
 
 ## Environment & Config
 
-- `.env` — Mapbox token + publishable payment keys (Moyasar pk, Tabby public, Samsung Pay service ID), loaded via `flutter_dotenv` and bundled as an app asset — publishable keys only, never secrets
+- `.env` — Mapbox token + publishable payment keys (Moyasar pk, Samsung Pay service ID), loaded via `flutter_dotenv` and bundled as an app asset — publishable keys only, never secrets
 - `.env.automation` — Additional automation env vars
 - `firebase.json` — Firebase project config (Firestore, hosting, functions)
 - `firestore.rules` — Database security rules
@@ -142,7 +142,7 @@ Two other Android paths exist and do **not** reach Google Play: `.github/workflo
 - **Role checks**: User role is stored in Firestore and accessed via `UserProvider`; always verify role before rendering admin-only UI
 - **Arabic support**: Use `arabic_reshaper` + `bidi` for any Arabic text rendering — do not use plain `Text()` for Arabic strings
 - **PDF generation**: Use existing service classes in `lib/services/`; they depend on the `pdf` and `printing` packages
-- **Payments**: Moyasar is primary (cards, STC Pay, Apple Pay); Tamara and Tabby handle installments; wallet is supported. Cash on delivery was removed at the root by owner decision — `test/no_cod_test.dart` guards it; never reintroduce it. All paid orders get a ZATCA invoice
+- **Payments**: Moyasar is primary (cards, STC Pay, Apple Pay); Tamara handles installments — Tabby was removed at the root on 2026-09-30 (owner uses Tamara only; `test/no_tabby_test.dart` guards it, and legacy Tabby orders stay displayable and refundable); wallet is supported. Cash on delivery was removed at the root by owner decision — `test/no_cod_test.dart` guards it; never reintroduce it. All paid orders get a ZATCA invoice
 - **Pricing is server-verified**: the client shows prices, but `functions/pricing.js` recomputes the base from the zone document (per-service rates, optional `terrain_surcharge_percent`) on every Moyasar/wallet payment and flags underpayment. `PriceBreakdown` (`lib/utils/terrain_surcharge.dart`) is the single client formula: base + terrain + surge − discount = net, + 15% VAT = total; fixed-price contracts skip all three
 - **Capacity**: drivers have no zones; capacity is one global daily cap plus the active-driver count, optionally tightened by a zone's `max_orders_per_day`. Every consumer of `getHourlyAvailability` decides day fullness through `dayIsFull` (`lib/utils/day_capacity.dart`). Home cleaning is day-only (no arrival slot for the client)
 - **Firestore queries**: do not add composite indexes casually — range/orderBy on one field and filter locally (see `firestore.indexes.json` for what exists)
