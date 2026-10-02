@@ -1,16 +1,19 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
-/// حارس التقديم الآليّ لمراجعة App Store — 2026-09-28.
+/// حارس التقديم الآليّ لمراجعة App Store — 2026-09-28، أُصلحت الآلية 2026-09-30.
 ///
 /// السياق: `submit_to_app_store: true` (قرار المالك 2026-09-21) لم يُقدّم شيئاً قطّ:
 /// كل بناء كان يُنشئ النسخة ويُرفق البناء ويفتح قشرة مراجعة ثم يتوقّف لأن حقل
 /// «ما الجديد» (ar-SA) فارغ — فبقيت 1.2.46 هي العامّة وكل ميزات ما بعد 31 أغسطس
-/// على TestFlight فقط، بلا أي خطأ ظاهر. الأداة التي تلفّها Codemagic
-/// (`app-store-connect publish`) تقرأ النصّ من المتغيّر `APP_STORE_CONNECT_WHATS_NEW`
-/// إن لم يُمرَّر — فيُصدَّر من `.github/whatsnew/whatsnew-ar` عبر `$CM_ENV` قبل النشر.
+/// على TestFlight فقط، بلا أي خطأ ظاهر (1.2.47 و1.2.48 قُدّمتا يدوياً).
+/// علاج 09-28 — تصدير النصّ في متغيّر بيئة عبر `$CM_ENV` — لم يعمل قطّ: Codemagic
+/// تنفّذ التقديم في «post-processing» بعد تحرير جهاز البناء، فلا يصلها شيء من CM_ENV،
+/// وفشل التقديم هناك لا يُفشل البناء (البناء #238 «نجح» و1.2.48 بلا «ما الجديد»).
+/// القناة الموثّقة عند Codemagic هي `release_notes.json` في جذر المشروع، فتولّده خطوة
+/// `Write release_notes.json` من `.github/whatsnew/whatsnew-ar` (اللغة ar-SA).
 /// `cancel_previous_submissions` يلغي القشور القديمة بالطريقة الصحيحة (سكربت
-/// الإلغاء اليدوي أعلاه في codemagic.yaml يضرب مساراً غير موجود ويُخفي فشله بـ
+/// الإلغاء اليدوي في codemagic.yaml يضرب مساراً غير موجود ويُخفي فشله بـ
 /// ignore_failure)، و`release_type: AFTER_APPROVAL` كي لا تنتظر النسخة ضغطة بعد
 /// الموافقة (الافتراضي MANUAL).
 void main() {
@@ -18,6 +21,11 @@ void main() {
   final cm = read('codemagic.yaml');
   // مسار iOS وحده: كل ما قبل تعريف مسار أندرويد.
   final ios = cm.substring(0, cm.indexOf('android-release:'));
+  // الأسطر غير التعليقية وحدها — التعليقات تشرح التاريخ وقد تذكر ما لا يجوز في الكود.
+  final iosCode = ios
+      .split('\n')
+      .where((l) => !l.trimLeft().startsWith('#'))
+      .join('\n');
 
   test('ملف «ما الجديد» بالعربية موجود وغير فارغ', () {
     final f = File('.github/whatsnew/whatsnew-ar');
@@ -25,13 +33,18 @@ void main() {
     expect(f.readAsStringSync().trim(), isNotEmpty);
   });
 
-  test('ios-release يصدّر APP_STORE_CONNECT_WHATS_NEW من الملف عبر CM_ENV قبل النشر', () {
-    expect(ios.contains('APP_STORE_CONNECT_WHATS_NEW'), isTrue,
-        reason: 'الأداة تقرأ «ما الجديد» من هذا المتغيّر — بدونه يتوقّف التقديم صامتاً');
-    expect(ios.contains('.github/whatsnew/whatsnew-ar'), isTrue,
+  test('ios-release يولّد release_notes.json من الملف قبل النشر — لا عبر CM_ENV', () {
+    expect(iosCode.contains('release_notes.json'), isTrue,
+        reason: 'Codemagic تقرأ «ما الجديد» من هذا الملف في جذر المشروع عند النشر');
+    expect(iosCode.contains('"language": "ar-SA"'), isTrue,
+        reason: 'لغة الأساس في App Store Connect — بدونها يُرفض التقديم');
+    expect(iosCode.contains('.github/whatsnew/whatsnew-ar'), isTrue,
         reason: 'مصدر النصّ هو الملف الذي يُعدَّل مع كل إصدار');
-    expect(ios.contains(r'>> $CM_ENV'), isTrue,
-        reason: 'المتغيّر يجب أن يُكتب إلى CM_ENV ليصل مرحلة النشر');
+    expect(iosCode.contains('APP_STORE_CONNECT_WHATS_NEW'), isFalse,
+        reason: 'التقديم يجري في post-processing بعد تحرير الجهاز — CM_ENV لا يصله؛ '
+            'هذا المسار لم يعمل قطّ فلا يُعاد');
+    expect(read('.gitignore').contains('/release_notes.json'), isTrue,
+        reason: 'الملف مولَّد؛ لو التُزم في الجذر لطبّقته Codemagic على نشر Play أيضاً');
   });
 
   test('ios-release: تقديم آليّ كامل — submit + cancel_previous + AFTER_APPROVAL', () {

@@ -107,13 +107,21 @@ Codemagic (`codemagic.yaml`) handles iOS releases — triggered on every push to
 4. Publishes to **TestFlight**, then submits the build to **App Store review** automatically
    (`submit_to_app_store: true` since 2026-09-21 — owner decision; before that the public
    release was a manual click). Revert by setting it back to `false`. **The submission needs
-   "What's New"**: from 2026-09-21 to 2026-09-28 every automatic submission stalled silently
+   "What's New"**: from 2026-09-21 to 2026-09-30 every automatic submission stalled silently
    at `PREPARE_FOR_SUBMISSION` because the `ar-SA` field was empty (1.2.46 stayed live while
-   every merge reached TestFlight only). Since 2026-09-28 the `Export What's New` step writes
-   `.github/whatsnew/whatsnew-ar` into `APP_STORE_CONNECT_WHATS_NEW` via `$CM_ENV` — the
-   CLI behind the `app_store_connect` block reads that variable — with
-   `cancel_previous_submissions: true` and `release_type: AFTER_APPROVAL`. **Edit that file
-   with every version bump**; `test/ios_auto_submit_guard_test.dart` pins the wiring. To check
+   every merge reached TestFlight only; 1.2.47 and 1.2.48 were submitted by hand). The 09-28
+   attempt — exporting `APP_STORE_CONNECT_WHATS_NEW` through `$CM_ENV` — never worked:
+   Codemagic runs `submit_to_app_store` in **post-processing**, after the build machine is
+   released, so CM_ENV variables never reach it, and a failed submission there does not fail
+   the build (#238 was green with 1.2.48 unsubmitted). Since 2026-09-30 the
+   `Write release_notes.json` step generates `release_notes.json` (Codemagic's documented
+   channel for "What's New", locale `ar-SA`, gitignored) at the repo root from
+   `.github/whatsnew/whatsnew-ar`, with `cancel_previous_submissions: true` and
+   `release_type: AFTER_APPROVAL`. **Edit that file with every version bump**;
+   `test/ios_auto_submit_guard_test.dart` pins the wiring. `cancel_previous_submissions`
+   also cancels a submission that is `WAITING_FOR_REVIEW` or `IN_REVIEW`, so a push to
+   `main` while Apple is reviewing restarts the review with the new build — hold merges
+   until the review completes (or squash-merge with the skip-ci marker). To check
    the real state from the terminal (the dashboard only shows the upload), query App Store
    Connect's `appStoreVersions` / `reviewSubmissions` with the API key — a `READY_FOR_REVIEW`
    submission with no `submittedDate` means "created, never submitted".
