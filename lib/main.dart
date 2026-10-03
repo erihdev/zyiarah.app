@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart'
-    show kIsWeb, LicenseRegistry, LicenseEntryWithLineBreaks;
+    show kDebugMode, kIsWeb, LicenseRegistry, LicenseEntryWithLineBreaks;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:google_fonts/google_fonts.dart';
@@ -8,6 +8,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/screens/onboarding_screen.dart';
 import 'package:zyiarah/screens/splash_screen.dart';
 import 'package:zyiarah/theme/app_theme.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:zyiarah/firebase_options.dart';
@@ -47,6 +48,50 @@ void main() async {
 
   await dotenv.load(fileName: ".env");
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // (A0) App Check — **إرسال الرموز فقط، بلا إلزام.** مفاتيح Firebase في
+  // firebase_options.dart عامّة بالتصميم (تُعرِّف المشروع ولا تُصرِّح)، فالحارس
+  // الوحيد قواعد Firestore والمصادقة: أي سكربت يسجّل حساباً ثم يمارس كل صلاحيات
+  // العميل وينادي الدوال القابلة للنداء من خارج التطبيق. App Check يُثبت أن
+  // الطلب من نسخة أصلية على جهاز حقيقي.
+  //
+  // **الإلزام ليس هنا ولا يجوز تفعيله الآن** (لا enforceAppCheck في
+  // functions/index.js ولا إلزام في لوحة Firebase): النسخة العامّة 1.2.46 بلا
+  // هذه الحزمة إطلاقاً، فتفعيل الإلزام اليوم يرفض كل طلب من كل مستخدم حاليّ —
+  // انقطاع خدمة لا تحسين أمني. هذه الدفعة تبدأ العدّاد: بعد انتشارها تُظهر لوحة
+  // Firebase نسبة الطلبات المُوثَّقة، وعند اقترابها من ١٠٠٪ يُفعَّل الإلزام لكل
+  // خدمة. انظر «App Check» في production_deployment_guide.md للشرط والترتيب.
+  //
+  // الويب مستثنى: يحتاج مفتاح موقع reCAPTCHA v3 لا نملكه، ولوحة الإدارة تطبيق
+  // React منفصل بلا App Check — لو أُلزمت Firestore لتعطّلت هي أيضاً.
+  //
+  // **قيد iOS معروف ومقصود هنا:** AppDelegate.swift ينادي FirebaseApp.configure()،
+  // ومع ذلك يُهمل providerApple على الأجهزة الحقيقية ويسقط إلى الافتراضي
+  // deviceCheck (flutterfire#18613). فنمرّر App Attest مع احتياطي deviceCheck:
+  // ما سيعمل فعلاً على الجهاز هو deviceCheck — وهو توثيق حقيقي أضعف لا فشل
+  // صامت، ويكفي لمرحلة القياس. ترقيته إلى App Attest تستوجب قراراً أصلياً
+  // (إسقاط ذلك السطر، أو AppCheck.setAppCheckProviderFactory قبله) ولا يصحّ
+  // اتخاذه بلا اختبار على جهاز حقيقي — فهو شرطٌ قبل إلزام iOS، لا قبل هذه الدفعة.
+  //
+  // مُغلَّف بمهلة وtry/catch لا ترمي: activate يُنتظَر قبل runApp، ودرسُ تابي أن
+  // نداءً شبكياً هناك يجعل انقطاعاً عابراً لحظة الفتح يمنع إقلاع التطبيق كلّه.
+  // الفشل يعني غياب رمز موثَّق — وهو بلا أثر ما دام الإلزام مُطفأً.
+  if (!kIsWeb) {
+    try {
+      await FirebaseAppCheck.instance
+          .activate(
+            providerAndroid: kDebugMode
+                ? const AndroidDebugProvider()
+                : const AndroidPlayIntegrityProvider(),
+            providerApple: kDebugMode
+                ? const AppleDebugProvider()
+                : const AppleAppAttestWithDeviceCheckFallbackProvider(),
+          )
+          .timeout(const Duration(seconds: 8));
+    } catch (e) {
+      debugPrint('[AppCheck] activate failed — التطبيق يعمل بلا رمز موثَّق: $e');
+    }
+  }
 
   // Enable Firestore Persistence for Enterprise Resilience
   FirebaseFirestore.instance.settings = const Settings(
