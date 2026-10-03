@@ -22,6 +22,9 @@ const {isAssignableDriver, assignabilityProblem, chunk, GET_ALL_CHUNK} =
 const moyasar = require("./moyasar_api");
 const tamara = require("./tamara_api");
 const amounts = require("./amounts");
+// محرّك الاسترداد الآلي — **أوّل وحدة تلمس Firestore**: تستقبل `db` وسيطاً
+// ولا تستوردها، وكذلك `queuePush`، فتبقى قابلة للاختبار بلا محاكٍ.
+const refunds = require("./refund_engine");
 initializeApp();
 
 // Secrets — stored in Firebase Secret Manager, never in source code
@@ -2203,20 +2206,6 @@ function _parseKsaIso(s) {
     d : new Date(d.getTime() - 3 * 60 * 60 * 1000);
 }
 
-function _reopenFieldsIfSystemCancelled(data) {
-  if (data && data.status === "cancelled" &&
-      data.cancel_reason === "unpaid_expired") {
-    return {
-      status: "pending",
-      cancel_reason: FieldValue.delete(),
-      cancelled_by: FieldValue.delete(),
-      cancelled_at: FieldValue.delete(),
-      reopened_after_late_payment: true,
-    };
-  }
-  return {};
-}
-
 // (#1) عامل الذروة الخادمي — يعكس getSurgePricingFactor حرفياً (system_configs.surge_percent).
 async function _readSurgeFactor(db) {
   try {
@@ -2268,45 +2257,6 @@ function _isPriceableKind(od) {
       .includes(kind)) return true;
   if (od.hours_contracted && !kind) return true; // بالساعة (النظام القديم)
   return false;
-}
-
-// (#1 Tier B) استرداد/إلغاء آليّ لطلبٍ ثبت دفعُه الناقص الصارخ. idempotent عبر مطالبة
-// tamper_handled ذرّياً، مصالحة الحالة الحيّة (void غير المقبوض / refund المقبوض)، وحجب
-// إعادة الفتح. يُعيد {done, action}. لا يُنفَّذ إلّا خلف ENFORCE_PRICE_TIER_B.
-async function _moyasarVoidOrRefund(db, secret, paymentId, orderRef) {
-  const claimed = await db.runTransaction(async (tx) => {
-    const s = await tx.get(orderRef);
-    const d = s.data() || {};
-    if (d.tamper_handled === true || d.payment_status === "voided" ||
-        d.payment_status === "refunded") return false;
-    tx.update(orderRef, {tamper_handled: true, payment_status: "refunding"});
-    return true;
-  });
-  if (!claimed) return {done: true, action: "already"};
-  const live = await moyasar.getPayment(secret, paymentId);
-  if (live.ok && (live.status === "refunded" || live.status === "voided")) {
-    await orderRef.update({payment_status: live.status, is_paid: false,
-      tamper_blocked: true, refund_credited: true}).catch(() => {});
-    return {done: true, action: live.status};
-  }
-  const authorized = live.ok &&
-    (live.status === "authorized" || live.status === "initiated");
-  const res = authorized ? await moyasar.voidPayment(secret, paymentId) :
-    await moyasar.refund(secret, paymentId, undefined);
-  if (!res.ok) {
-    // لم يُعَد المال: **لا نقلب is_paid ولا نرمي** — نترك الطلب للمراجعة اليدوية.
-    await orderRef.update({payment_status: "payment_review",
-      tamper_gateway_failed: true}).catch(() => {});
-    return {done: false, action: "gateway_error"};
-  }
-  await orderRef.update({
-    payment_status: authorized ? "voided" : "refunded",
-    moyasar_status: res.status, is_paid: false,
-    tamper_blocked: true, refund_credited: true,
-    [authorized ? "voided_at" : "refunded_at"]:
-      FieldValue.serverTimestamp(),
-  }).catch(() => {});
-  return {done: true, action: authorized ? "voided" : "refunded"};
 }
 
 // 7. Secure Moyasar payment verification on Call function
@@ -2553,7 +2503,7 @@ exports.verifyMoyasarPayment = onCall(
       // payment_review للمراجعة اليدوية) — فلا عميلٌ مخصومٌ بلا خدمة يُخدَم بالخطأ.
       if (tierBReason && paymentId) {
         const secret = moyasarSecretKey.value();
-        const r = await _moyasarVoidOrRefund(db, secret, paymentId, orderRef);
+        const r = await refunds.voidOrRefundTampered(db, secret, paymentId, orderRef);
         await queuePush("ADMIN_BROADCAST", "حُجب طلبٌ لدفعٍ ناقص صارخ 🛑",
             `الطلب #${orderId} حُجب (${r.done ? r.action : "بانتظار استرداد يدوي"}) لدفعٍ أقل من خُمس المتوقَّع.`,
             "admin_price_tamper", {orderId},
@@ -2575,7 +2525,7 @@ exports.verifyMoyasarPayment = onCall(
           moyasar_payment_id: paymentId,
           moyasar_status: paymentData.status,
           updated_at: FieldValue.serverTimestamp(),
-          ..._reopenFieldsIfSystemCancelled(snap.data()),
+          ...refunds.reopenFieldsIfSystemCancelled(snap.data()),
         });
         return true;
       });
@@ -4281,9 +4231,13 @@ exports.sweepUnassignedPaidOrders = onSchedule(
         const autoRefundable = secret &&
           !["subscription", "tamara", "tabby"].includes(method);
         if (autoRefundable) {
-          const r = await _autoResolveUnfulfilledPaidOrder(db, secret, doc);
+          const r = await refunds.autoResolveUnfulfilledPaidOrder(
+              db, secret, doc, {queuePush});
           if (r.handled) { autoResolved++; continue; }
-          // خطأ/تعذّر بعد بدء المعالجة → المعالج ضبط stranded_alerted؛ لا نُكرّر التنبيه.
+          // خطأ/تعذّر بعد بدء المعالجة → **المحرّك نفسه يُصعّد** للإدارة
+          // (escalateFailedAutoRefund بعلَم auto_refund_alerted المستقلّ)، فلا
+          // نُكرّر التنبيه هنا. قبل ذلك كان يرفع stranded_alerted بلا إرسال، وكان
+          // فرعُ الإنذار المبكّر أعلاه قد رفعه سلفاً — فيُدفَن الطلب صامتاً.
           if (["gateway_error", "wallet_error", "no_amount", "no_payment_id"]
               .includes(r.reason)) continue;
         }
@@ -4532,7 +4486,7 @@ exports.reconcileOrphanPayments = onSchedule(
                   is_paid: true, payment_status: "paid",
                   moyasar_payment_id: p.id, moyasar_status: "paid",
                   updated_at: FieldValue.serverTimestamp(),
-                  ..._reopenFieldsIfSystemCancelled(foundData),
+                  ...refunds.reopenFieldsIfSystemCancelled(foundData),
                 });
                 console.log(`[reconcile] CONFIRMED existing ${oid} (paid ${paidH}/${expectedH})`);
                 recovered++;
@@ -5318,7 +5272,7 @@ exports.moyasarWebhook = onRequest(
                     moyasar_payment_id: payment.id,
                     moyasar_status: verifiedPayment.status,
                     updated_at: FieldValue.serverTimestamp(),
-                    ..._reopenFieldsIfSystemCancelled(snap.data()),
+                    ...refunds.reopenFieldsIfSystemCancelled(snap.data()),
                   });
                   return true;
                 });
@@ -5378,164 +5332,10 @@ exports.moyasarWebhook = onRequest(
 // ── Moyasar Payment Operations (admin-only callable functions) ─────────────────
 // These use the SECRET key and are only callable by authenticated admin users.
 // Firestore rule: caller must have role == 'super_admin' or 'orders_manager'.
+// النقل الخام (fetch/الترويسة/المسارات) في `moyasar_api.js`، وسياسةُ الاسترداد
+// الآلي في `refund_engine.js`؛ ما يبقى هنا أغلفةُ onCall وحدها. (ثلاثةُ تعليقاتٍ
+// كانت هنا تَصِف شيفرةً انتقلت في الشريحتين الأولى والثانية — أُزيلت.)
 
-/** Helper: build Moyasar auth header from secret */
-
-// ── Moyasar gateway cores (raw HTTP, reusable by admin onCall + automated flows) ──
-// نفصل نداء البوابة الخام عن أغلفة onCall الإدارية كي تستدعيه المسارات الآلية (كرون
-// #18، ومسار التسعير #1) بلا اشتراط صلاحية إدارية.
-
-
-
-// (#18) استرداد/إلغاء آليّ لطلبٍ مدفوع تعذّر تنفيذه (فات موعده بلا سائق). idempotent:
-// مطالبة ذرّية بعلَم auto_refund_processed + مؤشّر payment_status='refunding' الدائم
-// قبل أي نداء بوابة، مصالحة الحالة الحيّة (void غير المقبوض / refund المقبوض)، وإعادة
-// قراءة driver_id في الكتابة النهائية كي لا نستردّ طلباً أُسنِد أثناء العملية.
-async function _autoResolveUnfulfilledPaidOrder(db, secret, orderDoc) {
-  const orderRef = orderDoc.ref;
-  const d0 = orderDoc.data();
-  const method = d0.payment_method || "";
-  // طرق لا تُسترَد آلياً: الاشتراك (مبلغ 0، مدفوع بالعقد)، وتمارا/تابي (لا API استرداد
-  // خادمي هنا، وإلغاؤها قد يُطلق إيداعاً بينما الأقساط قائمة).
-  if (method === "subscription") return {handled: false, reason: "subscription"};
-  if (method === "tamara" || method === "tabby") return {handled: false, reason: "bnpl"};
-
-  // (1) مطالبة ذرّية تمنع كرونَين متزامنَين من ضرب البوابة لنفس الطلب.
-  const claimed = await db.runTransaction(async (tx) => {
-    const s = await tx.get(orderRef);
-    const d = s.data() || {};
-    if (d.driver_id || d.status !== "pending" || d.is_paid !== true) return false;
-    if (d.auto_refund_processed === true || d.refund_credited === true ||
-        d.payment_status === "refunded" || d.payment_status === "voided") return false;
-    tx.update(orderRef, {
-      auto_refund_processed: true,
-      payment_status: "refunding", // مؤشّر دائم قابل للمصالحة عند تعافي عطل
-    });
-    return true;
-  });
-  if (!claimed) return {handled: false, reason: "claimed_or_ineligible"};
-
-  const clientId = d0.client_id || d0.userId || null;
-  const code = d0.code || orderDoc.id;
-  // نفس تدرّج المبلغ المستعمَل في مسار الاسترداد الإداري (store=total_amount، عقد=planPrice…).
-  const refundAmount = amounts.refundAmount(d0);
-  const hasGatewayPayment = !!d0.moyasar_payment_id;
-
-  // مسار المحفظة: نُعيد للرصيد مباشرةً داخل معاملة واحدة (لا نعتمد على onOrderRewards
-  // الذي يخرج مبكراً ما لم يُوسَم rewards_handled_by='server').
-  if (method === "wallet") {
-    if (!clientId || !(refundAmount > 0)) {
-      await orderRef.update({auto_refund_failed: true, stranded_alerted: true,
-        payment_status: "paid"}).catch(() => {});
-      return {handled: false, reason: "no_amount"};
-    }
-    const walletRef = db.collection("wallets").doc(clientId);
-    const txRef = walletRef.collection("transactions").doc(`refund_${orderDoc.id}`);
-    try {
-      await db.runTransaction(async (t) => {
-        const s = await t.get(orderRef);
-        if (s.get("driver_id")) throw new Error("assigned_midway");
-        t.set(walletRef, {
-          balance: FieldValue.increment(refundAmount),
-          last_updated: FieldValue.serverTimestamp(),
-        }, {merge: true});
-        t.create(txRef, {
-          amount: refundAmount, points: 0, type: "refund",
-          description: `استرداد طلبٍ تعذّر تنفيذه #${code}`,
-          order_id: orderDoc.id,
-          created_at: FieldValue.serverTimestamp(),
-        });
-        t.update(orderRef, {
-          status: "cancelled", cancelled_by: "system",
-          cancel_reason: "unfulfilled_no_driver",
-          cancelled_at: FieldValue.serverTimestamp(),
-          refund_credited: true, needs_refund: false,
-          rewards_handled_by: "server", payment_status: "refunded", is_paid: false,
-        });
-      });
-    } catch (e) {
-      if (e.message === "assigned_midway") {
-        await orderRef.update({auto_refund_processed: false,
-          payment_status: "paid"}).catch(() => {});
-        return {handled: false, reason: "assigned_midway"};
-      }
-      await orderRef.update({auto_refund_failed: true, stranded_alerted: true})
-          .catch(() => {});
-      return {handled: false, reason: "wallet_error"};
-    }
-    await _notifyAutoRefund(clientId, code, orderDoc.id, refundAmount, "محفظتكِ", "محفظة");
-    return {handled: true, action: "wallet_refund"};
-  }
-
-  // بطاقة/دفع أصلي بلا معرّف بوابة: يتعذّر الاسترداد الآلي — تصعيد إداري.
-  if (!hasGatewayPayment) {
-    await orderRef.update({auto_refund_failed: true, stranded_alerted: true,
-      payment_status: "paid"}).catch(() => {});
-    return {handled: false, reason: "no_payment_id"};
-  }
-
-  // مسار البطاقة/الدفع الأصلي: مصالحة الحالة الحيّة ثم void (غير مقبوض) أو refund كامل.
-  const paymentId = d0.moyasar_payment_id;
-  const live = await moyasar.getPayment(secret, paymentId);
-  let gatewayOk = false; let finalStatus = null; let action = null;
-  if (live.ok && (live.status === "refunded" || live.status === "voided")) {
-    gatewayOk = true; finalStatus = live.status; action = live.status; // مستردّ سلفاً
-  } else {
-    const authorized = live.ok &&
-      (live.status === "authorized" || live.status === "initiated");
-    const res = authorized ? await moyasar.voidPayment(secret, paymentId) :
-      await moyasar.refund(secret, paymentId, undefined); // استرداد كامل
-    gatewayOk = res.ok; finalStatus = res.status;
-    action = authorized ? "voided" : "refunded";
-  }
-  if (!gatewayOk) {
-    // لا نُعيد ضبط العلَم (قد يكون نجح ثم انقطع الاتصال) — نُثبّت الفشل وننبّه للمصالحة.
-    await orderRef.update({auto_refund_failed: true, stranded_alerted: true})
-        .catch(() => {});
-    return {handled: false, reason: "gateway_error"};
-  }
-  try {
-    await db.runTransaction(async (t) => {
-      const s = await t.get(orderRef);
-      if (s.get("driver_id")) throw new Error("assigned_midway");
-      t.update(orderRef, {
-        status: "cancelled", cancelled_by: "system",
-        cancel_reason: "unfulfilled_no_driver",
-        cancelled_at: FieldValue.serverTimestamp(),
-        payment_status: action === "voided" ? "voided" : "refunded",
-        moyasar_status: finalStatus, refund_credited: true, needs_refund: false,
-        rewards_handled_by: "server", is_paid: false,
-        refunded_amount: refundAmount,
-        [action === "voided" ? "voided_at" : "refunded_at"]:
-          FieldValue.serverTimestamp(),
-      });
-    });
-  } catch {
-    // البوابة نجحت لكن أُسنِد سائق لحظتها (نادر جداً): المال أُعيد فعلاً فنُكمل الإلغاء
-    // (لا نُبقي طلباً «مدفوعاً» بلا مال) ونُعلّم التعارض للمراجعة.
-    await orderRef.update({
-      status: "cancelled", cancelled_by: "system",
-      cancel_reason: "unfulfilled_no_driver_refunded",
-      payment_status: action === "voided" ? "voided" : "refunded",
-      refund_credited: true, is_paid: false, refund_after_assign_conflict: true,
-    }).catch(() => {});
-  }
-  await _notifyAutoRefund(clientId, code, orderDoc.id, refundAmount, "بطاقتكِ",
-      action === "voided" ? "إلغاء تفويض" : "استرداد");
-  return {handled: true, action};
-}
-
-// إشعار موحّد: العميل + بثّ إداري عند الاسترداد الآلي.
-async function _notifyAutoRefund(clientId, code, orderId, amount, dest, adminTag) {
-  if (clientId) {
-    await queuePush(clientId, "تعذّر تنفيذ طلبكِ — أُعيد المبلغ 💳",
-        `تعذّر إيجاد فريق لطلبكِ #${code} فأُعيد ${amount} ر.س إلى ${dest}.`,
-        "order_refunded", {orderId}).catch(() => {});
-  }
-  await queuePush("ADMIN_BROADCAST", "استُرد طلب مدفوع تعذّر تنفيذه ↩️",
-      `أُعيد الطلب #${code} (${adminTag}، ${amount} ر.س) — لا سائق حتى بعد فوات الموعد.`,
-      "admin_order_alert", {orderId}).catch(() => {});
-}
 
 // حذف سائق نهائياً (بطلب المالك: أيقونة الحذف تحذف فعلاً ولا يبقى ظاهراً).
 // خادمي إجبارياً: حذف مستند drivers من العميل يترك حساب Auth حيّاً، وبوّابة الطرد
