@@ -12,6 +12,7 @@ import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:zyiarah/utils/status_util.dart';
+import '../../utils/order_lifecycle.dart';
 import 'package:zyiarah/screens/map_screen.dart';
 
 class AdminOrderDetailsScreen extends StatefulWidget {
@@ -229,12 +230,20 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
 
         final bool isOrdersDoc = _srcCollection == 'orders';
 
-        // (#9) إسناد سائق لطلب pending **بلا موعد**: كان يمرّ من المسار المباشر
-        // متجاوزاً فحص التعارض الذرّي بأكمله — نوقفه ونطلب الموعد أولاً.
-        if (isOrdersDoc &&
+        // هل هذا إسنادٌ ابتدائيّ؟ القسمة على **وجود سائق** لا على الحالة وحدها:
+        // طلبٌ بلا driver_id في حالةِ ما قبل الإسناد = ابتدائيّ (approveAndAssign)،
+        // وطلبٌ يحمل سائقاً وهو نشط = إعادة إسناد/جدولة (reschedule).
+        final bool hasDriverNow =
+            (_orderData?['driver_id'] ?? '').toString().isNotEmpty;
+        final bool isInitialAssign = isOrdersDoc &&
             _selectedDriverId != null &&
-            _currentStatus == 'pending' &&
-            effectiveSchedule == null) {
+            !hasDriverNow &&
+            kPreDispatchStatuses.contains(_currentStatus);
+
+        // (#9) إسناد سائق **بلا موعد**: كان يمرّ من المسار المباشر متجاوزاً فحص
+        // التعارض الذرّي بأكمله — نوقفه ونطلب الموعد أولاً. وكان الشرط مقصوراً
+        // على pending، فطلبٌ under_review/awaiting_payment يُسنَد بلا موعدٍ أصلاً.
+        if (isInitialAssign && effectiveSchedule == null) {
           setState(() => _isLoading = false);
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
               content: Text('حدد موعد الزيارة أولاً قبل إسناد السائق'),
@@ -246,10 +255,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
         // الذي يعيد فحص التعارض **داخل معاملة** فيمنع الحجز المزدوج عند إسناد مديرَين نفس
         // السائق لفترتين متداخلتين معاً — بدل كتابة driver_id مباشرةً بلا فحص ذرّي. الدالة
         // تكتب status/driver/service_date/scheduled_at/booking من scheduledIso (أكمل من المباشر).
-        if (isOrdersDoc &&
-            _selectedDriverId != null &&
-            _currentStatus == 'pending' &&
-            effectiveSchedule != null) {
+        if (isInitialAssign && effectiveSchedule != null) {
           await FirebaseFunctions.instance
               .httpsCallable('approveAndAssignOrder')
               .call({
@@ -259,11 +265,10 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
           });
           if (mounted) setState(() => _currentStatus = 'scheduled');
         } else if (isOrdersDoc &&
-            (_orderData?['driver_id'] ?? '').toString().isNotEmpty &&
+            hasDriverNow &&
             // 'assigned' كانت خارج القائمة فتُعدَّل زيارتها بالكتابة المباشرة
             // متجاوزةً فحص التعارض — وهي حالة نشطة يحملها السائق في كل الشاشات.
-            ['scheduled', 'assigned', 'accepted', 'on_the_way', 'in_progress']
-                .contains(_orderData?['status']) &&
+            kActiveAssignedStatuses.contains(_orderData?['status']) &&
             (scheduleChanged || isNewAssignment)) {
           // (#23/D) طلب مُسنَد نشط: إعادة جدولة و/أو إعادة إسناد لسائق آخر — كلاهما عبر
           // rescheduleAssignedOrder الذرّي (يعيد فحص تعارض السائق **المستهدَف** داخل معاملة،
@@ -304,28 +309,28 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
             updatePayload['client_reminder_24h_sent'] = false;
             updatePayload['client_reminder_soon_sent'] = false;
           }
-          if (_selectedDriverId != null && isOrdersDoc) {
-            updatePayload['driver_id'] = _selectedDriverId!;
-            updatePayload['driver_name'] = _selectedDriverName ?? '';
-            updatePayload['assigned_driver'] = _selectedDriverName ?? '';
-            // بدون driver_phone كان زر اتصال العميل يعرض «رقم غير متوفر».
-            updatePayload['driver_phone'] = _drivers.firstWhere(
-                  (d) => d['id'] == _selectedDriverId,
-                  orElse: () => {'phone': ''},
-                )['phone'] ??
-                '';
-            updatePayload['assigned_at'] = FieldValue.serverTimestamp();
-            if (!scheduleChanged && sd is Timestamp) {
-              updatePayload['scheduled_at'] = sd;
-            }
-            // إسناد سائق لطلب حالته لا تظهر في استعلام لوحة السائق = إشعارٌ يصل
-            // لمهمة غير مرئية. كل حالة «قبل التنفيذ» تتقدّم إلى scheduled — الحالات
-            // النشطة (accepted/on_the_way/in_progress) تمرّ من المسار الذرّي أعلاه.
-            const preDispatch = {'pending', 'under_review', 'awaiting_payment', 'assigned'};
-            if (preDispatch.contains(_currentStatus)) {
-              updatePayload['status'] = 'scheduled';
-              if (mounted) setState(() => _currentStatus = 'scheduled');
-            }
+          // **لا يُكتب سائقٌ من هنا أبداً.** كان هذا الفرع يكتب
+          // driver_id/driver_name/driver_phone/assigned_at مباشرةً لكلّ حالةٍ لا
+          // يقبلها الخادم، والقواعد تمنح isOrdersManager() تحديثاً كاملاً فتمرّ
+          // الكتابة — فيتجاوز الإسنادُ فحصَ الأهليّة بأكمله
+          // (isAssignableDriver) وفحصَ التعارض الذرّي معاً. ومستندُ سائقٍ بلا
+          // حساب دخول يُخفي الطلب المدفوع عن الجميع: القواعد وتطبيق السائق
+          // يربطان الرؤية بـauth.uid == driver_id، فيُبلَّغ العميل أنّ سائقاً
+          // أُسنِد ولا يراه أحد. والقائمة تعرض كلّ سائق نشط **بقصد** («القائمة
+          // للعرض، والخادم هو الحارس») — فنقضُ الشقّ الثاني يُسقط القاعدة كلها.
+          //
+          // المسارانِ الخادميّان يقسمان الفضاء كاملاً: ما قبل الإسناد بلا سائق
+          // → approveAndAssignOrder، ونشطٌ يحمل سائقاً → rescheduleAssignedOrder.
+          // فإن بقي اختيارُ سائقٍ لا يقبله أيٌّ منهما (حالةٌ جديدة مثلاً) نُخبر
+          // المدير صراحةً بدل تجاهلٍ صامت أو كتابةٍ غير محروسة.
+          if (isNewAssignment && isOrdersDoc) {
+            setState(() => _isLoading = false);
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(
+                    'لا يمكن إسناد سائق لطلب بحالة «$_currentStatus» من هنا — '
+                    'اعتمد الطلب أولاً أو استعمل إعادة الجدولة'),
+                backgroundColor: Colors.red));
+            return;
           }
           // (#10) الكتابة على المجموعة المصدر — مستند صيانة كان يُكتب على orders
           // فيرمي not-found بصمت ويظن الأدمن أن التعديل حُفظ. (لاحقاً جمّدت

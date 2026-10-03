@@ -3606,6 +3606,16 @@ exports.payContractWithWallet = onCall({cpu: 0.083}, async (request) => {
 // ════════════════════════════════════════════════════════════════════════
 // Admin approve + assign (المسار الثاني: الكنب/المكيفات/المتجر)
 // ════════════════════════════════════════════════════════════════════════
+// مراحلُ حياة الطلب فيما يخصّ الإسناد — نسخةُ الخادم من `lib/utils/order_lifecycle.dart`
+// (يُقرن الحارسُ المجموعتين حرفاً بحرف). القسمةُ على **وجود سائق** لا على الحالة
+// وحدها، فالمساران يقسمان الفضاء كاملاً ولا يتداخلان:
+//   PRE_DISPATCH + بلا driver_id  → approveAndAssignOrder  (إسنادٌ ابتدائي)
+//   ACTIVE_ASSIGNED + بـdriver_id → rescheduleAssignedOrder (إعادة جدولة/إسناد)
+// و`assigned` في المجموعتين بقصد: طلبٌ assigned بلا سائق ما زال إسناداً ابتدائياً.
+const PRE_DISPATCH_STATUSES = [
+  "pending", "under_review", "awaiting_payment", "assigned",
+];
+
 exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   await _assertAdmin(request); // super_admin أو orders_manager
   const {orderId, driverId, scheduledIso} = request.data;
@@ -3631,8 +3641,17 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   if (!orderSnap.exists) throw new HttpsError("not-found", "الطلب غير موجود");
 
   const orderData = orderSnap.data();
-  if (orderData.status !== "pending") {
+  // كان الشرط `status !== "pending"` فقط، فطلبٌ under_review/awaiting_payment لا
+  // يقبله الخادم — وتطبيقُ الأدمن كان يسقط حينها إلى كتابةٍ مباشرة بلا أيّ فحص
+  // أهليّة. توسيعُ المقبول هنا هو ما يجعل «الخادم هو الحارس» صحيحاً فعلاً.
+  if (!PRE_DISPATCH_STATUSES.includes(orderData.status)) {
     throw new HttpsError("failed-precondition", "لا يمكن اعتماد الطلب بحالته الحالية");
+  }
+  // طلبٌ يحمل سائقاً شأنُ rescheduleAssignedOrder (يستثني الطلب نفسه من فحص
+  // التعارض) — ولو قبلناه هنا لحُسب السائق الحاليّ تعارضاً مع نفسه.
+  if (orderData.driver_id) {
+    throw new HttpsError("failed-precondition",
+        "الطلب مُسنَد سلفاً — استعمل إعادة الجدولة/الإسناد لتغيير سائقه");
   }
 
   // (الثغرة #2) تأكّد أن السائق المختار حرّ فعلاً في الفترة المطلوبة
@@ -3667,8 +3686,10 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
 
   await db.runTransaction(async (tx) => {
     const fresh = await tx.get(orderRef);
-    const st = fresh.data()?.status;
-    if (st !== "pending") {
+    const fd = fresh.data() || {};
+    // نفسُ القاعدة ذرّياً: الحالة مقبولة **ولا سائق** — فمديرٌ آخر أسند الطلب
+    // أثناء العملية يُوقِف هذه. (كان الفحص `!== "pending"` فيتجاوز الحالات الأخرى.)
+    if (!PRE_DISPATCH_STATUSES.includes(fd.status) || fd.driver_id) {
       throw new HttpsError("failed-precondition", "تم اعتماد الطلب بالفعل من مدير آخر");
     }
     // (منع الحجز المزدوج) إعادة فحص حرّية السائق ذرّياً داخل المعاملة — الفحص أعلاه
