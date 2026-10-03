@@ -21,6 +21,7 @@ const {isAssignableDriver, assignabilityProblem, chunk, GET_ALL_CHUNK} =
   require("./drivers");
 const moyasar = require("./moyasar_api");
 const tamara = require("./tamara_api");
+const amounts = require("./amounts");
 initializeApp();
 
 // Secrets — stored in Firebase Secret Manager, never in source code
@@ -4521,10 +4522,11 @@ exports.reconcileOrphanPayments = onSchedule(
                 !["voided", "refunded", "payment_review"]
                     .includes(foundData.payment_status)) {
               const paidH = Math.round(Number(p.amount));
-              const expected = Number(
-                  foundData.amount ?? foundData.final_amount ??
-                  foundData.total_amount ?? foundData.planPrice ?? 0);
-              const expectedH = Math.round(expected * 100);
+              // كان الترتيب هنا يقدّم `amount` على `final_amount` — بخلاف
+              // moyasarWebhook وtabbyWebhook. ومقارنةُ `paidH >= expectedH`
+              // تجعل الأثر باتجاهٍ واحد: تعديلٌ **هابط** يُنتج متوقَّعاً أكبر
+              // من المدفوع، فيُرفض استرداد طلبٍ دفع العميل ثمنه فعلاً.
+              const expectedH = amounts.toHalalas(amounts.expectedAmount(foundData));
               if (expectedH > 0 && paidH >= expectedH) {
                 await foundRef.update({
                   is_paid: true, payment_status: "paid",
@@ -5278,8 +5280,8 @@ exports.moyasarWebhook = onRequest(
               // يمنع دفع مبلغ صغير (بمفتاح النشر) وربطه بطلب كبير لتأكيده مجاناً.
               // نُفضّل final_amount (السعر النهائي الذي قد تعدّله الإدارة لطلب متجر)
               // على المبلغ الأساسي — وإلا رُفضت دفعة حقيقية عند تعديل السعر.
-              const expectedHalalas = Math.round(
-                  Number(data.final_amount ?? data[amountField] ?? 0) * 100);
+              const expectedHalalas = amounts.toHalalas(
+                  amounts.expectedAmount(data, amountField));
               if (expectedHalalas <= 0 || verifiedPayment.amount !== expectedHalalas) {
                 console.error(
                     `moyasarWebhook: AMOUNT MISMATCH order ${orderId} in '${col}' — ` +
@@ -5416,8 +5418,7 @@ async function _autoResolveUnfulfilledPaidOrder(db, secret, orderDoc) {
   const clientId = d0.client_id || d0.userId || null;
   const code = d0.code || orderDoc.id;
   // نفس تدرّج المبلغ المستعمَل في مسار الاسترداد الإداري (store=total_amount، عقد=planPrice…).
-  const refundAmount = Number(d0.final_amount ?? d0.total_amount ??
-    d0.planPrice ?? d0.amount ?? 0);
+  const refundAmount = amounts.refundAmount(d0);
   const hasGatewayPayment = !!d0.moyasar_payment_id;
 
   // مسار المحفظة: نُعيد للرصيد مباشرةً داخل معاملة واحدة (لا نعتمد على onOrderRewards
@@ -5719,8 +5720,7 @@ exports.moyasarRefundPayment = onCall(
       const order = await _findOrder(orderId);
       if (order) {
         const refundedAmount = amountHalalas ? amountHalalas / 100 :
-          Number(order.data.final_amount ?? order.data.total_amount ??
-            order.data.planPrice ?? order.data.amount ?? 0);
+          amounts.refundAmount(order.data);
         await order.ref.update({
           payment_status: "refunded",
           // نختم refund_credited أيضاً كي يمنع حارسُ onOrderRewards (refund_credited)
@@ -5785,8 +5785,7 @@ async function _claimRefund(existing) {
  * @return {number} المبلغ بالريال (قد يكون 0 إن غابت الحقول).
  */
 function _fullRefundAmount(data) {
-  return Number(data.final_amount ?? data.total_amount ??
-    data.planPrice ?? data.amount ?? 0);
+  return amounts.refundAmount(data);
 }
 
 // ── Tamara Refund ──────────────────────────────────────────────────────────────
@@ -6180,8 +6179,7 @@ exports.tabbyWebhook = onRequest(
                   // (أمان) جلسة تابي تُنشأ من العميل بمبلغ يتحكّم فيه، فنتحقّق أن المبلغ
                   // المدفوع = مبلغ الطلب الحقيقي قبل التأكيد (كما يفعل moyasarWebhook) —
                   // وإلا دفع 1ر.س لطلب كبير وأكّده مجاناً.
-                  const expected = Number(
-                      cur.final_amount ?? cur.total_amount ?? cur.planPrice ?? cur.amount ?? 0);
+                  const expected = amounts.expectedAmount(cur);
                   const paid = Number(payment.amount || 0);
                   if (expected <= 0 || Math.abs(paid - expected) > 0.01) {
                     tx.update(ref, {
