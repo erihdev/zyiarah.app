@@ -10,6 +10,7 @@ import 'package:arabic_reshaper/arabic_reshaper.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:zyiarah/services/zatca_service.dart';
+import 'package:zyiarah/utils/vat.dart';
 
 class ZyiarahPdfService {
   /// أداة مساعدة لمعالجة النصوص العربية وتشكيلها بشكل صحيح داخل الـ PDF
@@ -76,12 +77,12 @@ class ZyiarahPdfService {
     final double originalTotalInclusive = amount + discountAmount;
     
     // المبالغ الأساسية (قبل الضريبة)
-    final double subtotalBeforeDiscount = originalTotalInclusive / 1.15;
-    final double discountSubtotal = discountAmount / 1.15;
-    final double netSubtotal = amount / 1.15; // المجموع الفرعي بعد الخصم
+    final double subtotalBeforeDiscount = netFromGross(originalTotalInclusive);
+    final double discountSubtotal = netFromGross(discountAmount);
+    final double netSubtotal = netFromGross(amount); // المجموع الفرعي بعد الخصم
     
     // قيمة الضريبة 15% على المبلغ الصافي
-    final double vatAmount = netSubtotal * 0.15;
+    final double vatAmount = vatOnBase(netSubtotal);
 
     pdf.addPage(
       pw.MultiPage(

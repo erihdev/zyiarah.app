@@ -8,6 +8,7 @@ import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/zone_locator_service.dart';
 import 'package:zyiarah/widgets/booking_slot_picker.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
+import 'package:zyiarah/utils/vat.dart';
 
 /// تنظيف داخلية السيارة — **خدمة مجدولة مسعّرة** على نمط المكيفات: تنظيف عميق
 /// لمراتب السيارة وأسقفها. الإدارة تسعّر ثلاثة أحجام (صغيرة/وسط/كبيرة) لكل منطقة،
@@ -211,7 +212,7 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
 
   // الأساس = مجموع الأسعار المُدخلة؛ الضريبة 15% **تُضاف** فوقه (قرار المالك).
   double get subTotal => totalAmount; // الأساس
-  double get vat => totalAmount * 0.15; // 15% مضافة فوق الأساس
+  double get vat => vatOnBase(totalAmount); // 15% مضافة فوق الأساس
   double get grandTotal => totalAmount + vat; // ما يدفعه العميل (شامل الضريبة)
 
   int get totalCars => _counts.values.fold(0, (a, v) => a + v);

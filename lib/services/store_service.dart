@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/counter_service.dart';
+import 'package:zyiarah/utils/vat.dart';
 
 class StoreProduct {
   final String id;
@@ -141,7 +142,7 @@ class ZyiarahStoreService {
 
       // الضريبة 15% تُضاف فوق مجموع أسعار المنتجات (قرار المالك). total_amount هو
       // الإجمالي شامل الضريبة = ما يدفعه العميل، وهو ما تطابقه verifyMoyasarPayment.
-      serverCalculatedTotal = ((tempTotal * 1.15) * 100).roundToDouble() / 100;
+      serverCalculatedTotal = grossFromBaseRounded(tempTotal);
 
       // ─── 2) العدّاد (قراءة ثم كتابة) — بعد كل قراءات المنتجات ───
       final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);

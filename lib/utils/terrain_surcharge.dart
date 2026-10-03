@@ -7,6 +7,8 @@
 /// (`functions/pricing.js → applyTerrainSurcharge`) ويتجاهل ما يكتبه العميل.
 library;
 
+import 'package:zyiarah/utils/vat.dart';
+
 const String kTerrainMountain = 'mountain';
 const String kTerrainPlain = 'plain';
 
@@ -67,17 +69,17 @@ class PriceBreakdown {
     return (clamped * 100).roundToDouble() / 100;
   }
 
-  double get subtotal => total / 1.15;
+  double get subtotal => netFromGross(total);
   double get vat => total - subtotal;
 
   // صفوف العرض قبل الضريبة — تُجمَع على الصافي.
-  double get rowBase => amount / 1.15;
-  double get rowTerrain => amount * (_pct / 100) / 1.15;
-  double get rowSurge => amount * (1 + _pct / 100) * (_surge - 1) / 1.15;
+  double get rowBase => netFromGross(amount);
+  double get rowTerrain => netFromGross(amount * (_pct / 100));
+  double get rowSurge => netFromGross(amount * (1 + _pct / 100) * (_surge - 1));
   double get rowDiscount {
     if (fixedPrice) return 0.0;
     final capped = discount.clamp(0.0, grossBeforeDiscount);
-    return capped / 1.15;
+    return netFromGross(capped);
   }
 }
 

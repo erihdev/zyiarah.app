@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/admin/admin_orders_screen.dart';
+import 'package:zyiarah/utils/vat.dart';
 
 /// Lightweight financial snapshot computed client-side from the `orders`
 /// collection (current + last month only — never the full history).
@@ -183,7 +184,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
             const SizedBox(height: 6),
             // النموذج المعتمد: المخزَّن شامل الضريبة، فالصافي قبل الضريبة = الإجمالي ÷ 1.15.
             Text(
-              'الصافي قبل الضريبة: ${intl.NumberFormat.currency(symbol: 'ر.س ', decimalDigits: 0).format(totalRevenue / 1.15)}',
+              'الصافي قبل الضريبة: ${intl.NumberFormat.currency(symbol: 'ر.س ', decimalDigits: 0).format(netFromGross(totalRevenue))}',
               style: GoogleFonts.tajawal(fontSize: 13, color: Colors.white70),
             ),
             const SizedBox(height: 10),
@@ -531,7 +532,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
             final int completedOrders = (docData['completed_orders'] ?? 0).toInt();
             // الإيراد المخزَّن شامل الضريبة (المبلغ المشحون = الأساس×1.15)، فالضريبة
             // تُستخرج منه قسمةً لا تُضاف عليه ثانيةً (كانت تُضخَّم 15% زيادة).
-            final double vatAmount = totalRevenue - (totalRevenue / 1.15);
+            final double vatAmount = vatInGross(totalRevenue);
 
             return SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),

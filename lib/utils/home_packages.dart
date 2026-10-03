@@ -1,4 +1,5 @@
 import 'package:zyiarah/utils/firestore_maps.dart';
+import 'package:zyiarah/utils/vat.dart';
 
 /// نظام «باقات السكن» — بديل اختيار الساعات في النظافة بالساعة (قرار المالك):
 /// العميل يختار نوع سكنه (شقة صغيرة/متوسطة/فيلا) وعدد الكوادر، والسعر لكل
@@ -66,7 +67,7 @@ class CrewOption {
   /// ما **يُدفع** (شامل الضريبة 15%) — نفس معادلة بقية الخدمات.
   /// ملاحظة: لم يعد هذا ما **يُعرض**؛ العميل يرى `basePrice` (قبل الضريبة) في كل
   /// الشاشات، والضريبة تظهر في «تفاصيل الفاتورة» بشاشة إتمام الطلب فقط (قرار المالك).
-  double get grossPrice => ((basePrice * 1.15) * 100).roundToDouble() / 100;
+  double get grossPrice => grossFromBaseRounded(basePrice);
 }
 
 /// باقة نوع سكن كما هي في وثيقة المنطقة.

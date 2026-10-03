@@ -7,6 +7,7 @@ import 'package:intl/intl.dart' as intl;
 import 'dart:convert';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
+import 'package:zyiarah/utils/vat.dart';
 
 class ZyiarahContractSigningScreen extends StatefulWidget {
   final String planName;
@@ -57,7 +58,7 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
   // ونشحن ونعرض هذا الإجمالي شامل الضريبة، وهو نفسه ما يطابقه الخادم (planPrice =
   // الإجمالي المدفوع)، فلا حاجة لتغيير أي دالة تحقّق خادمية.
   double get _grossedPlanPrice =>
-      ((widget.planPrice * 1.15) * 100).roundToDouble() / 100;
+      grossFromBaseRounded(widget.planPrice);
 
   final Color brandPurple = const Color(0xFF660033);
   bool _isSubmitting = false;

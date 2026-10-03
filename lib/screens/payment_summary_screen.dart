@@ -34,6 +34,7 @@ import 'package:zyiarah/services/counter_service.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/terrain_surcharge.dart';
+import 'package:zyiarah/utils/vat.dart';
 
 
 
@@ -318,7 +319,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       );
   // مقرّب لخانتين عشريتين — يمنع أرقاماً مثل 57.4999999999 في المبلغ المخزَّن/المعروض.
   double get totalWithVat => _breakdown.total;
-  double get subtotal => totalWithVat / 1.15;
+  double get subtotal => netFromGross(totalWithVat);
   double get vatAmount => totalWithVat - subtotal;
 
   // ── صفوف العرض في «تفاصيل الفاتورة» ──

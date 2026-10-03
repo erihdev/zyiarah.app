@@ -13,6 +13,7 @@ import 'package:zyiarah/services/zone_locator_service.dart';
 import 'package:zyiarah/utils/home_packages.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
 import 'package:zyiarah/utils/day_capacity.dart';
+import 'package:zyiarah/utils/vat.dart';
 
 
 class HourlyCleaningDetailsScreen extends StatefulWidget {
@@ -567,7 +568,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   double get totalAmount => _basePrice + _materialsTotal;
 
   // الأساس من اللوحة؛ الضريبة 15% تُضاف فوقه (قرار المالك) — المعروض «شامل الضريبة».
-  double get grandTotal => ((totalAmount * 1.15) * 100).roundToDouble() / 100;
+  double get grandTotal => grossFromBaseRounded(totalAmount);
 
   bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;

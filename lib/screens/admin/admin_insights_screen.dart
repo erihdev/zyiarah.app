@@ -8,6 +8,7 @@ import 'package:zyiarah/screens/admin/admin_staff_performance_screen.dart';
 import 'package:zyiarah/screens/admin/admin_orders_screen.dart';
 import 'package:zyiarah/screens/admin/admin_store_orders_screen.dart';
 import 'package:zyiarah/screens/admin/admin_contracts_screen.dart';
+import 'package:zyiarah/utils/vat.dart';
 
 class AdminInsightsScreen extends StatefulWidget {
   // الدور يصل من AdminDashboardScreen (مطبَّع: admin→super_admin) — نحتاجه لتخطي
@@ -226,7 +227,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
 
     final double totalRevenue = cleaningRevenue + maintenanceRevenue + storeRevenue;
     // VAT in KSA is 15% inclusive. Tax = Total - (Total / 1.15)
-    final double vatLiability = totalRevenue - (totalRevenue / 1.15);
+    final double vatLiability = vatInGross(totalRevenue);
 
     // (دمج من لوحة الويب) نمو شهري: الشهر التقويمي الحالي مقابل السابق، من نفس
     // العيّنة المجلوبة (آخر 500) — حدّها حدّ بقية الإحصاءات هنا، لا استعلامات إضافية.

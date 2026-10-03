@@ -8,6 +8,7 @@ import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/zone_locator_service.dart';
 import 'package:zyiarah/widgets/booking_slot_picker.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
+import 'package:zyiarah/utils/vat.dart';
 
 /// تنظيف الكنب والسجاد — **بالمتر المربع**، كل قطعة بمقاسها.
 ///
@@ -211,7 +212,7 @@ class _SofaRugCleaningDetailsScreenState
       .fold(0.0, (acc, p) => acc + p.priceWith(_priceFor(p.kind)));
 
   double get subTotal => totalAmount; // الأساس
-  double get vat => totalAmount * 0.15; // 15% مضافة فوق الأساس
+  double get vat => vatOnBase(totalAmount); // 15% مضافة فوق الأساس
   double get grandTotal => totalAmount + vat; // ما يدفعه العميل (شامل الضريبة)
 
   /// مساحة السجاد الإجمالية (م²) — للإحصاء فقط؛ الكنب يُسعَّر بالطول فلا يدخلها.

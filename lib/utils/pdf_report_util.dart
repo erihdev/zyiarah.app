@@ -4,6 +4,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:zyiarah/utils/vat.dart';
 
 class ZyiarahPdfReportUtil {
   // نفس سبب التضمين المحلي في ZyiarahPdfService: PdfGoogleFonts كانت تجلب الخط
@@ -110,11 +111,11 @@ class ZyiarahPdfReportUtil {
           // النموذج المعتمد: المبالغ المخزَّنة شاملة الضريبة — الصافي = الإجمالي ÷ 1.15
           // والضريبة = الإجمالي − الصافي.
           _buildStatItem('الإيراد الإجمالي (شامل الضريبة)', '${revenue.toStringAsFixed(2)} ر.س'),
-          _buildStatItem('الصافي قبل الضريبة', '${(revenue / 1.15).toStringAsFixed(2)} ر.س'),
+          _buildStatItem('الصافي قبل الضريبة', '${(netFromGross(revenue)).toStringAsFixed(2)} ر.س'),
           _buildStatItem('الطلبات النشطة', active.toString()),
           _buildStatItem('الطلبات المكتملة', completed.toString()),
           _buildStatItem('ضريبة القيمة المضافة (15%)',
-              '${(revenue - revenue / 1.15).toStringAsFixed(2)} ر.س'),
+              '${(vatInGross(revenue)).toStringAsFixed(2)} ر.س'),
         ],
       ),
     );

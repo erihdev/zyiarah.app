@@ -9,6 +9,7 @@ import 'package:zyiarah/models/invoice_view.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:zyiarah/widgets/zatca_invoice_card.dart';
+import 'package:zyiarah/utils/vat.dart';
 
 class ZyiarahOrderSuccessScreen extends StatefulWidget {
   final String orderCode;
@@ -67,7 +68,7 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen>
     setState(() => _retryingInvoice = true);
     try {
       final double amount = (data['amount'] as num?)?.toDouble() ?? 0;
-      final double vat = amount - (amount / 1.15);
+      final double vat = vatInGross(amount);
       final String qrData = ZatcaService.generateZatcaQrCode(
         timestamp: DateTime.now(),
         totalAmount: amount,

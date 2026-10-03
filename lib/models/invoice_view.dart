@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/services/zatca_service.dart';
+import 'package:zyiarah/utils/vat.dart';
 
 /// ما تعرضه بطاقة «فاتورة ضريبية مبسطة» على شاشة نجاح الطلب — مشتقّ من وثيقة
 /// الطلب نفسها التي تُبنى منها نسخة PDF، وبالحساب نفسه في
@@ -38,7 +39,8 @@ class InvoiceView {
     required this.pdfStatus,
   });
 
-  static const double vatRate = 0.15;
+  /// أُحيلت إلى المصدر الموحَّد — انظر lib/utils/vat.dart.
+  static const double vatRate = kVatRate;
 
   /// الصافي الخاضع للضريبة بعد الخصم.
   double get net => total / (1 + vatRate);
