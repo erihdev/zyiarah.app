@@ -108,8 +108,11 @@ class ZyiarahNotificationService {
       const DarwinInitializationSettings iosSettings =
           DarwinInitializationSettings();
 
+      // flutter_local_notifications 22: صارت الوسائط مسمّاة لا موضعية
+      // (`settings:` بدل الأولى، و`id:`/`title:`/`notificationDetails:` في show).
       await _localNotifications.initialize(
-        const InitializationSettings(android: androidSettings, iOS: iosSettings),
+        settings: const InitializationSettings(
+            android: androidSettings, iOS: iosSettings),
         // (F1) نقر الإشعار المحلي (المعروض أثناء المقدمة) → توجيه عميق
         onDidReceiveNotificationResponse: _onLocalNotificationTap,
       );
@@ -122,10 +125,10 @@ class ZyiarahNotificationService {
         // تعيين مهمته أو تأكيد دفعته أو تحديث طلبه — يظهر في الجرس فقط.
         if (n != null) {
           _localNotifications.show(
-            message.hashCode,
-            n.title,
-            n.body,
-            NotificationDetails(
+            id: message.hashCode,
+            title: n.title,
+            body: n.body,
+            notificationDetails: NotificationDetails(
               android: AndroidNotificationDetails(
                 _channel.id,
                 _channel.name,
