@@ -44,11 +44,20 @@ void main() {
     // ويرفضه الفحص الذرّي فيبقى الطلب المدفوع عالقاً.
     expect(fn.contains('getFullYear(), startDateTime.getMonth()'), isFalse,
         reason: 'حدود اليوم التقويمي عادت — تُفوّت التعارض العابر لمنتصف الليل');
-    final n24 = RegExp(r'startDateTime\.getTime\(\) - 24 \* 60 \* 60 \* 1000')
-        .allMatches(fn)
-        .length;
-    expect(n24, greaterThanOrEqualTo(3),
-        reason: 'المواضع الثلاثة (find/isFree/atomic) يجب أن تستخدم نافذة −24س');
+    // كان هذا الفحص يعدّ المواضع (‏≥٣) وهي تكتب الحساب بأيديها. صارت النافذة
+    // تعريفاً **واحداً** في functions/slots.js، فالقرار مضمونٌ بنيويّاً لا عدداً:
+    // لا يمكن لموضعٍ أن ينحرف. والفحصُ أصرمُ ممّا كان — نسخةٌ رابعة بـ−٨س كانت
+    // تمرّ سابقاً (‏≥٣ محقَّق)، وتسقط الآن.
+    final slots = File('functions/slots.js').readAsStringSync();
+    expect(slots.contains('const CONFLICT_LOOKBACK_HOURS = 24;'), isTrue,
+        reason: 'الرجوع صار ≠ ٢٤س — مهمّة طويلة تبدأ قبل الفترة تفوت المسح '
+            'فيُحجَز السائق لمهمتين متداخلتين');
+    final viaModule =
+        RegExp(r'slots\.conflictWindowStart\(').allMatches(fn).length;
+    expect(viaModule, greaterThanOrEqualTo(5),
+        reason: 'مواضعُ مسح التعارض يجب أن تمرّ على slots.conflictWindowStart');
+    expect(RegExp(r'getTime\(\) - 24 \* 60 \* 60 \* 1000').hasMatch(fn), isFalse,
+        reason: 'حسابُ النافذة مكتوبٌ إنلاين من جديد — موضعُه slots.js وحده');
   });
 
   test('تذكير السائق عبر queuePush لا _pushToUid (وارد يصل بلا توكن FCM)', () {

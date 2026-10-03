@@ -141,12 +141,20 @@ void main() {
               'تعني سقوطاً إلى مسارٍ غير محروس أو رفضاً لإسنادٍ مشروع');
     });
 
-    test('kActiveAssignedStatuses == مجموعةُ reschedule الخادميّة', () {
+    test('kActiveAssignedStatuses == CONFLICT_STATUSES في slots.js', () {
+      // كانت المجموعة مكتوبةً إنلاين في rescheduleAssignedOrder؛ صارت تعريفاً
+      // واحداً في functions/slots.js (نفسُ السؤال: «هل يُحسَب السائق مشغولاً؟»).
+      final slots = File('functions/slots.js').readAsStringSync();
+      final js = _literals(slots, 'const CONFLICT_STATUSES = [', '];');
+      expect(js.toSet(), equals(kActiveAssignedStatuses),
+          reason: 'انحرافُ المجموعتين يعني حالةً يَشغل فيها الطلبُ سائقَه عند '
+              'أحدهما ولا يَشغله عند الآخر');
+      // والنداءُ ما زال يستعملها (قاعدةٌ صحيحة لا تُنادى = حرّاسها خضراء بلا أثر).
       final i = fn.indexOf('exports.rescheduleAssignedOrder');
-      expect(i, greaterThanOrEqualTo(0));
       final body = fn.substring(i, fn.indexOf('exports.', i + 10));
-      final js = _literals(body, 'const active = [', '];');
-      expect(js.toSet(), equals(kActiveAssignedStatuses));
+      expect(body.contains('slots.CONFLICT_STATUSES'), isTrue);
+      // و`pending` خارجَها بقصد: طلبٌ لم يُسنَد لا يَشغل أحداً.
+      expect(kActiveAssignedStatuses.contains('pending'), isFalse);
     });
 
     test('المجموعتان تتقاسمان assigned فقط — والقسمة بوجود السائق', () {
