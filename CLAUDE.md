@@ -63,13 +63,15 @@ Key directories:
 - `lib/providers/` — UserProvider, ConfigProvider, OrderProvider
 - `lib/widgets/` — reusable UI components
 
-`ZyiarahFirebaseService` is a singleton (`lib/services/firebase_service.dart`) and the central access point for Firestore, Auth, and user management. Most screens go through this service. Firestore offline persistence is enabled with unlimited cache.
+`ZyiarahFirebaseService` (`lib/services/firebase_service.dart`) is a factory singleton — call it as `ZyiarahFirebaseService()`, **not** `.instance` (`_instance` is private; there is no `.instance` getter, so code written against one will not compile). Its scope is **auth and account provisioning**, not Firestore access: sign-up/sign-in (email and phone-as-email), password reset/update, OTP, `signOut`, `getUserRole`, `saveUserToRegistry`, worker-photo upload, and `createAccountViaAdmin` / `createDriverAccountViaAdmin`.
+
+It is **not** a Firestore gateway, and describing it as one misleads: 15 of 139 files under `lib/` import it, while 72 call `FirebaseFirestore.instance` directly and 57 of 69 screens import `cloud_firestore` themselves. Screens query Firestore directly by design here — so a cross-cutting concern (caching, retry, logging, App Check) has no single chokepoint to land in, and adding one means touching those 72 files. Weigh that before assuming a central hook exists. Firestore offline persistence is enabled with unlimited cache.
 
 ### Key Services (`lib/services/`)
 
 | Service | Responsibility |
 |---|---|
-| `firebase_service.dart` | Auth, Firestore CRUD, user management |
+| `firebase_service.dart` | Auth (email + phone-as-email, OTP, password reset) and admin account provisioning — **not** general Firestore CRUD |
 | `order_service.dart` | Order lifecycle + dispatch Cloud Function calls |
 | `notification_service.dart` + `zyiarah_messaging_service.dart` | FCM push + in-app notifications |
 | `moyasar_service.dart` | Primary payment gateway (Moyasar: cards, STC Pay, Apple Pay) |
@@ -79,8 +81,9 @@ Key directories:
 | `zyiarah_pdf_service.dart` | PDF invoices & contracts |
 | `deep_link_service.dart` | Deep linking / app_links |
 | `location_service.dart` + `geofence_service.dart` | Location tracking (100m driver geofence) |
-| `zyiarah_capacity_service.dart` | Booking capacity / slot availability |
 | `audit_service.dart` | Admin audit trail |
+
+Capacity is **not** a service: it lives in `lib/utils/day_capacity.dart` (`dayIsFull`) and `functions/capacity.js`. A `lib/services/zyiarah_capacity_service.dart` file exists but nothing imports it — dead code, listed here only so it is not mistaken for the live path. Four other files are dead the same way: `lib/models/order_model.dart` (`ZyiarahOrder` — the typed order model, unused; orders travel between screens as raw `Map<String, dynamic>`), `lib/screens/account_activation_screen.dart`, `lib/utils/app_error_handler.dart`, `lib/widgets/permission_sheet.dart`.
 
 ### Admin Web Panel (`admin_panel/`)
 
@@ -88,7 +91,7 @@ React 19 + TypeScript (Vite), Tailwind CSS, MapBox GL for map views. Connects to
 
 ### Firebase Backend (`functions/index.js`)
 
-Node.js v22 Cloud Functions (~37 functions) handling:
+Node.js v22 Cloud Functions — **62 exported functions in one 6,280-line `index.js`** (21 `onCall`, 17 `onDocumentUpdated`, 8 `onDocumentCreated`, 8 `onSchedule`, 4 `onDocumentWritten`, 3 `onRequest`, 1 `onTaskDispatched`). Only three logic modules are extracted — `pricing.js`, `capacity.js`, `notify_prefs.js` (the other root `.js` files are standalone diagnostics and eslint config) — so expect every backend change to touch `index.js` and to conflict there. Handling:
 - FCM push notifications (Firestore triggers: orders, tickets, contracts, dispatch)
 - Email via Resend (through the `notification_triggers` queue — anti-relay guarded)
 - Payment webhooks & operations: Moyasar (primary; webhook + verify/refund/void/capture), Tamara — all HMAC-verified and idempotent; a Tabby webhook/refund pair is kept only for orders paid before Tabby was removed from the app (2026-09-30)
@@ -146,9 +149,9 @@ Two other Android paths exist and do **not** reach Google Play: `.github/workflo
 
 ## Important Patterns
 
-- **Singleton service**: Always access Firebase/Firestore via `ZyiarahFirebaseService.instance`
+- **Auth service**: reach auth and account provisioning through `ZyiarahFirebaseService()` — the factory call, never `.instance` (it does not exist). Firestore reads/writes are made directly from screens via `FirebaseFirestore.instance`; there is no service layer in front of them (see the note under *Flutter App* above)
 - **Role checks**: User role is stored in Firestore and accessed via `UserProvider`; always verify role before rendering admin-only UI
-- **Arabic support**: Use `arabic_reshaper` + `bidi` for any Arabic text rendering — do not use plain `Text()` for Arabic strings
+- **Arabic support**: plain `Text()` is **correct** for Arabic in the UI — Flutter shapes and bidi-orders Arabic natively, and there are ~528 such literals across `lib/`. Do **not** pass UI strings through `arabic_reshaper`: pre-shaping text Flutter will shape again garbles it. `arabic_reshaper` is needed in exactly one place — `zyiarah_pdf_service.dart`, because the `pdf` package draws glyphs without shaping them; that file wraps it in a single static helper `_ar()`, so every Arabic string in a PDF goes through that one call. `bidi` is declared in `pubspec.yaml` but imported nowhere in our code (the `pdf` package pulls it in itself)
 - **PDF generation**: Use existing service classes in `lib/services/`; they depend on the `pdf` and `printing` packages
 - **Payments**: Moyasar is primary (cards, STC Pay, Apple Pay); Tamara handles installments — Tabby was removed at the root on 2026-09-30 (owner uses Tamara only; `test/no_tabby_test.dart` guards it, and legacy Tabby orders stay displayable and refundable); wallet is supported. Cash on delivery was removed at the root by owner decision — `test/no_cod_test.dart` guards it; never reintroduce it. All paid orders get a ZATCA invoice
 - **Pricing is server-verified**: the client shows prices, but `functions/pricing.js` recomputes the base from the zone document (per-service rates, optional `terrain_surcharge_percent`) on every Moyasar/wallet payment and flags underpayment. `PriceBreakdown` (`lib/utils/terrain_surcharge.dart`) is the single client formula: base + terrain + surge − discount = net, + 15% VAT = total; fixed-price contracts skip all three
