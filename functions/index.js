@@ -25,6 +25,9 @@ const amounts = require("./amounts");
 // محرّك الاسترداد الآلي — **أوّل وحدة تلمس Firestore**: تستقبل `db` وسيطاً
 // ولا تستوردها، وكذلك `queuePush`، فتبقى قابلة للاختبار بلا محاكٍ.
 const refunds = require("./refund_engine");
+// نافذةُ شَغل السائق ومسندُ التداخل — وحدةٌ **نقيّة** (لا db): كان السؤال
+// مكتوباً بيدٍ في ٢٣ موضعاً (مدّةُ الطلب ١٦، ومسحُ التعارض ٧).
+const slots = require("./slots");
 initializeApp();
 
 // Secrets — stored in Firebase Secret Manager, never in source code
@@ -2636,7 +2639,7 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
         afterData.status === "pending" && afterData.service_date) {
       const db = getFirestore();
       const start = afterData.service_date.toDate();
-      const hours = Number(afterData.hours_contracted || 4);
+      const hours = slots.orderHours(afterData);
       const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
       const driver = await _findFreeDriverForSlot(db, {startDateTime: start, endDateTime: end});
       if (driver) {
@@ -2675,8 +2678,9 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
   // وdriver_id يمتلئ، فلا يعيد إطلاق أيٍّ من الكتلتين.
   try {
     // 'assigned' ضمن الحالات النشطة — استبعادها كان يجعل السائق «المُسنَد» حرّاً
-    // في كل استعلامات الانشغال فيُحجَز لمهمتين متداخلتين.
-    const ACTIVE_WITH_DRIVER = ["scheduled", "assigned", "accepted", "on_the_way", "in_progress"];
+    // في كل استعلامات الانشغال فيُحجَز لمهمتين متداخلتين. وهو **نفس السؤال** الذي
+    // يسأله مسحُ التعارض («هل يُحسَب السائق مشغولاً؟») فالمجموعة واحدة ومصدرها واحد.
+    const ACTIVE_WITH_DRIVER = slots.CONFLICT_STATUSES;
     const driverFreed = beforeData && afterData &&
         beforeData.driver_id && ACTIVE_WITH_DRIVER.includes(beforeData.status) &&
         (afterData.status === "cancelled" || afterData.status === "completed");
@@ -2695,7 +2699,7 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
         if (o.is_paid !== true || o.driver_id || !o.service_date) return false;
         // لا نُسند طلباً انتهت نافذته كاملةً (البدء + المدة) — ذاك للاسترداد.
         const endMs = o.service_date.toDate().getTime() +
-          Number(o.hours_contracted || 4) * 60 * 60 * 1000;
+          slots.orderHours(o) * 60 * 60 * 1000;
         return endMs > Date.now();
       }).slice(0, 5);
       // كل مسار يسجّل — الاختبار الحيّ الأول فشل صامتاً ولم نعرف أي فرع ابتلعه.
@@ -2704,7 +2708,7 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
       for (const doc of waiting) {
         const o = doc.data();
         const start = o.service_date.toDate();
-        const hours = Number(o.hours_contracted || 4);
+        const hours = slots.orderHours(o);
         const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
         const driver = await _findFreeDriverForSlot(db, {startDateTime: start, endDateTime: end});
         if (driver) {
@@ -3002,7 +3006,7 @@ async function _findFreeDriverForSlot(db, {startDateTime, endDateTime}) {
   // بتوقيت UTC للخادم) تُفوّت مهمة سائقٍ في اليوم السابق UTC (سلوت الرياض
   // 00:00–02:59 = اليوم UTC السابق)، فيُعاد اختيار السائق نفسه ويرفضه الفحص الذرّي
   // فيبقى الطلب المدفوع عالقاً بلا سائق أبداً. (24س تغطي أي مدة مهمة ≤ يوم.)
-  const winStart = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
+  const winStart = slots.conflictWindowStart(startDateTime);
 
   // الأهلية من الموضع الواحد (نشط + حساب دخول بدور سائق) — كانت هنا حلقةٌ
   // تقرأ `users/{id}` لكل مرشّح على التوالي حتى تجد أوّل مؤهَّل. صارت نداءً
@@ -3014,17 +3018,16 @@ async function _findFreeDriverForSlot(db, {startDateTime, endDateTime}) {
   const ordersSnap = await db.collection("orders")
       .where("service_date", ">=", Timestamp.fromDate(winStart))
       .where("service_date", "<", Timestamp.fromDate(endDateTime))
-      .where("status", "in", ["scheduled", "assigned", "on_the_way", "in_progress", "accepted"])
+      .where("status", "in", slots.CONFLICT_STATUSES)
       .get();
 
   const busy = new Set();
   for (const doc of ordersSnap.docs) {
     const data = doc.data();
-    if (!data.service_date || !data.driver_id) continue;
-    const oStart = data.service_date.toDate();
-    const oHours = Number(data.hours_contracted || 4);
-    const oEnd = new Date(oStart.getTime() + oHours * 60 * 60 * 1000);
-    if (startDateTime < oEnd && oStart < endDateTime) busy.add(data.driver_id);
+    if (!data.driver_id) continue; // غيابُ service_date يعالجه overlapsSlot
+    if (slots.overlapsSlot(data, startDateTime, endDateTime)) {
+      busy.add(data.driver_id);
+    }
   }
 
   // أوّل مؤهَّل غير مشغول — نفس الترتيب ونفس الاختيار كما قبل التوحيد.
@@ -3046,20 +3049,18 @@ async function _findFreeDriverForSlot(db, {startDateTime, endDateTime}) {
  */
 async function _isDriverFreeForSlot(db, driverId, startDateTime, endDateTime) {
   // نفس نافذة _findFreeDriverForSlot: [البداية−24س، النهاية) تلتقط العابر لمنتصف الليل.
-  const winStart = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
+  const winStart = slots.conflictWindowStart(startDateTime);
 
   const ordersSnap = await db.collection("orders")
       .where("service_date", ">=", Timestamp.fromDate(winStart))
       .where("service_date", "<", Timestamp.fromDate(endDateTime))
-      .where("status", "in", ["scheduled", "assigned", "on_the_way", "in_progress", "accepted"])
+      .where("status", "in", slots.CONFLICT_STATUSES)
       .get();
 
   for (const doc of ordersSnap.docs) {
     const data = doc.data();
-    if (data.driver_id !== driverId || !data.service_date) continue;
-    const oStart = data.service_date.toDate();
-    const oEnd = new Date(oStart.getTime() + Number(data.hours_contracted || 4) * 60 * 60 * 1000);
-    if (startDateTime < oEnd && oStart < endDateTime) return false; // مشغول
+    if (data.driver_id !== driverId) continue;
+    if (slots.overlapsSlot(data, startDateTime, endDateTime)) return false; // مشغول
   }
   return true;
 }
@@ -3100,22 +3101,20 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
     // يفحص قبل المعاملة، لكن حجزَين متزامنَين (زيارة اشتراك ↔ طلب عميل آخر) قد يقرآن
     // السائق "حرّاً" ثم يُسنِدانه لفترة متداخلة. القراءة داخل المعاملة تجعلها آمنة من السباق
     // فلا تُحجَز زيارة تتعارض مع موعد اختاره عميل آخر مسبقاً.
-    const slotHours = Number(cur.hours_contracted || 4);
-    const slotEnd = new Date(startDateTime.getTime() + slotHours * 60 * 60 * 1000);
+    const slotEnd = slots.orderEnd(startDateTime, cur);
     // نافذة [البداية−24س، النهاية): تلتقط مهمّة عابرة لمنتصف ليل UTC، وأيضاً مهمة
     // طويلة (hours_contracted > 8) تبدأ قبل السلوت بأكثر من 8 ساعات (كانت −8 تُفوّتها).
-    const winStart = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
+    const winStart = slots.conflictWindowStart(startDateTime);
     const dayQ = db.collection("orders")
         .where("service_date", ">=", Timestamp.fromDate(winStart))
         .where("service_date", "<", Timestamp.fromDate(slotEnd))
-        .where("status", "in", ["scheduled", "assigned", "on_the_way", "in_progress", "accepted"]);
+        .where("status", "in", slots.CONFLICT_STATUSES);
     const daySnap = await tx.get(dayQ);
     for (const d2 of daySnap.docs) {
       const od = d2.data();
-      if (od.driver_id !== driverDoc.id || !od.service_date) continue;
-      const oStart = od.service_date.toDate();
-      const oEnd = new Date(oStart.getTime() + Number(od.hours_contracted || 4) * 60 * 60 * 1000);
-      if (startDateTime < oEnd && oStart < slotEnd) return false; // تعارض زمني — لا تُسنِد
+      if (od.driver_id !== driverDoc.id) continue;
+      // تعارض زمني — لا تُسنِد
+      if (slots.overlapsSlot(od, startDateTime, slotEnd)) return false;
     }
 
     // (تعليمات المنزل) ننسخ house_rules من مستند العميل إلى الطلب عند الإسناد —
@@ -3655,7 +3654,7 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   }
 
   // (الثغرة #2) تأكّد أن السائق المختار حرّ فعلاً في الفترة المطلوبة
-  const hours = Number(orderData.hours_contracted || 4);
+  const hours = slots.orderHours(orderData);
   const endDateTime = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
   const free = await _isDriverFreeForSlot(db, driverId, startDateTime, endDateTime);
   if (!free) {
@@ -3697,18 +3696,16 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
     // لفترة متداخلة. النافذة −24س (كانت −8 فتُفوِّت مهمة hours_contracted>8 تبدأ
     // قبلها بأكثر من 8س — باقات السكن تتيح مدداً حتى 12س؛ نفس إصلاح _assignDriverScheduled).
     const slotEnd = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
-    const winStart = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
+    const winStart = slots.conflictWindowStart(startDateTime);
     const conflictQ = db.collection("orders")
         .where("service_date", ">=", Timestamp.fromDate(winStart))
         .where("service_date", "<", Timestamp.fromDate(slotEnd))
-        .where("status", "in", ["scheduled", "assigned", "on_the_way", "in_progress", "accepted"]);
+        .where("status", "in", slots.CONFLICT_STATUSES);
     const conflictSnap = await tx.get(conflictQ);
     for (const d2 of conflictSnap.docs) {
       const od = d2.data();
-      if (od.driver_id !== driverId || !od.service_date) continue;
-      const oStart = od.service_date.toDate();
-      const oEnd = new Date(oStart.getTime() + Number(od.hours_contracted || 4) * 60 * 60 * 1000);
-      if (startDateTime < oEnd && oStart < slotEnd) {
+      if (od.driver_id !== driverId) continue;
+      if (slots.overlapsSlot(od, startDateTime, slotEnd)) {
         throw new HttpsError("failed-precondition",
             "السائق مشغول بمهمة أخرى في هذا الوقت — اختر سائقاً أو موعداً آخر");
       }
@@ -3760,7 +3757,7 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
   const orderRef = db.collection("orders").doc(orderId);
   // 'assigned' حالة نشطة يحملها السائق في كل الشاشات — استبعادها كان يدفع تعديل
   // زيارتها للمسار المباشر غير الذرّي في لوحتي الأدمن.
-  const active = ["scheduled", "assigned", "accepted", "on_the_way", "in_progress"];
+  const active = slots.CONFLICT_STATUSES;
 
   // إعادة الإسناد لسائق آخر: **الأهلية كاملةً** لا النشاط وحده (قراءة قبل
   // المعاملة كافية). كان الفحص `exists` + `is_active` فقط — نفس فجوة
@@ -3790,11 +3787,11 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
     if (!startDateTime) {
       throw new HttpsError("failed-precondition", "لا موعد للطلب لإعادة الفحص");
     }
-    const hours = Number(o.hours_contracted || 4);
+    const hours = slots.orderHours(o);
     const slotEnd = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
     // −24س: تلتقط مهمة طويلة (hours_contracted>8، باقات السكن حتى 12س) تبدأ قبل
     // الموعد الجديد بأكثر من 8 ساعات — كانت −8 تُفوِّتها فيُحجَز السائق لمهمتين.
-    const winStart = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
+    const winStart = slots.conflictWindowStart(startDateTime);
     const conflictQ = db.collection("orders")
         .where("service_date", ">=", Timestamp.fromDate(winStart))
         .where("service_date", "<", Timestamp.fromDate(slotEnd))
@@ -3803,11 +3800,8 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
     for (const d2 of conflictSnap.docs) {
       if (d2.id === orderId) continue; // استثناء الطلب الحالي
       const od = d2.data();
-      if (od.driver_id !== targetDriver || !od.service_date) continue;
-      const oStart = od.service_date.toDate();
-      const oEnd = new Date(oStart.getTime() +
-        Number(od.hours_contracted || 4) * 60 * 60 * 1000);
-      if (startDateTime < oEnd && oStart < slotEnd) {
+      if (od.driver_id !== targetDriver) continue;
+      if (slots.overlapsSlot(od, startDateTime, slotEnd)) {
         throw new HttpsError("failed-precondition",
             "السائق مشغول بمهمة أخرى في هذا الوقت — اختر موعداً أو سائقاً آخر");
       }
@@ -4191,7 +4185,7 @@ exports.sweepUnassignedPaidOrders = onSchedule(
         // فقط الطلبات المدفوعة، بلا سائق، وذات موعد.
         if (d.driver_id || d.is_paid !== true || !d.service_date) continue;
         const start = d.service_date.toDate();
-        const hours = Number(d.hours_contracted || 4);
+        const hours = slots.orderHours(d);
         const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
         // انتهت نافذة الخدمة كلها → اتركه لمسار الاسترداد/التصعيد أدناه.
         if (end.getTime() <= now) continue;
@@ -4246,7 +4240,7 @@ exports.sweepUnassignedPaidOrders = onSchedule(
         if (d.driver_id || d.is_paid !== true) continue;
         if (!d.service_date || typeof d.service_date.toDate !== "function") continue;
         const startMs = d.service_date.toDate().getTime();
-        const endMs = startMs + Number(d.hours_contracted || 4) * 60 * 60 * 1000;
+        const endMs = startMs + slots.orderHours(d) * 60 * 60 * 1000;
         if (endMs >= now - GRACE_MS) continue; // لم ينتهِ الموعد + المهلة بعد
         const method = d.payment_method || "";
         const autoRefundable = secret &&
@@ -4309,7 +4303,7 @@ exports.opsHealthSweep = onSchedule(
         return fresh.length;
       };
       const endMsOf = (d) => d.service_date.toDate().getTime() +
-        Number(d.hours_contracted || 4) * 60 * 60 * 1000;
+        slots.orderHours(d) * 60 * 60 * 1000;
 
       // 1) مستند موسوم awaiting_payment لكنه مدفوع فعلاً — حالة متناقضة: مال مقبوض
       //    بلا مسار تشغيل. الحالة تعيش أساساً في store_orders (متجر الشركات المباشر —
@@ -4641,7 +4635,7 @@ exports.confirmPendingTamaraOrders = onSchedule(
             if (d.service_date && !d.driver_id && d.status === "pending") {
               try {
                 const start = d.service_date.toDate();
-                const hours = Number(d.hours_contracted || 4);
+                const hours = slots.orderHours(d);
                 const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
                 const driver = await _findFreeDriverForSlot(db, {
                   startDateTime: start,
@@ -4841,7 +4835,7 @@ exports.autoAssignDriverDirectly = onCall({cpu: 0.25}, async (request) => {
   }
 
   const startDateTime = orderData.service_date.toDate();
-  const hours = Number(durationHours || orderData.hours_contracted || 4);
+  const hours = slots.orderHours(orderData, durationHours);
   const endDateTime = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
 
   // (Direct Dispatch) اختيار أي سائق حرّ في الفترة ثم إسناده بحالة scheduled.
