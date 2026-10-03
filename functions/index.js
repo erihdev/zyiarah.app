@@ -20,6 +20,7 @@ const {grossFromBaseRounded, grossFromBase} = require("./vat");
 const {isAssignableDriver, assignabilityProblem, chunk, GET_ALL_CHUNK} =
   require("./drivers");
 const moyasar = require("./moyasar_api");
+const tamara = require("./tamara_api");
 initializeApp();
 
 // Secrets — stored in Firebase Secret Manager, never in source code
@@ -800,13 +801,8 @@ exports.createTamaraCheckout = onCall(
       const money = (a) => ({amount: a, currency: "SAR"});
 
       try {
-        const response = await fetch("https://api.tamara.co/checkout", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
+        // الحِمل يُبنى هنا (منطق عمل)، والنقل في tamara_api.
+        const res = await tamara.checkout(token, {
             order_reference_id: orderId,
             order_number: info.code || orderId,
             total_amount: money(amount),
@@ -846,18 +842,17 @@ exports.createTamaraCheckout = onCall(
               notification: "https://tamarawebhook-slpwb4s3aa-uc.a.run.app",
             },
             description: "خدمات منزلية - مؤسسة معاذ يحي محمد المالكي",
-          }),
         });
 
-        if (!response.ok) {
-          const errText = await response.text();
-          console.error(`Tamara API error ${response.status}: ${errText}`);
+        if (!res.ok) {
+          // كان `await response.text()`؛ صار الجسم مُحلَّلاً متسامحاً فيُسجَّل
+          // ككائن — نفس المعلومة، وبلا رميٍ على جسمٍ غير JSON.
+          console.error(`Tamara API error ${res.httpStatus}:`, res.result);
           throw new HttpsError(
               "internal", "فشل إنشاء جلسة الدفع — تحقق من بيانات الطلب");
         }
 
-        const data = await response.json();
-        return {checkoutUrl: data.checkout_url};
+        return {checkoutUrl: res.result.checkout_url};
       } catch (error) {
         if (error instanceof HttpsError) throw error;
         throw new HttpsError("internal", error.message);
@@ -1027,14 +1022,11 @@ exports.tamaraWebhook = onRequest(
         if (eventType === "order_approved") {
           // إلزامي: نقل approved→authorised عبر Authorize API، وإلا يبقى الطلب
           // معلّقاً ولا يدخل دورة التسوية (لا نُقبض).
-          const authRes = await fetch(
-              `https://api.tamara.co/orders/${tamaraOrderId}/authorise`,
-              {method: "POST", headers: {
-                "Authorization": `Bearer ${tamaraApiToken.value()}`,
-                "Content-Type": "application/json",
-              }});
+          const authRes = await tamara.authorise(
+              tamaraApiToken.value(), tamaraOrderId);
           if (!authRes.ok) {
-            console.error(`tamaraWebhook: authorise failed ${authRes.status}: ${await authRes.text()}`);
+            console.error(`tamaraWebhook: authorise failed ${authRes.httpStatus}:`,
+                authRes.result);
           } else {
             console.log(`tamaraWebhook: order ${tamaraOrderId} authorised`);
             await _tamaraFlipPaid(db, orderRef, eventType, tamaraOrderId);
@@ -4638,20 +4630,15 @@ exports.confirmPendingTamaraOrders = onSchedule(
         if (["order_declined", "order_expired", "order_canceled"]
             .includes(d.tamara_status)) continue;
         try {
-          const r = await fetch(
-              `https://api.tamara.co/merchants/orders/reference-id/${doc.id}`,
-              {headers: {Authorization: `Bearer ${apiToken}`}});
+          // كان `await r.json()` عارياً: جسمٌ غير JSON يرمي فيُتجاوَز المستند
+          // **بصمت** — طلبٌ موافَق عليه لا يُؤكَّد أبداً ولا سطر يقول لماذا.
+          const r = await tamara.getOrderByReference(apiToken, doc.id);
           if (!r.ok) continue;
-          const to = await r.json();
+          const to = r.order;
           const st = to.status;
           let justConfirmed = false;
           if (st === "approved") {
-            const a = await fetch(
-                `https://api.tamara.co/orders/${to.order_id}/authorise`,
-                {method: "POST", headers: {
-                  Authorization: `Bearer ${apiToken}`,
-                  "Content-Type": "application/json",
-                }});
+            const a = await tamara.authorise(apiToken, to.order_id);
             if (a.ok) {
               await _tamaraFlipPaid(db, doc.id, "order_authorised", to.order_id);
               justConfirmed = true;
@@ -4707,19 +4694,12 @@ exports.confirmPendingTamaraOrders = onSchedule(
           const cd = cdoc.data();
           if (cd.is_paid === true) continue;
           try {
-            const r = await fetch(
-                `https://api.tamara.co/merchants/orders/reference-id/${cdoc.id}`,
-                {headers: {Authorization: `Bearer ${apiToken}`}});
+            const r = await tamara.getOrderByReference(apiToken, cdoc.id);
             if (!r.ok) continue;
-            const to = await r.json();
+            const to = r.order;
             const st = to.status;
             if (st === "approved") {
-              const a = await fetch(
-                  `https://api.tamara.co/orders/${to.order_id}/authorise`,
-                  {method: "POST", headers: {
-                    Authorization: `Bearer ${apiToken}`,
-                    "Content-Type": "application/json",
-                  }});
+              const a = await tamara.authorise(apiToken, to.order_id);
               if (a.ok) {
                 await _tamaraFlipPaid(db, cdoc.id, "order_authorised", to.order_id);
                 confirmed++;
@@ -5855,13 +5835,8 @@ exports.tamaraRefundPayment = onCall(
       let tamaraOrderId = existing.data.tamara_order_id;
       if (!tamaraOrderId) {
         try {
-          const r = await fetch(
-              `https://api.tamara.co/merchants/orders/reference-id/${orderId}`,
-              {headers: {Authorization: `Bearer ${token}`}});
-          if (r.ok) {
-            const to = await r.json();
-            tamaraOrderId = to.order_id;
-          }
+          const r = await tamara.getOrderByReference(token, orderId);
+          if (r.ok) tamaraOrderId = r.order.order_id;
         } catch (e) {
           console.error("tamaraRefund lookup:", e.message);
         }
@@ -5872,33 +5847,24 @@ exports.tamaraRefundPayment = onCall(
             "تعذّر العثور على معرّف طلب تمارا لهذا الطلب — تحقّق من لوحة تمارا");
       }
 
-      let response; let result;
+      // النقل في tamara_api؛ وعقدُ الخطأ يبقى هنا: تحرير المطالبة قبل كل رمي
+      // حتى لا يبقى الطلب محجوزاً بلا استرداد.
+      let res;
       try {
-        response = await fetch(
-            `https://api.tamara.co/orders/${tamaraOrderId}/refunds`, {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${token}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                total_amount: {amount: refundAmount, currency: "SAR"},
-                comment: reason,
-              }),
-            });
-        result = await response.json().catch(() => ({}));
+        res = await tamara.refund(token, tamaraOrderId, refundAmount, reason);
       } catch (e) {
         await releaseClaim();
         console.error("tamaraRefund network error:", e.message);
         throw new HttpsError("internal", "تعذّر الاتصال ببوابة تمارا — أعد المحاولة");
       }
+      const result = res.result;
 
-      if (!response.ok) {
+      if (!res.ok) {
         await releaseClaim();
-        console.error(`tamaraRefund failed ${response.status}:`, result);
-        const msg = (response.status === 401 || response.status === 403) ?
+        console.error(`tamaraRefund failed ${res.httpStatus}:`, result);
+        const msg = (res.httpStatus === 401 || res.httpStatus === 403) ?
           "رفضت تمارا الاعتماد — تحقّق من رمز TAMARA_API_TOKEN" :
-          response.status === 409 ?
+          res.httpStatus === 409 ?
           "ترفض تمارا الاسترداد — يبدو أنه سبق استرداد هذه الدفعة لديها" :
           (result && result.message) ||
             "فشل استرداد المبلغ من تمارا — تحقّق من حالة الطلب في لوحة تمارا";
@@ -5979,33 +5945,23 @@ exports.tabbyRefundPayment = onCall(
             .catch((e) => console.error("tabbyRefund release claim:", e.message));
       };
 
-      let response; let result;
+      // تابي: المرتجع وحده — قرار المالك 2026-09-30 (انظر no_tabby_test.dart).
+      let res;
       try {
-        response = await fetch(
-            `https://api.tabby.ai/api/v2/payments/${tabbyPaymentId}/refunds`, {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${secret}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                amount: refundAmount.toFixed(2),
-                reason: reason,
-              }),
-            });
-        result = await response.json().catch(() => ({}));
+        res = await tamara.tabbyRefund(secret, tabbyPaymentId, refundAmount, reason);
       } catch (e) {
         await releaseClaim();
         console.error("tabbyRefund network error:", e.message);
         throw new HttpsError("internal", "تعذّر الاتصال ببوابة تابي — أعد المحاولة");
       }
+      const result = res.result;
 
-      if (!response.ok) {
+      if (!res.ok) {
         await releaseClaim();
-        console.error(`tabbyRefund failed ${response.status}:`, result);
-        const msg = (response.status === 401 || response.status === 403) ?
+        console.error(`tabbyRefund failed ${res.httpStatus}:`, result);
+        const msg = (res.httpStatus === 401 || res.httpStatus === 403) ?
           "رفضت تابي الاعتماد — تحقّق من مفتاح تابي في الخادم" :
-          response.status === 409 ?
+          res.httpStatus === 409 ?
           "ترفض تابي الاسترداد — يبدو أنه سبق استرداد هذه الدفعة لديها" :
           (result && (result.error || result.message)) ||
             "فشل استرداد المبلغ من تابي — تحقّق من حالة الدفعة في لوحة تابي";
