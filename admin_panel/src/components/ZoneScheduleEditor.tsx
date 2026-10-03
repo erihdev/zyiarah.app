@@ -3,6 +3,7 @@ import { Plus, Trash2, CalendarX2 } from 'lucide-react';
 import {
     type ZoneSchedule, type DayHours,
     DAY_NAMES, HOURS, formatHour12, scheduleFromDoc, scheduleToDoc,
+    withStart, withEnd,
 } from '../utils/zoneSchedule.ts';
 
 // محرّر جدول فتح المحافظة — **مرآة الويب** لـ
@@ -15,6 +16,11 @@ import {
 //
 // **الساعات تُعرَض 12 وتُخزَّن 24** — الخادم يحلّلها رقميّاً، فأي تخزين نصّي
 // أو 12-ساعي يكسر حساب الإتاحة بصمت.
+//
+// وقائمتا الساعات مستقلّتان على 0..23، فكانتا تسمحان بحفظ «مفتوح ١٠م → ٨ص»:
+// يشترط الخادم `e > s` وإلّا أعاد null أي **مغلق كلّ اليوم** — فتقول اللوحة
+// حُفظ، ولا إتاحة، ولا خطأ في أي مكان. محرّر Flutter يمنعه في الاتجاهين منذ
+// البداية؛ المرآة كانت بلا قيد. withStart/withEnd هما نقلُ قيده.
 
 interface Props {
     initial?: unknown;
@@ -85,12 +91,12 @@ export default function ZoneScheduleEditor({ initial, onChange }: Props) {
                                             <div className="flex items-center gap-2">
                                                 <span className="text-xs text-slate-400">من</span>
                                                 <select aria-label={`بداية ${name}`} value={day.start} className={inputCls}
-                                                        onChange={e => setDay(d, { start: Number(e.target.value) })}>
+                                                        onChange={e => setDay(d, withStart(Number(e.target.value), day.end))}>
                                                     {HOURS.map(h => <option key={h} value={h}>{formatHour12(h)}</option>)}
                                                 </select>
                                                 <span className="text-xs text-slate-400">إلى</span>
                                                 <select aria-label={`نهاية ${name}`} value={day.end} className={inputCls}
-                                                        onChange={e => setDay(d, { end: Number(e.target.value) })}>
+                                                        onChange={e => setDay(d, withEnd(day.start, Number(e.target.value)))}>
                                                     {HOURS.map(h => <option key={h} value={h}>{formatHour12(h)}</option>)}
                                                 </select>
                                             </div>
@@ -141,11 +147,17 @@ export default function ZoneScheduleEditor({ initial, onChange }: Props) {
                                 <input type="date" aria-label="إلى تاريخ" value={w.to} className={inputCls} dir="ltr"
                                        onChange={e => mutate(s => { s.windows[i].to = e.target.value; return s; })} />
                                 <select aria-label="ساعة البدء" value={w.start} className={inputCls}
-                                        onChange={e => mutate(s => { s.windows[i].start = Number(e.target.value); return s; })}>
+                                        onChange={e => mutate(s => {
+                                            Object.assign(s.windows[i], withStart(Number(e.target.value), s.windows[i].end));
+                                            return s;
+                                        })}>
                                     {HOURS.map(h => <option key={h} value={h}>{formatHour12(h)}</option>)}
                                 </select>
                                 <select aria-label="ساعة الانتهاء" value={w.end} className={inputCls}
-                                        onChange={e => mutate(s => { s.windows[i].end = Number(e.target.value); return s; })}>
+                                        onChange={e => mutate(s => {
+                                            Object.assign(s.windows[i], withEnd(s.windows[i].start, Number(e.target.value)));
+                                            return s;
+                                        })}>
                                     {HOURS.map(h => <option key={h} value={h}>{formatHour12(h)}</option>)}
                                 </select>
                                 <button type="button" title="حذف الفترة" className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg"

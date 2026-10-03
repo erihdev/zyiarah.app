@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/utils/time_format.dart';
+import 'package:zyiarah/utils/hour_range.dart';
 
 /// محرّر جدول فتح المنطقة — يُدمج في حوار «إضافة/تعديل منطقة».
 ///
@@ -187,8 +188,11 @@ class _ZoneScheduleEditorState extends State<ZoneScheduleEditor> {
               ),
               if (d.open) ...[
                 Expanded(child: _hourDropdown(d.start, (v) => setState(() {
-                      d.start = v;
-                      if (d.end <= v) d.end = (v + 1).clamp(1, 23);
+                      // القيد في hour_range.dart: نطاقٌ طرفاه متساويان يقرؤه
+                      // الخادم «مغلقاً» بلا أي رسالة — وكان يحدث في بداية 23.
+                      final r = hourRangeWithStart(v, d.end);
+                      d.start = r.start;
+                      d.end = r.end;
                       _emit();
                     }))),
                 const Padding(
@@ -196,8 +200,9 @@ class _ZoneScheduleEditorState extends State<ZoneScheduleEditor> {
                   child: Text('→', style: TextStyle(color: Color(0xFF94A3B8))),
                 ),
                 Expanded(child: _hourDropdown(d.end, (v) => setState(() {
-                      d.end = v;
-                      if (d.start >= v) d.start = (v - 1).clamp(0, 22);
+                      final r = hourRangeWithEnd(d.start, v);
+                      d.start = r.start;
+                      d.end = r.end;
                       _emit();
                     }))),
               ] else
@@ -293,8 +298,9 @@ class _ZoneScheduleEditorState extends State<ZoneScheduleEditor> {
           Row(
             children: [
               Expanded(child: _hourDropdown(w.start, (v) => setState(() {
-                    w.start = v;
-                    if (w.end <= v) w.end = (v + 1).clamp(1, 23);
+                    final r = hourRangeWithStart(v, w.end);
+                    w.start = r.start;
+                    w.end = r.end;
                     _emit();
                   }))),
               const Padding(
@@ -302,8 +308,9 @@ class _ZoneScheduleEditorState extends State<ZoneScheduleEditor> {
                 child: Text('→', style: TextStyle(color: Color(0xFF94A3B8))),
               ),
               Expanded(child: _hourDropdown(w.end, (v) => setState(() {
-                    w.end = v;
-                    if (w.start >= v) w.start = (v - 1).clamp(0, 22);
+                    final r = hourRangeWithEnd(w.start, v);
+                    w.start = r.start;
+                    w.end = r.end;
                     _emit();
                   }))),
             ],
