@@ -14,6 +14,7 @@ import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:zyiarah/screens/moyasar_card_screen.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
+import 'package:zyiarah/utils/vat.dart';
 
 /// شاشة دفع طلب المتجر — تُفتح فور إنشاء الطلب (طلب مباشر، لا موافقة مسبقة).
 /// طرق الدفع المعتمدة: ميسر (بطاقة) + تمارا. لا دفع عند الاستلام — أُزيل من الجذور.
@@ -51,7 +52,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
   // مصدر العنوان المقترَح وتغيّره إن لم يعد عنوانها. null عند الاختيار اليدوي.
   String? _prefillZoneName;
 
-  double get _vat => widget.total - (widget.total / 1.15);
+  double get _vat => vatInGross(widget.total);
   double get _subtotal => widget.total - _vat;
 
   @override

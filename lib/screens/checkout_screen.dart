@@ -11,6 +11,7 @@ import 'package:zyiarah/services/audit_service.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/services/counter_service.dart';
 import 'package:zyiarah/services/order_service.dart';
+import 'package:zyiarah/utils/vat.dart';
 
 class TamaraCheckoutScreen extends StatefulWidget {
   final String checkoutUrl;
@@ -250,7 +251,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
               }
 
               // توليد بيانات ZATCA وتوليد الفاتورة في الخلفية (باستخدام الحسابات الصحيحة)
-              final double vatAmount = widget.amount - (widget.amount / 1.15);
+              final double vatAmount = vatInGross(widget.amount);
               final String qrData = ZatcaService.generateZatcaQrCode(
                 timestamp: DateTime.now(),
                 totalAmount: widget.amount,

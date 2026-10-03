@@ -11,6 +11,8 @@ const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
 const {HttpsError} = require("firebase-functions/v2/https");
+// الدالة الحقيقية لا بديلٌ عنها: الغرض اختبار الحساب الفعلي المشترك.
+const {grossFromBaseRounded} = require("../vat");
 
 const src = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
 
@@ -37,11 +39,15 @@ function extractAsyncFn(name, params) {
   }
   assert.ok(depth === 0, `أقواس غير متوازنة عند اقتطاع ${name}`);
   const body = src.slice(braceStart + 1, end);
-  // HttpsError حرّة في نص الدالة الأصلية (مستوردة أعلى index.js) — نمرّرها
-  // كمعامل إضافي هنا بدل استيراد كامل index.js (يتجنّب initializeApp
-  // وأسرار defineSecret وغيرها من التهيئة الثقيلة غير اللازمة لهذا الاختبار).
+  // HttpsError وgrossFromBaseRounded حرّتان في نص الدالة الأصلية (مستوردتان
+  // أعلى index.js) — نمرّرهما كمعاملين إضافيين بدل استيراد كامل index.js
+  // (يتجنّب initializeApp وأسرار defineSecret وغيرها من التهيئة الثقيلة غير
+  // اللازمة لهذا الاختبار). grossFromBaseRounded تُحقن هنا داخلياً فلا تتغيّر
+  // مواضع النداء، وتُمرَّر **حقيقيةً** من ../vat كي يُختبر الحساب الفعلي.
   const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
-  return new AsyncFunction(...params, "HttpsError", body);
+  const fn = new AsyncFunction(
+      ...params, "HttpsError", "grossFromBaseRounded", body);
+  return (...args) => fn(...args, grossFromBaseRounded);
 }
 
 const validateContractPlan = extractAsyncFn(

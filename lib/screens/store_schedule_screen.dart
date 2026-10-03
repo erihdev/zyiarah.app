@@ -7,6 +7,7 @@ import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/zone_locator_service.dart';
 import 'package:zyiarah/widgets/booking_slot_picker.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
+import 'package:zyiarah/utils/vat.dart';
 
 /// جدولة توصيل طلب **متجر الأدوات والتنظيف** (متجر العميل) — طلبٌ مجدول كبقية
 /// الخدمات (قرار المالك 2026-07-21): العميل يختار العنوان ثم التاريخ والوقت،
@@ -50,7 +51,7 @@ class _StoreScheduleScreenState extends State<StoreScheduleScreen> {
   LocateFailure? _locateFailure;
 
   double get _subTotal => widget.total; // الأساس
-  double get _vat => widget.total * 0.15; // 15% مضافة فوق الأساس
+  double get _vat => vatOnBase(widget.total); // 15% مضافة فوق الأساس
   double get _grandTotal => widget.total + _vat; // ما يدفعه العميل (شامل الضريبة)
   int get _totalQty =>
       widget.items.fold(0, (a, it) => a + ((it['quantity'] as num?)?.toInt() ?? 0));

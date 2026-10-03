@@ -53,20 +53,28 @@ void main() {
 
   test('المبلغ المُمرَّر للدفع يبقى شاملاً الضريبة', () {
     // الحارسة المقابلة: تغيير **العرض** يجب ألا يُنقص ما يُشحن فعلاً — شاشة الدفع
-    // تشتقّ الأساس بقسمة الإجمالي على 1.15، فتمرير مبلغ بلا ضريبة يخصم أقل.
+    // تشتقّ الأساس من الإجمالي الشامل، فتمرير مبلغ بلا ضريبة يخصم أقل.
     expect(read('lib/screens/hourly_details_screen.dart')
         .contains('amount: grandTotal'), isTrue);
     expect(read('lib/screens/sofa_rug_details_screen.dart')
         .contains('amount: grandTotal'), isTrue);
+    // كانت الحارسة تطابق النصّ `basePrice * 1.15`. وحّدت دفعةُ ضريبة القيمة
+    // المضافة النسبة في lib/utils/vat.dart، فصار الاسم نفسه يقول النموذج:
+    // grossFromBaseRounded = الإجمالي الشامل من أساس، مقرَّباً — وهو دلالةً
+    // أقوى من مطابقة معامل عددي. القرار المحميّ لم يتغيّر.
     expect(read('lib/utils/home_packages.dart')
-        .contains('basePrice * 1.15'), isTrue);
+        .contains('grossFromBaseRounded(basePrice)'), isTrue,
+        reason: 'grossPrice يجب أن يبقى الأساس شاملاً الضريبة');
   });
 
   test('تفاصيل الفاتورة وحدها تعرض الضريبة والإجمالي', () {
     final pay = read('lib/screens/payment_summary_screen.dart');
     expect(pay.contains("_buildRowDetail('المبلغ الأساسي'"), isTrue);
     expect(pay.contains("_buildRowDetail('الضريبة (15%)'"), isTrue);
-    expect(pay.contains('totalWithVat / 1.15'), isTrue,
+    // كانت الحارسة تطابق `totalWithVat / 1.15`. بعد توحيد النسبة في
+    // lib/utils/vat.dart صار الاسم يقول النموذج: netFromGross = الصافي من
+    // إجمالٍ شامل. نفس الاشتقاق، ودلالةٌ أصرح.
+    expect(pay.contains('netFromGross(totalWithVat)'), isTrue,
         reason: 'الأساس يُشتقّ من الإجمالي المشحون');
   });
 }

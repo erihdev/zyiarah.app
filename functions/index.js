@@ -16,6 +16,7 @@ const {computeExpectedBasePrice, resolveMaterialsBase, applyTerrainSurcharge} =
   require("./pricing");
 const {isMarketingBroadcast, excludeOptedOut} = require("./notify_prefs");
 const {countBookings, zoneDailyCap} = require("./capacity");
+const {grossFromBaseRounded, grossFromBase} = require("./vat");
 initializeApp();
 
 // Secrets — stored in Firebase Secret Manager, never in source code
@@ -2117,7 +2118,7 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
             applyTerrainSurcharge(base0, zq.docs[0].data()) : base0;
           if (base && base > 0) {
             const surge = await _readSurgeFactor(db);
-            pkgExpectedGross = Math.round(base * 1.15 * surge * 100) / 100;
+            pkgExpectedGross = grossFromBaseRounded(base, surge);
           }
         }
       }
@@ -2511,9 +2512,9 @@ exports.verifyMoyasarPayment = onCall(
               applyTerrainSurcharge(base0, zoneData) : base0;
             if (base && base > 0) {
               const surge = await _readSurgeFactor(db);
-              const expected = Math.round(base * 1.15 * surge * 100) / 100;
+              const expected = grossFromBaseRounded(base, surge);
               const trustedDiscount =
-                  await _computeTrustedDiscount(db, od, base * 1.15, surge);
+                  await _computeTrustedDiscount(db, od, grossFromBase(base), surge);
               const expectedNet = Math.max(0, expected - trustedDiscount);
               // expectedNet<=0 مع دفعٍ موجب = مريب (خصم يفوق السعر) → Tier A، لا نفترض ratio=1.
               const suspiciousZero = expectedNet <= 0 && paid > 0;
@@ -3175,7 +3176,7 @@ async function _validateContractPlan(db, c, tx) {
   // السعر المتوقّع = سعر الباقة + 15% ضريبة بنفس تقريب العميل لسنتين عشريتين
   // (انظر contract_signing_screen: _grossedPlanPrice) — سماحية قرش واحد للتعويم.
   const base = Number(pkg.price || 0);
-  const expected = Math.round(base * 1.15 * 100) / 100;
+  const expected = grossFromBaseRounded(base);
   const actual = Number(c.planPrice || 0);
   if (!(base > 0) || Math.abs(actual - expected) > 0.01) {
     throw new HttpsError("failed-precondition",
