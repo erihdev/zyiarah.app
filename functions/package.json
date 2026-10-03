@@ -3,7 +3,7 @@
   "description": "Cloud Functions for Firebase",
   "scripts": {
     "lint": "eslint .",
-    "test": "node test/audit_posture.test.js && node test/vat.test.js && node test/pricing.test.js && node test/capacity.test.js && node test/drivers.test.js && node test/notify_prefs.test.js && node test/notification_dedup.test.js && node test/event_worker_contract_validation.test.js && node test/zone_geo_and_visit_location.test.js && node test/email_hygiene.test.js && node test/admin_modular_api.test.js",
+    "test": "node test/audit_posture.test.js && node test/vat.test.js && node test/pricing.test.js && node test/capacity.test.js && node test/drivers.test.js && node test/moyasar_api.test.js && node test/notify_prefs.test.js && node test/notification_dedup.test.js && node test/event_worker_contract_validation.test.js && node test/zone_geo_and_visit_location.test.js && node test/email_hygiene.test.js && node test/admin_modular_api.test.js",
     "test:emulator": "node test/rules.orders.test.js && node test/rules.roles.test.js && node test/rules.policies.test.js && node test/payWithWallet.test.js",
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",

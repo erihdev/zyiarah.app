@@ -19,6 +19,7 @@ const {countBookings, zoneDailyCap} = require("./capacity");
 const {grossFromBaseRounded, grossFromBase} = require("./vat");
 const {isAssignableDriver, assignabilityProblem, chunk, GET_ALL_CHUNK} =
   require("./drivers");
+const moyasar = require("./moyasar_api");
 initializeApp();
 
 // Secrets — stored in Firebase Secret Manager, never in source code
@@ -2289,7 +2290,7 @@ async function _moyasarVoidOrRefund(db, secret, paymentId, orderRef) {
     return true;
   });
   if (!claimed) return {done: true, action: "already"};
-  const live = await _moyasarGetPayment(secret, paymentId);
+  const live = await moyasar.getPayment(secret, paymentId);
   if (live.ok && (live.status === "refunded" || live.status === "voided")) {
     await orderRef.update({payment_status: live.status, is_paid: false,
       tamper_blocked: true, refund_credited: true}).catch(() => {});
@@ -2297,8 +2298,8 @@ async function _moyasarVoidOrRefund(db, secret, paymentId, orderRef) {
   }
   const authorized = live.ok &&
     (live.status === "authorized" || live.status === "initiated");
-  const res = authorized ? await _moyasarVoidCore(secret, paymentId) :
-    await _moyasarRefundCore(secret, paymentId, undefined);
+  const res = authorized ? await moyasar.voidPayment(secret, paymentId) :
+    await moyasar.refund(secret, paymentId, undefined);
   if (!res.ok) {
     // لم يُعَد المال: **لا نقلب is_paid ولا نرمي** — نترك الطلب للمراجعة اليدوية.
     await orderRef.update({payment_status: "payment_review",
@@ -2332,24 +2333,15 @@ exports.verifyMoyasarPayment = onCall(
       if (!secret) {
         throw new HttpsError("failed-precondition", "مفتاح Moyasar السري غير مهيأ في الخادم");
       }
-      const authHeader = `Basic ${Buffer.from(secret + ":").toString("base64")}`;
-
       // نجلب الدفعة من Moyasar أولاً — نحتاج metadata لإنشاء الطلب خادميّاً إن غاب.
-      let paymentData;
-      try {
-        const response = await fetch(`https://api.moyasar.com/v1/payments/${paymentId}`, {
-          method: "GET", headers: {"Authorization": authHeader},
-        });
-        if (!response.ok) {
-          const errText = await response.text();
-          console.error(`Moyasar API response error ${response.status}: ${errText}`);
-          throw new HttpsError("internal", "فشل التحقق من الدفع مع بوابة Moyasar");
-        }
-        paymentData = await response.json();
-      } catch (error) {
-        if (error instanceof HttpsError) throw error;
-        throw new HttpsError("internal", error.message);
+      // `moyasar.getPayment` يبتلع خطأ الشبكة ويُعيد ok:false، فيُرمى هنا نفس
+      // HttpsError المقصود بدل رسالة الاستثناء الخامّة التي كانت تصعد.
+      const got = await moyasar.getPayment(secret, paymentId);
+      if (!got.ok) {
+        console.error("Moyasar API response error:", got.error ?? got.raw);
+        throw new HttpsError("internal", "فشل التحقق من الدفع مع بوابة Moyasar");
       }
+      const paymentData = got.raw;
       if (paymentData.status !== "paid") {
         throw new HttpsError("failed-precondition", `حالة عملية الدفع ليست مدفوعة: ${paymentData.status}`);
       }
@@ -4497,14 +4489,14 @@ exports.reconcileOrphanPayments = onSchedule(
     async () => {
       const secret = moyasarSecretKey.value();
       if (!secret) { console.error("[reconcile] Moyasar secret not set"); return null; }
-      const authHeader = `Basic ${Buffer.from(secret + ":").toString("base64")}`;
       const db = getFirestore();
       let recovered = 0;
       try {
-        const resp = await fetch("https://api.moyasar.com/v1/payments?per=25",
-            {method: "GET", headers: {Authorization: authHeader}});
-        if (!resp.ok) { console.error("[reconcile] list failed", resp.status); return null; }
-        const data = await resp.json();
+        const listed = await moyasar.listPayments(secret, 25);
+        if (!listed.ok) {
+          console.error("[reconcile] list failed", listed.httpStatus); return null;
+        }
+        const data = listed.result;
         // حدّ تجاهل: مدفوعات تجريبية/قديمة تمّ تنظيف طلباتها لا تُعاد مطابقتها أبداً.
         // يُضبط في system_configs/reconcile.ignore_before (ISO). بلا إعداد = السلوك السابق.
         let ignoreBeforeMs = 0;
@@ -5275,18 +5267,15 @@ exports.moyasarWebhook = onRequest(
         if (eventType === "payment_paid" || eventType === "payment_captured") {
           // Double-verify with Moyasar API using secret key (never trust webhook payload alone)
           const secret = moyasarSecretKey.value();
-          const authHeader = `Basic ${Buffer.from(secret + ":").toString("base64")}`;
 
-          const verifyResponse = await fetch(`https://api.moyasar.com/v1/payments/${payment.id}`, {
-            headers: {"Authorization": authHeader},
-          });
-
-          if (!verifyResponse.ok) {
-            console.error(`moyasarWebhook: Moyasar API verify failed ${verifyResponse.status} for payment ${payment.id}`);
+          const verified = await moyasar.getPayment(secret, payment.id);
+          if (!verified.ok) {
+            console.error(`moyasarWebhook: Moyasar API verify failed for payment ${payment.id}:`,
+                verified.error ?? verified.raw);
             return;
           }
 
-          const verifiedPayment = await verifyResponse.json();
+          const verifiedPayment = verified.raw;
           if (verifiedPayment.status !== "paid" && verifiedPayment.status !== "captured") {
             console.warn(`moyasarWebhook: payment ${payment.id} status is ${verifiedPayment.status} — skipping`);
             return;
@@ -5409,44 +5398,12 @@ exports.moyasarWebhook = onRequest(
 // Firestore rule: caller must have role == 'super_admin' or 'orders_manager'.
 
 /** Helper: build Moyasar auth header from secret */
-function _moyasarAuthHeader(secret) {
-  return `Basic ${Buffer.from(secret + ":").toString("base64")}`;
-}
 
 // ── Moyasar gateway cores (raw HTTP, reusable by admin onCall + automated flows) ──
 // نفصل نداء البوابة الخام عن أغلفة onCall الإدارية كي تستدعيه المسارات الآلية (كرون
 // #18، ومسار التسعير #1) بلا اشتراط صلاحية إدارية.
-async function _moyasarGetPayment(secret, paymentId) {
-  try {
-    const r = await fetch(`https://api.moyasar.com/v1/payments/${paymentId}`, {
-      method: "GET", headers: {"Authorization": _moyasarAuthHeader(secret)},
-    });
-    const j = await r.json().catch(() => ({}));
-    return {ok: r.ok, status: j && j.status, raw: j};
-  } catch (e) {
-    return {ok: false, status: null, error: e.message};
-  }
-}
 
-async function _moyasarRefundCore(secret, paymentId, amountHalalas) {
-  const body = amountHalalas ? JSON.stringify({amount: amountHalalas}) : undefined;
-  const r = await fetch(`https://api.moyasar.com/v1/payments/${paymentId}/refund`, {
-    method: "POST",
-    headers: {"Authorization": _moyasarAuthHeader(secret),
-      ...(body ? {"Content-Type": "application/json"} : {})},
-    ...(body ? {body} : {}),
-  });
-  const result = await r.json().catch(() => ({}));
-  return {ok: r.ok, httpStatus: r.status, status: result && result.status, result};
-}
 
-async function _moyasarVoidCore(secret, paymentId) {
-  const r = await fetch(`https://api.moyasar.com/v1/payments/${paymentId}/void`, {
-    method: "POST", headers: {"Authorization": _moyasarAuthHeader(secret)},
-  });
-  const result = await r.json().catch(() => ({}));
-  return {ok: r.ok, httpStatus: r.status, status: result && result.status, result};
-}
 
 // (#18) استرداد/إلغاء آليّ لطلبٍ مدفوع تعذّر تنفيذه (فات موعده بلا سائق). idempotent:
 // مطالبة ذرّية بعلَم auto_refund_processed + مؤشّر payment_status='refunding' الدائم
@@ -5538,15 +5495,15 @@ async function _autoResolveUnfulfilledPaidOrder(db, secret, orderDoc) {
 
   // مسار البطاقة/الدفع الأصلي: مصالحة الحالة الحيّة ثم void (غير مقبوض) أو refund كامل.
   const paymentId = d0.moyasar_payment_id;
-  const live = await _moyasarGetPayment(secret, paymentId);
+  const live = await moyasar.getPayment(secret, paymentId);
   let gatewayOk = false; let finalStatus = null; let action = null;
   if (live.ok && (live.status === "refunded" || live.status === "voided")) {
     gatewayOk = true; finalStatus = live.status; action = live.status; // مستردّ سلفاً
   } else {
     const authorized = live.ok &&
       (live.status === "authorized" || live.status === "initiated");
-    const res = authorized ? await _moyasarVoidCore(secret, paymentId) :
-      await _moyasarRefundCore(secret, paymentId, undefined); // استرداد كامل
+    const res = authorized ? await moyasar.voidPayment(secret, paymentId) :
+      await moyasar.refund(secret, paymentId, undefined); // استرداد كامل
     gatewayOk = res.ok; finalStatus = res.status;
     action = authorized ? "voided" : "refunded";
   }
@@ -5760,28 +5717,21 @@ exports.moyasarRefundPayment = onCall(
             .catch((e) => console.error("moyasarRefund release claim:", e.message));
       };
 
-      const body = amountHalalas ? JSON.stringify({amount: amountHalalas}) : undefined;
-
-      let response; let result;
+      // النقل في moyasar_api؛ وعقدُ الخطأ يبقى هنا: نداءٌ من العميل يجب أن
+      // يرمي HttpsError، وتحرير المطالبة قبل كل رمي حتى لا يبقى الطلب محجوزاً.
+      let res;
       try {
-        response = await fetch(`https://api.moyasar.com/v1/payments/${paymentId}/refund`, {
-          method: "POST",
-          headers: {
-            "Authorization": _moyasarAuthHeader(secret),
-            ...(body ? {"Content-Type": "application/json"} : {}),
-          },
-          ...(body ? {body} : {}),
-        });
-        result = await response.json();
+        res = await moyasar.refund(secret, paymentId, amountHalalas);
       } catch (e) {
         await releaseClaim();
         console.error("moyasarRefund network error:", e.message);
         throw new HttpsError("internal", "تعذّر الاتصال ببوابة Moyasar — أعد المحاولة");
       }
+      const result = res.result;
 
-      if (!response.ok) {
+      if (!res.ok) {
         await releaseClaim();
-        console.error(`moyasarRefund failed ${response.status}:`, result);
+        console.error(`moyasarRefund failed ${res.httpStatus}:`, result);
         throw new HttpsError("internal", result.message ?? "فشل استرداد المبلغ من Moyasar");
       }
 
@@ -6112,15 +6062,14 @@ exports.moyasarVoidPayment = onCall(
         throw new HttpsError("failed-precondition", "مفتاح Moyasar السري غير مهيأ");
       }
 
-      const response = await fetch(`https://api.moyasar.com/v1/payments/${paymentId}/void`, {
-        method: "POST",
-        headers: {"Authorization": _moyasarAuthHeader(secret)},
-      });
+      // كان `await response.json()` عارياً هنا: ردٌّ غير JSON من وسيطٍ يرمي
+      // خطأً خامّاً بدل الرسالة العربية. التحليل في الوحدة متسامح، فيصل
+      // `result = {}` و`ok = false` فتُرمى الرسالة المقصودة.
+      const res = await moyasar.voidPayment(secret, paymentId);
+      const result = res.result;
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        console.error(`moyasarVoid failed ${response.status}:`, result);
+      if (!res.ok) {
+        console.error(`moyasarVoid failed ${res.httpStatus}:`, result);
         throw new HttpsError("internal", result.message ?? "فشل إلغاء عملية الدفع من Moyasar");
       }
 
@@ -6158,21 +6107,12 @@ exports.moyasarCapturePayment = onCall(
         throw new HttpsError("failed-precondition", "مفتاح Moyasar السري غير مهيأ");
       }
 
-      const body = amountHalalas ? JSON.stringify({amount: amountHalalas}) : undefined;
+      // نفس ملاحظة الإلغاء: كان التحليل عارياً.
+      const res = await moyasar.capture(secret, paymentId, amountHalalas);
+      const result = res.result;
 
-      const response = await fetch(`https://api.moyasar.com/v1/payments/${paymentId}/capture`, {
-        method: "POST",
-        headers: {
-          "Authorization": _moyasarAuthHeader(secret),
-          ...(body ? {"Content-Type": "application/json"} : {}),
-        },
-        ...(body ? {body} : {}),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        console.error(`moyasarCapture failed ${response.status}:`, result);
+      if (!res.ok) {
+        console.error(`moyasarCapture failed ${res.httpStatus}:`, result);
         throw new HttpsError("internal", result.message ?? "فشل تحصيل المبلغ المحجوز من Moyasar");
       }
 
