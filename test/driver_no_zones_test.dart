@@ -46,8 +46,27 @@ void main() {
         reason: 'ترشيح جغرافي يمنع إسناد سائق حرّ لطلب خارج منطقته');
     expect(body.contains('assigned_zones'), isFalse,
         reason: 'assigned_zones حقل ميت لم يُكتب قط');
-    expect(body.contains('is_active !== false'), isTrue,
-        reason: 'المؤهّل = السائق النشط، لا أكثر');
+    // كان الحارس يطابق `is_active !== false` **داخل** هذه الدالّة، كوكيلٍ عن
+    // «الترشيح بالنشاط لا بالجغرافيا». ثم استُخرجت الأهلية إلى `drivers.js`
+    // ليشترك فيها المُسنِد وعدّاد السعة (كانت قاعدةً مكتوبةً مرّتين، وتباعُدها
+    // أعلق طلباً مدفوعاً) — فانتقل النصّ ولم يتغيّر القرار المحروس: الأسطر
+    // أعلاه (لا zoneName ولا assigned_zones) هي القرار نفسه وما زالت تمرّ.
+    //
+    // فالوكيل يُوجَّه إلى موضعه الجديد، وأقوى: يفحص **التسليم** إلى الدالّة
+    // المشتركة، و**أنها هي** ترشّح بالنشاط ولا تعرف المنطقة — فالجغرافيا لا
+    // تتسلّل من هناك أيضاً، وهو الموضع الذي كانت ستتسلّل منه الآن.
+    expect(body.contains('_eligibleDriverDocs(db)'), isTrue,
+        reason: 'المرشّحون من دالّة الأهلية الواحدة لا من ترشيحٍ محلّي');
+
+    final j = fn.indexOf('async function _eligibleDriverDocs');
+    expect(j, greaterThan(-1), reason: 'دالّة الأهلية اختفت — حدِّث الحارس');
+    final elig = fn.substring(j, fn.indexOf('\n}', j));
+    expect(elig.contains('is_active !== false'), isTrue,
+        reason: 'المؤهّل = السائق النشط (+ حسابُ دخولٍ بدور سائق) — لا منطقته');
+    expect(elig.contains('zoneName'), isFalse,
+        reason: 'ترشيح جغرافي يمنع إسناد سائق حرّ لطلب خارج منطقته');
+    expect(elig.contains('assigned_zones'), isFalse,
+        reason: 'assigned_zones حقل ميت لم يُكتب قط');
   });
 
   test('السعة: البسط والمقام من العالم نفسه', () {

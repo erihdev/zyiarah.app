@@ -17,6 +17,8 @@ const {computeExpectedBasePrice, resolveMaterialsBase, applyTerrainSurcharge} =
 const {isMarketingBroadcast, excludeOptedOut} = require("./notify_prefs");
 const {countBookings, zoneDailyCap} = require("./capacity");
 const {grossFromBaseRounded, grossFromBase} = require("./vat");
+const {isAssignableDriver, assignabilityProblem, chunk, GET_ALL_CHUNK} =
+  require("./drivers");
 initializeApp();
 
 // Secrets — stored in Firebase Secret Manager, never in source code
@@ -2980,6 +2982,74 @@ exports.findNearestDrivers = onCall({cpu: 0.25}, async (request) => {
 // ════════════════════════════════════════════════════════════════════════
 
 /**
+ * قراءة `users/{id}` لعدّة سائقين في **نداءٍ واحد** لكل قطعة (`getAll`) بدل نداءٍ
+ * لكل سائق.
+ *
+ * `getAll` يحفظ ترتيب الطلب (BatchGetDocuments لا يحفظه، والـSDK يرتّب النتائج
+ * على ترتيب المراجع — انظر `document-reader.js`)، فالمزاوجة بالفهرس صحيحة.
+ * @param {FirebaseFirestore.Firestore} db
+ * @param {Array<FirebaseFirestore.DocumentReference>} refs
+ * @return {Promise<Array<FirebaseFirestore.DocumentSnapshot>>}
+ */
+async function _getAllChunked(db, refs) {
+  if (!refs.length) return [];
+  const out = [];
+  for (const part of chunk(refs, GET_ALL_CHUNK)) {
+    out.push(...await db.getAll(...part));
+  }
+  return out;
+}
+
+/**
+ * مستندات السائقين **المؤهَّلين للإسناد** — نشطون ولهم حساب دخول بدور سائق.
+ *
+ * موضعٌ واحد للقاعدة: ينادونه المُسنِد الآلي وعدّاد السعة، فلا يتباعدان. وكان
+ * تباعُدهما يُظهر يوماً «متاحاً» فيدفع العميل ثم لا يجد المُسنِد سائقاً مؤهَّلاً
+ * فيعلق الطلب المدفوع حتى الاسترداد الآلي. (انظر رأس `drivers.js`.)
+ *
+ * الترتيب ترتيبُ `drivers` كما تُعيدها Firestore — المُسنِد يأخذ أوّل حرٍّ فيه،
+ * فالاختيار لا يتغيّر بهذا التوحيد.
+ * @param {FirebaseFirestore.Firestore} db
+ * @return {Promise<Array<FirebaseFirestore.QueryDocumentSnapshot>>}
+ */
+async function _eligibleDriverDocs(db) {
+  const driversSnap = await db.collection("drivers").get();
+  // الترشيح على النشاط أوّلاً: يوفّر قراءة `users` لكل سائق موقوف.
+  const active = driversSnap.docs.filter((d) => d.data().is_active !== false);
+  if (!active.length) return [];
+  const userSnaps = await _getAllChunked(
+      db, active.map((d) => db.collection("users").doc(d.id)));
+  return active.filter((d, i) => isAssignableDriver(
+      d.data(), userSnaps[i].exists ? userSnaps[i].data() : null));
+}
+
+/**
+ * يتحقّق أن سائقاً **محدَّداً بالاسم** يجوز إسناده — للمسارات اليدوية التي يختار
+ * فيها الأدمن السائق بنفسه، فلا تمرّ على `_eligibleDriverDocs`.
+ *
+ * يرمي `HttpsError` برسالة تقول للأدمن **ما العمل**، لا رفضاً مبهماً. ويُعيد
+ * بيانات `drivers/{id}` كي لا يقرأها المُنادي مرّةً ثانية.
+ * @param {FirebaseFirestore.Firestore} db
+ * @param {string} driverId
+ * @return {Promise<object>} بيانات مستند السائق
+ */
+async function _assertAssignableDriver(db, driverId) {
+  const [dSnap, uSnap] = await Promise.all([
+    db.collection("drivers").doc(driverId).get(),
+    db.collection("users").doc(driverId).get(),
+  ]);
+  const dData = dSnap.exists ? dSnap.data() : null;
+  const problem = assignabilityProblem(
+      dData, uSnap.exists ? uSnap.data() : null);
+  if (problem) {
+    // not-found للمستند الغائب، وfailed-precondition لمن وُجد ولا يصلح.
+    throw new HttpsError(
+        dSnap.exists ? "failed-precondition" : "not-found", problem);
+  }
+  return dData;
+}
+
+/**
  * يجد سائقاً حرّاً لفترة زمنية.
  * - **بلا مناطق**: قرار المالك — السائق يقبل أي طلب يُسنَد إليه، والسعة تُضبط بالسقف
  *   اليومي المتفق عليه مسبقاً (max_orders_per_day) وبعدد السائقين، لا بالجغرافيا.
@@ -2999,8 +3069,10 @@ async function _findFreeDriverForSlot(db, {startDateTime, endDateTime}) {
   // فيبقى الطلب المدفوع عالقاً بلا سائق أبداً. (24س تغطي أي مدة مهمة ≤ يوم.)
   const winStart = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
 
-  const driversSnap = await db.collection("drivers").get();
-  const eligible = driversSnap.docs.filter((doc) => doc.data().is_active !== false);
+  // الأهلية من الموضع الواحد (نشط + حساب دخول بدور سائق) — كانت هنا حلقةٌ
+  // تقرأ `users/{id}` لكل مرشّح على التوالي حتى تجد أوّل مؤهَّل. صارت نداءً
+  // واحداً (`getAll`) ثم ترشيحاً في الذاكرة.
+  const eligible = await _eligibleDriverDocs(db);
   if (eligible.length === 0) return null;
 
   // بناء مجموعة السائقين المشغولين بطلبات متقاطعة زمنياً
@@ -3020,16 +3092,10 @@ async function _findFreeDriverForSlot(db, {startDateTime, endDateTime}) {
     if (startDateTime < oEnd && oStart < endDateTime) busy.add(data.driver_id);
   }
 
+  // أوّل مؤهَّل غير مشغول — نفس الترتيب ونفس الاختيار كما قبل التوحيد.
+  // (فحص H3 كان هنا داخل الحلقة؛ صار في `_eligibleDriverDocs` أعلاه.)
   for (const doc of eligible) {
-    if (busy.has(doc.id)) continue;
-    // (H3) تأكّد أن معرّف مستند السائق حساب حقيقي (users/{id} بدور driver).
-    // مستند drivers قد يكون مسودّة id ليست uid → إسناده يترك الطلب عالقاً بلا
-    // من يراه (تطبيق السائق والقواعد يعتمدان على auth.uid == driver_id).
-    const userSnap = await db.collection("users").doc(doc.id).get();
-    const role = userSnap.exists ?
-      (userSnap.data().staff_role || userSnap.data().role) : null;
-    if (role !== "driver") continue;
-    return doc;
+    if (!busy.has(doc.id)) return doc;
   }
   return null;
 }
@@ -3618,19 +3684,20 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   const db = getFirestore();
   const orderRef = db.collection("orders").doc(orderId);
 
-  const [orderSnap, driverSnap] = await Promise.all([
+  // (H3 في المسار اليدوي) الأهلية كاملةً لا النشاط وحده: كان الفحص هنا
+  // `exists` + `is_active` فقط، فيمرّ مستند سائقٍ بلا حساب دخول (مسودّات
+  // `addDoc` القديمة من لوحة الويب) أو كادرٌ ليس سائق توصيل. وإسناد أحدهما
+  // يُخفي الطلب المدفوع عن الجميع — القواعد وتطبيق السائق يربطان الرؤية
+  // بـ`auth.uid == driver_id`. المُسنِد الآلي كان محصَّناً وهذا المسار مكشوفاً.
+  const [orderSnap, driverData] = await Promise.all([
     orderRef.get(),
-    db.collection("drivers").doc(driverId).get(),
+    _assertAssignableDriver(db, driverId),
   ]);
   if (!orderSnap.exists) throw new HttpsError("not-found", "الطلب غير موجود");
-  if (!driverSnap.exists) throw new HttpsError("not-found", "السائق غير موجود");
 
   const orderData = orderSnap.data();
   if (orderData.status !== "pending") {
     throw new HttpsError("failed-precondition", "لا يمكن اعتماد الطلب بحالته الحالية");
-  }
-  if (driverSnap.data().is_active === false) {
-    throw new HttpsError("failed-precondition", "السائق غير نشط");
   }
 
   // (الثغرة #2) تأكّد أن السائق المختار حرّ فعلاً في الفترة المطلوبة
@@ -3645,7 +3712,7 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
 
   // (الثغرة #2) Transaction ذرّي: يُعيد فحص حالة الطلب قبل الإسناد لمنع التعيين
   // المزدوج عند موافقة مديرَين على نفس الطلب معاً.
-  const d = driverSnap.data();
+  const d = driverData;
   // موعد الرياض (UTC+3) — انظر _assignDriverScheduled: حساب المكوّنات بـUTC مباشرةً
   // كان يخزّن ساعة/يوماً خاطئاً في booking_time_slot/booking_date.
   const riyadh = new Date(startDateTime.getTime() + 3 * 60 * 60 * 1000);
@@ -3739,17 +3806,16 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
   // زيارتها للمسار المباشر غير الذرّي في لوحتي الأدمن.
   const active = ["scheduled", "assigned", "accepted", "on_the_way", "in_progress"];
 
-  // إعادة الإسناد لسائق آخر: تأكّد أنه موجود ونشط (قراءة قبل المعاملة كافية).
+  // إعادة الإسناد لسائق آخر: **الأهلية كاملةً** لا النشاط وحده (قراءة قبل
+  // المعاملة كافية). كان الفحص `exists` + `is_active` فقط — نفس فجوة
+  // approveAndAssignOrder: إسنادٌ لمستندٍ بلا حساب دخول ينقل الطلب من سائقٍ
+  // يراه إلى من لا يراه أحد، فيختفي بعد أن كان ظاهراً.
   let newDriverName = null;
   let newDriverPhone = null;
   if (newDriverId) {
-    const dSnap = await db.collection("drivers").doc(newDriverId).get();
-    if (!dSnap.exists) throw new HttpsError("not-found", "السائق غير موجود");
-    if (dSnap.data().is_active === false) {
-      throw new HttpsError("failed-precondition", "السائق غير نشط");
-    }
-    newDriverName = dSnap.data().name || "سائق";
-    newDriverPhone = dSnap.data().phone || "000000000";
+    const dData = await _assertAssignableDriver(db, newDriverId);
+    newDriverName = dData.name || "سائق";
+    newDriverPhone = dData.phone || "000000000";
   }
 
   return await db.runTransaction(async (tx) => {
@@ -4990,19 +5056,14 @@ exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
     } catch { /* تعذّر جلب جدول المنطقة — يُعامَل كغير مقيَّد بجدول */ }
   }
 
-  // 1. السعة الحقيقية للفترة = عدد السائقين النشطين. **بلا مناطق** (قرار المالك):
-  // السائق يقبل أي طلب، فالسعة رقم واحد للنشاط كلّه لا لكل منطقة.
-  // **نفس مرشّح الأهلية الذي يفرضه المُسنِد** (H3: users/{id} بدور driver) — عدّاد
-  // يفوق ما يقبله _findFreeDriverForSlot كان يُظهر يوماً «متاحاً» فيدفع العميل
-  // ثم لا يجد المُسنِد سائقاً مؤهّلاً فيعلق الطلب حتى الاسترداد الآلي.
-  const driversSnap = await db.collection("drivers").get();
-  const activeDocs = driversSnap.docs.filter((doc) => doc.data().is_active !== false);
-  const roleChecks = await Promise.all(activeDocs.map(async (doc) => {
-    const u = await db.collection("users").doc(doc.id).get();
-    const role = u.exists ? (u.data().staff_role || u.data().role) : null;
-    return role === "driver";
-  }));
-  const driverCount = roleChecks.filter(Boolean).length;
+  // 1. السعة الحقيقية للفترة = عدد السائقين المؤهَّلين. **بلا مناطق** (قرار
+  // المالك): السائق يقبل أي طلب، فالسعة رقم واحد للنشاط كلّه لا لكل منطقة.
+  //
+  // **ونفس دالّة الأهلية التي يفرضها المُسنِد** — لا نسخةً تطابقها. عدّادٌ يفوق
+  // ما يقبله `_findFreeDriverForSlot` كان يُظهر يوماً «متاحاً» فيدفع العميل ثم
+  // لا يجد المُسنِد سائقاً مؤهَّلاً فيعلق الطلب المدفوع حتى الاسترداد الآلي.
+  // كانت القاعدة مكتوبةً مرّتين ويحفظ تطابقَهما هذا التعليق؛ صارت `drivers.js`.
+  const driverCount = (await _eligibleDriverDocs(db)).length;
 
   // 2. السعة اليومية تبقى من الإعدادات (سقف إضافي)
   let maxOrdersPerDay = 10;
