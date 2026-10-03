@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement } from 'react';
+import { useEffect, useState, lazy, Suspense, type ReactElement } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
@@ -6,26 +6,53 @@ import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './services/firebase.ts';
 import Layout from './components/Layout.tsx';
 import { NotificationProvider } from './components/Notification.tsx';
-import Dashboard from './pages/Dashboard.tsx';
-import Login from './pages/Login.tsx';
-import Settings from './pages/Settings.tsx';
-import Orders from './pages/Orders.tsx';
-import ScheduleBoard from './pages/ScheduleBoard.tsx';
-import Drivers from './pages/Drivers.tsx';
-import Users from './pages/Users.tsx';
-import Accountants from './pages/Accountants.tsx';
-import Marketing from './pages/Marketing.tsx';
-import Notifications from './pages/Notifications.tsx';
-import Support from './pages/Support.tsx';
-import Admins from './pages/Admins.tsx';
-import AccountDeletion from './pages/AccountDeletion.tsx';
-import Contracts from './pages/Contracts.tsx';
-import StoreProducts from './pages/StoreProducts.tsx';
-import StoreOrders from './pages/StoreOrders.tsx';
-import Payroll from './pages/Payroll.tsx';
 import { canAccess } from './config/access.ts';
 
+// ── تقسيم الحِزمة على المسارات ──────────────────────────────────────────
+//
+// كانت الصفحات السبعَ عشرة كلها مستورَدةً ثابتاً، فيُبنى ملفٌ واحد 3.0 ميغا
+// (841ك مضغوطاً) يُنزّله **كل** أدمن قبل أن يرى أول شاشة.
+//
+// وأثقل تبعية (mapbox-gl) يستوردها **ملفٌ واحد**: Settings — فمحاسبٌ أو
+// مسؤول تسويق لا يفتح الإعدادات قط كان ينزّل محرّك الخرائط كاملاً.
+//
+// Dashboard وLogin يبقيان ثابتَين: الأول صفحة الهبوط بعد الدخول والثاني أول
+// ما يُرى قبله، فتأجيلهما يزيد زمن أول رسم لا ينقصه.
+//
+// **وبوّابة الأدوار صارت بوّابة تنزيل أيضاً:** `guard` تُعيد `<Navigate>` بدل
+// العنصر حين يُمنع الدور، فالعنصر المؤجَّل لا يُصيَّر أصلاً — ولا تُجلب قطعته.
+// فلا ينزّل أحدٌ شفرة صفحةٍ لا يملكها.
+const Settings = lazy(() => import('./pages/Settings.tsx'));
+const Orders = lazy(() => import('./pages/Orders.tsx'));
+const ScheduleBoard = lazy(() => import('./pages/ScheduleBoard.tsx'));
+const Drivers = lazy(() => import('./pages/Drivers.tsx'));
+const Users = lazy(() => import('./pages/Users.tsx'));
+const Accountants = lazy(() => import('./pages/Accountants.tsx'));
+const Marketing = lazy(() => import('./pages/Marketing.tsx'));
+const Notifications = lazy(() => import('./pages/Notifications.tsx'));
+const Support = lazy(() => import('./pages/Support.tsx'));
+const Admins = lazy(() => import('./pages/Admins.tsx'));
+const AccountDeletion = lazy(() => import('./pages/AccountDeletion.tsx'));
+const Contracts = lazy(() => import('./pages/Contracts.tsx'));
+const StoreProducts = lazy(() => import('./pages/StoreProducts.tsx'));
+const StoreOrders = lazy(() => import('./pages/StoreOrders.tsx'));
+const Payroll = lazy(() => import('./pages/Payroll.tsx'));
+
+// غير مؤجَّلتين بقصد — انظر أعلاه.
+import Dashboard from './pages/Dashboard.tsx';
+import Login from './pages/Login.tsx';
+
 const ADMIN_ROLES = ['super_admin', 'admin', 'orders_manager', 'accountant_admin', 'marketing_admin'];
+
+/// مؤشّر انتظار قطعة الصفحة — بنفس هيئة مؤشّر التحقّق من الهوية كي لا يبدو
+/// التنقّل عطلاً. يملأ منطقة المحتوى لا الصفحة، فالإطار يبقى ظاهراً.
+function PageSpinner() {
+    return (
+        <div className="flex items-center justify-center py-24" dir="rtl">
+            <div className="w-10 h-10 border-4 border-[#660033] border-t-transparent rounded-full animate-spin"></div>
+        </div>
+    );
+}
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -61,8 +88,15 @@ function App() {
 
   // Guard a route element: render it only if the role may access that path,
   // otherwise bounce to the dashboard (which every admin role can open).
+  //
+  // ويلفّ العنصرَ المؤجَّل بحدّ Suspense **لكلّ مسار على حدة** لا حدّاً واحداً
+  // حول الـRoutes: حدٌّ واحد يُفرِغ الإطار (الشريط الجانبي والترويسة) أثناء
+  // جلب القطعة، فيرى الأدمن شاشةً بيضاء عند كل تنقّل. وبالحدّ لكل مسار يبقى
+  // الإطار ثابتاً ويدور المؤشّر في منطقة المحتوى وحدها.
   const guard = (path: string, element: ReactElement) =>
-    canAccess(role, path) ? element : <Navigate to="/" replace />;
+    canAccess(role, path)
+      ? <Suspense fallback={<PageSpinner />}>{element}</Suspense>
+      : <Navigate to="/" replace />;
 
   if (loading) {
     return (
