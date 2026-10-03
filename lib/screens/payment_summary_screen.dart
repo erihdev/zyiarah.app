@@ -1072,7 +1072,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           'coupon_code': _appliedCoupon,
           'discount_amount': _discountAmount,
           if (widget.serviceMeta != null) 'service_meta': widget.serviceMeta,
-          // Capacity index fields — queried by ZyiarahCapacityService
+          // حقول فهرس السعة — يقرؤها `functions/capacity.js` (countBookings)
+          // وهو مسار السعة الحيّ، ولوحة السائق والفواتير وقائمة الطلبات.
+          // (كان التعليق يشير إلى ZyiarahCapacityService، وهي خدمة ماتت حين
+          // استُبدلت بوابة السعة بـgetHourlyAvailability الخادمية — انظر الشرح
+          // أعلى `_checkCapacity` — وحُذف ملفها. الحقول نفسها مستعملة بكثافة.)
           if (isHourly && widget.serviceDate != null) ...{
             'booking_date': '${widget.serviceDate!.year}-'
                 '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
