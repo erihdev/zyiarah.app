@@ -1,15 +1,19 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { Save, Shield, Wallet, MapPin, Search, Smartphone, Loader2, CheckCircle2, ChevronLeft, CreditCard, Activity, Database, KeyRound, ArrowRight, Plus, Navigation, ToggleLeft, ToggleRight, Trash2, Pencil, CalendarClock, Copy } from 'lucide-react';
 import { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, GeoPoint, serverTimestamp, writeBatch } from 'firebase/firestore';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/notificationContext.ts';
 import { logAudit, AUDIT } from '../services/audit.ts';
 import ZoneScheduleEditor from '../components/ZoneScheduleEditor.tsx';
 import { type ZoneSchedule } from '../utils/zoneSchedule.ts';
-import { arabizeMapLabels } from '../utils/mapboxArabic.ts';
-import { JAZAN_BBOX, jazanMaskGeoJSON, jazanOutlineGeoJSON, isInJazan } from '../utils/jazanBoundary.ts';
+import { isInJazan } from '../utils/jazanBoundary.ts';
+
+// **أثقلُ تبعيةٍ في اللوحة تُجلب هنا وحدها.** كل شيفرة mapbox-gl (والقناع والتعريب
+// وحساب الدائرة) في ZoneMapPicker، ويُركّبه نموذجُ «إضافة محافظة» فقط — فصار فتحُ
+// الإعدادات على أي تبويب لا يُنزّل محرّك الخرائط إطلاقاً، وكان يُنزّله دائماً.
+// و`utils/mapboxArabic.ts` انتقل استيرادها إلى هناك كذلك: هي تستورد mapboxgl على
+// مستوى الوحدة، فإبقاؤها هنا كان يُبقي التبعية في قطعة Settings وحدها كافية.
+const ZoneMapPicker = lazy(() => import('../components/ZoneMapPicker.tsx'));
 
 interface SystemSettings {
     // General
@@ -101,23 +105,6 @@ const CAR_FIELDS = [
 
 const zoneInputCls = 'w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 transition-all';
 
-// دائرة نطاق التغطية كمضلّع GeoJSON (64 نقطة) حول المركز — MapBox لا يرسم دائرة
-// جغرافية بالكيلومتر مباشرةً (طبقة circle بالبكسل)، فنبنيها كمضلّع يثبُت مع التقريب.
-const circleGeoJSON = (lat: number, lng: number, radiusKm: number): GeoJSON.FeatureCollection => {
-    const points = 64;
-    const distX = radiusKm / (111.32 * Math.cos((lat * Math.PI) / 180));
-    const distY = radiusKm / 110.574;
-    const coords: [number, number][] = [];
-    for (let i = 0; i <= points; i++) {
-        const theta = (i / points) * 2 * Math.PI;
-        coords.push([lng + distX * Math.cos(theta), lat + distY * Math.sin(theta)]);
-    }
-    return {
-        type: 'FeatureCollection',
-        features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [coords] } }],
-    };
-};
-
 // إعداد التحديث الإجباري — يُخزَّن في مستند منفصل system_configs/app_update
 // والذي يقرأه التطبيق (app_update_service.dart). كانت اللوحة سابقاً تكتب
 // force_update_version/enabled في main_settings الذي لا يقرأه التطبيق إطلاقاً.
@@ -185,17 +172,6 @@ export default function Settings({ role }: { role?: string | null }) {
     const [loadFailed, setLoadFailed] = useState(false);
     const zoneNameRef = useRef<HTMLInputElement>(null);
 
-    // (تكافؤ التطبيق) خريطة اختيار مركز المحافظة: نقرة تحدّد المركز، والدائرة تتبع النطاق.
-    const zoneMapContainer = useRef<HTMLDivElement>(null);
-    const zoneMap = useRef<mapboxgl.Map | null>(null);
-    const zoneMarker = useRef<mapboxgl.Marker | null>(null);
-    // مرآة للنموذج تقرؤها معالِجات الخريطة (load/click) دون أسر state قديم.
-    // التحديث في أثر لا أثناء الرندر: الكتابة على ref أثناء الرندر غير آمنة في
-    // الرندر المتزامن (قد يُلغى الرندر أو يُعاد تشغيله). معالِجات الخريطة لا
-    // تعمل إلا بعد التركيب، فتقرأ القيمة المحدَّثة دائماً.
-    const newZoneRef = useRef(newZone);
-    useEffect(() => { newZoneRef.current = newZone; }, [newZone]);
-
     useEffect(() => {
         const fetchSettings = async () => {
             try {
@@ -250,108 +226,6 @@ export default function Settings({ role }: { role?: string | null }) {
         return () => unsub();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
-    // يرسم/يحرّك الدبوس والدائرة من قيم النموذج الحالية (يدوية كانت أم من نقرة الخريطة).
-    const syncZoneMapFromForm = () => {
-        const m = zoneMap.current;
-        if (!m) return;
-        const z = newZoneRef.current;
-        const lat = parseFloat(z.latitude);
-        const lng = parseFloat(z.longitude);
-        const radius = parseFloat(z.radiusKm) || 15;
-        if (isNaN(lat) || isNaN(lng)) return;
-        if (!zoneMarker.current) {
-            zoneMarker.current = new mapboxgl.Marker({ color: '#660033' }).setLngLat([lng, lat]).addTo(m);
-        } else {
-            zoneMarker.current.setLngLat([lng, lat]);
-        }
-        const src = m.getSource('zone-circle') as mapboxgl.GeoJSONSource | undefined;
-        if (src) src.setData(circleGeoJSON(lat, lng, radius));
-    };
-
-    // إنشاء الخريطة عند فتح النموذج وتدميرها عند إغلاقه (الحاوية لا تُرسم إلا وهو مفتوح).
-    useEffect(() => {
-        if (!showAddForm) {
-            zoneMarker.current = null;
-            zoneMap.current?.remove();
-            zoneMap.current = null;
-            return;
-        }
-        if (zoneMap.current || !zoneMapContainer.current) return;
-        mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
-        const m = new mapboxgl.Map({
-            container: zoneMapContainer.current,
-            style: 'mapbox://styles/mapbox/streets-v12',
-            // العرض الابتدائي = منطقة جازان كاملة، والكاميرا مقفولة داخلها (بهامش طفيف)
-            // — لا تحريك/تصغير يُخرج الخريطة لأي منطقة أخرى.
-            bounds: [[JAZAN_BBOX[0], JAZAN_BBOX[1]], [JAZAN_BBOX[2], JAZAN_BBOX[3]]],
-            fitBoundsOptions: { padding: 24 },
-            maxBounds: [
-                [JAZAN_BBOX[0] - 0.25, JAZAN_BBOX[1] - 0.25],
-                [JAZAN_BBOX[2] + 0.25, JAZAN_BBOX[3] + 0.25],
-            ],
-        });
-        m.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
-        m.on('click', (e) => {
-            // المحافظات محصورة بجازان — لا مركز خارج حدودها الإدارية.
-            if (!isInJazan(e.lngLat.lng, e.lngLat.lat)) {
-                toast.error('خارج نطاق منطقة جازان — حدد داخل حدود المنطقة');
-                return;
-            }
-            setNewZone(p => ({
-                ...p,
-                latitude: e.lngLat.lat.toFixed(5),
-                longitude: e.lngLat.lng.toFixed(5),
-            }));
-        });
-        m.on('load', () => {
-            arabizeMapLabels(m); // التسميات بالعربية (name_ar) بدل الإنجليزية الافتراضية
-            // قناع «خارج جازان»: يُعتِّم كل ما حول المنطقة فلا تظهر إلا محافظاتها
-            // وقراها وهجرها، مع حدّ بنفسجي يرسم حدودها الإدارية (اليابسة + فرسان).
-            m.addSource('jazan-mask', { type: 'geojson', data: jazanMaskGeoJSON() });
-            m.addLayer({ id: 'jazan-mask-fill', type: 'fill', source: 'jazan-mask', paint: { 'fill-color': '#e2e8f0', 'fill-opacity': 0.9 } });
-            m.addSource('jazan-outline', { type: 'geojson', data: jazanOutlineGeoJSON() });
-            m.addLayer({ id: 'jazan-outline-line', type: 'line', source: 'jazan-outline', paint: { 'line-color': '#660033', 'line-width': 2.5 } });
-            m.addSource('zone-circle', {
-                type: 'geojson',
-                data: { type: 'FeatureCollection', features: [] },
-            });
-            m.addLayer({ id: 'zone-circle-fill', type: 'fill', source: 'zone-circle', paint: { 'fill-color': '#660033', 'fill-opacity': 0.15 } });
-            m.addLayer({ id: 'zone-circle-line', type: 'line', source: 'zone-circle', paint: { 'line-color': '#660033', 'line-width': 2 } });
-            syncZoneMapFromForm(); // قيمٌ أُدخلت يدوياً قبل جاهزية الخريطة تُرسم الآن
-        });
-        zoneMap.current = m;
-        return () => {
-            zoneMarker.current = null;
-            zoneMap.current?.remove();
-            zoneMap.current = null;
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [showAddForm]);
-
-    // مزامنة الدبوس/الدائرة مع أي تغيير في الإحداثيات أو النطاق.
-    useEffect(() => {
-        syncZoneMapFromForm();
-    }, [newZone.latitude, newZone.longitude, newZone.radiusKm, showAddForm]);
-
-    // (تكافؤ التطبيق) كتابة اسم المحافظة تنقل الخريطة إليه تلقائياً — geocoding بنفس التوكن،
-    // بلا تثبيت دبوس: الانتقال للعرض فقط، والنقرة هي التي تحدّد المركز. صامت عند الفشل.
-    useEffect(() => {
-        if (!showAddForm || newZone.name.trim().length < 3) return;
-        const t = setTimeout(async () => {
-            try {
-                const q = encodeURIComponent(newZone.name.trim());
-                // bbox: قصر نتائج البحث على منطقة جازان فقط (لا مدن/مناطق أخرى).
-                const r = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${q}.json?access_token=${import.meta.env.VITE_MAPBOX_TOKEN}&country=sa&language=ar&limit=1&bbox=${JAZAN_BBOX.join(',')}`);
-                const j = await r.json();
-                const c = j?.features?.[0]?.center;
-                if (Array.isArray(c) && c.length >= 2 && zoneMap.current) {
-                    zoneMap.current.flyTo({ center: [c[0], c[1]], zoom: 10 });
-                }
-            } catch { /* صامت — الخريطة تبقى حيث هي */ }
-        }, 800);
-        return () => clearTimeout(t);
-    }, [newZone.name, showAddForm]);
 
     const handleAddZone = async () => {
         const lat = parseFloat(newZone.latitude);
@@ -1265,10 +1139,24 @@ export default function Settings({ role }: { role?: string | null }) {
                                                 <label className="block text-xs font-bold text-slate-600 mb-1">
                                                     اضغط على الخريطة لتحديد مركز المحافظة — الدائرة تعرض نطاق التغطية
                                                 </label>
-                                                <div
-                                                    ref={zoneMapContainer}
-                                                    className="w-full h-72 rounded-2xl overflow-hidden border-2 border-rose-200"
-                                                />
+                                                <Suspense fallback={
+                                                    <div className="w-full h-72 rounded-2xl border-2 border-rose-200 bg-slate-50 flex items-center justify-center">
+                                                        <Loader2 className="animate-spin text-rose-400" size={28} />
+                                                    </div>
+                                                }>
+                                                    <ZoneMapPicker
+                                                        latitude={newZone.latitude}
+                                                        longitude={newZone.longitude}
+                                                        radiusKm={newZone.radiusKm}
+                                                        name={newZone.name}
+                                                        onPick={(lat, lng) => setNewZone(p => ({
+                                                            ...p,
+                                                            latitude: lat.toFixed(5),
+                                                            longitude: lng.toFixed(5),
+                                                        }))}
+                                                        onReject={(m) => toast.error(m)}
+                                                    />
+                                                </Suspense>
                                             </div>
 
                                             <div className="flex items-center gap-3 flex-wrap">
