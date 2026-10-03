@@ -100,8 +100,16 @@ t("tamaraRefundPayment: أدمن + مطالبة + بوابة تمارا + إشع
   assert.ok(b.includes("await _assertAdmin(request)"));
   assert.ok(b.includes("secrets: [\"TAMARA_API_TOKEN\"]"));
   assert.ok(b.includes("await _claimRefund(existing)"));
-  assert.ok(b.includes("https://api.tamara.co/orders/${tamaraOrderId}/refunds"));
-  assert.ok(b.includes("total_amount: {amount: refundAmount, currency: \"SAR\"}"));
+  // كان الفحصان يطابقان عنوان تمارا وشكل المبلغ **نصّاً داخل هذه الدالّة**،
+  // وكيلاً عن «تضرب البوّابة الصحيحة بالمبلغ الصحيح». ثم استُخرج النقل إلى
+  // tamara_api ليشترك فيه تسعةُ مواضع (كانت الترويسة تُبنى يدويّاً تسع مرّات،
+  // والمسار مكتوباً ثلاثاً) — فانتقل النصّ ولم يتغيّر القرار المحروس.
+  //
+  // فالوكيل يُوجَّه إلى نداء الوحدة، وهو **أقوى**: الاسم نفسه يحدّد البوّابة
+  // (tamara.refund لا tabbyRefund)، وشكل الجسم والعنوان يثبّتهما
+  // test/tamara_api.test.js حيث يُفحَصان بـfetch مُستبدَل لا بمطابقة نصّية.
+  assert.ok(b.includes("await tamara.refund(token, tamaraOrderId, refundAmount, reason)"),
+      "استرداد تمارا يجب أن يمرّ على tamara.refund بالمبلغ والسبب");
   assert.ok(b.includes("is_paid: false"));
   assert.ok(b.includes("refunded: true"));
   assert.ok(b.includes("تم استرداد مبلغك 💳"));
@@ -112,8 +120,11 @@ t("tabbyRefundPayment: أدمن + مطالبة + بوابة تابي + إشعا�
   assert.ok(b.includes("await _assertAdmin(request)"));
   assert.ok(b.includes("secrets: [\"TABBY_WEBHOOK_SECRET\"]"));
   assert.ok(b.includes("await _claimRefund(existing)"));
+  // نفس التوجيه؛ و`tabbyRefund` هي **نقطة تابي الوحيدة** في الوحدة (قرار
+  // المالك: المرتجع وحده)، ويحرس ذلك فحصُها هناك.
   assert.ok(b.includes(
-      "https://api.tabby.ai/api/v2/payments/${tabbyPaymentId}/refunds"));
+      "await tamara.tabbyRefund(secret, tabbyPaymentId, refundAmount, reason)"),
+  "استرداد تابي يجب أن يمرّ على tamara.tabbyRefund");
   assert.ok(b.includes("existing.data.tabby_payment_id"));
   assert.ok(b.includes("is_paid: false"));
   assert.ok(b.includes("refunded: true"));
