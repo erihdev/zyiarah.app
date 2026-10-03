@@ -35,6 +35,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/terrain_surcharge.dart';
 import 'package:zyiarah/utils/vat.dart';
+import 'package:zyiarah/utils/error_report.dart';
 
 
 
@@ -229,8 +230,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               if (_pendingOrderCreated) _mintFreshPendingOrderId();
             });
           }
-        } catch (e) {
-          debugPrint('Surge pricing fetch failed, using 1.0: $e');
+        } catch (e, st) {
+          // السقوط إلى 1.0 يعني شحناً **بلا ذروة** — خصمٌ صامت من الإيراد.
+          reportSilent(e, st, reason: 'surge_fetch_failed');
         }
       }
     }
@@ -293,8 +295,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           if (_pendingOrderCreated) _mintFreshPendingOrderId();
         });
       }
-    } catch (e) {
-      debugPrint('[terrain] zone fetch failed: $e');
+    } catch (e, st) {
+      // بلا مستند المنطقة تسقط رسوم الوعورة — شحنٌ أقلّ من المستحقّ، والخادم
+      // يرصد النقص فيُعلَّق الدفع. فالصمت هنا يُخفي سبب التعليق لا الأثر فقط.
+      reportSilent(e, st, reason: 'terrain_zone_fetch_failed');
     }
   }
 
@@ -1023,9 +1027,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           }
           return;
         }
-      } catch (e) {
+      } catch (e, st) {
         // لا نرمي: المُصالِح الخادمي الدوري يضمن الطلب احتياطاً خلال دقائق.
-        debugPrint('[verify-first non-fatal] $e');
+        // لكن «لا نرمي» ليست «لا نعلم»: تكرارُ هذا يعني أن المُصالِح يحمل كل
+        // الحِمل، وهو ما لا يظهر في أي لوحة بلا إبلاغ.
+        reportSilent(e, st, reason: 'verify_first_failed');
       }
     }
     // 1. Update Database
@@ -1131,8 +1137,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               'paymentId': paymentId,
               'orderId': widget.contractId,
             });
-          } catch (e) {
-            debugPrint('[verify contract] non-fatal: $e');
+          } catch (e, st) {
+            reportSilent(e, st, reason: 'verify_contract_failed');
           }
         }
       } else if (method == 'wallet') {
@@ -1150,9 +1156,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             'paymentId': paymentId,
             'orderId': id,
           });
-        } catch (e) {
-          // الـ webhook يؤكّد خادمياً حتى لو فشل هذا النداء.
-          debugPrint('[verifyMoyasar] non-fatal: $e');
+        } catch (e, st) {
+          // الـ webhook يؤكّد خادمياً حتى لو فشل هذا النداء — فلا نرمي.
+          reportSilent(e, st, reason: 'verify_moyasar_failed');
         }
       }
     }
@@ -1198,8 +1204,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 startDateTime: bgServiceDate!,
                 durationHours: bgHours!,
               );
-            } catch (e) {
-              debugPrint('[AutoAssign bg] non-fatal: $e');
+            } catch (e, st) {
+              // فشلُ الإسناد يعني طلباً **مدفوعاً بلا سائق** حتى يلتقطه الإرسال
+              // الدوري. يستحقّ أثراً.
+              reportSilent(e, st, reason: 'auto_assign_failed');
             }
           }
           try {
@@ -1210,8 +1218,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
               serviceName: bgServiceName,
               orderId: id,
             );
-          } catch (e) {
-            debugPrint('[notifyOrderCreated bg] non-fatal: $e');
+          } catch (e, st) {
+            reportSilent(e, st, reason: 'notify_order_created_failed');
           }
         }
 
@@ -1241,8 +1249,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           'zone': bgZone,
           'coupon': bgCoupon,
         }, customerEmail: bgClientEmail, invoiceUrl: invoiceUrl);
-      } catch (e) {
-        debugPrint('[post-order background: invoice/notify] non-fatal: $e');
+      } catch (e, st) {
+        // يشمل توليد فاتورة ZATCA: طلبٌ مدفوع بلا فاتورة ضريبية مسألة امتثال،
+        // لا إزعاجٌ مؤجَّل. الصمت هنا أسوأ ما في الفئة كلها.
+        reportSilent(e, st, reason: 'post_order_invoice_notify_failed');
       }
     });
 

@@ -1,10 +1,9 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:zyiarah/utils/moyasar_util.dart';
+import 'package:zyiarah/utils/error_report.dart';
 
 /// Moyasar payment gateway service.
 /// - Credit Card / Apple Pay / STC Pay → handled by Moyasar Flutter SDK (no code here)
@@ -98,9 +97,11 @@ class MoyasarService {
       });
       return result.data['success'] == true;
     } catch (e, stack) {
-      debugPrint('MoyasarService.verifyPayment error: $e');
-      await FirebaseCrashlytics.instance
-          .recordError(e, stack, fatal: false);
+      // كان يُبلّغ بلا `reason`، فيصل Crashlytics بلا تجميع — تختفي الإشارة.
+      // والسبب هنا ثابت ومُسمّى: فشلُ التحقّق من دفعةٍ مسار مال.
+      reportSilent(e, stack,
+          reason: 'moyasar_verify_payment_failed',
+          info: {'orderId': orderId, 'paymentId': paymentId});
       return false;
     }
   }

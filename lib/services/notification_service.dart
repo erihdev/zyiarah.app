@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:zyiarah/services/deep_link_service.dart';
+import 'package:zyiarah/utils/error_report.dart';
 
 /// خدمة إدارة الإشعارات - تطبيق زيارة
 @pragma('vm:entry-point')
@@ -149,8 +150,8 @@ class ZyiarahNotificationService {
       if (initialMessage != null) {
         _handleRemoteMessageTap(initialMessage);
       }
-    } catch (e) {
-      debugPrint("Error initializing notifications: $e");
+    } catch (e, st) {
+      reportSilent(e, st, reason: 'notifications_init_failed');
     }
   }
 
@@ -195,8 +196,8 @@ class ZyiarahNotificationService {
           role = userDoc.data()?['role'] ?? 'client';
           staffRole = userDoc.data()?['staff_role'] as String?;
         }
-      } catch (e) {
-        debugPrint("⚠️ Could not fetch user role for token: $e");
+      } catch (e, st) {
+        reportSilent(e, st, reason: 'fcm_role_fetch_failed');
       }
 
       await FirebaseFirestore.instance.collection('fcm_tokens').doc(uid).set({
@@ -215,8 +216,9 @@ class ZyiarahNotificationService {
       // العميل من لمس وثيقة رمز حساب آخر).
 
       debugPrint("✅ FCM Token ($role) saved for user: $uid");
-    } catch (e) {
-      debugPrint("❌ Error saving FCM token to Firestore: $e");
+    } catch (e, st) {
+      // بلا رمز محفوظ لا تصل الإشعارات إطلاقاً — والمستخدم لا يعلم.
+      reportSilent(e, st, reason: 'fcm_token_save_failed');
     }
   }
 

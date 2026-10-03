@@ -1,11 +1,10 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/services/firebase_service.dart';
+import 'package:zyiarah/utils/error_report.dart';
 
 /// المزود المركزي لحالة المستخدم وصلاحياته
 /// يعالج مشكلة الـ Redundant Reads ويعزز استقرار حالة التطبيق
@@ -76,7 +75,7 @@ class ZyiarahUserProvider extends ChangeNotifier {
       // ولا تعافي حتى إعادة التشغيل، ويظهر المستخدم كأنه «غير مسجّل». الآن: نُسجّل
       // الخطأ (لا debugPrint صامت) ونواصل لتركيب المستمع الذي يجلب الدور أيضاً.
       _profileError = e;
-      _reportSilent('getUserRole failed for $uid', e, s);
+      reportSilent(e, s, reason: 'get_user_role_failed', info: {'uid': uid});
     }
 
     // يُركَّب دائماً — حتى لو فشل جلب الدور أعلاه — فهو مصدر التعافي.
@@ -106,27 +105,26 @@ class ZyiarahUserProvider extends ChangeNotifier {
         // تلف حقل في المستند (نوع غير متوقّع) كان يرمي داخل المستمع فيتحوّل إلى خطأ
         // غير ملتقَط — «كراش صامت». الآن يُلتقط ويُبلَّغ ولا يُسقط الجلسة.
         _profileError = e;
-        _reportSilent('user profile parse failed for $uid', e, s);
+        reportSilent(e, s,
+            reason: 'user_profile_parse_failed', info: {'uid': uid});
       }
       _isLoading = false;
       notifyListeners();
     }, onError: (e, s) {
       // خطأ بثّ (شبكة/صلاحيات) — الجلسة تبقى، والبيانات تُعاد محاولتها.
       _profileError = e;
-      _reportSilent('user profile stream error for $uid', e, s);
+      reportSilent(e, s,
+          reason: 'user_profile_stream_error', info: {'uid': uid});
       _isLoading = false;
       notifyListeners();
     });
   }
 
-  /// يمنع «الكراش الصامت»: كل فشل هنا يصل Crashlytics بدل أن يُبتلع في debugPrint.
-  void _reportSilent(String reason, Object e, StackTrace s) {
-    debugPrint('[UserProvider] $reason: $e');
-    if (!kIsWeb) {
-      FirebaseCrashlytics.instance
-          .recordError(e, s, reason: reason, fatal: false);
-    }
-  }
+  // كان هنا `_reportSilent` خاصّ بهذا الملف — وُحِّد على `reportSilent` في
+  // lib/utils/error_report.dart. والفرق ليس تنظيمياً فقط: كان يبني السبب
+  // بـ`'... for $uid'`، وCrashlytics يجمّع بالسبب — فكل مستخدم يُنتج مجموعةً
+  // منفصلة بواحدةٍ فيها، وتختفي الإشارة في ألف مجموعة. الآن السبب ثابت
+  // والـuid في `info` كمفتاح مخصّص. والمساعد المشترك أيضاً لا يرمي أبداً.
 
   @override
   void dispose() {
