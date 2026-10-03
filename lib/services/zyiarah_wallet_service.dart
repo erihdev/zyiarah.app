@@ -1,9 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
 
 import 'package:zyiarah/models/wallet_model.dart';
 import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/utils/error_report.dart';
 
 class ZyiarahWalletService {
   // Singleton Pattern
@@ -63,8 +63,8 @@ class ZyiarahWalletService {
           targetId: userId,
           details: {'points_redeemed': pointsToRedeem},
         );
-      } catch (e) {
-        debugPrint('[wallet] audit log failed (non-fatal): $e');
+      } catch (e, st) {
+        reportSilent(e, st, reason: 'wallet_audit_log_failed');
       }
     }
     return success;
