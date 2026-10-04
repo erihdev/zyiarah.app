@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminStaffPerformanceScreen extends StatefulWidget {
   const AdminStaffPerformanceScreen({super.key});
@@ -28,7 +29,7 @@ class _AdminStaffPerformanceScreenState extends State<AdminStaffPerformanceScree
       // (يُنشأ عند أول تقييم فقط) فلا يظهر السائقون الجدد إطلاقاً. نجلب الكل ونرتّب محلياً.
       final driversSnap = await FirebaseFirestore.instance
           .collection('drivers')
-          .get();
+          .get().timeout(kNetCallTimeout);
 
       List<Map<String, dynamic>> stats = [];
 

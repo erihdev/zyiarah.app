@@ -46,7 +46,7 @@ String _code(String path) {
   return out.join();
 }
 
-/// الشاشاتُ التي تنتظر الشبكةَ خلف مؤشّرِ تحميلٍ للعميلة.
+/// الشاشاتُ التي بُدئ بها الإصلاح — تبقى مذكورةً لأنّ فحوصاً بعينها تخصّها.
 const List<String> _screens = [
   'lib/screens/hourly_details_screen.dart',
   'lib/screens/subscription_plans_screen.dart',
@@ -54,6 +54,28 @@ const List<String> _screens = [
   'lib/screens/login_screen.dart',
   'lib/screens/signup_screen.dart',
 ];
+
+/// **كلُّ** شاشة — القاعدةُ أدناه عامّة: لا قراءةَ Firestore بلا مهلة في أيٍّ
+/// منها. بُدئ بخمسٍ ثمّ وُسِّع إلى الـ٤١ كلِّها حين تبيّن أنّ العطل عامّ:
+/// ٤١ قراءةً بلا مهلة في ٢٠ ملفّاً.
+List<File> _allScreens() => Directory('lib/screens')
+    .listSync(recursive: true)
+    .whereType<File>()
+    .where((f) => f.path.endsWith('.dart'))
+    .toList();
+
+/// نداءاتُ دوالَّ سحابيّة **تُغيّر حالة** (لا تقرأ): مهلتُها قرارٌ مختلف، لأنّ
+/// «انقضت المهلة» ليست «لم يحدث شيء» — قد يكون الخادمُ نفّذ. تُعالَج كلٌّ على
+/// حدة برسالةٍ تقول «لا نعرف» لا «فشل»، ولا تدخل القاعدةَ العامّة.
+const Map<String, String> _statefulCalls = {
+  'deleteDriverAccount': 'حذفُ حساب سائق — إعادةُ المحاولة بعد نجاحٍ صامت تُربك',
+  'approveAndAssignOrder': 'إسنادُ سائق — الخادمُ يرفض الثاني، لكنّ الرسالة تُضلّل',
+  'rescheduleAssignedOrder': 'نقلُ موعد — نفسُ الاعتبار',
+  'verifyMoyasarPayment': 'تأكيدُ دفعٍ تمّ فعلاً عند البوّابة — «فشل» كذبة',
+  'payWithWallet': 'خصمٌ من المحفظة — idempotent خادميّاً، والرسالةُ هي المسألة',
+  'payContractWithWallet': 'كسابقه',
+  'moyasarRefundPayment': 'استرداد — تكرارُه بعد نجاحٍ صامت خطر',
+};
 
 void main() {
   test('كلُّ نداءِ دالّةٍ سحابيّة في شاشات الحجز له مهلة', () {
@@ -72,9 +94,10 @@ void main() {
             '  • ${offenders.join('\n  • ')}\n');
   });
 
-  test('كلُّ قراءةِ Firestore ينتظرها مؤشّرُ تحميل لها مهلة', () {
+  test('كلُّ قراءةِ Firestore في كلّ شاشة لها مهلة', () {
     final offenders = <String>[];
-    for (final p in _screens) {
+    for (final f in _allScreens()) {
+      final p = f.path.replaceAll(r'\', '/');
       final src = _code(p);
       for (final m in RegExp(r'await\s+[\s\S]{0,180}?\.get\(\)(\s*\.timeout\()?')
           .allMatches(src)) {

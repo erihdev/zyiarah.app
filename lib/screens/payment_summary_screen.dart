@@ -36,6 +36,7 @@ import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/terrain_surcharge.dart';
 import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/error_report.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 
 
@@ -174,7 +175,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       final List<DocumentSnapshot<Map<String, dynamic>>> results;
       try {
         results = await Future.wait([
-          FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
+          FirebaseFirestore.instance.collection('users').doc(user.uid).get().timeout(kNetCallTimeout),
           FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get(),
         ]);
       } catch (e) {
@@ -284,7 +285,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           .collection('service_zones')
           .where('name', isEqualTo: widget.zoneName)
           .limit(1)
-          .get();
+          .get().timeout(kNetCallTimeout);
       if (q.docs.isEmpty) return;
       final pct = terrainPercentFrom(q.docs.first.data()['terrain_surcharge_percent']);
       if (mounted && pct != _terrainPct) {
@@ -1045,7 +1046,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
       // إن كان الطلب أُنشئ مسبقاً (بطاقة/STC/تمارا تنشئه is_paid=false قبل الدفع)
       // فلا نُعيد إنشاءه — يتفادى عدّاداً مزدوجاً وكتابةً فوق المستند؛ نكتفي بكوده.
-      final existingOrder = await FirebaseFirestore.instance.collection('orders').doc(id).get();
+      final existingOrder = await FirebaseFirestore.instance.collection('orders').doc(id).get().timeout(kNetCallTimeout);
       if (existingOrder.exists) {
         code = (existingOrder.data()?['code'] as String?) ?? id;
       } else {

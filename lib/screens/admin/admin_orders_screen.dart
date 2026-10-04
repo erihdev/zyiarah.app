@@ -8,6 +8,7 @@ import 'package:zyiarah/widgets/zyiarah_shimmer.dart';
 import 'package:zyiarah/utils/csv_export_util.dart';
 import 'package:zyiarah/utils/status_util.dart';
 import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 
 class AdminOrdersScreen extends StatefulWidget {
@@ -47,7 +48,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
           .orderBy('created_at', descending: true)
           .startAfterDocument(cursor)
           .limit(_pageSize)
-          .get();
+          .get().timeout(kNetCallTimeout);
       if (!mounted) return;
       setState(() {
         _olderDocs.addAll(snap.docs);

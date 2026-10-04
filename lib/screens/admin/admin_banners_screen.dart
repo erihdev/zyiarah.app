@@ -7,6 +7,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminBannersScreen extends StatefulWidget {
   const AdminBannersScreen({super.key});
@@ -41,7 +42,7 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
 
     if (confirm == true) {
       try {
-        final docSnap = await _db.collection('promo_banners').doc(id).get();
+        final docSnap = await _db.collection('promo_banners').doc(id).get().timeout(kNetCallTimeout);
         if (docSnap.exists) {
           final data = docSnap.data();
           final String? imageUrl = data?['imageUrl'];

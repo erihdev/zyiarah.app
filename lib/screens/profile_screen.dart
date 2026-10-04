@@ -16,6 +16,7 @@ import 'package:zyiarah/screens/store_screen.dart';
 import 'package:zyiarah/services/zyiarah_wallet_service.dart';
 import 'package:zyiarah/services/zyiarah_referral_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class ZyiarahProfileScreen extends StatefulWidget {
   const ZyiarahProfileScreen({super.key});
@@ -76,7 +77,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
       return;
     }
     try {
-      final doc = await _firestore.collection('users').doc(uid).get();
+      final doc = await _firestore.collection('users').doc(uid).get().timeout(kNetCallTimeout);
       if (mounted && doc.exists) {
         setState(() {
           _currentUser = ZyiarahUser.fromMap(uid, doc.data()!);
@@ -94,7 +95,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
           .collection('orders')
           .where('client_id', isEqualTo: uid)
           .count()
-          .get();
+          .get().timeout(kNetCallTimeout);
       if (mounted) setState(() => _totalBookings = agg.count);
     } catch (_) {/* غير حرِج — تبقى — */}
     // Load wallet and referral in parallel after user data

@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:zyiarah/models/notification_item.dart';
 import 'package:zyiarah/theme/app_theme.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// مركز تنبيهات العميل (تصميم Stitch، 2026-09-16).
 ///
@@ -64,7 +65,7 @@ class _ClientNotificationsScreenState extends State<ClientNotificationsScreen> {
           .where('userId', isEqualTo: uid)
           .startAfterDocument(cursor)
           .limit(_pageSize)
-          .get();
+          .get().timeout(kNetCallTimeout);
       if (!mounted) return;
       setState(() {
         _olderDocs.addAll(snap.docs);
@@ -345,7 +346,7 @@ class _ClientNotificationsScreenState extends State<ClientNotificationsScreen> {
   // users/{uid}.notification_prefs.marketing ويقرؤه الخادم عند كل بثّ تسويقي.
   Future<bool> _loadPref(String uid) async {
     if (widget.loadMarketingPref != null) return widget.loadMarketingPref!();
-    final d = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final d = await FirebaseFirestore.instance.collection('users').doc(uid).get().timeout(kNetCallTimeout);
     final prefs = d.data()?['notification_prefs'];
     return prefs is Map ? prefs['marketing'] != false : true;
   }

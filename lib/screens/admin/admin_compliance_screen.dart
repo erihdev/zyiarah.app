@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/screens/admin/admin_drivers_screen.dart';
 import 'package:zyiarah/services/firebase_service.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminComplianceScreen extends StatefulWidget {
   const AdminComplianceScreen({super.key});
@@ -338,7 +339,7 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
           .collection('drivers')
           .where('id_expiry', isGreaterThan: '1900-01-01')
           .where('id_expiry', isLessThanOrEqualTo: soon)
-          .get();
+          .get().timeout(kNetCallTimeout);
       int count = 0;
       for (var doc in docs.docs) {
         final data = doc.data();

@@ -15,6 +15,7 @@ import 'package:zyiarah/screens/moyasar_card_screen.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
 import 'package:zyiarah/utils/vat.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// شاشة دفع طلب المتجر — تُفتح فور إنشاء الطلب (طلب مباشر، لا موافقة مسبقة).
 /// طرق الدفع المعتمدة: ميسر (بطاقة) + تمارا. لا دفع عند الاستلام — أُزيل من الجذور.
@@ -72,7 +73,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
           .where('client_id', isEqualTo: uid)
           .orderBy('created_at', descending: true)
           .limit(5)
-          .get();
+          .get().timeout(kNetCallTimeout);
       for (final d in snap.docs) {
         final m = d.data();
         // نتخطى زيارات الاشتراك المولّدة (sub_*) والمواقع الموروثة لا المُلتقطة
@@ -127,7 +128,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
       final doc = await FirebaseFirestore.instance
           .collection('system_configs')
           .doc('main_settings')
-          .get();
+          .get().timeout(kNetCallTimeout);
       if (mounted) {
         setState(() =>
             _tamaraEnabled = doc.data()?['tamara_enabled'] as bool? ?? false);

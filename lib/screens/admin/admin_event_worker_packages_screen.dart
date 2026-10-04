@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminEventWorkerPackagesScreen extends StatefulWidget {
   const AdminEventWorkerPackagesScreen({super.key});
@@ -134,7 +135,7 @@ class _AdminEventWorkerPackagesScreenState extends State<AdminEventWorkerPackage
                             .collection('event_worker_packages')
                             .orderBy('rank', descending: true)
                             .limit(1)
-                            .get();
+                            .get().timeout(kNetCallTimeout);
                         final maxRank = top.docs.isEmpty
                             ? 0
                             : (top.docs.first.data()['rank'] as num? ?? 0)

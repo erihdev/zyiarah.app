@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:ui';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminSettingsScreen extends StatefulWidget {
   const AdminSettingsScreen({super.key});
@@ -50,7 +51,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   Future<void> _fetchPricing() async {
     try {
       if (_loadFailed && mounted) setState(() => _loadFailed = false);
-      final doc = await _db.collection('system_configs').doc('main_settings').get();
+      final doc = await _db.collection('system_configs').doc('main_settings').get().timeout(kNetCallTimeout);
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
         if (mounted) {
@@ -74,7 +75,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
           // (باقات السكن) لم يتبقَّ من hourly_settings إلا **السعة اليومية** —
           // allowed_hours/max_workers كانا يُعرضان ويُحفظان بلا أي قارئ (العميل
           // صار يختار باقةً وكوادرها من تسعير المنطقة، لا ساعات ولا عدد عاملات).
-          final hourlyDoc = await _db.collection('system_configs').doc('hourly_settings').get();
+          final hourlyDoc = await _db.collection('system_configs').doc('hourly_settings').get().timeout(kNetCallTimeout);
           if (mounted) {
             setState(() {
               _maxOrdersPerDayCtrl.text =
@@ -86,7 +87,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
           // (يقرؤه app_update_service.dart لإجبار المستخدمين على التحديث).
           try {
             final updDoc =
-                await _db.collection('system_configs').doc('app_update').get();
+                await _db.collection('system_configs').doc('app_update').get().timeout(kNetCallTimeout);
             if (updDoc.exists && updDoc.data() != null && mounted) {
               final u = updDoc.data()!;
               setState(() {

@@ -22,6 +22,7 @@ import 'package:go_router/go_router.dart';
 import 'package:zyiarah/screens/driver_tasks_screen.dart';
 import 'package:zyiarah/screens/driver_notifications_screen.dart';
 import 'package:zyiarah/screens/driver_profile_screen.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
@@ -88,7 +89,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
   Future<void> _ensureAlwaysAvailable() async {
     if (_currentDriverId == null) return;
     final ref = FirebaseFirestore.instance.collection('drivers').doc(_currentDriverId);
-    final doc = await ref.get();
+    final doc = await ref.get().timeout(kNetCallTimeout);
     if (!mounted) return;
     final data = doc.data();
     setState(() => _driverName = data?['name'] as String? ?? 'السائق');
@@ -1301,7 +1302,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     _proximityChecked.add(orderId);
     try {
       final docRef = FirebaseFirestore.instance.collection('orders').doc(orderId);
-      final doc = await docRef.get();
+      final doc = await docRef.get().timeout(kNetCallTimeout);
       final data = doc.data();
 
       if (data != null && data['proximity_notified'] != true) {
@@ -1387,7 +1388,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     final message = "بلاغ عن الطلب #$orderId: لدي مشكلة في هذا الطلب — السائق: $_currentDriverId";
     String? adminPhone;
     try {
-      final configDoc = await FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get();
+      final configDoc = await FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get().timeout(kNetCallTimeout);
       adminPhone = (configDoc.data()?['support_whatsapp'] ?? configDoc.data()?['admin_whatsapp'])?.toString();
     } catch (_) {
       // قراءة فاشلة (أوفلاين غالباً) — نُبلغ أدناه بدل المتابعة برقم وهمي
@@ -1412,7 +1413,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     if (_isUpdatingStatus) return;
     setState(() => _isUpdatingStatus = true);
     try {
-      final doc = await FirebaseFirestore.instance.collection('orders').doc(id).get();
+      final doc = await FirebaseFirestore.instance.collection('orders').doc(id).get().timeout(kNetCallTimeout);
       final data = doc.data();
       if (data == null) return;
 
