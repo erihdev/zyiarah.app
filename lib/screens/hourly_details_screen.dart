@@ -14,6 +14,7 @@ import 'package:zyiarah/utils/home_packages.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
 import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/vat.dart';
+import 'package:zyiarah/utils/date_strip.dart';
 
 
 class HourlyCleaningDetailsScreen extends StatefulWidget {
@@ -37,6 +38,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   // (max_orders_per_day) تضبطها الإدارة من الإعدادات، ووقت البدء الفعلي يُرسى
   // على ساعة فتح المنطقة وتعدّله الإدارة من «تعديل الزيارة» عند الحاجة.
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
+  final ScrollController _dateStripCtrl = ScrollController();
   bool _isLoading = true;
 
   /// مراقبة تنقّل العميل: يعاد التحديد بصمت دورياً وعند العودة للتطبيق،
@@ -252,6 +254,9 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           }
         }
       });
+
+      // الشريط لا يتبع الاختيار من تلقائه — أظهِر اليومَ المنتقَل إليه.
+      _revealSelectedDate();
     } catch (e) {
       // **لا نبتلع الفشل بصمت.** كان هذا الـ catch يكتفي بإطفاء الدوّار، فتبقى
       // ‎_dailyOrderCounts فارغة ⇒ عدّاد كل تاريخ = 0 ⇒ ‎`_dayCapacityFull`
@@ -646,6 +651,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   void dispose() {
     _zoneWatch?.cancel();
     WidgetsBinding.instance.removeObserver(this);
+    _dateStripCtrl.dispose();
     super.dispose();
   }
 
@@ -914,6 +920,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                           }
                         }
                       });
+                      // مدّةٌ أطول قد تنقل الاختيار بعيداً — أظهِره.
+                      _revealSelectedDate();
                     },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
@@ -961,6 +969,26 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     );
   }
 
+  /// أظهِر البطاقة المختارة في الشريط بعد انتقال الاختيار تلقائياً.
+  /// بدونها يبقى الشريط عند أوّل العناصر والاختيارُ خارج الشاشة أو مقتطعاً عند
+  /// حرفها — انظر رأس `lib/utils/date_strip.dart`.
+  void _revealSelectedDate() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_dateStripCtrl.hasClients) return;
+      final int i = dateStripIndexOf(_selectedDate, DateTime.now());
+      if (i <= 0) return; // الفهرس ٠ عند الحرف أصلاً، و‎-١‎ خارج الشريط
+      _dateStripCtrl.animateTo(
+        dateStripOffsetFor(
+          index: i,
+          viewportWidth: _dateStripCtrl.position.viewportDimension,
+          maxOffset: _dateStripCtrl.position.maxScrollExtent,
+        ),
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
   Widget _buildDateSelector() {
     // تعذّر معرفة الإتاحة ⇒ لا نرسم تقويماً أخضر كاذباً. الأخضر وعدٌ بوجود سائق.
     if (_availabilityError) {
@@ -1004,6 +1032,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     return SizedBox(
       height: 82,
       child: ListView.builder(
+        controller: _dateStripCtrl,
         scrollDirection: Axis.horizontal,
         itemCount: 30,
         itemBuilder: (context, index) {

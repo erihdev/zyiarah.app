@@ -11,6 +11,7 @@ import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/services/zone_locator_service.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
 import 'package:zyiarah/utils/day_capacity.dart';
+import 'package:zyiarah/utils/date_strip.dart';
 
 class ZyiarahSubscriptionPlansScreen extends StatefulWidget {
   const ZyiarahSubscriptionPlansScreen({super.key});
@@ -32,6 +33,7 @@ class _ZyiarahSubscriptionPlansScreenState
   // --- NEW CAPACITY AND BOOKING FIELDS ---
   int? _selectedPackageIndex;
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
+  final ScrollController _dateStripCtrl = ScrollController();
   int? _selectedStartHour;
   Map<int, bool> _slotAvailability = {};
   bool _checkingSlots = false;
@@ -71,6 +73,7 @@ class _ZyiarahSubscriptionPlansScreenState
 
   @override
   void dispose() {
+    _dateStripCtrl.dispose();
     super.dispose();
   }
 
@@ -264,6 +267,9 @@ class _ZyiarahSubscriptionPlansScreenState
           }
         }
       });
+
+      // الشريط لا يتبع الاختيار من تلقائه — أظهِر اليومَ المنتقَل إليه.
+      _revealSelectedDate();
 
       // بعد تحميل البيانات: احسب إتاحة الخانات من الـ cache مباشرة
       if (_selectedPackageIndex != null) {
@@ -769,6 +775,26 @@ class _ZyiarahSubscriptionPlansScreenState
     );
   }
 
+  /// أظهِر البطاقة المختارة في الشريط بعد انتقال الاختيار تلقائياً.
+  /// بدونها يبقى الشريط عند أوّل العناصر والاختيارُ خارج الشاشة أو مقتطعاً عند
+  /// حرفها — انظر رأس `lib/utils/date_strip.dart`.
+  void _revealSelectedDate() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_dateStripCtrl.hasClients) return;
+      final int i = dateStripIndexOf(_selectedDate, DateTime.now());
+      if (i <= 0) return; // الفهرس ٠ عند الحرف أصلاً، و‎-١‎ خارج الشريط
+      _dateStripCtrl.animateTo(
+        dateStripOffsetFor(
+          index: i,
+          viewportWidth: _dateStripCtrl.position.viewportDimension,
+          maxOffset: _dateStripCtrl.position.maxScrollExtent,
+        ),
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
   Widget _buildSubscriptionDatePicker() {
     if (_loadingDailyCounts) {
       return const SizedBox(
@@ -812,6 +838,7 @@ class _ZyiarahSubscriptionPlansScreenState
     return SizedBox(
       height: 82,
       child: ListView.builder(
+        controller: _dateStripCtrl,
         scrollDirection: Axis.horizontal,
         itemCount: 30,
         itemBuilder: (context, index) {
