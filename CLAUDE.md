@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Working with the owner
+
+Replies to the owner are **short and neutral**: state what happened, what is left, and the
+next action. No build-up, no praise, no restating the request, no selling the work —
+findings in a line or two each, detail only where a decision depends on it. Full rationale
+belongs in this file, the commit message and the PR body, not in chat. (Owner request,
+2026-10-04.)
+
 ## Project Overview
 
 Zyiarah is a Flutter-based service booking platform (cleaning services) targeting iOS and Android. It includes a React/TypeScript admin web panel and a Firebase Cloud Functions backend. The app supports three user roles: **client**, **driver**, and **admin** (sub-types: super_admin, orders_manager, accountant_admin, marketing_admin).
