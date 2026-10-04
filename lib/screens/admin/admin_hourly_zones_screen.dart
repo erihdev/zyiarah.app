@@ -15,6 +15,7 @@ import 'package:zyiarah/utils/firestore_maps.dart';
 import 'package:zyiarah/screens/admin/admin_zone_schedule_editor.dart';
 import 'package:zyiarah/utils/jazan_boundary.dart';
 import 'package:zyiarah/utils/home_packages.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// حقل سعر ساعة العاملة الواحدة في وثيقة المنطقة — **قبل الضريبة**.
 /// (منقول هنا بعد حذف lib/screens/event_workers_details_screen.dart —
@@ -108,7 +109,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
   /// منتقي المناطق: كل المدن كمربعات اختيار + «تحديد الكل». يُرجع المعرّفات
   /// المختارة أو null عند الإلغاء. الاختيار الصريح هو التأكيد — لا حوار ثانٍ.
   Future<Set<String>?> _pickTargetZones(BuildContext ctx) async {
-    final snap = await _db.collection('service_zones').get();
+    final snap = await _db.collection('service_zones').get().timeout(kNetCallTimeout);
     if (!ctx.mounted) return null;
     final zones = snap.docs;
     final selected = <String>{};
@@ -883,7 +884,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                             .collection('service_zones')
                             .orderBy('rank', descending: true)
                             .limit(1)
-                            .get();
+                            .get().timeout(kNetCallTimeout);
                         final maxRank = top.docs.isEmpty
                             ? 0
                             : (top.docs.first.data()['rank'] as num? ?? 0)

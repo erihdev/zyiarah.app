@@ -12,6 +12,7 @@ import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/services/counter_service.dart';
 import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/utils/vat.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class TamaraCheckoutScreen extends StatefulWidget {
   final String checkoutUrl;
@@ -116,7 +117,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                 String clientPhone = widget.customerPhone ?? 'غير متوفر';
                 if (user != null) {
                   try {
-                    final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+                    final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get().timeout(kNetCallTimeout);
                     if (userDoc.exists) {
                       clientName = userDoc.data()?['name'] ?? clientName;
                       clientPhone = userDoc.data()?['phone'] ?? clientPhone;
@@ -147,7 +148,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                   // الإنشاء والإسناد — يتكفّل sweepUnassignedPaidOrders بالإسناد بعد
                   // أن يقلب tamaraWebhook is_paid=true.
                   final existingOrder = await FirebaseFirestore.instance
-                      .collection('orders').doc(widget.orderId).get();
+                      .collection('orders').doc(widget.orderId).get().timeout(kNetCallTimeout);
                   if (existingOrder.exists) {
                     tamaraOrderCode = existingOrder.data()?['code'] ?? widget.orderId;
                     await ZyiarahMessagingService().notifyOrderCreated(
@@ -266,7 +267,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
               if (widget.contractId != null) {
                 orderCode = widget.contractId!;
               } else {
-                final orderDoc = await FirebaseFirestore.instance.collection('orders').doc(newOrderId).get();
+                final orderDoc = await FirebaseFirestore.instance.collection('orders').doc(newOrderId).get().timeout(kNetCallTimeout);
                 orderCode = orderDoc.data()?['code'] ?? newOrderId.substring(0, 8).toUpperCase();
               }
 

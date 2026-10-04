@@ -14,6 +14,7 @@ import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:zyiarah/utils/status_util.dart';
 import '../../utils/order_lifecycle.dart';
 import 'package:zyiarah/screens/map_screen.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminOrderDetailsScreen extends StatefulWidget {
   final String orderId;
@@ -100,12 +101,12 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   Future<void> _fetchOrder() async {
     if (mounted) setState(() { _isLoading = true; _fetchError = false; });
     try {
-      final doc = await _db.collection('orders').doc(widget.orderId).get();
+      final doc = await _db.collection('orders').doc(widget.orderId).get().timeout(kNetCallTimeout);
 
       // Try maintenance collection if not in orders
       DocumentSnapshot? finalDoc = doc;
       if (!finalDoc.exists) {
-        finalDoc = await _db.collection('maintenance_requests').doc(widget.orderId).get();
+        finalDoc = await _db.collection('maintenance_requests').doc(widget.orderId).get().timeout(kNetCallTimeout);
         // كل الكتابات أدناه كانت تستهدف orders دائماً — حفظ تعديلٍ على طلب صيانة
         // كان يرمي not-found بصمت. نتتبع المجموعة المصدر ونكتب عليها هي.
         if (finalDoc.exists) _srcCollection = 'maintenance_requests';
@@ -122,7 +123,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
         final userId = data['client_id'] ?? data['userId'];
         if (userId != null && (phone == null || name == null)) {
           try {
-            final userDoc = await _db.collection('users').doc(userId).get();
+            final userDoc = await _db.collection('users').doc(userId).get().timeout(kNetCallTimeout);
             if (userDoc.exists) {
               final userData = userDoc.data() as Map<String, dynamic>;
               phone ??= userData['phone'];
@@ -165,7 +166,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
       final snapshot = await _db
           .collection('drivers')
           .where('is_active', isEqualTo: true)
-          .get();
+          .get().timeout(kNetCallTimeout);
 
       if (mounted) {
         setState(() {

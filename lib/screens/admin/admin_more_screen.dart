@@ -26,6 +26,7 @@ import 'package:zyiarah/utils/pdf_report_util.dart';
 import 'package:zyiarah/utils/zyiarah_strings.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminMoreScreen extends StatelessWidget {
   final String role;
@@ -400,7 +401,7 @@ class AdminMoreScreen extends StatelessWidget {
           .collection('orders')
           .orderBy('created_at', descending: true)
           .limit(2000)
-          .get();
+          .get().timeout(kNetCallTimeout);
       final buffer = StringBuffer();
       buffer.writeln('الكود,التاريخ,الخدمة,العميل,المبلغ,الحالة');
       for (final doc in snap.docs) {
@@ -429,7 +430,7 @@ class AdminMoreScreen extends StatelessWidget {
           .collection('orders')
           .orderBy('created_at', descending: true)
           .limit(2000)
-          .get();
+          .get().timeout(kNetCallTimeout);
       double revenue = 0;
       int active = 0;
       for (final doc in snap.docs) {

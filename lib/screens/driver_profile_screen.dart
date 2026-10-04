@@ -6,6 +6,7 @@ import 'package:zyiarah/services/firebase_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class DriverProfileScreen extends StatefulWidget {
   final VoidCallback? onLogout;
@@ -410,7 +411,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
       final doc = await FirebaseFirestore.instance
           .collection('system_configs')
           .doc('main_settings')
-          .get();
+          .get().timeout(kNetCallTimeout);
       adminPhone = (doc.data()?['support_whatsapp'] ?? doc.data()?['admin_whatsapp'])?.toString();
     } catch (_) {
       // قراءة فاشلة (أوفلاين غالباً) — نُبلغ أدناه بدل المتابعة برقم وهمي

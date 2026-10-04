@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/utils/vat.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class ZyiarahContractSigningScreen extends StatefulWidget {
   final String planName;
@@ -78,7 +79,7 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
   Future<void> _loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get().timeout(kNetCallTimeout);
       if (doc.exists && mounted) {
         setState(() {
           _userName = doc.data()?['name'] ?? user.displayName ?? 'عميل زيارة';
@@ -88,7 +89,7 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
     }
 
     try {
-      final configDoc = await FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get();
+      final configDoc = await FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get().timeout(kNetCallTimeout);
       if (configDoc.exists && mounted) {
         final terms = configDoc.data()?['contract_terms'] as String?;
         if (terms != null && terms.trim().isNotEmpty) {
@@ -132,7 +133,7 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
       final contractId = 'CTR-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
 
       // Re-fetch latest user data to be 100% sure we have the name
-      final userDoc = await firestore.collection('users').doc(user?.uid).get();
+      final userDoc = await firestore.collection('users').doc(user?.uid).get().timeout(kNetCallTimeout);
       final String finalName = userDoc.data()?['name'] ?? user?.displayName ?? 'عميل زيارة';
       final String finalPhone = userDoc.data()?['phone'] ?? user?.phoneNumber ?? 'غير مسجل';
 

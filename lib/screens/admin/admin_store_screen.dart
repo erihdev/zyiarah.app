@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminStoreScreen extends StatefulWidget {
   // قاعدة /products في firestore.rules تحصر الكتابة بـ isMarketingAdmin
@@ -68,7 +69,7 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
 
     if (confirm == true) {
       try {
-        final docSnap = await _db.collection('products').doc(id).get();
+        final docSnap = await _db.collection('products').doc(id).get().timeout(kNetCallTimeout);
         // data() تُعيد null أصلاً لغير الموجود — بلا ثلاثية: «?[» داخلها يُربك المحلل.
         final String? imageUrl = docSnap.data()?['image_url'] as String?;
 

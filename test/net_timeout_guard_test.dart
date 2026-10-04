@@ -46,7 +46,7 @@ String _code(String path) {
   return out.join();
 }
 
-/// الشاشاتُ التي تنتظر الشبكةَ خلف مؤشّرِ تحميلٍ للعميلة.
+/// الشاشاتُ التي بُدئ بها الإصلاح — تبقى مذكورةً لأنّ فحوصاً بعينها تخصّها.
 const List<String> _screens = [
   'lib/screens/hourly_details_screen.dart',
   'lib/screens/subscription_plans_screen.dart',
@@ -55,26 +55,75 @@ const List<String> _screens = [
   'lib/screens/signup_screen.dart',
 ];
 
-void main() {
-  test('كلُّ نداءِ دالّةٍ سحابيّة في شاشات الحجز له مهلة', () {
-    final offenders = <String>[];
-    for (final p in _screens) {
-      final src = _code(p);
-      // `.call({...})` ينتهي بـ`});` — نطلب `.timeout(` بعدها مباشرةً.
-      for (final m in RegExp(r'\.call\(\{[\s\S]*?\n\s*\}\)(\.timeout\()?')
+/// **كلُّ** شاشة — القاعدةُ أدناه عامّة: لا قراءةَ Firestore بلا مهلة في أيٍّ
+/// منها. بُدئ بخمسٍ ثمّ وُسِّع إلى الـ٤١ كلِّها حين تبيّن أنّ العطل عامّ:
+/// ٤١ قراءةً بلا مهلة في ٢٠ ملفّاً.
+List<File> _allScreens() => Directory('lib/screens')
+    .listSync(recursive: true)
+    .whereType<File>()
+    .where((f) => f.path.endsWith('.dart'))
+    .toList();
+
+/// ملفّاتٌ نداءاتُها السحابيّة **تُغيّر حالة** لا تقرأ — مهلتُها قرارٌ مختلف.
+/// «انقضت المهلة» ليست «لم يحدث شيء»: قد يكون الخادمُ نفّذ. فرسالةُ «فشل» بعد
+/// استردادٍ نجح تدفع الأدمنَ لإعادته. تُترك بلا مهلة عمداً حتى يُقرَّر لكلٍّ منها
+/// نصٌّ يقول «لا نعرف»، وهو قرارُ المالك لا مسحٌ آليّ.
+///
+/// (شاشةُ الدفع ليست هنا: نداءاتُها الخمسة مُؤمَّنة أصلاً — verifyMoyasarPayment
+///  مُغلَّف بـcatch يصمت عمداً لأنّ المُصالِح الدوري يضمن الطلب، وpayWithWallet
+///  idempotent خادميّاً، والمعالجُ الخارجيّ لا يُظهر خطأً بعد دفعٍ بمعرّف إطلاقاً
+///  ويقول للمحفظة «لن يُخصم منك مرتين». المهلةُ هناك تُتيح هذا السلوك لا تُغيّره.)
+const Map<String, String> _statefulCallFiles = {
+  'lib/screens/admin/admin_order_details_screen.dart':
+      'استرداد/إلغاء/تحصيل + إسناد سائق + نقل موعد',
+  'lib/screens/admin/admin_drivers_screen.dart': 'حذفُ حساب سائق',
+};
+
+/// مواضعُ نداءِ دالّةٍ سحابيّة بلا مهلة في مصدرٍ مُقنَّع.
+///
+/// الارتكازُ على `httpsCallable` إلزاميّ: مطابقةُ `.call(` وحدَها تلتقط
+/// `onTap?.call()` وأمثالَه — وهو ما حدث فعلاً وكشفه هذا الفحص على نفسه.
+int _bareCallableCalls(String src) {
+  var n = 0;
+  for (final m
+      in RegExp(r'\.call\(\s*(?:\{[\s\S]*?\n\s*\})?\s*\)(\s*\.timeout\()?')
           .allMatches(src)) {
-        if (m.group(1) == null) offenders.add('$p  ←  httpsCallable بلا مهلة');
-      }
+    if (m.group(1) != null) continue;
+    final from = (m.start - 220).clamp(0, src.length);
+    if (!src.substring(from, m.start).contains('httpsCallable')) continue;
+    n++;
+  }
+  return n;
+}
+
+void main() {
+  test('كلُّ نداءِ دالّةٍ سحابيّة له مهلة، إلّا المُغيِّرةَ للحالة صراحةً', () {
+    final offenders = <String>[];
+    for (final f in _allScreens()) {
+      final p = f.path.replaceAll(r'\', '/');
+      if (_statefulCallFiles.containsKey(p)) continue;
+      final n = _bareCallableCalls(_code(p));
+      if (n > 0) offenders.add('$p  ←  $n نداءً سحابيّاً بلا مهلة');
     }
     expect(offenders, isEmpty,
         reason: '\n\nنداءٌ سحابيٌّ بلا مهلة: حين لا يردّ الخادم ولا يرمي، يبقى\n'
             'مؤشّرُ التحميل دائراً ولا تُعرض واجهةُ الخطأ المكتوبة أصلاً.\n'
+            'إن كان النداءُ يُغيّر حالةً فأضِف ملفَّه إلى _statefulCallFiles بسببٍ مكتوب.\n'
             '  • ${offenders.join('\n  • ')}\n');
   });
 
-  test('كلُّ قراءةِ Firestore ينتظرها مؤشّرُ تحميل لها مهلة', () {
+  test('قائمةُ الاستثناء لا تتعفّن — كلُّ ملفٍّ فيها ما زال يحمل نداءً بلا مهلة', () {
+    // قائمةٌ تُجيز ما لم يعد موجوداً تتعفّن (كما تعفّن شاهدُ COD في status_util).
+    _statefulCallFiles.forEach((p, why) {
+      expect(_bareCallableCalls(_code(p)), greaterThan(0),
+          reason: '$p لم يعد يحمل نداءً بلا مهلة ($why) — أزِله من القائمة');
+    });
+  });
+
+  test('كلُّ قراءةِ Firestore في كلّ شاشة لها مهلة', () {
     final offenders = <String>[];
-    for (final p in _screens) {
+    for (final f in _allScreens()) {
+      final p = f.path.replaceAll(r'\', '/');
       final src = _code(p);
       for (final m in RegExp(r'await\s+[\s\S]{0,180}?\.get\(\)(\s*\.timeout\()?')
           .allMatches(src)) {

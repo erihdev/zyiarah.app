@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminCouponsScreen extends StatefulWidget {
   const AdminCouponsScreen({super.key});
@@ -30,7 +31,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
 
   Future<void> _fetchZones() async {
     try {
-      final snapshot = await _db.collection('service_zones').get();
+      final snapshot = await _db.collection('service_zones').get().timeout(kNetCallTimeout);
       if (!mounted) return; // كان بلا حارس → setState بعد dispose عند مغادرة الشاشة أثناء التحميل
       setState(() {
         _availableZones = snapshot.docs.map((d) => (d.data()['name'] ?? '').toString()).toList();
@@ -54,7 +55,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
       });
     }
     try {
-      final snapshot = await _db.collection('promo_codes').get();
+      final snapshot = await _db.collection('promo_codes').get().timeout(kNetCallTimeout);
       if (mounted) {
         setState(() {
           _coupons = snapshot.docs;
@@ -438,7 +439,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                           final dup = await _db
                               .collection('promo_codes')
                               .where('code', isEqualTo: newData['code'] as String)
-                              .get();
+                              .get().timeout(kNetCallTimeout);
                           if (dup.docs.any((d) => d.id != doc.id)) {
                             setDialogState(() {
                               isSaving = false;
