@@ -145,4 +145,141 @@ void main() {
       expect(s.contains('homeLabel'), isTrue);
     });
   });
+
+  // ────────────────── الحالةُ الفارغة: ثلاثُ حالاتٍ لا واحدة ──────────────────
+  // «لا توجد باقات مسعّرة **في منطقتك**» كانت تُقال قبل تحديد المنطقة، فتناقض
+  // بطاقةَ الموقع التي تقول في الشاشة نفسها «موقعك خارج نطاق خدماتنا».
+  group('homePackagesView', () {
+    HomePackage pkg(String type, List<CrewOption> opts) =>
+        HomePackage(type: type, desc: '', durationHours: 4, options: opts);
+
+    final withPrice = [pkg('small', const [CrewOption(1, 200)])];
+    final noPrice = [pkg('small', const []), pkg('villa', const [])];
+
+    test('خيارٌ مسعّرٌ واحد يكفي لعرض البطاقات', () {
+      expect(homePackagesView(packages: withPrice, zoneName: 'صبيا'),
+          HomePackagesView.packages);
+    });
+
+    test('خيارٌ مسعّرٌ يُعرض حتى قبل معرفة اسم المنطقة', () {
+      // لا نحجب سعراً بيدنا لأنّ الاسم لم يصل — العرضُ أسبقُ من التسمية.
+      expect(homePackagesView(packages: withPrice, zoneName: null),
+          HomePackagesView.packages);
+    });
+
+    test('لا منطقةَ ولا باقات ⇒ لا تُقال دعوى عن «منطقتك»', () {
+      expect(homePackagesView(packages: const [], zoneName: null),
+          HomePackagesView.noZone);
+      expect(homePackagesView(packages: noPrice, zoneName: null),
+          HomePackagesView.noZone);
+    });
+
+    test('اسمٌ فارغٌ أو مسافاتٌ = لا منطقة', () {
+      for (final z in <String>['', '   ', '\t']) {
+        expect(homePackagesView(packages: noPrice, zoneName: z),
+            HomePackagesView.noZone,
+            reason: 'اسمٌ خالٍ ليس منطقةً محدَّدة');
+      }
+    });
+
+    test('منطقةٌ محدَّدة بلا خيارٍ مسعّر ⇒ الدعوى صحيحةٌ هنا وحدها', () {
+      expect(homePackagesView(packages: noPrice, zoneName: 'صبيا'),
+          HomePackagesView.zoneWithoutPackages);
+      expect(homePackagesView(packages: const [], zoneName: 'صبيا'),
+          HomePackagesView.zoneWithoutPackages);
+    });
+
+    test('الشاشة تفرّق الحالتين، ودعوى «في منطقتك» مقيَّدةٌ بالمنطقة', () {
+      final s =
+          File('lib/screens/hourly_details_screen.dart').readAsStringSync();
+      expect(s.contains('homePackagesView('), isTrue,
+          reason: 'الشاشة لا تستعمل التفريق — الرسالةُ الواحدة عادت');
+      expect(s.contains('HomePackagesView.noZone'), isTrue);
+      // لا دعوى عن «منطقتك» بلا اسمِ منطقةٍ مُدرجٍ في النصّ.
+      expect(s.contains('لا توجد باقات مسعّرة في منطقتك'), isFalse,
+          reason: 'هذه هي الصيغةُ التي تُقال قبل تحديد المنطقة — أُزيلت');
+      expect(s.contains('لا توجد باقات مسعّرة في «\$_selectedZoneName»'), isTrue,
+          reason: 'الدعوى تُسمّي منطقتها، فلا تُقال إلّا بوجودها');
+      expect(s.contains('حدّدي موقعك أولاً لعرض الباقات وأسعارها'), isTrue,
+          reason: 'حالةُ «لا منطقة» تطلب الخطوةَ المطلوبة فعلاً');
+    });
+  });
+
+  // ─────────── مدّةُ فحصِ الإتاحة: لا تُلوَّن الأيّام بمدّةٍ وهمية ───────────
+  group('homeStripDurationHours', () {
+    HomePackage pkg(String type, int hours, bool sellable) => HomePackage(
+        type: type,
+        desc: '',
+        durationHours: hours,
+        options: sellable ? const [CrewOption(1, 200)] : const []);
+
+    final zone = [
+      pkg('small', 4, true),
+      pkg('medium', 6, true),
+      pkg('villa', 8, true),
+    ];
+
+    test('باقةٌ مختارة ⇒ مدّتُها هي الفترةُ المحجوزة', () {
+      expect(
+          homeStripDurationHours(packages: zone, selectedType: 'villa'), 8);
+      expect(
+          homeStripDurationHours(packages: zone, selectedType: 'small'), 4);
+    });
+
+    test('بلا اختيار ⇒ أقصرُ مدّةٍ مسعّرة، فلا يُستبعَد يومٌ متّسعٌ لباقةٍ تُشترى',
+        () {
+      expect(homeStripDurationHours(packages: zone, selectedType: null), 4);
+    });
+
+    test('أقصرُ **مسعّرةٍ** لا أقصرُ موجودة — المعطّلةُ لا تُشترى', () {
+      final z = [
+        pkg('small', 4, false), // معطّلةٌ في هذه المنطقة
+        pkg('medium', 6, true),
+        pkg('villa', 8, true),
+      ];
+      expect(homeStripDurationHours(packages: z, selectedType: null), 6,
+          reason: 'لا نتساهل بمدّةِ باقةٍ لا تستطيع شراءها');
+    });
+
+    test('نوعٌ مختارٌ عُطّل هنا ⇒ لا تبقى مدّتُه (مدّةُ منطقةٍ أخرى)', () {
+      // هذا هو العطبُ نفسه: الاختيارُ يُصفَّر والمدّةُ كانت تبقى ٨ فيُلوَّن
+      // الشريطُ بها ويُحمَّر يومٌ متّسعٌ للستّ.
+      final z = [pkg('medium', 6, true), pkg('villa', 8, false)];
+      expect(homeStripDurationHours(packages: z, selectedType: 'villa'), 6);
+    });
+
+    test('لا باقةَ مسعّرةً بالمرّة ⇒ الافتراضي', () {
+      expect(homeStripDurationHours(packages: const [], selectedType: null), 4);
+      expect(
+          homeStripDurationHours(
+              packages: [pkg('small', 4, false)], selectedType: 'small'),
+          4);
+      expect(
+          homeStripDurationHours(
+              packages: const [], selectedType: null, fallback: 6),
+          6);
+    });
+
+    test('فحصُ الإتاحة في الشاشة يقرأ المشتقّ لا الحقل', () {
+      final s =
+          File('lib/screens/hourly_details_screen.dart').readAsStringSync();
+      final int i = s.indexOf('int? _firstFeasibleStart(');
+      expect(i, greaterThan(0));
+      final String body = s.substring(i, s.indexOf('bool _dayCapacityFull', i));
+      expect(body.contains('_availabilityHours'), isTrue,
+          reason: 'الفحص يقرأ الحقلَ المباشر ⇒ مدّةُ منطقةٍ أخرى تُلوّن الشريط');
+      expect(body.contains('_durationHours'), isFalse,
+          reason: '`_durationHours` للطلب نفسه، لا لتلوين الأيّام');
+      expect(s.contains('homeStripDurationHours('), isTrue,
+          reason: 'القاعدةُ في الوحدة لا منسوخةً في الشاشة');
+    });
+
+    test('مدّةُ الطلب المُرسَلة تبقى مدّةَ الباقة المختارة', () {
+      final s =
+          File('lib/screens/hourly_details_screen.dart').readAsStringSync();
+      expect(s.contains('hours: _durationHours'), isTrue);
+      expect(s.contains("'durationHours': _durationHours"), isTrue,
+          reason: 'لا يُرسَل للخادم أقصرُ مدّةٍ في المنطقة بل مدّةُ ما اختارته');
+    });
+  });
 }

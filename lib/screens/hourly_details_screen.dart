@@ -14,6 +14,7 @@ import 'package:zyiarah/utils/home_packages.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
 import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/vat.dart';
+import 'package:zyiarah/utils/date_strip.dart';
 
 
 class HourlyCleaningDetailsScreen extends StatefulWidget {
@@ -37,6 +38,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   // (max_orders_per_day) تضبطها الإدارة من الإعدادات، ووقت البدء الفعلي يُرسى
   // على ساعة فتح المنطقة وتعدّله الإدارة من «تعديل الزيارة» عند الحاجة.
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
+  final ScrollController _dateStripCtrl = ScrollController();
   bool _isLoading = true;
 
   /// مراقبة تنقّل العميل: يعاد التحديد بصمت دورياً وعند العودة للتطبيق،
@@ -252,6 +254,9 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           }
         }
       });
+
+      // الشريط لا يتبع الاختيار من تلقائه — أظهِر اليومَ المنتقَل إليه.
+      _revealSelectedDate();
     } catch (e) {
       // **لا نبتلع الفشل بصمت.** كان هذا الـ catch يكتفي بإطفاء الدوّار، فتبقى
       // ‎_dailyOrderCounts فارغة ⇒ عدّاد كل تاريخ = 0 ⇒ ‎`_dayCapacityFull`
@@ -481,15 +486,23 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     return _openHours[key] ?? const [8, 22];
   }
 
+  /// المدّةُ التي يُفحَص بها اليوم — مشتقّةٌ دائماً من `_packages` و`_selectedType`
+  /// لا من الحقل، فلا يُلوَّن الشريطُ بمدّةِ باقةٍ من منطقةٍ أخرى. انظر
+  /// `homeStripDurationHours`. (`_durationHours` يبقى للطلب نفسه، ولا يُقرأ
+  /// إلّا وباقةٌ مختارة.)
+  int get _availabilityHours => homeStripDurationHours(
+      packages: _packages, selectedType: _selectedType);
+
   /// أول ساعة في اليوم يتسع فيها **سائقٌ** لمدة الباقة كاملةً — null إن لم توجد.
   /// لا تُعرض للعميل: تقرر إتاحة اليوم وتُرسي موعد الطلب على فترةٍ حرّة فعلاً.
   int? _firstFeasibleStart(DateTime d) {
     final key = intl.DateFormat('yyyy-MM-dd').format(d);
     final open = _openHoursFor(d);
-    final last = open[1] - _durationHours;
+    final int hours = _availabilityHours;
+    final last = open[1] - hours;
     for (int h = open[0]; h <= last; h++) {
       bool free = true;
-      for (int hh = h; hh < h + _durationHours; hh++) {
+      for (int hh = h; hh < h + hours; hh++) {
         final slotKey = '${key}_${hh.toString().padLeft(2, '0')}:00';
         if ((_slotCounts[slotKey] ?? 0) >= _maxTeamsPerSlot) {
           free = false;
@@ -646,6 +659,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   void dispose() {
     _zoneWatch?.cancel();
     WidgetsBinding.instance.removeObserver(this);
+    _dateStripCtrl.dispose();
     super.dispose();
   }
 
@@ -827,15 +841,33 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   /// بمدة الجدولة الخاصة بالنوع.
   Widget _buildPackageSelector() {
     final sellable = _packages.where((p) => p.sellable).toList();
-    if (sellable.isEmpty) {
+    // الحالةُ الفارغة ليست واحدة — انظر `HomePackagesView`: دعوى «في منطقتك»
+    // كانت تُقال قبل تحديد المنطقة، فتناقض بطاقةَ الموقع أعلاها.
+    final view =
+        homePackagesView(packages: _packages, zoneName: _selectedZoneName);
+    if (view != HomePackagesView.packages) {
+      final bool noZone = view == HomePackagesView.noZone;
       return Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
             color: Colors.grey.shade50,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: Colors.grey.shade200)),
-        child: const Text("لا توجد باقات مسعّرة في منطقتك حالياً",
-            style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+        child: Row(
+          children: [
+            Icon(noZone ? Icons.place_outlined : Icons.inventory_2_outlined,
+                size: 20, color: Colors.grey.shade500),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                noZone
+                    ? 'حدّدي موقعك أولاً لعرض الباقات وأسعارها — فهي تختلف بحسب المنطقة.'
+                    : 'لا توجد باقات مسعّرة في «$_selectedZoneName» حالياً.',
+                style: TextStyle(color: Colors.grey.shade600, height: 1.5),
+              ),
+            ),
+          ],
+        ),
       );
     }
     return Column(
@@ -914,6 +946,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                           }
                         }
                       });
+                      // مدّةٌ أطول قد تنقل الاختيار بعيداً — أظهِره.
+                      _revealSelectedDate();
                     },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
@@ -961,6 +995,26 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     );
   }
 
+  /// أظهِر البطاقة المختارة في الشريط بعد انتقال الاختيار تلقائياً.
+  /// بدونها يبقى الشريط عند أوّل العناصر والاختيارُ خارج الشاشة أو مقتطعاً عند
+  /// حرفها — انظر رأس `lib/utils/date_strip.dart`.
+  void _revealSelectedDate() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_dateStripCtrl.hasClients) return;
+      final int i = dateStripIndexOf(_selectedDate, DateTime.now());
+      if (i <= 0) return; // الفهرس ٠ عند الحرف أصلاً، و‎-١‎ خارج الشريط
+      _dateStripCtrl.animateTo(
+        dateStripOffsetFor(
+          index: i,
+          viewportWidth: _dateStripCtrl.position.viewportDimension,
+          maxOffset: _dateStripCtrl.position.maxScrollExtent,
+        ),
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
   Widget _buildDateSelector() {
     // تعذّر معرفة الإتاحة ⇒ لا نرسم تقويماً أخضر كاذباً. الأخضر وعدٌ بوجود سائق.
     if (_availabilityError) {
@@ -1004,6 +1058,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     return SizedBox(
       height: 82,
       child: ListView.builder(
+        controller: _dateStripCtrl,
         scrollDirection: Axis.horizontal,
         itemCount: 30,
         itemBuilder: (context, index) {

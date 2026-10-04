@@ -121,7 +121,17 @@ void main() {
       // (الإغلاق − المدة) — نفس القيد بلا واجهة أوقات.
       final hourly = _code('lib/screens/hourly_details_screen.dart');
       expect(hourly.contains('_openHoursFor(d)'), isTrue);
-      expect(hourly.contains('open[1] - _durationHours'), isTrue);
+      // القيدُ المحروس هو **القيد** لا اسمُ الحقل: الإرساءُ لا يتجاوز
+      // (الإغلاق − المدة). والمدّةُ صارت مشتقّةً من باقات المنطقة
+      // (`_availabilityHours` ← `homeStripDurationHours`) بدل الحقل المباشر،
+      // فلا يُلوَّن الشريطُ بمدّةِ باقةٍ من منطقةٍ أخرى — والشرطُ هنا أضيق
+      // من سابقه: يثبّت المشتقَّ ويمنع رقماً ثابتاً.
+      expect(hourly.contains('final int hours = _availabilityHours;'), isTrue,
+          reason: 'المدّةُ تُشتقّ من الباقات المسعّرة لا من الحقل');
+      expect(hourly.contains('open[1] - hours'), isTrue,
+          reason: 'الإرساءُ محصورٌ بـ(الإغلاق − المدة)');
+      expect(RegExp(r'open\[1\] - \d').hasMatch(hourly), isFalse,
+          reason: 'مدّةٌ مكتوبةٌ رقماً تتجاهل باقةَ المنطقة');
     });
   });
 
