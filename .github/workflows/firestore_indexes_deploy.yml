@@ -1,0 +1,56 @@
+# نشرُ فهارس Firestore عند الدمج.
+#
+# فهرسٌ في الملفّ ولا أحد ينشره = لا شيء — نفسُ ثقبِ الدوالّ واللوحة. وبناءُ
+# الفهرس عند Google يستغرق دقائق إلى ساعات على مجموعةٍ كبيرة؛ الاستعلامُ يبقى
+# فاشلاً حتى يكتمل (Firebase Console ← Firestore ← Indexes يُظهر Building).
+#
+# **الفهارسُ وحدها — لا القواعد، عمداً.** `firestore.rules` يحمل تحذيراً صريحاً
+# (STAGE-C: «DO NOT DEPLOY UNTIL THE NEW APP IS THE MINIMUM VERSION») لأنّ
+# قاعدةَ إنشاء الطلب الجديدة تكسر مدفوعاتِ النسخ القديمة من التطبيق. فنشرُ
+# القواعد قرارٌ بشريٌّ مرتبطٌ بانتشار الإصدار، لا أثرٌ جانبيٌّ لدمجة.
+name: Deploy Firestore Indexes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'firestore.indexes.json'
+      - '.github/workflows/firestore_indexes_deploy.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-firestore-indexes
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy indexes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      # ملفٌّ غيرُ صالحٍ نحويّاً يفشل عند firebase بعد تثبيتٍ كامل — نكشفه فوراً.
+      - name: Validate JSON
+        run: node -e "JSON.parse(require('fs').readFileSync('firestore.indexes.json','utf8'))"
+
+      - name: Write service account key
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA_JSON" ]; then
+            echo "::error::سرُّ FIREBASE_SERVICE_ACCOUNT غير مضبوط في إعدادات المستودع"
+            exit 1
+          fi
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+
+      - name: Deploy
+        run: npx --yes firebase-tools@15 deploy --only firestore:indexes --project zyiarah-app --non-interactive
+
+      - name: Remove key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sa.json"
