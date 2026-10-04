@@ -52,6 +52,11 @@ const _mustReport = <String, List<String>>{
     'fcm_role_fetch_failed',
     'notifications_init_failed',
   ],
+  'lib/services/zyiarah_referral_service.dart': [
+    // الإحالةُ مالٌ: 50 ر.س للمُحيل وخصمُ 10% للمُحال إليه. كان الفشلُ
+    // يُبتلع في `catch` ويُطبع بـ`debugPrint` — لا يُجمَع ولا يُرسَل.
+    'referral_apply_failed',
+  ],
   'lib/services/zyiarah_wallet_service.dart': [
     'wallet_audit_log_failed',
   ],

@@ -84,18 +84,52 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
       ).timeout(kAuthTimeout);
 
       final referralCode = _referralCodeController.text.trim();
+      // فشلُ كود الإحالة لا يُجهض حساباً أُنشئ فعلاً (وإلا علِق المستخدم بـ«فشل
+      // الإنشاء» ثمّ «البريد مسجّل مسبقاً») — لكنّه **يُقال**. كان يُبتلع
+      // بصمت، فمن أدخلت كوداً خاطئاً تنتظر خصمَ 10% لا يأتي أبداً، ولا تعرف
+      // لماذا. و`catch` الذي كان هنا غيرُ قابلٍ للوصول: الخدمةُ لا ترمي.
+      var referral = ReferralApplyOutcome.none;
       if (referralCode.isNotEmpty && credential.user != null) {
-        // فشل تطبيق كود الإحالة يجب ألا يُجهض حساباً أُنشئ فعلاً (وإلا يعلق المستخدم
-        // بـ«فشل الإنشاء» ثم «البريد مسجّل مسبقاً»). نتجاهله بصمت.
-        try {
-          await ZyiarahReferralService().applyReferralCode(
-            newUserId: credential.user!.uid,
-            referralCode: referralCode,
-          );
-        } catch (_) {/* إحالة غير صالحة — لا يمنع المتابعة */}
+        referral = await ZyiarahReferralService().applyReferralCode(
+          newUserId: credential.user!.uid,
+          referralCode: referralCode,
+        );
       }
 
       if (!mounted) return;
+      if (referral != ReferralApplyOutcome.none &&
+          referral != ReferralApplyOutcome.applied) {
+        // حوارٌ لا شريطَ إشعار: الشاشةُ تنتقل في السطر التالي، والشريطُ يختفي
+        // مع الانتقال فلا يُقرأ.
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('تم إنشاء حسابك ✅',
+                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+            content: Text(
+              switch (referral) {
+                ReferralApplyOutcome.notFound =>
+                  'لكنّ كود الإحالة «$referralCode» غير صحيح، فلم يُطبَّق. '
+                      'تحقّقي منه مع من أرسله لك.',
+                ReferralApplyOutcome.ownCode =>
+                  'لكنّ هذا كودك أنتِ — لا يمكن إحالةُ النفس، فلم يُطبَّق.',
+                ReferralApplyOutcome.already =>
+                  'لكنّ هذا الحساب مرتبطٌ بإحالةٍ سابقة، فلم يُطبَّق الكود الجديد.',
+                _ => 'لكن تعذّر تطبيق كود الإحالة الآن. تواصلي مع الدعم '
+                    'إن كنتِ تتوقّعين خصماً.',
+              },
+              style: GoogleFonts.tajawal(height: 1.6),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text('متابعة', style: GoogleFonts.tajawal()),
+              ),
+            ],
+          ),
+        );
+        if (!mounted) return;
+      }
       // كشاشة الدخول: نذهب للجذر ويوجّه AuthWrapper بعد أن يُحمّل المزوّد الدور —
       // بدل القفز إلى '/client' قبل أن يلحق المزوّد فيردّنا الحارس ونعود للترحيب.
       context.go('/');
