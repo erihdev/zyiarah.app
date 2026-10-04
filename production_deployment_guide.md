@@ -216,6 +216,16 @@ Failed to publish زيارة | Zyiarah.ipa to App Store Connect.
    - `Cloud Build Editor` + `Artifact Registry Administrator` — بناءُ الجيل الثاني
    - `Secret Manager Admin` — ربطُ أسرار `defineSecret` بالدوالّ المنشورة
    - `Service Usage Consumer`
+   - `Cloud Scheduler Admin` — **لا غنى عنه**: ثماني دوالّ `onSchedule` تُنشئ
+     وظائفَ Cloud Scheduler، و`Firebase Admin` **لا يشملها**
+   - `Cloud Tasks Admin` — `deliverScheduledNotification` دالّةُ `onTaskDispatched`
+     ولها طابورُ Cloud Tasks
+
+   الدوران الأخيران ليسا ترفاً: أوّلُ نشرٍ آليّ (2026-10-04) تمّ بدونهما، فنُشرت
+   الدوالّ العادية ونجحت، و**فشلت التسعُ المجدولة كلُّها** بـ
+   `403 lacks IAM permission "cloudscheduler.jobs.update"` — ومنها بالضبط
+   `confirmPendingTamaraOrders` و`reconcileOrphanPayments`
+   و`sweepUnassignedPaidOrders`، أي الإصلاحاتُ الثلاثة التي كان النشرُ لأجلها.
 3. من تبويب **Keys** ← *Add key* ← *Create new key* ← **JSON**. يُنزَّل ملفّ.
 4. GitHub ← [Settings → Secrets and variables → Actions](https://github.com/erihdev/zyiarah.app/settings/secrets/actions)
    ← **New repository secret**، الاسم `FIREBASE_SERVICE_ACCOUNT`، والقيمةُ
