@@ -547,7 +547,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
               style: GoogleFonts.tajawal(color: Colors.grey[600], fontSize: 14)),
           Text(value,
               style: GoogleFonts.tajawal(
-                  fontWeight: FontWeight.w600, fontSize: 14)),
+                  fontWeight: FontWeight.w700, fontSize: 14)),
         ],
       ),
     );

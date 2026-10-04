@@ -378,7 +378,7 @@ class _PhoneStep extends StatelessWidget {
                 : 'رقم الجوال',
             style: GoogleFonts.tajawal(
               fontSize: 16,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
               color: controller.text.isNotEmpty && !isValid
                   ? Colors.red
                   : Colors.black87,
@@ -535,7 +535,7 @@ class _OtpStep extends StatelessWidget {
                 : 'رمز التحقق OTP',
             style: GoogleFonts.tajawal(
               fontSize: 16,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
               color: controller.text.isNotEmpty && !isValid
                   ? Colors.red
                   : Colors.black87,

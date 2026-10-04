@@ -386,7 +386,7 @@ class _ClientNotificationsScreenState extends State<ClientNotificationsScreen> {
                 children: [
                   Text('تفضيلات التنبيهات',
                       style: GoogleFonts.tajawal(
-                          fontSize: 17, fontWeight: FontWeight.w800)),
+                          fontSize: 17, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 4),
                   Text(
                     'تنبيهات طلباتك ومدفوعاتك ومواعيدك تصلك دائماً — هنا تتحكّم بالعروض فقط.',
@@ -564,7 +564,7 @@ class _ClientNotifCard extends StatelessWidget {
                 children: [
                   Text(item.title,
                       style: GoogleFonts.tajawal(
-                          fontWeight: isRead ? FontWeight.w600 : FontWeight.bold,
+                          fontWeight: isRead ? FontWeight.w700 : FontWeight.bold,
                           fontSize: 13,
                           color: ZyiarahTheme.ink)),
                   if (item.body.isNotEmpty) ...[

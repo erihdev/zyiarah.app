@@ -130,7 +130,7 @@ class _AdminFleetMapScreenState extends State<AdminFleetMapScreen> {
           backgroundColor: ZyiarahTheme.brand,
           foregroundColor: Colors.white,
           title: Text('رادار الأسطول المباشر',
-              style: GoogleFonts.tajawal(fontWeight: FontWeight.w800)),
+              style: GoogleFonts.tajawal(fontWeight: FontWeight.w900)),
         ),
         body: StreamBuilder<List<FleetVehicle>>(
           stream: _stream,
@@ -294,7 +294,7 @@ class _AdminFleetMapScreenState extends State<AdminFleetMapScreen> {
                     backgroundColor: color,
                     child: Text(v.initials,
                         style: GoogleFonts.tajawal(
-                            color: Colors.white, fontWeight: FontWeight.w800)),
+                            color: Colors.white, fontWeight: FontWeight.w900)),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -307,7 +307,7 @@ class _AdminFleetMapScreenState extends State<AdminFleetMapScreen> {
                               child: Text(v.driverName,
                                   overflow: TextOverflow.ellipsis,
                                   style: GoogleFonts.tajawal(
-                                      fontWeight: FontWeight.w800,
+                                      fontWeight: FontWeight.w900,
                                       color: ZyiarahTheme.ink)),
                             ),
                             _chip(_statusLabel(v, now), color),
@@ -361,7 +361,7 @@ class _AdminFleetMapScreenState extends State<AdminFleetMapScreen> {
               backgroundColor: color,
               child: Text(v.initials,
                   style: GoogleFonts.tajawal(
-                      color: Colors.white, fontWeight: FontWeight.w800)),
+                      color: Colors.white, fontWeight: FontWeight.w900)),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -371,7 +371,7 @@ class _AdminFleetMapScreenState extends State<AdminFleetMapScreen> {
                   Text('${v.driverName} — ${_statusLabel(v, now)}',
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.tajawal(
-                          fontWeight: FontWeight.w800, color: ZyiarahTheme.ink)),
+                          fontWeight: FontWeight.w900, color: ZyiarahTheme.ink)),
                   Text('${v.taskLine} • ${v.ageLabel(now)}',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -405,7 +405,7 @@ class _AdminFleetMapScreenState extends State<AdminFleetMapScreen> {
             const SizedBox(height: 8),
             Text('لا سائق في مهمة الآن',
                 style: GoogleFonts.tajawal(
-                    fontWeight: FontWeight.w800, color: ZyiarahTheme.ink)),
+                    fontWeight: FontWeight.w900, color: ZyiarahTheme.ink)),
             const SizedBox(height: 4),
             Text(
               'تظهر المركبات هنا فور انطلاق سائق إلى طلب (في الطريق / قيد التنفيذ).',
@@ -496,7 +496,7 @@ class _VehicleMarker extends StatelessWidget {
       alignment: Alignment.center,
       child: Text(initials,
           style: GoogleFonts.tajawal(
-              color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
+              color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
     );
   }
 }

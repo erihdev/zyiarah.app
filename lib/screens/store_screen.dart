@@ -540,7 +540,7 @@ class _CartSheetState extends State<_CartSheet> {
                           widget.companies
                               ? 'ستنتقل لإتمام الدفع مباشرةً (بطاقة / تمارا)، ويصلك طلبك بعد تأكيد الدفع.'
                               : 'ستحدّد عنوان التوصيل وموعده في الخطوة التالية، ثم تدفع ويصلك سائق بطلبك في الموعد.',
-                          style: GoogleFonts.tajawal(fontSize: 12, height: 1.5, color: const Color(0xFF660033), fontWeight: FontWeight.w600),
+                          style: GoogleFonts.tajawal(fontSize: 12, height: 1.5, color: const Color(0xFF660033), fontWeight: FontWeight.w700),
                         ),
                       ),
                     ],

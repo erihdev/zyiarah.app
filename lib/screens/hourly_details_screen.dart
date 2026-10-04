@@ -128,7 +128,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                       fontSize: 15,
                       height: 1.6,
                       color: const Color(0xFF660033),
-                      fontWeight: FontWeight.w600)),
+                      fontWeight: FontWeight.w700)),
               const SizedBox(height: 22),
               Row(
                 children: [

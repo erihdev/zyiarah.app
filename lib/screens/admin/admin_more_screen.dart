@@ -377,7 +377,7 @@ class AdminMoreScreen extends StatelessWidget {
               child: Text(
                 item['title'] as String,
                 style: GoogleFonts.tajawal(
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                   fontSize: 13,
                   color: const Color(0xFF1E293B),
                 ),

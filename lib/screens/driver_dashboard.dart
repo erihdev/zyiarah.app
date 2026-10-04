@@ -817,7 +817,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   style: GoogleFonts.tajawal(
                       fontSize: 12,
                       color: color,
-                      fontWeight: bold ? FontWeight.bold : FontWeight.w600),
+                      fontWeight: bold ? FontWeight.bold : FontWeight.w700),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis),
             ),

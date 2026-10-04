@@ -305,7 +305,7 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
                     fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.white)),
             Text('$value',
                 style: GoogleFonts.tajawal(
-                    fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white)),
+                    fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white)),
             Text(sub,
                 style: GoogleFonts.tajawal(
                     fontSize: 10.5, color: Colors.white.withValues(alpha: 0.9))),
@@ -384,7 +384,7 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
           Text('${d.day}',
               style: GoogleFonts.tajawal(
                   fontSize: compact ? 13 : 18,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w900,
                   color: inMonth ? ZyiarahTheme.ink : ZyiarahTheme.inkFaint)),
           if (count == 0)
             (compact

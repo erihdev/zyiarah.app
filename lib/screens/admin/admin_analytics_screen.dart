@@ -295,7 +295,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                     children: [
                       Text(label,
                           style: GoogleFonts.tajawal(
-                              fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF334155))),
+                              fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF334155))),
                       const Spacer(),
                       Text(
                         '${intl.NumberFormat.currency(symbol: 'ر.س ', decimalDigits: 0).format(e.value)}  (${(fraction * 100).toStringAsFixed(0)}%)',
@@ -360,7 +360,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.tajawal(
-                                  fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
+                                  fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
                           const SizedBox(height: 2),
                           Text(tx.service,
                               maxLines: 1,

@@ -1023,7 +1023,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                                   ? 'بلا محافظة'
                                   : 'محافظة ${row.governorate}',
                               style: GoogleFonts.tajawal(
-                                  fontWeight: FontWeight.w800, fontSize: 15)),
+                                  fontWeight: FontWeight.w900, fontSize: 15)),
                         ),
                         Text(n == 1 ? 'منطقة واحدة' : '$n مناطق',
                             style: GoogleFonts.tajawal(

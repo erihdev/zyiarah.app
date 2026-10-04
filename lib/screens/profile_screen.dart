@@ -1335,7 +1335,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                 Text(value,
                     style: GoogleFonts.tajawal(
                         fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                         color: Colors.black87)),
               ],
             ),

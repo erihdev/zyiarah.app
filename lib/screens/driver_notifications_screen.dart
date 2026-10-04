@@ -205,7 +205,7 @@ class _NotifCard extends StatelessWidget {
                 Text(title,
                     style: GoogleFonts.tajawal(
                         fontWeight:
-                            isRead ? FontWeight.w600 : FontWeight.bold,
+                            isRead ? FontWeight.w700 : FontWeight.bold,
                         fontSize: 13,
                         color: const Color(0xFF1E293B))),
                 if (body.isNotEmpty) ...[
