@@ -89,6 +89,18 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
+    // المحفظة والإحالة **قبل** عدّ الحجوزات، لا بعده.
+    //
+    // كانتا تُطلَقان في آخر الدالّة، بعد `await` عدّ الحجوزات. والعدُّ «غير
+    // حرِج» بنصِّ تعليقه (يسقط إلى «—» عند الفشل) — لكنّه بمهلةِ عشرين ثانية،
+    // فحين يتعذّر (شوهد حيّاً: `RunAggregationQuery` يرجع `unavailable` ثمّ
+    // يعيد المحاولة حتى المهلة) يؤخّر **بطاقةَ الرصيد** عشرين ثانيةً كاملة
+    // قبل أن تبدأ أصلاً. تِبعةُ تِبعةٍ غير حرجة على رقمٍ ماليّ.
+    //
+    // لا تبعية بينها: كلتاهما تحتاج `uid` وحده.
+    _loadWallet(uid);
+    _loadReferralCode(uid);
+
     // إجمالي الحجوزات — عدّ فعلي (aggregate) لا يتأثّر بسقف الـ20 في المزوّد
     try {
       final agg = await _firestore
@@ -98,9 +110,6 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
           .get().timeout(kNetCallTimeout);
       if (mounted) setState(() => _totalBookings = agg.count);
     } catch (_) {/* غير حرِج — تبقى — */}
-    // Load wallet and referral in parallel after user data
-    _loadWallet(uid);
-    _loadReferralCode(uid);
   }
 
   Future<void> _loadWallet(String uid) async {

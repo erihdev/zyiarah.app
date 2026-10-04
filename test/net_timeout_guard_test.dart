@@ -180,6 +180,37 @@ void main() {
             'راجِع الجديدَ منها: أهو مُغيِّرٌ للحالة فعلاً؟');
   });
 
+  test('مهلةٌ على قراءةٍ غير حرجة لا تقف أمام قراءةٍ ماليّة', () {
+    // المهلةُ تُنهي التعليق، لكنّها **عشرون ثانية**. فقراءةٌ «غير حرجة»
+    // موضوعةٌ قبل قراءةٍ ماليّة تُورِّثها تأخيرَها كاملاً.
+    //
+    // وُجد حيّاً (2026-10-04): في «حسابي» كان عدُّ الحجوزات (`count()`، يسقط
+    // إلى «—» عند الفشل بنصِّ تعليقه) يُنتظَر قبل إطلاق `_loadWallet`. وقد
+    // فشل فعلاً — `RunAggregationQuery` يرجع `unavailable` ويعيد المحاولة —
+    // فبقيت بطاقةُ الرصيد هيكلَ تحميلٍ عشرين ثانيةً **قبل أن تبدأ أصلاً**.
+    // لا تبعيةَ بينهما: كلتاهما تحتاج `uid` وحده.
+    // الفحصُ داخل `_loadUserData` وحدَها: للمحفظة مواضعُ نداءٍ أخرى مشروعة
+    // (إعادةُ تحميلٍ بعد استبدال النقاط، وزرُّ إعادة المحاولة).
+    final full = _code('lib/screens/profile_screen.dart');
+    final from = full.indexOf('Future<void> _loadUserData() async {');
+    expect(from, greaterThan(0));
+    final src = full.substring(from, full.indexOf('\n  Future<', from + 10));
+    final wallet = src.indexOf('_loadWallet(uid);');
+    final referral = src.indexOf('_loadReferralCode(uid);');
+    final count = src.indexOf('.count()');
+    expect(wallet, greaterThan(0), reason: 'لم تعد تُحمَّل المحفظةُ هنا أصلاً');
+    expect(referral, greaterThan(0));
+    expect(count, greaterThan(0));
+    expect(wallet, lessThan(count),
+        reason: 'عادت بطاقةُ الرصيد تنتظر عدّاً غير حرِج');
+    expect(referral, lessThan(count),
+        reason: 'عاد كودُ الإحالة ينتظر عدّاً غير حرِج');
+    // ولا تُطلَقان مرّتين داخل الدالّة (نسخةٌ قديمة بقيت في الذيل تُضاعف
+    // القراءات بلا أن يظهر شيء).
+    expect('_loadWallet(uid);'.allMatches(src).length, 1);
+    expect('_loadReferralCode(uid);'.allMatches(src).length, 1);
+  });
+
   test('المصادقة لها مهلة ورسالةٌ عند انقضائها', () {
     for (final p in ['lib/screens/login_screen.dart', 'lib/screens/signup_screen.dart']) {
       final src = _code(p);
