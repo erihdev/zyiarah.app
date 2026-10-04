@@ -254,6 +254,26 @@ Failed to publish زيارة | Zyiarah.ipa to App Store Connect.
 | `Missing permissions` / `PERMISSION_DENIED` | دورٌ ناقصٌ من الخطوة ٢ |
 | `functions ... will be deleted` | دالّةٌ غابت عن الشيفرة — انظر `--force` أعلاه |
 
+## 1-ج. نشرُ اللوحة الإدارية — آليّ منذ 2026-10-04
+
+`.github/workflows/admin_deploy.yml` ينشر إلى Firebase Hosting (هدف `admin`) عند
+كلّ دمجٍ يمسّ `admin_panel/**` أو `firebase.json` أو `.firebaserc` أو
+`lib/firebase_options.dart` — بعد `lint` و`test` و**البناء**.
+
+لا إعدادَ جديداً: يستعمل سرَّ `FIREBASE_SERVICE_ACCOUNT` نفسه (دورُ `Firebase
+Admin` يشمل الاستضافة)، ويلزمه سرُّ `MAPBOX_TOKEN` الموجود أصلاً.
+
+**`src/services/firebase.ts` يُولَّد ولا يُكتب بيد**: `admin_panel/scripts/gen_firebase_config.mjs`
+يقرأ كتلةَ `web` من `lib/firebase_options.dart`. القيمُ ليست سرّاً — تُشحن داخل
+الحزمة ويقرؤها أيُّ زائر، والحمايةُ من قواعد Firestore. و`ci.yml` يستعمل المولّد
+نفسه، فلا تُفحص الأنواعُ على نسخةٍ صوريّة تخالف ما يُنشَر.
+
+| الرسالة | المعنى |
+|---|---|
+| `سرُّ MAPBOX_TOKEN غير مضبوط` | أضفه في أسرار المستودع — بدونه لا ترسم خريطةُ المناطق |
+| `HTTP Error: 403 ... firebasehosting` | أضف دور `Firebase Hosting Admin` إلى `github-deployer` |
+| `لم يُعثر على كتلة FirebaseOptions web` | شكلُ `firebase_options.dart` تغيّر — حدّث المولّد |
+
 ## 2. حرّاس ما قبل الدمج
 
 `.github/workflows/ci.yml` يشغّل خمس مهامّ على كل طلب دمج، ولا يُدمج شيء وهي حمراء:

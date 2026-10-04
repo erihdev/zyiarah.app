@@ -1,0 +1,96 @@
+# نشرُ اللوحة الإدارية إلى Firebase Hosting (هدف `admin`) عند الدمج إلى main.
+#
+# لماذا: اللوحةُ كانت تُنشَر باليد وحدها، فتغييراتُها تبقى مدمَجةً وغيرَ ظاهرة
+# للإدارة — نفسُ ثقبِ الدوالّ قبل `functions_deploy.yml`.
+#
+# `src/services/firebase.ts` مُستثنى من git، فيُولَّد من `lib/firebase_options.dart`
+# (كتلة web) عبر `scripts/gen_firebase_config.mjs`: مصدرٌ واحدٌ مكتوبٌ في المستودع
+# أصلاً ويستعمله بناءُ فلاتر للويب، بدل نسخةٍ صوريّة تتباعد بصمت. وقيمُه ليست
+# سرّاً — تُشحن داخل الحزمة ويقرؤها أيُّ زائر، والحمايةُ من قواعد Firestore.
+#
+# الاعتمادُ هو سرُّ `FIREBASE_SERVICE_ACCOUNT` نفسه؛ دورُ `Firebase Admin` يشمل
+# الاستضافة فلا يلزم دورٌ جديد.
+name: Deploy Admin Panel
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'admin_panel/**'
+      - 'firebase.json'
+      - '.firebaserc'
+      - 'lib/firebase_options.dart'
+      - '.github/workflows/admin_deploy.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-admin
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy admin hosting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: admin_panel/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: admin_panel
+
+      - name: Generate Firebase config
+        run: node scripts/gen_firebase_config.mjs
+        working-directory: admin_panel
+
+      # رمزُ Mapbox قابلٌ للنشر لكنّه مخزَّنٌ سرّاً أصلاً (يستعمله android_release).
+      # غيابُه لا يكسر البناء بل يترك خريطةَ المناطق عاجزةً عن الرسم في الإنتاج
+      # بصمت — فنفشل هنا بدل أن ننشر لوحةً نصفَ عاملة.
+      - name: Write build env
+        env:
+          MAPBOX: ${{ secrets.MAPBOX_TOKEN }}
+        working-directory: admin_panel
+        run: |
+          if [ -z "$MAPBOX" ]; then
+            echo "::error::سرُّ MAPBOX_TOKEN غير مضبوط — خريطةُ المناطق في الإعدادات لن ترسم"
+            exit 1
+          fi
+          printf 'VITE_MAPBOX_TOKEN=%s\n' "$MAPBOX" > .env.production
+
+      # لا يُنشَر ما لم يُفحَص: مكرّرةٌ هنا عمداً لأنّ هذا المسار يكتب في الإنتاج
+      # وقد يُشغَّل يدويّاً على حالةٍ لم تمرّ بـPR.
+      - name: Lint
+        run: npm run lint
+        working-directory: admin_panel
+
+      - name: Unit tests
+        run: npm test
+        working-directory: admin_panel
+
+      - name: Build
+        run: npm run build
+        working-directory: admin_panel
+
+      - name: Write service account key
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA_JSON" ]; then
+            echo "::error::سرُّ FIREBASE_SERVICE_ACCOUNT غير مضبوط في إعدادات المستودع"
+            exit 1
+          fi
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+
+      # `hosting:admin` وحده — هدفُ `web` (صفحةُ الهبوط) لا يُنشر من هنا.
+      - name: Deploy
+        run: npx --yes firebase-tools@15 deploy --only hosting:admin --project zyiarah-app --non-interactive
+
+      - name: Remove key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sa.json"
