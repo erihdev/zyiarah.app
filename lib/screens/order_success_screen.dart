@@ -10,6 +10,7 @@ import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:zyiarah/widgets/zatca_invoice_card.dart';
 import 'package:zyiarah/utils/vat.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class ZyiarahOrderSuccessScreen extends StatefulWidget {
   final String orderCode;
@@ -247,7 +248,8 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen>
               isEqualTo: FirebaseAuth.instance.currentUser?.uid ?? '')
           .where('code', isEqualTo: widget.orderCode)
           .limit(1)
-          .snapshots(),
+          .snapshots()
+            .firstEventTimeout(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Padding(

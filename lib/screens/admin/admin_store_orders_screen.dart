@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminStoreOrdersScreen extends StatefulWidget {
   const AdminStoreOrdersScreen({super.key});
@@ -213,7 +214,8 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
             ),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('store_orders').orderBy('created_at', descending: true).limit(100).snapshots(),
+                stream: FirebaseFirestore.instance.collection('store_orders').orderBy('created_at', descending: true).limit(100).snapshots()
+            .firstEventTimeout(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
                   if (snapshot.hasError) {

@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/zyiarah_strings.dart';
 import 'package:zyiarah/services/firebase_service.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminManagersScreen extends StatefulWidget {
   const AdminManagersScreen({super.key});
@@ -63,7 +64,8 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
           label: Text("إضافة منسوب", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13)),
         ),
         body: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('admins').snapshots(),
+          stream: FirebaseFirestore.instance.collection('admins').snapshots()
+            .firstEventTimeout(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Color(0xFF1E293B)));
             // فشل البث كان يُعرض كقائمة فارغة — خطأ صريح مع إعادة محاولة.
@@ -489,7 +491,8 @@ class StaffSearchDelegate extends SearchDelegate {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('admins').snapshots(),
+        stream: FirebaseFirestore.instance.collection('admins').snapshots()
+            .firstEventTimeout(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           // نقرأ عبر data() لا عامل [] — الأخير يرمي StateError حين يغيب الحقل

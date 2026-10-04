@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class ZyiarahConfigService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -9,8 +10,8 @@ class ZyiarahConfigService {
       if (doc.exists && doc.data() != null) {
         return doc.data()!;
       }
-      return {};
-    });
+      return <String, dynamic>{};
+    }).firstEventTimeout();
   }
 
   Color getColorFromHex(String hexColor) {

@@ -219,7 +219,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
     }
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('drivers').doc(_currentDriverId).snapshots(),
+      stream: FirebaseFirestore.instance.collection('drivers').doc(_currentDriverId).snapshots()
+            .firstEventTimeout(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Scaffold(
@@ -585,7 +586,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
           .where('status', whereIn: const [
             'assigned', 'scheduled', 'accepted', 'on_the_way', 'in_progress',
           ])
-          .snapshots(),
+          .snapshots()
+            .firstEventTimeout(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return _buildStatusPlaceholder(Icons.error_outline,

@@ -209,7 +209,8 @@ class _ClientNotificationsScreenState extends State<ClientNotificationsScreen> {
           .collection('notifications')
           .where('userId', isEqualTo: uid)
           .limit(_pageSize)
-          .snapshots(),
+          .snapshots()
+            .firstEventTimeout(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/screens/support_screen.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// يُنقّي رقم الدعم المخزَّن في اللوحة إلى أرقام فقط (مع + اختيارية في البداية).
 /// القيمة الحيّة كانت «+966 53 048 9016» بعلامات اتجاه (U+202D/U+202C)
@@ -71,7 +72,8 @@ class ZyiarahSupportFab extends StatelessWidget {
                 stream: FirebaseFirestore.instance
                     .collection('system_configs')
                     .doc('main_settings')
-                    .snapshots(),
+                    .snapshots()
+                    .firstEventTimeout(),
                 builder: (context, snapshot) {
                   // فشل قراءة الإعدادات: لا أزرار بأرقام placeholder ميتة —
                   // صف خطأ مع إعادة محاولة، والتذكرة أدناه تبقى المسار المضمون.

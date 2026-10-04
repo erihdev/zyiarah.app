@@ -16,6 +16,7 @@ import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zyiarah/utils/order_tracking.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 // تحويل رقمي دفاعي — حقول Firestore (amount/total_amount/quotePrice) قد تصل نصّاً
 // أو null، و.toDouble()/as num المباشر كان يعطّل بطاقة الطلب داخل القائمة.
@@ -142,7 +143,8 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
       stream: FirebaseFirestore.instance
           .collection('orders')
           .where('client_id', isEqualTo: user?.uid)
-          .snapshots(),
+          .snapshots()
+            .firstEventTimeout(),
       builder: (context, snapshot) {
         if (user == null) return const Center(child: Text('يرجى تسجيل الدخول لعرض حجوزاتك'));
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -202,7 +204,8 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
       stream: FirebaseFirestore.instance
           .collection('store_orders')
           .where('client_id', isEqualTo: user?.uid)
-          .snapshots(),
+          .snapshots()
+            .firstEventTimeout(),
       builder: (context, snapshot) {
         if (user == null) return const Center(child: Text('يرجى تسجيل الدخول'));
         if (snapshot.connectionState == ConnectionState.waiting) {

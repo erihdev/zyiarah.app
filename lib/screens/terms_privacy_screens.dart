@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/models/service_policy.dart';
 import 'package:zyiarah/theme/app_theme.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// شاشة «الشروط والأحكام» — تُفتح من التسجيل قبل الدخول.
 ///
@@ -33,7 +34,8 @@ class _ZyiarahTermsScreenState extends State<ZyiarahTermsScreen> {
             .collection(ServicePolicy.collectionPath)
             .orderBy('order')
             .snapshots()
-            .map(ServicePolicy.fromQuery);
+            .map(ServicePolicy.fromQuery)
+            .firstEventTimeout();
   }
 
   @override
@@ -194,7 +196,8 @@ class _ZyiarahPrivacyScreenState extends State<ZyiarahPrivacyScreen> {
             .collection('public_content')
             .doc('privacy')
             .snapshots()
-            .map((d) => d.data()?['content'] as String?);
+            .map((d) => d.data()?['content'] as String?)
+            .firstEventTimeout();
   }
 
   @override

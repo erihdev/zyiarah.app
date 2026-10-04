@@ -202,7 +202,8 @@ class _AdminEventWorkerPackagesScreenState extends State<AdminEventWorkerPackage
           child: const Icon(Icons.add, color: Colors.white),
         ),
         body: StreamBuilder<QuerySnapshot>(
-          stream: _db.collection('event_worker_packages').orderBy('rank').snapshots(),
+          stream: _db.collection('event_worker_packages').orderBy('rank').snapshots()
+            .firstEventTimeout(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
             // فشل البث كان يُعرض كقائمة فارغة — خطأ صريح مع إعادة محاولة.

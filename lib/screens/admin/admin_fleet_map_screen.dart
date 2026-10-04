@@ -9,6 +9,7 @@ import 'package:zyiarah/models/fleet_vehicle.dart';
 import 'package:zyiarah/screens/admin/admin_order_details_screen.dart';
 import 'package:zyiarah/theme/app_theme.dart';
 import 'package:zyiarah/utils/status_util.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// رادار الأسطول المباشر (تصميم Stitch `_21` «رادار الأسطول في المرتفعات»):
 /// كل سائق في مهمة الآن على خريطة واحدة، بعلامة تحمل حروفه ولونَ حالته،
@@ -73,7 +74,8 @@ class _AdminFleetMapScreenState extends State<AdminFleetMapScreen> {
         .snapshots()
         .map((snap) => FleetVehicle.latestPerDriver(snap.docs
             .map((d) => FleetVehicle.fromOrder(d.id, d.data()))
-            .whereType<FleetVehicle>()));
+            .whereType<FleetVehicle>()))
+        .firstEventTimeout();
   }
 
   DateTime get _now => (widget.clock ?? DateTime.now)();

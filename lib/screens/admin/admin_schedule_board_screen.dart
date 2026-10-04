@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/admin/admin_order_details_screen.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// المدى الزمني المعروض. «ماذا أمامنا» — كلها تبدأ من **اليوم** لا من الماضي.
 enum BoardRange { day, week, month }
@@ -121,7 +122,8 @@ class _AdminScheduleBoardScreenState extends State<AdminScheduleBoardScreen> {
         .limit(_fetchLimit);
 
     return StreamBuilder<QuerySnapshot>(
-      stream: q.snapshots(),
+      stream: q.snapshots()
+            .firstEventTimeout(),
       builder: (context, snap) {
         if (snap.hasError) {
           // لا فشل صامت: بلا هذا تظهر الشاشة فارغة فيُفهَم «لا مواعيد» خطأً.

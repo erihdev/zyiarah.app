@@ -129,7 +129,8 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
           .where('id_expiry', isLessThanOrEqualTo: soon);
     }
 
-    return query.snapshots();
+    return query.snapshots()
+            .firstEventTimeout();
   }
 
   Widget _buildFilterTabs() {

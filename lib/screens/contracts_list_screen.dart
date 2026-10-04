@@ -6,6 +6,7 @@ import 'package:intl/intl.dart' as intl;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// مرجع مختصر آمن (يتجنّب RangeError على معرّفات أقصر من 8).
 String _shortRef(dynamic v) {
@@ -36,7 +37,8 @@ class ZyiarahContractsListScreen extends StatelessWidget {
           stream: FirebaseFirestore.instance
               .collection('contracts')
               .where('userId', isEqualTo: user?.uid)
-            .snapshots(),
+            .snapshots()
+            .firstEventTimeout(),
           builder: (context, snapshot) {
             if (user == null) {
               return const Center(child: Text('يرجى تسجيل الدخول لعرض عقودك'));

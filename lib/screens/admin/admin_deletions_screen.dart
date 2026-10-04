@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 // StatefulWidget كي تعمل «إعادة المحاولة» بإعادة إنشاء التدفق عند فشل القراءة.
 class AdminDeletionsScreen extends StatefulWidget {
@@ -75,7 +76,8 @@ class _AdminDeletionsScreenState extends State<AdminDeletionsScreen> {
         ),
         body: StreamBuilder<QuerySnapshot>(
           // نافذة محدودة (300) مثل لوحة الويب — لا نحمّل الأرشيف كله في بثّ حي.
-          stream: FirebaseFirestore.instance.collection('account_deletions').orderBy('requested_at', descending: true).limit(300).snapshots(),
+          stream: FirebaseFirestore.instance.collection('account_deletions').orderBy('requested_at', descending: true).limit(300).snapshots()
+            .firstEventTimeout(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
             // فشل القراءة كان يظهر كقائمة فارغة نظيفة — خطر على مهلة معالجة

@@ -1039,7 +1039,8 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
           child: const Icon(Icons.add_location_alt_rounded, color: Colors.white),
         ),
         body: StreamBuilder<QuerySnapshot>(
-          stream: _db.collection('service_zones').orderBy('rank').snapshots(),
+          stream: _db.collection('service_zones').orderBy('rank').snapshots()
+            .firstEventTimeout(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
             if (snapshot.hasError) return const Center(child: Text("تعذّر تحميل المناطق", style: TextStyle(color: Colors.grey)));

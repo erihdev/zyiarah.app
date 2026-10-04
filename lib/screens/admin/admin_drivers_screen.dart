@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:typed_data';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminDriversScreen extends StatefulWidget {
   const AdminDriversScreen({super.key});
@@ -456,7 +457,8 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
           label: Text("تسجيل كادر جديد", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
         ),
         body: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('drivers').limit(100).snapshots(),
+          stream: FirebaseFirestore.instance.collection('drivers').limit(100).snapshots()
+            .firstEventTimeout(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return _buildShimmerLoading();
             if (snapshot.hasError) return const Center(child: Text("تعذّر تحميل السائقين، تحقّق من الاتصال"));

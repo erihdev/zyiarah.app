@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/models/driver_schedule.dart';
 import 'package:zyiarah/theme/app_theme.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// جدول المهام والمناوبات للسائق (تصميم Stitch `_39`، 2026-09-16).
 ///
@@ -84,13 +85,15 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
         .collection('orders')
         .where('driver_id', isEqualTo: driverId)
         .where('status', whereIn: DriverSchedule.activeStatuses)
-        .snapshots();
+        .snapshots()
+            .firstEventTimeout();
     final history = FirebaseFirestore.instance
         .collection('orders')
         .where('driver_id', isEqualTo: driverId)
         .orderBy('created_at', descending: true)
         .limit(100)
-        .snapshots();
+        .snapshots()
+            .firstEventTimeout();
 
     List<DriverTask> parse(QuerySnapshot<Map<String, dynamic>> q) => [
           for (final d in q.docs) DriverTask.fromMap(d.id, d.data(), fallback: _now),

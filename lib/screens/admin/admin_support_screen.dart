@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/screens/admin/admin_ticket_details_screen.dart';
 import 'package:zyiarah/widgets/zyiarah_shimmer.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminSupportScreen extends StatefulWidget {
   const AdminSupportScreen({super.key});
@@ -61,7 +62,8 @@ class _AdminSupportScreenState extends State<AdminSupportScreen> {
           .where('status', whereIn: statuses)
           .orderBy('createdAt', descending: true)
           .limit(200)
-          .snapshots(),
+          .snapshots()
+            .firstEventTimeout(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return ZyiarahShimmer.buildListSkeleton(count: 5);

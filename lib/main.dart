@@ -29,6 +29,7 @@ import 'package:provider/provider.dart';
 import 'package:zyiarah/providers/user_provider.dart';
 import 'package:zyiarah/providers/config_provider.dart';
 import 'package:zyiarah/providers/order_provider.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -217,7 +218,8 @@ Widget _maintenanceGate(BuildContext context, Widget child) {
     stream = FirebaseFirestore.instance
         .collection('system_configs')
         .doc('main_settings')
-        .snapshots();
+        .snapshots()
+            .firstEventTimeout();
   } catch (_) {
     return child; // Firebase غير مهيّأ (نادر/اختبار) ⇒ لا بوّابة، لا نُسقط التطبيق
   }
@@ -278,7 +280,8 @@ class AuthWrapper extends StatelessWidget {
           stream: FirebaseFirestore.instance
               .collection('system_configs')
               .doc('main_settings')
-              .snapshots(),
+              .snapshots()
+            .firstEventTimeout(),
           builder: (context, snap) {
             final data = snap.data?.data() as Map<String, dynamic>?;
             if (data != null && data['maintenance_mode'] == true) {
