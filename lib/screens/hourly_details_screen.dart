@@ -833,15 +833,33 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   /// بمدة الجدولة الخاصة بالنوع.
   Widget _buildPackageSelector() {
     final sellable = _packages.where((p) => p.sellable).toList();
-    if (sellable.isEmpty) {
+    // الحالةُ الفارغة ليست واحدة — انظر `HomePackagesView`: دعوى «في منطقتك»
+    // كانت تُقال قبل تحديد المنطقة، فتناقض بطاقةَ الموقع أعلاها.
+    final view =
+        homePackagesView(packages: _packages, zoneName: _selectedZoneName);
+    if (view != HomePackagesView.packages) {
+      final bool noZone = view == HomePackagesView.noZone;
       return Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
             color: Colors.grey.shade50,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: Colors.grey.shade200)),
-        child: const Text("لا توجد باقات مسعّرة في منطقتك حالياً",
-            style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+        child: Row(
+          children: [
+            Icon(noZone ? Icons.place_outlined : Icons.inventory_2_outlined,
+                size: 20, color: Colors.grey.shade500),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                noZone
+                    ? 'حدّدي موقعك أولاً لعرض الباقات وأسعارها — فهي تختلف بحسب المنطقة.'
+                    : 'لا توجد باقات مسعّرة في «$_selectedZoneName» حالياً.',
+                style: TextStyle(color: Colors.grey.shade600, height: 1.5),
+              ),
+            ),
+          ],
+        ),
       );
     }
     return Column(

@@ -145,4 +145,63 @@ void main() {
       expect(s.contains('homeLabel'), isTrue);
     });
   });
+
+  // ────────────────── الحالةُ الفارغة: ثلاثُ حالاتٍ لا واحدة ──────────────────
+  // «لا توجد باقات مسعّرة **في منطقتك**» كانت تُقال قبل تحديد المنطقة، فتناقض
+  // بطاقةَ الموقع التي تقول في الشاشة نفسها «موقعك خارج نطاق خدماتنا».
+  group('homePackagesView', () {
+    HomePackage pkg(String type, List<CrewOption> opts) =>
+        HomePackage(type: type, desc: '', durationHours: 4, options: opts);
+
+    final withPrice = [pkg('small', const [CrewOption(1, 200)])];
+    final noPrice = [pkg('small', const []), pkg('villa', const [])];
+
+    test('خيارٌ مسعّرٌ واحد يكفي لعرض البطاقات', () {
+      expect(homePackagesView(packages: withPrice, zoneName: 'صبيا'),
+          HomePackagesView.packages);
+    });
+
+    test('خيارٌ مسعّرٌ يُعرض حتى قبل معرفة اسم المنطقة', () {
+      // لا نحجب سعراً بيدنا لأنّ الاسم لم يصل — العرضُ أسبقُ من التسمية.
+      expect(homePackagesView(packages: withPrice, zoneName: null),
+          HomePackagesView.packages);
+    });
+
+    test('لا منطقةَ ولا باقات ⇒ لا تُقال دعوى عن «منطقتك»', () {
+      expect(homePackagesView(packages: const [], zoneName: null),
+          HomePackagesView.noZone);
+      expect(homePackagesView(packages: noPrice, zoneName: null),
+          HomePackagesView.noZone);
+    });
+
+    test('اسمٌ فارغٌ أو مسافاتٌ = لا منطقة', () {
+      for (final z in <String>['', '   ', '\t']) {
+        expect(homePackagesView(packages: noPrice, zoneName: z),
+            HomePackagesView.noZone,
+            reason: 'اسمٌ خالٍ ليس منطقةً محدَّدة');
+      }
+    });
+
+    test('منطقةٌ محدَّدة بلا خيارٍ مسعّر ⇒ الدعوى صحيحةٌ هنا وحدها', () {
+      expect(homePackagesView(packages: noPrice, zoneName: 'صبيا'),
+          HomePackagesView.zoneWithoutPackages);
+      expect(homePackagesView(packages: const [], zoneName: 'صبيا'),
+          HomePackagesView.zoneWithoutPackages);
+    });
+
+    test('الشاشة تفرّق الحالتين، ودعوى «في منطقتك» مقيَّدةٌ بالمنطقة', () {
+      final s =
+          File('lib/screens/hourly_details_screen.dart').readAsStringSync();
+      expect(s.contains('homePackagesView('), isTrue,
+          reason: 'الشاشة لا تستعمل التفريق — الرسالةُ الواحدة عادت');
+      expect(s.contains('HomePackagesView.noZone'), isTrue);
+      // لا دعوى عن «منطقتك» بلا اسمِ منطقةٍ مُدرجٍ في النصّ.
+      expect(s.contains('لا توجد باقات مسعّرة في منطقتك'), isFalse,
+          reason: 'هذه هي الصيغةُ التي تُقال قبل تحديد المنطقة — أُزيلت');
+      expect(s.contains('لا توجد باقات مسعّرة في «\$_selectedZoneName»'), isTrue,
+          reason: 'الدعوى تُسمّي منطقتها، فلا تُقال إلّا بوجودها');
+      expect(s.contains('حدّدي موقعك أولاً لعرض الباقات وأسعارها'), isTrue,
+          reason: 'حالةُ «لا منطقة» تطلب الخطوةَ المطلوبة فعلاً');
+    });
+  });
 }
