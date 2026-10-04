@@ -17,18 +17,24 @@ const ZoneMapPicker = lazy(() => import('../components/ZoneMapPicker.tsx'));
 
 interface SystemSettings {
     // General
-    terms_url: string;
+    // support_url: تستعمله هذه اللوحة نفسها في زرّ الدعم أعلى الصفحة.
     support_url: string;
     privacy_policy: string;
     maintenance_mode: boolean;
 
-    // Payments — أزيلت vat_rate/min_wallet_balance ومفاتيح الإشعارات الثلاثة:
-    // لا قارئ لها في التطبيق أو الدوال (الضريبة مثبّتة 15% في functions/pricing.js)،
-    // فكان الأدمن «يحفظها بنجاح» بلا أي أثر تشغيلي. tamara_enabled حيّ فعلاً
-    // (payment_summary_screen / store_payment_screen).
-    commission_rate: number;
+    // Payments
     tamara_enabled: boolean;
 }
+
+// أُزيلت من هنا مفاتيحُ يحفظها الأدمن «بنجاح» بلا أيّ أثر تشغيليّ:
+//   • الجولة الأولى: vat_rate و min_wallet_balance ومفاتيحُ الإشعارات الثلاثة
+//     (الضريبة مثبّتة 15% في functions/pricing.js).
+//   • 2026-10-04: terms_url — لا قارئَ له في التطبيق ولا الدوالّ ولا هذه اللوحة،
+//     وليس في lib/ رابطُ شروطٍ مثبَّت كان يُفترض أن يقوده: شاشةُ الشروط للعميل
+//     (terms_privacy_screens.dart) تقرأ من مجموعة `service_policies` بنداً بنداً.
+//   • 2026-10-04: commission_rate — لم يكن له **حقلُ تحرير أصلاً**، فكان يُكتب
+//     ثابتاً بالقيمة 15 مع كلّ حفظ ولا يقرؤه أحد.
+// ما يبقى هنا لا بدّ أن يكون له قارئ. يحرس ذلك `test/settings_keys_test.dart`.
 
 interface CoverageZone {
     id: string;
@@ -130,11 +136,9 @@ const defaultAppUpdate: AppUpdateConfig = {
 };
 
 const defaultSettings: SystemSettings = {
-    terms_url: "https://zyiarah.com/terms",
     support_url: "https://zyiarah.com/support",
     privacy_policy: "نحن في تطبيق زيارة نلتزم بحماية بياناتك الشخصية...",
     maintenance_mode: false,
-    commission_rate: 15,
     tamara_enabled: false,
 };
 
@@ -831,14 +835,6 @@ export default function Settings({ role }: { role?: string | null }) {
                                                     </div>
                                                 </div>
 
-                                                <div className="space-y-2">
-                                                    <label htmlFor="terms-url" className="block text-sm font-bold text-slate-700">رابط الشروط والأحكام</label>
-                                                    <input
-                                                        id="terms-url" type="url" value={settings.terms_url} onChange={(e) => handleChange('terms_url', e.target.value)}
-                                                        className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 text-slate-700 text-sm rounded-xl px-5 py-3.5 outline-none focus:border-[#8E2B5C] focus:ring-4 focus:ring-[#8E2B5C]/10 transition-all text-left"
-                                                        dir="ltr" placeholder="https://example.com/terms"
-                                                    />
-                                                </div>
                                                 <div className="space-y-2">
                                                     <label htmlFor="support-url" className="block text-sm font-bold text-slate-700">رابط الدعم الفني</label>
                                                     <input
