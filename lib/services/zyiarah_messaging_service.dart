@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class ZyiarahMessagingService {
   // Singleton Implementation
@@ -303,7 +304,7 @@ class ZyiarahMessagingService {
 
   Future<String> _getAdminEmail() async {
     try {
-      final doc = await FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get();
+      final doc = await FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get().timeout(kNetCallTimeout);
       if (doc.exists && doc.data()?['admin_email'] != null) {
         return doc.data()!['admin_email'];
       }

@@ -20,7 +20,7 @@ class ZyiarahOrderService {
           .where('code', isEqualTo: code.toUpperCase())
           .where('status', isEqualTo: 'active')
           .limit(1)
-          .get();
+          .get().timeout(kNetCallTimeout);
 
       if (snapshot.docs.isEmpty) return null;
 
@@ -274,7 +274,7 @@ class ZyiarahOrderService {
 
   // تقديم تقييم للطلب وتحديث معدل تقييم الكادر
   Future<void> submitOrderRating(String orderId, double rating, String comment, {String? reason, File? evidence}) async {
-    final orderDoc = await _db.collection('orders').doc(orderId).get();
+    final orderDoc = await _db.collection('orders').doc(orderId).get().timeout(kNetCallTimeout);
     if (!orderDoc.exists) return;
 
     final data = orderDoc.data() as Map<String, dynamic>;

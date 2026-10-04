@@ -64,6 +64,18 @@ List<File> _allScreens() => Directory('lib/screens')
     .where((f) => f.path.endsWith('.dart'))
     .toList();
 
+/// **والخدماتُ معها.** المسحُ الأوّل توقّف عند `lib/screens/**`، فبقيت قراءاتُ
+/// `lib/services/**` بلا مهلة — وهي ما تقف خلف شاشاتٍ كثيرة. وُجد ذلك حيّاً
+/// (2026-10-04) في «حسابي»: «الرصيد المتاح» و«كود الإحالة» كلاهما هيكلُ
+/// تحميلٍ لا ينتهي، وكلاهما من خدمة لا من شاشة
+/// (`getOrCreateWallet` و`getOrCreateReferralCode`). سبعَ عشرةَ قراءةً في
+/// أربعةَ عشرَ ملفّ خدمة.
+List<File> _allServices() => Directory('lib/services')
+    .listSync(recursive: true)
+    .whereType<File>()
+    .where((f) => f.path.endsWith('.dart'))
+    .toList();
+
 /// ملفّاتٌ نداءاتُها السحابيّة **تُغيّر حالة** لا تقرأ — مهلتُها قرارٌ مختلف.
 /// «انقضت المهلة» ليست «لم يحدث شيء»: قد يكون الخادمُ نفّذ. فرسالةُ «فشل» بعد
 /// استردادٍ نجح تدفع الأدمنَ لإعادته. تُترك بلا مهلة عمداً حتى يُقرَّر لكلٍّ منها
@@ -85,13 +97,21 @@ const Map<String, String> _statefulCallFiles = {
 /// `onTap?.call()` وأمثالَه — وهو ما حدث فعلاً وكشفه هذا الفحص على نفسه.
 int _bareCallableCalls(String src) {
   var n = 0;
-  for (final m
-      in RegExp(r'\.call\(\s*(?:\{[\s\S]*?\n\s*\})?\s*\)(\s*\.timeout\()?')
-          .allMatches(src)) {
-    if (m.group(1) != null) continue;
+  for (final m in RegExp(r'\.call\(').allMatches(src)) {
     final from = (m.start - 220).clamp(0, src.length);
     if (!src.substring(from, m.start).contains('httpsCallable')) continue;
-    n++;
+    // **موازنةُ أقواسٍ لا نمطٌ للوسائط.** النسخةُ الأولى طابقت «خريطةً
+    // متعدّدةَ الأسطر أو لا وسائط»، فأفلت منها `.call({'code': code})` في
+    // سطرٍ واحد — `applyReferralCode` في خدمة الإحالة — فقرأ النداءُ بلا
+    // مهلةٍ كأنّه محصَّن. كشفه فحصُ مجموعةِ الخدمات أدناه.
+    var i = m.end, depth = 1;
+    while (i < src.length && depth > 0) {
+      if (src[i] == '(') depth++;
+      if (src[i] == ')') depth--;
+      i++;
+    }
+    final tail = src.substring(i, (i + 40).clamp(0, src.length)).trimLeft();
+    if (!tail.startsWith('.timeout(')) n++;
   }
   return n;
 }
@@ -120,9 +140,9 @@ void main() {
     });
   });
 
-  test('كلُّ قراءةِ Firestore في كلّ شاشة لها مهلة', () {
+  test('كلُّ قراءةِ Firestore في كلّ شاشة وكلّ خدمة لها مهلة', () {
     final offenders = <String>[];
-    for (final f in _allScreens()) {
+    for (final f in [..._allScreens(), ..._allServices()]) {
       final p = f.path.replaceAll(r'\', '/');
       final src = _code(p);
       for (final m in RegExp(r'await\s+[\s\S]{0,180}?\.get\(\)(\s*\.timeout\()?')
@@ -136,6 +156,28 @@ void main() {
         reason: '\n\nقراءةُ Firestore بلا مهلة. مع persistenceEnabled لا ترمي\n'
             'حين يتعذّر بلوغُ الخادم — تنتظر، فيبقى shimmer إلى الأبد:\n'
             '  • ${offenders.join('\n  • ')}\n');
+  });
+
+  test('نداءاتُ الخدمات السحابيّة الأربعةُ مُغيِّرةٌ للحالة — تُترك عمداً', () {
+    // `verifyMoyasarPayment`، `autoAssignDriverDirectly`، `createTamaraCheckout`،
+    // `applyReferralCode`: كلُّها تُغيّر حالةً خادميّة، فـ«انقضت المهلة» ليست
+    // «لم يحدث شيء» — القرارُ نفسُه المُسجَّل في `_statefulCallFiles` أعلاه،
+    // ممتدّاً إلى الخدمات. الفحصُ يثبّت أنّها ما زالت **هي** الأربعة: نداءٌ
+    // خامسٌ بلا مهلة يجب أن يُراجَع لا أن يمرّ ضمن استثناءٍ مفتوح.
+    final stateful = <String>{
+      'lib/services/moyasar_service.dart',
+      'lib/services/order_service.dart',
+      'lib/services/tamara_service.dart',
+      'lib/services/zyiarah_referral_service.dart',
+    };
+    final bare = <String>{};
+    for (final f in _allServices()) {
+      final p = f.path.replaceAll(r'\', '/');
+      if (_bareCallableCalls(_code(p)) > 0) bare.add(p);
+    }
+    expect(bare, stateful,
+        reason: 'تغيّرت مجموعةُ النداءات السحابيّة بلا مهلة في الخدمات — '
+            'راجِع الجديدَ منها: أهو مُغيِّرٌ للحالة فعلاً؟');
   });
 
   test('المصادقة لها مهلة ورسالةٌ عند انقضائها', () {

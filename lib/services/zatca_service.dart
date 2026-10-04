@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// خدمة متوافقة مع متطلبات هيئة الزكاة والضريبة والجمارك (ZATCA)
 /// تقوم بتوليد رمز الاستجابة السريعة (QR Code) بنظام التشفير (TLV) المطلوب قانونياً
@@ -21,7 +22,7 @@ class ZatcaService {
       final doc = await FirebaseFirestore.instance
           .collection('system_configs')
           .doc('zatca_settings')
-          .get();
+          .get().timeout(kNetCallTimeout);
       if (doc.exists && doc.data() != null) {
         final d = doc.data()!;
         final m = (d['merchant_name'] as String?)?.trim();

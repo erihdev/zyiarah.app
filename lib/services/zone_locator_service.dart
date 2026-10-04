@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:geolocator/geolocator.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// سبب تعذّر التحديد التلقائي — **لكل حالة رسالة وإجراء**.
 ///
@@ -98,7 +99,7 @@ class ZyiarahZoneLocator {
     final snap = await FirebaseFirestore.instance
         .collection('service_zones')
         .where('enabled', isEqualTo: true)
-        .get();
+        .get().timeout(kNetCallTimeout);
     return snap.docs.map((d) => d.data()).toList()
       ..sort((a, b) => (a['rank'] as int? ?? 0).compareTo(b['rank'] as int? ?? 0));
   }

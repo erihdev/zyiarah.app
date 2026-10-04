@@ -93,7 +93,7 @@ class ZyiarahStoreService {
     // (تحت المراجعة/جاري التوصيل/تم التسليم) بلا جلبٍ إضافي.
     String? clientEmail = user.email;
     try {
-      final userDoc = await _db.collection('users').doc(user.uid).get();
+      final userDoc = await _db.collection('users').doc(user.uid).get().timeout(kNetCallTimeout);
       if (userDoc.exists) {
         clientName = userDoc.data()?['name'] ?? 'عميل زيارة';
         clientPhone = userDoc.data()?['phone'] ?? '000000000';

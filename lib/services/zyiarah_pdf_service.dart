@@ -11,6 +11,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/utils/vat.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class ZyiarahPdfService {
   /// أداة مساعدة لمعالجة النصوص العربية وتشكيلها بشكل صحيح داخل الـ PDF
@@ -268,7 +269,7 @@ class ZyiarahPdfService {
       final vs = await FirebaseFirestore.instance
           .collection('orders')
           .where('contract_id', isEqualTo: contractId)
-          .get();
+          .get().timeout(kNetCallTimeout);
       final docs = vs.docs.map((d) => d.data()).toList()
         ..sort((a, b) => ((a['visit_index'] ?? 0) as num)
             .compareTo((b['visit_index'] ?? 0) as num));

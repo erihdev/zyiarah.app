@@ -7,6 +7,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:zyiarah/firebase_options.dart';
 import 'package:zyiarah/services/notification_service.dart';
 import 'dart:math';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// خدمة إدارة Firebase لتطبيق زيارة
 class ZyiarahFirebaseService {
@@ -114,7 +115,7 @@ class ZyiarahFirebaseService {
   Future<String?> getUserRole(String uid, {String? phone}) async {
     try {
       // 1. التحقق أولاً من مجموعة المديرين (UID-based)
-      DocumentSnapshot adminDoc = await _db.collection('admins').doc(uid).get();
+      DocumentSnapshot adminDoc = await _db.collection('admins').doc(uid).get().timeout(kNetCallTimeout);
       if (adminDoc.exists && adminDoc.data() != null) {
         final adminData = adminDoc.data() as Map<String, dynamic>;
         // العودة بالدور الإداري التفصيلي (مثل accountant_admin, marketing_admin)
@@ -122,7 +123,7 @@ class ZyiarahFirebaseService {
       }
 
       // 2. التحقق من مجموعة المستخدمين العامة
-      DocumentSnapshot doc = await _db.collection('users').doc(uid).get();
+      DocumentSnapshot doc = await _db.collection('users').doc(uid).get().timeout(kNetCallTimeout);
       if (doc.exists && doc.data() != null) {
         final data = doc.data() as Map<String, dynamic>;
         return data['role'] ?? 'client';
@@ -156,7 +157,7 @@ class ZyiarahFirebaseService {
             .collection('drivers')
             .where('phone', isEqualTo: cleanPhone)
             .limit(1)
-            .get();
+            .get().timeout(kNetCallTimeout);
 
         if (driverDoc.docs.isNotEmpty) {
           // حفظ الدور في مجموعة المستخدمين للمستقبل برقم الجوال الموحد

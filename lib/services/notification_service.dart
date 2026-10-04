@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:zyiarah/services/deep_link_service.dart';
 import 'package:zyiarah/utils/error_report.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// خدمة إدارة الإشعارات - تطبيق زيارة
 @pragma('vm:entry-point')
@@ -74,7 +75,7 @@ class ZyiarahNotificationService {
             // تشغيل كان يبقى خارج all_users فلا يصله بثّ «الكل» كإشعار Push.
             await _fcm.subscribeToTopic('all_users');
 
-            final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+            final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get().timeout(kNetCallTimeout);
             if (userDoc.exists) {
               final role = userDoc.data()?['role'];
               final adminRoles = ['admin', 'super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin'];
@@ -194,7 +195,7 @@ class ZyiarahNotificationService {
       String role = 'client';
       String? staffRole;
       try {
-        final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get().timeout(kNetCallTimeout);
         if (userDoc.exists) {
           role = userDoc.data()?['role'] ?? 'client';
           staffRole = userDoc.data()?['staff_role'] as String?;

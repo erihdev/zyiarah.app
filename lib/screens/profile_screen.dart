@@ -133,6 +133,11 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
   }
 
   Future<void> _loadReferralCode(String uid) async {
+    // عند إعادة المحاولة: أعد الـshimmer أثناء الجلب، كما يفعل `_loadWallet`
+    // — بدونها يبقى «تعذّر التحميل» ظاهراً فتبدو الإعادةُ بلا أثر.
+    if (mounted && _referralLoaded && _referralCode == null) {
+      setState(() => _referralLoaded = false);
+    }
     try {
       final code = await ZyiarahReferralService().getOrCreateReferralCode(uid);
       if (mounted) {
@@ -1070,13 +1075,16 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                                   const Icon(Icons.tag_rounded,
                                       color: Color(0xFFFBBF24), size: 14),
                                   const SizedBox(width: 6),
+                                  // «--------» تقرأ ككودٍ مُعتَّم لا كعطل.
+                                  // حين يفشل الجلبُ نقولها، فالزرُّ بجانبها
+                                  // كان يصمت تماماً عند الضغط.
                                   Text(
-                                    _referralCode ?? '--------',
+                                    _referralCode ?? 'تعذّر التحميل',
                                     style: GoogleFonts.tajawal(
                                       color: Colors.white,
-                                      fontSize: 18,
+                                      fontSize: _referralCode == null ? 13 : 18,
                                       fontWeight: FontWeight.w900,
-                                      letterSpacing: 3,
+                                      letterSpacing: _referralCode == null ? 0 : 3,
                                     ),
                                   ),
                                 ],
@@ -1100,7 +1108,26 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                   // Copy button
                   GestureDetector(
                     onTap: () {
-                      if (_referralCode == null) return;
+                      // كان `return;` صامتاً: زرٌّ يُضغط فلا يحدث شيء ولا
+                      // تُقال كلمة — ولا سبيلَ لها إلى معرفة أنّ الكودَ لم
+                      // يصل أصلاً. نقولها ونُتيح إعادةَ المحاولة.
+                      if (_referralCode == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: const Text(
+                              'تعذّر تحميل كود الإحالة — أعيدي المحاولة'),
+                          backgroundColor: Colors.red,
+                          behavior: SnackBarBehavior.floating,
+                          action: SnackBarAction(
+                            label: 'إعادة',
+                            textColor: Colors.white,
+                            onPressed: () {
+                              final uid = _auth.currentUser?.uid;
+                              if (uid != null) _loadReferralCode(uid);
+                            },
+                          ),
+                        ));
+                        return;
+                      }
                       HapticFeedback.mediumImpact();
                       final message =
                           'سجّل في تطبيق زيارة للخدمات المنزلية باستخدام كودي '
