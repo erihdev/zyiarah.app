@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:zyiarah/utils/time_format.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +13,7 @@ import 'package:zyiarah/services/zone_locator_service.dart';
 import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/date_strip.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// باقات عاملات المناسبات — جاهزة ومسعّرة مسبقاً (بدل الإدخال الحر السابق):
 /// العميل يختار باقة بعدد عاملات وساعات وزيارات ثابتة، ثم يحدّد مواعيد الزيارات
@@ -240,7 +242,7 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
             'endDate': endDate,
             // المنطقة لسقفها اليومي الخاص (لا لعدّ السائقين — هم بلا مناطق).
             if (_userZoneName != null) 'zoneName': _userZoneName,
-          });
+          }).timeout(kNetCallTimeout);
 
       final data = result.data as Map;
 
@@ -310,8 +312,10 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
           _availabilityError = true;
         });
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-              'تعذّر تحميل مواعيد الإتاحة: ${e.toString().replaceAll("Exception: ", "")}'),
+          // لا نصَّ استثناءٍ خامّاً للعميلة (انظر نظيرتها في subscription_plans_screen).
+          content: Text(e is TimeoutException
+              ? 'تعذّر تحميل مواعيد الإتاحة — تحقّقي من الاتصال وأعيدي المحاولة'
+              : 'تعذّر تحميل مواعيد الإتاحة، أعيدي المحاولة'),
           backgroundColor: Colors.red,
         ));
       }
@@ -385,7 +389,10 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
       });
     }
     try {
-      final snapshot = await _db.collection('event_worker_packages').get();
+      final snapshot = await _db
+          .collection('event_worker_packages')
+          .get()
+          .timeout(kNetCallTimeout);
       if (mounted) {
         final docs = snapshot.docs;
         docs.sort((a, b) {
