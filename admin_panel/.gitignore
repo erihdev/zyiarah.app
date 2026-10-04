@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 
 .env
+
+# يكتبه مسارُ النشر برمز Mapbox — لا يدخل git
+.env*

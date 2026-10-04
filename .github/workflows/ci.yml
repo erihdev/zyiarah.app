@@ -140,33 +140,12 @@ jobs:
         run: npm ci
         working-directory: admin_panel
 
-      # src/services/firebase.ts مُستثنى من git (إعداد Firebase للويب). البناء
-      # فحص أنواع وحزم لا اتصال فعلي، فتكفي قيم صوريّة.
-      - name: Create placeholder Firebase config
+      # src/services/firebase.ts مُستثنى من git، فيُولَّد من
+      # lib/firebase_options.dart (كتلة web) — نفسُ المولّد الذي يستعمله مسارُ
+      # النشر، فلا تُفحص الأنواعُ هنا على نسخةٍ صوريّة تخالف ما يُنشَر.
+      - name: Generate Firebase config
+        run: node scripts/gen_firebase_config.mjs
         working-directory: admin_panel
-        run: |
-          cat > src/services/firebase.ts <<'EOF'
-          import { initializeApp } from 'firebase/app';
-          import { getAuth } from 'firebase/auth';
-          import { getFirestore } from 'firebase/firestore';
-          import { getStorage } from 'firebase/storage';
-          import { getFunctions } from 'firebase/functions';
-
-          const app = initializeApp({
-            apiKey: 'ci',
-            authDomain: 'ci.firebaseapp.com',
-            projectId: 'ci',
-            storageBucket: 'ci.appspot.com',
-            messagingSenderId: '0',
-            appId: 'ci',
-          });
-
-          export const auth = getAuth(app);
-          export const db = getFirestore(app);
-          export const storage = getStorage(app);
-          export const functions = getFunctions(app);
-          export default app;
-          EOF
 
       - name: Lint
         run: npm run lint
