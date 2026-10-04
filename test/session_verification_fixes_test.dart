@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   final fn = File('functions/index.js').readAsStringSync();
   final ordersList = File('lib/screens/orders_list_screen.dart').readAsStringSync();
+  // نصوصُ «لا تتبّع» انتقلت إلى القاعدة المشتركة مع إصلاح 2026-10-04.
+  final tracking = File('lib/utils/order_tracking.dart').readAsStringSync();
   final storeTsx = File('admin_panel/src/pages/StoreOrders.tsx').readAsStringSync();
   final ordersTsx = File('admin_panel/src/pages/Orders.tsx').readAsStringSync();
 
@@ -28,12 +30,16 @@ void main() {
   });
 
   test('بطاقة العميل: خدمة مُدارة بلا سائق لا تعرض «تتبع السائق» الميت', () {
-    expect(
-        ordersList.contains(
-            "status == 'under_review' ||\n                  (status == 'in_progress' && order['driver_id'] == null)"),
-        isTrue,
+    // كان هذا يُثبِّت **تعداد حالتين** حرفيّاً: `under_review` و`in_progress`
+    // بلا سائق. والقرارُ سليم، لكنّ التعداد تركَ `scheduled` بلا سائق خارجه —
+    // وهي الحالةُ التي شوهدت حيّةً (2026-10-04): زياراتُ اشتراكٍ من يوليو تعرض
+    // «تتبع السائق» والبطاقةُ فوقه تقول «انتهى الموعد». فأُعيد توجيهُ الحارس
+    // إلى **القاعدة** بدل القائمة، وصار أشدّ: يمنع عودةَ التعداد أصلاً.
+    expect(ordersList.contains('else if (!canTrackOrder(order))'), isTrue,
         reason: 'طلب سيارة (بلا سائق أبداً) كان يعرض تتبّعاً يقول «انتظر السائق» للأبد');
-    expect(ordersList.contains('تحت المراجعة — تصلك الإشعارات'), isTrue);
+    expect(ordersList.contains("status == 'under_review' ||"), isFalse,
+        reason: 'عاد تعدادُ الحالات — وهو ما أبقى العطل في الحالة التي يغفلها');
+    expect(tracking.contains('تحت المراجعة — تصلك الإشعارات'), isTrue);
   });
 
   test('لوحة الويب: متجر مباشر — أزرار بدء التوصيل/تم التوصيل والحالات', () {

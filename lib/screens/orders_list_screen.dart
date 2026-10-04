@@ -15,6 +15,7 @@ import 'package:zyiarah/utils/status_util.dart';
 import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:zyiarah/utils/order_tracking.dart';
 
 // تحويل رقمي دفاعي — حقول Firestore (amount/total_amount/quotePrice) قد تصل نصّاً
 // أو null، و.toDouble()/as num المباشر كان يعطّل بطاقة الطلب داخل القائمة.
@@ -602,10 +603,12 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                 )
-              else if (status == 'under_review' ||
-                  (status == 'in_progress' && order['driver_id'] == null))
-                // خدمة مُدارة إدارياً بلا سائق (تنظيف داخلية السيارة): لا تتبّع —
-                // كان زرّ «تتبع السائق» يظهر ويقول «لم يُعيَّن سائق بعد» للأبد.
+              else if (!canTrackOrder(order))
+                // لا سائقَ ولا موقع ⇒ لا تتبّع. كان هذا تعداداً لحالتين
+                // (`under_review`، و`in_progress` بلا سائق) فبقيت `scheduled` بلا
+                // سائق تعرض زرّاً يقول «لم يُعيَّن سائق بعد» للأبد — شوهد على
+                // زياراتِ اشتراكٍ فات موعدُها بثلاثة أشهر، والبطاقةُ فوقه تقول
+                // «انتهى الموعد». القاعدةُ الآن في `order_tracking.dart`.
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -618,9 +621,18 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                         size: 15, color: Color(0xFF660033)),
                     const SizedBox(width: 6),
                     Text(
-                        status == 'under_review'
-                            ? 'تحت المراجعة — تصلك الإشعارات'
-                            : 'جاري التنفيذ',
+                        trackingUnavailableLabel(
+                          status: status,
+                          passed: appointmentPassed(
+                              orderAppointment(
+                                serviceDate:
+                                    (order['service_date'] as Timestamp?)?.toDate(),
+                                bookingDate: order['booking_date'] as String?,
+                                bookingTimeSlot:
+                                    order['booking_time_slot'] as String?,
+                              ),
+                              DateTime.now()),
+                        ),
                         style: GoogleFonts.tajawal(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
@@ -629,15 +641,11 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                 )
               else
                 ElevatedButton.icon(
+                  // الحارسُ انتقل إلى شرط الظهور أعلاه (canTrackOrder)، فلا
+                  // حاجة لفرعِ «لم يُعيَّن سائق» هنا: الزرُّ لا يُرسم أصلاً حينها.
                   onPressed: () {
-                    if (order['driver_id'] != null && order['location'] != null) {
-                      ZyiarahCoreService.triggerHapticLight();
-                      context.push('/track/$docId');
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('لم يُعيَّن سائق بعد، يُرجى الانتظار')),
-                      );
-                    }
+                    ZyiarahCoreService.triggerHapticLight();
+                    context.push('/track/$docId');
                   },
                   icon: const Icon(Icons.map_outlined, size: 16),
                   label: Text('تتبع السائق', style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold)),
@@ -659,13 +667,12 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
   /// حتى لا ينسى العميل موعده. تظهر فقط للطلبات ذات موعد محدد (service_date
   /// أو booking_date/booking_time_slot).
   Widget _buildAppointmentBanner(Map<String, dynamic> order) {
-    DateTime? appt = (order['service_date'] as Timestamp?)?.toDate();
-    if (appt == null && order['booking_date'] is String) {
-      try {
-        final t = (order['booking_time_slot'] as String?) ?? '00:00';
-        appt = DateTime.parse('${order['booking_date']}T${t.length == 5 ? t : '00:00'}:00');
-      } catch (_) {}
-    }
+    // نفسُ المُحلِّل الذي يقرّر التتبّع — موعدٌ واحد لا قراءتان قد تختلفان.
+    final DateTime? appt = orderAppointment(
+      serviceDate: (order['service_date'] as Timestamp?)?.toDate(),
+      bookingDate: order['booking_date'] as String?,
+      bookingTimeSlot: order['booking_time_slot'] as String?,
+    );
     if (appt == null) return const SizedBox.shrink();
 
     const days = ['', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'];
