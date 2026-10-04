@@ -70,16 +70,4 @@ class ZyiarahWalletService {
     return success;
   }
 
-  /// بث تيار لحظي لسجل المعاملات والتحصيلات الخاصة بمحفظة المستخدم (Real-time Stream)
-  Stream<List<WalletTransaction>> streamTransactions(String userId) {
-    return _db
-        .collection('wallets')
-        .doc(userId)
-        .collection('transactions')
-        .orderBy('created_at', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => WalletTransaction.fromFirestore(doc))
-            .toList());
-  }
 }

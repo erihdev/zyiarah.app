@@ -23,11 +23,6 @@ class GlobalErrorHandler {
     _showToast(message, isError: true);
   }
 
-  /// Displays success messages gracefully.
-  static void showSuccess(String message) {
-    _showToast(message, isError: false);
-  }
-
   static void _showToast(String message, {bool isError = false}) {
     messengerKey.currentState?.removeCurrentSnackBar();
     messengerKey.currentState?.showSnackBar(

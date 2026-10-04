@@ -52,53 +52,11 @@ class ZyiarahCoreService {
 
   // --- 3. التوقيع الرقمي (Digital Signature) ---
 
-  Map<String, dynamic> generateSecureSignature(String orderId, String userId) {
-    return {
-      "sig_id": "SIG-${DateTime.now().millisecondsSinceEpoch}",
-      "signed_at": DateTime.now().toIso8601String(),
-      "metadata": "مؤسسة معاذ يحي محمد المالكي - سجل 7030376342",
-      "order_ref": orderId,
-      "user_ref": userId
-    };
-  }
-
   // --- 4. التحليلات (Business Analytics) ---
   final FirebaseAnalytics _analytics = FirebaseAnalytics.instance;
 
   Future<void> logEvent(String name, Map<String, dynamic>? parameters) async {
     await _analytics.logEvent(name: name, parameters: parameters?.cast<String, Object>());
-  }
-
-  Future<void> logOrderSuccess(String orderId, double amount, String type) async {
-    await _analytics.logEvent(
-      name: 'order_success',
-      parameters: {
-        'order_id': orderId,
-        'value': amount,
-        'currency': 'SAR',
-        'service_type': type
-      },
-    );
-  }
-
-  Future<void> logPaymentComplete(String orderId, String method) async {
-    await _analytics.logEvent(
-      name: 'payment_complete',
-      parameters: {
-        'order_id': orderId,
-        'method': method,
-      },
-    );
-  }
-
-  Future<void> logSupportOpen(String ticketId, String category) async {
-    await _analytics.logEvent(
-      name: 'support_ticket_open',
-      parameters: {
-        'ticket_id': ticketId,
-        'category': category,
-      },
-    );
   }
 
   // --- 5. نظام التفاعل الحسي (Sensory UI) ---
@@ -111,11 +69,6 @@ class ZyiarahCoreService {
   /// اهتزاز قوي للنجاح (مثل إتمام الحجز)
   static Future<void> triggerHapticSuccess() async {
     await HapticFeedback.heavyImpact();
-  }
-
-  /// اهتزاز تحذيري (مثل وجود خطأ)
-  static Future<void> triggerHapticWarning() async {
-    await HapticFeedback.vibrate();
   }
 
   /// تأثير خفيف للمس الأزرار

@@ -19,13 +19,4 @@ class ZyiarahOrderUtil {
     return '$numStr-$letters';
   }
 
-  /// Legacy backup (or for other uses)
-  static String generateOrderCode({String prefix = 'ZY'}) {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final rnd = Random();
-    final code = String.fromCharCodes(Iterable.generate(
-      4, (_) => chars.codeUnitAt(rnd.nextInt(chars.length)),
-    ));
-    return '$prefix-$code';
-  }
 }
