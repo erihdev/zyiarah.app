@@ -79,4 +79,31 @@ void main() {
       expect(src.contains('final double? rating;'), isTrue);
     });
   });
+
+  group('نقاط قطرات: لا رقمَ قبل أن نعرفه', () {
+    // نفسُ عائلة «تقييمك 4.9»، وُجدت في التشغيل الحيّ نفسِه بعد ساعات:
+    // شريطُ «ينقصكِ كذا» يحسب `50 - _qatratPoints` و`_qatratPoints` صفرٌ
+    // أثناء التحميل — فيقول «50 نقطة» لمن تملك 48 وينقصها اثنتان، ثمّ يقفز
+    // إلى «2 نقطة» حين يصل الرصيد. والعدّادُ فوقه مباشرةً يعرض هيكلَ تحميلٍ
+    // في الحال نفسِها: الصيغةُ الصحيحة كانت بجانب الخطأ، كما كانت «إجمالي
+    // الحجوزات» بجانب «تقييمك».
+    final src = File('lib/screens/profile_screen.dart').readAsStringSync();
+
+    test('الشريطُ يفحص `_walletLoaded` لا الخطأَ وحده', () {
+      expect(src.contains("_walletError || !_walletLoaded\n                                ? '—'"),
+          isTrue,
+          reason: 'عاد الشريطُ يحسب رقماً من رصيدٍ لم يصل');
+    });
+
+    test('والاستبدالُ لا يُفتح قبل معرفة الرصيد', () {
+      expect(
+          src.contains(
+              'final canRedeem = !_walletError && _walletLoaded && _qatratPoints >= 50;'),
+          isTrue);
+    });
+
+    test('العدّادُ فوقه ما زال يُشَمّر أثناء التحميل (مرجعُ الصيغة)', () {
+      expect(src.contains("key: ValueKey('qshimmer')"), isTrue);
+    });
+  });
 }

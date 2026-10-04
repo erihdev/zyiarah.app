@@ -876,7 +876,8 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
 
   Widget _buildQatratCard() {
     // عند فشل جلب المحفظة لا استبدال: القيمة صفر افتراضية لا حقيقية.
-    final canRedeem = !_walletError && _qatratPoints >= 50;
+    // الاستبدالُ ممكنٌ فقط بعد أن نعرف الرصيدَ فعلاً — لا قبله.
+    final canRedeem = !_walletError && _walletLoaded && _qatratPoints >= 50;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
@@ -977,12 +978,18 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                             ),
                           )
                         : Text(
-                            _walletError
+                            // **لا رقمَ قبل أن نعرفه.** `_qatratPoints` صفرٌ
+                            // أثناء التحميل، فكان الشريطُ يقول «50 نقطة» —
+                            // أي «ينقصكِ خمسون» — لمن تملك 48 وينقصها اثنتان،
+                            // ثمّ يقفز إلى «2 نقطة». والعدّادُ فوقه يعرض
+                            // هيكلَ تحميلٍ في الحال نفسِها: الصيغةُ الصحيحة
+                            // كانت بجانبه. (نفسُ عطلِ «تقييمك 4.9».)
+                            _walletError || !_walletLoaded
                                 ? '—'
                                 : canRedeem
                                     ? 'استبدال'
                                     : '${50 - _qatratPoints} نقطة',
-                            key: ValueKey(canRedeem),
+                            key: ValueKey('$canRedeem|$_walletLoaded'),
                             style: GoogleFonts.tajawal(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
