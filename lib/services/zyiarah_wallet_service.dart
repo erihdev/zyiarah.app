@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:zyiarah/models/wallet_model.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/error_report.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class ZyiarahWalletService {
   // Singleton Pattern
@@ -17,7 +18,7 @@ class ZyiarahWalletService {
   /// جلب محفظة المستخدم أو إنشائها تلقائياً إذا لم تكن موجودة (Safe Guard)
   Future<ZyiarahWallet> getOrCreateWallet(String userId) async {
     final walletRef = _db.collection('wallets').doc(userId);
-    final doc = await walletRef.get();
+    final doc = await walletRef.get().timeout(kNetCallTimeout);
 
     if (doc.exists) {
       return ZyiarahWallet.fromFirestore(doc);

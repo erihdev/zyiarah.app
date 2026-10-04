@@ -15,6 +15,7 @@ import 'package:zyiarah/screens/ac_service_details_screen.dart';
 import 'package:zyiarah/screens/subscription_plans_screen.dart';
 import 'package:zyiarah/services/zyiarah_referral_service.dart';
 import 'package:zyiarah/theme/app_theme.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// قسم «العروض».
 ///
@@ -68,7 +69,8 @@ class _ZyiarahOffersScreenState extends State<ZyiarahOffersScreen> {
             .map((q) => q.docs
                 .map((d) => d.data())
                 .where((m) => m['placement'] == 'offers')
-                .toList());
+                .toList())
+            .firstEventTimeout();
 
     final uid = _uid;
     if (uid != null) {
@@ -77,7 +79,8 @@ class _ZyiarahOffersScreenState extends State<ZyiarahOffersScreen> {
               .collection(PromoCoupon.collectionPath)
               .where('status', isEqualTo: 'active')
               .snapshots()
-              .map(PromoCoupon.fromQuery);
+              .map(PromoCoupon.fromQuery)
+              .firstEventTimeout();
       _referral = widget.referralCode ??
           ZyiarahReferralService()
               .getOrCreateReferralCode(uid)

@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class DriverNotificationsScreen extends StatelessWidget {
   const DriverNotificationsScreen({super.key});
@@ -34,7 +35,8 @@ class DriverNotificationsScreen extends StatelessWidget {
                     // مستندات وارد السائق تُكتب بحقل sentAt خادميّاً.
                     .orderBy('sentAt', descending: true)
                     .limit(50)
-                    .snapshots(),
+                    .snapshots()
+            .firstEventTimeout(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(

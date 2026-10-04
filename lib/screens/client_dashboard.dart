@@ -24,6 +24,7 @@ import 'package:zyiarah/screens/client_notifications_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:zyiarah/providers/user_provider.dart';
 import 'package:zyiarah/providers/order_provider.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 // تحويل رقمي دفاعي: حقول Firestore قد تصل نصّاً ("150") أو null من لوحة الإدارة،
 
@@ -247,7 +248,8 @@ class _ClientDashboardState extends State<ClientDashboard> {
           .where('client_id', isEqualTo: uid)
           .where('status', whereIn: ['assigned', 'scheduled', 'accepted', 'on_the_way', 'in_progress'])
           .limit(20)
-          .snapshots(),
+          .snapshots()
+            .firstEventTimeout(),
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const SizedBox.shrink();
@@ -413,7 +415,8 @@ class _ClientDashboardState extends State<ClientDashboard> {
       stream: FirebaseFirestore.instance
           .collection('contracts')
           .where('userId', isEqualTo: uid)
-          .snapshots(),
+          .snapshots()
+            .firstEventTimeout(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox.shrink();
         // إزالة التكرار بمعرّف العقد ثم إبقاء العقود النشطة التي بقيت بها زيارات
@@ -543,7 +546,8 @@ class _ClientDashboardState extends State<ClientDashboard> {
       stream: FirebaseFirestore.instance
           .collection('promo_banners')
           .where('isActive', isEqualTo: true)
-          .snapshots(),
+          .snapshots()
+            .firstEventTimeout(),
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const SizedBox.shrink();
@@ -895,7 +899,8 @@ class _NotifBell extends StatelessWidget {
           .collection('notifications')
           .where('userId', isEqualTo: uid)
           .limit(50)
-          .snapshots(),
+          .snapshots()
+            .firstEventTimeout(),
       builder: (context, snapshot) {
         // غير المقروء = لا isRead ولا is_read = true (يوحّد مع شاشة الإشعارات)
         final hasUnread = (snapshot.data?.docs ?? []).any((d) {

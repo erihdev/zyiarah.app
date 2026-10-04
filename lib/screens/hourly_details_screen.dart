@@ -584,7 +584,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   // المواد المضافة تُجمع فوقه في الأساس نفسه (فاتورة واحدة).
   double get totalAmount => _basePrice + _materialsTotal;
 
-  // الأساس من اللوحة؛ الضريبة 15% تُضاف فوقه (قرار المالك) — المعروض «شامل الضريبة».
+  // الأساس من اللوحة؛ الضريبة 15% تُضاف فوقه (قرار المالك). هذا ما **يُرسَل**
+  // إلى شاشة الدفع، لا ما يُعرض هنا: المعروض في هذه الشاشة قبل الضريبة.
   double get grandTotal => grossFromBaseRounded(totalAmount);
 
   bool _isSameDay(DateTime a, DateTime b) =>
@@ -599,6 +600,32 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("اختر نوع السكن وعدد الكوادر أولاً")));
       return;
     }
+    // **مجهولةٌ لا ممتلئة.** حين يفشل جلبُ الإتاحة يُستبدَل شريطُ التواريخ
+    // برسالة العطل، فلا ترى العميلةُ تاريخاً ولا تختاره؛ والحقولُ تبقى على
+    // افتراضاتها المتسامحة (10 طلبات، 5 فرق، عدّاداتٌ فارغة) فتقول
+    // `_dateUnavailable` «متاح». فالمضيُّ كان يأخذها إلى شاشةِ دفعٍ **لتاريخٍ
+    // لم تره ولم تختره**، لتُمنع هناك برسالةٍ ثانية مختلفة. نقولها هنا، مع
+    // إعادةِ المحاولة في الرسالة نفسها — وهي الرسالةُ التي يعرضها الشريطُ
+    // فوقها، فلا يتناقض موضعان.
+    //
+    // الشاشتان الأخريان (باقات الاشتراك وعاملات المناسبات) محصّنتان أصلاً
+    // بلا هذا الفحص: زرُّهما معطَّلٌ حتى تُختار كلُّ الزيارات من الشريط، وهو
+    // مستبدَلٌ عند العطل — فلا سبيل للمضيّ. وهذه الشاشة وحدها لا تطلب اختياراً.
+    if (_availabilityError) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text(
+            'تعذّر تحميل المواعيد المتاحة. تحقّقي من اتصالك وأعيدي المحاولة.'),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'إعادة',
+          textColor: Colors.white,
+          onPressed: _loadAvailabilityFromServer,
+        ),
+      ));
+      return;
+    }
+
     // (قرار المالك) لا وقت بدء يختاره العميل: يُرسى الموعد على **أول ساعة فيها
     // سائق متاح لمدة الباقة** في اليوم المختار — فالإسناد يجد سائقاً فعلاً،
     // والإدارة تعدّل الوقت من «تعديل الزيارة» عند الحاجة (يُشعَر الطرفان تلقائياً).
@@ -721,7 +748,13 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                     if (_selectedLocation != null) ...[
                       const Text("اختر نوع سكنك:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
                       const SizedBox(height: 6),
-                      const Text("الأسعار شاملة الضريبة وتشمل كامل الكوادر المختارة",
+                      // **قبل** الضريبة: البطاقاتُ أدناه تعرض `opt.basePrice`.
+                      // كان النصُّ «شاملة الضريبة» — دعوى تناقض الرقمَ تحتها،
+                      // وتناقض «الإجمالي قبل الضريبة» و«تُضاف 15% عند إتمام
+                      // الطلب» في الشاشة نفسها. نفسُ الجملة صُحِّحت مرّةً في هذا
+                      // الملفّ (انظر «السعر قبل الضريبة ويشمل أدوات التنظيف») —
+                      // وفُوِّت هذا الموضع.
+                      const Text("الأسعار قبل الضريبة وتشمل كامل الكوادر المختارة",
                           style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
                       const SizedBox(height: 15),
                       _buildPackageSelector(),
@@ -841,7 +874,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   }
 
   /// بطاقات باقات السكن: لكل نوعٍ وصفُه وخيارات الكوادر **المفعّلة في منطقة العميل
-  /// فقط** بسعرها شامل الضريبة — اختيار الكادر يختار الباقة ويعيد حساب الخانات
+  /// فقط** بسعرها **قبل الضريبة** — اختيار الكادر يختار الباقة ويعيد حساب الخانات
   /// بمدة الجدولة الخاصة بالنوع.
   Widget _buildPackageSelector() {
     final sellable = _packages.where((p) => p.sellable).toList();

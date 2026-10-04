@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/utils/error_report.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// المزود المركزي لحالة المستخدم وصلاحياته
 /// يعالج مشكلة الـ Redundant Reads ويعزز استقرار حالة التطبيق
@@ -84,6 +85,7 @@ class ZyiarahUserProvider extends ChangeNotifier {
         .collection('users')
         .doc(uid)
         .snapshots()
+        .firstEventTimeout()
         .listen((doc) {
       try {
         if (doc.exists && doc.data() != null) {

@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/firebase_service.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminUsersScreen extends StatefulWidget {
   const AdminUsersScreen({super.key});
@@ -246,7 +247,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
               .where('role', isEqualTo: 'client')
               .orderBy('created_at', descending: true)
               .limit(100)
-              .snapshots(),
+              .snapshots()
+            .firstEventTimeout(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator(color: Color(0xFF6366F1)));

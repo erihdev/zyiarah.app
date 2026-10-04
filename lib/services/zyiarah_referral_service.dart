@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// ZyiarahReferralService — Viral referral engine.
 ///
@@ -42,7 +43,7 @@ class ZyiarahReferralService {
   /// persists a collision-free one.
   Future<String> getOrCreateReferralCode(String userId) async {
     final userRef = _db.collection('users').doc(userId);
-    final doc = await userRef.get();
+    final doc = await userRef.get().timeout(kNetCallTimeout);
 
     if (!doc.exists) throw Exception('User $userId not found');
 
@@ -56,7 +57,7 @@ class ZyiarahReferralService {
           .collection('users')
           .where('referral_code', isEqualTo: code)
           .limit(1)
-          .get();
+          .get().timeout(kNetCallTimeout);
       if (collision.docs.isEmpty) break;
       code = _generateCode();
     }

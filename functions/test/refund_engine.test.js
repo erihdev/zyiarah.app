@@ -599,3 +599,63 @@ t("(و٦) index.js ما زال يُصدّر ٦٢ دالّة", () => {
   }
   console.log(`\nrefund_engine tests: ${passed} passed`);
 })();
+
+// ── «refunding» مؤشّرٌ عابرٌ لا حالةٌ نهائيّة ────────────────────────────────
+//
+// كانت تُكتب في موضعَين و**لا يقرأها شيء** — لا شاشة ولا قاعدة ولا دالّة — ثمّ
+// تبقى قائمةً في فرعَي فشلٍ من أربعة. والتعليقُ فوقها يسمّيها «مؤشّراً دائماً
+// قابلاً للمصالحة»، والمصالحةُ غيرُ موجودة.
+//
+// والأثرُ ليس نظريّاً: `admin_order_details_screen` يقرأ
+// `moyasar_status ?? payment_status`، فطلبٌ مدفوعٌ بالمحفظة (لا `moyasar_status`
+// له) عالقٌ على "refunding" يُسقط شروطَ void/refund/capture **كلَّها**
+// و`alreadyFinal` معاً — بطاقةُ عمليّاتٍ بلا زرٍّ وبلا سبب، في اللحظة التي
+// صُعِّد فيها فشلُ الاسترداد إلى الأدمن.
+//
+// القاعدة: كلُّ مخرجٍ من `autoResolveUnfulfilledPaidOrder` يستبدلها —
+// refunded/voided عند النجاح، **paid** حين لم يتحرّك شيء (معاملةُ المحفظة
+// ذرّية: إمّا التزمت كلُّها أو لا شيء)، و**payment_review** حين لا نعرف
+// (فشلُ البوابة) — وهي كلمةُ `voidOrRefundTampered` نفسِها للحالة عينِها،
+// ويعرفها `index.js` فلا يُحيي الطلبَ تلقائياً.
+{
+  const src = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "refund_engine.js"), "utf8");
+  // نحجب التعليقات: الوحدةُ تشرح القرارَ بذكر "refunding" في تعليقها، فالفحصُ
+  // بلا حجبٍ يفشل على توثيقه هو — نفسُ درسِ حارسِ تمارا ونشرِ الدوالّ.
+  const code = src.split("\n")
+      .filter((l) => !l.trimStart().startsWith("//") &&
+                     !l.trimStart().startsWith("*") &&
+                     !l.trimStart().startsWith("/*"))
+      .join("\n");
+
+  t("(ز١) refunding تُكتب مرّتين فقط — ولا ثالثة", () => {
+    const n = (code.match(/payment_status: "refunding"/g) || []).length;
+    assert.strictEqual(n, 2, "موضعُ كتابةٍ ثالث لمؤشّرٍ لا يقرأه أحد");
+  });
+
+  t("(ز٢) ولا تُترك في أيّ فرعِ فشل", () => {
+    // كلُّ نداءٍ لـ_failAndEscalate يمرّر extra فيه payment_status.
+    const calls = code.match(/_failAndEscalate\([\s\S]{0,260}?\);/g) || [];
+    assert.ok(calls.length >= 4, `وُجد ${calls.length} نداءً فقط`);
+    for (const c of calls) {
+      if (c.includes("function _failAndEscalate")) continue;
+      assert.ok(/payment_status:/.test(c),
+          `فرعُ فشلٍ بلا payment_status — يبقى على "refunding":\n${c}`);
+    }
+  });
+
+  t("(ز٣) الحالتان المستعملتان paid وpayment_review لا غيرهما", () => {
+    const states = new Set();
+    for (const m of code.matchAll(/_failAndEscalate\([\s\S]{0,260}?payment_status: "([a-z_]+)"/g)) {
+      states.add(m[1]);
+    }
+    assert.deepStrictEqual([...states].sort(), ["paid", "payment_review"]);
+  });
+
+  t("(ز٤) التعليقُ الذي يشرح القرار ما زال في النصّ الخامّ", () => {
+    // لو أفرط الحجبُ لما بقي شيءٌ يُفحَص — نتأكّد أنّ ما حُجب كان تعليقاً حقّاً.
+    assert.ok(src.includes("refunding"), "اختفت الكلمةُ من الملفّ كلِّه");
+    assert.ok(src.includes("عابر"), "اختفى التعليقُ الذي يصفها بالعابرة");
+  });
+}
+

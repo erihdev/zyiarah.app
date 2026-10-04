@@ -691,6 +691,22 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                   style: GoogleFonts.tajawal(color: Colors.grey.shade600, fontSize: 13),
                 ),
               )
+            // لا عمليةَ متاحةً ولا حالةَ نهائيّة: كان يُرسم `Wrap` **فارغ** —
+            // بطاقةٌ بلا زرٍّ وبلا سبب. وهذا يقع بالضبط حين يحتاجها الأدمنُ
+            // أكثر: استردادٌ آليٌّ فشل وصُعِّد إليه، فحالةُ الدفع ليست من
+            // مفردات ميسر (payment_review مثلاً) فتسقط كلُّ الشروط.
+            else if (!canCapture && !canVoid && !canRefund)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  paymentId.isEmpty
+                      ? 'لا عملية دفع بوابة على هذا الطلب (محفظة أو تمارا أو دفع يدوي) — '
+                          'عمليات ميسر غير متاحة.'
+                      : 'لا عملية متاحة على حالة «${_moyasarStatusLabel(moyasarStatus)}». '
+                          'راجِع الدفعة في لوحة ميسر ثم حدّث الطلب يدوياً.',
+                  style: GoogleFonts.tajawal(color: Colors.grey.shade600, fontSize: 13),
+                ),
+              )
             else
               Wrap(
                 spacing: 10,
@@ -876,6 +892,15 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
       'failed' => 'فاشل',
       'abandoned' => 'متروك',
       'initiated' => 'قيد الإجراء',
+      // حالاتٌ ليست من مفردات ميسر لكنّها تصل هنا عبر الارتداد إلى
+      // `payment_status`: الطلبُ المدفوع بالمحفظة أو بتمارا لا يحمل
+      // `moyasar_status` أصلاً. كانت تُعرض بحروفٍ لاتينيّة خامّة داخل واجهةٍ
+      // عربيّة — نفسُ ما حدث مع نصّ الاستثناء في شاشات الحجز.
+      'refunding' => 'جارٍ الاسترداد',
+      'payment_review' => 'يحتاج مراجعة',
+      'awaiting_payment' => 'بانتظار الدفع',
+      'awaiting_confirmation' => 'بانتظار التأكيد',
+      '' => 'غير معروفة',
       _ => status,
     };
   }

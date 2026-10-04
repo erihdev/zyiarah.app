@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// إشعار توفّر تحديث للتطبيق — متحكَّم به بالكامل من الإدارة عبر Firestore.
 ///
@@ -44,7 +45,7 @@ class ZyiarahAppUpdateService {
       final doc = await FirebaseFirestore.instance
           .collection('system_configs')
           .doc('app_update')
-          .get();
+          .get().timeout(kNetCallTimeout);
       if (!doc.exists || doc.data() == null) return;
       final d = doc.data()!;
       if (d['enabled'] != true) return;

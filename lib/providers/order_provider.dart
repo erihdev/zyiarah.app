@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class ZyiarahOrderProvider extends ChangeNotifier {
   List<DocumentSnapshot> recentOrders = [];
@@ -36,6 +37,7 @@ class ZyiarahOrderProvider extends ChangeNotifier {
         .where('client_id', isEqualTo: uid)
         .limit(20)
         .snapshots()
+        .firstEventTimeout()
         .listen((snapshot) {
       recentOrders = snapshot.docs.toList()
         ..sort((a, b) {

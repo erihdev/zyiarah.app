@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/models/service_model.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// كتالوج الخدمات — **للعرض فقط**.
 ///
@@ -47,7 +48,8 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
             _honestNotice(),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: _db.collection('services').orderBy('order_index').snapshots(),
+                stream: _db.collection('services').orderBy('order_index').snapshots()
+            .firstEventTimeout(),
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
                     return Center(

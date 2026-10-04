@@ -6,6 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// خدمة إدارة دورة حياة الطلب - تطبيق زيارة
 class ZyiarahOrderService {
@@ -19,7 +20,7 @@ class ZyiarahOrderService {
           .where('code', isEqualTo: code.toUpperCase())
           .where('status', isEqualTo: 'active')
           .limit(1)
-          .get();
+          .get().timeout(kNetCallTimeout);
 
       if (snapshot.docs.isEmpty) return null;
 
@@ -268,12 +269,12 @@ class ZyiarahOrderService {
 
   // الاستماع لتتبع طلب معين (للمتابعة من قبل العميل)
   Stream<DocumentSnapshot> streamOrderTracking(String orderId) {
-    return _db.collection('orders').doc(orderId).snapshots();
+    return _db.collection('orders').doc(orderId).snapshots().firstEventTimeout();
   }
 
   // تقديم تقييم للطلب وتحديث معدل تقييم الكادر
   Future<void> submitOrderRating(String orderId, double rating, String comment, {String? reason, File? evidence}) async {
-    final orderDoc = await _db.collection('orders').doc(orderId).get();
+    final orderDoc = await _db.collection('orders').doc(orderId).get().timeout(kNetCallTimeout);
     if (!orderDoc.exists) return;
 
     final data = orderDoc.data() as Map<String, dynamic>;

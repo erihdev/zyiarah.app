@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/models/service_policy.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/theme/app_theme.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// (تصميم Stitch «إدارة شروط وضوابط الخدمة والتعاقد»، 2026-09-16)
 ///
@@ -327,7 +328,8 @@ class _AdminPoliciesScreenState extends State<AdminPoliciesScreen> {
           foregroundColor: Colors.white,
         ),
         body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: _col.orderBy('order').snapshots(),
+          stream: _col.orderBy('order').snapshots()
+            .firstEventTimeout(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());

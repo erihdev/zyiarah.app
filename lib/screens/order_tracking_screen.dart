@@ -10,6 +10,7 @@ import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/widgets/rating_dialog.dart';
 import 'package:zyiarah/models/tracking_steps.dart';
 import 'package:zyiarah/utils/phone_format.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 
 class OrderTrackingScreen extends StatefulWidget {
@@ -49,7 +50,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           systemOverlayStyle: SystemUiOverlayStyle.light,
         ),
         body: StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance.collection('orders').doc(widget.orderId).snapshots(),
+          stream: FirebaseFirestore.instance.collection('orders').doc(widget.orderId).snapshots()
+            .firstEventTimeout(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());

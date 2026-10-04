@@ -346,7 +346,8 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
               )
             : null,
         body: StreamBuilder<QuerySnapshot>(
-          stream: _db.collection('products').orderBy('created_at', descending: true).snapshots(),
+          stream: _db.collection('products').orderBy('created_at', descending: true).snapshots()
+            .firstEventTimeout(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());

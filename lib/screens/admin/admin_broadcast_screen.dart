@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:zyiarah/providers/user_provider.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:zyiarah/services/audit_service.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminBroadcastScreen extends StatefulWidget {
   const AdminBroadcastScreen({super.key});
@@ -616,7 +617,8 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
 
   Widget _buildRecentBroadcastsList() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('broadcasts').orderBy('timestamp', descending: true).limit(5).snapshots(),
+      stream: FirebaseFirestore.instance.collection('broadcasts').orderBy('timestamp', descending: true).limit(5).snapshots()
+            .firstEventTimeout(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox.shrink();
         final docs = snapshot.data!.docs;
@@ -686,7 +688,8 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
           isEqualTo: FirebaseAuth.instance.currentUser?.uid ?? '');
     }
     return StreamBuilder<QuerySnapshot>(
-      stream: query.snapshots(),
+      stream: query.snapshots()
+            .firstEventTimeout(),
       builder: (context, snapshot) {
         // كان permission-denied يُبتلع (!hasData → shrink) فتختفي القائمة وزر
         // الإلغاء بصمت رغم قدرة الدور على الجدولة نفسها — نُظهر السبب بدل الفراغ.

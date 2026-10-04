@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/admin/admin_orders_screen.dart';
 import 'package:zyiarah/utils/vat.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 /// Lightweight financial snapshot computed client-side from the `orders`
 /// collection (current + last month only — never the full history).
@@ -501,7 +502,8 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
       body: Directionality(
         textDirection: TextDirection.rtl,
         child: StreamBuilder<DocumentSnapshot>(
-          stream: db.collection('metadata').doc('analytics_summary').snapshots(),
+          stream: db.collection('metadata').doc('analytics_summary').snapshots()
+            .firstEventTimeout(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());

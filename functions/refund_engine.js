@@ -206,7 +206,7 @@ async function _failAndEscalate(
 /**
  * (#18) استرداد/إلغاء آليّ لطلبٍ مدفوع تعذّر تنفيذه (فات موعده بلا سائق).
  * idempotent: مطالبة ذرّية بعلَم `auto_refund_processed` + مؤشّر
- * `payment_status='refunding'` قبل أي نداء بوابة، ثم مصالحة الحالة الحيّة،
+ * `payment_status='refunding'` (مؤشّر **عابر**) قبل أي نداء بوابة، ثم مصالحة،
  * وإعادة قراءة `driver_id` في الكتابة النهائية كي لا نستردّ طلباً أُسنِد أثناء
  * العملية.
  * @param {object} db مرجع Firestore (وسيطاً — لا تستورده الوحدة).
@@ -235,7 +235,11 @@ async function autoResolveUnfulfilledPaidOrder(db, secret, orderDoc, deps = {}) 
         d.payment_status === "refunded" || d.payment_status === "voided") return false;
     tx.update(orderRef, {
       auto_refund_processed: true,
-      payment_status: "refunding", // مؤشّر دائم قابل للمصالحة عند تعافي عطل
+      // مؤشّرٌ **عابر**: كلُّ مخرجٍ من هذه الدالّة يستبدله (refunded/voided
+      // عند النجاح، paid حين لم يتحرّك شيء، payment_review حين لا نعرف).
+      // كان يُترك قائماً في فرعَين فيصفُ استرداداً جارياً لا يجري ولا يقرأه
+      // أحد — ويُخفي أزرارَ عمليات الدفع عن الأدمن في اللحظة التي يحتاجها.
+      payment_status: "refunding",
     });
     return true;
   });
@@ -285,8 +289,13 @@ async function autoResolveUnfulfilledPaidOrder(db, secret, orderDoc, deps = {}) 
           payment_status: "paid"}).catch(() => {});
         return {handled: false, reason: "assigned_midway"};
       }
+      // **معاملةُ المحفظة ذرّية**: إمّا التزمت كلُّها أو لم يتحرّك شيء —
+      // لا رصيدٌ زِيد، ولا مستندَ حركةٍ كُتب، ولا الطلبُ تغيّر. فتركُ
+      // `payment_status` على "refunding" يصف استرداداً جارياً لا وجود له،
+      // والطلبُ ما زال مدفوعاً كما كان. (شقيقُها `no_amount` يُعيدها إلى
+      // "paid" أصلاً — الفرقُ بينهما كان سهواً.)
       return _failAndEscalate(queuePush, orderRef, orderDoc, refundAmount,
-          "wallet_error");
+          "wallet_error", {payment_status: "paid"});
     }
     await notifyAutoRefund(queuePush, clientId, code, orderDoc.id, refundAmount,
         "محفظتكِ", "محفظة");
@@ -303,9 +312,15 @@ async function autoResolveUnfulfilledPaidOrder(db, secret, orderDoc, deps = {}) 
   const settled = await reconcileAndSettle(secret, d0.moyasar_payment_id, gateway);
   const action = settled.action;
   if (!settled.ok) {
-    // لا نُعيد ضبط العلَم (قد يكون نجح ثم انقطع الاتصال) — نُثبّت الفشل وننبّه للمصالحة.
+    // لا نُعيد ضبط `auto_refund_processed` (قد يكون نجح ثم انقطع الاتصال) —
+    // نُثبّت الفشل وننبّه للمصالحة. أمّا `payment_status` فيصير
+    // **"payment_review"** لا "refunding": الحالةُ الحقيقيّة «لا نعرف، ويلزم
+    // إنسان»، وهي الكلمةُ التي تستعملها هذه الوحدةُ نفسُها في
+    // `voidOrRefundTampered` للحالة عينِها، ويعرفها `index.js` فلا يُحيي
+    // الطلبَ تلقائياً. و"refunding" لا يقرأها شيء، فتبقى إلى الأبد تَعِد
+    // بمصالحةٍ لا تجري.
     return _failAndEscalate(queuePush, orderRef, orderDoc, refundAmount,
-        "gateway_error");
+        "gateway_error", {payment_status: "payment_review"});
   }
   try {
     await db.runTransaction(async (t) => {

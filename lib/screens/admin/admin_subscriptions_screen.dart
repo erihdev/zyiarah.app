@@ -197,7 +197,8 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
           child: const Icon(Icons.add, color: Colors.white),
         ),
         body: StreamBuilder<QuerySnapshot>(
-          stream: _db.collection('subscription_packages').orderBy('rank').snapshots(),
+          stream: _db.collection('subscription_packages').orderBy('rank').snapshots()
+            .firstEventTimeout(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
             // فشل البث كان يُعرض كقائمة فارغة — خطأ صريح مع إعادة محاولة.

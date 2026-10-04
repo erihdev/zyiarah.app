@@ -118,10 +118,20 @@ void main() {
 
     test('إعادة الجدولة: نشطٌ **ويحمل** سائقاً', () {
       expect(scr.contains('kActiveAssignedStatuses.contains'), isTrue);
-      // لا إعادةَ كتابةٍ للمجموعتين إنلاين في الشاشة.
-      expect(scr.contains("'awaiting_payment'"), isFalse,
-          reason: 'مجموعةُ الحالات مكتوبةٌ بيدها من جديد — موضعُها '
-              'lib/utils/order_lifecycle.dart');
+      // لا إعادةَ كتابةٍ للمجموعتين إنلاين في الشاشة. `awaiting_payment`
+      // هي الشاهد: عضوٌ في `kPreDispatchStatuses` ولا يرد في قائمة حالاتِ
+      // القائمة المنسدلة المسموح بها.
+      //
+      // **لكنّ منعَ النصِّ مطلقاً كان أوسعَ من القاعدة:** الحالةُ نفسُها
+      // تُكتب أيضاً ذراعَ `switch` في جدول تسميات حالة الدفع (ترجمةٌ عربيّة
+      // لشارةٍ كانت تطبع الرمزَ اللاتينيّ خامّاً)، وذلك ليس مجموعةً مُعادة.
+      // فالفحصُ الآن على **الشكل**: كلُّ ورودٍ لها ذراعُ `switch` لا عضوُ
+      // قائمة — فـ`'awaiting_payment',` أو `'awaiting_payment']` يفشل كما كان.
+      for (final m in RegExp(r"'awaiting_payment'(.{0,3})").allMatches(scr)) {
+        expect(m.group(1)!.startsWith(' =>'), isTrue,
+            reason: 'مجموعةُ الحالات مكتوبةٌ بيدها من جديد — موضعُها '
+                'lib/utils/order_lifecycle.dart');
+      }
     });
 
     test('حارسُ «بلا موعد» يغطّي حالاتِ ما قبل الإسناد كلّها', () {

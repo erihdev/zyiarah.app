@@ -4,6 +4,7 @@ import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/counter_service.dart';
 import 'package:zyiarah/utils/vat.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class StoreProduct {
   final String id;
@@ -72,7 +73,8 @@ class ZyiarahStoreService {
         .map((snapshot) => snapshot.docs
             .map((doc) => StoreProduct.fromFirestore(doc))
             .where((p) => audience == null || p.audience == audience)
-            .toList());
+            .toList())
+        .firstEventTimeout();
   }
 
   /// إنشاء طلب متجر بانتظار موافقة الإدارة (بدون دفع).
@@ -91,7 +93,7 @@ class ZyiarahStoreService {
     // (تحت المراجعة/جاري التوصيل/تم التسليم) بلا جلبٍ إضافي.
     String? clientEmail = user.email;
     try {
-      final userDoc = await _db.collection('users').doc(user.uid).get();
+      final userDoc = await _db.collection('users').doc(user.uid).get().timeout(kNetCallTimeout);
       if (userDoc.exists) {
         clientName = userDoc.data()?['name'] ?? 'عميل زيارة';
         clientPhone = userDoc.data()?['phone'] ?? '000000000';

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminTicketDetailsScreen extends StatefulWidget {
   final String ticketId;
@@ -97,7 +98,8 @@ class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
           children: [
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: _db.collection('support_tickets').doc(widget.ticketId).collection('messages').orderBy('sentAt', descending: true).snapshots(),
+                stream: _db.collection('support_tickets').doc(widget.ticketId).collection('messages').orderBy('sentAt', descending: true).snapshots()
+            .firstEventTimeout(),
                 builder: (context, snapshot) {
                   // فشل تدفق الرسائل كان يترك سبينر أبدياً يوحي بأن العميل لم يراسل —
                   // نعرض خطأً بإعادة محاولة (setState يعيد إنشاء التدفق لأنه يُبنى داخل build).

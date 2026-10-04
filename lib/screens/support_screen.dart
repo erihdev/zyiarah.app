@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class ZyiarahSupportScreen extends StatefulWidget {
   const ZyiarahSupportScreen({super.key});
@@ -84,7 +85,8 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
           .collection('support_tickets')
           .where('userId', isEqualTo: user?.uid)
           .where('status', whereIn: statuses)
-          .snapshots(),
+          .snapshots()
+            .firstEventTimeout(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Center(child: Text("خطأ: ${snapshot.error}"));
@@ -206,7 +208,8 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
           .doc(ticketId)
           .collection('messages')
           .orderBy('sentAt', descending: false)
-          .snapshots(),
+          .snapshots()
+            .firstEventTimeout(),
       builder: (context, snapshot) {
         // خطأ البث كان يُخفي المحادثة وصندوق الرد معاً بصمت (SizedBox فارغ).
         if (snapshot.hasError) {

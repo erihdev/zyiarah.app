@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -113,5 +115,42 @@ void main() {
     expect(find.text('لا مهام في هذا اليوم — راحة'), findsOneWidget);
     expect(find.text('راحة'), findsNWidgets(7));
     expect(t.takeException(), isNull);
+  });
+
+  group('البثّان يُفتحان مرّةً لا في كلّ بناء', () {
+    // كانا يُنشآن داخل دالّة البناء، والشاشةُ تستدعي `setState` في ثمانية
+    // مواضع (اختيارُ يوم، تنقّلُ أسبوع، تبديلُ العرض…) — فكلُّ لمسةٍ تُلغي
+    // مستمِعَي Firestore وتُنشئ غيرهما. لا يظهر شيء (StreamBuilder يحتفظ
+    // بآخر لقطةٍ عبر إعادة الاشتراك) لكنّ الكلفةَ حقيقيّة، ومهلةُ أوّلِ حدثٍ
+    // تُستأنف مع كلّ لمسة.
+    final src = File('lib/screens/driver_tasks_screen.dart').readAsStringSync();
+
+    test('تُفتح في initState', () {
+      final i = src.indexOf('void initState()');
+      expect(i, greaterThan(0));
+      final body = src.substring(i, src.indexOf('\n  }', i));
+      expect(body.contains('_openStreams()'), isTrue);
+    });
+
+    test('ودالّةُ البناء لا تنشئ بثّاً', () {
+      final i = src.indexOf('Widget _firestore()');
+      expect(i, greaterThan(0));
+      final body = src.substring(i, src.indexOf('\n  }', i));
+      expect(body.contains('.snapshots()'), isFalse,
+          reason: 'عاد البثُّ يُنشأ في كلّ بناء — اشتراكانِ لكلّ لمسة');
+      expect(body.contains('_active'), isTrue);
+      expect(body.contains('_history'), isTrue);
+    });
+
+    test('وإعادةُ المحاولة صريحةٌ لا أثرٌ جانبيّ', () {
+      // `setState(() {})` كانت تعمل لأنّ البناءَ يُعيد إنشاء البثّ — وهو
+      // بالضبط ما نريد إنهاءه. فلا بدّ أن تُعيد فتحَه صراحةً.
+      expect(src.contains('setState(_openStreams)'), isTrue);
+      expect(src.contains('onPressed: () => setState(() {})'), isFalse);
+    });
+
+    test('ولا يُفتحان حين تُحقَن البثوث (الاختبارات بلا Firebase)', () {
+      expect(src.contains('if (widget.items == null) _openStreams();'), isTrue);
+    });
   });
 }

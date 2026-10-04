@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class ZyiarahZone {
   final String name;
@@ -41,7 +42,7 @@ class GeofenceService {
       final snapshot = await db
           .collection('service_zones')
           .where('enabled', isEqualTo: true)
-          .get();
+          .get().timeout(kNetCallTimeout);
 
       // المجموعة فارغة — ابذر البيانات الافتراضية تلقائياً. وإن كانت عامرة فلا شيء
       // نفعله: القراءةُ هنا تقرّر البذر فقط. (كانت تملأ ذاكرةً مؤقّتة قارئُها الوحيد

@@ -6,6 +6,7 @@ import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminContractsScreen extends StatefulWidget {
   const AdminContractsScreen({super.key});
@@ -126,7 +127,8 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
             _buildSearchField(),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('contracts').orderBy('createdAt', descending: true).limit(100).snapshots(),
+                stream: FirebaseFirestore.instance.collection('contracts').orderBy('createdAt', descending: true).limit(100).snapshots()
+            .firstEventTimeout(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());

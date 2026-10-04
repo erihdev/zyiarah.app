@@ -16,6 +16,7 @@ import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zyiarah/utils/order_tracking.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 // تحويل رقمي دفاعي — حقول Firestore (amount/total_amount/quotePrice) قد تصل نصّاً
 // أو null، و.toDouble()/as num المباشر كان يعطّل بطاقة الطلب داخل القائمة.
@@ -142,7 +143,8 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
       stream: FirebaseFirestore.instance
           .collection('orders')
           .where('client_id', isEqualTo: user?.uid)
-          .snapshots(),
+          .snapshots()
+            .firstEventTimeout(),
       builder: (context, snapshot) {
         if (user == null) return const Center(child: Text('يرجى تسجيل الدخول لعرض حجوزاتك'));
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -202,7 +204,8 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
       stream: FirebaseFirestore.instance
           .collection('store_orders')
           .where('client_id', isEqualTo: user?.uid)
-          .snapshots(),
+          .snapshots()
+            .firstEventTimeout(),
       builder: (context, snapshot) {
         if (user == null) return const Center(child: Text('يرجى تسجيل الدخول'));
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -603,7 +606,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                 )
-              else if (!canTrackOrder(order))
+              else if (!canTrackOrder(order, passed: _apptPassed(order)))
                 // لا سائقَ ولا موقع ⇒ لا تتبّع. كان هذا تعداداً لحالتين
                 // (`under_review`، و`in_progress` بلا سائق) فبقيت `scheduled` بلا
                 // سائق تعرض زرّاً يقول «لم يُعيَّن سائق بعد» للأبد — شوهد على
@@ -623,15 +626,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                     Text(
                         trackingUnavailableLabel(
                           status: status,
-                          passed: appointmentPassed(
-                              orderAppointment(
-                                serviceDate:
-                                    (order['service_date'] as Timestamp?)?.toDate(),
-                                bookingDate: order['booking_date'] as String?,
-                                bookingTimeSlot:
-                                    order['booking_time_slot'] as String?,
-                              ),
-                              DateTime.now()),
+                          passed: _apptPassed(order),
                         ),
                         style: GoogleFonts.tajawal(
                             fontSize: 12,
@@ -666,6 +661,17 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
   /// شارة موعد الخدمة المجدول — تُظهر التاريخ والوقت وعدّاداً نسبياً بوضوح
   /// حتى لا ينسى العميل موعده. تظهر فقط للطلبات ذات موعد محدد (service_date
   /// أو booking_date/booking_time_slot).
+  /// هل فات موعدُ هذا الطلب؟ — تُقرأ مرّتين في البطاقة (شرطُ ظهور زرّ التتبّع
+  /// ونصُّ الشارة البديلة) فتُستخرج مرّةً كي لا يفترقا.
+  bool _apptPassed(Map<String, dynamic> order) => appointmentPassed(
+        orderAppointment(
+          serviceDate: (order['service_date'] as Timestamp?)?.toDate(),
+          bookingDate: order['booking_date'] as String?,
+          bookingTimeSlot: order['booking_time_slot'] as String?,
+        ),
+        DateTime.now(),
+      );
+
   Widget _buildAppointmentBanner(Map<String, dynamic> order) {
     // نفسُ المُحلِّل الذي يقرّر التتبّع — موعدٌ واحد لا قراءتان قد تختلفان.
     final DateTime? appt = orderAppointment(

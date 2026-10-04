@@ -90,7 +90,8 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: StreamBuilder<QuerySnapshot>(
-        stream: _db.collection('orders').orderBy('created_at', descending: true).limit(_pageSize).snapshots(),
+        stream: _db.collection('orders').orderBy('created_at', descending: true).limit(_pageSize).snapshots()
+            .firstEventTimeout(),
         builder: (context, snapshot) {
           final streamDocs = snapshot.data?.docs ?? [];
           // دمج نافذة البث الحيّ مع الصفحات الأقدم مع منع تكرار المستندات

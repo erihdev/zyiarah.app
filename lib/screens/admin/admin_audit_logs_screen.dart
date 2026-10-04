@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminAuditLogsScreen extends StatefulWidget {
   const AdminAuditLogsScreen({super.key});
@@ -155,7 +156,8 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
         .collection('audit_logs')
         .orderBy('timestamp', descending: true)
         .limit(200)
-        .snapshots();
+        .snapshots()
+            .firstEventTimeout();
   }
 
   List<QueryDocumentSnapshot> _applyFilter(List<QueryDocumentSnapshot> docs) {
