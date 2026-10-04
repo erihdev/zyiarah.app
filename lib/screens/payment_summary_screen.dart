@@ -221,7 +221,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         // Fetch surge pricing factor — يُطبَّق على المبلغ قبل عرضه للعميل
         try {
           final surgeResult = await FirebaseFunctions.instance
-              .httpsCallable('getSurgePricingFactor').call();
+              .httpsCallable('getSurgePricingFactor')
+              .call()
+              .timeout(kNetCallTimeout);
           final factor = (surgeResult.data['surgeFactor'] as num? ?? 1.0).toDouble();
           if (mounted && factor != _surgeFactor) {
             setState(() {
@@ -1014,7 +1016,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             .httpsCallable('verifyMoyasarPayment').call({
           'paymentId': paymentId,
           'orderId': widget.contractId ?? id,
-        });
+        }).timeout(kNetCallTimeout);
         // (#1) الخادم حجب الطلب لدفعٍ ناقص صارخ (Tier B) وأعاد المبلغ — لا نتابع للنجاح.
         // مطفأ فعليّاً ما دام ENFORCE_PRICE_TIER_B=false خادميّاً، لكنه العقد الجاهز للتفعيل.
         final vdata = vres.data;
@@ -1128,7 +1130,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         if (method == 'wallet') {
           await FirebaseFunctions.instance.httpsCallable('payContractWithWallet').call({
             'contractId': widget.contractId,
-          });
+          }).timeout(kNetCallTimeout);
           if (mounted && _walletBalance != null) {
             setState(() => _walletBalance = _walletBalance! - amountToSave);
           }
@@ -1137,7 +1139,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             await FirebaseFunctions.instance.httpsCallable('verifyMoyasarPayment').call({
               'paymentId': paymentId,
               'orderId': widget.contractId,
-            });
+            }).timeout(kNetCallTimeout);
           } catch (e, st) {
             reportSilent(e, st, reason: 'verify_contract_failed');
           }
@@ -1147,7 +1149,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           'amount': amountToSave,
           'orderId': id,
           'description': 'دفع خدمة: ${widget.serviceName}',
-        });
+        }).timeout(kNetCallTimeout);
         if (mounted && _walletBalance != null) {
           setState(() => _walletBalance = _walletBalance! - amountToSave);
         }
@@ -1156,7 +1158,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           await FirebaseFunctions.instance.httpsCallable('verifyMoyasarPayment').call({
             'paymentId': paymentId,
             'orderId': id,
-          });
+          }).timeout(kNetCallTimeout);
         } catch (e, st) {
           // الـ webhook يؤكّد خادمياً حتى لو فشل هذا النداء — فلا نرمي.
           reportSilent(e, st, reason: 'verify_moyasar_failed');

@@ -64,34 +64,60 @@ List<File> _allScreens() => Directory('lib/screens')
     .where((f) => f.path.endsWith('.dart'))
     .toList();
 
-/// نداءاتُ دوالَّ سحابيّة **تُغيّر حالة** (لا تقرأ): مهلتُها قرارٌ مختلف، لأنّ
-/// «انقضت المهلة» ليست «لم يحدث شيء» — قد يكون الخادمُ نفّذ. تُعالَج كلٌّ على
-/// حدة برسالةٍ تقول «لا نعرف» لا «فشل»، ولا تدخل القاعدةَ العامّة.
-const Map<String, String> _statefulCalls = {
-  'deleteDriverAccount': 'حذفُ حساب سائق — إعادةُ المحاولة بعد نجاحٍ صامت تُربك',
-  'approveAndAssignOrder': 'إسنادُ سائق — الخادمُ يرفض الثاني، لكنّ الرسالة تُضلّل',
-  'rescheduleAssignedOrder': 'نقلُ موعد — نفسُ الاعتبار',
-  'verifyMoyasarPayment': 'تأكيدُ دفعٍ تمّ فعلاً عند البوّابة — «فشل» كذبة',
-  'payWithWallet': 'خصمٌ من المحفظة — idempotent خادميّاً، والرسالةُ هي المسألة',
-  'payContractWithWallet': 'كسابقه',
-  'moyasarRefundPayment': 'استرداد — تكرارُه بعد نجاحٍ صامت خطر',
+/// ملفّاتٌ نداءاتُها السحابيّة **تُغيّر حالة** لا تقرأ — مهلتُها قرارٌ مختلف.
+/// «انقضت المهلة» ليست «لم يحدث شيء»: قد يكون الخادمُ نفّذ. فرسالةُ «فشل» بعد
+/// استردادٍ نجح تدفع الأدمنَ لإعادته. تُترك بلا مهلة عمداً حتى يُقرَّر لكلٍّ منها
+/// نصٌّ يقول «لا نعرف»، وهو قرارُ المالك لا مسحٌ آليّ.
+///
+/// (شاشةُ الدفع ليست هنا: نداءاتُها الخمسة مُؤمَّنة أصلاً — verifyMoyasarPayment
+///  مُغلَّف بـcatch يصمت عمداً لأنّ المُصالِح الدوري يضمن الطلب، وpayWithWallet
+///  idempotent خادميّاً، والمعالجُ الخارجيّ لا يُظهر خطأً بعد دفعٍ بمعرّف إطلاقاً
+///  ويقول للمحفظة «لن يُخصم منك مرتين». المهلةُ هناك تُتيح هذا السلوك لا تُغيّره.)
+const Map<String, String> _statefulCallFiles = {
+  'lib/screens/admin/admin_order_details_screen.dart':
+      'استرداد/إلغاء/تحصيل + إسناد سائق + نقل موعد',
+  'lib/screens/admin/admin_drivers_screen.dart': 'حذفُ حساب سائق',
 };
 
-void main() {
-  test('كلُّ نداءِ دالّةٍ سحابيّة في شاشات الحجز له مهلة', () {
-    final offenders = <String>[];
-    for (final p in _screens) {
-      final src = _code(p);
-      // `.call({...})` ينتهي بـ`});` — نطلب `.timeout(` بعدها مباشرةً.
-      for (final m in RegExp(r'\.call\(\{[\s\S]*?\n\s*\}\)(\.timeout\()?')
+/// مواضعُ نداءِ دالّةٍ سحابيّة بلا مهلة في مصدرٍ مُقنَّع.
+///
+/// الارتكازُ على `httpsCallable` إلزاميّ: مطابقةُ `.call(` وحدَها تلتقط
+/// `onTap?.call()` وأمثالَه — وهو ما حدث فعلاً وكشفه هذا الفحص على نفسه.
+int _bareCallableCalls(String src) {
+  var n = 0;
+  for (final m
+      in RegExp(r'\.call\(\s*(?:\{[\s\S]*?\n\s*\})?\s*\)(\s*\.timeout\()?')
           .allMatches(src)) {
-        if (m.group(1) == null) offenders.add('$p  ←  httpsCallable بلا مهلة');
-      }
+    if (m.group(1) != null) continue;
+    final from = (m.start - 220).clamp(0, src.length);
+    if (!src.substring(from, m.start).contains('httpsCallable')) continue;
+    n++;
+  }
+  return n;
+}
+
+void main() {
+  test('كلُّ نداءِ دالّةٍ سحابيّة له مهلة، إلّا المُغيِّرةَ للحالة صراحةً', () {
+    final offenders = <String>[];
+    for (final f in _allScreens()) {
+      final p = f.path.replaceAll(r'\', '/');
+      if (_statefulCallFiles.containsKey(p)) continue;
+      final n = _bareCallableCalls(_code(p));
+      if (n > 0) offenders.add('$p  ←  $n نداءً سحابيّاً بلا مهلة');
     }
     expect(offenders, isEmpty,
         reason: '\n\nنداءٌ سحابيٌّ بلا مهلة: حين لا يردّ الخادم ولا يرمي، يبقى\n'
             'مؤشّرُ التحميل دائراً ولا تُعرض واجهةُ الخطأ المكتوبة أصلاً.\n'
+            'إن كان النداءُ يُغيّر حالةً فأضِف ملفَّه إلى _statefulCallFiles بسببٍ مكتوب.\n'
             '  • ${offenders.join('\n  • ')}\n');
+  });
+
+  test('قائمةُ الاستثناء لا تتعفّن — كلُّ ملفٍّ فيها ما زال يحمل نداءً بلا مهلة', () {
+    // قائمةٌ تُجيز ما لم يعد موجوداً تتعفّن (كما تعفّن شاهدُ COD في status_util).
+    _statefulCallFiles.forEach((p, why) {
+      expect(_bareCallableCalls(_code(p)), greaterThan(0),
+          reason: '$p لم يعد يحمل نداءً بلا مهلة ($why) — أزِله من القائمة');
+    });
   });
 
   test('كلُّ قراءةِ Firestore في كلّ شاشة لها مهلة', () {
