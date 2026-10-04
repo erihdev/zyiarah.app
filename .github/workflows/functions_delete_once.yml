@@ -1,0 +1,77 @@
+# حذفُ أربع دوالَّ سحابيّةٍ بلا عميل — **مسارٌ لمرّةٍ واحدة**، يُشغَّل بيدِ المالك.
+#
+# لماذا مسارٌ لا أمرٌ محلّيّ: مفتاحُ حساب الخدمة يعيش في سرِّ المستودع
+# `FIREBASE_SERVICE_ACCOUNT` وحده — لا في حاوية أحد ولا في محادثة. فالحذفُ يجري
+# حيث المفتاحُ أصلاً، ولا يمرّ بأحد.
+#
+# الدوالُّ الأربع وُجدت بلا أيّ مُنادٍ في `lib/` ولا في لوحة الإدارة:
+#   • checkHourlySlotAvailability — غلافُها في Dart حُذف؛ الشاشات تنادي getHourlyAvailability
+#   • findNearestDrivers        — تستعلم users بمدى على `geohash`، ولا شيءَ يكتب geohash
+#                                  في المشروع كلِّه، فهي تُرجع قائمةً فارغةً دائماً
+#   • generateSubscriptionVisits — استبدلها مُشغِّل activateContractOnPaid
+#   • manualSendNotification     — لا مُنادي (حارسُ الدور فيها سليم)
+#
+# **`--force` هنا ليست `--force` التي يمنعها `functions_deploy.yml`.** تلك توافق
+# تلقائياً على حذفِ *أيِّ* دالّةٍ تغيب عن الشيفرة — أثرٌ جانبيٌّ صامت لنشرٍ عاديّ.
+# وهذه تتخطّى سؤالَ التأكيد على **قائمةٍ مكتوبةٍ حرفيّاً أدناه**، بعد أن كتب
+# المُشغِّلُ كلمةَ تأكيدٍ بيده. لا يمكن لهذا المسار أن يحذف اسماً غيرَ الأربعة.
+#
+# بعد نجاحه: تُزال الدوالُّ من `functions/index.js`، ويُزال الفهرسُ الميّت
+# `users(role, status, geohash)`، وتُزال `geofire-common`، ويُحذف هذا الملفّ نفسه.
+name: Delete Unused Functions (one-shot)
+
+# بالطلب اليدويّ فقط — لا يعمل عند أيّ دفعٍ أبداً.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'اكتب DELETE للتأكيد'
+        required: true
+        default: ''
+
+concurrency:
+  group: deploy-functions
+  cancel-in-progress: false
+
+jobs:
+  delete:
+    name: Delete from zyiarah-app
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        run: |
+          if [ "${{ inputs.confirm }}" != "DELETE" ]; then
+            echo "::error::اكتب DELETE في خانة التأكيد لتشغيل هذا المسار"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Write service account key
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA_JSON" ]; then
+            echo "::error::سرُّ FIREBASE_SERVICE_ACCOUNT غير مضبوط في إعدادات المستودع"
+            exit 1
+          fi
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+
+      # الأسماءُ مكتوبةٌ حرفيّاً — لا مُدخَلَ يختار ما يُحذف.
+      - name: Delete the four
+        run: |
+          npx --yes firebase-tools@15 functions:delete \
+            checkHourlySlotAvailability \
+            findNearestDrivers \
+            generateSubscriptionVisits \
+            manualSendNotification \
+            --project zyiarah-app --force
+
+      - name: Remove key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sa.json"
