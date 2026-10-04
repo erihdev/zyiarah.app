@@ -108,15 +108,23 @@ const zoneInputCls = 'w-full bg-white border border-slate-200 rounded-xl px-4 py
 // إعداد التحديث الإجباري — يُخزَّن في مستند منفصل system_configs/app_update
 // والذي يقرأه التطبيق (app_update_service.dart). كانت اللوحة سابقاً تكتب
 // force_update_version/enabled في main_settings الذي لا يقرأه التطبيق إطلاقاً.
+//
+// **عدّادا البناء مستقلّان بين المنصّتين.** app_update_service يقرأ
+// latest_build_ios / latest_build_android أوّلاً، ولا يسقط إلى latest_build
+// الموحّد إلا عند **غياب** حقل المنصّة. فكتابةُ الموحّد وحده تعني أنّ ما يكتبه
+// الأدمن لا يقرؤه أحد. والموحّدُ أخطرُ من ذلك: ضُبط مرّةً على رقم بناء iOS
+// فرأى كلُّ مختبري أندرويد مطالبةَ تحديثٍ إجباريّةً زائفة لأسابيع (2026-08-31).
 interface AppUpdateConfig {
     enabled: boolean;
-    latest_build: number;
+    latest_build_ios: number;
+    latest_build_android: number;
     force: boolean;
     message: string;
 }
 const defaultAppUpdate: AppUpdateConfig = {
     enabled: false,
-    latest_build: 0,
+    latest_build_ios: 0,
+    latest_build_android: 0,
     force: false,
     message: '',
 };
@@ -531,10 +539,12 @@ export default function Settings({ role }: { role?: string | null }) {
             const updRef = doc(db, 'system_configs', 'app_update');
             await Promise.all([
                 setDoc(docRef, settings, { merge: true }),
-                // نكتب بالمفاتيح التي يقرأها التطبيق فعلاً: enabled / latest_build (int) / force / message
+                // المفاتيحُ التي يقرؤها app_update_service فعلاً — لكلّ منصّةٍ
+                // عدّادُها. لا نكتب latest_build الموحّد عمداً (انظر التعليق أعلاه).
                 setDoc(updRef, {
                     enabled: appUpdate.enabled,
-                    latest_build: Number(appUpdate.latest_build) || 0,
+                    latest_build_ios: Number(appUpdate.latest_build_ios) || 0,
+                    latest_build_android: Number(appUpdate.latest_build_android) || 0,
                     force: appUpdate.force,
                     message: appUpdate.message || '',
                 }, { merge: true }),
@@ -760,18 +770,36 @@ export default function Settings({ role }: { role?: string | null }) {
                                                 <div className="md:col-span-2 flex flex-col gap-5 p-5 bg-[#FAF1F6]/50 border border-[#F2DEE9]/50 rounded-2xl">
                                                     <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
                                                         <div className="flex-1 w-full">
-                                                            <label htmlFor="latest-build" className="block text-sm font-bold text-slate-800 mb-2">أحدث رقم بناء منشور (Latest Build)</label>
-                                                            <p className="text-xs text-slate-500 font-medium mb-3">يظهر إشعار التحديث لكل مستخدم رقم بنائه أقدم من هذا الرقم فقط. (مثال: 209)</p>
-                                                            <input
-                                                                id="latest-build"
-                                                                type="number"
-                                                                min={0}
-                                                                value={appUpdate.latest_build}
-                                                                onChange={(e) => setAppUpdate(p => ({ ...p, latest_build: parseInt(e.target.value) || 0 }))}
-                                                                className="w-full md:w-64 bg-white border border-slate-300 focus:border-[#8E2B5C] focus:ring-4 focus:ring-[#8E2B5C]/20 text-slate-800 font-bold text-sm rounded-xl px-5 py-3.5 outline-none transition-all shadow-sm text-left font-mono"
-                                                                dir="ltr"
-                                                                placeholder="209"
-                                                            />
+                                                            <label className="block text-sm font-bold text-slate-800 mb-2">أحدث بناء منشور — لكل منصّة</label>
+                                                            <p className="text-xs text-slate-500 font-medium mb-3">يظهر إشعار التحديث لمن رقم بنائه أقدم من رقم منصّته فقط. <strong>العدّادان مستقلّان</strong> — رقم iOS أعلى من أندرويد، ووضعُ رقم iOS للمنصّتين يُطالب كلَّ مستخدمي أندرويد بتحديثٍ لا وجود له.</p>
+                                                            <div className="flex gap-3">
+                                                                <div className="flex-1">
+                                                                    <label htmlFor="latest-build-ios" className="block text-xs font-bold text-slate-600 mb-1">iOS</label>
+                                                                    <input
+                                                                        id="latest-build-ios"
+                                                                        type="number"
+                                                                        min={0}
+                                                                        value={appUpdate.latest_build_ios}
+                                                                        onChange={(e) => setAppUpdate(p => ({ ...p, latest_build_ios: parseInt(e.target.value) || 0 }))}
+                                                                        className="w-full bg-white border border-slate-300 focus:border-[#8E2B5C] focus:ring-4 focus:ring-[#8E2B5C]/20 text-slate-800 font-bold text-sm rounded-xl px-5 py-3.5 outline-none transition-all shadow-sm text-left font-mono"
+                                                                        dir="ltr"
+                                                                        placeholder="261"
+                                                                    />
+                                                                </div>
+                                                                <div className="flex-1">
+                                                                    <label htmlFor="latest-build-android" className="block text-xs font-bold text-slate-600 mb-1">أندرويد</label>
+                                                                    <input
+                                                                        id="latest-build-android"
+                                                                        type="number"
+                                                                        min={0}
+                                                                        value={appUpdate.latest_build_android}
+                                                                        onChange={(e) => setAppUpdate(p => ({ ...p, latest_build_android: parseInt(e.target.value) || 0 }))}
+                                                                        className="w-full bg-white border border-slate-300 focus:border-[#8E2B5C] focus:ring-4 focus:ring-[#8E2B5C]/20 text-slate-800 font-bold text-sm rounded-xl px-5 py-3.5 outline-none transition-all shadow-sm text-left font-mono"
+                                                                        dir="ltr"
+                                                                        placeholder="208"
+                                                                    />
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                         <div className="flex flex-col gap-3 self-stretch md:self-auto">
                                                             <div className="flex items-center justify-between gap-4 bg-white border border-slate-200 p-2 pl-4 pr-2 rounded-2xl shadow-sm">

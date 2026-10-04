@@ -31,7 +31,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   final TextEditingController _contractTermsCtrl = TextEditingController();
   // (دمج من لوحة الويب) سياسة الخصوصية + التحكم بالتحديث الإجباري (يقرؤه app_update_service).
   final TextEditingController _privacyPolicyCtrl = TextEditingController();
-  final TextEditingController _latestBuildCtrl = TextEditingController();
+  // عدّادا البناء مستقلّان بين المنصّتين — حقلٌ موحّد واحد هو ما أطلق مطالبةَ
+  // التحديث الإجباريّ الزائفة على كلّ مختبري أندرويد (2026-08-31).
+  final TextEditingController _latestBuildIosCtrl = TextEditingController();
+  final TextEditingController _latestBuildAndroidCtrl = TextEditingController();
   final TextEditingController _updateMsgCtrl = TextEditingController();
   bool _updateEnabled = false;
   bool _updateForce = false;
@@ -89,7 +92,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
               setState(() {
                 _updateEnabled = u['enabled'] == true;
                 _updateForce = u['force'] == true;
-                _latestBuildCtrl.text = (u['latest_build'] ?? 0).toString();
+                _latestBuildIosCtrl.text =
+                    (u['latest_build_ios'] ?? u['latest_build'] ?? 0).toString();
+                _latestBuildAndroidCtrl.text =
+                    (u['latest_build_android'] ?? u['latest_build'] ?? 0).toString();
                 _updateMsgCtrl.text = u['message'] ?? '';
               });
             }
@@ -167,7 +173,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
       // (دمج من الويب) إعداد التحديث الإجباري — يقرؤه app_update_service.dart.
       await _db.collection('system_configs').doc('app_update').set({
         'enabled': _updateEnabled,
-        'latest_build': int.tryParse(_latestBuildCtrl.text.trim()) ?? 0,
+        // المفاتيحُ التي يقرؤها app_update_service فعلاً — لكلّ منصّةٍ عدّادُها.
+        // لا نكتب latest_build الموحّد: الخدمة لا تقرؤه إلا عند غياب حقل المنصّة،
+        // وكتابتُه هي بعينها ما سبّب الإنذارَ الزائف.
+        'latest_build_ios': int.tryParse(_latestBuildIosCtrl.text.trim()) ?? 0,
+        'latest_build_android':
+            int.tryParse(_latestBuildAndroidCtrl.text.trim()) ?? 0,
         'force': _updateForce,
         'message': _updateMsgCtrl.text.trim(),
       }, SetOptions(merge: true));
@@ -210,7 +221,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
     _surgePercentCtrl.dispose();
     _contractTermsCtrl.dispose();
     _privacyPolicyCtrl.dispose();
-    _latestBuildCtrl.dispose();
+    _latestBuildIosCtrl.dispose();
+    _latestBuildAndroidCtrl.dispose();
     _updateMsgCtrl.dispose();
     super.dispose();
   }
@@ -418,7 +430,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                         icon: Icons.system_update_rounded,
                         color: const Color(0xFF660033),
                         children: [
-                          _buildPremiumField("أحدث رقم بناء منشور (Latest Build)", "مثال 210", _latestBuildCtrl, Icons.numbers_rounded),
+                          _buildPremiumField("أحدث بناء منشور — iOS", "مثال 261", _latestBuildIosCtrl, Icons.phone_iphone_rounded),
+                          _buildPremiumField("أحدث بناء منشور — أندرويد", "مثال 208", _latestBuildAndroidCtrl, Icons.android_rounded),
                           const Padding(
                             padding: EdgeInsets.only(top: 6, bottom: 4),
                             child: Text(

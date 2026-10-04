@@ -16,7 +16,10 @@ void main() {
     // كتابة عند الحفظ بالمفاتيح التي يقرؤها التطبيق فعلاً.
     expect(s.contains("doc('app_update').set"), isTrue);
     expect(s.contains("'enabled': _updateEnabled"), isTrue);
-    expect(s.contains("'latest_build': int.tryParse"), isTrue);
+    // (كان يُثبِّت `latest_build` الموحّد — وهو المفتاح الذي **لا** تقرؤه الخدمة
+    //  إلا عند غياب حقل المنصّة، فكان الحارس يحرس عطلاً. انظر app_update_keys_test.)
+    expect(s.contains("'latest_build_ios': int.tryParse"), isTrue);
+    expect(s.contains("'latest_build_android':"), isTrue);
     expect(s.contains("'force': _updateForce"), isTrue);
     expect(s.contains("'message': _updateMsgCtrl"), isTrue);
   });
