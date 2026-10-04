@@ -1417,7 +1417,20 @@ class _DriverDashboardState extends State<DriverDashboard> {
     try {
       final doc = await FirebaseFirestore.instance.collection('orders').doc(id).get().timeout(kNetCallTimeout);
       final data = doc.data();
-      if (data == null) return;
+      if (data == null) {
+        // `return;` صامتاً كان يعني: السائقُ يضغط «تم الإنجاز» فلا يحدث شيء،
+        // ولا رسالة، والزرُّ يعود قابلاً للضغط — فيضغط ويضغط. والطلبُ قد
+        // يكون حُذف أو أُلغي من الإدارة بينما بطاقتُه ما زالت على جهازه.
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('لم يعد هذا الطلب موجوداً — حدِّث القائمة',
+                style: GoogleFonts.tajawal()),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
+        return;
+      }
 
 
       // (جيوفنس متساهل) عند الإكمال: لو GPS متاح وموقع الطلب معروف والمسافة > 1كم،

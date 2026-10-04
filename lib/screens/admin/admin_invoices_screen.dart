@@ -96,14 +96,23 @@ class _AdminInvoicesScreenState extends State<AdminInvoicesScreen> {
 
   Future<void> _open(InvoiceLogEntry e) async {
     final url = e.view.pdfUrl;
-    if (url == null) return;
+    // الأزرارُ تظهر على `status == 'ready'`، وقد تكون الوثيقةُ «جاهزة» بلا
+    // رابطٍ (كتابةٌ ناقصة). `return;` صامتاً = زرٌّ يُضغط فلا يحدث شيء.
+    if (url == null) {
+      _snack('الفاتورة مُعلَّمة جاهزةً بلا رابط ملف — أعِد توليدها', error: true);
+      return;
+    }
     final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     if (!ok) _snack('تعذّر فتح ملف الفاتورة', error: true);
   }
 
   Future<void> _share(InvoiceLogEntry e) async {
     final url = e.view.pdfUrl;
-    if (url == null || _busy.contains(e.docId)) return;
+    if (_busy.contains(e.docId)) return; // مشاركةٌ جاريةٌ أصلاً — لا كلامَ لازم
+    if (url == null) {
+      _snack('الفاتورة مُعلَّمة جاهزةً بلا رابط ملف — أعِد توليدها', error: true);
+      return;
+    }
     setState(() => _busy.add(e.docId));
     try {
       await ZyiarahPdfService.shareUploadedInvoice(
