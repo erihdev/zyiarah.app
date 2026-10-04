@@ -186,7 +186,7 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen>
                       const SizedBox(height: 5),
                       Text(
                         widget.orderCode,
-                        style: GoogleFonts.ibmPlexMono(
+                        style: GoogleFonts.tajawal(
                             fontWeight: FontWeight.w900,
                             fontSize: 32,
                             letterSpacing: 2,

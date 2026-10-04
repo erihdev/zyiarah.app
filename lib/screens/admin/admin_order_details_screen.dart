@@ -845,7 +845,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
     return OutlinedButton.icon(
       onPressed: onTap,
       icon: Icon(icon, size: 16, color: color),
-      label: Text(label, style: GoogleFonts.tajawal(fontSize: 13, color: color, fontWeight: FontWeight.w600)),
+      label: Text(label, style: GoogleFonts.tajawal(fontSize: 13, color: color, fontWeight: FontWeight.w700)),
       style: OutlinedButton.styleFrom(
         side: BorderSide(color: color.withValues(alpha: 0.5)),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1037,7 +1037,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                     if (data['location'] != null)
                       ListTile(
                         title: Text("الموقع الجغرافي",
-                            style: GoogleFonts.tajawal(fontWeight: FontWeight.w600)),
+                            style: GoogleFonts.tajawal(fontWeight: FontWeight.w700)),
                         subtitle: Text(
                           data['driver_location'] != null
                               ? "اضغط لتتبع السائق مباشرة على الخريطة"
@@ -1076,7 +1076,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                         final bool far = distM > 1000;
                         return ListTile(
                           title: Text("مسافة السائق عند الإتمام",
-                              style: GoogleFonts.tajawal(fontWeight: FontWeight.w600)),
+                              style: GoogleFonts.tajawal(fontWeight: FontWeight.w700)),
                           subtitle: Text(
                             '${distM.round()} م',
                             style: GoogleFonts.tajawal(

@@ -160,7 +160,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                 Text('$totalTasks مهمة منجزة',
                     style: GoogleFonts.tajawal(
                         color: Colors.white,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                         fontSize: 14)),
               ],
             ),
@@ -213,7 +213,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                     color: Colors.grey[500], fontSize: 11)),
             Text(value,
                 style: GoogleFonts.tajawal(
-                    fontWeight: FontWeight.w600, fontSize: 14)),
+                    fontWeight: FontWeight.w700, fontSize: 14)),
           ],
         ),
       ],
@@ -341,7 +341,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
         child: Icon(icon, color: color, size: 20),
       ),
       title: Text(label,
-          style: GoogleFonts.tajawal(fontWeight: FontWeight.w600)),
+          style: GoogleFonts.tajawal(fontWeight: FontWeight.w700)),
       trailing: const Icon(Icons.arrow_forward_ios,
           size: 14, color: Colors.grey),
     );

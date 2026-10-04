@@ -179,7 +179,7 @@ class ZatcaInvoiceCard extends StatelessWidget {
                   Text(_money(view.total),
                       style: GoogleFonts.tajawal(
                           fontSize: 20,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w900,
                           color: ZyiarahTheme.brand)),
                 ]),
                 const SizedBox(height: 14),

@@ -29,7 +29,7 @@ class ZyiarahTheme {
 
       textTheme: GoogleFonts.tajawalTextTheme(
         const TextTheme(
-          displayLarge: TextStyle(color: ink, fontWeight: FontWeight.w800),
+          displayLarge: TextStyle(color: ink, fontWeight: FontWeight.w900),
           displayMedium: TextStyle(color: ink, fontWeight: FontWeight.w700),
           // (طلب المالك) العناوين والفرعية أوضح — رُفعت درجتين فوق السلّم العام
           // في main.dart، فالعنوان يتميّز عن النص لا أن يكبر معه بالنسبة نفسها.
@@ -37,8 +37,8 @@ class ZyiarahTheme {
           headlineMedium: TextStyle(color: ink, fontWeight: FontWeight.w700, fontSize: 24),
           headlineSmall: TextStyle(color: ink, fontWeight: FontWeight.bold, fontSize: 20),
           titleLarge: TextStyle(color: ink, fontWeight: FontWeight.bold, fontSize: 18),
-          titleMedium: TextStyle(color: ink, fontWeight: FontWeight.w600, fontSize: 16),
-          titleSmall: TextStyle(color: inkMuted, fontWeight: FontWeight.w600, fontSize: 14),
+          titleMedium: TextStyle(color: ink, fontWeight: FontWeight.w700, fontSize: 16),
+          titleSmall: TextStyle(color: inkMuted, fontWeight: FontWeight.w700, fontSize: 14),
           bodyLarge: TextStyle(color: ink, fontSize: 16, height: 1.6),
           bodyMedium: TextStyle(color: inkMuted, fontSize: 14, height: 1.5),
           bodySmall: TextStyle(color: inkMuted, fontSize: 12),
@@ -105,7 +105,7 @@ class ZyiarahTheme {
         style: TextButton.styleFrom(
           foregroundColor: brand,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          textStyle: GoogleFonts.tajawal(fontWeight: FontWeight.w600, fontSize: 14),
+          textStyle: GoogleFonts.tajawal(fontWeight: FontWeight.w700, fontSize: 14),
         ),
       ),
 

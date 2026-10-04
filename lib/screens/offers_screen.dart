@@ -395,7 +395,7 @@ class _ZyiarahOffersScreenState extends State<ZyiarahOffersScreen> {
                   textDirection: TextDirection.ltr,
                   style: GoogleFonts.tajawal(
                       fontSize: 16,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w900,
                       letterSpacing: 2,
                       color: ZyiarahTheme.ink)),
             ),
@@ -482,7 +482,7 @@ class _ZyiarahOffersScreenState extends State<ZyiarahOffersScreen> {
                         style: GoogleFonts.tajawal(
                             color: Colors.white,
                             fontSize: 16,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w900,
                             letterSpacing: 2)),
                   ),
                   IconButton(

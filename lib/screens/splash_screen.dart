@@ -240,7 +240,7 @@ class _ZyiarahSplashScreenState extends State<ZyiarahSplashScreen>
               children: [
                 Text(
                   'ZYIARAH',
-                  style: GoogleFonts.roboto(
+                  style: GoogleFonts.tajawal(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                     color: const Color(0xFF7AB51D),

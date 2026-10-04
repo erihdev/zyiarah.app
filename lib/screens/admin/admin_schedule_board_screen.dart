@@ -543,7 +543,7 @@ class _AdminScheduleBoardScreenState extends State<AdminScheduleBoardScreen> {
               child: Text(label,
                   style: GoogleFonts.tajawal(
                       fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       color: const Color(0xFF334155))),
             ),
             Text(value,
@@ -560,7 +560,7 @@ class _AdminScheduleBoardScreenState extends State<AdminScheduleBoardScreen> {
             color: bg, borderRadius: BorderRadius.circular(14)),
         child: Text(text,
             style: GoogleFonts.tajawal(
-                fontSize: 12, color: fg, fontWeight: FontWeight.w600)),
+                fontSize: 12, color: fg, fontWeight: FontWeight.w700)),
       );
 
   Widget _message(IconData icon, String title, String detail,

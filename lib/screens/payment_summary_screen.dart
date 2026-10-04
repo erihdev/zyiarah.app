@@ -1515,7 +1515,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         children: [
           Text(label, style: GoogleFonts.tajawal(color: Colors.grey[600], fontSize: 14)),
           Text(value, style: GoogleFonts.tajawal(
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             fontSize: 14,
             color: isSurge ? Colors.orange.shade700 : isDiscount ? Colors.red : Colors.black,
           )),
@@ -1837,7 +1837,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                           style: GoogleFonts.tajawal(
                             fontSize: 11,
                             color: Colors.red.shade600,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(width: 6),
@@ -1861,7 +1861,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                       style: GoogleFonts.tajawal(
                         fontSize: 11,
                         color: Colors.grey[600],
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                       ),
                     )
                   else
@@ -1872,7 +1872,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                           style: GoogleFonts.tajawal(
                             fontSize: 11,
                             color: hasSufficientBalance ? Colors.green.shade700 : Colors.red.shade600,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         if (!hasSufficientBalance)

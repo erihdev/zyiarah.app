@@ -286,7 +286,7 @@ class _AdminInvoicesScreenState extends State<AdminInvoicesScreen> {
             Text(value,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.tajawal(
-                    fontSize: 13, fontWeight: FontWeight.w800, color: color)),
+                    fontSize: 13, fontWeight: FontWeight.w900, color: color)),
           ]),
         ),
       );
@@ -382,7 +382,7 @@ class _AdminInvoicesScreenState extends State<AdminInvoicesScreen> {
           Text(v.orderCode,
               textDirection: TextDirection.ltr,
               style: GoogleFonts.tajawal(
-                  fontSize: 14, fontWeight: FontWeight.w800, color: ZyiarahTheme.brand)),
+                  fontSize: 14, fontWeight: FontWeight.w900, color: ZyiarahTheme.brand)),
           const SizedBox(width: 8),
           _chip(e.sourceLabel, e.isStore ? const Color(0xFF7C3AED) : const Color(0xFF0F766E)),
           const Spacer(),
@@ -402,7 +402,7 @@ class _AdminInvoicesScreenState extends State<AdminInvoicesScreen> {
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text(_money(v.total),
                 style: GoogleFonts.tajawal(
-                    fontSize: 15, fontWeight: FontWeight.w800, color: ZyiarahTheme.ink)),
+                    fontSize: 15, fontWeight: FontWeight.w900, color: ZyiarahTheme.ink)),
             Text('منها ضريبة ${_money(v.vat)}',
                 style: GoogleFonts.tajawal(fontSize: 10.5, color: ZyiarahTheme.inkMuted)),
           ]),
