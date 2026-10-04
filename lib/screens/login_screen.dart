@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -5,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/screens/forgot_password_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class ZyiarahLoginScreen extends StatefulWidget {
   const ZyiarahLoginScreen({super.key});
@@ -36,7 +38,9 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
 
     try {
       final userCredential =
-          await _firebaseService.signInWithRealEmailAndPassword(email, password);
+          await _firebaseService
+              .signInWithRealEmailAndPassword(email, password)
+              .timeout(kAuthTimeout);
 
       if (userCredential.user != null) {
         if (!mounted) return;
@@ -65,6 +69,10 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
         _ => 'تعذّر تسجيل الدخول، أعد المحاولة',
       };
       _showError(message);
+    } on TimeoutException {
+      // نداءٌ لا يردّ ولا يرمي: شبكةٌ «متّصلة» خلف بوّابةِ تسجيل أو وكيلٍ شفّاف.
+      // بلا مهلة كان الزرُّ يبقى دوّاراً إلى الأبد بلا رسالة ولا مخرج.
+      _showError('تعذّر الاتصال — تحقّق من الإنترنت وأعد المحاولة');
     } catch (_) {
       _showError('تعذّر تسجيل الدخول، أعد المحاولة');
     } finally {

@@ -15,6 +15,7 @@ import 'package:zyiarah/widgets/zone_location_card.dart';
 import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/date_strip.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 
 class HourlyCleaningDetailsScreen extends StatefulWidget {
@@ -196,7 +197,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
             'startDate': startDate,
             'endDate': endDate,
             if (_selectedZoneName != null) 'zoneName': _selectedZoneName,
-          });
+          }).timeout(kNetCallTimeout);
 
       final data = result.data as Map;
 
@@ -279,7 +280,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       final snapshot = await FirebaseFirestore.instance
           .collection('service_zones')
           .where('enabled', isEqualTo: true)
-          .get();
+          .get()
+          .timeout(kNetCallTimeout);
       if (mounted) {
         final sorted = snapshot.docs.map((doc) => doc.data()).toList()
           ..sort((a, b) => (a['rank'] as int? ?? 0).compareTo(b['rank'] as int? ?? 0));
@@ -296,8 +298,10 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       debugPrint('[Hourly] fetchZones failed: $e');
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('تعذّر تحميل مناطق الخدمة: $e'),
+        // نفس صياغة الرسالة الأخرى في هذا الملفّ — لا نصَّ استثناءٍ للعميلة.
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'تعذّر تحميل مناطق الخدمة — تحقّق من اتصالك وأعد المحاولة'),
           backgroundColor: Colors.red,
         ));
       }

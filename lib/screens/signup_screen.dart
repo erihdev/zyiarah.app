@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -5,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/services/zyiarah_referral_service.dart';
 import 'package:zyiarah/screens/terms_privacy_screens.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class ZyiarahSignupScreen extends StatefulWidget {
   const ZyiarahSignupScreen({super.key});
@@ -79,7 +81,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
         password: password,
         name: name,
         email: email,
-      );
+      ).timeout(kAuthTimeout);
 
       final referralCode = _referralCodeController.text.trim();
       if (referralCode.isNotEmpty && credential.user != null) {
@@ -109,6 +111,8 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
         _ => 'تعذّر إنشاء الحساب، أعد المحاولة',
       };
       _showError(msg);
+    } on TimeoutException {
+      _showError('تعذّر الاتصال — تحقّق من الإنترنت وأعد المحاولة');
     } catch (_) {
       _showError('تعذّر إنشاء الحساب، أعد المحاولة');
     } finally {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:zyiarah/utils/time_format.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +13,7 @@ import 'package:zyiarah/services/zone_locator_service.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
 import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/date_strip.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 
 class ZyiarahSubscriptionPlansScreen extends StatefulWidget {
   const ZyiarahSubscriptionPlansScreen({super.key});
@@ -216,7 +218,7 @@ class _ZyiarahSubscriptionPlansScreenState
             'endDate': endDate,
             // منطقة العميل لجدول فتحها وسقفها اليومي الخاص (إن ضُبط).
             if (_userZoneName != null) 'zoneName': _userZoneName,
-          });
+          }).timeout(kNetCallTimeout);
 
       final data = result.data as Map;
 
@@ -282,7 +284,12 @@ class _ZyiarahSubscriptionPlansScreenState
       if (mounted) {
         setState(() { _loadingDailyCounts = false; _availabilityError = true; });
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('تعذّر تحميل مواعيد الإتاحة: ${e.toString().replaceAll("Exception: ", "")}'),
+          // لا نصَّ استثناءٍ خامّاً للعميلة: كانت تُعرض «[firebase_functions/internal]
+          // internal [0]» بحروفٍ لاتينيّة داخل واجهةٍ عربيّة. شاشةُ الدخول تُترجم
+          // رموزَ Firebase عمداً، وهذه كانت تسرّبها.
+          content: Text(e is TimeoutException
+              ? 'تعذّر تحميل مواعيد الإتاحة — تحقّقي من الاتصال وأعيدي المحاولة'
+              : 'تعذّر تحميل مواعيد الإتاحة، أعيدي المحاولة'),
           backgroundColor: Colors.red,
         ));
       }
@@ -358,7 +365,10 @@ class _ZyiarahSubscriptionPlansScreenState
   Future<void> _fetchPackages() async {
     if (mounted) setState(() { _isLoading = true; _hasError = false; });
     try {
-      final snapshot = await _db.collection('subscription_packages').get();
+      final snapshot = await _db
+          .collection('subscription_packages')
+          .get()
+          .timeout(kNetCallTimeout);
       if (mounted) {
         final docs = snapshot.docs;
         docs.sort((a, b) {
