@@ -6,7 +6,13 @@ class ZyiarahUser {
   final String email;
   final String phone;
   final String role;
-  final double rating;
+  /// تقييمُ المستخدم — **قد يغيب**، وغيابُه ليس 4.9.
+  ///
+  /// لا شيءَ في المشروع يكتب `rating` على مستند مستخدم: `aggregateDriverRating`
+  /// يكتب `rating_avg`/`rating_count` على مجموعة `drivers` وحدها. فكان الافتراضُ
+  /// الثابت 4.9 يجعل **كلَّ** عميلةٍ ترى «تقييمك 4.9 ★» وتظنُّه تقييمَها،
+  /// وهو رقمٌ لم يحسبه أحد. `null` الآن تعني «لا تقييم» وتُعرض «—».
+  final double? rating;
   final bool hasActiveSubscription;
   final int visitsRemaining;
   final DateTime? subscriptionExpiry;
@@ -20,7 +26,7 @@ class ZyiarahUser {
     required this.email,
     required this.phone,
     required this.role,
-    this.rating = 4.9,
+    this.rating,
     this.hasActiveSubscription = false,
     this.visitsRemaining = 0,
     this.subscriptionExpiry,
@@ -42,7 +48,7 @@ class ZyiarahUser {
       email: data['email'] ?? '',
       phone: data['phone'] ?? '',
       role: data['role'] ?? 'client',
-      rating: toD(data['rating'], 4.9),
+      rating: data['rating'] == null ? null : toD(data['rating'], 0),
       hasActiveSubscription: data['has_active_subscription'] ?? false,
       visitsRemaining: toI(data['visits_remaining'], 0),
       subscriptionExpiry: data['subscription_expiry'] is Timestamp

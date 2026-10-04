@@ -562,10 +562,14 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
   // ─────────────────────────────────────────────────────────
 
   Widget _buildStatsRow() {
-    final double rating = _currentUser?.rating ?? 4.9;
-    final String ratingText = rating == rating.roundToDouble()
-        ? rating.toStringAsFixed(0)
-        : rating.toStringAsFixed(1);
+    // لا رقمَ مُلفَّقاً: بلا تقييمٍ محسوب تُعرض «—» كما تفعل بطاقةُ الحجوزات
+    // بجانبها. الافتراضُ 4.9 كان يُري كلَّ عميلةٍ تقييماً لم يحسبه أحد.
+    final double? rating = _currentUser?.rating;
+    final String ratingText = rating == null
+        ? '—'
+        : (rating == rating.roundToDouble()
+            ? rating.toStringAsFixed(0)
+            : rating.toStringAsFixed(1));
     final String totalBookings = _totalBookings?.toString() ?? '—';
     return Row(
       children: [
@@ -581,7 +585,8 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
         Expanded(
           child: _buildStatCard(
             'تقييمك',
-            '$ratingText ★',
+            // النجمةُ تتبع رقماً، لا شَرطةَ غياب: «— ★» تقرأ كعطل.
+            rating == null ? ratingText : '$ratingText ★',
             Icons.star_rounded,
             const Color(0xFFF59E0B),
           ),
