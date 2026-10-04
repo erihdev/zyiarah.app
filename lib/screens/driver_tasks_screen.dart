@@ -32,6 +32,41 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
   late DateTime _selected;
   _View _view = _View.week;
 
+  /// البثّان يُبنيان **مرّةً واحدة**، لا في كلّ `build`.
+  ///
+  /// كانا يُنشآن داخل دالّة البناء، وهذه الشاشةُ تستدعي `setState` في ثمانية
+  /// مواضع (اختيارُ يوم، تنقّلُ أسبوع، تبديلُ العرض…) — فكلُّ لمسةٍ تُلغي
+  /// مستمِعَي Firestore وتُنشئ غيرهما. والبياناتُ لا تختفي (StreamBuilder
+  /// يحتفظ بآخر لقطةٍ عبر إعادة الاشتراك) فلا يُرى شيء، لكنّ الكلفةَ حقيقيّة:
+  /// اشتراكانِ جديدان لكلّ لمسة، ومهلةُ أوّلِ حدثٍ تُستأنف معهما.
+  ///
+  /// وإعادةُ المحاولة كانت تعتمد على ذلك الأثر الجانبيّ عينِه — فصارت صريحة:
+  /// `setState(_openStreams)`.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _active;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _history;
+
+  void _openStreams() {
+    final id = _driverId;
+    if (id == null) return;
+    // (تدقيق السائق) استعلامان محدودان بدل بثّ كل طلبات السائق مدى الحياة:
+    // النشطة بفلتر حالات خادمي (يخدمه فهرس driver_id+status القائم)، والسجل
+    // بأحدث 100 طلب (يخدمه فهرس driver_id+created_at القائم) ثم تصفية
+    // حالات السجل محلياً — إضافة whereIn فوق orderBy كانت ستتطلب فهرساً جديداً.
+    _active = FirebaseFirestore.instance
+        .collection('orders')
+        .where('driver_id', isEqualTo: id)
+        .where('status', whereIn: DriverSchedule.activeStatuses)
+        .snapshots()
+        .firstEventTimeout();
+    _history = FirebaseFirestore.instance
+        .collection('orders')
+        .where('driver_id', isEqualTo: id)
+        .orderBy('created_at', descending: true)
+        .limit(100)
+        .snapshots()
+        .firstEventTimeout();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -40,6 +75,7 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
         : FirebaseAuth.instance.currentUser?.uid;
     _now = widget.now ?? DateTime.now();
     _selected = DriverSchedule.dayKey(_now);
+    if (widget.items == null) _openStreams();
   }
 
   @override
@@ -58,7 +94,7 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
         ),
         body: _driverId == null
             ? const Center(child: Text('يرجى تسجيل الدخول'))
-            : (widget.items != null ? _injected() : _firestore(_driverId!)),
+            : (widget.items != null ? _injected() : _firestore()),
       ),
     );
   }
@@ -76,24 +112,9 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
     );
   }
 
-  Widget _firestore(String driverId) {
-    // (تدقيق السائق) استعلامان محدودان بدل بثّ كل طلبات السائق مدى الحياة:
-    // النشطة بفلتر حالات خادمي (يخدمه فهرس driver_id+status القائم)، والسجل
-    // بأحدث 100 طلب (يخدمه فهرس driver_id+created_at القائم) ثم تصفية
-    // حالات السجل محلياً — إضافة whereIn فوق orderBy كانت ستتطلب فهرساً جديداً.
-    final active = FirebaseFirestore.instance
-        .collection('orders')
-        .where('driver_id', isEqualTo: driverId)
-        .where('status', whereIn: DriverSchedule.activeStatuses)
-        .snapshots()
-            .firstEventTimeout();
-    final history = FirebaseFirestore.instance
-        .collection('orders')
-        .where('driver_id', isEqualTo: driverId)
-        .orderBy('created_at', descending: true)
-        .limit(100)
-        .snapshots()
-            .firstEventTimeout();
+  Widget _firestore() {
+    final active = _active;
+    final history = _history;
 
     List<DriverTask> parse(QuerySnapshot<Map<String, dynamic>> q) => [
           for (final d in q.docs) DriverTask.fromMap(d.id, d.data(), fallback: _now),
@@ -130,8 +151,9 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
       const Center(child: CircularProgressIndicator(color: ZyiarahTheme.brand));
 
   Widget _error() {
-    // لا «قائمة فارغة» كاذبة عند الفشل — لافتة خطأ + إعادة المحاولة
-    // (setState يعيد بناء التيار فيُعاد الاشتراك).
+    // لا «قائمة فارغة» كاذبة عند الفشل — لافتة خطأ + إعادة محاولةٍ **صريحة**:
+    // `setState(_openStreams)` تفتح بثَّين جديدين. كانت تعتمد على أثرٍ جانبيّ
+    // (أيُّ `setState` يُعيد بناء التيار) — فكانت كلُّ لمسةٍ إعادةَ اشتراك.
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -160,7 +182,7 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
             ),
             const SizedBox(height: 12),
             TextButton.icon(
-              onPressed: () => setState(() {}),
+              onPressed: () => setState(_openStreams),
               icon: const Icon(Icons.refresh, size: 18),
               label: Text('إعادة المحاولة',
                   style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
