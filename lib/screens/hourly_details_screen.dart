@@ -486,15 +486,23 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     return _openHours[key] ?? const [8, 22];
   }
 
+  /// المدّةُ التي يُفحَص بها اليوم — مشتقّةٌ دائماً من `_packages` و`_selectedType`
+  /// لا من الحقل، فلا يُلوَّن الشريطُ بمدّةِ باقةٍ من منطقةٍ أخرى. انظر
+  /// `homeStripDurationHours`. (`_durationHours` يبقى للطلب نفسه، ولا يُقرأ
+  /// إلّا وباقةٌ مختارة.)
+  int get _availabilityHours => homeStripDurationHours(
+      packages: _packages, selectedType: _selectedType);
+
   /// أول ساعة في اليوم يتسع فيها **سائقٌ** لمدة الباقة كاملةً — null إن لم توجد.
   /// لا تُعرض للعميل: تقرر إتاحة اليوم وتُرسي موعد الطلب على فترةٍ حرّة فعلاً.
   int? _firstFeasibleStart(DateTime d) {
     final key = intl.DateFormat('yyyy-MM-dd').format(d);
     final open = _openHoursFor(d);
-    final last = open[1] - _durationHours;
+    final int hours = _availabilityHours;
+    final last = open[1] - hours;
     for (int h = open[0]; h <= last; h++) {
       bool free = true;
-      for (int hh = h; hh < h + _durationHours; hh++) {
+      for (int hh = h; hh < h + hours; hh++) {
         final slotKey = '${key}_${hh.toString().padLeft(2, '0')}:00';
         if ((_slotCounts[slotKey] ?? 0) >= _maxTeamsPerSlot) {
           free = false;

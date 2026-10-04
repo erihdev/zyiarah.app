@@ -204,4 +204,82 @@ void main() {
           reason: 'حالةُ «لا منطقة» تطلب الخطوةَ المطلوبة فعلاً');
     });
   });
+
+  // ─────────── مدّةُ فحصِ الإتاحة: لا تُلوَّن الأيّام بمدّةٍ وهمية ───────────
+  group('homeStripDurationHours', () {
+    HomePackage pkg(String type, int hours, bool sellable) => HomePackage(
+        type: type,
+        desc: '',
+        durationHours: hours,
+        options: sellable ? const [CrewOption(1, 200)] : const []);
+
+    final zone = [
+      pkg('small', 4, true),
+      pkg('medium', 6, true),
+      pkg('villa', 8, true),
+    ];
+
+    test('باقةٌ مختارة ⇒ مدّتُها هي الفترةُ المحجوزة', () {
+      expect(
+          homeStripDurationHours(packages: zone, selectedType: 'villa'), 8);
+      expect(
+          homeStripDurationHours(packages: zone, selectedType: 'small'), 4);
+    });
+
+    test('بلا اختيار ⇒ أقصرُ مدّةٍ مسعّرة، فلا يُستبعَد يومٌ متّسعٌ لباقةٍ تُشترى',
+        () {
+      expect(homeStripDurationHours(packages: zone, selectedType: null), 4);
+    });
+
+    test('أقصرُ **مسعّرةٍ** لا أقصرُ موجودة — المعطّلةُ لا تُشترى', () {
+      final z = [
+        pkg('small', 4, false), // معطّلةٌ في هذه المنطقة
+        pkg('medium', 6, true),
+        pkg('villa', 8, true),
+      ];
+      expect(homeStripDurationHours(packages: z, selectedType: null), 6,
+          reason: 'لا نتساهل بمدّةِ باقةٍ لا تستطيع شراءها');
+    });
+
+    test('نوعٌ مختارٌ عُطّل هنا ⇒ لا تبقى مدّتُه (مدّةُ منطقةٍ أخرى)', () {
+      // هذا هو العطبُ نفسه: الاختيارُ يُصفَّر والمدّةُ كانت تبقى ٨ فيُلوَّن
+      // الشريطُ بها ويُحمَّر يومٌ متّسعٌ للستّ.
+      final z = [pkg('medium', 6, true), pkg('villa', 8, false)];
+      expect(homeStripDurationHours(packages: z, selectedType: 'villa'), 6);
+    });
+
+    test('لا باقةَ مسعّرةً بالمرّة ⇒ الافتراضي', () {
+      expect(homeStripDurationHours(packages: const [], selectedType: null), 4);
+      expect(
+          homeStripDurationHours(
+              packages: [pkg('small', 4, false)], selectedType: 'small'),
+          4);
+      expect(
+          homeStripDurationHours(
+              packages: const [], selectedType: null, fallback: 6),
+          6);
+    });
+
+    test('فحصُ الإتاحة في الشاشة يقرأ المشتقّ لا الحقل', () {
+      final s =
+          File('lib/screens/hourly_details_screen.dart').readAsStringSync();
+      final int i = s.indexOf('int? _firstFeasibleStart(');
+      expect(i, greaterThan(0));
+      final String body = s.substring(i, s.indexOf('bool _dayCapacityFull', i));
+      expect(body.contains('_availabilityHours'), isTrue,
+          reason: 'الفحص يقرأ الحقلَ المباشر ⇒ مدّةُ منطقةٍ أخرى تُلوّن الشريط');
+      expect(body.contains('_durationHours'), isFalse,
+          reason: '`_durationHours` للطلب نفسه، لا لتلوين الأيّام');
+      expect(s.contains('homeStripDurationHours('), isTrue,
+          reason: 'القاعدةُ في الوحدة لا منسوخةً في الشاشة');
+    });
+
+    test('مدّةُ الطلب المُرسَلة تبقى مدّةَ الباقة المختارة', () {
+      final s =
+          File('lib/screens/hourly_details_screen.dart').readAsStringSync();
+      expect(s.contains('hours: _durationHours'), isTrue);
+      expect(s.contains("'durationHours': _durationHours"), isTrue,
+          reason: 'لا يُرسَل للخادم أقصرُ مدّةٍ في المنطقة بل مدّةُ ما اختارته');
+    });
+  });
 }
