@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { crewPriceInversions, crewPriceInversionLabel } from '../utils/crewPriceCheck';
 import { Save, Shield, Wallet, MapPin, Search, Smartphone, Loader2, CheckCircle2, ChevronLeft, CreditCard, Activity, Database, KeyRound, ArrowRight, Plus, Navigation, ToggleLeft, ToggleRight, Trash2, Pencil, CalendarClock, Copy } from 'lucide-react';
 import { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, GeoPoint, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
@@ -1325,6 +1326,28 @@ export default function Settings({ role }: { role?: string | null }) {
                                                                         );
                                                                     })}
                                                                 </div>
+                                                                {/* تنبيهٌ لا منع: خيارٌ بكوادرَ أكثرَ بسعرٍ
+                                                                    أدنى من خيارٍ أقلَّ منه يجعل العميلةَ تأخذ
+                                                                    كادرَين بأقلَّ من كادر — وُجد في الإنتاج
+                                                                    («فيفا»/«فيلا أو دور»: 347 لكادرٍ و320
+                                                                    لكادرَين). السعرُ الترويجيُّ قرارٌ تجاريّ. */}
+                                                                {(() => {
+                                                                    const invs = crewPriceInversions(
+                                                                        Object.fromEntries(['1', '2', '3', '4']
+                                                                            .filter(n => pkg.crews[n].enabled)
+                                                                            .map(n => [n, parseFloat(pkg.crews[n].price) || 0])));
+                                                                    if (!invs.length) return null;
+                                                                    return (
+                                                                        <div className="bg-amber-50 border border-amber-400 rounded-xl p-3">
+                                                                            <p className="text-xs font-black text-amber-800 mb-1">⚠ انقلابُ سعر</p>
+                                                                            {invs.map(inv => (
+                                                                                <p key={inv.crews} className="text-[11px] leading-relaxed text-amber-800">
+                                                                                    {crewPriceInversionLabel(inv)}
+                                                                                </p>
+                                                                            ))}
+                                                                        </div>
+                                                                    );
+                                                                })()}
                                                             </div>
                                                         );
                                                     })}

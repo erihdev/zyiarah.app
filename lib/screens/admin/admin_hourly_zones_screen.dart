@@ -14,6 +14,7 @@ import 'package:zyiarah/utils/service_pricing_defaults.dart';
 import 'package:zyiarah/utils/firestore_maps.dart';
 import 'package:zyiarah/screens/admin/admin_zone_schedule_editor.dart';
 import 'package:zyiarah/utils/jazan_boundary.dart';
+import 'package:zyiarah/utils/crew_price_check.dart';
 import 'package:zyiarah/utils/home_packages.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 
@@ -737,6 +738,9 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                                         enabled: pkgEnabled[type]![n] == true,
                                         keyboardType: const TextInputType
                                             .numberWithOptions(decimal: true),
+                                        // يُعيد بناء الحوار كي يتحدّث تنبيهُ
+                                        // انقلاب السعر أدناه مع كلِّ ضغطة.
+                                        onChanged: (_) => setDialogState(() {}),
                                         decoration: const InputDecoration(
                                             labelText: 'السعر (ر.س)',
                                             border: OutlineInputBorder(),
@@ -746,6 +750,67 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                                   ],
                                 ),
                               ),
+
+                            // **تنبيهٌ لا منع**: خيارٌ بكوادرَ أكثرَ بسعرٍ أدنى
+                            // من خيارٍ أقلَّ منه يجعل العميلةَ تأخذ كادرَين
+                            // بأقلَّ من كادر — وُجد في الإنتاج («فيفا»، «فيلا
+                            // أو دور»: 347 لكادرٍ و320 لكادرَين) ولم يقل
+                            // المحرِّرُ شيئاً. السعرُ الترويجيُّ قرارٌ تجاريّ،
+                            // فنُظهر الانقلابَ ونترك القرار.
+                            ...() {
+                              final invs = crewPriceInversions({
+                                for (int n = 1; n <= kMaxCrews; n++)
+                                  if (pkgEnabled[type]![n] == true)
+                                    n: double.tryParse(
+                                            pkgPriceCtrls[type]![n]!
+                                                .text
+                                                .trim()) ??
+                                        0,
+                              });
+                              if (invs.isEmpty) return const <Widget>[];
+                              return <Widget>[
+                                Container(
+                                  width: double.infinity,
+                                  margin: const EdgeInsets.only(top: 4),
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEF3C7),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                        color: const Color(0xFFF59E0B)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Row(
+                                        children: [
+                                          Icon(Icons.warning_amber_rounded,
+                                              size: 16,
+                                              color: Color(0xFF92400E)),
+                                          SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text('انقلابُ سعر',
+                                                style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight:
+                                                        FontWeight.bold,
+                                                    color: Color(0xFF92400E))),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      for (final inv in invs)
+                                        Text(crewPriceInversionLabel(inv),
+                                            style: const TextStyle(
+                                                fontSize: 11,
+                                                height: 1.5,
+                                                color: Color(0xFF92400E))),
+                                    ],
+                                  ),
+                                ),
+                              ];
+                            }(),
                           ],
                         ),
                       ),
