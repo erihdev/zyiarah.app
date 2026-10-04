@@ -487,6 +487,12 @@ class _CartSheetState extends State<_CartSheet> {
             if (cartProducts.isEmpty) {
               return const SizedBox(height: 200, child: Center(child: Text('سلة التسوق فارغة')));
             }
+            // صنفٌ أُخفي أو حُذف بعد إضافته يختفي من هذه القائمة بلا كلمة:
+            // العدّادُ على أيقونة السلّة يقول «3» والورقةُ تعرض اثنين، ثمّ
+            // `_checkout` يتخطّاه صامتاً (لا يُنبّه إلّا حين يختفي **كلّ**
+            // شيء). الإجماليُّ صحيحٌ في الحالين، فالعطلُ إفادةٌ لا مال —
+            // لكنّ «أين الثالث؟» سؤالٌ لا تجد له جواباً.
+            final int gone = widget.cart.length - cartProducts.length;
 
             double total = 0;
             for (var p in cartProducts) {
@@ -498,6 +504,25 @@ class _CartSheetState extends State<_CartSheet> {
               children: [
                 Text('سلة التسوق', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 20)),
                 const SizedBox(height: 20),
+                if (gone > 0) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFF59E0B)),
+                    ),
+                    child: Text(
+                      gone == 1
+                          ? 'صنفٌ لم يعد متاحاً وأُزيل من السلة.'
+                          : '$gone أصنافٍ لم تعد متاحة وأُزيلت من السلة.',
+                      style: const TextStyle(
+                          fontSize: 12, color: Color(0xFF92400E), height: 1.5),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 Flexible(
                   child: ListView.builder(
                     shrinkWrap: true,
