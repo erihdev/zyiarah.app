@@ -1,0 +1,73 @@
+# نشرُ دوالّ Firebase آليّاً عند الدمج إلى main.
+#
+# لماذا: لا شيء كان ينشر الدوالّ — لا Codemagic ولا Actions. فكلُّ إصلاحٍ خادميّ
+# (الاسترداد التلقائي، تحقّقُ الدفع، أهليّةُ السائق) كان يُدمَج ويبقى **غير عامل**
+# في الإنتاج حتى يفتح المالكُ طرفيّةً ويكتب `npm run deploy` بيده.
+#
+# الاعتماد: سرُّ المستودع `FIREBASE_SERVICE_ACCOUNT` — محتوى مفتاح حساب خدمةٍ
+# بصيغة JSON. لا يُكتب في الشيفرة ولا في المحادثات؛ انظر
+# `production_deployment_guide.md` للصلاحيات المطلوبة وخطوات إنشائه.
+#
+# **بلا `--force` عمداً:** مع `--non-interactive` وحدها يفشل النشر إن كانت دالّةٌ
+# قد حُذفت من الشيفرة، بدل أن يحذفها من الإنتاج صامتاً. حذفُ دالّةٍ قرارٌ بشريّ
+# يُنفَّذ يدويّاً مرّةً واحدة.
+name: Deploy Functions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'functions/**'
+      - 'firebase.json'
+      - '.github/workflows/functions_deploy.yml'
+  workflow_dispatch:
+
+# دمجتان متتاليتان لا تنشران معاً — الثانية تنتظر، ولا تُلغى الأولى في منتصفها.
+concurrency:
+  group: deploy-functions
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to zyiarah-app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: functions
+
+      # لا يُنشَر ما لم يُختبَر: نفس فحوص CI، مكرّرةً هنا عمداً لأنّ هذا المسار
+      # يكتب في الإنتاج وقد يُشغَّل يدويّاً (workflow_dispatch) على حالةٍ لم تمرّ بـPR.
+      - name: Lint
+        run: npm run lint
+        working-directory: functions
+
+      - name: Unit tests
+        run: npm test
+        working-directory: functions
+
+      - name: Write service account key
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA_JSON" ]; then
+            echo "::error::سرُّ FIREBASE_SERVICE_ACCOUNT غير مضبوط في إعدادات المستودع"
+            exit 1
+          fi
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+
+      - name: Deploy
+        run: npx --yes firebase-tools@15 deploy --only functions --project zyiarah-app --non-interactive
+
+      - name: Remove key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sa.json"

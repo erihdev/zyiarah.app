@@ -195,6 +195,55 @@ Failed to publish زيارة | Zyiarah.ipa to App Store Connect.
 يحرس الحالتين `test/app_check_guard_test.dart`: أن الإرسال قائم، وأن الإلزام
 مُطفأ. وسقوط الفحص الثاني ليس خطأً يُعطَّل — بل سؤال: هل تحقّق شرط الانتشار؟
 
+## 1-ب. نشرُ دوالّ Firebase — آليّ منذ 2026-10-04
+
+`.github/workflows/functions_deploy.yml` ينشر الدوالّ عند كلّ دمجٍ إلى `main`
+يمسّ `functions/**` أو `firebase.json`، وبعد `lint` و`npm test` لا قبلهما.
+
+**لمَ وُجد:** لم يكن شيءٌ ينشر الدوالّ — لا Codemagic ولا Actions. في 2026-10-03
+دُمجت تسعُ دمجات، سبعٌ منها خادميّة (دفنُ طلبٍ مدفوع تعذّر استردادُه، تجاوزٌ
+صامتٌ لطلبٍ وافقت عليه تمارا، عطلُ الإلغاء في ميسر، حارسُ أهليّة السائق)، وبقيت
+كلُّها **مدمَجةً وغيرَ عاملة** لأنّ النشر كان أمراً يُكتَب باليد.
+
+### إعدادٌ لمرّةٍ واحدة: سرُّ `FIREBASE_SERVICE_ACCOUNT`
+
+1. [Google Cloud Console](https://console.cloud.google.com/iam-admin/serviceaccounts?project=zyiarah-app)
+   ← **Create Service Account** ← الاسم `github-deployer`.
+2. امنحه هذه الأدوار (`IAM & Admin → IAM`):
+   - `Firebase Admin` — إدارةُ مشروع Firebase
+   - `Cloud Functions Admin` — نشرُ الدوالّ وحذفُها
+   - `Service Account User` — ليعمل باسم حساب تشغيل الدوالّ
+   - `Cloud Build Editor` + `Artifact Registry Administrator` — بناءُ الجيل الثاني
+   - `Secret Manager Admin` — ربطُ أسرار `defineSecret` بالدوالّ المنشورة
+   - `Service Usage Consumer`
+3. من تبويب **Keys** ← *Add key* ← *Create new key* ← **JSON**. يُنزَّل ملفّ.
+4. GitHub ← [Settings → Secrets and variables → Actions](https://github.com/erihdev/zyiarah.app/settings/secrets/actions)
+   ← **New repository secret**، الاسم `FIREBASE_SERVICE_ACCOUNT`، والقيمةُ
+   **محتوى الملفّ كاملاً** (من `{` إلى `}`).
+5. احذف الملفَّ المنزَّل من جهازك. **لا يُرفع إلى المستودع ولا يُلصق في محادثة**:
+   هذا المفتاح يتجاوز قواعدَ Firestore ويفتح قاعدةَ البيانات كاملة.
+6. جرّبه بلا انتظار دمجة: Actions ← *Deploy Functions* ← **Run workflow**.
+
+### قرارات مثبّتة في `test/functions_deploy_guard_test.dart`
+
+- **بلا `--force`** عمداً: مع `--non-interactive` وحدها **يفشل** النشر إن غابت
+  دالّةٌ عن الشيفرة، بدل أن تُحذف من الإنتاج صامتةً. حذفُ دالّةٍ قرارٌ بشريّ
+  يُنفَّذ مرّةً باليد: `firebase deploy --only functions --force`.
+- **الاختبارات قبل النشر**، في هذا المسار نفسه لا في CI وحده — لأنّ
+  `workflow_dispatch` قد يُشغَّل على حالةٍ لم تمرّ بـPR.
+- `--only functions`: لا تُنشَر القواعدُ ولا الاستضافةُ من هنا.
+- `cancel-in-progress: false`: إلغاءُ نشرٍ في منتصفه يترك الدوالّ نصفَ منشورة.
+- المفتاحُ يُكتب في `RUNNER_TEMP` ويُمحى بـ`if: always()` حتى عند الفشل.
+
+### إن فشل
+
+| الرسالة | المعنى |
+|---|---|
+| `سرُّ FIREBASE_SERVICE_ACCOUNT غير مضبوط` | الخطوة ٤ لم تُنفَّذ |
+| `Failed to authenticate` | المفتاحُ ناقصٌ أو ملصوقٌ جزئيّاً |
+| `Missing permissions` / `PERMISSION_DENIED` | دورٌ ناقصٌ من الخطوة ٢ |
+| `functions ... will be deleted` | دالّةٌ غابت عن الشيفرة — انظر `--force` أعلاه |
+
 ## 2. حرّاس ما قبل الدمج
 
 `.github/workflows/ci.yml` يشغّل خمس مهامّ على كل طلب دمج، ولا يُدمج شيء وهي حمراء:
