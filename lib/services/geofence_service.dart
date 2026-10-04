@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:geolocator/geolocator.dart';
 
 class ZyiarahZone {
   final String name;
@@ -35,11 +34,6 @@ class GeofenceService {
     ZyiarahZone(name: 'ريع',                  latitude: 17.2666000, longitude: 43.1000000),
   ];
 
-  static List<ZyiarahZone> _cachedZones = [];
-
-  static List<ZyiarahZone> get supportedZones =>
-      _cachedZones.isNotEmpty ? _cachedZones : _fallbackZones;
-
   /// يُستدعى مرة واحدة عند بدء التطبيق لتحميل المحافظات من Firestore
   static Future<void> initialize() async {
     try {
@@ -49,19 +43,10 @@ class GeofenceService {
           .where('enabled', isEqualTo: true)
           .get();
 
-      if (snapshot.docs.isNotEmpty) {
-        _cachedZones = snapshot.docs.map((doc) {
-          final d = doc.data();
-          final center = d['centerLoc'] as GeoPoint?;
-          return ZyiarahZone(
-            name: d['name'] as String? ?? '',
-            latitude: center?.latitude ?? 0.0,
-            longitude: center?.longitude ?? 0.0,
-            radiusInMeters: ((d['radiusKm'] as num?)?.toDouble() ?? 15.0) * 1000,
-          );
-        }).where((z) => z.name.isNotEmpty).toList();
-      } else {
-        // المجموعة فارغة — ابذر البيانات الافتراضية تلقائياً
+      // المجموعة فارغة — ابذر البيانات الافتراضية تلقائياً. وإن كانت عامرة فلا شيء
+      // نفعله: القراءةُ هنا تقرّر البذر فقط. (كانت تملأ ذاكرةً مؤقّتة قارئُها الوحيد
+      // `supportedZones` بلا مُنادٍ، فيُبنى الجدولُ كلَّ إقلاعٍ ثمّ يُرمى.)
+      if (snapshot.docs.isEmpty) {
         await _seedDefaultZones(db);
       }
     } catch (_) {
@@ -110,41 +95,6 @@ class GeofenceService {
       });
     }
     await batch.commit();
-    _cachedZones = List.of(_fallbackZones);
   }
 
-  static bool isLocationSupported(Position userPosition) {
-    for (final zone in supportedZones) {
-      final distance = Geolocator.distanceBetween(
-        userPosition.latitude, userPosition.longitude,
-        zone.latitude, zone.longitude,
-      );
-      if (distance <= zone.radiusInMeters) return true;
-    }
-    return false;
-  }
-
-  static String? getNearestSupportedZoneName(Position userPosition) {
-    double minDistance = double.infinity;
-    String? nearestZoneName;
-    for (final zone in supportedZones) {
-      final distance = Geolocator.distanceBetween(
-        userPosition.latitude, userPosition.longitude,
-        zone.latitude, zone.longitude,
-      );
-      if (distance <= zone.radiusInMeters && distance < minDistance) {
-        minDistance = distance;
-        nearestZoneName = zone.name;
-      }
-    }
-    return nearestZoneName;
-  }
-
-  static double calculateDistance(double startLat, double startLng, double endLat, double endLng) {
-    return Geolocator.distanceBetween(startLat, startLng, endLat, endLng);
-  }
-
-  static bool isNearTarget(double currentLat, double currentLng, double targetLat, double targetLng, {double threshold = 2000}) {
-    return calculateDistance(currentLat, currentLng, targetLat, targetLng) <= threshold;
-  }
 }

@@ -36,8 +36,10 @@ void main() {
   // الملفّات التي يُسمح فيها بذكر waiting_payment_cod: شاهد قبر للبيانات التاريخية فقط.
   // طلبٌ قديم بهذه الحالة يجب أن يظلّ **مقروءاً** في الواجهة بدل عرض حالة خامّة —
   // لكن لا يجوز لأي شيفرة أن **تُنشئ** هذه الحالة من جديد.
+  // (أُسقط `lib/utils/status_util.dart` من القائمة: الموضعُ الوحيد الحامل
+  //  لـwaiting_payment_cod فيه كان `getMaintenanceStatus`، ولم تكن تُنادى من أيّ
+  //  شاشة — فالشاهدُ لم يكن يَعرض شيئاً لأحد. قائمةٌ تُجيز ما لا يُكتب تتعفّن.)
   const legacyLabelFiles = {
-    'lib/utils/status_util.dart',
     'lib/screens/admin/admin_maintenance_screen.dart',
     'lib/screens/orders_list_screen.dart',
     'lib/screens/admin/admin_store_orders_screen.dart',

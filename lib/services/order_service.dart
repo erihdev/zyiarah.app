@@ -225,82 +225,6 @@ class ZyiarahOrderService {
     // rewards_handled_by:'server' وتغيّر الحالة — منعاً للتزوير والازدواج.
   }
 
-  // قبول الطلب باستخدام Transaction لمنع التعارض المزدوج (Race Condition)
-  Future<bool> acceptOrder(String orderId, String driverId) async {
-    return await _db.runTransaction((transaction) async {
-      final orderRef = _db.collection('orders').doc(orderId);
-      final driverRef = _db.collection('drivers').doc(driverId);
-      
-      final orderSnap = await transaction.get(orderRef);
-      
-      // 1. التحقق من أن الطلب ما زال متاحاً (قيد الانتظار)
-      if (!orderSnap.exists || orderSnap.data()?['status'] != 'pending') {
-        return false;
-      }
-
-      // 2. جلب بيانات السائق والتحقق من توفره (داخل الـ Transaction)
-      final driverSnap = await transaction.get(driverRef);
-      final driverData = driverSnap.data() ?? {};
-
-      // التحقق من أن السائق متاح (ليس في طلب آخر)
-      if (driverData['is_available'] == false) {
-        return false;
-      }
-
-      // 3. تنفيذ التحديث بشكل ذري (Atomic)
-      transaction.update(orderRef, {
-        'status': 'accepted',
-        'driver_id': driverId,
-        'driver_phone': driverData['phone'] ?? '000000000', // مزامنة الرقم
-        'assigned_driver': driverData['name'] ?? 'سائق', // مزامنة الاسم
-        'accepted_at': FieldValue.serverTimestamp(),
-      });
-
-      transaction.update(driverRef, {
-        'status': 'en_route',
-        'current_order_id': orderId,
-        'is_available': false,
-      });
-
-      return true;
-    });
-  }
-
-  // التحقق من توفر فتحة زمنية لخدمة التنظيف بالساعة (عبر دالة سحابية آمنة)
-  Future<Map<String, dynamic>> checkHourlySlotAvailability({
-    required DateTime startDateTime,
-    required int durationHours,
-    String? zoneName,
-  }) async {
-    try {
-      final result = await FirebaseFunctions.instance
-          .httpsCallable('checkHourlySlotAvailability')
-          .call({
-        'startDateTimeIso': startDateTime.toIso8601String(),
-        'durationHours': durationHours,
-        if (zoneName != null) 'zoneName': zoneName,
-      });
-
-      final data = result.data as Map;
-      return {
-        'available': data['available'] == true,
-        'driverId': data['driverId'] as String?,
-        'driverName': data['driverName'] as String?,
-        'driverEmail': data['driverEmail'] as String?,
-      };
-    } catch (e) {
-      debugPrint('Error calling checkHourlySlotAvailability Cloud Function, using secure fallback: $e');
-      // fail-open حتى لا يحجب خطأ عابر الحجز (يغطّيه sweepUnassignedPaidOrders +
-      // autoAssign خادمياً). لا نُرجع معرّف سائق وهمياً كي لا يُكتب driver_id زائف.
-      return {
-        'available': true,
-        'driverId': null,
-        'driverName': null,
-        'driverEmail': null,
-      };
-    }
-  }
-
   // التوزيع التلقائي والتعيين المباشر للسائق المتاح (Direct Auto Assign)
   Future<bool> autoAssignDriverForHourly({
     required String orderId,
@@ -331,44 +255,6 @@ class ZyiarahOrderService {
       debugPrint('Error calling autoAssignDriverDirectly Cloud Function: $e');
       return false;
     }
-  }
-
-  // التحقق مما إذا كان السائق مشغولاً بمهمة قيد التنفيذ الآن (ليس مجرد مهمة مجدولة مستقبلية)
-  Future<bool> hasActiveOrder(String driverId) async {
-    final activeSnap = await _db
-        .collection('orders')
-        .where('driver_id', isEqualTo: driverId)
-        .where('status', whereIn: ['on_the_way', 'in_progress', 'accepted'])
-        .limit(1)
-        .get();
-    return activeSnap.docs.isNotEmpty;
-  }
-
-  // الاستماع للطلبات المتاحة (التي لم يقبلها أحد بعد)
-  Stream<List<QueryDocumentSnapshot>> streamAvailableOrders() {
-    return _db.collection('orders')
-        .where('status', isEqualTo: 'pending')
-        // (D) تقييد الحجم لمنع استنزاف الذاكرة عند تضخّم الطلبات المعلّقة
-        .limit(50)
-        .snapshots()
-        .map((snap) => snap.docs.toList()
-          ..sort((a, b) {
-            final aT = (a.data() as Map?)?['created_at'] as Timestamp?;
-            final bT = (b.data() as Map?)?['created_at'] as Timestamp?;
-            if (aT == null && bT == null) return 0;
-            if (aT == null) return 1;
-            if (bT == null) return -1;
-            return bT.compareTo(aT);
-          }));
-  }
-
-  // الاستماع للمهام المُسنَدة للسائق (غير المكتملة) — نموذج التوزيع المباشر.
-  // 'accepted' مُبقاة للتوافق مع الطلبات الجارية أثناء الانتقال.
-  Stream<QuerySnapshot> streamDriverActiveOrders(String driverId) {
-    return _db.collection('orders')
-        .where('driver_id', isEqualTo: driverId)
-        .where('status', whereIn: ['scheduled', 'on_the_way', 'in_progress', 'accepted'])
-        .snapshots();
   }
 
   // الاستماع لتحديثات طلب معين

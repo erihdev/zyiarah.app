@@ -1,27 +1,6 @@
 import 'package:flutter/material.dart';
 
 class ZyiarahStatus {
-  // Maintenance Statuses
-  static Map<String, dynamic> getMaintenanceStatus(String status) {
-    switch (status) {
-      case 'under_review':
-        return {'text': 'تحت المراجعة', 'color': Colors.orange, 'step': 0};
-      case 'waiting_payment':
-      case 'waiting_payment_cod':
-        return {'text': 'بانتظار الدفع', 'color': Colors.blue, 'step': 1};
-      case 'approved':
-      case 'paid':
-      case 'in_progress':
-        return {'text': 'جاري التنفيذ', 'color': Colors.indigo, 'step': 2};
-      case 'completed':
-        return {'text': 'مكتمل', 'color': Colors.green, 'step': 3};
-      case 'rejected':
-        return {'text': 'مرفوض', 'color': Colors.red, 'step': -1};
-      default:
-        return {'text': 'تحت المراجعة', 'color': Colors.orange, 'step': 0};
-    }
-  }
-
   // General Order Statuses
   static Map<String, dynamic> getOrderStatus(String status) {
     switch (status) {

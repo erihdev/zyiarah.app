@@ -224,67 +224,6 @@ class ZyiarahPdfService {
   }
 
   // ============================================================================
-  // 2. تقرير مبيعات الإدارة (Admin Sales Report)
-  // ============================================================================
-  static Future<void> generateOrdersReport({
-    required List<Map<String, dynamic>> orders,
-    required String periodName,
-    required double totalRevenue,
-  }) async {
-    final pdf = pw.Document();
-    final f = await _fonts();
-    final ttf = f.base;
-    final ttfBold = f.bold;
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        textDirection: pw.TextDirection.rtl,
-        theme: pw.ThemeData.withFont(base: ttf, bold: ttfBold),
-        build: (context) => [
-          pw.Header(
-            level: 0,
-            child: pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text(_ar("تقرير مبيعات زيارة - $periodName"), style: const pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-                pw.Text(intl.DateFormat('yyyy-MM-dd').format(DateTime.now())),
-              ],
-            ),
-          ),
-          pw.SizedBox(height: 20),
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
-            children: [
-              _buildStatCard(_ar("إجمالي الإيرادات"), "$totalRevenue ر.س"),
-              _buildStatCard(_ar("عدد الطلبات"), "${orders.length}"),
-            ],
-          ),
-          pw.SizedBox(height: 30),
-          pw.TableHelper.fromTextArray(
-            headers: [_ar("كود الطلب"), _ar("الخدمة"), _ar("العميل"), _ar("المبلغ"), _ar("الحالة")],
-            data: orders.map((o) => [
-              o['code'] ?? 'N/A',
-              _ar(o['service_name'] ?? '-'),
-              _ar(o['user_name'] ?? o['client_name'] ?? '-'),
-              "${o['final_amount'] ?? o['amount'] ?? 0} ر.س",
-              _ar(o['status'] ?? '-'),
-            ]).toList(),
-            headerStyle: const pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            cellAlignment: pw.Alignment.centerRight,
-          ),
-        ],
-      ),
-    );
-
-    // نُولّد البايتات أولاً ثم نشاركها عبر ورقة المشاركة بدل معاينة الطباعة.
-    // `layoutPdf` يفتح شاشة طباعة iOS التي تعلّق على "Loading Preview" عند ترسيم
-    // المستند؛ `sharePdf` يعرضه عبر عارض النظام (QuickLook) بلا ترسيم طباعة.
-    final Uint8List reportBytes = await pdf.save();
-    await Printing.sharePdf(bytes: reportBytes, filename: 'Zyiarah_Report.pdf');
-  }
-
-  // ============================================================================
   // 3. توثيق العقد الإلكتروني (Contract Document)
   // ============================================================================
   static Future<void> generateAndDownloadContract({
@@ -519,19 +458,6 @@ class ZyiarahPdfService {
           pw.Text(label, style: pw.TextStyle(fontSize: 12, fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
           pw.SizedBox(width: 20),
           pw.Text('$value SAR', style: pw.TextStyle(fontSize: 12, fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
-        ],
-      ),
-    );
-  }
-
-  static pw.Widget _buildStatCard(String label, String value) {
-    return pw.Container(
-      padding: const pw.EdgeInsets.all(10),
-      decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey), borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10))),
-      child: pw.Column(
-        children: [
-          pw.Text(label, style: const pw.TextStyle(fontSize: 12)),
-          pw.Text(value, style: const pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
         ],
       ),
     );

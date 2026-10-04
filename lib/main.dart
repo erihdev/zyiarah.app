@@ -125,7 +125,7 @@ void main() async {
   // كل تهيئة محميّة داخلياً بـ try/catch فلن تُسقط الإقلاع.
   await ZyiarahNotificationService().initialize();
   ZyiarahDeepLinkService().initialize(navigatorKey);
-  await GeofenceService.initialize(); // تحميل مناطق التغطية من Firestore
+  await GeofenceService.initialize(); // يبذر service_zones الافتراضية إن كانت فارغة
 
   runApp(
     MultiProvider(
