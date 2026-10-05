@@ -84,4 +84,43 @@ describe('تقسيم الحِزمة على المسارات', () => {
         const unrouted = paths.filter(p => !appSrc.includes(`path="${p.slice(1)}"`));
         expect(unrouted, `مسار في خريطة الأدوار بلا سطر في App:\n${unrouted.join('\n')}`).toEqual([]);
     });
+
+    // ─────────── والاتجاهُ المقابل: مسارٌ بلا بوّابة ───────────
+    //
+    // الفحصُ أعلاه يَمشي من الخريطةِ إلى `App`، فيَكشفُ صفحةً في الخريطةِ بلا
+    // سطرِ مسار. والاتجاهُ الآخرُ كان مفتوحاً، **وهو الاتجاهُ الذي يَسرّب**:
+    // `<Route path="x" element={<X />} />` بلا `guard` يَصلُه **كلُّ أدمنٍ
+    // مسجَّلٍ** أيَّ دورٍ كان، ولا شيءَ في الواجهةِ يَتغيّرُ للسوبر ولا فحصٌ
+    // يَسقط — نفسُ صمتِ «استيرادٌ ثابتٌ بدلَ lazy» الذي كُتب هذا الملفُّ له.
+    // (وصفحةٌ بلا سطرٍ في الخريطةِ تُغلَقُ على الأدوارِ الفرعيّةِ لأنّ
+    // `canAccess` تَسقطُ مُغلَقةً — عطلٌ في الاتجاهِ الآمن، ويُكشَفُ هنا كذلك.)
+    describe('وكلُّ مسارٍ في App له بوّابةٌ وسطرٌ في الخريطة', () => {
+        // كلُّ `<Route path="x" element={…}/>` — والفهرسُ (Dashboard) وLogin
+        // خارجَ النمطِ أصلاً لأنّهما بلا `path="…"`.
+        const routes = [...appSrc.matchAll(
+            /<Route\s+path="([a-z-]+)"\s+element=\{([^\n]*)/g)]
+            .map(m => ({path: '/' + m[1], element: m[2]}));
+
+        it('وجدَ المساراتَ فعلاً — وإلّا فالفحصُ أجوف', () => {
+            expect(routes.length).toBeGreaterThanOrEqual(15);
+        });
+
+        it('لا مسارَ بلا `guard` — وهو الاتجاهُ الذي يَسرّب', () => {
+            const unguarded = routes
+                .filter(r => !r.element.includes(`guard('${r.path}'`))
+                .map(r => `${r.path} ⇒ ${r.element.trim().slice(0, 60)}`);
+            expect(unguarded,
+                `مسارٌ بلا بوّابةِ دور — يَصلُه كلُّ أدمن:\n${unguarded.join('\n')}`)
+                .toEqual([]);
+        });
+
+        it('ولا مسارَ خارجَ خريطةِ الأدوار', () => {
+            const unmapped = routes
+                .map(r => r.path)
+                .filter(p => !(p in PAGE_ROLES));
+            expect(unmapped,
+                `مسارٌ بلا سطرٍ في الخريطة — مُغلَقٌ على الأدوارِ الفرعيّة:\n${unmapped.join('\n')}`)
+                .toEqual([]);
+        });
+    });
 });
