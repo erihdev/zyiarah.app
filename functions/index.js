@@ -4941,9 +4941,16 @@ exports.opsHealthSweep = onSchedule(
       //    `t.create` على معرّفٍ حتميٍّ `refund_{orderId}`) فإعادتُه آمنة.
       //    مساواتانِ بلا مدًى ⇒ لا فهرسَ مركَّب (سابقةُ `referrals`).
       try {
+        // المساواةُ الثالثةُ ليست زينةً: `needs_refund` **يَكتبُه العميلُ**
+        // على طلبِه عند الإلغاء (`firestore.rules`: فرعُ الإلغاءِ يُجيزُه في
+        // `hasOnly`)، والتطبيقُ الشريفُ يَكتبُ `is_paid == true` — لكنّ
+        // كتابةً مباشرةً من الـSDK تَضَعُ `true` على طلبٍ **غيرِ مدفوع**،
+        // فيَشغلُ خانةً من الـ200 بلا حقّ. وثلاثُ مساواتٍ بلا مدًى لا
+        // تَلزمُها فهرسٌ مركَّب (دمجُ zigzag — سابقةُ `referrals` الحيّة).
         const snap = await db.collection("orders")
             .where("status", "==", "cancelled")
-            .where("needs_refund", "==", true).limit(200).get();
+            .where("needs_refund", "==", true)
+            .where("is_paid", "==", true).limit(200).get();
         let retried = 0; let stuck = 0;
         for (const doc of snap.docs) {
           const d = doc.data();

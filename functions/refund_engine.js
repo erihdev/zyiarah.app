@@ -369,6 +369,23 @@ async function autoResolveUnfulfilledPaidOrder(db, secret, orderDoc, deps = {}) 
  * به (`refund_credit_alerted`) كي لا يُسكِته علمٌ آخر — ويَبقى
  * `needs_refund: true` فتَجدَه المكنسةُ وتُعيدَ المحاولة.
  *
+ * **والنافذةُ تَنضَح (2026-10-05).** أوّلُ صياغةٍ لهذه الدالّةِ كتبت
+ * `{refund_credited: true}` وحدَه ولم تَمسح `needs_refund` — بينما أختاها في
+ * هذا الملفِّ نفسِه (`reopenFieldsIfSystemCancelled` و`reconcileAndSettle`،
+ * على بُعدِ سبعينَ سطراً) تَكتبانِ `needs_refund: false` مع
+ * `refund_credited: true` معاً. فاستعلامُ المكنسةِ
+ * (`status == "cancelled" && needs_refund == true`) كان يَحتفظُ بكلِّ طلبٍ
+ * **نُجِحَ** استردادُه إلى الأبد: الحلقةُ تَتخطّاه بـ`refund_credited` لكنّه
+ * يَشغلُ خانةً من الـ200، وترتيبُ استعلامِ المساواةِ هو `__name__` ومعرّفاتُ
+ * الطلباتِ عشوائيّة — فبعدَ مئتَي استردادٍ ناجحٍ يَسقطُ الاستردادُ
+ * **الفاشلُ** من النافذةِ بالاحتمالِ وحدَه، بلا خطأٍ ولا سطرِ سجلّ. وهي
+ * العائلةُ نفسُها التي وُجدت مرّتَين في هذه الجلسة (نافذةُ البثِّ المجدول،
+ * ونافذةُ «مدفوعٌ وعالق»)، ودرسُها مكتوبٌ في `rewards.js`: «المجموعةُ لا
+ * تَحوي إلّا الفشل». فكلُّ مَخرَجٍ يُسقِطُ الدَّينَ يَمسحُ العلمَ —
+ * النجاحُ، و«سُوِّيَ سلفاً» (بوّابةٌ ردّت، أو الاستردادُ الآليُّ تَولّاه،
+ * أو أُودِعَ قبلاً: ثلاثتُها «غيرُ مستحقّ») — و**الفشلُ وحدَه يُبقيه**،
+ * لأنّه بعينِه ما تَستعلمُه المكنسةُ لإعادةِ المحاولة.
+ *
  * @param {object} db Firestore.
  * @param {object} args المعطيات.
  * @param {object} args.orderRef مرجعُ الطلب.
@@ -396,6 +413,11 @@ async function creditCancelledRefund(db, args, queuePush) {
           oSnap.get("payment_status") === "refunded" ||
           oSnap.get("auto_refund_processed") === true) {
         skipped = "already_settled";
+        // الدَّينُ غيرُ مستحقٍّ، فيَخرجُ من نافذةِ المكنسة — وإلّا احتفظت
+        // بكلِّ طلبٍ سَوّتْه البوّابةُ أو الاستردادُ الآليُّ إلى الأبد.
+        if (oSnap.get("needs_refund") === true) {
+          t.update(orderRef, {needs_refund: false});
+        }
         return;
       }
       t.set(walletRef, {
@@ -408,7 +430,7 @@ async function creditCancelledRefund(db, args, queuePush) {
         order_id: orderId,
         created_at: FieldValue.serverTimestamp(),
       });
-      t.update(orderRef, {refund_credited: true});
+      t.update(orderRef, {refund_credited: true, needs_refund: false});
       didFlip = true;
     });
     if (skipped) return {credited: false, skipped};

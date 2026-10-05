@@ -314,7 +314,18 @@ service cloud.firestore {
           (resource.data.status in ['pending', 'awaiting_payment'] &&
            request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['status', 'cancelled_at', 'cancelled_by', 'needs_refund', 'rewards_handled_by']) &&
-           request.resource.data.status == 'cancelled')
+           request.resource.data.status == 'cancelled' &&
+           // `needs_refund` مربوطٌ بالواقع لا بإرادةِ الكاتب: التطبيقُ
+           // الشريفُ يَكتبُ `is_paid == true` بعينِه (`order_service.cancelOrder`
+           // و`Orders.tsx` كلاهما)، لكنّ كتابةً مباشرةً من الـSDK كانت تَضَعُ
+           // `true` على طلبٍ **غيرِ مدفوع**. ولا مالَ فيها (كِلا قارئَي العلم
+           // — المُشغّلُ والمكنسةُ — يَشترطُ `is_paid === true`)، لكنّ
+           // المستندَ يَشغلُ خانةً من نافذةِ المكنسةِ ذاتِ الـ200 **إلى
+           // الأبد**، فيُزحزحُ استرداداً فاشلاً حقيقيّاً بترتيبِ `__name__`
+           // العشوائيّ: صمتٌ تامّ. و`.get` لا القوسُ المباشر، لأنّ طلباً
+           // قديماً قد لا يَحملُ الحقلَ أصلاً وقراءةُ غائبٍ تَرفضُ الكتابة.
+           request.resource.data.needs_refund ==
+             resource.data.get('is_paid', false))
           ||
           // 2. Invoice PDF URL update flow — يشمل invoice_pdf_status: مولّد
           //    الفاتورة يكتب حالة إعادة المحاولة، وكانت خارج القائمة فتُرفض

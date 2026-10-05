@@ -7,7 +7,7 @@ const {
   assertFails,
   assertSucceeds,
 } = require("@firebase/rules-unit-testing");
-const {setDoc, doc} = require("firebase/firestore");
+const {setDoc, updateDoc, doc} = require("firebase/firestore");
 
 (async () => {
   const testEnv = await initializeTestEnvironment({
@@ -163,6 +163,53 @@ const {setDoc, doc} = require("firebase/firestore");
       setDoc(doc(db, "orders/bad1"),
           {client_id: uid, status: "completed", is_paid: false, amount: 200}),
       false);
+
+  // ── الإلغاءُ العميليّ: `needs_refund` مربوطٌ بالواقعِ لا بإرادةِ الكاتب ──
+  //
+  // الفرعُ يُجيزُ العلمَ في `hasOnly` لأنّ التطبيقَ الشريفَ يَكتبُه في نفسِ
+  // معامَلةِ الإلغاء، و`order_service.cancelOrder` يَضَعُ `is_paid == true`
+  // بعينِه (وكذلك `Orders.tsx`). وكتابةٌ مباشرةٌ من الـSDK كانت تَضَعُ `true`
+  // على طلبٍ **غيرِ مدفوع**: لا مالَ فيها (قارئا العلمِ كلاهما يَشترطُ
+  // `is_paid === true`)، لكنّ المستندَ يَشغلُ خانةً من نافذةِ المكنسةِ ذاتِ
+  // الـ200 إلى الأبد فيُزحزحُ استرداداً فاشلاً حقيقيّاً — بترتيبِ `__name__`
+  // العشوائيّ، بصمتٍ تامّ.
+  // **مستندٌ لكلِّ فحصٍ**: إلغاءٌ ناجحٌ يُغيّرُ الحالةَ إلى `cancelled`
+  // فيَسقطُ شرطُ الفرعِ (`status in ['pending','awaiting_payment']`) عن أيِّ
+  // فحصٍ تالٍ على المستندِ نفسِه. أوّلُ صياغةٍ شاركت المستندات، فحين أُزيلَ
+  // الرباطُ في اختبارِ القضمِ **سقطَ فحصٌ ثانٍ تبعاً للأوّل** لا بعطلٍ في
+  // القاعدة — فحصٌ يَعتمدُ على نجاحِ ما قبله يُضلّل.
+  const seed = {
+    cancelUnpaidForge: {is_paid: false},
+    cancelUnpaidHonest: {is_paid: false},
+    cancelPaidHonest: {is_paid: true},
+    cancelPaidDeny: {is_paid: true},
+    cancelNoField: {},
+  };
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const admin = ctx.firestore();
+    for (const [id, extra] of Object.entries(seed)) {
+      await setDoc(doc(admin, `orders/${id}`),
+          Object.assign({client_id: uid, status: "pending", amount: 200},
+              extra));
+    }
+  });
+  const cancelWith = (id, needsRefund) => updateDoc(doc(db, `orders/${id}`), {
+    status: "cancelled", cancelled_at: new Date(), cancelled_by: "client",
+    needs_refund: needsRefund, rewards_handled_by: "server",
+  });
+  await check("cancel: unpaid order claiming needs_refund -> DENIED",
+      cancelWith("cancelUnpaidForge", true), false);
+  await check("cancel: unpaid order with needs_refund=false -> ALLOWED",
+      cancelWith("cancelUnpaidHonest", false), true);
+  await check("cancel: paid order with needs_refund=true -> ALLOWED",
+      cancelWith("cancelPaidHonest", true), true);
+  await check("cancel: paid order denying its own refund -> DENIED",
+      cancelWith("cancelPaidDeny", false), false);
+  // وطلبٌ قديمٌ بلا الحقلِ أصلاً: `.get('is_paid', false)` يَقرؤه غياباً،
+  // فالإلغاءُ يَمرُّ بـ`false` — ولو كان القوسَ المباشرَ لَرُفض كلُّ إلغاءٍ
+  // لتلك الطلبات.
+  await check("cancel: legacy order with no is_paid field -> ALLOWED",
+      cancelWith("cancelNoField", false), true);
 
   await testEnv.cleanup();
   console.log(`\nRules test: ${pass} passed, ${fail} failed`);
