@@ -275,6 +275,62 @@ const {setDoc, updateDoc, doc} = require("firebase/firestore");
   await check("cancel: legacy order with no is_paid field -> ALLOWED",
       cancelWith("cancelNoField", false), true);
 
+  // وسلّةٌ غيرُ مدفوعةٍ خالدة: `cancelStaleUnpaidOrders` يُعفي كلَّ طلبٍ
+  // يَحملُ `moyasar_payment_id`، والحقلُ خادميٌّ خالصٌ (صفرُ كاتبٍ عميليّ).
+  await check("mute: moyasar_payment_id at create -> DENIED",
+      setDoc(doc(db, "orders/mute15"),
+          {client_id: uid, status: "pending", is_paid: false,
+            moyasar_payment_id: "pay_forged", amount: 200}),
+      false);
+
+  // ─── طلباتُ المتجر: القائمةُ نفسُها، فالخادمُ يَكتبُ الأعلامَ نفسَها ──
+  //
+  // `store_orders` كانت تَمنعُ اسمَين (`paid_confirmed`,
+  // `moyasar_payment_id`) بينما `_verifyStoreOrderPrice` — تحقّقُ السعرِ
+  // **الوحيدُ** لهذه المجموعة — يَكتبُ عليها أعلامَ المراجعةِ بحروفِها.
+  // والقائمةُ تَسكنُ الآن في `serverTrustFlags()` ويُنادِيها الموضعان.
+  const sOrder = (extra) => Object.assign(
+      {client_id: uid, status: "awaiting_payment", is_paid: false,
+        total_amount: 300, items: [{id: "p1", quantity: 2, price: 100}]},
+      extra);
+  // (١) حقنُ تنبيهٍ: الكتلةُ ٥ من `opsHealthSweep` تَستعلمُ هذين الحقلَين
+  //     بعينِهما، فمستندٌ يَحملُهما يُنبّهُ الإدارةَ عن «دفعٍ ناقص» بلا دفعٍ.
+  await check("store: price_mismatch + ops_alerted_mismatch=false at create -> DENIED",
+      setDoc(doc(db, "store_orders/sm1"),
+          sOrder({price_mismatch: true, ops_alerted_mismatch: false})),
+      false);
+  // (٢) وشهادةٌ لم يُوقّعها أحد: `price_reviewed_at` وحدَه يَرسمُ بطاقةً
+  //     خضراءَ «اعتمدته مراجعة سابقة» في `admin_store_orders_screen`.
+  await check("store: price_reviewed_at at create -> DENIED",
+      setDoc(doc(db, "store_orders/sm2"),
+          sOrder({price_reviewed_at: new Date()})),
+      false);
+  await check("store: price_reviewed_by at create -> DENIED",
+      setDoc(doc(db, "store_orders/sm3"),
+          sOrder({price_reviewed_by: "سارة"})),
+      false);
+  // (٣) و«تعذّر التحقّق» فئةُ تنبيهٍ ثانيةٌ بنفسِ الشكل.
+  await check("store: price_unverifiable + its alert flag at create -> DENIED",
+      setDoc(doc(db, "store_orders/sm4"),
+          sOrder({price_unverifiable: true, ops_alerted_unverifiable: false})),
+      false);
+  // (٤) و`moyasar_payment_id` صارَ في القائمةِ المشتركة: ظنَنتُه حقلاً
+  //     يَكتبُه العميلُ شرعاً على `orders`، وهو خادميٌّ خالص.
+  await check("store: moyasar_payment_id at create -> DENIED",
+      setDoc(doc(db, "store_orders/sm5"),
+          sOrder({moyasar_payment_id: "pay_x"})),
+      false);
+  // (٥) ولا يُكسَرُ إنشاءُ سلّةٍ شرعيٍّ — وهذا الفحصُ هو ما يَمنعُ أن يكونَ
+  //     التضييقُ إغلاقاً للمتجرِ كلِّه.
+  await check("store: the app's own cart create -> ALLOWED",
+      setDoc(doc(db, "store_orders/sok1"), sOrder({
+        code: "S-1001", payment_method: "moyasar",
+        store_audience: "client", delivery_location: {lat: 24.7, lng: 46.7},
+        client_name: "عميلة", client_phone: "0500000000",
+        created_at: new Date(),
+      })),
+      true);
+
   await testEnv.cleanup();
   console.log(`\nRules test: ${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);

@@ -78,16 +78,23 @@ String _stripJs(String src) => src
     .where((l) => !l.trimLeft().startsWith('//'))
     .join('\n');
 
-/// قائمةُ `hasAny([...])` في قاعدةِ إنشاءِ الطلب — **بموازنةِ الأقواس** لا
-/// بأوّلِ `]`، وهو فخُّ الحدِّ المسجَّلُ في هذا المستودعِ مرّاتٍ.
-/// (ويَرمي بدلَ `expect`: الاستخراجُ يَجري في نطاقِ `main` و`expect` هناك
+/// قائمةُ منعِ الإنشاءِ المشتركة — من **جسمِ `serverTrustFlags()`**
+/// بموازنةِ الأقواس لا بأوّلِ `]` (فخُّ الحدِّ المسجَّلُ هنا مرّاتٍ).
+///
+/// **وكانت تَقرأُ `hasAny([` بعد `match /orders/`** — فحين انتقلت القائمةُ
+/// إلى دالّةٍ مشتركةٍ صارَ ذلك النمطُ يَلتقطُ `hasAny(['start_time'])` في
+/// فرعِ السائقِ أسفلَ الكتلةِ: مجموعةٌ من اسمٍ واحد، وحارسٌ أجوف. وهو
+/// سقوطُ الحارسِ بالنقلِ لا بالانحراف، وقد وقعَ هنا من قبل (فحصا
+/// `serviceMeta` بعد نقلِ الملخّص، و`driver_rating_claim_test` بعد نقلِ
+/// قاعدةِ البذر). الأرضيّةُ أدناه (`>= 45`) هي ما كشفَه.
+/// (ويَرمي بدلَ `expect`: الاستخراجُ في نطاقِ `main` و`expect` هناك
 /// غيرُ مشروعٍ — `OutsideTestException`، وهو فخٌّ مسجَّلٌ في هذا المستودع.)
 Set<String> _createBlocklist(String rules) {
-  final i = rules.indexOf('match /orders/{orderId}');
-  if (i < 0) throw StateError('كتلةُ قاعدةِ الطلباتِ اختفت');
+  final i = rules.indexOf('function serverTrustFlags()');
+  if (i < 0) throw StateError('دالّةُ القائمةِ المشتركةِ اختفت');
   final seg = rules.substring(i);
-  final h = seg.indexOf('hasAny([');
-  if (h < 0) throw StateError('قائمةُ المنعِ اختفت من قاعدةِ الإنشاء');
+  final h = seg.indexOf('return');
+  if (h < 0) throw StateError('جسمُ الدالّةِ بلا return');
   final open = seg.indexOf('[', h);
   int depth = 0, end = -1;
   for (int j = open; j < seg.length; j++) {
@@ -246,5 +253,178 @@ void main() {
     expect(adm.contains("updatePayload['reminder_sent'] = false"), isTrue,
         reason: 'تصفيرُ الإدارةِ عند تغييرِ الموعدِ زالَ — وهو `update` لا '
             '`create`، فالحجبُ لا يَمَسُّه');
+  });
+
+
+  // ═══ والقاعدةُ على السطحَين: `store_orders` كانت تَمنعُ اسمَين ═══
+  //
+  // `_verifyStoreOrderPrice` هو تحقّقُ السعرِ **الوحيدُ** لطلبِ المتجر،
+  // وسياستُه Tier A: وسمٌ وتنبيهٌ لا رفض — فمُخرَجُه كلُّه أعلامٌ على
+  // المستند. وقائمةُ منعِ إنشاءِ `store_orders` كانت اسمَين، فكلُّ تلك
+  // الأعلامِ مكشوفةٌ للعميلِ عند الإنشاء. وهو نمطُ «قاعدةٌ عامّةٌ مُنفَّذةٌ
+  // في سطحٍ واحد» الذي تَكرّر في هذا المستودعِ مرّاتٍ.
+
+  /// جسمُ دالّةٍ في `index.js` بموازنةِ الأقواسِ المعقوفة.
+  String bodyOf(String js, String signature) {
+    final i = js.indexOf(signature);
+    if (i < 0) return '';
+    final open = js.indexOf('{', i);
+    if (open < 0) return '';
+    int depth = 0;
+    for (int j = open; j < js.length; j++) {
+      if (js[j] == '{') depth++;
+      if (js[j] == '}') {
+        depth--;
+        if (depth == 0) return js.substring(open, j + 1);
+      }
+    }
+    return '';
+  }
+
+  test('القائمةُ تَسكنُ مرّةً، ويُنادِيها الموضعان — لا نسخةَ ثانية', () {
+    expect(RegExp(r'function\s+serverTrustFlags\(\)').allMatches(rules).length,
+        1,
+        reason: 'الدالّةُ المشتركةُ غائبةٌ أو مكرَّرة');
+    // كلُّ كتلةِ `match` فيها `allow create` تُنادي القائمةَ: الاشتقاقُ
+    // يُجيبُ «أيُّ المجموعاتِ محميّة» بدلَ قائمةٍ مكتوبةٍ بيد.
+    final callers = <String>{};
+    for (final m in RegExp(r'match /(\w+)/\{').allMatches(rules)) {
+      final name = m.group(1)!;
+      // الكتلةُ من هذا `match` إلى الذي يَليه.
+      final next = rules.indexOf('match /', m.end);
+      final block = rules.substring(m.start, next < 0 ? rules.length : next);
+      if (block.contains('allow create') &&
+          block.contains('hasAny(serverTrustFlags())')) {
+        callers.add(name);
+      }
+    }
+    expect(callers, containsAll(<String>['orders', 'store_orders']),
+        reason: 'مجموعةُ الطلباتِ التي تُنادي القائمةَ المشتركةَ: $callers');
+  });
+
+  test('ولا نسخةَ إنلاين باقيةً من القائمةِ في أيِّ قاعدةِ إنشاء', () {
+    // نسخةٌ ثانيةٌ تَنحرِف — وهي عِلّةُ انفراطِ السطحَين أصلاً. فلا كتلةَ
+    // `match` تَحملُ قائمةً حرفيّةً فيها علَمٌ من المشتركة (عدا
+    // `moyasar_payment_id` الخاصِّ بالمتجر — انظر الفحصَ التالي).
+    // **النطاقُ مجموعتا الطلباتِ وحدَهما، عن قصد.** كتلةُ `contracts`
+    // تَحملُ `paid_confirmed` في قائمتِها الخاصّةِ وهذا **ليس** نسخةً
+    // منحرفةً: هي قائمةُ مجموعةٍ أخرى لها قواعدُها، والخطرُ المَحروسُ هنا
+    // هو نسخةٌ ثانيةٌ من قائمةِ **الطلبات**. (أوّلُ صياغةٍ كانت على كلِّ
+    // كتلةٍ فأبلغت عن `contracts` — وهو إبلاغٌ خاطئ.)
+    for (final m in RegExp(r'match /(orders|store_orders)/\{')
+        .allMatches(rules)) {
+      final next = rules.indexOf('match /', m.end);
+      final block = _stripJs(
+          rules.substring(m.start, next < 0 ? rules.length : next));
+      if (!block.contains('allow create')) continue;
+      for (final h in RegExp(r'hasAny\(\[').allMatches(block)) {
+        // بموازنةِ الأقواسِ لا بأوّلِ `]` — فخُّ الحدِّ المسجَّلُ هنا مرّاتٍ.
+        final open = block.indexOf('[', h.start);
+        int depth = 0, end = -1;
+        for (int j = open; j < block.length; j++) {
+          if (block[j] == '[') depth++;
+          if (block[j] == ']') {
+            depth--;
+            if (depth == 0) {
+              end = j;
+              break;
+            }
+          }
+        }
+        if (end <= open) continue;
+        final lit = RegExp(r"'([a-z0-9_]+)'")
+            .allMatches(block.substring(open, end))
+            .map((x) => x.group(1)!)
+            .toSet();
+        final leaked = lit.intersection(blocked);
+        expect(leaked, isEmpty,
+            reason: 'نسخةٌ إنلاين من القائمةِ في ${m.group(1)}: $leaked');
+      }
+    }
+  });
+
+  test('كلُّ علَمٍ يَكتبُه تحقّقُ سعرِ المتجرِ محجوبٌ عند إنشاءِ طلبِ متجر',
+      () {
+    final js = File('functions/index.js').readAsStringSync();
+    final body = bodyOf(js, 'async function _verifyStoreOrderPrice(');
+    expect(body.length, greaterThan(400),
+        reason: 'لم يُقتطَع جسمُ _verifyStoreOrderPrice — فحصٌ أجوف');
+    // الحقولُ المكتوبةُ في `ref.update({...})` داخلَ الدالّة.
+    final written = <String>{};
+    for (final u in RegExp(r'\.update\(\s*\{').allMatches(body)) {
+      final open = body.indexOf('{', u.end - 1);
+      int depth = 0, end = -1;
+      for (int j = open; j < body.length; j++) {
+        if (body[j] == '{') depth++;
+        if (body[j] == '}') {
+          depth--;
+          if (depth == 0) {
+            end = j;
+            break;
+          }
+        }
+      }
+      if (end < 0) continue;
+      written.addAll(RegExp(r'^\s*([a-z0-9_]+)\s*:', multiLine: true)
+          .allMatches(body.substring(open, end))
+          .map((x) => x.group(1)!));
+    }
+    expect(written.length, greaterThanOrEqualTo(5),
+        reason: 'لم تُستخرَج حقولُ الوسمِ ($written) — فحصٌ أجوف');
+    expect(written.difference(blocked), isEmpty,
+        reason: 'علَمٌ يَكتبُه الخادمُ على طلبِ المتجرِ وليس في القائمة: '
+            '${written.difference(blocked)}');
+  });
+
+  test('moyasar_payment_id في القائمةِ المشتركة — واستثناءُ المكنسةِ باقٍ', () {
+    // **تصحيحٌ لظنٍّ مكتوب:** أبقيتُه أوّلاً محجوباً في `store_orders` وحدَها
+    // بحجّةِ أنّ العميلَ يَكتبُه شرعاً على `orders` عند بدءِ الدفع — وفحصُ
+    // «لا كاتبَ عميليّاً» أسقطَ الحجّة: صفرُ كاتبٍ في `lib/` واللوحة،
+    // وأربعةُ كُتّابٍ خادميّين. فهو علَمُ ثقةٍ خادميٌّ كأخواتِه.
+    expect(blocked, contains('moyasar_payment_id'));
+    final libWriters = Directory('lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.dart'))
+        .where((f) => RegExp("'moyasar_payment_id'\\s*:")
+            .hasMatch(f.readAsStringSync()))
+        .map((f) => f.path)
+        .toList();
+    expect(libWriters, isEmpty,
+        reason: 'ظهرَ كاتبٌ عميليٌّ — حجبُه يَكسِرُ ذلك المسار: $libWriters');
+    final js = File('functions/index.js').readAsStringSync();
+    expect(RegExp(r'moyasar_payment_id:').allMatches(js).length,
+        greaterThanOrEqualTo(3),
+        reason: 'كُتّابُه الخادميّون اختفوا — يُراجَعُ التعليل');
+    // وما يَجعلُ حجبَه لازماً هو هذا الاستثناءُ بعينِه: بقاؤه شرطُ صحّةِ
+    // التعليل، فزوالُه يَعني مراجعةً لا إسكاتاً.
+    expect(_stripJs(js).contains('if (d.moyasar_payment_id) continue;'), isTrue,
+        reason: 'استثناءُ cancelStaleUnpaidOrders زال — يُراجَعُ التعليل');
+    expect(js.contains('moyasar_payment_id'), isTrue,
+        reason: 'المضادّة: الاسمُ ما زال في الخامّ');
+  });
+
+  test('ولِلحالتَين المحجوبتَين قارئٌ ما زال قائماً — فالتعليلُ لا يَبيت', () {
+    final js = File('functions/index.js').readAsStringSync();
+    // (أ) مكنسةُ الوسمِ تَستعلمُ الحقلَين بعينِهما على المجموعتَين، فمستندٌ
+    //     يَحملُهما عند الإنشاءِ يَحقنُ تنبيهاً بلا دفعٍ أصلاً.
+    expect(js.contains('for (const coll of ["orders", "store_orders"])'), isTrue,
+        reason: 'حلقةُ المجموعتَين زالت — تعليلُ حقنِ التنبيهِ يُراجَع');
+    expect(
+        js.contains('.where("price_mismatch", "==", true)') &&
+            js.contains('.where("ops_alerted_mismatch", "==", false)'),
+        isTrue,
+        reason: 'استعلامُ المكنسةِ تغيّر — القارئُ هو ما يَجعلُ الحجبَ لازماً');
+    // (ب) وبطاقةُ الشاشةِ تَرسمُ الحالةَ الخضراءَ من `price_reviewed_*`
+    //     وحدَها، فتلفيقُهما شهادةٌ لم يُوقّعها أحد.
+    final screen =
+        File('lib/screens/admin/admin_store_orders_screen.dart')
+            .readAsStringSync();
+    expect(screen.contains('priceReviewOf('), isTrue);
+    expect(screen.contains("order['price_reviewed_by']"), isTrue,
+        reason: 'سطرُ «اعتُمد بواسطة» زال — تعليلُ حجبِ price_reviewed_by يُراجَع');
+    final util = File('lib/utils/price_review.dart').readAsStringSync();
+    expect(util.contains("order['price_reviewed_at'] != null"), isTrue,
+        reason: 'القاعدةُ لم تَعُد تَقرأُ price_reviewed_at — يُراجَع التعليل');
   });
 }
