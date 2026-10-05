@@ -289,6 +289,40 @@ class _ClientDashboardState extends State<ClientDashboard> {
     );
   }
 
+  /// **بطاقةٌ تَغيبُ بلا كلمة.** مستمعا «الطلب الجاري» و«باقتي» كانا
+  /// يُسقِطانِ بطاقتَهما إلى `SizedBox.shrink()` على الخطأ: فعميلةٌ لها طلبٌ
+  /// مدفوعٌ مُسنَدٌ — أو باقةٌ سارية — تَفتحُ الرئيسيّةَ فلا تَرى أثراً له،
+  /// فتَقرأُ غيابَه «لا طلبَ لي». ولا شيءَ في الملفِّ كان يَفحصُ `hasError`
+  /// إطلاقاً (صفرُ ذكرٍ)، خلافاً لبقيّةِ الشاشات.
+  ///
+  /// والسطرُ لا يَحملُ رقماً ولا حالةً — يَقولُ إنّ القراءةَ تعذّرت وحدَها،
+  /// كقاعدةِ «عندَ الجهلِ نُخبِرُ بلا رقم».
+  Widget _buildCardLoadError(String what) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF1F2),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFECDD3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off_rounded, color: Color(0xFFBE123C), size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text('تعذّر تحميل $what — تحقّقي من الاتصال. لا يعني هذا أنه غير موجود.',
+                style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF9F1239))),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActiveTrackingCard(String? uid) {
     if (uid == null) return const SizedBox.shrink();
 
@@ -301,6 +335,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           .snapshots()
             .firstEventTimeout(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) return _buildCardLoadError('طلبكِ الجاري');
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const SizedBox.shrink();
         }
@@ -468,6 +503,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           .snapshots()
             .firstEventTimeout(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) return _buildCardLoadError('باقتكِ');
         if (!snapshot.hasData) return const SizedBox.shrink();
         // إزالة التكرار بمعرّف العقد ثم إبقاء العقود النشطة التي بقيت بها زيارات
         final Map<String, Map<String, dynamic>> unique = {};

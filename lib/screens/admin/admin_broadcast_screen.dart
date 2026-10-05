@@ -620,9 +620,16 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
       stream: FirebaseFirestore.instance.collection('broadcasts').orderBy('timestamp', descending: true).limit(5).snapshots()
             .firstEventTimeout(),
       builder: (context, snapshot) {
+        // كان الفشلُ يُسقِطُ القسمَ كلَّه بصمتٍ (`!hasData → shrink`)، فيُقرأُ
+        // «لا سجلّ» — نفسُ العطلِ المُصلَحِ في قائمةِ المجدولِ أسفلَ هذا
+        // الملفِّ، وقاعدتُه هناك مكتوبة.
+        if (snapshot.hasError) {
+          return Center(child: Text("تعذّر تحميل سجل البث — ليست «لا عمليات»",
+              style: GoogleFonts.tajawal(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)));
+        }
         if (!snapshot.hasData) return const SizedBox.shrink();
         final docs = snapshot.data!.docs;
-        
+
         if (docs.isEmpty) return Center(child: Text("لا توجد عمليات بث سابقة", style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 12)));
 
         return ListView.builder(

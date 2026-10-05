@@ -494,6 +494,19 @@ class StaffSearchDelegate extends SearchDelegate {
         stream: FirebaseFirestore.instance.collection('admins').snapshots()
             .firstEventTimeout(),
         builder: (context, snapshot) {
+          // **دوّارةٌ لا تَنتهي.** على الخطأِ يَبقى `hasData` كاذباً، فكان
+          // الشرطُ الواحدُ يُرجِعُ الدوّارةَ إلى الأبد — والقاعدةُ مُنفَّذةٌ
+          // في هذا الملفِّ نفسِه (المستمعُ أعلاه: «فشل البث كان يُعرض كقائمة
+          // فارغة — خطأ صريح مع إعادة محاولة»).
+          if (snapshot.hasError) {
+            return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.cloud_off_rounded, size: 40, color: Colors.redAccent),
+              const SizedBox(height: 10),
+              Text('تعذّر البحث في قائمة المديرين — تحقّق من الاتصال أو الصلاحيات',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.redAccent)),
+            ]));
+          }
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           // نقرأ عبر data() لا عامل [] — الأخير يرمي StateError حين يغيب الحقل
           // (وثيقة admin بلا name/email) فينهار البحث بالكامل.

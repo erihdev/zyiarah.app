@@ -192,6 +192,23 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
     return StreamBuilder<DocumentSnapshot>(
       stream: _orderService.streamOrderTracking(widget.orderId),
       builder: (context, snapshot) {
+        // **دعوى مكانَ «تعذّر القراءة».** على الخطأِ تَبقى `data` فارغةً،
+        // فتُقرأُ البطاقةُ «جاري التعيين...» بحالةِ `pending` ويُخفى المبلغُ
+        // — أي أنّ الإدارةَ تَستنتجُ أنّ الطلبَ بلا سائقٍ وهو مُسنَد. والقاعدةُ
+        // مُنفَّذةٌ في المستمعِ الأوّلِ من هذا الملفِّ نفسِه («تعذّر تحميل
+        // بيانات التتبع»).
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text('تعذّر تحميل بيانات التتبع — قد يكون الاتصال '
+                  'منقطعاً. هذه ليست حالة الطلب.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.tajawal(
+                      fontWeight: FontWeight.bold, color: Colors.redAccent)),
+            ),
+          );
+        }
         final data = snapshot.data?.data() as Map<String, dynamic>? ?? {};
 
         final driverName = data['assigned_driver'] as String? ?? 'جاري التعيين...';
