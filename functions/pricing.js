@@ -5,6 +5,18 @@
 // متجاهلةً أي سعر مكتوب على الطلب/الـ service_meta (يكتبه العميل، غير موثوق).
 // الإجمالي المتوقَّع الذي يُخزَّن في حقل amount = الأساس × 1.15 (النموذج: الضريبة فوق السعر).
 
+// الأنواعُ التي تُعيدُ [computeExpectedBasePrice] حسابَ سعرِها. مُصدَّرةٌ كي
+// لا تُعدَّ بيدها في موضعٍ آخر: كانت `_isPriceableKind` في `index.js` تُعدِّدُ
+// أربعةً وتُغفلُ `event_workers`، فطلبُ عاملاتِ مناسباتٍ بلا منطقةٍ يَتهرّبُ من
+// التحقّقِ بصمت. `price_verify.test.js` يُقارنُ كلَّ فرعِ `kind` هنا بالقائمة.
+const PRICEABLE_KINDS = [
+  "sofa_rug_sqm",
+  "ac_service",
+  "car_interior",
+  "event_workers",
+  "home_package",
+];
+
 function acPriceField(job, type) {
   const j = job === "maintenance" ? "Maint" : job === "wash" ? "Wash" : null;
   const t = type === "window" ? "Window" : type === "split" ? "Split" : null;
@@ -150,6 +162,7 @@ function applyTerrainSurcharge(base, zone) {
 }
 
 module.exports = {
+  PRICEABLE_KINDS,
   computeExpectedBasePrice,
   resolveMaterialsBase,
   acPriceField,

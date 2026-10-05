@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:zyiarah/utils/order_lifecycle.dart';
 
 /// مهمّة سائق كما تُقرأ من وثيقة الطلب لجدول المناوبات.
 ///
@@ -78,10 +79,25 @@ class DriverTask {
 /// حسابات جدول المناوبات (تصميم Stitch «جدول المهام والمناوبات»، 2026-09-16):
 /// أسبوع سعودي يبدأ السبت، شبكة شهرية، تجميع بالأيام، ومؤشرات الفترة.
 class DriverSchedule {
-  static const List<String> activeStatuses = [
-    'assigned', 'scheduled', 'accepted', 'on_the_way', 'in_progress',
-  ];
-  static const List<String> historyStatuses = ['completed', 'cancelled'];
+  /// حالاتُ المهمّةِ الحيّةِ عند السائق — **مشتقّةٌ** من
+  /// `kActiveAssignedStatuses` لا مكتوبةٌ ثانيةً: كانت نسخةً خامسةً مطابقةً
+  /// لها حرفاً بحرف، فحالةٌ تُضافُ إلى دورةِ الحياةِ غداً تَسقطُ من استعلامِ
+  /// السائقِ بصمتٍ — مهمّةٌ مُسنَدةٌ إليه تَغيبُ عن جهازِه.
+  ///
+  /// تَبقى **قائمةً** بقصد: يَخدمُها `whereIn` في Firestore، ولا سبيلَ هناك
+  /// إلى «ليس في هذه المجموعة» — فالقاعدةُ السالبةُ (`orderIsOpen`) لا تَصلح
+  /// هنا، والتعدادُ الموجبُ هو الصحيح.
+  static final List<String> activeStatuses =
+      kActiveAssignedStatuses.toList(growable: false);
+
+  /// «ليس حيّاً» قاعدةً لا تعداداً: كان التعدادُ `{completed, cancelled}`،
+  /// فمهمّةٌ تَحملُ `driver_id` السائقِ بحالةٍ خارجَ القائمتَين — وأظهرُها
+  /// طلبٌ أُعيد فتحُه إلى `pending` بعد تأكيدِ دفعٍ متأخّر
+  /// (`reopenFieldsIfSystemCancelled`، وهو يُبقي `driver_id`) — كانت
+  /// **تَغيبُ عن العرضَين معاً**: لا في «النشطة» ولا في «السجل»، وهي مُسنَدةٌ
+  /// إليه في نظرِ الإدارة. والبطاقةُ تَحملُ أصلاً فرعَ `default` يَعرضُها
+  /// «معلقة» — واجهةٌ مكتوبةٌ لا يَصلُها شيء.
+  static bool isHistory(String status) => !activeStatuses.contains(status);
 
   static const List<String> dayNames = [
     'السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة',

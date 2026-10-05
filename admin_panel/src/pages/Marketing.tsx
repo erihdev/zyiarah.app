@@ -138,7 +138,10 @@ export default function Marketing() {
                 status: newStatus
             });
         } catch (error) {
+            // الحذفُ في هذا الملفِّ يُنبّه، والتفعيل/التعطيلُ كان لا يُنبّه:
+            // كوبونٌ يَبدو أنّه عُطّل وهو ما زال يُقبَل عند العميلة.
             console.error("Error updating status: ", error);
+            toast.error(error instanceof Error ? error.message : 'تعذّر تغيير حالة الكوبون');
         }
     };
 

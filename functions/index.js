@@ -14,6 +14,7 @@ const {getAuth} = require("firebase-admin/auth");
 const geofire = require("geofire-common");
 const {computeExpectedBasePrice, resolveMaterialsBase, applyTerrainSurcharge} =
   require("./pricing");
+const priceVerify = require("./price_verify");
 const {isMarketingBroadcast, excludeOptedOut} = require("./notify_prefs");
 const {countBookings, zoneDailyCap} = require("./capacity");
 const {grossFromBaseRounded, grossFromBase} = require("./vat");
@@ -2163,28 +2164,46 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
       // الخدمات (بالساعة/الكنب/المكيفات/السيارات/المناسبات) تُدفع من المحفظة بأي
       // مبلغ يكتبه العميل. computeExpectedBasePrice تُرجع null لغير القابل للتحقق
       // (المتجر) فلا يُرفض دفعٌ بلا يقين — نفس سلوك مسار ميسر تماماً.
-      if (od && od.zone_name) {
-        const zq = await db.collection("service_zones")
-            .where("name", "==", od.zone_name).limit(1).get();
-        if (!zq.empty) {
-          // تحقّق هندسي (نفس مسار ميسر): وسم + تنبيه إداري عند موقعٍ خارج نصف
-          // قطر المنطقة المُعلَنة — لا يحجب الدفع.
-          await _flagZoneGeoMismatch(orderRef, orderId, od, zq.docs[0].data())
-              .catch((e) => console.error("[wallet-pricing] geo:", e.message));
-          // مواد التنظيف داخل الطلب: تُسعَّر من products قبل الحساب. null =
-          // تعذّر التحقق ⇒ نترك pkgExpectedGross فارغاً (لا نرفض بلا يقين).
-          const matBase = await resolveMaterialsBase(db, od.service_meta);
-          const base0 = matBase === null ? null :
-            computeExpectedBasePrice(
-                {...od, materials_base_resolved: matBase}, zq.docs[0].data());
-          // رسوم الوعورة من مستند المنطقة (لا من الطلب) فوق الأساس قبل الضريبة.
-          const base = base0 && base0 > 0 ?
-            applyTerrainSurcharge(base0, zq.docs[0].data()) : base0;
-          if (base && base > 0) {
-            const surge = await _readSurgeFactor(db);
-            pkgExpectedGross = grossFromBaseRounded(base, surge);
-          }
+      // حلُّ المنطقةِ عبر `price_verify` نفسِه الذي يَستخدمُه مسارُ ميسر: كان
+      // هنا `zone_name` وحدَه، ولو غابَ تُخطّى التحقّقُ كلُّه بلا وسمٍ ولا
+      // تنبيه — وهي الثغرةُ التي سدَّها مسارُ ميسر بنصِّ تعليقِه («إسقاط
+      // zone_name للتهرّب من التحقّق») مفتوحةً في المسارِ الآخر.
+      const zoneData = od ? await priceVerify.resolveZone(db, od) : null;
+      if (od && zoneData) {
+        // تحقّق هندسي (نفس مسار ميسر): وسم + تنبيه إداري عند موقعٍ خارج نصف
+        // قطر المنطقة المُعلَنة — لا يحجب الدفع.
+        await _flagZoneGeoMismatch(orderRef, orderId, od, zoneData)
+            .catch((e) => console.error("[wallet-pricing] geo:", e.message));
+        // مواد التنظيف داخل الطلب: تُسعَّر من products قبل الحساب. null =
+        // تعذّر التحقق ⇒ نترك pkgExpectedGross فارغاً (لا نرفض بلا يقين).
+        const matBase = await resolveMaterialsBase(db, od.service_meta);
+        const base0 = matBase === null ? null :
+          computeExpectedBasePrice(
+              {...od, materials_base_resolved: matBase}, zoneData);
+        // رسوم الوعورة من مستند المنطقة (لا من الطلب) فوق الأساس قبل الضريبة.
+        const base = base0 && base0 > 0 ?
+          applyTerrainSurcharge(base0, zoneData) : base0;
+        if (base && base > 0) {
+          const surge = await _readSurgeFactor(db);
+          const expected = grossFromBaseRounded(base, surge);
+          // **الخصمُ الموثوقُ يُطرَح** — كما في مسارِ ميسر. كان غائباً هنا،
+          // فكوبونٌ نسبتُه أكثرُ من 50% يُوسمُ دفعاً سليماً `price_mismatch`،
+          // وأكثرُ من 80% يُرفضُ أصلاً برسالةِ «المبلغ لا يطابق السعر
+          // المعتمد» — في وجهِ عميلةٍ تَدفعُ ما طُلب منها بالضبط.
+          const trusted = await _computeTrustedDiscount(
+              db, od, grossFromBase(base), surge, {orderRef, orderId});
+          pkgExpectedGross = Math.max(0, expected - trusted);
         }
+      } else if (od && priceVerify.isPriceableKind(od)) {
+        // نوعٌ قابلٌ للتسعيرِ بلا منطقةٍ محلولة: مسارُ ميسر يَسِمُ ويُنبّه،
+        // وهذا المسارُ كان يَمضي صامتاً. (التنبيهُ هنا لأنّ الوسمَ وحدَه
+        // لا يَراه أحدٌ في حينِه.)
+        console.warn(`[wallet-pricing] UNVERIFIABLE ${orderId}: priceable kind but no zone/base`);
+        await orderRef.update({price_unverifiable: true}).catch(() => {});
+        await queuePush("ADMIN_BROADCAST", "طلب تعذّر التحقّق من سعره ⚠️",
+            `الطلب #${od.code || orderId} مدفوعٌ من المحفظة ومن نوعٍ قابلٍ للتسعير لكن تعذّر التحقّق من مبلغه — يُرجى المراجعة.`,
+            "admin_price_review", {orderId},
+            ["super_admin", "orders_manager", "accountant_admin"]).catch(() => {});
       }
     } catch (e) {
       console.error("[wallet-pricing] recompute failed:", e.message);
@@ -2329,13 +2348,6 @@ async function _computeTrustedDiscount(db, od, expectedGross, surge,
 
 // (#1) هل الطلب من نوعٍ يُعاد تسعيره خادميّاً؟ (بالساعة أو كنب/مكيّف/سيارة). نستعمله
 // لتعليم «تعذّر التحقّق» حين يبدو الطلب قابلاً للتسعير لكن غابت منطقته/تعذّر حسابه.
-function _isPriceableKind(od) {
-  const kind = od.service_meta && od.service_meta.kind;
-  if (["sofa_rug_sqm", "ac_service", "car_interior", "home_package"]
-      .includes(kind)) return true;
-  if (od.hours_contracted && !kind) return true; // بالساعة (النظام القديم)
-  return false;
-}
 
 // 7. Secure Moyasar payment verification on Call function
 exports.verifyMoyasarPayment = onCall(
@@ -2501,17 +2513,9 @@ exports.verifyMoyasarPayment = onCall(
           // discount_amount — استثناؤه صريحٌ وإلزاميّ يمنع ردّ كل عميل native-pay بكوبون.
           const skip = od.server_created_from_payment === true || nonMoyasar || !(paid > 0);
           if (!skip) {
-            // حلّ المنطقة: نُفضّل zone_id الثابت إن وُجد، وإلّا الاسم (قابل لإعادة التسمية).
-            let zoneData = null;
-            if (od.zone_id) {
-              const zd = await db.collection("service_zones").doc(od.zone_id).get();
-              if (zd.exists) zoneData = zd.data();
-            }
-            if (!zoneData && od.zone_name) {
-              const zq = await db.collection("service_zones")
-                  .where("name", "==", od.zone_name).limit(1).get();
-              if (!zq.empty) zoneData = zq.docs[0].data();
-            }
+            // حلّ المنطقة في `price_verify.resolveZone` (zone_id ثمّ الاسم) —
+            // مصدرٌ واحدٌ مع مسار المحفظة، وكان المسارانِ يَختلفان.
+            const zoneData = await priceVerify.resolveZone(db, od);
             // تحقّق هندسي أن موقع الطلب داخل نصف قطر المنطقة المُعلَنة — الاسم وحده
             // كان يكفي لتسعير منطقةٍ أرخص لعنوان أبعد. لا يحجب الدفع (وسم + تنبيه).
             if (zoneData) {
@@ -2564,7 +2568,7 @@ exports.verifyMoyasarPayment = onCall(
                     od.server_created_from_payment !== true;
                 if (egregious && ENFORCE_PRICE_TIER_B) tierBReason = "price_review";
               }
-            } else if (_isPriceableKind(od)) {
+            } else if (priceVerify.isPriceableKind(od)) {
               // نوعٌ قابل للتسعير لكن تعذّر حسابه (منطقة غائبة/غير محلولة) → لا نُمرّره
               // بصمت؛ نُعلّم وننبّه (Tier A) — يسدّ ثغرة إسقاط zone_name للتهرّب من التحقّق.
               console.warn(`[price-shadow] UNVERIFIABLE ${orderId}: priceable kind but no zone/base`);

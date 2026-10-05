@@ -18,6 +18,7 @@ import 'package:zyiarah/services/zyiarah_referral_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/qatrat.dart';
+import 'package:zyiarah/utils/wallet_deletion_notice.dart';
 
 class ZyiarahProfileScreen extends StatefulWidget {
   const ZyiarahProfileScreen({super.key});
@@ -42,6 +43,10 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
 
   // Wallet & loyalty state
   double _walletBalance = 0.0;
+
+  /// حالةُ تحذيرِ الحذف — ثلاثيّةٌ، من `wallet_deletion_notice.dart`.
+  WalletDeletionNotice get _walletNotice => walletDeletionNotice(
+      loaded: _walletLoaded, error: _walletError, balance: _walletBalance);
   int _qatratPoints = 0;
   bool _walletLoaded = false;
   // فشل جلب المحفظة: بدونها كان الرصيد يُعرض 0.00 كقيمة حقيقية عند أي خطأ شبكة.
@@ -1475,7 +1480,12 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
               // قابلاً لتسجيل الدخول، فلا سبيلَ لصاحبتِه إليه. تُقالُ لها
               // **قبل** التأكيد، لا بعده (الخادمُ يُسجّل الدَّينَ ويُنبّه
               // المحاسبةَ، لكنّ القرارَ قرارُها).
-              if (!_walletError && _walletBalance > 0) ...[
+              // ثلاثُ حالاتٍ لا حالتان (`wallet_deletion_notice.dart`): كان
+              // الشرطُ `!_walletError && _walletBalance > 0`، فيَغيبُ التحذيرُ
+              // حين **لم تُحمَّل** المحفظةُ بعدُ (الرصيدُ 0.0 ابتداءً) وحين
+              // **فشلت** القراءة — وهما الحالتان التي يَجبُ فيها أن يَظهر.
+              // عندَ الجهلِ نُحذّر.
+              if (_walletNotice == WalletDeletionNotice.balance) ...[
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -1493,6 +1503,36 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                           'لديك ${_walletBalance.toStringAsFixed(2)} ر.س في '
                           'محفظتك. استخدميها أو تواصلي مع الدعم قبل الحذف — '
                           'لن تتمكّني من الوصول إليها بعده.',
+                          style: GoogleFonts.tajawal(
+                              fontSize: 11,
+                              height: 1.5,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange.shade900),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (_walletNotice == WalletDeletionNotice.unknown) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange.shade300),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.help_outline,
+                          color: Colors.orange, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'لم نتمكّن من التحقّق من رصيد محفظتك الآن. إن كان '
+                          'فيها رصيد فلن تتمكّني من الوصول إليه بعد الحذف — '
+                          'تحقّقي منه أو تواصلي مع الدعم قبل المتابعة.',
                           style: GoogleFonts.tajawal(
                               fontSize: 11,
                               height: 1.5,

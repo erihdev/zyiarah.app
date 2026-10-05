@@ -3,6 +3,7 @@ import { LifeBuoy, Search, MessageSquare, AlertCircle, CheckCircle2, Send, Clock
 import { collection, onSnapshot, query, orderBy, where, limit, Timestamp, doc, updateDoc, addDoc, serverTimestamp, getCountFromServer, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { useNow } from '../hooks/useNow.ts';
+import { useNotification } from '../components/notificationContext.ts';
 
 // المجموعة الصحيحة هي support_tickets (يكتبها العميل في support_screen.dart والدوال في functions/index.js).
 // كانت اللوحة سابقاً مرتبطة بمجموعة وهمية 'tickets' بأسماء حقول خاطئة → صفحة الدعم فارغة دائماً
@@ -27,6 +28,7 @@ interface Ticket {
 }
 
 export default function Support() {
+    const { toast } = useNotification();
     // ساعة متجدّدة بدل قراءة Date.now() أثناء الرندر (نصوص «منذ ...»).
     const now = useNow();
     const [searchTerm, setSearchTerm] = useState('');
@@ -126,7 +128,13 @@ export default function Support() {
             });
             setReply('');
         } catch (e) {
+            // كان صامتاً: الأدمن يَضغطُ «إرسال» فيَبقى النصُّ في الحقلِ بلا
+            // كلمة، فيَظنُّ أنّ العميلةَ أُجيبت ولم تُجَب. والصياغةُ «إكمال»
+            // بقصد: الرسالةُ تُكتبُ أوّلاً ثمّ تُوسَم التذكرةُ «replied»، فقد
+            // يَفشلُ الثاني وحدَه — «لم يُرسَل» كانت ستكونُ كذباً حينها،
+            // ولذلك نُحذّرُ من إعادةٍ عمياء (تُكرّر الرسالةَ عند العميلة).
             console.error('send reply failed:', e);
+            toast.error('تعذّر إكمال إرسال الرد — راجع التذكرة قبل إعادة المحاولة');
         } finally {
             setSending(false);
         }

@@ -17,6 +17,7 @@ import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zyiarah/utils/order_tracking.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/order_activity.dart';
 
 // تحويل رقمي دفاعي — حقول Firestore (amount/total_amount/quotePrice) قد تصل نصّاً
 // أو null، و.toDouble()/as num المباشر كان يعطّل بطاقة الطلب داخل القائمة.
@@ -157,21 +158,14 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
         if (snapshot.hasError) {
           return const Center(child: Text('تعذّر تحميل البيانات، تحقّق من الاتصال'));
         }
-        // Filter based on phase
-        // كل حالات المسار النشط بما فيها لهجة الإرسال المباشر (Direct Dispatch)
-        final List<String> activeStatuses = [
-          'pending', 'awaiting_payment', 'under_review',
-          'assigned', 'scheduled', 'accepted', 'on_the_way', 'in_progress',
-        ];
-        final List<String> historyStatuses = ['completed', 'cancelled'];
-        
+        // القسمة قاعدة واحدة (`orderIsOpen`) لا قائمتان: القائمتان كانتا
+        // صحيحتين هنا، لكن أي حالة لا تَرِد في إحداهما تسقط من التبويبين معاً
+        // فلا تراها العميلة أصلاً — والقاعدة تُغلق ذلك بلا تعداد ثالث.
         final allDocs = snapshot.data!.docs;
         final orders = allDocs.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
           final status = data['status'] ?? 'pending';
-          return _activePhase == 0 
-              ? activeStatuses.contains(status)
-              : historyStatuses.contains(status);
+          return _activePhase == 0 ? orderIsOpen(status) : !orderIsOpen(status);
         }).toList();
 
         if (orders.isEmpty) {
@@ -219,21 +213,14 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           return const Center(child: Text('تعذّر تحميل البيانات، تحقّق من الاتصال'));
         }
         
-        // دورة المتجر الحقيقية: awaiting_payment ⇒ under_review ⇒ delivering ⇒ delivered.
-        // بدون الثلاث الأولى كان الطلب المدفوع يختفي من التبويبين معاً حتى «delivered».
-        final List<String> activeStatuses = [
-          'awaiting_payment', 'under_review', 'delivering',
-          'pending', 'approved', 'processing', 'shipped',
-        ];
-        final List<String> historyStatuses = ['delivered', 'completed', 'cancelled', 'rejected'];
-        
+        // دورة المتجر الحقيقية: awaiting_payment ⇒ under_review ⇒ delivering ⇒
+        // delivered. ومن `historyStatuses` التي كانت هنا أُخذت المجموعة المنتهية
+        // في `order_activity.dart` حرفياً — هذا الموضع كان الصحيح الوحيد من ثلاثة.
         final allDocs = snapshot.data!.docs;
         final storeOrders = allDocs.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
           final status = data['status'] ?? 'pending';
-          return _activePhase == 0 
-              ? activeStatuses.contains(status)
-              : historyStatuses.contains(status);
+          return _activePhase == 0 ? orderIsOpen(status) : !orderIsOpen(status);
         }).toList();
 
         if (storeOrders.isEmpty) {

@@ -134,7 +134,7 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
             final activeTasks = a.hasData ? parse(a.data!) : const <DriverTask>[];
             final historyTasks = h.hasData
                 ? parse(h.data!)
-                    .where((t) => DriverSchedule.historyStatuses.contains(t.status))
+                    .where((t) => DriverSchedule.isHistory(t.status))
                     .toList()
                 : const <DriverTask>[];
             return _content(
@@ -284,7 +284,7 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
 
   Widget _historyView(List<DriverTask> all, bool capped) {
     final history = all
-        .where((t) => DriverSchedule.historyStatuses.contains(t.status))
+        .where((t) => DriverSchedule.isHistory(t.status))
         .toList()
       ..sort((a, b) => b.when.compareTo(a.when));
     if (history.isEmpty) {
