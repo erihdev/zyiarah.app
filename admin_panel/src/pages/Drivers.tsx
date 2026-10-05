@@ -8,6 +8,7 @@ import { httpsCallable } from 'firebase/functions';
 import app, { db, storage, functions } from '../services/firebase.ts';
 import { logAudit, AUDIT } from '../services/audit.ts';
 import { useNotification } from '../components/notificationContext.ts';
+import { driverActivationFields, driverIsDisabled } from '../utils/driverActivation';
 
 interface DriverData {
     id: string;
@@ -25,8 +26,11 @@ interface DriverData {
     photo_url?: string;
 }
 
-const StatusBadge = ({ is_available, is_suspended = false }: { is_available: boolean, is_suspended?: boolean }) => {
-    if (is_suspended) return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-700 font-bold border border-rose-100 text-xs"><ShieldAlert size={14} />موقوف</span>;
+// الشارةُ تَقرأُ `is_active` أيضاً، لا `is_suspended` وحدَه: تعطيلٌ من تطبيقِ
+// الإدارةِ كان يَكتبُ `is_active` فقط، فيَظهرُ المعطَّلُ هنا «متاحاً» بنقطةٍ
+// خضراءَ نابضة — والخادمُ يَرفضُ إسنادَه، فالصورةُ وحدَها كانت تَكذب.
+const StatusBadge = ({ is_available, is_suspended = false, is_active = true }: { is_available: boolean, is_suspended?: boolean, is_active?: boolean }) => {
+    if (driverIsDisabled({ is_active, is_suspended })) return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-700 font-bold border border-rose-100 text-xs"><ShieldAlert size={14} />موقوف</span>;
     if (is_available) return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-100 text-xs"><div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>متاح</span>;
     return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-600 font-bold border border-slate-200 text-xs"><div className="w-2 h-2 rounded-full bg-slate-400"></div>غير متصل</span>;
 };
@@ -139,9 +143,11 @@ export default function Drivers() {
                     id_number: newDriver.id_number.trim(),
                     id_expiry: newDriver.id_expiry.trim(),
                     license_info: staffType === 'driver' ? newDriver.license_info.trim() : '',
+                    // الزوجُ من `driverActivation` — رابعُ كاتبٍ له، ومصدرُه
+                    // واحد. و`is_available: false` صريحةٌ هنا لأنّ السائقَ
+                    // الجديدَ لم يَتّصل بعد (التفعيلُ لا يَكتبُها عمداً).
+                    ...driverActivationFields(true),
                     is_available: false,
-                    is_active: true,
-                    is_suspended: false,
                     rating: 5.0,
                     rides: 0,
                     monthly_salary: newDriver.monthly_salary,
@@ -278,8 +284,12 @@ export default function Drivers() {
     const handleToggleSuspension = async (driver: DriverData) => {
         setTogglingId(driver.id);
         try {
-            const nowSuspended = !driver.is_suspended;
-            await updateDoc(doc(db, 'drivers', driver.id), { is_suspended: nowSuspended, is_available: nowSuspended ? false : driver.is_available, is_active: !nowSuspended });
+            // القرارُ من القاعدةِ نفسِها لا من حقلٍ واحد، وإلّا فزرُّ «إيقاف»
+            // على سائقٍ معطَّلٍ أصلاً (is_active=false) يُعطّلُه مرّةً أخرى.
+            const nowSuspended = !driverIsDisabled(driver);
+            // الحقولُ من `driverActivation` — مصدرٌ واحدٌ مع تطبيقِ الإدارة.
+            await updateDoc(doc(db, 'drivers', driver.id),
+                driverActivationFields(!nowSuspended));
             await logAudit(AUDIT.TOGGLE_DRIVER_STATUS,
                 { name: driver.name, suspended: nowSuspended }, driver.id);
         } catch (err) {
@@ -362,7 +372,7 @@ export default function Drivers() {
                                         <span className="text-slate-400 text-xs font-bold font-mono">#{driver.id.substring(0, 6).toUpperCase()}</span>
                                     </div>
                                 </div>
-                                <StatusBadge is_available={driver.is_available} is_suspended={driver.is_suspended} />
+                                <StatusBadge is_available={driver.is_available} is_suspended={driver.is_suspended} is_active={driver.is_active} />
                             </div>
 
                             <div className="space-y-3 mb-6">
@@ -386,8 +396,8 @@ export default function Drivers() {
                             {/* Action buttons */}
                             <div className="flex gap-2">
                                 <button type="button" onClick={() => openEdit(driver)} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-bold border border-[#E5C3D5] text-[#660033] hover:bg-[#FAF1F6] transition-colors"><Pencil size={14} />تعديل</button>
-                                <button type="button" disabled={togglingId === driver.id} onClick={() => handleToggleSuspension(driver)} className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-bold border transition-colors disabled:opacity-50 ${driver.is_suspended ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50' : 'border-amber-200 text-amber-600 hover:bg-amber-50'}`}>
-                                    {togglingId === driver.id ? <Loader2 size={14} className="animate-spin" /> : driver.is_suspended ? <><ToggleRight size={14} />تفعيل</> : <><ToggleLeft size={14} />إيقاف</>}
+                                <button type="button" disabled={togglingId === driver.id} onClick={() => handleToggleSuspension(driver)} className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-bold border transition-colors disabled:opacity-50 ${driverIsDisabled(driver) ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50' : 'border-amber-200 text-amber-600 hover:bg-amber-50'}`}>
+                                    {togglingId === driver.id ? <Loader2 size={14} className="animate-spin" /> : driverIsDisabled(driver) ? <><ToggleRight size={14} />تفعيل</> : <><ToggleLeft size={14} />إيقاف</>}
                                 </button>
                                 <button type="button" onClick={() => setDeleteTarget(driver)} className="px-3 py-2 rounded-xl border border-rose-200 text-rose-500 hover:bg-rose-50 transition-colors"><Trash2 size={14} /></button>
                             </div>

@@ -9,6 +9,7 @@ import 'dart:typed_data';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/driver_activation.dart';
 
 class AdminDriversScreen extends StatefulWidget {
   const AdminDriversScreen({super.key});
@@ -717,7 +718,13 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                       activeThumbColor: const Color(0xFF1E293B),
                       onChanged: (val) async {
                         try {
-                          await FirebaseFirestore.instance.collection('drivers').doc(docId).update({'is_active': val});
+                          // الحقولُ الثلاثةُ معاً — `driver_activation.dart`.
+                          // كان `{'is_active': val}` وحدَه، فيُظهرُ المعطَّلَ
+                          // «متاحاً» في لوحةِ الويبِ ويَعدُّه عدّادُها.
+                          await FirebaseFirestore.instance
+                              .collection('drivers')
+                              .doc(docId)
+                              .update(driverActivationFields(active: val));
                           await _audit.logAction(
                             action: ZyiarahAuditService.actionToggleDriver,
                             details: {'name': driver['name'], 'status': val ? 'نشط' : 'معطل'},
