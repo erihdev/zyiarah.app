@@ -25,9 +25,29 @@ service cloud.firestore {
       return getUserData().get('staff_role', getUserData().get('role', 'client'));
     }
 
+    // ⚠️ **STAGE-C — مُعلَّقٌ مع أخواتِه حتى يُفرَضَ الحدُّ الأدنى للإصدار.**
+    //
+    // مفتاحُ «إيقافِ موظّف» في `admin_managers_screen` كان يَكتبُ
+    // `admins/{id}.is_active` **ولا قارئَ لذلك الحقلِ في المستودعِ كلِّه**:
+    // لا هذه القواعدُ، ولا الدوالُّ، ولا `getUserRole` في العميل. فموظّفٌ
+    // تُظهِرُه الشاشةُ «معطّلاً» يَدخلُ ويَعملُ بكلِّ ما يُجيزُه دورُه —
+    // وهو مفتاحٌ يَستعملُه المالكُ **بدلَ الحذف** لأنّه يَبدو أهونَ.
+    //
+    // الشرطُ هنا يُقرأُ من `users` — المستندُ المُحمَّلُ أصلاً في
+    // `getUserData()` — فلا قراءةَ ثانيةً ولا كلفةَ. والغيابُ = مُفعَّل،
+    // لأنّ مستنداتَ الإنتاجِ القائمةَ لا تَحملُ الحقل.
+    //
+    // ومحصورٌ في مُعيِّناتِ **الموظّفينَ** عمداً: `is_active` على مستندِ
+    // عميلةٍ أو سائقٍ لا معنى له هنا (حالةُ السائقِ تُقرأُ من
+    // `drivers/{id}` عبر `isAssignableDriver` خادميّاً)، فإدخالُه في
+    // `getUserRole()` نفسِها كان سيَطرُدُ عميلاتٍ لحقلٍ كُتبَ لسببٍ آخر.
+    function staffEnabled() {
+      return getUserData().get('is_active', true) != false;
+    }
+
     // Any admin role
     function isAdmin() {
-      return isLoggedIn() && (
+      return isLoggedIn() && staffEnabled() && (
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
         getUserRole() in ['admin', 'super_admin', 'orders_manager',
                           'accountant_admin', 'marketing_admin']
@@ -36,25 +56,25 @@ service cloud.firestore {
 
     // Orders + drivers management
     function isOrdersManager() {
-      return isLoggedIn() &&
+      return isLoggedIn() && staffEnabled() &&
         getUserRole() in ['admin', 'super_admin', 'orders_manager'];
     }
 
     // Financial read access
     function isAccountantAdmin() {
-      return isLoggedIn() &&
+      return isLoggedIn() && staffEnabled() &&
         getUserRole() in ['admin', 'super_admin', 'accountant_admin'];
     }
 
     // Marketing content management
     function isMarketingAdmin() {
-      return isLoggedIn() &&
+      return isLoggedIn() && staffEnabled() &&
         getUserRole() in ['admin', 'super_admin', 'marketing_admin'];
     }
 
     // Destructive operations: delete users, change system config
     function isSuperAdmin() {
-      return isLoggedIn() &&
+      return isLoggedIn() && staffEnabled() &&
         getUserRole() in ['admin', 'super_admin'];
     }
 
