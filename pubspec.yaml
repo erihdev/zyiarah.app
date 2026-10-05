@@ -16,7 +16,7 @@ dependencies:
   cupertino_icons: ^2.0.0
   geolocator: ^14.0.2
   latlong2: ^0.10.1
-  google_fonts: ^8.1.0
+  google_fonts: ^9.0.0
   firebase_core: ^4.9.0
   # شجرة FlutterFire كلها على firebase_core_platform_interface 8.x. الدرس
   # (2026-09-13، البناء ٣١ — أوّل بناء تلقائي): إضافات crashlytics 5.2.5
