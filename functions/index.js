@@ -4914,17 +4914,41 @@ exports.opsHealthSweep = onSchedule(
             .where("status", "==", "cancelled")
             .where("needs_refund", "==", true)
             .where("is_paid", "==", true).limit(200).get();
-        let retried = 0; let stuck = 0;
+        let retried = 0; let stuck = 0; let released = 0; let unknown = 0;
+        // **مُرشِّحاتُ الطريقِ السريعِ كانت تَتخطّى بـ`continue` وتُبقي العلمَ،
+        // فيَبقى المستندُ في النافذةِ إلى الأبد — وهو العطلُ الذي أُغلق في
+        // المحرّكِ نفسِه ثمّ أُعيد من هنا.** وأخطرُها `payment_method ===
+        // "subscription"`: زيارةُ باقةٍ تُولَّدُ `is_paid: true` و`amount: 0`،
+        // وإلغاءُ العميلةِ لها (الزرُّ يَظهرُ على `pending`) يَكتبُ
+        // `needs_refund = is_paid` أي **`true`** — و`onOrderRewards` يَستثني
+        // الاشتراكَ فلا يُودِعُ شيئاً، ولا شيءَ يَمسحُ العلم. فكلُّ زيارةِ
+        // باقةٍ مُلغاةٍ تَشغلُ خانةً من الـ200 دائماً، وعدّادُها عددُ
+        // الإلغاءاتِ في عمرِ التطبيقِ كلِّه: فحين تَتجاوزُ المئتَين يَسقطُ
+        // استردادٌ **فاشلٌ حقيقيٌّ** من النافذةِ بترتيبِ `__name__` العشوائيِّ
+        // بلا خطأٍ ولا سطرِ سجلّ.
+        //
+        // فما لا دَينَ فيه يُطفأُ علمُه (`needs_refund: false`) بدلَ تخطّيه:
+        // لا مالٌ مستحقٌّ ⇒ العلمُ خاطئ. والثلاثةُ الأولى تُسوِّيها المحرّكةُ
+        // نفسُها إن بَلغتها، لكنّ المُرشِّحَ يَسبقُها فلا تَبلغُها أبداً.
+        const release = async (ref) => {
+          await ref.update({needs_refund: false}).catch(() => {});
+          released++;
+        };
         for (const doc of snap.docs) {
           const d = doc.data();
-          if (d.is_paid !== true) continue;
-          if (d.refund_credited === true) continue;
-          if (d.payment_status === "refunded") continue;
-          if (d.auto_refund_processed === true) continue;
-          if (d.payment_method === "subscription") continue;
           const amt = Number(d.amount || 0);
-          if (!(amt > 0)) continue;
-          if (!d.client_id) continue;
+          if (d.refund_credited === true ||
+              d.payment_status === "refunded" ||
+              d.auto_refund_processed === true ||
+              d.payment_method === "subscription" ||
+              !(amt > 0)) {
+            await release(doc.ref);
+            continue;
+          }
+          // لا مالكَ ⇒ لا نَعرفُ لمن نُودِع، والعلمُ يَبقى بحقّ. والقواعدُ
+          // تَشترطُ `client_id` عند الإنشاءِ فهو غيرُ قابلِ الوصولِ عملياً —
+          // يُعَدُّ كي لا يَصيرَ تراكماً صامتاً إن صارَ قابلاً.
+          if (!d.client_id) { unknown++; continue; }
           const r = await refunds.creditCancelledRefund(db, {
             orderRef: doc.ref,
             orderId: doc.id,
@@ -4936,7 +4960,8 @@ exports.opsHealthSweep = onSchedule(
           if (r.credited) retried++;
           else if (r.failed) stuck++;
         }
-        console.log(`opsHealthSweep: cancelled-refund retried=${retried} stuck=${stuck}`);
+        console.log(`opsHealthSweep: cancelled-refund retried=${retried} ` +
+            `stuck=${stuck} released=${released} unknown=${unknown}`);
       } catch (e) {
         console.error("opsHealthSweep: cancelled-refund retry failed:", e.message);
       }
