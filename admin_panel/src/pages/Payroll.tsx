@@ -3,6 +3,7 @@ import { Banknote, CheckCircle2, Clock, Users, ChevronRight, ChevronLeft, Loader
 import { collection, onSnapshot, query, doc, setDoc, serverTimestamp, where } from 'firebase/firestore';
 import { db, auth } from '../services/firebase.ts';
 import { useNotification } from '../components/notificationContext.ts';
+import { driverIsDisabled } from '../utils/driverActivation';
 
 interface Driver {
     id: string;
@@ -10,6 +11,7 @@ interface Driver {
     type: string;
     monthly_salary: number;
     is_active: boolean;
+    is_suspended: boolean;
 }
 
 interface PayrollRecord {
@@ -75,6 +77,10 @@ export default function Payroll() {
                     type: data.type || 'driver',
                     monthly_salary: data.monthly_salary || 0,
                     is_active: data.is_active ?? true,
+                    // الحقلانِ معاً: `driverIsDisabled` يَقرأُ أيَّهما كفى، كالخادم.
+                    // قراءةُ `is_active` وحدَه كانت تُظهِرُ سائقاً أوقفَته هذه
+                    // اللوحةُ نفسُها (تَكتبُ `is_suspended`) على غيرِ حقيقتِه.
+                    is_suspended: data.is_suspended ?? false,
                 };
             }));
             setLoadingDrivers(false);
@@ -123,13 +129,22 @@ export default function Payroll() {
         };
     });
 
-    const totalBudget = drivers.reduce((s, d) => s + d.monthly_salary, 0);
+    // **`is_active` كان يُحمَّلُ في كلِّ صفٍّ ولا يَقرؤه شيء:** لا شارةَ ولا
+    // ترشيح. فمَن تَرَكَ العملَ يَبقى في «إجمالي ميزانية الرواتب» وفي «لم
+    // يُصرف بعد»، وله زرُّ «صرف» وصفٌّ لا يُميّزُه شيءٌ — والمحاسبُ لا يَرى
+    // الحالةَ فلا يَستطيعُ تطبيقَ أيِّ سياسة. والقراءةُ الآن عبر القاعدةِ
+    // المشترَكةِ لا بحقلٍ واحد.
+    const stopped = rows.filter(r => driverIsDisabled(r));
+    const activeRows = rows.filter(r => !driverIsDisabled(r));
+    const stoppedTotal = stopped.reduce((s, r) => s + r.monthly_salary, 0);
+    const totalBudget = activeRows.reduce((s, r) => s + r.monthly_salary, 0);
     // للصفوف المدفوعة نستخدم الراتب المُسجَّل وقت الصرف لا الراتب الحيّ — وإلا تغيّر
     // إجمالي شهر سابق بأثر رجعي عند تعديل راتب السائق لاحقاً.
+    // والمصروفُ يَضمُّ الموقوفَ عمداً: صرفٌ تمَّ فعلاً يُحتسَبُ كما تمّ.
     const paidTotal = rows.filter(r => r.status === 'paid').reduce((s, r) => s + (payrollRecords[r.id]?.salary ?? r.monthly_salary), 0);
-    const unpaidTotal = rows.filter(r => r.status === 'unpaid').reduce((s, r) => s + r.monthly_salary, 0);
+    const unpaidTotal = activeRows.filter(r => r.status === 'unpaid').reduce((s, r) => s + r.monthly_salary, 0);
     const paidCount = rows.filter(r => r.status === 'paid').length;
-    const unpaidCount = rows.filter(r => r.status === 'unpaid').length;
+    const unpaidCount = activeRows.filter(r => r.status === 'unpaid').length;
 
     const markPaid = async (row: DriverPayrollRow) => {
         setPayingId(row.id);
@@ -154,9 +169,21 @@ export default function Payroll() {
     };
 
     const markAllPaid = async () => {
-        const unpaid = rows.filter(r => r.status === 'unpaid');
-        if (!unpaid.length) return;
-        if (!await confirm(`هل تريد تأكيد صرف رواتب ${unpaid.length} موظف؟`)) return;
+        // **الكوادرُ النشطةُ وحدَها.** كان يَصرفُ كلَّ صفٍّ غيرِ مصروفٍ ومنه مَن
+        // تَرَكَ العمل، وعدَّادُ التأكيدِ يَضمُّه، ولا شيءَ على الشاشةِ يُميّزُه.
+        // وهل يُستحَقُّ راتبُ موقوفٍ سؤالٌ تجاريٌّ لا شفريّ — فزرُّ الصفِّ
+        // الواحدِ يَبقى عاملاً لصرفٍ مقصود، والجَماعيُّ لا يَفعلُه بصمت.
+        const unpaid = activeRows.filter(r => r.status === 'unpaid');
+        if (!unpaid.length) {
+            if (stopped.some(r => r.status === 'unpaid')) {
+                toast.success('لا رواتبَ مستحقّةً للكوادر النشطة. ' +
+                    'الموقوفون يُصرَفُ لهم من زرِّ الصفِّ عند الحاجة.');
+            }
+            return;
+        }
+        const extra = stopped.filter(r => r.status === 'unpaid').length;
+        if (!await confirm(`هل تريد تأكيد صرف رواتب ${unpaid.length} موظف نشط؟` +
+            (extra ? ` (${extra} موقوفاً لن يُصرَف لهم — استعمل زرَّ الصفّ)` : ''))) return;
         setPayingAll(true);
         try {
             await Promise.all(unpaid.map(r =>
@@ -216,9 +243,14 @@ export default function Payroll() {
                 <div className="bg-gradient-to-bl from-emerald-500 to-teal-600 rounded-3xl p-6 text-white shadow-lg shadow-emerald-500/20 relative overflow-hidden col-span-2 lg:col-span-1">
                     <div className="absolute -left-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl"></div>
                     <div className="p-3 bg-white/20 rounded-2xl w-fit mb-4"><Wallet size={22} /></div>
-                    <p className="text-emerald-100 text-xs font-bold mb-1">إجمالي ميزانية الرواتب</p>
+                    <p className="text-emerald-100 text-xs font-bold mb-1">ميزانية رواتب الكوادر النشطة</p>
                     <h3 className="text-3xl font-black">{totalBudget.toLocaleString()} <span className="text-lg font-bold text-emerald-200">ر.س</span></h3>
-                    <p className="text-emerald-200 text-xs mt-2 font-medium">{drivers.length} موظف مسجل</p>
+                    <p className="text-emerald-200 text-xs mt-2 font-medium">{activeRows.length} موظف نشط من {drivers.length} مسجل</p>
+                    {stopped.length > 0 && (
+                        <p className="text-emerald-200/90 text-xs mt-1 font-medium">
+                            + {stoppedTotal.toLocaleString()} ر.س لـ{stopped.length} موقوفاً (غير محتسَب)
+                        </p>
+                    )}
                 </div>
 
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group hover:border-emerald-200 transition-colors">
@@ -325,7 +357,14 @@ export default function Payroll() {
                                                     {row.name.charAt(0)}
                                                 </div>
                                                 <div>
-                                                    <p className="font-bold text-slate-800 text-sm">{row.name}</p>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="font-bold text-slate-800 text-sm">{row.name}</p>
+                                                        {driverIsDisabled(row) && (
+                                                            <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-slate-200 text-slate-600 border border-slate-300">
+                                                                موقوف
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <p className="text-xs text-slate-400 font-mono">#{row.id.substring(0, 6).toUpperCase()}</p>
                                                 </div>
                                             </div>
