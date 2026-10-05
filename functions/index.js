@@ -4587,27 +4587,38 @@ exports.opsHealthSweep = onSchedule(
       // 1) مستند موسوم awaiting_payment لكنه مدفوع فعلاً — حالة متناقضة: مال مقبوض
       //    بلا مسار تشغيل. الحالة تعيش أساساً في store_orders (متجر الشركات المباشر —
       //    محوّل الترقية التلقائي قد يفشل بلا بديل)، وتُفحص orders أيضاً لأن القواعد
-      //    تسمح بإنشائها عميلياً (مستندات قديمة/عدائية). مساواة واحدة، لا فهرس جديد.
-      //    limit بلا orderBy مقبول: تشبّعه يتطلب مئات المستندات العالقة معاً.
+      //    تسمح بإنشائها عميلياً (مستندات قديمة/عدائية).
+      //
+      //    **النافذةُ تَسألُ عن الحالةِ المتناقضةِ نفسِها.** كانت مساواةً واحدةً
+      //    على الحالةِ بـ`limit(500)` ثم يُرشَّحُ `is_paid` في الكود، وتعليقُها
+      //    يَقول «تشبّعُه يَتطلّبُ مئاتِ المستنداتِ العالقةِ معاً» — وهي موجودةٌ
+      //    بالفعل: `store_orders` يُنشَأُ **قبلَ** الدفعِ بـ`awaiting_payment`
+      //    (قرارُ المالك: لا موافقةَ قبل الدفع)، وسلّةٌ متروكةٌ تَبقى كذلك
+      //    للأبدِ — `cancelStaleUnpaidOrders` يَمسحُ `orders` بحالةِ `pending`
+      //    وحدَها، والعميلةُ تَستأنفُ الدفعَ من بطاقةِ الطلبِ عندها فالبقاءُ
+      //    مقصود. واستعلامٌ بمساواةٍ واحدةٍ يُرتَّبُ بـ`__name__` ومعرّفاتُ
+      //    `store_orders` عشوائيّة: فطلبٌ **مدفوعٌ** عالقٌ — «مالٌ مقبوضٌ بلا
+      //    مسارِ تشغيل»، وهو كلُّ موضوعِ هذا الفحص — يَسقطُ من النافذةِ
+      //    بالاحتمالِ وحدَه. مساواتانِ بلا مدًى لا تَلزمُهما فهرسٌ مركَّب
+      //    (دمجُ zigzag — كاستعلامِ `referrals` الحيِّ هنا بلا فهرس).
       for (const coll of ["store_orders", "orders"]) {
         try {
           const snap = await db.collection(coll)
-              .where("status", "==", "awaiting_payment").limit(500).get();
-          const paid = snap.docs
-              .filter((doc) => doc.data().is_paid === true)
-              .map((doc) => ({doc, d: doc.data()}));
+              .where("status", "==", "awaiting_payment")
+              .where("is_paid", "==", true).limit(500).get();
+          const paid = snap.docs.map((doc) => ({doc, d: doc.data()}));
           const n = await alertBatch(paid, "ops_alerted_paid_awaiting",
               "طلب مدفوع عالق في «بانتظار الدفع» ⚠️",
               (codes, c) => `${c} طلب مدفوع وحالته ما تزال awaiting_payment (${codes}) — ` +
                 "مال مقبوض بلا مسار تشغيل، يلزم تصحيح الحالة يدوياً.");
-          // المهجورة (غير المدفوعة) الأقدم من 24س ضجيج سلات متروكة — سجلّ فقط.
-          const abandoned = snap.docs.filter((doc) => {
-            const d = doc.data();
-            return d.is_paid !== true && d.created_at &&
-              typeof d.created_at.toDate === "function" &&
-              d.created_at.toDate().getTime() < now - 24 * 60 * 60 * 1000;
-          }).length;
-          console.log(`opsHealthSweep[${coll}]: paid-awaiting alerted=${n}, abandoned>24h=${abandoned}`);
+          // والمهجورةُ تُعَدُّ خادميّاً: `count()` بمساواةٍ واحدةٍ (لا فهرس،
+          // ولا قراءةُ خمسِ مئةِ مستند) يُعطي الإجماليَّ الدقيقَ بدلَ رقمٍ
+          // مقصوصٍ بنافذةٍ صارت لا تَرى غيرَ المدفوع. سجلٌّ فقط — تراكمُها
+          // مقصودٌ ما دامت قابلةً للاستئناف.
+          const openAgg = await db.collection(coll)
+              .where("status", "==", "awaiting_payment").count().get();
+          console.log(`opsHealthSweep[${coll}]: paid-awaiting alerted=${n}, ` +
+            `awaiting_payment total=${openAgg.data().count}`);
         } catch (e) {
           console.error(`opsHealthSweep: awaiting_payment check failed (${coll}):`, e.message);
         }
