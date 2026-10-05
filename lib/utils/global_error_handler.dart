@@ -6,7 +6,7 @@ class GlobalErrorHandler {
 
   /// Logs the error and displays a unified user-friendly snackbar.
   static void handleError(dynamic error, [StackTrace? stackTrace]) {
-    String message = "حدث خطأ غير متوقع. جرب مرة أخرى.";
+    String message = "حدث خطأ غير متوقع. يُرجى المحاولة مرة أخرى.";
     
     // Customize user message based on standard exceptions
     if (error.toString().contains("network") || error.toString().contains("offline")) {

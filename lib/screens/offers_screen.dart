@@ -200,10 +200,10 @@ class _ZyiarahOffersScreenState extends State<ZyiarahOffersScreen> {
         _sectionHeader(
           icon: Icons.confirmation_number_outlined,
           title: 'كوبونات الخصم المعتمدة',
-          subtitle: 'انقر لنسخ الكوبون ثم أدخله عند الدفع',
+          subtitle: 'انقري لنسخ الكوبون ثم أدخليه عند الدفع',
         ),
         if (_uid == null)
-          _hintCard(Icons.login_rounded, 'سجّل الدخول لرؤية كوبوناتك وكود الإحالة')
+          _hintCard(Icons.login_rounded, 'سجّلي الدخول لرؤية كوبوناتك وكود الإحالة')
         else if (k?.hasError ?? false)
           _inlineError('تعذّر تحميل الكوبونات، تحقّقي من الاتصال')
         else if (couponsWaiting)
@@ -460,7 +460,7 @@ class _ZyiarahOffersScreenState extends State<ZyiarahOffersScreen> {
               ]),
               const SizedBox(height: 8),
               Text(
-                'شارك كودك مع أهلك وأصدقائك: تحصل على $reward ر.س في محفظتك عند '
+                'شاركي كودك مع أهلك وأصدقائك: تحصلين على $reward ر.س في محفظتك عند '
                 'اكتمال أول طلب لصديقك، ويحصل صديقك على خصم $discount% على أول طلب.',
                 style: GoogleFonts.tajawal(
                     color: Colors.white.withValues(alpha: 0.92),

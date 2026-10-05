@@ -99,8 +99,11 @@ class _ZyiarahRatingDialogState extends State<ZyiarahRatingDialog> {
                       // رفض إذن الكاميرا يرمي PlatformException — بدون تنبيه يبدو زر
                       // إرفاق الدليل ميتاً في مسار شكوى التقييم المنخفض حيث الدليل مهم.
                       if (!mounted) return;
-                      messenger.showSnackBar(SnackBar(
-                        content: Text('تعذّر فتح الكاميرا — فعّل إذن الكاميرا من الإعدادات: $e'),
+                      // والتشخيصُ يَبقى لنا لا لها (قاعدةُ `reportSilent`).
+                      debugPrint('rating_dialog camera: $e');
+                      messenger.showSnackBar(const SnackBar(
+                        content: Text(
+                            'تعذّر فتح الكاميرا — فعّلي إذن الكاميرا من الإعدادات'),
                         backgroundColor: Colors.red,
                       ));
                     }

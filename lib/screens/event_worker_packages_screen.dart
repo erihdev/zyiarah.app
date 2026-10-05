@@ -1516,7 +1516,7 @@ class _EventWorkerPackageCardState extends State<EventWorkerPackageCard>
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Text(
-                                        widget.isSelected ? 'تم اختيار الباقة بنجاح ✓' : 'اطلب هذه الباقة الآن',
+                                        widget.isSelected ? 'تم اختيار الباقة بنجاح ✓' : 'اطلبي هذه الباقة الآن',
                                         style: GoogleFonts.tajawal(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 14,

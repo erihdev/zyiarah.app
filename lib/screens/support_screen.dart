@@ -292,7 +292,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
                       child: TextField(
                         controller: replyCtrl,
                         decoration: InputDecoration(
-                          hintText: "اكتب ردك هنا...",
+                          hintText: "اكتبي ردك هنا...",
                           isDense: true,
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),

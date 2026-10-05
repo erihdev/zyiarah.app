@@ -1482,7 +1482,7 @@ class _SubscriptionPlanCardState extends State<SubscriptionPlanCard>
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Text(
-                                        widget.isSelected ? 'تم اختيار الباقة بنجاح ✓' : 'اطلب هذه الباقة الآن',
+                                        widget.isSelected ? 'تم اختيار الباقة بنجاح ✓' : 'اطلبي هذه الباقة الآن',
                                         style: GoogleFonts.tajawal(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 14,

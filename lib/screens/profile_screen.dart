@@ -364,7 +364,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                 maxLines: 5,
                 decoration: InputDecoration(
                   hintText:
-                      'مثال: يرجى عدم رن الجرس، استخدم ملمع الخشب للكنب...',
+                      'مثال: يرجى عدم رن الجرس، ويرجى استخدام ملمع الخشب للكنب...',
                   hintStyle: GoogleFonts.tajawal(fontSize: 12),
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12)),
@@ -1073,7 +1073,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'شارك عائلتك وأصدقائك واربح! 🎁',
+                      'شاركي عائلتك وأصدقائك واربحي! 🎁',
                       style: GoogleFonts.tajawal(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
@@ -1166,8 +1166,8 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                       }
                       HapticFeedback.mediumImpact();
                       final message =
-                          'سجّل في تطبيق زيارة للخدمات المنزلية باستخدام كودي '
-                          'وبتحصل على خصم 10% على أول خدمة تنظيف لمنزلك! ✨ كودي: $_referralCode';
+                          'سجّلوا في تطبيق زيارة للخدمات المنزلية باستخدام كودي '
+                          'وتحصلون على خصم 10% على أول خدمة تنظيف للمنزل! ✨ كودي: $_referralCode';
                       Clipboard.setData(ClipboardData(text: message));
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(

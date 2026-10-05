@@ -104,7 +104,7 @@ void main() {
 
   testWidgets('زائر بلا حساب → تلميح الدخول ولا بطاقة إحالة ولا انهيار', (t) async {
     await pumpOffers(t, coupons: Stream.value([c('X')]), uid: null);
-    expect(find.text('سجّل الدخول لرؤية كوبوناتك وكود الإحالة'), findsOneWidget);
+    expect(find.text('سجّلي الدخول لرؤية كوبوناتك وكود الإحالة'), findsOneWidget);
     expect(find.text('برنامج سفراء زيارة'), findsNothing);
     expect(t.takeException(), isNull);
   });

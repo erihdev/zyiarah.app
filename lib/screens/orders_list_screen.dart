@@ -329,7 +329,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.payment, size: 18),
-                  label: Text("ادفع الآن", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                  label: Text("ادفعي الآن", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF660033),
                     foregroundColor: Colors.white,
@@ -542,7 +542,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                     context.push('/track/$docId');
                   },
                   icon: const Icon(Icons.star_rate_rounded, size: 16),
-                  label: Text('قيّم الخدمة',
+                  label: Text('قيّمي الخدمة',
                       style: GoogleFonts.tajawal(fontSize: 12)),
                   style: TextButton.styleFrom(
                       foregroundColor: const Color(0xFFD97706)),

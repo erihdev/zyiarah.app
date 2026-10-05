@@ -396,7 +396,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       controller: _searchController,
                       onChanged: _onSearchChanged,
                       decoration: const InputDecoration(
-                        hintText: "ابحث عن شارع، حي، أو معلم...",
+                        hintText: "البحث عن شارع، حي، أو معلم...",
                         prefixIcon: Icon(Icons.search, color: Color(0xFF660033)),
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.symmetric(vertical: 15, horizontal: 15),
