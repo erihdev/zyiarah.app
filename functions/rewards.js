@@ -34,13 +34,14 @@
 // (قاعدةُ `refund_engine.js`)، فتُختبَرُ على `db` مزيّفٍ بلا مُحاكٍ ولا شبكة.
 // ═══════════════════════════════════════════════════════════════════════
 
-const {FieldValue} = require("firebase-admin/firestore");
+const {FieldValue, Timestamp} = require("firebase-admin/firestore");
 
 /** علمُ الفشلِ لكلِّ مكافأة — المكنسةُ تَستعلمُه، والنجاحُ يَمحوه. */
 const PENDING_FLAGS = {
   qatrat: "qatrat_pending",
   couponCount: "coupon_count_pending",
   visitAccounting: "visit_accounting_pending",
+  referralPayout: "referral_payout_pending",
 };
 
 /**
@@ -303,7 +304,148 @@ async function settleVisitAccounting(db, args, queuePush) {
   }
 }
 
+/**
+ * Race-safe first-completed-order referral payout. The referral doc's
+ * pending->rewarded flip inside the transaction is the single-winner mutex;
+ * the referrer credit, ledger row and coupon are all written in the SAME
+ * transaction so a crash cannot leave a half-paid referral, and deterministic
+ * ids make a redelivery a no-op.
+ * **ولا يُبتلَعُ الفشل (2026-10-05):** `catch` كان سطرَ `console.error`
+ * وحدَه، والمعامَلةُ تَكتبُ خمسةَ مستنداتٍ معاً ومنها ٥٠ ر.س إلى محفظةِ
+ * المُحيلِ وكوبونُ المُحالة. فالفشلُ يَكتبُ علمَه والمكنسةُ تُعيدُ
+ * المحاولةَ، والتصعيدُ مرّةً واحدة.
+ *
+ * @param {object} db Firestore.
+ * @param {object} args المعطيات.
+ * @param {string} args.refereeUid معرّفُ المُحالة (المستخدمُ الجديد).
+ * @param {string} args.orderId معرّفُ الطلبِ المكتمل.
+ * @param {object} [args.orderRef] مرجعُ الطلب.
+ * @param {string} [args.code] رقمُ الطلبِ المعروض.
+ * @param {boolean} [args.alreadyAlerted] هل صُعِّدَ الفشلُ سابقاً؟
+ * @param {Function} queuePush طابورُ الإشعارات.
+ * @return {Promise<{paid: boolean, skipped?: string, failed?: string}>}
+ *   النتيجة.
+ */
+async function payReferralBonus(db, args, queuePush) {
+  const {refereeUid, orderId} = args;
+  const orderRef = args.orderRef || db.collection("orders").doc(orderId);
+
+  // Resolve the referral: deterministic id first, query fallback for legacy
+  // random-id docs created before applyReferralCode switched to a fixed id.
+  let referralRef = db.collection("referrals").doc(refereeUid);
+  if (!(await referralRef.get()).exists) {
+    const q = await db.collection("referrals")
+        .where("referee_id", "==", refereeUid)
+        .where("status", "==", "pending").limit(1).get();
+    if (q.empty) return clearAndSkip(orderRef, "no_referral");
+    referralRef = q.docs[0].ref;
+  }
+
+  const REFERRER_REWARD = 50;
+  let payout = null;
+  try {
+    payout = await db.runTransaction(async (t) => {
+      const rSnap = await t.get(referralRef);
+      if (!rSnap.exists || rSnap.get("status") !== "pending") return null;
+      const referrerId = rSnap.get("referrer_id");
+      if (!referrerId) return null;
+      const referralId = referralRef.id;
+      const referrerWallet = db.collection("wallets").doc(referrerId);
+      const bonusTx = referrerWallet.collection("transactions").doc(`refbonus_${referralId}`);
+      const couponCode = `REF${refereeUid.substring(0, 6).toUpperCase()}10`;
+      const couponRef = db.collection("promo_codes").doc(couponCode);
+
+      t.update(referralRef, {
+        status: "rewarded",
+        rewarded_on_order: orderId,
+        rewarded_at: FieldValue.serverTimestamp(),
+      });
+      t.update(orderRef, {referral_processed: true});
+      t.set(referrerWallet, {
+        balance: FieldValue.increment(REFERRER_REWARD),
+        last_updated: FieldValue.serverTimestamp(),
+      }, {merge: true});
+      t.create(bonusTx, {
+        amount: REFERRER_REWARD, points: 0, type: "referral_reward",
+        description: "مكافأة إحالة صديق أتمّ أول طلب",
+        order_id: orderId,
+        created_at: FieldValue.serverTimestamp(),
+      });
+      // يجب أن يطابق مخطّط الكوبونات الذي يقرؤه التطبيق (validateCoupon):
+      // type/value/maxUses/status/expiry — كان يكتب discount_type/is_active/expires_at
+      // فيفشل التحقّق دائماً ولا يُطبَّق كوبون الإحالة أبداً.
+      t.set(couponRef, {
+        code: couponCode,
+        type: "percentage",
+        value: 10,
+        maxUses: 1,
+        uses: 0,
+        status: "active",
+        expiry: Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        target_user_id: refereeUid,
+        description: "خصم الإحالة 10% — مكافأة الانضمام",
+        created_at: FieldValue.serverTimestamp(),
+      }, {merge: true});
+
+      return {referrerId, couponCode};
+    });
+  } catch (e) {
+    // **كان هذا السطرَ وحدَه.** والمعامَلةُ تَكتبُ خمسةَ مستنداتٍ معاً —
+    // ومنها **٥٠ ر.س إلى محفظةِ المُحيل** وكوبونُ المُحالةِ — فالفشلُ يَعني
+    // أنّ أحداً لم يَنَلْ ما وُعِد، ولا أحدَ عَلِم. وتعليقُ الدالّةِ يُطمئنُ
+    // عن الذرّيّة («a crash cannot leave a half-paid referral») وهو صحيحٌ
+    // ولا يَمَسُّ هذا الوجهَ: المُشغّلُ `onDocumentUpdated` بلا `retry`،
+    // وحدثُ «أوّلُ طلبٍ مكتمل» لا يَعودُ أبداً.
+    const note = e && e.message ? e.message : "unknown";
+    await orderRef.update({
+      [PENDING_FLAGS.referralPayout]: true,
+      referral_payout_failed_reason: note,
+      referral_payout_alerted: true,
+    }).catch(() => {});
+    if (!args.alreadyAlerted && typeof queuePush === "function") {
+      await queuePush("ADMIN_BROADCAST",
+          "تعذّر صرفُ مكافأةِ الإحالة ⚠️",
+          `الطلب #${args.code || orderId} أتمّ أوّلَ طلبٍ لمُحالٍ، ولم تُصرَف ` +
+          `مكافأةُ الإحالة (${REFERRER_REWARD} ر.س للمُحيل + كوبونُ المُحالة) ` +
+          `(${note}). المكنسة تُعيد المحاولة؛ إن تكرّر فالصرفُ يدويّ.`,
+          "admin_order_alert",
+          {orderId, refereeUid, referralFailed: true},
+          ["super_admin", "accountant_admin", "marketing_admin"]).catch(() => {});
+    }
+    return {paid: false, failed: note};
+  }
+  // لا شيءَ لِيُصرَف (لا إحالةَ، أو صُرِفت سلفاً): العلمُ يُنظَّفُ فلا
+  // تَقرؤه المكنسةُ للأبد.
+  if (!payout) return clearAndSkip(orderRef, "nothing_to_pay");
+
+  await queuePush(payout.referrerId, "🎁 مكافأة إحالتك وصلت!",
+      `أُضيفت ${REFERRER_REWARD} ر.س لمحفظتك مكافأة لإحالة صديق أتمّ أول طلب.`,
+      "referral_reward", {orderId: orderId});
+  await queuePush(refereeUid, "🎉 كوبون الإحالة جاهز!",
+      `حصلت على كوبون خصم 10% على طلبك القادم. الكود: ${payout.couponCode}`,
+      "referral_coupon", {coupon_code: payout.couponCode});
+  // والعلمُ يُمحى بعد النجاحِ كي لا تَتضخّمَ مجموعةُ المكنسةِ بما نُجِح.
+  await orderRef.update({
+    [PENDING_FLAGS.referralPayout]: FieldValue.delete(),
+  }).catch(() => {});
+  return {paid: true, referrerId: payout.referrerId};
+}
+
+/**
+ * يُنظّفُ علمَ إعادةِ المحاولةِ حين لا شيءَ لِيُصرَف.
+ * @param {object} orderRef مرجعُ الطلب.
+ * @param {string} why السبب.
+ * @return {Promise<object>} النتيجة.
+ */
+async function clearAndSkip(orderRef, why) {
+  await orderRef.update({
+    [PENDING_FLAGS.referralPayout]: FieldValue.delete(),
+  }).catch(() => {});
+  return {paid: false, skipped: why};
+}
+
 module.exports = {
+  payReferralBonus,
   settleVisitAccounting,
   PENDING_FLAGS,
   grantQatratPoints,

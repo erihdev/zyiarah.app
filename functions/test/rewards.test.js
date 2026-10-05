@@ -66,15 +66,42 @@ function fakeDb(seed) {
     path: p,
     id: p.split("/").pop(),
     update: async (obj) => Object.assign(touch(p), obj),
+    // `payReferralBonus` يَقرأُ وجودَ مستندِ الإحالةِ **خارجَ** المعامَلة.
+    get: async () => snapOf(p),
     collection: (c) => ({doc: (id) => mkRef(`${p}/${c}/${id}`)}),
   });
   const snapOf = (p) => {
     const d = store.get(p);
     return {exists: d !== undefined, data: () => d, get: (f) => (d || {})[f]};
   };
+  /**
+   * استعلامٌ مُصغَّرٌ بمساواةٍ واحدةٍ أو أكثر — لِمَسارِ الإحالةِ الاحتياطيّ
+   * (مستنداتٌ قديمةٌ بمعرّفٍ عشوائيّ).
+   * @param {string} c المجموعة
+   * @param {Array} conds الشروط
+   * @return {object} استعلام
+   */
+  const mkQuery = (c, conds) => ({
+    where: (f, _op, v) => mkQuery(c, [...conds, [f, v]]),
+    limit: () => mkQuery(c, conds),
+    get: async () => {
+      const docs = [];
+      for (const [path, d] of store) {
+        if (!path.startsWith(`${c}/`) || path.split("/").length !== 2) continue;
+        if (conds.every(([f, v]) => d[f] === v)) {
+          docs.push({id: path.split("/").pop(), ref: mkRef(path),
+            data: () => d, get: (f) => d[f]});
+        }
+      }
+      return {empty: docs.length === 0, docs, size: docs.length};
+    },
+  });
   return {
     _store: store, _ref: mkRef,
-    collection: (c) => ({doc: (id) => mkRef(`${c}/${id}`)}),
+    collection: (c) => ({
+      doc: (id) => mkRef(`${c}/${id}`),
+      where: (f, op, v) => mkQuery(c, [[f, v]]),
+    }),
     runTransaction: async (fn) => fn({
       get: async (ref) => snapOf(ref.path),
       update: (ref, obj) => Object.assign(touch(ref.path), obj),
@@ -349,6 +376,120 @@ tAsync("(د٦) الفشل: العلمُ والسببُ، ويُصعَّدُ مر
   assert.strictEqual(pushes.length, 1, "تصعيدٌ مكرَّرٌ لكلِّ دورةِ مكنسة");
 });
 
+// ── مكافأةُ الإحالة ──────────────────────────────────────────────────────
+tAsync("(هـ١) الصرف: ٥٠ للمُحيل، سجلٌّ، كوبونٌ للمُحالة، والحالةُ تَنقلب",
+    async () => {
+      const db = fakeDb({
+        "orders/o7": {code: "R7", client_id: "ref1"},
+        "referrals/ref1": {status: "pending", referrer_id: "boss"},
+      });
+      const pushes = [];
+      const r = await rewards.payReferralBonus(db, {
+        refereeUid: "ref1", orderId: "o7",
+        orderRef: db._ref("orders/o7"), code: "R7",
+      }, async (...a) => pushes.push(a));
+      assert.strictEqual(r.paid, true);
+      assert.deepStrictEqual(db._store.get("wallets/boss").balance,
+          FieldValue.increment(50));
+      const tx = db._store.get("wallets/boss/transactions/refbonus_ref1");
+      assert.strictEqual(tx.amount, 50);
+      assert.strictEqual(tx.type, "referral_reward");
+      assert.strictEqual(db._store.get("referrals/ref1").status, "rewarded");
+      assert.strictEqual(db._store.get("orders/o7").referral_processed, true);
+      // وكوبونُ المُحالةِ بالمخطّطِ الذي يَقرؤه التطبيقُ فعلاً
+      const cp = db._store.get("promo_codes/REFREF110");
+      assert.ok(cp, "لم يُكتَبْ كوبونُ الإحالة");
+      assert.strictEqual(cp.type, "percentage");
+      assert.strictEqual(cp.value, 10);
+      assert.strictEqual(cp.maxUses, 1);
+      assert.strictEqual(cp.status, "active");
+      assert.strictEqual(cp.target_user_id, "ref1");
+      assert.strictEqual(pushes.length, 2, "دفعتانِ: للمُحيلِ وللمُحالة");
+    });
+
+tAsync("(هـ٢) صُرِفت سلفاً ⇒ لا صرفَ ثانٍ، والعلمُ يُنظَّف", async () => {
+  const db = fakeDb({
+    "orders/o7": {code: "R7", client_id: "ref1", referral_payout_pending: true},
+    "referrals/ref1": {status: "rewarded", referrer_id: "boss"},
+  });
+  const pushes = [];
+  const r = await rewards.payReferralBonus(db, {
+    refereeUid: "ref1", orderId: "o7",
+    orderRef: db._ref("orders/o7"), code: "R7",
+  }, async () => pushes.push(1));
+  assert.strictEqual(r.paid, false);
+  assert.strictEqual(r.skipped, "nothing_to_pay");
+  assert.strictEqual(db._store.get("wallets/boss"), undefined,
+      "صُرِفت المكافأةُ مرّتَين");
+  assert.strictEqual(pushes.length, 0);
+  assert.deepStrictEqual(db._store.get("orders/o7").referral_payout_pending,
+      FieldValue.delete(), "علمٌ يَبقى فتَقرؤه المكنسةُ للأبد");
+});
+
+tAsync("(هـ٣) ولا مستندَ إحالةٍ أصلاً ⇒ تخطٍّ نظيفٌ لا فشل", async () => {
+  const db = fakeDb({
+    "orders/o7": {code: "R7", client_id: "ref1", referral_payout_pending: true},
+  });
+  const r = await rewards.payReferralBonus(db, {
+    refereeUid: "ref1", orderId: "o7",
+    orderRef: db._ref("orders/o7"), code: "R7",
+  }, async () => null);
+  assert.strictEqual(r.skipped, "no_referral");
+  assert.deepStrictEqual(db._store.get("orders/o7").referral_payout_pending,
+      FieldValue.delete());
+});
+
+tAsync("(هـ٤) الفشل: العلمُ والسببُ، وتصعيدٌ واحدٌ يَضمُّ التسويق",
+    async () => {
+      const db = fakeDb({
+        "orders/o7": {code: "R7", client_id: "ref1"},
+        "referrals/ref1": {status: "pending", referrer_id: "boss"},
+      });
+      db.runTransaction = async () => {
+        throw new Error("aborted");
+      };
+      const pushes = [];
+      const r = await rewards.payReferralBonus(db, {
+        refereeUid: "ref1", orderId: "o7",
+        orderRef: db._ref("orders/o7"), code: "R7",
+      }, async (...a) => pushes.push(a));
+      assert.strictEqual(r.failed, "aborted");
+      const o = db._store.get("orders/o7");
+      assert.strictEqual(o.referral_payout_pending, true,
+          "بلا العلمِ لا تَراه المكنسةُ — ٥٠ ر.س تَضيعُ بلا أثر");
+      assert.strictEqual(o.referral_payout_failed_reason, "aborted");
+      assert.strictEqual(o.referral_payout_alerted, true);
+      assert.strictEqual(pushes.length, 1);
+      assert.strictEqual(pushes[0][0], "ADMIN_BROADCAST");
+      assert.deepStrictEqual(pushes[0][5],
+          ["super_admin", "accountant_admin", "marketing_admin"]);
+
+      const again = await rewards.payReferralBonus(db, {
+        refereeUid: "ref1", orderId: "o7",
+        orderRef: db._ref("orders/o7"), code: "R7", alreadyAlerted: true,
+      }, async (...a) => pushes.push(a));
+      assert.strictEqual(again.failed, "aborted");
+      assert.strictEqual(pushes.length, 1, "تصعيدٌ مكرَّرٌ كلَّ دورةِ مكنسة");
+    });
+
+tAsync("(هـ٥) والمسارُ الاحتياطيُّ: مستندُ إحالةٍ بمعرّفٍ عشوائيٍّ قديم",
+    async () => {
+      const db = fakeDb({
+        "orders/o7": {code: "R7", client_id: "ref1"},
+        "referrals/xyz99": {
+          status: "pending", referrer_id: "boss", referee_id: "ref1",
+        },
+      });
+      const r = await rewards.payReferralBonus(db, {
+        refereeUid: "ref1", orderId: "o7",
+        orderRef: db._ref("orders/o7"), code: "R7",
+      }, async () => null);
+      assert.strictEqual(r.paid, true, "المستندُ القديمُ لم يُعثَرْ عليه");
+      assert.strictEqual(db._store.get("referrals/xyz99").status, "rewarded");
+      // والمعرّفُ الحتميُّ للسجلِّ يَتبعُ **معرّفَ مستندِ الإحالة** لا uid
+      assert.ok(db._store.get("wallets/boss/transactions/refbonus_xyz99"));
+    });
+
 // ── حُرّاسُ المصدر ────────────────────────────────────────────────────────
 const ROOT = path.join(__dirname, "..");
 const idxRaw = fs.readFileSync(path.join(ROOT, "index.js"), "utf8");
@@ -379,10 +520,17 @@ t("(ج١) index.js لا يَحملُ المعامَلاتِ إنلاين، وا�
   assert.ok(!/t\.set\(userRef, \{\s*visits_remaining: FieldValue/.test(idx),
       "بناءُ معامَلةِ الزياراتِ عادَ إلى index.js");
   // والنداءاتُ الثلاثةُ قائمة
+  // والموضعُ الرابع (2026-10-05): مكافأةُ الإحالة — ٥٠ ر.س وكوبون.
+  assert.ok(!idx.includes("[referral] payout txn failed for"),
+      "`catch` مكافأةِ الإحالةِ الصامتُ عادَ — ٥٠ ر.س للمُحيلِ وكوبونُ " +
+    "المُحالةِ يَضيعانِ بلا تنبيهٍ ولا محاولةٍ ثانية");
+  assert.ok(!idx.includes("async function processReferralRewardServer"),
+      "الدالّةُ عادَت إلى index.js");
   for (const call of [
     "rewards.grantQatratPoints(db, {",
     "rewards.countCouponUse(db, {",
     "rewards.settleVisitAccounting(db, {",
+    "rewards.payReferralBonus(db, {",
   ]) {
     assert.ok(idx.includes(call), `النداءُ غائب: ${call}`);
   }
@@ -408,6 +556,7 @@ t("(ج٢) والمكنسةُ تَستعلمُ **العلمَ** لا الحالة
   }
   for (const line of [
     /qatrat retried=/, /coupon-count retried=/, /visit-accounting retried=/,
+    /referral retried=/,
   ]) {
     assert.ok(line.test(idx), `سطرُ سجلِّ المكنسةِ غائب: ${line}`);
   }
