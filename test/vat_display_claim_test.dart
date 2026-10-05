@@ -115,4 +115,29 @@ void main() {
           reason: 'الحجبُ لا يرى التعليق — سيفشل الحارسُ على توثيقه');
     });
   });
+
+  group('سلّةُ المتجر: المجموعُ يقول إنّه قبل الضريبة', () {
+    // الرقمُ في السلّة أساسٌ: `store_schedule_screen` يأخذه ويضيف 15% فوقه
+    // (`_grandTotal = widget.total + _vat`). و«المجموع الإجمالي» بلا قيدٍ تقرأ
+    // كآخرِ ما يُدفع — نفسُ شكل «الأسعار شاملة الضريبة» أعلاه، وبقيّةُ الشاشات
+    // تقول «الإجمالي قبل الضريبة» صراحةً.
+    final src = File('lib/screens/store_screen.dart').readAsStringSync();
+
+    test('التسميةُ مقيَّدة', () {
+      expect(src.contains("'المجموع قبل الضريبة'"), isTrue);
+      expect(src.contains("'المجموع الإجمالي'"), isFalse,
+          reason: 'عاد المجموعُ يُقدَّم كآخرِ ما يُدفع');
+    });
+
+    test('والضريبةُ مذكورةٌ في سطر التنبيه، للمسارين', () {
+      expect('تُضاف ضريبة القيمة المضافة 15% عند الدفع.'.allMatches(src).length, 2,
+          reason: 'مسارُ الشركات ومسارُ العميل كلاهما يحتاجها');
+    });
+
+    test('وشاشةُ الجدولة ما زالت تعامله أساساً (وإلّا انقلبت القاعدة)', () {
+      final sch = File('lib/screens/store_schedule_screen.dart').readAsStringSync();
+      expect(sch.contains('double get _vat => vatOnBase(widget.total);'), isTrue);
+      expect(sch.contains('double get _grandTotal => widget.total + _vat;'), isTrue);
+    });
+  });
 }

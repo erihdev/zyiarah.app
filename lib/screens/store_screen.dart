@@ -543,7 +543,12 @@ class _CartSheetState extends State<_CartSheet> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('المجموع الإجمالي', style: TextStyle(fontWeight: FontWeight.bold)),
+                      // **قبل الضريبة**: `store_schedule_screen` يأخذ هذا
+                      // الرقمَ أساساً ويضيف 15% فوقه (`_grandTotal`). فـ«المجموع
+                      // الإجمالي» بلا قيدٍ تقرأ كآخرِ ما يُدفع، وهو ليس كذلك —
+                      // نفسُ شكل «الأسعار شاملة الضريبة» في شاشة التنظيف
+                      // المنزليّ. وبقيّةُ الشاشات تقول «الإجمالي قبل الضريبة».
+                      const Text('المجموع قبل الضريبة', style: TextStyle(fontWeight: FontWeight.bold)),
                       Text('$total ر.س', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.w900, fontSize: 18)),
                     ],
                   ),
@@ -562,9 +567,12 @@ class _CartSheetState extends State<_CartSheet> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
+                          // تُذكر الضريبةُ هنا كما تُذكر في شاشات الحجز
+                          // («تُضاف ضريبة القيمة المضافة 15% عند إتمام الطلب»)
+                          // — فالمبلغُ أعلاه أساسٌ لا نهاية.
                           widget.companies
-                              ? 'ستنتقل لإتمام الدفع مباشرةً (بطاقة / تمارا)، ويصلك طلبك بعد تأكيد الدفع.'
-                              : 'ستحدّد عنوان التوصيل وموعده في الخطوة التالية، ثم تدفع ويصلك سائق بطلبك في الموعد.',
+                              ? 'تُضاف ضريبة القيمة المضافة 15% عند الدفع. ستنتقل لإتمام الدفع مباشرةً (بطاقة / تمارا)، ويصلك طلبك بعد تأكيد الدفع.'
+                              : 'تُضاف ضريبة القيمة المضافة 15% عند الدفع. ستحدّد عنوان التوصيل وموعده في الخطوة التالية، ثم تدفع ويصلك سائق بطلبك في الموعد.',
                           style: GoogleFonts.tajawal(fontSize: 12, height: 1.5, color: const Color(0xFF660033), fontWeight: FontWeight.w700),
                         ),
                       ),
