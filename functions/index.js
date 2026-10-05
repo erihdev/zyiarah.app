@@ -2549,6 +2549,11 @@ async function _verifyStoreOrderPrice(db, ref, orderId, od, paid, source) {
     console.warn(`[store-price:${source}] UNDERPAID ${orderId}: paid=${paid} expected=${expected} ratio=${ratio}`);
     await ref.update({
       price_mismatch: true,
+      // **`opsHealthSweep` لا يَمسحُ `store_orders`** — استعلامُه
+      // `collection("orders").where("price_mismatch", "==", true)` — فلا
+      // تنبيهَ مزدوجاً، ولا تَعتمدْ عليه لطلباتِ المتجر: التنبيهُ أدناه هو
+      // كلُّ ما هناك. والعلمُ يُكتَبُ لأنّه صادقٌ لمن يَقرأُ المستند، ولئلّا
+      // يُكرَّرَ التنبيهُ إن وُسِّع المسحُ يوماً إلى هذه المجموعة.
       ops_alerted_mismatch: true,
       price_expected: expected,
       price_shadow_ratio: ratio,

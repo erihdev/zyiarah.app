@@ -361,6 +361,13 @@ function fakeDb({byId = {}, byName = {}} = {}) {
     // والمقارنةُ على الإجماليِّ شاملَ الضريبةِ كما يُنشئُ المتجرُ الطلب.
     assert.ok(body.includes("grossFromBaseRounded(base)"),
         "المتجرُ يُنشئُ total_amount بـgrossFromBaseRounded — فالمقارنةُ نظيرتُها");
+    // وأنّ المسحَ الدوريَّ لا يَمسحُ هذه المجموعةَ مكتوبٌ حيث يُقرأ: الاعتمادُ
+    // عليه لطلباتِ المتجرِ وهمٌ، والتنبيهُ الفوريُّ هو كلُّ ما هناك.
+    assert.ok(idx.includes("لا يَمسحُ `store_orders`"),
+        "تنبيهُ أنّ المسحَ لا يُغطّي المتجرَ اختفى");
+    assert.ok(
+        /collection\("orders"\)\s*\n?\s*\.where\("price_mismatch"/.test(code),
+        "لو وُسّع المسحُ إلى store_orders فهذا الفحصُ هو ما يُراجَع");
   });
 
   // ─────────── قاعدةُ الوحدات ───────────
