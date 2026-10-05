@@ -42,6 +42,12 @@ export default function Drivers() {
     const [searchTerm, setSearchTerm] = useState('');
     const [drivers, setDrivers] = useState<DriverData[]>([]);
     const [isAvailableCount, setIsAvailableCount] = useState(0);
+    // فشلُ المستمعِ كان `console.error` وحدَه، والصفحةُ بلا حالةِ تحميلٍ ولا خطأ:
+    // فجدولُ الأسطولِ يُرسَمُ **فارغاً** ويُقرأُ «لا سائقين»، و«المتاحين حالياً»
+    // صفراً — دعوى عن الأسطولِ مكانَ «تعذّر القراءة». القاعدةُ مكتوبةٌ في
+    // `ScheduleBoard` و`Orders` بنفسِ الملفِّ: «لا فشل صامت».
+    const [loadError, setLoadError] = useState(false);
+    const [retryKey, setRetryKey] = useState(0);
 
     // Add
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -82,9 +88,13 @@ export default function Drivers() {
             });
             setDrivers(fetched);
             setIsAvailableCount(available);
-        }, (e: unknown) => { console.error("Drivers listener error:", e); });
+            setLoadError(false);
+        }, (e: unknown) => {
+            console.error("Drivers listener error:", e);
+            setLoadError(true);
+        });
         return () => unsubscribe();
-    }, []);
+    }, [retryKey]);
 
     // ── Add ──
     // كانت addDoc تُنشئ مستند drivers فقط: بلا حساب Auth وبلا users/{uid}، فالسائق
@@ -327,7 +337,7 @@ export default function Drivers() {
                     <div className="w-12 h-12 bg-[#FAF1F6] text-[#660033] rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform"><ShieldCheck size={24} /></div>
                 </div>
                 <div className="bg-white p-6 rounded-[20px] shadow-sm border border-slate-100/60 flex items-center justify-between group hover:border-emerald-200 transition-colors">
-                    <div><p className="text-sm font-bold text-slate-500 mb-1">المتاحين حالياً</p><h3 className="text-3xl font-extrabold text-slate-800">{isAvailableCount}</h3></div>
+                    <div><p className="text-sm font-bold text-slate-500 mb-1">المتاحين حالياً</p><h3 className="text-3xl font-extrabold text-slate-800">{loadError ? '—' : isAvailableCount}</h3></div>
                     <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform"><MapPin size={24} /></div>
                 </div>
             </div>
@@ -342,7 +352,13 @@ export default function Drivers() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 p-6 bg-slate-50/30">
-                    {filteredDrivers.length === 0 ? (
+                    {loadError ? (
+                        <div className="col-span-full py-12 text-center">
+                            <p className="text-rose-600 font-bold mb-3">تعذّر تحميل قائمة السائقين — تحقّق من الاتصال أو الصلاحيات.</p>
+                            <p className="text-slate-500 text-sm font-medium mb-4">لا تقرأ هذه الشاشة كأسطول فارغ: البيانات لم تُقرأ أصلاً.</p>
+                            <button type="button" onClick={() => { setLoadError(false); setRetryKey(k => k + 1); }} className="px-5 py-2.5 bg-[#660033] text-white rounded-xl font-bold">إعادة المحاولة</button>
+                        </div>
+                    ) : filteredDrivers.length === 0 ? (
                         <div className="col-span-full py-12 text-center text-slate-500 font-bold">لا يوجد سائقين مطابقين للبحث.</div>
                     ) : filteredDrivers.map(driver => (
                         <div key={driver.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow p-5 relative overflow-hidden group">

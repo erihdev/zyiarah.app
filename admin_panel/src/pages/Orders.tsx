@@ -92,6 +92,11 @@ export default function Orders() {
     const [searchTerm, setSearchTerm] = useState('');
     const [orders, setOrders] = useState<OrderRecord[]>([]);
     const [drivers, setDrivers] = useState<DriverOption[]>([]);
+    // المستمعُ الرئيسُ أدناه يُظهِرُ حالةَ خطأٍ بزرِّ إعادة («لا فشل صامت»)،
+    // ومستمعُ السائقينِ بجوارِه كان `console.error` وحدَه — ففشلُه يَجعلُ
+    // حوارَ الإسنادِ يَطبعُ **«لا يوجد سائقون متاحون حالياً»**: دعوى عن
+    // الأسطولِ تَمنعُ الأدمنَ من إسنادِ طلبٍ مدفوعٍ ولا تُخبرُه بالسبب.
+    const [driversError, setDriversError] = useState(false);
     const [loading, setLoading] = useState(true);
     // فشل المستمع نهائي (Firestore لا يعيد الاشتراك) — كان الدوّار يعلق للأبد بلا
     // رسالة ولا زر إعادة؛ retryKey يعيد تشغيل الاشتراك عند طلب المستخدم.
@@ -152,7 +157,8 @@ export default function Orders() {
 
         const driversUnsub = onSnapshot(collection(db, 'drivers'), (snap) => {
             setDrivers(snap.docs.map(d => ({ id: d.id, name: d.data().name || 'سائق', is_available: d.data().is_available || false, is_active: d.data().is_active !== false })));
-        }, (e) => console.error('Drivers listener error:', e));
+            setDriversError(false);
+        }, (e) => { console.error('Drivers listener error:', e); setDriversError(true); });
 
         return () => { unsub(); pendingUnsub(); driversUnsub(); };
     }, [retryKey]);
@@ -600,7 +606,9 @@ export default function Orders() {
                                 المكيفات، مقاسات الكنب، مواد التنظيف التي يجب أن
                                 يحملها، وعدد عاملات المناسبة وساعاتها. */}
                             <ServiceMetaTable meta={assignModal.service_meta} />
-                            {availableDrivers.length === 0 ? (
+                            {driversError ? (
+                                <p className="text-center text-rose-600 font-bold py-4">تعذّر تحميل قائمة السائقين — أعد تحميل الصفحة. هذه ليست «لا سائقين»: القائمة لم تُقرأ.</p>
+                            ) : availableDrivers.length === 0 ? (
                                 <p className="text-center text-amber-600 font-bold py-4">لا يوجد سائقون متاحون حالياً</p>
                             ) : (
                                 <div className="space-y-2">

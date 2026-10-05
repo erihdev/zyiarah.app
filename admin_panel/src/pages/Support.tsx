@@ -82,6 +82,11 @@ export default function Support() {
     // تفريغ رسائل التذكرة السابقة يتمّ أثناء الرندر عند تغيّر المُحدَّد لا في
     // جسم الأثر: setState هناك يُسبّب رندراً متتالياً تظهر فيه رسائل التذكرة
     // القديمة تحت عنوان التذكرة الجديدة.
+    // فشلُ مستمعِ الرسائلِ كان `console.error` وحدَه، فالخيطُ يُرسَمُ فارغاً
+    // ويُقرأُ **«لا توجد رسائل بعد. كن أول من يرد!»** — والعميلةُ تَنتظرُ رداً
+    // على رسالةٍ مكتوبةٍ لم تُقرأ، فيَرُدُّ الأدمنُ على غيرِ سياق.
+    const [msgError, setMsgError] = useState(false);
+    const [msgRetry, setMsgRetry] = useState(0);
     const [selectedKey, setSelectedKey] = useState(selected?.id ?? null);
     if (selectedKey !== (selected?.id ?? null)) {
         setSelectedKey(selected?.id ?? null);
@@ -94,9 +99,10 @@ export default function Support() {
         const q = query(collection(db, 'support_tickets', selectedKey, 'messages'), orderBy('sentAt', 'asc'));
         const unsub = onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
             setMessages(snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as SupportMessage)));
-        }, (e) => { console.error("Support listener error:", e); });
+            setMsgError(false);
+        }, (e) => { console.error("Support listener error:", e); setMsgError(true); });
         return () => unsub();
-    }, [selectedKey]);
+    }, [selectedKey, msgRetry]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -298,7 +304,12 @@ export default function Support() {
                                     </div>
                                     );
                                 })}
-                                {messages.length === 0 && (
+                                {msgError ? (
+                                    <div className="text-center py-10">
+                                        <p className="text-rose-600 font-bold text-sm mb-3">تعذّر تحميل رسائل التذكرة — لا تَرُدّ على غير سياق.</p>
+                                        <button type="button" onClick={() => { setMsgError(false); setMsgRetry(k => k + 1); }} className="px-4 py-2 bg-[#660033] text-white rounded-lg font-bold text-sm">إعادة المحاولة</button>
+                                    </div>
+                                ) : messages.length === 0 && (
                                     <div className="text-center py-10 text-slate-400">
                                         <MessageSquare size={40} className="mx-auto mb-3 opacity-30" />
                                         <p className="font-bold text-sm">لا توجد رسائل بعد. كن أول من يرد!</p>
