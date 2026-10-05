@@ -124,6 +124,75 @@ void main() {
       expect(diagRaw.contains('notification_queue'), isTrue);
     });
 
+    test('البثُّ المجدول: الاستعلامُ يَسألُ ما تَسألُه المطالبة', () {
+      // **نافذةٌ بـ`limit` تَمتلئُ بما لا يُزيلُه أحد.** كان الاستعلامُ مدًى
+      // واحداً (`scheduled_at <= now`) بلا مساواةٍ على الحالة، و«الحالةُ تُصفّى
+      // في الكود». ومستندُ بثٍّ **مُرسَلٍ** يَحتفظُ بـ`scheduled_at` ماضيةً
+      // فيَظلُّ مطابقاً للأبد، والترتيبُ الضمنيُّ لاستعلامِ المدى هو ذلك الحقلُ
+      // تصاعديّاً: فأقدمُ خمسينَ بثٍّ مُرسَلٍ تَسُدُّ النافذةَ، والمطالبةُ
+      // تَنكُلُ عن كلِّ واحدٍ منها، والجديدُ الذي حلَّ موعدُه لا يُقرأُ أصلاً.
+      expect(has('notifications_log', ['status', 'scheduled_at']), isTrue,
+          reason: 'مساواةٌ على status مع مدًى على scheduled_at تَلزمُها هذه');
+
+      final String fn = File('functions/index.js').readAsStringSync();
+      final String code = fn
+          .split('\n')
+          .where((l) => !l.trimLeft().startsWith('//'))
+          .join('\n');
+      final int at = code.indexOf('db.collection("notifications_log")\n');
+      expect(at, greaterThan(-1), reason: 'استعلامُ الإفراجِ اختفى');
+      final String q = code.substring(at, code.indexOf('.get();', at));
+      expect(q.contains('.where("status", "==", "scheduled")'), isTrue,
+          reason: 'بلا هذه المساواةِ تَعودُ النافذةُ تَمتلئُ بالمُرسَل');
+      expect(q.contains('.where("scheduled_at", "<=", now)'), isTrue);
+
+      // والمطالبةُ تَسألُ السؤالَ نفسَه — الطرفانِ يَتحرّكانِ معاً أو يَسقط.
+      expect(code.contains('if (d.status !== "scheduled" || d.processed === true) return null;'),
+          isTrue,
+          reason: 'شرطُ المطالبةِ هو ما نُقل إلى الاستعلام');
+
+      // **وهذا الـcron ليس شبكةَ أمانٍ لِما بَعُد عن 29 يوماً، بل مَسارُه
+      // الوحيد**: `onNotificationCreated` لا يُجدولُ Cloud Task بعدها.
+      expect(code.contains('29 * 24 * 60 * 60 * 1000'), isTrue,
+          reason: 'إن زال الحدُّ فالاعتمادُ على الـcron يَحتاجُ مراجعة');
+    });
+
+    test('ومَن يَكتبُ scheduled_at يَكتبُ status: scheduled — المجموعةُ كلُّها',
+        () {
+      // التضييقُ آمنٌ ما دام كلُّ مُجدوِلٍ يَكتبُ الحالة. مُحرِّرٌ ثالثٌ
+      // يَكتبُ الموعدَ وحدَه يُصبحُ غيرَ مرئيٍّ للـcron — وهو نمطُ «حقلُ قرارٍ
+      // يَعرفُه مُحرِّرٌ واحد» الذي تَكرّر أربعَ مرّاتٍ في هذا المستودع.
+      final writers = <String>[];
+      for (final d in [Directory('lib'), Directory('admin_panel/src')]) {
+        for (final f in d.listSync(recursive: true).whereType<File>()) {
+          if (!f.path.endsWith('.dart') &&
+              !f.path.endsWith('.ts') &&
+              !f.path.endsWith('.tsx')) {
+            continue;
+          }
+          if (f.path.contains('.test.')) continue;
+          final String src = f.readAsStringSync();
+          if (!src.contains('notifications_log')) continue;
+          if (src.contains("'scheduled_at':") || src.contains('scheduled_at: ')) {
+            writers.add(f.path.split('/').last);
+          }
+        }
+      }
+      expect(writers.toSet(),
+          {'zyiarah_messaging_service.dart', 'Notifications.tsx'},
+          reason: 'مُجدوِلٌ جديدٌ يُراجَع: هل يَكتبُ status: scheduled؟');
+      expect(
+          File('lib/services/zyiarah_messaging_service.dart')
+              .readAsStringSync()
+              .contains("'status': 'scheduled'"),
+          isTrue);
+      expect(
+          File('admin_panel/src/pages/Notifications.tsx')
+              .readAsStringSync()
+              .contains("status: isScheduled ? 'scheduled'"),
+          isTrue);
+    });
+
     test('لا فهرسَ مكرّر', () {
       final seen = <String>{};
       for (final dynamic raw in indexes) {
