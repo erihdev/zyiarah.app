@@ -130,9 +130,16 @@ const _frameworkMembers = {
 };
 
 void main() {
+  // **النطاقُ وُسِّع (2026-10-05):** كان `services` و`utils` وحدَهما، والقاعدةُ
+  // عامّة — فوجّهتُه إلى `models` و`providers` فوَجدَ ثلاثةَ جالباتٍ ميّتة،
+  // أحدُها `UserProvider.profileError` الموثَّقُ بأنّ «الواجهةَ تَعرضُه» ولم
+  // تَكن. (الشاشاتُ خارجَ النطاقِ بقصد: فيها تجاوزاتُ `build`/`initState`
+  // ونداءاتٌ من الشجرةِ لا من الشفرة، فتَحتاجُ تصفيةً أخرى.)
   final scope = [
     ..._dartFiles('lib/services'),
     ..._dartFiles('lib/utils'),
+    ..._dartFiles('lib/models'),
+    ..._dartFiles('lib/providers'),
   ]..sort((a, b) => a.path.compareTo(b.path));
 
   final all = [..._dartFiles('lib'), ..._dartFiles('test')];
@@ -141,7 +148,7 @@ void main() {
     counts[f.path.replaceAll(r'\', '/')] = _identCounts(_mask(f.readAsStringSync()));
   }
 
-  test('لا دالّة ولا جالب ميّتاً في lib/services و lib/utils', () {
+  test('لا دالّة ولا جالب ميّتاً في services/utils/models/providers', () {
     final dead = <String>[];
 
     for (final f in scope) {

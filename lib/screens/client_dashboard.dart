@@ -116,6 +116,8 @@ class _ClientDashboardState extends State<ClientDashboard> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        if (userProvider.profileError != null)
+                          _buildProfileErrorBanner(),
                         _buildActiveTrackingCard(user?.uid),
                         _buildAnimatedItem(_buildPromoBanners()),
                         _buildAnimatedItem(_buildSubscriptionCards(user?.uid)),
@@ -235,6 +237,54 @@ class _ClientDashboardState extends State<ClientDashboard> {
             )),
           ],
         ),
+      ),
+    );
+  }
+
+  /// **القسمُ المنسيُّ من إصلاحٍ سابق.** `UserProvider.profileError` مكتوبٌ
+  /// وموثَّقٌ بأنّ «الواجهةَ تَعرضُه بدل إسقاطِ الجلسةِ صامتاً» — ولم تَكن
+  /// تَعرضُه: فشلُ تحميلِ الملفِّ يُنهي `isLoading`، ويَبقى `user` فارغاً،
+  /// فتُرسَمُ الرئيسيّةُ بلا اسمٍ وببطاقةِ تتبّعٍ بلا معرّف، **ولا كلمةَ
+  /// تُقال**. والجلسةُ سليمةٌ فعلاً (قرارُ «لا نُخرجُ المستخدمةَ أبداً عند
+  /// فشلِ البيانات») — فالنصُّ يَقولُ ذلك كي لا تَظنَّ أنّها خُرِجت، ويُعيدُ
+  /// الزرُّ المحاولةَ عبر `refreshUser` وهو مسارُ التعافي نفسُه.
+  Widget _buildProfileErrorBanner() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.orange.shade300),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off_rounded, color: Colors.orange, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'تعذّر تحميل بياناتكِ — جلستُكِ سليمة.',
+              // `TextStyle` لا `GoogleFonts`: هذا الملفُّ لا يَستورِدُها،
+              // والمحرّكُ يَختارُ أقربَ وزنٍ مُحزَّمٍ بلا استثناء (قاعدةُ
+              // `font_assets_guard_test`).
+              style: TextStyle(
+                  fontSize: 12,
+                  height: 1.4,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange.shade900),
+            ),
+          ),
+          if (uid != null)
+            TextButton(
+              onPressed: () => Provider.of<ZyiarahUserProvider>(context,
+                      listen: false)
+                  .refreshUser(uid),
+              child: const Text('إعادة المحاولة',
+                  style: TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.bold)),
+            ),
+        ],
       ),
     );
   }

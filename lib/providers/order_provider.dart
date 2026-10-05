@@ -70,12 +70,7 @@ class ZyiarahOrderProvider extends ChangeNotifier {
       return status != 'completed' && status != 'cancelled';
     }).toList();
   }
-  
-  List<DocumentSnapshot> get trackingOrders {
-    return recentOrders.where((doc) {
-      final data = doc.data() as Map<String, dynamic>;
-      final status = data['status'] ?? 'pending';
-      return ['accepted', 'in_progress'].contains(status);
-    }).toList();
-  }
+
+  // `trackingOrders` أُزيل: جالبٌ لا قارئَ له — شاشةُ التتبّعِ تَستعلمُ
+  // Firestore مباشرةً بمعرّفِ الطلب — وكان نسخةً سادسةً من تعدادِ الحالات.
 }
