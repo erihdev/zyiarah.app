@@ -1,0 +1,197 @@
+"use strict";
+
+// price_verify: حلُّ منطقةِ الطلبِ، و«هل نوعُه قابلٌ للتحقّقِ من سعره؟».
+// بـ`db` مُزيَّفٍ — لا مُحاكٍ ولا شبكة (قاعدةُ الوحداتِ هنا).
+
+const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
+
+const {resolveZone, isPriceableKind} = require("../price_verify");
+const {PRICEABLE_KINDS, computeExpectedBasePrice} = require("../pricing");
+
+let ok = 0; let fail = 0;
+const t = (name, fn) => {
+  try { fn(); console.log(`ok - ${name}`); ok++; } catch (e) {
+    console.error(`FAIL - ${name}\n    ${e.message}`); fail++;
+  }
+};
+const ta = async (name, fn) => {
+  try { await fn(); console.log(`ok - ${name}`); ok++; } catch (e) {
+    console.error(`FAIL - ${name}\n    ${e.message}`); fail++;
+  }
+};
+
+/** `db` مُزيَّفٌ: مستنداتٌ بالمعرّفِ ومستنداتٌ بالاسم. */
+function fakeDb({byId = {}, byName = {}} = {}) {
+  const calls = {docGets: [], nameQueries: []};
+  const db = {
+    collection(c) {
+      assert.strictEqual(c, "service_zones");
+      return {
+        doc(id) {
+          return {get: async () => {
+            calls.docGets.push(id);
+            const d = byId[id];
+            return {exists: !!d, data: () => d};
+          }};
+        },
+        where(field, op, val) {
+          assert.strictEqual(field, "name");
+          assert.strictEqual(op, "==");
+          return {limit: () => ({get: async () => {
+            calls.nameQueries.push(val);
+            const d = byName[val];
+            return {empty: !d, docs: d ? [{data: () => d}] : []};
+          }})};
+        },
+      };
+    },
+  };
+  return {db, calls};
+}
+
+(async () => {
+  // ─────────── resolveZone ───────────
+  await ta("(١) zone_id يُفضَّل على الاسم", async () => {
+    const {db, calls} = fakeDb({
+      byId: {z1: {name: "فيفا", by: "id"}},
+      byName: {"فيفا": {name: "فيفا", by: "name"}},
+    });
+    const z = await resolveZone(db, {zone_id: "z1", zone_name: "فيفا"});
+    assert.strictEqual(z.by, "id");
+    assert.deepStrictEqual(calls.nameQueries, [], "لا استعلامَ بالاسمِ بعد نجاحِ المعرّف");
+  });
+
+  await ta("(٢) الاسمُ احتياطٌ حين لا يُوجد المعرّف", async () => {
+    const {db, calls} = fakeDb({byName: {"فيفا": {by: "name"}}});
+    const z = await resolveZone(db, {zone_id: "missing", zone_name: "فيفا"});
+    assert.strictEqual(z.by, "name");
+    assert.deepStrictEqual(calls.docGets, ["missing"]);
+  });
+
+  await ta("(٣) الاسمُ وحدَه (ما يَكتبُه التطبيقُ فعلاً اليوم)", async () => {
+    const {db} = fakeDb({byName: {"الدائر": {by: "name"}}});
+    assert.strictEqual((await resolveZone(db, {zone_name: "الدائر"})).by, "name");
+  });
+
+  await ta("(٤) لا منطقةَ ⇒ null (لا رميَ ولا تخمين)", async () => {
+    const {db} = fakeDb({});
+    assert.strictEqual(await resolveZone(db, {zone_name: "لا توجد"}), null);
+    assert.strictEqual(await resolveZone(db, {}), null);
+    assert.strictEqual(await resolveZone(db, null), null);
+  });
+
+  // ─────────── isPriceableKind ───────────
+  t("(٥) كلُّ نوعٍ يُسعّرُه pricing.js قابلٌ للتحقّق", () => {
+    for (const kind of PRICEABLE_KINDS) {
+      assert.ok(isPriceableKind({service_meta: {kind}}), kind);
+    }
+  });
+
+  t("(٦) event_workers منها — وكان غائباً عن التعدادِ اليدويّ", () => {
+    // الثغرةُ بالضبط: نوعٌ يُسعّرُه الخادمُ وكان إسقاطُ المنطقةِ عليه يَمرُّ صامتاً.
+    assert.ok(PRICEABLE_KINDS.includes("event_workers"));
+    assert.ok(isPriceableKind({service_meta: {kind: "event_workers"}}));
+  });
+
+  t("(٧) المتجرُ ليس قابلاً للتحقّق (عناصرُه بلا معرّفِ منتج)", () => {
+    assert.ok(!isPriceableKind({service_meta: {kind: "store_products"}}));
+  });
+
+  t("(٨) بالساعة (بلا service_meta) قابلٌ للتحقّقِ بالمدّة", () => {
+    assert.ok(isPriceableKind({hours_contracted: 4}));
+    assert.ok(!isPriceableKind({}));
+    assert.ok(!isPriceableKind(null));
+  });
+
+  t("(٩) نوعٌ مجهولٌ لا يُقرأ قابلاً للتحقّق", () => {
+    // لو قُرئ قابلاً لأنتجَ تنبيهاً إداريّاً على كلِّ طلبٍ من نوعٍ جديد.
+    assert.ok(!isPriceableKind({service_meta: {kind: "لم_يُولد_بعد"}}));
+    assert.ok(!isPriceableKind({service_meta: {kind: "x"}, hours_contracted: 4}));
+  });
+
+  // ─────────── القائمةُ لا تَنفكُّ عن المُسعِّر ───────────
+  t("(١٠) كلُّ فرعِ kind في pricing.js مُدرَجٌ في PRICEABLE_KINDS", () => {
+    const src = fs.readFileSync(path.join(__dirname, "..", "pricing.js"), "utf8");
+    const body = src.slice(src.indexOf("function computeExpectedBasePrice"));
+    // `kind` وحدَه، غيرَ مسبوقٍ بنقطة: `p.kind === "rug"` داخلَ فرعِ الكنبِ
+    // نوعُ **قطعة** لا نوعُ خدمة — وقد التقطَته أوّلُ صيغةٍ لهذا الفحص.
+    const branches = new Set(
+        [...body.matchAll(/(?:^|[^.\w])kind === "([a-z_]+)"/g)].map((m) => m[1]));
+    // store_products مذكورٌ في تعليقٍ لا في فرعٍ — فالمقارنةُ بالفروعِ وحدَها.
+    assert.deepStrictEqual([...branches].sort(), [...PRICEABLE_KINDS].sort(),
+        `فروعُ المُسعِّر: ${[...branches]} — القائمة: ${PRICEABLE_KINDS}`);
+  });
+
+  t("(١١) الأنواعُ المُدرَجةُ تُحسَبُ فعلاً (ولا تُعيدُ null لغيابِ فرع)", () => {
+    // عيّنةٌ صالحةٌ لكلِّ نوع: غيابُ الفرعِ يُنتجُ null فيَسقطُ الفحص.
+    const zone = {
+      sofaSqmPrice: 10, rugSqmPrice: 20, acMaintSplitPrice: 30,
+      carSmallPrice: 40, eventWorkerHourPrice: 50,
+      packages: {villa: {crews: {"2": {enabled: true, price: 300}}}},
+    };
+    const samples = {
+      sofa_rug_sqm: {pieces: [{kind: "sofa", length_m: 2}]},
+      ac_service: {lines: [{job: "maintenance", type: "split", count: 1}]},
+      car_interior: {lines: [{size: "small", count: 1}]},
+      event_workers: {workers: 2, event_hours: 3},
+      home_package: {homeType: "villa", crewCount: 2},
+    };
+    for (const kind of PRICEABLE_KINDS) {
+      const base = computeExpectedBasePrice(
+          {service_meta: {kind, ...samples[kind]}}, zone);
+      assert.ok(base > 0, `${kind} ⇒ ${base}`);
+    }
+  });
+
+  // ─────────── المسارانِ لا يَفترقانِ مرّةً أخرى ───────────
+  const idx = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
+
+  t("(١٢) لا حلَّ منطقةٍ مكتوباً بيدِه في index.js", () => {
+    assert.ok(!idx.includes(".where(\"name\", \"==\", od.zone_name)"),
+        "نسخةٌ ثالثةٌ من الاستعلامِ — المسارانِ اختلفا هكذا أوّلَ مرّة");
+    assert.strictEqual(
+        (idx.match(/priceVerify\.resolveZone\(/g) || []).length, 2,
+        "مسارُ ميسر ومسارُ المحفظة");
+  });
+
+  t("(١٣) المسارانِ يَطرحانِ الخصمَ الموثوق", () => {
+    assert.strictEqual(
+        (idx.match(/_computeTrustedDiscount\(/g) || []).length, 3,
+        "التعريفُ + نداءانِ (كان نداءً واحداً، فتُرفضُ دفعةُ محفظةٍ بكوبونٍ كبير)");
+  });
+
+  t("(١٤) المسارانِ يَسِمانِ ويُنبّهانِ على ما تعذّر التحقّقُ منه", () => {
+    // تُجرَّدُ أسطرُ التعليقِ أوّلاً: `index.js` يَذكرُ الوسمَ في ترويسةِ
+    // `_flagZoneGeoMismatch` — فعَدَّ الحارسُ ثلاثاً وسَقطَ على التوثيق.
+    const code = idx.split("\n")
+        .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+    assert.strictEqual((code.match(/price_unverifiable/g) || []).length, 2,
+        "كتابةٌ في كلِّ مسار");
+    // ولا يُفرّغُ التجريدُ الفحص.
+    assert.ok(idx.includes("price_unverifiable)"),
+        "ذكرُ الوسمِ في الترويسةِ ما زال — فلو غابَ فالتجريدُ حَجبَ شيئاً");
+    assert.strictEqual(
+        (idx.match(/priceVerify\.isPriceableKind\(/g) || []).length, 2);
+    assert.ok(!/function _isPriceableKind/.test(idx),
+        "التعدادُ اليدويُّ أُزيل — وهو ما أغفلَ event_workers");
+  });
+
+  // ─────────── قاعدةُ الوحدات ───────────
+  t("(١٥) الوحدةُ لا تُهيّئُ Firestore — تَستقبلُ db", () => {
+    const raw = fs.readFileSync(
+        path.join(__dirname, "..", "price_verify.js"), "utf8");
+    const code = raw.split("\n")
+        .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+    for (const bad of ["getFirestore(", "getApp(", "initializeApp("]) {
+      assert.ok(!code.includes(bad), bad);
+    }
+    // ولا يُفرّغُ التجريدُ الفحص: الملفُّ يَذكرُ القاعدةَ في ترويستِه.
+    assert.ok(raw.includes("getFirestore()"),
+        "الترويسةُ تَنصُّ القاعدةَ — فلو غابت فالتجريدُ حَجبَ شيئاً");
+  });
+
+  console.log(`\n${ok} ok, ${fail} failed`);
+  process.exit(fail ? 1 : 0);
+})();
