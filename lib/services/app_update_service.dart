@@ -5,6 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:zyiarah/utils/build_gate.dart';
+import 'package:zyiarah/utils/error_report.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 
 /// إشعار توفّر تحديث للتطبيق — متحكَّم به بالكامل من الإدارة عبر Firestore.
@@ -50,11 +52,15 @@ class ZyiarahAppUpdateService {
       final d = doc.data()!;
       if (d['enabled'] != true) return;
 
-      final String platformField = defaultTargetPlatform == TargetPlatform.iOS
-          ? 'latest_build_ios'
-          : 'latest_build_android';
-      final int latestBuild =
-          ((d[platformField] ?? d['latest_build']) as num?)?.toInt() ?? 0;
+      // القرارُ في `lib/utils/build_gate.dart`: حقلُ المنصّةِ أوّلاً، ثمّ
+      // الموحّدُ للمستنداتِ القديمة، والصفرُ/النصُّ غيرُ الرقميِّ **غيابٌ** لا
+      // بوّابةٌ مفتوحة. كان الصفرُ يُفضَّلُ على الاحتياطيِّ فيُطفئُ المطالبةَ
+      // لتلك المنصّةِ بصمت — وصندوقٌ فارغٌ في أيِّ المحرّرَين كان يَكتبُه.
+      final int? latestBuild = latestBuildFor(d,
+          isIos: defaultTargetPlatform == TargetPlatform.iOS);
+      // لا رقمَ منشوراً مضبوطاً ⇒ لا بوّابة. (الإطفاءُ المقصودُ له
+      // `enabled: false`؛ هذا «لم يُضبَط بعد».)
+      if (latestBuild == null) return;
       final info = await PackageInfo.fromPlatform();
       final int currentBuild = int.tryParse(info.buildNumber) ?? 0;
 
@@ -78,8 +84,14 @@ class ZyiarahAppUpdateService {
           force: force,
         ),
       );
-    } catch (_) {
-      // صامت
+    } catch (e, st) {
+      // صامتٌ **للمستخدمة** — لا يُعطّلُ الواجهةَ ولا يُقلقُها بعطلِ إعداد.
+      // لكنّه لم يكن صامتاً عن الإدارةِ وحدَها: كان `catch (_) {}` فلا أثرَ
+      // لفشلِ البوّابةِ في أيِّ مكان — وهي **شرطُ نشرِ أربعِ قواعدِ أمان**
+      // (حجزُ STAGE-C). ونوعٌ نصّيٌّ في الكونسولِ كان يَرمي هنا بعينِه،
+      // فتَموتُ البوّابةُ للمنصّتَين بلا علمِ أحد. هذا هو المعاملُ الثالثُ في
+      // `error_report.dart`: يُسجَّلُ ولا يُعرَض.
+      reportSilent(e, st, reason: 'app_update_gate_failed');
     }
   }
 

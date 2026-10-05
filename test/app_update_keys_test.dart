@@ -51,12 +51,23 @@ const String _webEditor = 'admin_panel/src/pages/Settings.tsx';
 
 void main() {
   test('القارئ يُفضّل حقلَ المنصّة ويسقط للموحّد عند غيابه فقط', () {
-    final src = _code(_service);
-    expect(src.contains("'latest_build_ios'"), isTrue);
-    expect(src.contains("'latest_build_android'"), isTrue);
-    // الترتيب هو القرار: حقلُ المنصّة أوّلاً ثمّ الموحّد.
-    expect(src.contains("d[platformField] ?? d['latest_build']"), isTrue,
+    // **أُعيد توجيهُه (2026-10-05) لا إسكاتُه.** القرارُ انتقلَ إلى
+    // `lib/utils/build_gate.dart` لأنّ الأسبقيّةَ وحدَها لم تَكن كافية:
+    // الصفرُ ليس `null` فكان يُفضَّلُ على الاحتياطيِّ الموحّدِ ويُطفئُ
+    // البوّابةَ لتلك المنصّةِ بصمت. فالفحصُ يُثبّتُ الأسبقيّةَ **حيث تَسكن**،
+    // وأنّ الخدمةَ لا تُعيدُ كتابتِها، ويَمنعُ الشكلَ القديمَ صراحةً — انظر
+    // `test/build_gate_test.dart` للقاعدةِ وجدولِها.
+    final rule = _code('lib/utils/build_gate.dart');
+    expect(rule.contains("'latest_build_ios'"), isTrue);
+    expect(rule.contains("'latest_build_android'"), isTrue);
+    expect(rule.contains("publishedBuild(d['latest_build'])"), isTrue,
         reason: 'عكسُ الترتيب يُعيد عطلَ 2026-08-31: رقمُ iOS يُطالب أندرويد');
+
+    final src = _code(_service);
+    expect(src.contains('latestBuildFor(d'), isTrue,
+        reason: 'الخدمةُ لا تَسألُ القاعدةَ — فنسخةٌ ثانيةٌ عادت');
+    expect(src.contains("d[platformField] ?? d['latest_build']"), isFalse,
+        reason: 'الشكلُ القديمُ عادَ — والصفرُ فيه يُطفئُ البوّابة');
   });
 
   test('كلا المحرّرَين يكتب حقلي المنصّة', () {

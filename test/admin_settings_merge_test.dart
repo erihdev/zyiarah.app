@@ -18,8 +18,15 @@ void main() {
     expect(s.contains("'enabled': _updateEnabled"), isTrue);
     // (كان يُثبِّت `latest_build` الموحّد — وهو المفتاح الذي **لا** تقرؤه الخدمة
     //  إلا عند غياب حقل المنصّة، فكان الحارس يحرس عطلاً. انظر app_update_keys_test.)
-    expect(s.contains("'latest_build_ios': int.tryParse"), isTrue);
-    expect(s.contains("'latest_build_android':"), isTrue);
+    //
+    // وأُعيد توجيهُه ثانيةً (2026-10-05) وشُدّد: كان يُثبّتُ
+    // `int.tryParse` بعينِه، وهو الشكلُ الذي **يُسقِطُ الفارغَ إلى صفر** —
+    // والصفرُ يُفضَّلُ على الاحتياطيِّ الموحّدِ فيُطفئُ البوّابةَ بصمت. فصارَ
+    // يُثبّتُ القيمةَ **المُتحقَّقَ منها** ويَمنعُ الإسقاطَ.
+    expect(s.contains("'latest_build_ios': iosBuild"), isTrue);
+    expect(s.contains("'latest_build_android': androidBuild"), isTrue);
+    expect(s.contains("'latest_build_ios': int.tryParse"), isFalse,
+        reason: 'الإسقاطُ إلى صفرٍ عادَ — راجِعْ test/build_gate_test.dart');
     expect(s.contains("'force': _updateForce"), isTrue);
     expect(s.contains("'message': _updateMsgCtrl"), isTrue);
   });
