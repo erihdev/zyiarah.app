@@ -73,7 +73,7 @@ class _AcServiceDetailsScreenState extends State<AcServiceDetailsScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('تعذّر تحميل مناطق الخدمة: $e',
+          content: Text('تعذّر تحميل مناطق الخدمة — تحقّقي من اتصالكِ وأعيدي المحاولة',
               style: GoogleFonts.tajawal()),
           backgroundColor: Colors.red,
         ));

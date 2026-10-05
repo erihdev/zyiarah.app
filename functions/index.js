@@ -800,7 +800,7 @@ exports.createTamaraCheckout = onCall(
       }
 
       if (trueAmount === null || isNaN(trueAmount) || trueAmount <= 0) {
-        throw new HttpsError("not-found", "لم يتم العثور على الطلب أو أن قيمة المبلغ غير صالحة في السيرفر");
+        throw new HttpsError("not-found", "تعذّر العثور على الطلب أو أنّ مبلغه غير صالح — أعيدي المحاولة");
       }
 
       const amount = trueAmount;
@@ -864,7 +864,7 @@ exports.createTamaraCheckout = onCall(
           // ككائن — نفس المعلومة، وبلا رميٍ على جسمٍ غير JSON.
           console.error(`Tamara API error ${res.httpStatus}:`, res.result);
           throw new HttpsError(
-              "internal", "فشل إنشاء جلسة الدفع — تحقق من بيانات الطلب");
+              "internal", "تعذّر بدء الدفع بالتقسيط — أعيدي المحاولة أو اختاري طريقةً أخرى");
         }
 
         return {checkoutUrl: res.result.checkout_url};

@@ -230,7 +230,7 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                                 );
                               } catch (e) {
                                 messenger.showSnackBar(
-                                  SnackBar(content: Text('تعذّر تجهيز العقد: $e')),
+                                  const SnackBar(content: Text('تعذّر تجهيز العقد — أعيدي المحاولة')),
                                 );
                               }
                             },

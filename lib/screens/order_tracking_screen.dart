@@ -97,8 +97,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                         if (!mounted) return;
                         _ratingPromptShown = false;
                         messenger.showSnackBar(
-                          SnackBar(
-                            content: Text('تعذّر إرسال التقييم: ${e.toString().replaceAll("Exception: ", "")}'),
+                          const SnackBar(
+                            content: Text('تعذّر إرسال التقييم — تحقّقي من اتصالكِ وأعيدي المحاولة'),
                             backgroundColor: Colors.red,
                           ),
                         );

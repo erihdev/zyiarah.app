@@ -186,7 +186,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         debugPrint('[loadUserData] failed: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('تعذّر تحميل بيانات حسابك: $e',
+            content: Text('تعذّر تحميل بيانات حسابكِ — تحقّقي من اتصالكِ',
                 style: GoogleFonts.tajawal()),
             backgroundColor: Colors.red,
             action: SnackBarAction(
@@ -494,8 +494,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       // وتُرجع null فيُعامَل ككود خاطئ). نُبقي أي كوبون مُطبَّق سابقاً كما هو.
       if (mounted) {
         setState(() => _isValidatingCoupon = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('تعذّر الاتصال — يرجى المحاولة مجدداً: $e'),
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('تعذّر الاتصال — يُرجى المحاولة مجدداً'),
           backgroundColor: Colors.red,
         ));
       }
