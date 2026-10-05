@@ -97,11 +97,22 @@ void main() {
           .contains('لوحة الويب تبني شارة الحالة'), isTrue);
     });
 
-    test('ولوحةُ الويب', () {
+    test('ولوحةُ الويب — مفتاحُها وإنشاءُ السائقِ كلاهما', () {
       final src = code('admin_panel/src/pages/Drivers.tsx');
       expect(src.contains('driverActivationFields(!nowSuspended)'), isTrue);
       expect(src.contains('is_suspended: nowSuspended, is_available:'), isFalse,
           reason: 'الكتابةُ اليدويّةُ عادت');
+      // ورابعُ كاتبٍ: إنشاءُ سائقٍ جديدٍ كان يَكتبُ الزوجَ بيدِه.
+      expect(src.contains('...driverActivationFields(true)'), isTrue,
+          reason: 'إنشاءُ السائقِ يَكتبُ الزوجَ بيدِه');
+      // و`is_available: false` تَبقى صريحةً هناك: الجديدُ لم يَتّصل بعد.
+      expect(
+          src.contains('...driverActivationFields(true),\n                    is_available: false,'),
+          isTrue,
+          reason: 'السائقُ الجديدُ يَلزمُ أن يُنشأَ غيرَ متّصل');
+      // ولا بقيّةَ كتابةٍ يدويّةٍ للزوج: `is_active: true` حرفيّاً اختفت.
+      expect(src.contains('is_active: true,'), isFalse,
+          reason: 'كتابةٌ يدويّةٌ خامسةٌ للزوج');
     });
   });
 

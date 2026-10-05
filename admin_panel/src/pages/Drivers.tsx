@@ -143,9 +143,11 @@ export default function Drivers() {
                     id_number: newDriver.id_number.trim(),
                     id_expiry: newDriver.id_expiry.trim(),
                     license_info: staffType === 'driver' ? newDriver.license_info.trim() : '',
+                    // الزوجُ من `driverActivation` — رابعُ كاتبٍ له، ومصدرُه
+                    // واحد. و`is_available: false` صريحةٌ هنا لأنّ السائقَ
+                    // الجديدَ لم يَتّصل بعد (التفعيلُ لا يَكتبُها عمداً).
+                    ...driverActivationFields(true),
                     is_available: false,
-                    is_active: true,
-                    is_suspended: false,
                     rating: 5.0,
                     rides: 0,
                     monthly_salary: newDriver.monthly_salary,
