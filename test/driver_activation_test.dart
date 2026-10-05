@@ -140,4 +140,104 @@ void main() {
           reason: 'عدّادٌ آخرُ يَستعملُ snap.size بحقٍّ، وهذا لم يَعُد');
     });
   });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // والمالُ: راتبُ مَن تَرَكَ العملَ كان في الميزانيةِ وفي صافي الربح
+  //
+  // `Payroll.tsx` كان يُحمّلُ `is_active` في كلِّ صفٍّ **ولا يَقرؤه شيء**:
+  // لا شارةَ ولا ترشيح. فمَن تَرَكَ العملَ يَبقى في «إجمالي ميزانية
+  // الرواتب» وفي «لم يُصرف بعد»، وزرُّ «صرف للكل» يَصرفُ له وعدّادُ
+  // التأكيدِ يَضمُّه — والمحاسبُ لا يَرى الحالةَ فلا يُطبّقُ أيَّ سياسة.
+  // و`Accountants.tsx` يَخصمُ راتبَه من **صافي الربح** إلى الأبد.
+  //
+  // وحتى لو رشَّحا لكان بحقلٍ واحد: اللوحةُ تَكتبُ `is_suspended` وتطبيقُ
+  // الإدارةِ كان يَكتبُ `is_active`، فمستنداتُ الإنتاجِ تَحملُ هذا أو ذاك.
+  // ══════════════════════════════════════════════════════════════════════
+  group('ولا راتبَ يُجمَعُ خارجَ القاعدة', () {
+    /// كلُّ صفحةٍ في اللوحةِ تَجمعُ `monthly_salary` — مُشتَقّةٌ لا مكتوبة.
+    List<String> salarySummingPages() {
+      final out = <String>[];
+      for (final f in Directory('admin_panel/src/pages')
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.tsx'))) {
+        final c = code(f.path);
+        if (RegExp(r'monthly_salary[^\n]*\)\s*,\s*0\)').hasMatch(c) ||
+            RegExp(r'reduce\(\([^)]*\)\s*=>[^;]*monthly_salary').hasMatch(c)) {
+          out.add(f.path);
+        }
+      }
+      out.sort();
+      return out;
+    }
+
+    test('الصفحتانِ المعروفتانِ هما الجامعتان — وثالثةٌ تُراجَع', () {
+      expect(
+          salarySummingPages(),
+          equals(const [
+            'admin_panel/src/pages/Accountants.tsx',
+            'admin_panel/src/pages/Payroll.tsx',
+          ]),
+          reason: 'صفحةٌ ثالثةٌ تَجمعُ الرواتب — تُراجَعُ بدلَ أن تَمرّ، '
+              'فجمعٌ بلا ترشيحٍ يَضمُّ مَن تَرَكَ العمل');
+    });
+
+    test('وكلٌّ منهما يَمرُّ بـdriverIsDisabled لا بحقلٍ واحد', () {
+      for (final p in salarySummingPages()) {
+        final c = code(p);
+        expect(c.contains("from '../utils/driverActivation'"), isTrue,
+            reason: '$p لا يَستورِدُ القاعدةَ المشترَكة');
+        expect(c.contains('driverIsDisabled('), isTrue,
+            reason: '$p يَجمعُ الرواتبَ بلا ترشيحٍ بالقاعدة');
+        // ولا ترشيحَ بحقلٍ واحدٍ بديلاً عنها
+        expect(RegExp(r"filter\(\s*\(?\w+\)?\s*=>\s*\w+\.is_active\b").hasMatch(c),
+            isFalse,
+            reason: '$p يُرشّحُ بـis_active وحدَه — واللوحةُ تَكتبُ is_suspended');
+      }
+    });
+
+    test('و«صرف للكل» على النشطينَ وحدَهم، وزرُّ الصفِّ يَبقى', () {
+      final pay = code('admin_panel/src/pages/Payroll.tsx');
+      expect(pay.contains("const unpaid = activeRows.filter(r => r.status === 'unpaid');"),
+          isTrue,
+          reason: 'الصرفُ الجماعيُّ عادَ يَضمُّ الموقوفَ بصمت');
+      // وهل يُستحَقُّ راتبُ موقوفٍ قرارٌ تجاريّ: لا نَمنعُه، نَمنعُ الصمت.
+      expect(pay.contains('markPaid(row)'), isTrue,
+          reason: 'زرُّ الصفِّ الواحدِ هو المَخرجُ المقصود — لا يُحذَف');
+      expect(pay.contains('موظف نشط'), isTrue,
+          reason: 'عدّادُ التأكيدِ لا يَقولُ إنّهم النشطون');
+    });
+
+    test('والشارةُ تُظهِرُ الموقوفَ في الصفّ', () {
+      final pay = code('admin_panel/src/pages/Payroll.tsx');
+      expect(pay.contains('driverIsDisabled(row)'), isTrue);
+      expect(pay.contains('موقوف'), isTrue,
+          reason: 'صفٌّ لا يُميّزُه شيءٌ هو أصلُ العطل');
+      // والحقلُ المفقودُ يُحمَّلُ فعلاً، وإلّا كانت القاعدةُ تَقرأُ undefined
+      expect(pay.contains('is_suspended: data.is_suspended ?? false,'), isTrue,
+          reason: 'بلا تحميلِ الحقلِ تَقرأُ القاعدةُ undefined فتَمرُّ دائماً');
+    });
+
+    test('والأرقامُ تُسمّي ما تَعُدّ', () {
+      final pay = code('admin_panel/src/pages/Payroll.tsx');
+      final acc = code('admin_panel/src/pages/Accountants.tsx');
+      expect(pay.contains('ميزانية رواتب الكوادر النشطة'), isTrue,
+          reason: 'عنوانٌ يَقولُ «إجمالي» على مجموعٍ مُرشَّحٍ يُضلّل');
+      expect(pay.contains('stoppedTotal'), isTrue,
+          reason: 'مجموعُ الموقوفينَ يُعرَضُ لا يُخفى — الفرقُ مُفسَّر');
+      expect(acc.contains('رواتب الكوادر النشطة شهرياً'), isTrue);
+      expect(acc.contains('activeDrivers.length'), isTrue,
+          reason: 'متوسطُ الراتبِ يُقسَمُ على نفسِ الجمهورِ الذي جُمِع');
+    });
+
+    test('والمسحُ قرأَ صفحاتٍ فعلاً — حارسٌ عقيمٌ أسوأُ من لا حارس', () {
+      final pages = Directory('admin_panel/src/pages')
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.tsx'))
+          .length;
+      expect(pages, greaterThanOrEqualTo(10),
+          reason: 'تعدادُ صفحاتِ اللوحةِ انهار ($pages) — الفحوصُ أعلاه فارغة');
+    });
+  });
 }

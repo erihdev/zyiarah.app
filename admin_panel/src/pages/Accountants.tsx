@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { DollarSign, ArrowUpRight, TrendingUp, Users, Banknote, ShoppingBag, CreditCard, Wallet } from 'lucide-react';
+import { driverIsDisabled } from '../utils/driverActivation';
 
 interface Order {
     id: string;
@@ -17,6 +18,10 @@ interface Order {
 interface Driver {
     monthly_salary?: number;
     name?: string;
+    // حقلا التعطيل: `driverIsDisabled` يَقرأُ أيَّهما كفى (كالخادم). كان
+    // «إجمالي الرواتب» و«صافي الربح» يَضُمّانِ مَن تَرَكَ العملَ إلى الأبد.
+    is_active?: boolean;
+    is_suspended?: boolean;
 }
 
 interface Transaction {
@@ -81,7 +86,18 @@ export default function Accountants() {
     }, []);
 
     const totalRevenue = orders.reduce((sum, o) => sum + (o.amount || 0), 0);
-    const totalPayroll = drivers.reduce((sum, d) => sum + (d.monthly_salary || 0), 0);
+    // **الكوادرُ النشطةُ وحدَها.** كان الجمعُ على كلِّ مستندٍ في `drivers`،
+    // فراتبُ مَن تَرَكَ العملَ يُخصَمُ من «صافي الربح» إلى الأبد — ورقمُ ربحٍ
+    // أقلُّ من الحقيقةِ يُغيّرُ قراراتِ المالك. والقاعدةُ هي المشترَكةُ لا حقلٌ
+    // واحد: اللوحةُ تَكتبُ `is_suspended` وتطبيقُ الإدارةِ كان يَكتبُ
+    // `is_active`، فمستنداتُ الإنتاجِ تَحملُ هذا أو ذاك.
+    //
+    // **والمتبقّي مُعلَن:** المصدرُ الحقيقيُّ لِما صُرِفَ فعلاً هو
+    // `payroll_records` (تَقرؤه صفحةُ «الرواتب»)، وهذه الشاشةُ تَستعملُ
+    // الرواتبَ الحيّةَ تقديراً — فاستثناءُ الموقوفِ أقربُ إلى الحقيقةِ من
+    // ضمِّه، لا بديلٌ عن القراءةِ من السجلّ.
+    const activeDrivers = drivers.filter(d => !driverIsDisabled(d));
+    const totalPayroll = activeDrivers.reduce((sum, d) => sum + (d.monthly_salary || 0), 0);
     // amount شامل ضريبة 15% (مستحقة لهيئة الزكاة، ليست إيراداً) — نصفّيها قبل حساب الربح
     // كي لا يتضخّم «صافي الربح». متّسق مع الفاتورة/ZATCA/التحليلات.
     // كانت المعادلة معكوسة: `total − total/1.15` = **حصة الضريبة** (13% من الإجمالي)
@@ -168,13 +184,13 @@ export default function Accountants() {
                             <Banknote size={22} strokeWidth={2.5} />
                         </div>
                     </div>
-                    <p className="text-slate-500 text-sm font-medium mb-1">إجمالي الرواتب الشهرية</p>
+                    <p className="text-slate-500 text-sm font-medium mb-1">رواتب الكوادر النشطة شهرياً</p>
                     {loading ? (
                         <div className="h-7 w-28 bg-slate-100 rounded-lg animate-pulse"></div>
                     ) : (
                         <h3 className="text-2xl font-extrabold text-slate-800">{formatCurrency(totalPayroll)} <span className="text-sm font-bold text-slate-400">ر.س</span></h3>
                     )}
-                    <p className="text-xs text-slate-400 mt-1">{drivers.length} موظف</p>
+                    <p className="text-xs text-slate-400 mt-1">{activeDrivers.length} موظف نشط من {drivers.length} مسجل</p>
                 </div>
 
                 {/* Order Count */}
@@ -239,13 +255,13 @@ export default function Accountants() {
                             <Users size={16} className="text-slate-400" /> ملخص الموظفين
                         </div>
                         <div className="flex items-center justify-between">
-                            <span className="text-sm text-slate-500">عدد السائقين</span>
-                            <span className="font-extrabold text-slate-800">{drivers.length}</span>
+                            <span className="text-sm text-slate-500">عدد الكوادر النشطة</span>
+                            <span className="font-extrabold text-slate-800">{activeDrivers.length}</span>
                         </div>
                         <div className="flex items-center justify-between mt-1">
                             <span className="text-sm text-slate-500">متوسط الراتب</span>
                             <span className="font-bold text-slate-700">
-                                {drivers.length > 0 ? formatCurrency(totalPayroll / drivers.length) : 0} ر.س
+                                {activeDrivers.length > 0 ? formatCurrency(totalPayroll / activeDrivers.length) : 0} ر.س
                             </span>
                         </div>
                     </div>
