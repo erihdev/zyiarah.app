@@ -201,4 +201,56 @@ test("(م) المضادّة: الشكلانِ القديمانِ ما زالا �
       "اختفى اقتباسُ سقفِ العدِّ القديمِ من التوثيق");
 });
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// (ن) نافذةُ استردادِ الإلغاءِ لا تَحتفظُ بما لا دَينَ فيه
+//
+// المُرشِّحاتُ السريعةُ كانت تَتخطّى بـ`continue` وتُبقي `needs_refund: true`،
+// فالمستندُ يَبقى في نافذةِ الـ200 **إلى الأبد**. وأخطرُها زيارةُ الباقة:
+// تُولَّدُ `is_paid: true` و`amount: 0`، وإلغاءُ العميلةِ لها يَكتبُ
+// `needs_refund = is_paid` أي `true`، و`onOrderRewards` يَستثني الاشتراكَ فلا
+// يُودِعُ شيئاً — فكلُّ زيارةِ باقةٍ مُلغاةٍ تَشغلُ خانةً دائماً، وعدّادُها
+// عددُ الإلغاءاتِ في عمرِ التطبيق. وهو العطلُ الذي أُغلق في المحرّكِ نفسِه
+// ثمّ أُعيد من هذا الموضع.
+test("(ن١) ما لا دَينَ فيه يُطفأُ علمُه لا يُتخطّى", () => {
+  const at = code.indexOf("cancelled-refund retried=");
+  assert.ok(at > -1, "سطرُ سجلِّ المكنسةِ اختفى");
+  const blk = code.slice(Math.max(0, at - 2600), at);
+  assert.ok(/needs_refund: false/.test(blk),
+      "المكنسةُ لا تُطفئُ العلمَ — فالمستندُ يَبقى في النافذةِ أبداً");
+  // الخمسةُ تُطفَأُ في فرعٍ واحدٍ لا تُتخطّى كلٌّ وحدَه.
+  for (const term of [
+    "d.refund_credited === true",
+    "d.payment_status === \"refunded\"",
+    "d.auto_refund_processed === true",
+    "d.payment_method === \"subscription\"",
+  ]) {
+    assert.ok(blk.includes(term), `المُرشِّحُ ${term} اختفى`);
+    assert.ok(!new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") +
+        "\\) continue;").test(blk),
+    `${term} ما زال يَتخطّى بلا إطفاء`);
+  }
+});
+
+test("(ن٢) زيارةُ الباقةِ هي السببُ، وما زالت تُولَّدُ كذلك", () => {
+  // لو تغيّرَ توليدُ الزيارةِ (مثلاً `is_paid: false`) فالتعليلُ يُراجَعُ لا
+  // يُسكَت: النافذةُ قد لا تَزدحمُ أصلاً.
+  const at = code.indexOf("payment_method: \"subscription\"");
+  assert.ok(at > -1);
+  const blk = code.slice(Math.max(0, at - 400), at + 200);
+  assert.ok(/amount: 0/.test(blk), "زيارةُ الباقةِ لم تَعُد بمبلغٍ صفر");
+  assert.ok(/is_paid: true/.test(blk), "زيارةُ الباقةِ لم تَعُد مدفوعة");
+  assert.ok(/status: "pending"/.test(blk),
+      "لو لم تُولَّد pending فزرُّ الإلغاءِ لا يَظهرُ ويَسقطُ التعليل");
+});
+
+test("(ن٣) وغيابُ المالكِ وحدَه يُبقي العلمَ — ويُعَدّ", () => {
+  const at = code.indexOf("cancelled-refund retried=");
+  const blk = code.slice(Math.max(0, at - 2600), at + 300);
+  assert.ok(/if \(!d\.client_id\) \{ unknown\+\+; continue; \}/.test(blk),
+      "غيابُ المالكِ يَجبُ أن يُعَدَّ لا أن يُتخطّى بصمت");
+  assert.ok(/released=\$\{released\}/.test(blk) &&
+      /unknown=\$\{unknown\}/.test(blk),
+  "العدّادانِ لا يُطبَعان — فالتراكمُ يَبقى غيرَ مرئيّ");
+});
 console.log(`\nops_sweep_window tests: ${passed} passed`);
