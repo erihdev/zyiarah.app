@@ -178,6 +178,39 @@ function fakeDb({byId = {}, byName = {}} = {}) {
         "التعدادُ اليدويُّ أُزيل — وهو ما أغفلَ event_workers");
   });
 
+  // ─────────── الصفرُ ليس «لا تحقّق» ───────────
+  t("(١٦) مسارُ المحفظةِ يُميّزُ `null` من `0`", () => {
+    const code = idx.split("\n")
+        .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+    // `if (pkgExpectedGross && …)` يَقرأُ الصفرَ كاذباً فيُطفئُ الفحصَين.
+    assert.ok(!code.includes("if (pkgExpectedGross && amount <"),
+        "الصفرُ يُطفئُ الفحصَ — ميّزْ null من 0");
+    assert.ok(code.includes("pkgExpectedGross !== null"),
+        "تعذّرُ التحقّقِ يُقال null لا 0");
+    assert.ok(code.includes("suspiciousZero"),
+        "خصمٌ يَبلغُ السعرَ كاملاً مع دفعٍ موجبٍ يُوسَم");
+    // وبالمقابل: اللفظُ ما زال في الخامّ (التعليقُ يَشرحُ الشرطَ المحذوف).
+    assert.ok(idx.includes("if (pkgExpectedGross && …)"),
+        "شرحُ الشرطِ المحذوفِ ما زال — فلو غابَ فالتجريدُ حَجبَ شيئاً");
+  });
+
+  t("(١٧) ولا يَرفضُ على الصفرِ — كما لا يَرفضُ مسارُ ميسر", () => {
+    const code = idx.split("\n")
+        .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+    const i = code.indexOf("const suspiciousZero = verifiable");
+    assert.ok(i > -1);
+    const j = code.indexOf("runTransaction", i);
+    const block = code.slice(i, j);
+    const throwAt = block.indexOf("throw new HttpsError");
+    const zeroAt = block.indexOf("suspiciousZero ||");
+    assert.ok(throwAt > -1 && zeroAt > -1);
+    assert.ok(throwAt < zeroAt,
+        "الرفضُ قبلَ الوسم، والصفرُ في فرعِ الوسمِ وحدَه");
+    // أرضيّةُ ميسر التي تَستثني كوبونَ الـ~100% من الإنفاذِ ما زالت.
+    assert.ok(code.includes("expectedNet >= 5"),
+        "أرضيّةُ Tier B هي ما يَجعلُ «لا رفض» هنا متّسقاً");
+  });
+
   // ─────────── قاعدةُ الوحدات ───────────
   t("(١٥) الوحدةُ لا تُهيّئُ Firestore — تَستقبلُ db", () => {
     const raw = fs.readFileSync(

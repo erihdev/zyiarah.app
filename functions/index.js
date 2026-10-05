@@ -2209,11 +2209,25 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
       console.error("[wallet-pricing] recompute failed:", e.message);
     }
   }
-  if (pkgExpectedGross && amount < pkgExpectedGross * 0.2) {
+  // **`0` ليس «لا تحقّق».** `null` تعني تعذّر التحقّق، والصفرُ يعني خصماً
+  // يَبلغُ السعرَ كاملاً — ومع دفعٍ موجبٍ فهو مريب، وهو ما يُسمّيه مسارُ ميسر
+  // `suspiciousZero` ويَسِمُه Tier A. وكان `if (pkgExpectedGross && …)`
+  // يَقرأُ الصفرَ كاذباً **فيُطفئُ الفحصَين معاً** — نفسُ شكلِ «الصفرُ قرارٌ
+  // لا غياب» في `amounts.js`. (أُدخلت هذه الحالةُ بطرحِ الخصمِ الموثوق؛
+  // قبلَه كان `expected > 0` دائماً.)
+  const verifiable = pkgExpectedGross !== null;
+  const suspiciousZero = verifiable && pkgExpectedGross === 0 && amount > 0;
+  if (verifiable && pkgExpectedGross > 0 &&
+      amount < pkgExpectedGross * 0.2) {
     throw new HttpsError("failed-precondition",
         "المبلغ لا يطابق السعر المعتمد لمنطقتك");
   }
-  if (pkgExpectedGross && amount < pkgExpectedGross * 0.5) {
+  // لا رفضَ على `suspiciousZero`: مسارُ ميسر لا يَرفضُه كذلك — أرضيّةُ
+  // `expectedNet >= 5` فيه تَستثني كوبونَ الـ~100% عمداً، فرفضُه هنا كان
+  // سيُعيدَ الخللَ الذي طرحُ الخصمِ أصلحَه، في الاتجاهِ المقابل.
+  if (suspiciousZero ||
+      (verifiable && pkgExpectedGross > 0 &&
+       amount < pkgExpectedGross * 0.5)) {
     await orderRef.update({
       price_mismatch: true,
       price_expected: pkgExpectedGross,
