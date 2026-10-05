@@ -179,6 +179,62 @@ void main() {
     });
   });
 
+  group('بطاقاتُ «الطلبات» في لوحةِ المالك تَعدُّ ما يَقولُ عنوانُها', () {
+    test('لا حالةَ ميتةً في عدّادِ البطاقات', () {
+      final code = insights.split('\n').where((l) {
+        final t = l.trimLeft();
+        return !t.startsWith('//') && !t.startsWith('///');
+      }).join('\n');
+      // `waiting_payment` (بلا `a` وبلا `approved_`) لا يَكتبُها شيءٌ على طلب.
+      expect(RegExp(r"(?<![_a-z])waiting_payment").hasMatch(code), isFalse,
+          reason: 'الاسمُ الحيُّ awaiting_payment');
+      expect(code.contains("'status'] == 'pending'"), isFalse,
+          reason: 'pending على طلبِ متجرٍ صفرٌ بنيويّ');
+      // وبالمقابل: اللفظُ ما زال في التعليقِ الذي يَشرحُ إزالتَه.
+      expect(insights.contains('waiting_payment'), isTrue);
+    });
+
+    test('بطاقةُ الإسنادِ تَعدُّ ما قبلَ الإسنادِ بلا سائق', () {
+      expect(insights.contains('kPreDispatchStatuses.contains'), isTrue);
+      expect(insights.contains("hasDriver"), isTrue,
+          reason: 'طلبٌ له سائقٌ لا يَنتظرُ إسناداً');
+      expect(insights.contains('طلبات بانتظار الإسناد'), isTrue);
+      // العنوانُ القديمُ مذكورٌ في التعليقِ الذي يَشرحُ تغييرَه، فنُجرّدُ أوّلاً.
+      final c = insights.split('\n').where((l) {
+        final t = l.trimLeft();
+        return !t.startsWith('//') && !t.startsWith('///');
+      }).join('\n');
+      expect(c.contains('الطلبات المجدولة'), isFalse,
+          reason: 'العنوانُ كان يُسمّي ما لا يَعدّ');
+      expect(insights.contains('الطلبات المجدولة'), isTrue,
+          reason: 'لو غابَ من الخامِّ فالتجريدُ حَجبَ شيئاً');
+    });
+
+    test('بطاقةُ المتجرِ تَمرُّ بالقاعدةِ المشتركة', () {
+      expect(insights.contains('storeOrderNeedsAction('), isTrue);
+      expect(insights.contains('طلبات متجر تحتاج إجراء'), isTrue);
+    });
+
+    test('بطاقةُ العقودِ تَعدُّ فعلاً، ولا صفرَ مكتوباً بيدِه', () {
+      expect(insights.contains('count: 0,'), isFalse,
+          reason: 'رقمٌ لم يَحسبْه أحد');
+      expect(insights.contains('_pendingContracts'), isTrue);
+      expect(insights.contains("collection('contracts')"), isTrue);
+      expect(insights.contains('عقود بانتظار المراجعة'), isTrue);
+    });
+
+    test('عدُّ العقودِ `count()` بلا حقلٍ مُجمَّع فلا فهرسَ مركّباً', () {
+      // الجملةُ وحدَها حتّى `.get());` — نافذةٌ بعدِّ الأحرفِ كانت تَبتلعُ
+      // الاستعلامَ التالي (وفيه `orderBy`) فتَسقطُ بلا سبب.
+      final i = insights.indexOf("collection('contracts')");
+      final block = insights.substring(i, insights.indexOf('.get());', i) + 8);
+      expect(block.contains('.count()'), isTrue);
+      expect(block.contains('orderBy'), isFalse,
+          reason: 'ترتيبٌ فوقَ مساواةٍ يَطلبُ فهرساً مركّباً');
+      expect(block.contains('sum(') || block.contains('average('), isFalse);
+    });
+  });
+
   group('الأساس الذي بُنيت عليه القاعدة', () {
     test('طلبُ المتجرِ يُنشَأ awaiting_payment لا pending', () {
       // لو تغيّر هذا فالقاعدةُ تَحتاجُ مراجعةً لا إسكاتاً.

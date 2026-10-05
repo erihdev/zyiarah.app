@@ -10,6 +10,7 @@ import 'package:zyiarah/screens/admin/admin_store_orders_screen.dart';
 import 'package:zyiarah/screens/admin/admin_contracts_screen.dart';
 import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/order_activity.dart';
+import 'package:zyiarah/utils/order_lifecycle.dart';
 
 class AdminInsightsScreen extends StatefulWidget {
   // الدور يصل من AdminDashboardScreen (مطبَّع: admin→super_admin) — نحتاجه لتخطي
@@ -26,6 +27,10 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
   List<DocumentSnapshot> _maintenance = [];
   List<DocumentSnapshot> _drivers = [];
   List<DocumentSnapshot> _storeOrders = [];
+
+  /// عقودٌ حالتُها `pending` — «قيد المراجعة» في شاشةِ العقود، وهي وحدَها
+  /// ما يَنتظرُ قراراً إداريّاً. كان رقمُ البطاقةِ `0` مكتوباً بيدِه.
+  int _pendingContracts = 0;
   int _userCount = 0;
   bool _isLoading = true;
 
@@ -65,6 +70,11 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       // كان يضخّم «إجمالي العملاء». (حسابات العملاء تُكتب بـ role='client'.)
       final usersF      = guarded(db.collection('users').where('role', isEqualTo: 'client').count().get());
       final driversF    = guarded(db.collection('drivers').limit(200).get());
+      // عدٌّ خادميٌّ (لا جلبُ مستندات): القواعدُ تُجيزُ قراءةَ العقودِ لكلِّ
+      // الأدوارِ الإداريّة (`isAdmin`)، ومساواةٌ واحدةٌ بلا ترتيبٍ فلا فهرسَ
+      // مركّباً تَحتاجُه (`count()` بلا حقلٍ مُجمَّع — راجع بطاقةَ الإيرادات).
+      final contractsF  = guarded(db.collection('contracts')
+          .where('status', isEqualTo: 'pending').count().get());
       final storeF      = canReadStore
           ? guarded(db.collection('store_orders').orderBy('created_at', descending: true).limit(500).get())
           : Future<QuerySnapshot<Map<String, dynamic>>?>.value(null);
@@ -73,6 +83,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       final usersSnap       = await usersF;
       final driversSnap     = await driversF;
       final storeSnap       = await storeF;
+      final contractsSnap   = await contractsF;
 
       if (!mounted) return;
       setState(() {
@@ -82,6 +93,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
         _userCount   = usersSnap?.count ?? _userCount;
         _drivers     = driversSnap?.docs ?? _drivers;
         _storeOrders = storeSnap?.docs ?? _storeOrders;
+        _pendingContracts = contractsSnap?.count ?? _pendingContracts;
         _isLoading   = false;
       });
       if (firstError != null) {
@@ -744,8 +756,24 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
 
   Widget _buildLivePulseSection() {
     // Calculating New (Pending) Counts for each section
-    final int cleaningNew = _orders.where((doc) => (doc.data() as Map)['status'] == 'pending' || (doc.data() as Map)['status'] == 'waiting_payment').length;
-    final int storeNew = _storeOrders.where((doc) => (doc.data() as Map)['status'] == 'pending').length;
+    // بطاقاتُ هذا الصفِّ كانت تَعرضُ ثلاثةَ أرقامٍ لا تُقابلُ عناوينَها:
+    //  * «الطلبات المجدولة» كانت تَعدُّ `pending` و`waiting_payment` — ولا أحدَ
+    //    يَكتبُ `waiting_payment` على طلب (الاسمُ الحيُّ `awaiting_payment`،
+    //    و`approved_waiting_payment` للعقودِ شيءٌ آخر)، ولا تَعدُّ `scheduled`
+    //    إطلاقاً. فالعنوانُ يَقولُ «مجدولة» والرقمُ يَقولُ غيرَه.
+    //  * «طلبات المتجر» كانت تَعدُّ `pending`، ولا أحدَ يَكتبُها على طلبِ
+    //    متجر — **صفرٌ بنيويّ** (الدورة: awaiting_payment ⇒ under_review ⇒
+    //    delivering ⇒ delivered).
+    //  * «عقود تنفيذية» كان رقمُها `0` مكتوباً بيدِه في الشفرة.
+    // الثلاثةُ الآن «ما يَنتظرُ إجراءً منك»، وكلُّ عنوانٍ يَقولُ ما يَعدُّه.
+    final int cleaningNew = _orders.where((doc) {
+      final d = doc.data() as Map;
+      final hasDriver = '${d['driver_id'] ?? ''}'.trim().isNotEmpty;
+      return kPreDispatchStatuses.contains(d['status']) && !hasDriver;
+    }).length;
+    final int storeNew = _storeOrders
+        .where((doc) => storeOrderNeedsAction((doc.data() as Map)['status']))
+        .length;
 
     // بطاقتا «خدمات بالساعة» و«طلبات المتجر» تفتحان شاشتين حكرهما على مديري
     // الطلبات (تبويب الطلبات في اللوحة وقيود firestore.rules) — كانتا تظهران
@@ -788,22 +816,22 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
           childAspectRatio: MediaQuery.of(context).size.width > 600 ? 1.3 : 1.15,
           children: [
             _buildLuxuryRequestCard(
-              title: "الطلبات المجدولة",
+              title: "طلبات بانتظار الإسناد",
               count: cleaningNew,
               icon: Icons.cleaning_services_rounded,
               gradient: const [Color(0xFF1E293B), Color(0xFF475569)], // Gray/Slate
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminOrdersScreen())),
             ),
             _buildLuxuryRequestCard(
-              title: "طلبات المتجر",
+              title: "طلبات متجر تحتاج إجراء",
               count: storeNew,
               icon: Icons.shopping_basket_rounded,
               gradient: const [Color(0xFF1E1B4B), Color(0xFF312E81)], // Deep Indigo
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminStoreOrdersScreen())),
             ),
             _buildLuxuryRequestCard(
-              title: "عقود تنفيذية",
-              count: 0, 
+              title: "عقود بانتظار المراجعة",
+              count: _pendingContracts,
               icon: Icons.history_edu_rounded,
               gradient: const [Color(0xFF581C87), Color(0xFF701A75)], // Purple/Fuchsia
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminContractsScreen())),
