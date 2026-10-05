@@ -1960,7 +1960,9 @@ exports.onOrderRewards = onDocumentUpdated({document: "orders/{orderId}", cpu: 0
           }
           if (didFlip) {
             await queuePush(clientId, "تم إعادة رصيد لمحفظتك 💰",
-                `تم إيداع مبلغ ${amount} ر.س في محفظتك للطلب الملغي #${code}.`,
+                // `.toFixed(2)` كثلاثةِ نظائرِها في الملفّ — كانت وحدَها خامّاً،
+                // فتُقرأُ «172.5 ر.س» بينما رسائلُ الاسترداد تَقولُ «172.50».
+                `تم إيداع مبلغ ${amount.toFixed(2)} ر.س في محفظتك للطلب الملغي #${code}.`,
                 "wallet_credit", {orderId: orderId});
           }
         }
