@@ -58,6 +58,13 @@ const tabbyWebhookSecret = defineSecret("TABBY_WEBHOOK_SECRET");
 // التجريبي 1 ر.س خارج مداها أصلاً — تصبح فاعلة مع التسعير الحقيقي).
 const ENFORCE_PRICE_TIER_B = true;
 
+// حدُّ مسحِ المحافظِ السالبة (opsHealthSweep، الكتلة ٤). المجموعتانِ هناك
+// جمهورُ **خللٍ** لا جمهورُ استعمال — صفرٌ في الحالةِ السليمة — فتُقرآنِ
+// كاملتَين لا مقصوصتَين، وتجاوزُ هذا الحدِّ خبرٌ بذاته يُنبَّهُ عنه بالعددِ
+// وحدَه بلا تعداد. لا يُستبدَلُ بـ`limit()` على الاستعلام: القصُّ قبلَ
+// الترشيحِ هو العطلُ نفسُه الذي أُغلق.
+const NEG_WALLET_SCAN_MAX = 500;
+
 // 1. Notify user when admin replies to a support ticket
 exports.sendNotificationOnTicketReply = onDocumentCreated({document: "support_tickets/{ticketId}/messages/{messageId}", cpu: 0.083},
     async (event) => {
@@ -4855,27 +4862,80 @@ exports.opsHealthSweep = onSchedule(
 
       // 4) محافظ سالبة: كل الكتابة خادمية، فالسالب إما خلل منطق أو استرداد تجاوز
       //    الرصيد — يهم المحاسبة فوراً.
+      //
+      //    **عطلانِ في خمسةِ أسطر، كلاهما من عائلةٍ أُغلقت ثلاثَ مرّاتٍ هنا.**
+      //    (أ) النافذةُ كانت `where("balance","<",0).limit(200)` ثم يُرشَّحُ
+      //    `ops_negative_alerted` **في الكودِ بعدَ القصّ** — ولا شيءَ في
+      //    المستودعِ يَمحو العلمَ ولا يُصلِّحُ رصيداً سالباً، فالموسومُ يَبقى
+      //    في النافذةِ أبداً. ومدًى (`< 0`) يُرتَّبُ ضمناً بذلك الحقلِ
+      //    **تصاعديّاً**، فالمئتانِ الأكثرُ سَلباً تَسُدُّ النافذةَ ومحفظةٌ
+      //    جديدةٌ بسالبٍ صغيرٍ **لا تُقرأُ أصلاً**: لا احتمالاً بل بنيةً.
+      //    والشكلُ الصحيحُ على بُعدِ أربعينَ سطراً — الكتلتانِ (٥) و(٦)
+      //    تَستعلمانِ العلمَ لا الحالة.
+      //    (ب) والعلمُ لا يُمحى عند التعافي: محفظةٌ عادَت موجَبةً ثم سَلبت
+      //    مرّةً أخرى **لا يُنبَّهُ عنها إطلاقاً**، لأنّ العلمَ يَعني
+      //    «أخبرناكَ مرّةً، يوماً ما» لا «أخبرناكَ عن هذه الحادثة». وهذا هو
+      //    الفرعُ القريبُ الوقوع: استردادٌ زائدٌ يُصحِّحُه المحاسبُ، ثم آخرُ
+      //    لاحقاً بلا كلمة.
+      //
+      //    والعلاجُ أن تُقرأَ المجموعتانِ كاملتَينِ لا مقصوصتَين: السالبُ
+      //    الآن (ن) والموسومُ سابقاً (و). يُنبَّهُ عن ن\و ويُمحى العلمُ عن
+      //    و\ن. وكلتاهما جمهورُ **خللٍ** لا جمهورُ استعمال — صفرٌ في الحالةِ
+      //    السليمة — فقراءتُهما كاملةً آمنة، ويَحرُسُها عَدٌّ خادميٌّ أوّلاً
+      //    (`count()` بمدًى واحدٍ أو بمساواةٍ واحدةٍ ⇒ لا فهرسَ مركَّب)،
+      //    فانفجارُ العددِ نفسُه هو الخبرُ ولا يُعدَّدُ مستنداً مستنداً.
       try {
-        const snap = await db.collection("wallets")
-            .where("balance", "<", 0).limit(200).get();
-        const negs = snap.docs.map((doc) => ({doc, d: doc.data()}));
-        const fresh = negs.filter(({d}) => d.ops_negative_alerted !== true);
-        if (fresh.length) {
-          const sample = fresh.slice(0, 5)
-              .map(({doc, d}) => `${doc.id.slice(0, 6)}…: ${Number(d.balance).toFixed(2)}`)
-              .join("، ");
-          // الوسم بعد نجاح الإشعار فقط — فشله يعيد المحاولة الدورة القادمة.
+        const negQ = db.collection("wallets").where("balance", "<", 0);
+        const flagQ = db.collection("wallets")
+            .where("ops_negative_alerted", "==", true);
+        const [negCount, flagCount] = await Promise.all([
+          negQ.count().get().then((a) => a.data().count),
+          flagQ.count().get().then((a) => a.data().count),
+        ]);
+        if (negCount > NEG_WALLET_SCAN_MAX || flagCount > NEG_WALLET_SCAN_MAX) {
           await queuePush("ADMIN_BROADCAST", "محافظ برصيد سالب ⚠️",
-              `${fresh.length} محفظة رصيدها سالب (${sample}` +
-              `${fresh.length > 5 ? ` و${fresh.length - 5} غيرها` : ""}) — ` +
-              "كل الكتابة خادمية؛ راجع سجل المعاملات فقد يكون خللاً أو استرداداً زائداً.",
-              "admin_order_alert", {count: fresh.length},
+              `${negCount} محفظة رصيدها سالب — عددٌ يتجاوز حدَّ المسح ` +
+              `(${NEG_WALLET_SCAN_MAX})، وهو بذاته خللٌ منهجيٌّ لا حالاتٌ ` +
+              "فرديّة. كل الكتابة خادمية؛ راجع سجل المعاملات فوراً.",
+              "admin_order_alert", {count: negCount},
               ["super_admin", "accountant_admin"]);
-          for (const {doc} of fresh) {
-            await doc.ref.update({ops_negative_alerted: true}).catch(() => {});
+          console.error("opsHealthSweep: negative wallets above scan cap: " +
+            `negative=${negCount}, flagged=${flagCount}`);
+        } else {
+          const [negSnap, flagSnap] = await Promise.all([negQ.get(), flagQ.get()]);
+          const negs = negSnap.docs.map((doc) => ({doc, d: doc.data()}));
+          const fresh = negs.filter(({d}) => d.ops_negative_alerted !== true);
+          if (fresh.length) {
+            const sample = fresh.slice(0, 5)
+                .map(({doc, d}) => `${doc.id.slice(0, 6)}…: ${Number(d.balance).toFixed(2)}`)
+                .join("، ");
+            // الوسم بعد نجاح الإشعار فقط — فشله يعيد المحاولة الدورة القادمة.
+            await queuePush("ADMIN_BROADCAST", "محافظ برصيد سالب ⚠️",
+                `${fresh.length} محفظة رصيدها سالب (${sample}` +
+                `${fresh.length > 5 ? ` و${fresh.length - 5} غيرها` : ""}) — ` +
+                "كل الكتابة خادمية؛ راجع سجل المعاملات فقد يكون خللاً أو استرداداً زائداً.",
+                "admin_order_alert", {count: fresh.length},
+                ["super_admin", "accountant_admin"]);
+            for (const {doc} of fresh) {
+              await doc.ref.update({ops_negative_alerted: true}).catch(() => {});
+            }
           }
+          // تَصريفُ العلم: ما عادَ رصيدُه ≥ 0 يُمحى وسمُه (و\ن). بلا هذا يَعني
+          // العلمُ «مرّةً يوماً ما» فتُبتلَعُ الحادثةُ الثانية. وغيرُ الرقميِّ
+          // لا يُمحى: `NaN >= 0` كاذب، وهو التصرّفُ المحافظ.
+          let cleared = 0;
+          for (const doc of flagSnap.docs) {
+            if (Number(doc.data().balance ?? 0) >= 0) {
+              await doc.ref.update({
+                ops_negative_alerted: FieldValue.delete(),
+              }).catch(() => {});
+              cleared += 1;
+            }
+          }
+          console.log("opsHealthSweep: negative wallets total=" +
+            `${negs.length}, newly alerted=${fresh.length}, ` +
+            `flags cleared=${cleared}`);
         }
-        console.log(`opsHealthSweep: negative wallets total=${negs.length}, newly alerted=${fresh.length}`);
       } catch (e) {
         console.error("opsHealthSweep: wallet check failed:", e.message);
       }
@@ -6103,13 +6163,19 @@ exports.deleteDriverAccount = onCall({cpu: 0.083}, async (request) => {
   // حارس تكامل: حذف سائق وسط مهمة حيّة يترك الطلب بلا منفّذ والعميل يتتبّع
   // سائقاً غير موجود. نمنع الحذف ونطلب إعادة الإسناد أولاً — لا نحذف بصمت.
   const ACTIVE = ["assigned", "accepted", "on_the_way", "in_progress", "scheduled"];
-  const activeSnaps = await Promise.all(
+  // الحارسُ نفسُه يَسألُ «> 0» فحسب، لكنّ **الرسالةَ تَطبعُ رقماً** — وكان
+  // `limit(5)` لكلِّ مجموعةٍ يَسقُفُه عند عشرة: فسائقٌ عليه اثنتا عشرةَ مهمّةً
+  // حيّةً يُقالُ للأدمنِ «لديه ١٠ طلب نشط»، فيُعيدُ إسنادَ عشرٍ ويَظنُّ أنّه
+  // أفرغَه. وهي عائلةُ «لا رقمَ قبل أن نعرفه» بعينِها، فالعدُّ خادميٌّ الآن:
+  // مساواةٌ + `in` بلا مدًى ⇒ لا فهرسَ مركَّب (كما كان الاستعلامُ المقصوص)،
+  // وقراءةٌ واحدةٌ أرخصُ من خمسةِ مستندات.
+  const activeCounts = await Promise.all(
       ["orders", "store_orders"].map((col) => db.collection(col)
           .where("driver_id", "==", driverId)
           .where("status", "in", ACTIVE)
-          .limit(5).get()),
+          .count().get().then((a) => a.data().count)),
   );
-  const activeCount = activeSnaps.reduce((n, s) => n + s.size, 0);
+  const activeCount = activeCounts.reduce((n, c) => n + c, 0);
   if (activeCount > 0) {
     throw new HttpsError("failed-precondition",
         `لا يمكن حذف السائق: لديه ${activeCount} طلب نشط — أعد إسنادها لسائق آخر أولاً.`);

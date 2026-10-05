@@ -108,4 +108,97 @@ test("(و) المضادّة: الشكلُ القديمُ ما زال موثَّ�
   assert.ok(code.length < src.length, "التجريدُ لم يُزِل شيئاً — نمطٌ معطوب");
 });
 
+test("(ز) نافذةُ المحافظِ السالبةِ بلا قصٍّ — المجموعتانِ تُقرآنِ كاملتَين", () => {
+  // العطلُ كان `where("balance","<",0).limit(200)` ثم ترشيحُ العلمِ في الكود:
+  // القصُّ قبلَ الترشيح. ومدًى يُرتَّبُ ضمناً بحقلِه تصاعديّاً، فالأكثرُ سَلباً
+  // يَسُدُّ النافذةَ ومحفظةٌ جديدةٌ بسالبٍ صغيرٍ لا تُقرأُ أصلاً.
+  assert.ok(code.includes(
+      "const negQ = db.collection(\"wallets\").where(\"balance\", \"<\", 0);"),
+  "استعلامُ المحافظِ السالبةِ تغيّر — راجِعْ أنّه ما زال بلا قصّ");
+  assert.ok(!/where\("balance", "<", 0\)[\s\S]{0,60}\.limit\(/.test(code),
+      "عادَ `limit` إلى استعلامِ السالب — فالموسومُ يَسُدُّ النافذةَ مرّةً أخرى");
+  assert.ok(code.includes("const [negSnap, flagSnap] = await Promise.all("),
+      "المجموعتانِ (السالبُ الآن، والموسومُ سابقاً) تُقرآنِ معاً");
+});
+
+test("(ح) ويَحرُسُهما عَدٌّ خادميٌّ أوّلاً، فالانفجارُ لا يُعدَّدُ", () => {
+  assert.ok(code.includes("negQ.count().get()") &&
+    code.includes("flagQ.count().get()"),
+  "العَدُّ بـcount(): قراءةٌ واحدةٌ لكلٍّ، ومدًى/مساواةٌ أحاديّةٌ بلا فهرسٍ مركَّب");
+  assert.ok(/const NEG_WALLET_SCAN_MAX = \d+;/.test(code),
+      "حدُّ المسحِ ثابتٌ مُسمّى، لا رقمٌ مبثوثٌ في الاستعلام");
+  const i = code.indexOf("negCount > NEG_WALLET_SCAN_MAX");
+  assert.ok(i > -1, "فرعُ تجاوزِ الحدِّ اختفى");
+  const branch = code.slice(i, i + 900);
+  assert.ok(branch.includes("queuePush(\"ADMIN_BROADCAST\""),
+      "تجاوزُ الحدِّ خبرٌ بذاته — يُنبَّهُ عنه بالعددِ وحدَه");
+  assert.ok(!/\.limit\(/.test(branch),
+      "لا قصَّ في فرعِ الانفجار: إمّا العددُ وحدَه أو القراءةُ كاملة");
+});
+
+test("(ط) والعلمُ يُمحى عند التعافي — وإلّا فالحادثةُ الثانيةُ تُبتلَع", () => {
+  // العلمُ كان يَعني «أخبرناكَ مرّةً، يوماً ما»: محفظةٌ عادَت موجَبةً ثم سَلبت
+  // مرّةً أخرى لا يُنبَّهُ عنها إطلاقاً. وهذا الفرعُ هو القريبُ الوقوع.
+  assert.ok(code.includes("ops_negative_alerted: FieldValue.delete()"),
+      "لا محوَ للعلمِ عند التعافي — فالسلبُ الثاني صامتٌ أبداً");
+  const i = code.indexOf("for (const doc of flagSnap.docs)");
+  assert.ok(i > -1, "حلقةُ التصريفِ اختفت");
+  const loop = code.slice(i, i + 420);
+  assert.ok(loop.includes("Number(doc.data().balance ?? 0) >= 0"),
+      "التصريفُ مشروطٌ بالتعافي؛ و`??` لا `||` على المال، والنصُّ غيرُ الرقميِّ " +
+    "لا يُمحى (NaN >= 0 كاذب) وهو التصرّفُ المحافظ");
+});
+
+test("(ي) ومواضعُ العلمِ أربعةٌ بعينِها، والعميلُ ليس كاتباً", () => {
+  // العلمُ خادميٌّ بالبناء: `wallets` مُغلقةٌ على العميلِ في القواعد، فلو
+  // انفتحت صارَ ضبطُه سلفاً إسكاتاً للتنبيهِ الوحيدِ على خللِ مال.
+  const sites = (code.match(/ops_negative_alerted/g) || []).length;
+  assert.strictEqual(sites, 4,
+      `مواضعُ العلمِ في الشفرةِ = ${sites} (المتوقَّع ٤: الاستعلام، الترشيح، ` +
+    "الوسم، المحو) — موضعٌ خامسٌ يُراجَعُ بدلَ أن يَمرّ");
+  const rules = fs.readFileSync(
+      path.join(__dirname, "..", "..", "firestore.rules"), "utf8");
+  const i = rules.indexOf("match /wallets/{walletId}");
+  assert.ok(i > -1, "قاعدةُ المحافظِ اختفت");
+  assert.ok(rules.slice(i, i + 260).includes("allow write: if false"),
+      "المحافظُ ما زالت مُغلقةً على العميل — وهو ما يَجعلُ العلمَ موثوقاً");
+});
+
+test("(ك) ولا فهرسَ مركَّبٌ لـwallets: الاستعلامانِ أحاديّا الحقل", () => {
+  const idx = JSON.parse(fs.readFileSync(
+      path.join(__dirname, "..", "..", "firestore.indexes.json"), "utf8"));
+  const w = (idx.indexes || []).filter((x) => x.collectionGroup === "wallets");
+  assert.strictEqual(w.length, 0,
+      "أُضيف فهرسٌ مركَّبٌ لـwallets — الاستعلامانِ لا يَلزمُهما واحدٌ " +
+    "(مدًى على حقلٍ واحدٍ، ومساواةٌ على حقلٍ واحد)، والفهرسُ بلا استعلامٍ " +
+    "كلفةُ كتابةٍ بلا مقابل");
+  assert.deepStrictEqual(idx.fieldOverrides || [], [],
+      "استثناءُ فهرسةٍ أحاديّةٍ يُبطِلُ أحدَ الاستعلامَين بصمت");
+});
+
+test("(ل) وعدُّ مهامِّ السائقِ الحيّةِ رقمٌ حقيقيٌّ لا مقصوفٌ بـlimit", () => {
+  // الحارسُ يَسألُ «> 0» فحسب، لكنّ الرسالةَ تَطبعُ العدد: `limit(5)` لكلِّ
+  // مجموعةٍ كان يَسقُفُه عند عشرة، فيُعيدُ الأدمنُ إسنادَ عشرٍ ويَظنُّ أنّه
+  // أفرغَ السائق.
+  const i = code.indexOf("const activeCounts = await Promise.all(");
+  assert.ok(i > -1, "عدُّ المهامِّ الحيّةِ قبلَ حذفِ السائقِ اختفى");
+  const blk = code.slice(i, i + 560);
+  assert.ok(blk.includes(".count().get().then((a) => a.data().count)"),
+      "العَدُّ خادميٌّ: مساواةٌ + in بلا مدًى ⇒ لا فهرسَ مركَّب، وقراءةٌ واحدة");
+  assert.ok(!blk.includes(".limit("),
+      "عادَ القصُّ — فالرقمُ المطبوعُ للأدمنِ ليس الرقمَ الحقيقيّ");
+  assert.ok(code.includes("لديه ${activeCount} طلب نشط"),
+      "الرسالةُ ما زالت تَطبعُ العدد — وهو ما يَجعلُ دقّتَه شرطاً");
+});
+
+test("(م) المضادّة: الشكلانِ القديمانِ ما زالا موثَّقَين في الخامّ", () => {
+  // لو غابا فالتجريدُ حَجبَ أكثرَ من التعليقاتِ ولم يَبقَ للفحصِ ما يَجده.
+  assert.ok(src.includes("`where(\"balance\",\"<\",0).limit(200)`"),
+      "اختفى اقتباسُ نافذةِ السالبِ القديمةِ من التوثيق");
+  assert.ok(src.includes("أخبرناكَ مرّةً، يوماً ما"),
+      "اختفى وصفُ معنى العلمِ القديمِ من التوثيق");
+  assert.ok(src.includes("`limit(5)` لكلِّ مجموعةٍ يَسقُفُه عند عشرة"),
+      "اختفى اقتباسُ سقفِ العدِّ القديمِ من التوثيق");
+});
+
 console.log(`\nops_sweep_window tests: ${passed} passed`);
