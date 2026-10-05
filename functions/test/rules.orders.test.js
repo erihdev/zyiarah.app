@@ -69,6 +69,48 @@ const {setDoc, doc} = require("firebase/firestore");
           {client_id: uid, status: "awaiting_payment", amount: 200}),
       true);
 
+  // ── أعلامُ الثقةِ الخادميّةُ الباقية (2026-10-05) ────────────────────
+  //
+  // القائمةُ كانت ثمانيةً، وبقيةُ أعلامِ الخادمِ مكشوفةً — **وواحدٌ منها
+  // يُسكِتُ التنبيهَ الوحيدَ لمسارِ المحفظة**: `opsHealthSweep` يُنبّه عبر
+  // `alertBatch(docs, "ops_alerted_mismatch")`، وهي تُسقِطُ كلَّ مستندٍ العلمُ
+  // فيه `true` سلفاً؛ ومسارُ المحفظةِ يَسِمُ `price_mismatch` **بصمتٍ**
+  // ويَتّكلُ على ذلك المسحِ وحدَه. فإنشاءُ الطلبِ بالعلمِ مضبوطاً ثمّ دفعُ
+  // أقلَّ من نصفِ السعرِ وفوقَ خُمسِه (فلا يُرفَض) = خدمةٌ بسعرٍ ناقصٍ **بلا
+  // تنبيهٍ أبداً**.
+  await check("mute: ops_alerted_mismatch at create -> DENIED",
+      setDoc(doc(db, "orders/mute1"),
+          {client_id: uid, status: "pending", is_paid: false,
+            ops_alerted_mismatch: true, amount: 200}),
+      false);
+  // الحجزُ الذي يُعطّلُ Tier B: ضبطُه سلفاً يَجعلُ `voidOrRefundTampered`
+  // تُعيدُ «already» بلا نداءِ البوّابةِ أصلاً.
+  await check("mute: tamper_handled at create -> DENIED",
+      setDoc(doc(db, "orders/mute2"),
+          {client_id: uid, status: "pending", is_paid: false,
+            tamper_handled: true, amount: 200}),
+      false);
+  // `final_amount` يَتقدّمُ تدرّجَ المبالغِ كلَّه في `amounts.js` ولا يَكتبُه
+  // شيءٌ في المستودعِ (١٢ قراءةً خادميّة، صفرُ كتابات).
+  await check("trust: final_amount at create -> DENIED",
+      setDoc(doc(db, "orders/mute3"),
+          {client_id: uid, status: "pending", is_paid: false,
+            final_amount: 1, amount: 200}),
+      false);
+  await check("mute: auto_refund_processed at create -> DENIED",
+      setDoc(doc(db, "orders/mute4"),
+          {client_id: uid, status: "pending", is_paid: false,
+            auto_refund_processed: true, amount: 200}),
+      false);
+  // ولا يُكسَرُ الإنشاءُ الشرعيُّ: الحقولُ التي يَكتبُها التطبيقُ فعلاً تمرّ.
+  await check("legit: the app's own create fields -> ALLOWED",
+      setDoc(doc(db, "orders/ok3"),
+          {client_id: uid, status: "pending", is_paid: false, amount: 200,
+            coupon_code: "X10", discount_amount: 20, zone_name: "فيفا",
+            service_name: "تنظيف منزلي", hours_contracted: 4,
+            booking_date: "2026-10-06", booking_time_slot: "10:00"}),
+      true);
+
   // Existing protections still hold.
   await check("spoof: client_id != uid -> DENIED",
       setDoc(doc(db, "orders/spoof1"),

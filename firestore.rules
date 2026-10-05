@@ -206,6 +206,34 @@ service cloud.firestore {
           // كان يزرع سائقاً من اختياره في مهامّه ويتجاوز محرّك التوزيع (لا مسار شرعي
           // في التطبيق يكتبه عند الإنشاء).
           'driver_id',
+
+          // ⚠️ **أعلامُ الثقةِ الخادميّةُ (2026-10-05).** كانت القائمةُ ثمانيةً،
+          // وبقيةُ أعلامِ الخادمِ مكشوفةً للإنشاء — **وواحدٌ منها يُسكِتُ
+          // التنبيهَ الوحيدَ لمسارِ المحفظة**:
+          //
+          // `opsHealthSweep` يُنبّه عبر `alertBatch(docs, 'ops_alerted_mismatch')`،
+          // وهي **تُسقِطُ كلَّ مستندٍ العلمُ فيه `true` سلفاً** («نبّهنا عنه»).
+          // ومسارُ المحفظةِ يَسِمُ `price_mismatch` **بصمتٍ** ويَتّكلُ على هذا
+          // المسحِ وحدَه (تعليقُه في `index.js` يَقولُه: «مسار المحفظة يَسِم
+          // بصمت فيغطيه الفحص الدوري»). فعميلةٌ تُنشئُ طلبَها بـ
+          // `ops_alerted_mismatch: true` ثمّ تَدفعُ من المحفظةِ أقلَّ من نصفِ
+          // السعرِ وفوقَ خُمسِه (فلا يُرفَض): تُخدَم، ويُوسَمُ الطلبُ، **ولا
+          // يُنبَّهُ أحدٌ أبداً**.
+          //
+          // والثلاثةُ الأخرى من عائلةِ `alertBatch` نفسِها، و`tamper_handled`
+          // هو حجزُ Tier B (ضبطُه سلفاً يَجعلُ `voidOrRefundTampered` تُعيد
+          // «already» بلا نداءِ البوّابة)، و`final_amount` يَتقدّمُ تدرّجَ
+          // المبالغِ كلَّه في `amounts.js`.
+          //
+          // ولا كاتبَ شرعيّاً لأيٍّ منها في العميل: صفرُ كتاباتٍ في `lib/`
+          // للثمانيةِ، و`final_amount` ١٤ قراءةً بلا كتابة.
+          'ops_alerted_mismatch', 'ops_alerted_noshow',
+          'ops_alerted_paid_awaiting', 'ops_alerted_stuck',
+          'tamper_handled', 'tamper_blocked',
+          'price_mismatch', 'price_unverifiable', 'price_expected',
+          'price_expected_net', 'price_shadow_ratio',
+          'auto_refund_processed', 'auto_refund_alerted', 'stranded_alerted',
+          'coupon_rejected_reason', 'final_amount',
         ]);
 
       // Orders manager: full update (approve, assign driver -> scheduled, override status)
