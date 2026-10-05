@@ -45,33 +45,80 @@ void main() {
       expect(lint, lessThan(deploy));
     });
 
-    test('بلا --force: حذفُ دالّةٍ قرارٌ بشريّ لا أثرٌ جانبيّ', () {
+    test('«لا حذفَ صامتاً» حارسٌ صريحٌ يَسبقُ النشرَ، لا غيابُ علَم', () {
       expect(wf.contains('--non-interactive'), isTrue,
           reason: 'سؤالٌ تفاعليٌّ في CI يعني تعليقاً حتى المهلة');
-      // **النطاقُ هو نداءُ النشرِ وحدَه، لا الملفُّ كلُّه.** نصُّ رسالةِ
-      // الفشلِ (خطوةُ «Surface the failure») يَشرحُ القرارَ بتسميةِ العلمِ
-      // في `echo` — وهو **شفرةٌ لا تعليق**، فالتجريدُ لا يَحجبُه وسقطَ
-      // الفحصُ على رسالةٍ شرحيّة. وهو الفخُّ المسجَّلُ أحدَ عشرَ مرّةً في
-      // هذه الجلسة، بثوبٍ جديد: المحظورُ لم يَظهرْ في تعليقٍ بل في نصٍّ
-      // يُطبَع. والعلمُ في أيِّ موضعٍ آخرَ غيرُ ضارّ؛ الضارُّ أن يكونَ في
-      // النداء.
+      // **القرارُ نفسُه لم يَتغيّر؛ ما تغيّرَ هو مَن يُنفّذُه.** كان يُنفَّذُ
+      // بغيابِ `--force` — وهي حمايةٌ بالمصادفة: أثرٌ جانبيٌّ لعدمِ التفاعل.
+      // ثم تَبيّنَ أنّ `--non-interactive` تَرفضُ كذلك **سياسةَ إعادةِ
+      // المحاولةِ** (`retry: true` على مُعالِجَي طابورَي الإشعارات، وهي
+      // مقصودة) إلّا بـ`--force`، فتَوقّفَ النشرُ كلُّه: كلُّ تشغيلٍ منذ
+      // دمجِ الطابورِ المنفصلِ فشلَ برسالةٍ واحدة، وبقيت الإصلاحاتُ
+      // الخادميّةُ مدمَجةً وغيرَ عاملة — وهي الحفرةُ التي كُتب هذا السيرُ
+      // لسدِّها. فالحمايةُ صارت خطوةً تَقولُ ما تَحرُس، وتَسبقُ النشر.
+      final iGuard = wf.indexOf('- name: Refuse a silent deletion');
       final iDep = wf.indexOf('- name: Deploy');
+      expect(iGuard, greaterThan(-1),
+          reason: 'حارسُ الحذفِ اختفى — و`--force` بلاهُ يَحذفُ صامتاً');
       expect(iDep, greaterThan(-1), reason: 'خطوةُ النشرِ اختفت');
+      expect(iGuard, lessThan(iDep),
+          reason: 'الحارسُ **بعدَ** النشرِ لا يَحرُسُ شيئاً');
+
       final nextStep = wf.indexOf('      - name:', iDep + 10);
       final deployStep =
           wf.substring(iDep, nextStep < 0 ? wf.length : nextStep);
       expect(deployStep.contains('firebase-tools'), isTrue,
           reason: 'الاقتطاعُ لم يُصِب نداءَ النشر — فحصٌ أجوف');
-      expect(deployStep.contains('--force'), isFalse,
-          reason: '`--force` يوافق تلقائياً على **حذف** دوالّ غابت عن الشيفرة '
-              '— فمسحُ ملفٍّ سهواً يمحوها من الإنتاج بلا سؤال');
-      expect(wf.contains('--force'), isTrue,
-          reason: 'القرارُ موثَّقٌ في رأس الملفّ؛ غيابُه من النصّ الخام يعني '
-              'أنّ التجريد ابتلع أكثر ممّا يجب وأنّ الفحصَ أعلاه أجوف');
-      expect(wf.contains('--only functions'), isTrue,
+      // و`--force` مشروطٌ لا مباح: مسموحٌ **لأنّ** الحارسَ أعلاه أثبتَ أنّ لا
+      // حذفَ معلَّقاً. فلو زالَ الحارسُ سقطَ الفحصُ أعلاه.
+      expect(deployStep.contains('--force'), isTrue,
+          reason: 'بلا `--force` يَرفضُ النشرُ سياسةَ إعادةِ المحاولةِ فيَتوقّفُ '
+              'كلُّ نشرٍ — وهو العطلُ الذي عطّلَ سبعةَ تشغيلاتٍ متتالية');
+      expect(deployStep.contains('--only functions'), isTrue,
           reason: 'لا تُنشَر القواعدُ ولا الاستضافةُ من هذا المسار');
-      expect(wf.contains('--project zyiarah-app'), isTrue,
+      expect(deployStep.contains('--project zyiarah-app'), isTrue,
           reason: 'المشروعُ صريحٌ — لا يُستنتج من بيئةٍ قد تتغيّر');
+    });
+
+    test('والحارسُ يَقرأُ المنشورَ فعلاً، ويَفشلُ مُغلَقاً', () {
+      final iGuard = wf.indexOf('- name: Refuse a silent deletion');
+      final nextStep = wf.indexOf('      - name:', iGuard + 10);
+      final step = wf.substring(iGuard, nextStep < 0 ? wf.length : nextStep);
+      expect(step.contains('functions:list'), isTrue,
+          reason: 'الحارسُ لا يَقرأُ ما هو منشورٌ فعلاً — فلا يَعرفُ ما يُحذَف');
+      expect(step.contains('--json'), isTrue,
+          reason: 'صيغةٌ غيرُ مستقرّةٍ تُحلَّلُ خطأً فتُقرأُ «لا شيءَ يُحذَف»');
+      expect(step.contains('.github/scripts/refuse_deletion.py'), isTrue,
+          reason: 'المُحلِّلُ في ملفٍّ لا heredoc — التداخلُ أفسدَ YAML من قبل');
+
+      // والمُحلِّلُ نفسُه: قدرةٌ لا وجودٌ. **حارسٌ مجوَّفٌ هو ما لم يَقضم في
+      // كاشفِ الانحراف** حين كان الفحصُ `existsSync` وحدَه.
+      final g = File('.github/scripts/refuse_deletion.py').readAsStringSync();
+      expect(g.contains('def deployed_ids('), isTrue);
+      expect(g.contains('def source_exports('), isTrue);
+      expect(g.contains(r"r'^exports\.([A-Za-z_][A-Za-z0-9_]*)\s*='") ||
+              g.contains(r'exports\.([A-Za-z_][A-Za-z0-9_]*)'), isTrue,
+          reason: 'لا يَستخرجُ تصديراتِ المصدر — فالمقارنةُ بلا طرف');
+      expect(g.contains('live - src_names'), isTrue,
+          reason: 'الاتّجاهُ مهمّ: المنشورُ ناقصاً المصدرَ هو الحذفُ المعلَّق');
+      // يَفشلُ مُغلَقاً، و**كلُّ فرعٍ مُسمّى بنصِّه**. اختبارُ قضمٍ لم يَقضم
+      // كشفَ أنّ عبارةً مشترَكةً وعتبةَ عَدٍّ لا تَكفيان: حذفُ فرعِ «تعذّرَ
+      // التحليل» وحدَه مرَّ أخضرَ لأنّ العبارةَ ترِدُ مرّتَين و`return 1`
+      // بَقيَ فوقَ العتبة. فالفروعُ تُسمّى واحداً واحداً.
+      const closedBranches = {
+        'تعذّر قراءةُ مُدخلِ الحارس': 'تعذّرُ قراءةِ المُدخل',
+        'تعذّر تحليلُ قائمةِ الدوالِّ المنشورة': 'قائمةٌ غيرُ مقروءة',
+        'لم يُعثَرْ على أيِّ `exports.` في المصدر': 'مصدرٌ بلا تصدير',
+        'النشرُ سيَحذفُ من الإنتاج': 'حذفٌ معلَّق',
+      };
+      for (final e in closedBranches.entries) {
+        expect(g.contains(e.key), isTrue,
+            reason: 'فرعُ الفشلِ «${e.value}» زال — فالحارسُ يَفشلُ مفتوحاً '
+                'في تلك الحالة، أي يُجيزُ `--force` بلا علمٍ بما يُحذَف');
+      }
+      expect(RegExp(r'return 1').allMatches(g).length,
+          greaterThanOrEqualTo(closedBranches.length + 1),
+          reason: 'مَخارجُ الفشلِ أقلُّ من الفروعِ المُسمّاةِ + فحصِ الوسائط');
     });
 
     test('المفتاحُ من سرِّ المستودع، لا من الشيفرة، ويُمحى بعدها', () {
