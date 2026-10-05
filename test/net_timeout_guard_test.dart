@@ -98,6 +98,10 @@ const Map<String, String> _statefulCallFiles = {
   'lib/screens/admin/admin_order_details_screen.dart':
       'استرداد/إلغاء/تحصيل + إسناد سائق + نقل موعد',
   'lib/screens/admin/admin_drivers_screen.dart': 'حذفُ حساب سائق',
+  // حذفُ موظّف: يَحذفُ حسابَ Auth **أوّلاً** ثمّ المستندات، فـ«انقضت
+  // المهلة» ليست «لم يحدث شيء» بحالٍ — قد يكون الحسابُ أُغلق والمستنداتُ
+  // باقية. نصٌّ يَقول «لا نعرف» قرارٌ مستقلٌّ كأخواتِه.
+  'lib/screens/admin/admin_managers_screen.dart': 'حذفُ حساب موظّف (Auth أوّلاً)',
 };
 
 /// مواضعُ نداءِ دالّةٍ سحابيّة بلا مهلة في مصدرٍ مُقنَّع.

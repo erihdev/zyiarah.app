@@ -68,6 +68,20 @@ function body(name) {
 // ─────────────────────────────────────────────────────────────────────────
 // المساراتُ الماليّةُ التي يُنادِيها **العميلُ** (لا `_assertAdmin`) وتَقرأُ
 // مستنداً بمعرّفٍ من `request.data`. لكلٍّ سببُ إدراجِه.
+// **مُعيِّناتُ الصلاحيّةِ الإداريّةِ تُشتَقُّ ولا تُكتَبُ بيدٍ.** كان الفحصُ
+// يَعرفُ تهجئةً واحدةً (`_assertAdmin`)، فحين أُضيف `_assertSuperAdmin`
+// (لعمليّةٍ تَحصرُها القواعدُ على `isSuperAdmin()`) دخلَ نداءٌ **إداريٌّ**
+// في مجموعةِ «المسارات العميليّة» — أي أنّ الحارسَ كان يَعمى عن تهجئةٍ
+// ثانيةٍ بدلَ أن يَفشلَ عالياً. فالقائمةُ مُشتَقّةٌ من المصدرِ، ومُقابَلةٌ
+// بمجموعةٍ مثبّتةٍ كي يُراجَعَ مُعيِّنٌ ثالثٌ بدلَ أن يُوسِّعَ النطاقَ بصمت.
+const ADMIN_ASSERTIONS = [...code.matchAll(
+    /^async function (_assert\w*Admin)\(/gm)].map((m) => m[1]).sort();
+t("(أ٠) مُعيِّناتُ الصلاحيّةِ هي المعروفةُ وحدَها", () => {
+  assert.deepStrictEqual(ADMIN_ASSERTIONS,
+      ["_assertAdmin", "_assertSuperAdmin"],
+      "مُعيِّنُ صلاحيّةٍ جديدٌ — أضِفْه بوعيٍ أو انظر لِمَ أُضيف");
+});
+
 const CLIENT_MONEY_CALLABLES = {
   createTamaraCheckout: "جلسةُ تقسيطٍ على طلبٍ بمعرّفٍ من العميل",
   payWithWallet: "خصمٌ من المحفظةِ لطلبٍ بمعرّفٍ من العميل",
@@ -82,7 +96,8 @@ t("(أ) المجموعةُ كاملةً: كلُّ مسارٍ ماليٍّ عمي
   for (const m of code.matchAll(/^exports\.(\w+) = onCall/gm)) {
     const name = m[1];
     const b = body(name);
-    if (b.includes("_assertAdmin") || b.includes("adminRoles.includes")) continue;
+    if (ADMIN_ASSERTIONS.some((a) => b.includes(a)) ||
+        b.includes("adminRoles.includes")) continue;
     if (!/request\.data[^\n]*\b\w*[Ii]d\b/.test(b) &&
         !/\{[^}]*\b\w*[Ii]d\b[^}]*\}\s*=\s*request\.data/.test(b)) continue;
     // يَقرأُ مستنداً بذلك المعرّف؟
