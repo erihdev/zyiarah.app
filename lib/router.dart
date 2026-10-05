@@ -16,6 +16,8 @@ import 'package:zyiarah/screens/orders_list_screen.dart';
 import 'package:zyiarah/screens/store_screen.dart';
 import 'package:zyiarah/screens/offers_screen.dart';
 import 'package:zyiarah/screens/profile_screen.dart';
+import 'package:zyiarah/screens/contracts_list_screen.dart';
+import 'package:zyiarah/screens/support_screen.dart';
 import 'package:zyiarah/main.dart';
 
 /// انتقال شرائح التبويب السفلي — كان معرَّفاً كـ PageRouteBuilder داخل client_dashboard
@@ -140,6 +142,21 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/profile',
       pageBuilder: (context, state) => _slideFadePage(const ZyiarahProfileScreen(), state),
+    ),
+    // وجهتا إشعارٍ كانتا تُفتَحانِ بالدفعِ وحدَه، فلم يَكن لهما مسارٌ
+    // يُقصَد: فنقرُ «تم تفعيل باقتك» و«تم الرد على تذكرتك» لم يَكن يَصِلُ
+    // إليهما من أيِّ سطح. تسجيلُهما مسارَين حقيقيَّين يُوحِّدُ مصدرَ التنقّلِ
+    // كما فُعِلَ بـ/orders و/offers، ويُبقي الشاشةَ قابلةً للاختبارِ بحقنِ
+    // `navigate` بدلَ دفعٍ مباشرٍ لا يُلتقَط.
+    GoRoute(
+      path: '/contracts',
+      pageBuilder: (context, state) =>
+          _slideFadePage(const ZyiarahContractsListScreen(), state),
+    ),
+    GoRoute(
+      path: '/support',
+      pageBuilder: (context, state) =>
+          _slideFadePage(const ZyiarahSupportScreen(), state),
     ),
     GoRoute(
       path: '/track/:orderId',

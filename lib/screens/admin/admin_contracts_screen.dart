@@ -357,6 +357,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
       await ZyiarahMessagingService().notifyContractApproved(
         data['userId'] ?? '',
         data['planName'] ?? 'باقة اشتراك',
+        contractId: doc.id,
       );
       messenger.showSnackBar(const SnackBar(
           content: Text('تم اعتماد العقد ✅'), backgroundColor: Colors.green));

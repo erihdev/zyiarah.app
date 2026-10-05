@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>أُلغي الدفع — زيارة</title>
+  <!-- صفحةُ عَوْدةٍ لبوّابةِ تمارا (الإلغاء) — السببُ نفسُه المشروحُ في
+       `payment-success.html`: بلا JavaScript ولا صورٍ ولا طلبٍ خارجيّ.
+       والإلغاءُ لا خصمَ فيه، فالعَوْدةُ إلى الطلبِ في التطبيقِ استئنافٌ لا
+       دفعٌ مكرَّر — ولا تُذكَرُ مُدّةٌ لأنّ مكنسةَ الطلباتِ غيرِ المدفوعةِ قد
+       تُلغي الطلبَ، فوعدُ «وقتما شِئتِ» لا نَملكُه. -->
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      background: #f8fafc; color: #1e293b; line-height: 1.9;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 24px; text-align: center;
+    }
+    .card {
+      background: #fff; border-radius: 24px; padding: 40px 28px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.06); max-width: 460px; width: 100%;
+    }
+    .mark {
+      width: 76px; height: 76px; border-radius: 50%; margin: 0 auto 22px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2.4rem; font-weight: 900; color: #fff; background: #ea580c;
+    }
+    h1 { font-size: 1.5rem; font-weight: 800; color: #9a3412; }
+    p { margin-top: 12px; color: #334155; font-size: 1.02rem; }
+    .hint { margin-top: 22px; background: #f1f5f9; border-radius: 16px; padding: 16px 18px; color: #64748b; font-size: 0.95rem; }
+    .links { margin-top: 24px; font-size: 0.9rem; }
+    .links a { color: #660033; font-weight: 700; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="mark">×</div>
+    <h1>أُلغيت عمليّة الدفع</h1>
+    <p>أُلغيت الدفعةُ قبل إتمامها، ولم يُخصَم من حسابكِ شيء.</p>
+    <div class="hint">
+      طلبكِ ما زال في تطبيق «زيارة» — عودي إليه وأكمِلي الدفع، أو اختاري
+      طريقةَ دفعٍ أخرى.
+    </div>
+    <div class="links">
+      <a href="mailto:support@zyiarah.com">تواصلي معنا</a> ·
+      <a href="/support">الدعم</a>
+    </div>
+  </div>
+</body>
+</html>

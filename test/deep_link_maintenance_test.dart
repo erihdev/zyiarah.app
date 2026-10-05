@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:zyiarah/utils/notification_target.dart';
 
 /// **فرعٌ فارغٌ يَقرأ كفرعٍ مُعالَج.**
 ///
@@ -68,10 +69,28 @@ void main() {
   });
 
   test('وtap الإشعارِ ما زال يُحوّل requestId إلى مسارٍ', () {
-    expect(code, contains("resource = 'maintenance'"));
-    expect(code, contains("data['requestId']"));
-    // وبلا معرّفٍ يَبقى في مكانِه (لا تنقّلٌ أعمى).
+    // **أُعيدَ توجيهُ هذا الفحصِ لا إرخاؤه (2026-10-05).** كان يَشدُّ
+    // `resource = 'maintenance'` و`data['requestId']` حرفيّاً في هذه الخدمة؛
+    // والقرارُ انتقلَ إلى `lib/utils/notification_target.dart` لأنّه كان
+    // مكتوباً ثلاثَ مرّاتٍ لا تَتّفق (المسارُ، ونصُّ الزرِّ، ونقرُ FCM) —
+    // فإشعارُ العقدِ كان يَذهبُ إلى `/track/<معرّفِ الطابور>` تحتَ زرٍّ يَقول
+    // «عرض الطلب والفاتورة». فيُفحَصُ **سلوكاً** الآن لا نصّاً، وهو أشدّ.
+    final t = notifTargetFromData({'requestId': 'r1'});
+    expect(t.kind, NotifDest.maintenance,
+        reason: 'requestId لم يَعُد يُنتجُ وجهةَ الصيانة');
+    expect(t.id, 'r1');
+    // وطلبٌ بعينِه يَسبقُ، كما كان ترتيبُ التعدادِ القديمِ بعينِه.
+    expect(notifTargetFromData({'orderId': 'o1', 'requestId': 'r1'}).kind,
+        NotifDest.order,
+        reason: 'ترتيبُ التحديدِ انقلبَ — إشعارُ طلبٍ صار يَفتحُ أرشيفَ صيانة');
+    // والخدمةُ ما زالت تُترجمُ الوجهةَ إلى الموردِ نفسِه.
+    expect(code, contains("NotifDest.maintenance => 'maintenance'"),
+        reason: 'الخدمةُ لم تَعُد تُترجمُ وجهةَ الصيانةِ إلى موردٍ');
+    // وبلا معرّفٍ يَبقى في مكانِه (لا تنقّلٌ أعمى) — في الموضعَين.
     expect(code, contains('if (id == null) return;'));
+    expect(
+        code, contains('if (resource == null || id == null || id.isEmpty) return;'),
+        reason: 'حِملٌ بلا معرّفٍ صارَ يُنتجُ رابطاً ناقصاً');
   });
 
   test('وحارسُ الدور: المسارُ كلُّه بعد المصادقةِ والدور', () {

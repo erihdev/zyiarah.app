@@ -23,8 +23,29 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # نفسُ نقصِ `android_release.yml`: كان يَكتبُ مفتاحَ الخريطةِ وحدَه،
+      # فبناءُ هذا السيرِ يُرفَعُ إلى App Store **بلا بطاقةٍ ولا Apple Pay**
+      # (كلاهما مشروطٌ بـ`moyasarReady`). والسيرُ يدويُّ التشغيلِ فحسب، لكنّ
+      # تشغيلَه يَرفعُ إلى المتجرِ فعلاً — فالسرُّ الغائبُ يُفشِلُ الوظيفة.
       - name: Create .env file
-        run: echo "MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }}" > .env
+        env:
+          MAPBOX_TOKEN: ${{ secrets.MAPBOX_TOKEN }}
+          MOYASAR_PUBLISHABLE_KEY: ${{ secrets.MOYASAR_PUBLISHABLE_KEY }}
+          SAMSUNG_PAY_SERVICE_ID: ${{ secrets.SAMSUNG_PAY_SERVICE_ID }}
+        run: |
+          if [ -z "$MOYASAR_PUBLISHABLE_KEY" ]; then
+            echo "::error::سرُّ MOYASAR_PUBLISHABLE_KEY غير مضبوط — البناءُ بلا بطاقة ولا Apple Pay"
+            exit 1
+          fi
+          if [ -z "$MAPBOX_TOKEN" ]; then
+            echo "::error::سرُّ MAPBOX_TOKEN غير مضبوط — خريطةُ المناطق لن ترسم"
+            exit 1
+          fi
+          {
+            printf 'MAPBOX_TOKEN=%s\n' "$MAPBOX_TOKEN"
+            printf 'MOYASAR_PUBLISHABLE_KEY=%s\n' "$MOYASAR_PUBLISHABLE_KEY"
+            printf 'SAMSUNG_PAY_SERVICE_ID=%s\n' "$SAMSUNG_PAY_SERVICE_ID"
+          } > .env
 
       - name: Flutter pub get
         run: flutter pub get

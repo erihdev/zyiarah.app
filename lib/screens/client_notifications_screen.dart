@@ -7,6 +7,7 @@ import 'package:intl/intl.dart' hide TextDirection;
 import 'package:zyiarah/models/notification_item.dart';
 import 'package:zyiarah/theme/app_theme.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/notification_target.dart';
 
 /// مركز تنبيهات العميل (تصميم Stitch، 2026-09-16).
 ///
@@ -120,18 +121,12 @@ class _ClientNotificationsScreenState extends State<ClientNotificationsScreen> {
     }
   }
 
-  /// وجهة الإشعار: طلب بمعرّفه → التتبّع؛ طلب بكوده → طلباتي؛ عرض → العروض.
-  String? _routeFor(NotificationItem n) {
-    switch (n.category) {
-      case NotificationCategory.orders:
-      case NotificationCategory.payments:
-        return n.relatedLooksLikeOrderDoc ? '/track/${n.relatedId}' : '/orders';
-      case NotificationCategory.offers:
-        return '/offers';
-      case NotificationCategory.other:
-        return null;
-    }
-  }
+  /// وجهةُ الإشعارِ من القاعدةِ المشتركةِ لا من تعدادٍ محلّيّ — كانت هذه
+  /// الدالّةُ وأختُها `_actionLabelFor` وخدمةُ الروابطِ العميقةِ ثلاثَ نسخٍ
+  /// لا تَتّفق، فإشعارُ العقدِ كان يَعرضُ «عرض الطلب والفاتورة» ويَذهبُ إلى
+  /// `/track/<معرّفِ مستندِ الطابور>` (تفصيلُه في `notification_target.dart`).
+  String? _routeFor(NotificationItem n) =>
+      notifTargetFromRecord(type: n.type, relatedId: n.relatedId).route;
 
   Future<void> _open(NotificationItem n) async {
     if (!n.isRead && !_readLocally.contains(n.id)) await _markRead([n.id]);
@@ -291,18 +286,9 @@ class _ClientNotificationsScreenState extends State<ClientNotificationsScreen> {
     );
   }
 
-  String? _actionLabelFor(NotificationItem n) {
-    switch (n.category) {
-      case NotificationCategory.orders:
-        return n.relatedLooksLikeOrderDoc ? 'تتبع الطلب' : 'طلباتي';
-      case NotificationCategory.payments:
-        return n.relatedLooksLikeOrderDoc ? 'عرض الطلب والفاتورة' : 'طلباتي';
-      case NotificationCategory.offers:
-        return 'العروض';
-      case NotificationCategory.other:
-        return null;
-    }
-  }
+  /// النصُّ من الوجهةِ نفسِها — فلا يَعِدُ زرٌّ بما لا يَفعلُه النقر.
+  String? _actionLabelFor(NotificationItem n) => notifActionLabel(
+      notifTargetFromRecord(type: n.type, relatedId: n.relatedId), n.category);
 
   Widget _header(String uid, List<NotificationItem> unread) {
     return Row(children: [

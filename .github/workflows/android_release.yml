@@ -29,8 +29,37 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
+      # `.env` أصلٌ مُعلَنٌ في `pubspec.yaml` ويُحزَمُ داخلَ التطبيق، ومنه
+      # يَقرأُ `moyasarReady` مفتاحَ ميسر القابلَ للنشر. وكان هذا السطرُ
+      # يَكتبُ **مفتاحَ الخريطةِ وحدَه** و`>` يَمسحُ ما قبلَه — فحزمةُ هذا
+      # السيرِ تُبنى بلا مفتاحِ ميسر: **لا بطاقةَ ولا Apple Pay**، إذ
+      # كلاهما مشروطٌ بـ`moyasarReady` في `payment_summary_screen`. يَبقى
+      # «تمارا» والمحفظةُ وحدَهما، والبناءُ ينجحُ أخضرَ. و`codemagic.yaml`
+      # يَكتبُ الثلاثةَ في مسارَيه — فالنقصُ هنا وحدَه.
+      #
+      # والسرُّ الغائبُ **يُفشِلُ الوظيفةَ** لا يُكتَبُ فارغاً: نفسُ قرارِ
+      # `admin_deploy.yml` مع `MAPBOX_TOKEN` («لا يَكسِرُ البناءَ بل يَترُكُ
+      # الخريطةَ عاجزةً بصمت») — وهنا الأثرُ أثقل: حزمةٌ بلا وسيلةِ الدفعِ
+      # الأساسيّةِ تُرفَعُ إلى Play.
       - name: Create .env
-        run: echo "MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }}" > .env
+        env:
+          MAPBOX_TOKEN: ${{ secrets.MAPBOX_TOKEN }}
+          MOYASAR_PUBLISHABLE_KEY: ${{ secrets.MOYASAR_PUBLISHABLE_KEY }}
+          SAMSUNG_PAY_SERVICE_ID: ${{ secrets.SAMSUNG_PAY_SERVICE_ID }}
+        run: |
+          if [ -z "$MOYASAR_PUBLISHABLE_KEY" ]; then
+            echo "::error::سرُّ MOYASAR_PUBLISHABLE_KEY غير مضبوط — الحزمةُ تُبنى بلا بطاقة ولا Apple Pay"
+            exit 1
+          fi
+          if [ -z "$MAPBOX_TOKEN" ]; then
+            echo "::error::سرُّ MAPBOX_TOKEN غير مضبوط — خريطةُ المناطق لن ترسم"
+            exit 1
+          fi
+          {
+            printf 'MAPBOX_TOKEN=%s\n' "$MAPBOX_TOKEN"
+            printf 'MOYASAR_PUBLISHABLE_KEY=%s\n' "$MOYASAR_PUBLISHABLE_KEY"
+            printf 'SAMSUNG_PAY_SERVICE_ID=%s\n' "$SAMSUNG_PAY_SERVICE_ID"
+          } > .env
 
       - name: Decode keystore
         run: |
@@ -55,14 +84,19 @@ jobs:
           path: build/app/outputs/bundle/release/app-release.aab
           retention-days: 7
 
-      # Publishes to the Google Play "production" track as a draft release.
-      # Review and roll out the draft from the Play Console.
-      # To publish without the manual step, change status to "completed".
+      # **مسارٌ ثانٍ إلى Google Play، وهو قرارُ مالكٍ مسجَّل.** حسابٌ شخصيٌّ
+      # يَلزمُه ١٢ مُختبِراً مُنضمّاً إلى الاختبارِ المغلقِ ١٤ يوماً متّصلاً
+      # قبلَ منحِ الوصولِ إلى الإنتاج، والنشرُ إلى مسارٍ غيرِ ممنوحٍ يَفشلُ عند
+      # خطوةِ النشرِ — ولذلك نُقِلَ `codemagic.yaml` إلى `alpha` في 2026-09-28.
+      # وكان هذا السيرُ باقياً على `production`، فدفعُ وسمِ `v*` يَتجاوزُ ذلك
+      # القرارَ من البابِ الآخر. (وإعادتُه إلى `production` بعد منحِ الوصولِ
+      # قرارُ مالكٍ: حدِّثْ `test/app_distribution_guard_test.dart` معه عمداً،
+      # فهو يُثبّتُ `alpha` في **المسارَين** الآن.)
       - name: Publish to Google Play
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: com.zyiarah.zyiarah
           releaseFiles: build/app/outputs/bundle/release/app-release.aab
-          track: production
+          track: alpha
           status: draft
