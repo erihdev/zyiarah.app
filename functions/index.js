@@ -25,6 +25,10 @@ const amounts = require("./amounts");
 // محرّك الاسترداد الآلي — **أوّل وحدة تلمس Firestore**: تستقبل `db` وسيطاً
 // ولا تستوردها، وكذلك `queuePush`، فتبقى قابلة للاختبار بلا محاكٍ.
 const refunds = require("./refund_engine");
+const attachmentsGuard = require("./attachments");
+// معرّفُ المشروع من بيئة التشغيل (Cloud Functions تضبطه) — يُقصر مرفقاتِ
+// البريد على مخزن هذا المشروع وحده.
+const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "";
 // نافذةُ شَغل السائق ومسندُ التداخل — وحدةٌ **نقيّة** (لا db): كان السؤال
 // مكتوباً بيدٍ في ٢٣ موضعاً (مدّةُ الطلب ١٦، ومسحُ التعارض ٧).
 const slots = require("./slots");
@@ -1361,12 +1365,33 @@ exports.processNotificationTriggers = onDocumentCreated(
           const fromString = `"${fromName}" <${fromEmail}>`;
           const resend = new Resend(resendKey);
 
+          // SECURITY: `attachmentUrls` تأتي من مستندٍ يكتبه العميل، وكانت
+          // تُجلب بـ`fetch` بلا تحقّقٍ من الأصل — فالخادمُ يطلب أيَّ عنوانٍ
+          // يختاره العميل (SSRF بصلاحية خروج المشروع) ويُنزِّل أيَّ حجم.
+          // وحارسا البريد القائمان لا يغطّيان هذا: أحدهما يحرس المستلِم
+          // والآخر المُرسِل، وكلاهما يمرّ لعميلٍ يراسل **نفسه** ببريده
+          // المسجَّل. القَصرُ على مخزن المشروع لا يمسّ مساراً قائماً: كلُّ
+          // مرفقٍ في المستودع فاتورةُ ZATCA من `getDownloadURL()`.
           const attachments = [];
           for (const url of attachmentUrls) {
+            if (!attachmentsGuard.isProjectStorageUrl(url, PROJECT_ID)) {
+              console.warn(`[EMAIL] Refused foreign attachment origin: ${url}`);
+              continue;
+            }
             try {
               const res = await fetch(url);
               if (res.ok) {
+                const declared = Number(res.headers.get("content-length") || 0);
+                if (declared > attachmentsGuard.MAX_ATTACHMENT_BYTES) {
+                  console.warn(`[EMAIL] Attachment too large (${declared}): ${url}`);
+                  continue;
+                }
                 const buf = await res.arrayBuffer();
+                if (buf.byteLength > attachmentsGuard.MAX_ATTACHMENT_BYTES) {
+                  // بعضُ الردود بلا `content-length` — نفحص الحجمَ الفعليّ أيضاً.
+                  console.warn(`[EMAIL] Attachment too large (${buf.byteLength}): ${url}`);
+                  continue;
+                }
                 const filename = url.split("/").pop().split("?")[0] || "invoice.pdf";
                 attachments.push({filename, content: Buffer.from(buf)});
               }
@@ -3136,6 +3161,11 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
       // تعيين سائق» للأبد رغم إسناد السائق.
       assigned_driver: d.name || "سائق",
       driver_phone: d.phone || "000000000",
+      // تقييمُ السائق لحظةَ الإسناد — شاشةُ التتبّع تعرضه للعميلة. لا يُكتب
+      // إلّا إن وُجد فعلاً: كانت الشاشةُ تعرض «★ 5.0» افتراضاً لكلِّ سائق،
+      // ولا شيءَ في المستودع يكتب هذا الحقل أصلاً، فكان الرقمُ مختلقاً دائماً.
+      ...(Number.isFinite(Number(d.rating_avg)) && Number(d.rating_avg) > 0 ?
+        {driver_rating_avg: Number(d.rating_avg)} : {}),
       assigned_at: FieldValue.serverTimestamp(),
       scheduled_at: Timestamp.fromDate(startDateTime),
       // service_date مطلوب حتى يحتسب مُحدِّد التوفّر هذه المهمة ضمن انشغال السائق
@@ -3719,6 +3749,11 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
       // تعيين سائق» للأبد في مسار الاعتماد اليدوي (كنب/مكيفات/متجر).
       assigned_driver: d.name || "سائق",
       driver_phone: d.phone || "000000000",
+      // تقييمُ السائق لحظةَ الإسناد — شاشةُ التتبّع تعرضه للعميلة. لا يُكتب
+      // إلّا إن وُجد فعلاً: كانت الشاشةُ تعرض «★ 5.0» افتراضاً لكلِّ سائق،
+      // ولا شيءَ في المستودع يكتب هذا الحقل أصلاً، فكان الرقمُ مختلقاً دائماً.
+      ...(Number.isFinite(Number(d.rating_avg)) && Number(d.rating_avg) > 0 ?
+        {driver_rating_avg: Number(d.rating_avg)} : {}),
       assigned_at: FieldValue.serverTimestamp(),
       scheduled_at: Timestamp.fromDate(startDateTime),
       service_date: Timestamp.fromDate(startDateTime),

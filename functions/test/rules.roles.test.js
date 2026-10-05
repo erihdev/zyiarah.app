@@ -31,6 +31,9 @@ const {setDoc, doc, updateDoc, getDoc} = require("firebase/firestore");
     await setDoc(doc(db, "users/superA"), {role: "admin"});
     // a plain client
     await setDoc(doc(db, "users/client1"), {role: "client"});
+    // عميلٌ له كودُ إحالةٍ مكتوبٌ سلفاً، وآخرُ بلا كود (أوّلُ توليد).
+    await setDoc(doc(db, "users/refOwner"), {role: "client", referral_code: "AAAA1111"});
+    await setDoc(doc(db, "users/refNew"), {role: "client"});
     // target docs
     await setDoc(doc(db, "system_configs/hourly_settings"), {max_orders_per_day: 10});
     await setDoc(doc(db, "products/p1"), {name: "x", price: 10});
@@ -90,6 +93,27 @@ const {setDoc, doc, updateDoc, getDoc} = require("firebase/firestore");
       updateDoc(doc(asUser("client1"), "products/p1"), {price: 1}), false);
   await check("client CANNOT write system_configs",
       updateDoc(doc(asUser("client1"), "system_configs/hourly_settings"), {max_orders_per_day: 1}), false);
+
+  // ── الإحالة: الكودُ يُكتب مرّةً، والرابطُ خادميٌّ بحت ──────────────────
+  //
+  // `applyReferralCode` يحلّ المُحيلَ بـ
+  // `where('referral_code','==',code).limit(1)`. فمن يستطيع **تغيير** كوده
+  // يضبطه على كود غيره فتُرجِع الاستعلامةُ أحدَ المستندَين، وقد تُنسب إحالةٌ
+  // ومكافأتُها (50 ر.س) إلى غير صاحبها. والتوليدُ الأوّل يجب أن يبقى ممكناً:
+  // `getOrCreateReferralCode` يكتبه من العميل.
+  await check("client CAN write referral_code when absent (first generation)",
+      updateDoc(doc(asUser("refNew"), "users/refNew"), {referral_code: "BBBB2222"}), true);
+  await check("client CANNOT change an existing referral_code",
+      updateDoc(doc(asUser("refOwner"), "users/refOwner"), {referral_code: "AAAA1111X"}), false);
+  await check("client CANNOT hijack another user's code onto their own doc",
+      updateDoc(doc(asUser("refNew"), "users/refNew"), {referral_code: "AAAA1111"}), false);
+  await check("client CANNOT self-set referred_by",
+      updateDoc(doc(asUser("client1"), "users/client1"), {referred_by: "refOwner"}), false);
+  await check("client CANNOT self-set used_referral_code",
+      updateDoc(doc(asUser("client1"), "users/client1"), {used_referral_code: "AAAA1111"}), false);
+  // ولا يُمنع ما كان مسموحاً: حقولُ الملفّ العاديّة.
+  await check("client CAN still edit their own name",
+      updateDoc(doc(asUser("client1"), "users/client1"), {name: "سارة"}), true);
 
   await testEnv.cleanup();
   console.log(`\nRole test: ${pass} passed, ${fail} failed`);

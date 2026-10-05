@@ -377,20 +377,35 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
               ],
             ),
           ),
-          Column(
-            children: [
-              const Icon(Icons.star, color: Colors.amber, size: 18),
-              Text(
-                (data['driver_rating_avg'] ?? 5.0).toStringAsFixed(1),
-                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 12),
-              ),
-            ],
-          ),
+          // **لا نجمةَ بلا تقييم.** كان الاحتياطُ `?? 5.0` يعرض «★ 5.0» لكلِّ
+          // سائق — ولا شيءَ في المستودع كان يكتب `driver_rating_avg` أصلاً،
+          // فالرقمُ مختلَقٌ دائماً لا أحياناً. (نفسُ عائلة «تقييمك 4.9».)
+          // الخادمُ يختمه الآن عند الإسناد من مستند السائق متى وُجد فعلاً.
+          if (_ratingOf(data) != null)
+            Column(
+              children: [
+                const Icon(Icons.star, color: Colors.amber, size: 18),
+                Text(
+                  _ratingOf(data)!.toStringAsFixed(1),
+                  style: GoogleFonts.tajawal(
+                      fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+              ],
+            ),
         ],
       ),
     );
   }
 
+
+  /// تقييمُ السائق على الطلب، أو `null` إن لم يُختم. صفرٌ أو قيمةٌ تالفة =
+  /// لا تقييم، لا «0.0 ★».
+  static double? _ratingOf(Map<String, dynamic> data) {
+    final v = data['driver_rating_avg'];
+    final d = v is num ? v.toDouble() : double.tryParse('$v');
+    if (d == null || !d.isFinite || d <= 0) return null;
+    return d;
+  }
 
   Widget _buildServiceSummary(Map<String, dynamic> data) {
     return Column(

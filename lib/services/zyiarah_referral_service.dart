@@ -2,7 +2,29 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
+import 'package:zyiarah/utils/error_report.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+
+/// نتيجةُ محاولة ربط كود إحالة بحسابٍ جديد — كلُّ حالةٍ لها رسالتُها.
+enum ReferralApplyOutcome {
+  /// لا كودَ أُدخل أصلاً.
+  none,
+
+  /// رُبط بنجاح.
+  applied,
+
+  /// لا مستخدمَ يحمل هذا الكود.
+  notFound,
+
+  /// الكودُ كودُ صاحب الحساب نفسِه.
+  ownCode,
+
+  /// سبق ربطُ إحالةٍ بهذا الحساب.
+  already,
+
+  /// تعذّر الوصول أو ردٌّ غيرُ مفهوم.
+  failed,
+}
 
 /// ZyiarahReferralService — Viral referral engine.
 ///
@@ -74,22 +96,47 @@ class ZyiarahReferralService {
   /// Called immediately after a new user registers.
   /// Validates [referralCode], resolves the referrer, and creates a
   /// `referrals` document with `status: 'pending'`.
-  Future<void> applyReferralCode({
+  /// **تُعيد نتيجةً، ولا تبتلعها.**
+  ///
+  /// كانت `Future<void>` تبتلع كلَّ خطأٍ في `catch` وتطبع ردَّ الخادم
+  /// بـ`debugPrint` ثمّ ترميه. فالعميلةُ التي تُدخل كوداً خاطئاً لا تعرف أنّه
+  /// لم يُطبَّق — وتنتظر خصمَ 10% على أوّل طلب — ولا نعرف نحن: `debugPrint`
+  /// لا يُجمَع ولا يُرسَل. والخادمُ يردّ `{ok, reason}` بثلاثة أسبابٍ مميَّزة
+  /// (`not_found`/`self`/`already`) كانت كلُّها تذهب إلى اللاشيء.
+  ///
+  /// وكان مُستدعيها في شاشة التسجيل يلفّها بـ`try/catch` معلّقاً عليه
+  /// «نتجاهله بصمت» — و`catch` ذاك **غيرُ قابلٍ للوصول** أصلاً لأنّ الدالّة
+  /// لا ترمي.
+  Future<ReferralApplyOutcome> applyReferralCode({
     required String newUserId,
     required String referralCode,
   }) async {
+    final code = referralCode.trim().toUpperCase();
+    if (code.isEmpty) return ReferralApplyOutcome.none;
     try {
-      final code = referralCode.trim().toUpperCase();
-      if (code.isEmpty) return;
       // الربط يتم خادمياً: العميل يرسل الكود فقط، والخادم يتحقّق منه ويحدّد
       // المُحيل (referrer_id) — فلا يستطيع العميل منح مكافأة إحالة لأي شخص
       // بضبط الحقل يدوياً. القاعدة تمنع كتابة referrals من العميل.
       final res = await FirebaseFunctions.instance
           .httpsCallable('applyReferralCode')
           .call({'code': code});
-      debugPrint('[ZyiarahReferralService] applyReferralCode($newUserId) -> ${res.data}');
-    } catch (e) {
-      debugPrint('[ZyiarahReferralService] applyReferralCode error: $e');
+      final data = res.data;
+      final ok = data is Map && data['ok'] == true;
+      if (ok) return ReferralApplyOutcome.applied;
+      final reason = data is Map ? '${data['reason']}' : '';
+      return switch (reason) {
+        'not_found' => ReferralApplyOutcome.notFound,
+        'self' => ReferralApplyOutcome.ownCode,
+        'already' => ReferralApplyOutcome.already,
+        _ => ReferralApplyOutcome.failed,
+      };
+    } catch (e, st) {
+      // مسارٌ يمسّ المال (50 ر.س للمُحيل وخصم 10% للمُحال إليه): يُسجَّل
+      // بسببٍ **ثابت** كي تتجمّع في Crashlytics مجموعةً واحدة، والسياقُ
+      // المتغيّر في `info`.
+      reportSilent(e, st,
+          reason: 'referral_apply_failed', info: {'uid': newUserId});
+      return ReferralApplyOutcome.failed;
     }
   }
 
