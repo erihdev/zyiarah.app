@@ -1,10 +1,13 @@
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zyiarah/models/driver_schedule.dart';
+import 'package:zyiarah/utils/order_lifecycle.dart';
 
 /// حسابات جدول مناوبات السائق (تصميم Stitch، 2026-09-16): أسبوع يبدأ السبت،
 /// شبكة شهرية بمضاعفات سبعة، تجميع بالأيام، ومؤشرات الفترة.
 void main() {
+  _visibilityGuard();
   DriverTask t(String id, DateTime when, {String status = 'scheduled', String? slot}) =>
       DriverTask(
         id: id, code: id, serviceName: 's', clientName: 'c', zoneName: 'z',
@@ -87,5 +90,49 @@ void main() {
     expect(k.scheduled, 3);
     expect(k.done, 1);
     expect(k.remaining, 2);
+  });
+}
+
+/// مهمّةٌ مُسنَدةٌ بحالةٍ خارجَ القائمتَين كانت تَغيبُ عن العرضَين معاً.
+void _visibilityGuard() {
+  group('لا مهمّةَ سائقٍ تَغيبُ عن العرضَين معاً', () {
+    test('«النشطة» مشتقّةٌ من دورةِ الحياةِ لا مكتوبةٌ ثانيةً', () {
+      expect(DriverSchedule.activeStatuses.toSet(),
+          equals(kActiveAssignedStatuses),
+          reason: 'نسخةٌ خامسةٌ تَنفكُّ ⇒ مهمّةٌ تَغيبُ عن جهازِ السائق');
+    });
+
+    test('ما ليس نشطاً فهو سجلّ — بلا تعداد', () {
+      for (final s in kActiveAssignedStatuses) {
+        expect(DriverSchedule.isHistory(s), isFalse, reason: s);
+      }
+      for (final s in ['completed', 'cancelled']) {
+        expect(DriverSchedule.isHistory(s), isTrue, reason: s);
+      }
+    });
+
+    test('الطلبُ المُعاد فتحُه (pending بـdriver_id) يَظهرُ الآن', () {
+      // `reopenFieldsIfSystemCancelled` يُعيدُه pending ويُبقي driver_id:
+      // كان في «النشطة» لا، وفي «السجل» لا — ولا أحدَ يَراه.
+      for (final s in ['pending', 'under_review', 'awaiting_payment']) {
+        expect(DriverSchedule.activeStatuses.contains(s), isFalse, reason: s);
+        expect(DriverSchedule.isHistory(s), isTrue, reason: s);
+      }
+    });
+
+    test('الشاشةُ تَستعملُ القاعدةَ، ولا تعدادَ بعدها', () {
+      final src = File('lib/screens/driver_tasks_screen.dart').readAsStringSync();
+      expect(RegExp(r'DriverSchedule\.isHistory\(').allMatches(src).length, 2,
+          reason: 'عرضُ السجلِّ ودمجُ المصدرَين');
+      expect(src.contains('historyStatuses'), isFalse);
+      // و«النشطة» تَبقى تعداداً موجباً: whereIn لا يَقبلُ قاعدةً سالبة.
+      expect(src.contains('whereIn: DriverSchedule.activeStatuses'), isTrue);
+    });
+
+    test('بطاقةُ المهمّةِ تَعرضُ الحالةَ غيرَ المعروفةِ بدلَ إخفائها', () {
+      final src = File('lib/screens/driver_tasks_screen.dart').readAsStringSync();
+      expect(src.contains("statusLabel = 'معلقة'"), isTrue,
+          reason: 'فرعُ default كان مكتوباً ولا يَصلُه شيء');
+    });
   });
 }
