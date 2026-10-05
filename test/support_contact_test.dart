@@ -2,6 +2,7 @@
 // فكان رابط واتساب/الهاتف يُشفَّر إلى %E2%80%AD… ويُرفض. التنقية إلزامية.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zyiarah/services/zyiarah_messaging_service.dart';
+import 'package:zyiarah/utils/phone_format.dart';
 import 'package:zyiarah/widgets/support_fab.dart';
 
 void main() {
@@ -17,12 +18,16 @@ void main() {
           'tel:+966530489016');
     });
 
-    test('واتساب: أرقام عارية بلا + (wa.me لا يقبل غيرها)', () {
-      expect(supportContactDigits(live, forWhatsapp: true), '966530489016');
-      expect(
-          Uri.parse('https://wa.me/${supportContactDigits(live, forWhatsapp: true)}')
-              .toString(),
+    test('واتساب صار شأنَ whatsappNumber وحدَها — وهي أقوى', () {
+      // كان `forWhatsapp: true` يُسقط `+` فقط، فرقمُ دعمٍ محلّيٌّ يَخرج كما هو
+      // و`wa.me` يَرفضه. `whatsappNumber` تُسقط غيرَ الأرقامِ (فتُغطّي علاماتَ
+      // الاتجاهِ نفسَها) **وتُلحق 966 بالمحلّيّ**.
+      expect(whatsappNumber(live), '966530489016');
+      expect(Uri.parse('https://wa.me/${whatsappNumber(live)}').toString(),
           'https://wa.me/966530489016');
+      // وهذا ما كانت الصيغةُ القديمةُ تُفسده:
+      expect(whatsappNumber('0530489016'), '966530489016');
+      expect(whatsappNumber('530489016'), '966530489016');
     });
 
     test('قيمة فارغة أو بلا أرقام → "" فلا يظهر زر ميت', () {

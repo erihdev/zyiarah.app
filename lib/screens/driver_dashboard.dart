@@ -23,6 +23,7 @@ import 'package:zyiarah/screens/driver_tasks_screen.dart';
 import 'package:zyiarah/screens/driver_notifications_screen.dart';
 import 'package:zyiarah/screens/driver_profile_screen.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/phone_format.dart';
 
 class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
@@ -1406,7 +1407,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
       }
       return;
     }
-    final url = "https://wa.me/$adminPhone?text=${Uri.encodeComponent(message)}";
+    // نفسُ تطبيعِ رقمِ الدعمِ في driver_profile_screen — الحقلُ واحد.
+    final url = "https://wa.me/${whatsappNumber(adminPhone)}"
+        "?text=${Uri.encodeComponent(message)}";
     await _openExternalUrl(url, failMessage: 'تعذّر فتح واتساب — تأكد من تثبيته');
   }
 

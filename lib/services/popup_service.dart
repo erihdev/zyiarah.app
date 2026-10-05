@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -7,6 +8,8 @@ import 'package:zyiarah/screens/subscription_plans_screen.dart';
 import 'package:zyiarah/screens/ac_service_details_screen.dart';
 import 'package:zyiarah/screens/contracts_list_screen.dart';
 import 'package:zyiarah/screens/hourly_details_screen.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/popup_gate.dart';
 
 class ZyiarahPopupService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -18,17 +21,29 @@ class ZyiarahPopupService {
         .orderBy('sent_at', descending: true)
         .limit(1)
         .get()
-        .then((snapshot) {
-      if (snapshot.docs.isNotEmpty) {
-        final data = snapshot.docs.first.data();
-        final sentAt = (data['sent_at'] as Timestamp?)?.toDate();
+        .then((snapshot) async {
+      if (snapshot.docs.isEmpty) return;
+      final data = snapshot.docs.first.data();
 
-        // Only show if sent in the last 24 hours (or adjust as needed)
-        if (sentAt != null && DateTime.now().difference(sentAt).inHours < 24) {
-          if (!context.mounted) return;
-          _showRahaStylePopup(context, data);
-        }
+      // تفضيلُ التسويقِ يُقرأ **بعد** أن يُوجَد إعلانٌ حديثٌ غيرُ تشغيليّ، لا
+      // على كلِّ فتح: قراءةٌ واحدةٌ وقتَ الحاجةِ فقط. وفشلُها لا يَعرض —
+      // المنبثقُ تحسينٌ لا خدمة، والخطأُ في اتجاهِ احترامِ التفضيل.
+      Future<bool> marketingEnabled() async {
+        if (data['operational'] == true) return true;
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        if (uid == null) return false;
+        final u = await _db.collection('users').doc(uid).get()
+            .timeout(kNetCallTimeout);
+        return marketingEnabledFrom(u.data());
       }
+
+      final allowed = await marketingEnabled();
+      if (!shouldShowPopup(data,
+          now: DateTime.now(), marketingEnabled: allowed)) {
+        return;
+      }
+      if (!context.mounted) return;
+      _showRahaStylePopup(context, data);
     }).catchError((e) {
       // صامت للمستخدم دائماً (الإعلان تحسين لا خدمة أساسية) — لكن نميّز رفض
       // الصلاحيات بوسمٍ خاص: رفضٌ هنا يعني انحدار قواعد Firestore يُخفي الإعلانات

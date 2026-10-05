@@ -15,6 +15,7 @@ import 'package:zyiarah/utils/status_util.dart';
 import '../../utils/order_lifecycle.dart';
 import 'package:zyiarah/screens/map_screen.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/phone_format.dart';
 
 class AdminOrderDetailsScreen extends StatefulWidget {
   final String orderId;
@@ -583,10 +584,33 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   }
 
   Future<void> _openWhatsApp(String phone) async {
+    // **رقمُ العميلةِ محلّيٌّ، وwa.me لا يَقبل إلّا الدولية.** حقلُ التسجيلِ
+    // تلميحُه «5XXXXXXXX»، فكان الرابطُ `wa.me/5XXXXXXXX` — ميتاً في كلِّ
+    // طلبٍ تقريباً. و`whatsappNumber` مكتوبةٌ لهذا بعينه، ويُناديها الاتجاهُ
+    // المقابلُ (العميلةُ ← السائق) في `order_tracking_screen` منذ البداية:
+    // فاتجاهٌ يَعمل والآخرُ لا.
+    final number = whatsappNumber(phone);
+    if (number.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('لا رقمَ على هذا الطلب', style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.orange.shade800,
+        ));
+      }
+      return;
+    }
     try {
-      final url = Uri.parse("https://wa.me/$phone");
+      final url = Uri.parse("https://wa.me/$number");
       if (await canLaunchUrl(url)) {
-        await launchUrl(url);
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else if (mounted) {
+        // كان الفشلُ صامتاً: لا شيءَ يحدثُ ولا رسالة، فيظنُّ الأدمنُ الزرَّ
+        // معطّلاً — نفسُ عطلِ «زرٍّ يُضغط فلا يحدث شيء».
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('تعذّر فتح واتساب — تأكد من تثبيته',
+              style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.red.shade700,
+        ));
       }
     } catch (e) {
       if (mounted) {

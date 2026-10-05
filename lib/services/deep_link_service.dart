@@ -99,9 +99,24 @@ class ZyiarahDeepLinkService {
          MaterialPageRoute(builder: (_) => AdminTicketDetailsScreen(ticketId: id))
        );
     } else if (resource == 'maintenance') {
-       // Navigate based on role for maintenance
-       // For clients, we could push MaintenanceDetailsScreen (if exists) or tracking
-       // For now, let's keep it safe.
+       // **كان فرعاً فارغاً** («For now, let's keep it safe») — فنقرةُ الإشعارِ
+       // لا تَفعلُ شيئاً ولا تَقولُ شيئاً، وهو يَقرأ كفرعٍ مُعالَج.
+       //
+       // صيانةُ الأجهزةِ أُرشِفت (`firestore.rules`: `allow create, update: if
+       // false`، ولا موضعَ في المستودعِ يُنشئ مستنداً هناك)، فلا إشعارَ جديدٌ
+       // يُولَّد منها عمليّاً — المتبقّي مستنداتٌ قديمةٌ تُقرأ. لكنّ شاشةَ
+       // الأرشيفِ **قائمةٌ وتَعملُ**: `AdminOrderDetailsScreen` تَكشف
+       // المجموعةَ بنفسِها (`_srcCollection == 'maintenance_requests'`
+       // و`_isMaintenanceArchive`) وتُفتَح من شاشةِ البحثِ فعلاً.
+       //
+       // فالأدمنُ يَذهب إليها، والعميلةُ لا: القراءةُ من `maintenance_requests`
+       // محصورةٌ بـ`isAdmin()` في القواعد، فأيُّ دفعٍ لشاشةٍ عميليّةٍ ينتهي
+       // بخطأِ صلاحيّات. البقاءُ في مكانِها هو الصواب، مكتوباً لا مسكوتاً عنه.
+       if (isAdmin) {
+         _navKey?.currentState?.push(
+           MaterialPageRoute(builder: (_) => AdminOrderDetailsScreen(orderId: id)),
+         );
+       }
     }
   }
 

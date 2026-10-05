@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/phone_format.dart';
 
 class DriverProfileScreen extends StatefulWidget {
   final VoidCallback? onLogout;
@@ -428,8 +429,11 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
       }
       return;
     }
-    final url =
-        'https://wa.me/$adminPhone?text=${Uri.encodeComponent("استفسار من سائق زيارة")}';
+    // رقمُ الدعمِ يَكتبه الأدمنُ في الإعدادات بلا تلميحِ صيغة (افتراضُه
+    // دوليٌّ `966500000000`) — فمن يَكتبه محلّيّاً يَقتل الرابطَ. التطبيعُ
+    // عند القراءةِ يُغطّي الصيغتَين. (كامنٌ لا حيّ.)
+    final url = 'https://wa.me/${whatsappNumber(adminPhone)}'
+        '?text=${Uri.encodeComponent("استفسار من سائق زيارة")}';
     await _openUrl(url, failMessage: 'تعذّر فتح واتساب — تأكد من تثبيته');
   }
 
