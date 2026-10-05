@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, query, where, orderBy, limit, Timestamp, getCountFromServer, getAggregateFromServer, sum, or, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { STORE_NEEDS_ACTION_STATUSES } from '../utils/orderActivity';
+import { driverIsDisabled } from '../utils/driverActivation';
 
 interface RecentOrder {
     id: string;
@@ -144,9 +145,15 @@ export default function Dashboard() {
             (snap: QuerySnapshot<DocumentData>) => setActiveOrders(snap.size.toString()),
             onErr('active orders')
         );
+        // **المعطَّلُ لا يُعَدّ.** `is_available` حالةُ اتّصالِ السائقِ يَضبطُها
+        // تطبيقُه، وتبقى `true` بعدَ تعطيلِه من الإدارة — فكان العدّادُ يُظهرُ
+        // سعةً لا وجودَ لها. والتصفيةُ محلّيّةٌ لا باستعلامٍ ثانٍ: مساواةٌ مع
+        // `!=` على حقلٍ آخرَ تَلزمُها فهرسةٌ مركّبة، وقاعدةُ المستودعِ أن
+        // يُصفّى محلّيّاً بدلَ إضافةِ فهرس.
         const unsubDrivers = onSnapshot(
             query(collection(db, 'drivers'), where('is_available', '==', true)),
-            (snap: QuerySnapshot<DocumentData>) => setAvailableDrivers(snap.size.toString()),
+            (snap: QuerySnapshot<DocumentData>) => setAvailableDrivers(
+                snap.docs.filter((d) => !driverIsDisabled(d.data())).length.toString()),
             onErr('drivers')
         );
         // (أداء) الإيراد الكلي كان يُجمَع بالاستماع لكل الطلبات المكتملة منذ الأزل

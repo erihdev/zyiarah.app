@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/screens/admin/admin_drivers_screen.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/driver_activation.dart';
 
 class AdminComplianceScreen extends StatefulWidget {
   const AdminComplianceScreen({super.key});
@@ -244,11 +245,10 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
                          // نضبط is_suspended/is_available أيضاً: لوحة الويب تبني شارة الحالة
                          // ومفتاح الإيقاف على is_suspended، فحظرٌ يكتب is_active فقط كان يُظهر
                          // السائق «نشطاً» في الويب رغم تعطيله هنا.
-                         await FirebaseFirestore.instance.collection('drivers').doc(doc.id).update({
-                           'is_active': false,
-                           'is_suspended': true,
-                           'is_available': false,
-                         });
+                         await FirebaseFirestore.instance
+                             .collection('drivers')
+                             .doc(doc.id)
+                             .update(driverActivationFields(active: false));
                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم تعطيل الحساب بنجاح")));
                        } catch (e) {
                          // كان الفشل (رفض قواعد/شبكة) استثناءً صامتاً — السائق يبقى نشطاً
