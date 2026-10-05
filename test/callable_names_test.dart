@@ -117,4 +117,42 @@ void main() {
         reason: 'تغيّرت مجموعةُ الـonCall بلا عميل: إمّا مات نداءٌ (فالدالّةُ '
             'صارت ميتةً أيضاً) أو أُحييت واحدةٌ من الأربع');
   });
+  // مُشغّلُ Firestore لا يُنادى، فلا يَراه الفحصُ أعلاه — ويَموتُ بطريقةٍ
+  // أخرى: أن تَخلوَ مجموعتُه من كاتب. و`maintenance_requests` كذلك: خدمةُ
+  // الصيانةِ أُزيلت من الجذور، فلا شيءَ في `lib/` ولا في اللوحةِ يُنشئ
+  // مستنداً فيها (القراءةُ وحدَها باقيةٌ للطلباتِ القديمة — بحثُ الإدارةِ
+  // وشاشةُ التفاصيل)، فمُشغّلاها لا يُطلَقانِ أبداً.
+  //
+  // **وهما خارجَ `functions_delete_once.yml`** الذي يَحذفُ أربعاً — فلو
+  // شُغّل اليومَ بَقيت هاتان منشورتَين، وهو مسارٌ «لمرّةٍ واحدة» يُحذفُ
+  // بعدَه. الفجوةُ مُثبَّتةٌ هنا كي لا تُنسى.
+  test('مُشغّلاتُ الصيانةِ ميّتتان: لا كاتبَ لمجموعتِها', () {
+    const dead = {
+      'sendNotificationToAdminsOnNewMaintenance',
+      'notifyClientOnMaintenanceRejected',
+    };
+    for (final name in dead) {
+      expect(fn.contains('exports.$name'), isTrue,
+          reason: '$name حُذفت من المصدر — فأزِلها من هذه المجموعة');
+    }
+
+    // كلُّ ذكرٍ للمجموعةِ يَتبعُه كاتبٌ خلال ١٢٠ حرفاً = كتابة.
+    final writers = <String>[];
+    for (final f in _sources()) {
+      final code = f.readAsStringSync().split('\n').where((l) {
+        final t = l.trimLeft();
+        return !t.startsWith('//') && !t.startsWith('///') && !t.startsWith('*');
+      }).join('\n');
+      for (final m in RegExp('maintenance_requests').allMatches(code)) {
+        final tail = code.substring(
+            m.end, m.end + 120 > code.length ? code.length : m.end + 120);
+        for (final w in const ['.set(', '.add(', '.update(', '.delete(']) {
+          if (tail.contains(w)) writers.add('${f.path}$w');
+        }
+      }
+    }
+    expect(writers, isEmpty,
+        reason: 'عاد كاتبٌ لـmaintenance_requests ⇒ المُشغّلانِ حيّان: '
+            'أزِلهما من هذه المجموعةِ ولا تَحذفهما من الإنتاج');
+  });
 }
