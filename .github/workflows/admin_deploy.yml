@@ -88,8 +88,44 @@ jobs:
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
 
       # `hosting:admin` وحده — هدفُ `web` (صفحةُ الهبوط) لا يُنشر من هنا.
+      # `pipefail` حاملٌ لا زينة: بلاهُ يَحجبُ `tee` خروجَ `firebase`
+      # فيَمرُّ فشلُ النشرِ أخضرَ — أسوأُ من الفشلِ نفسِه.
       - name: Deploy
-        run: npx --yes firebase-tools@15 deploy --only hosting:admin --project zyiarah-app --non-interactive
+        run: |
+          set -o pipefail
+          npx --yes firebase-tools@15 deploy --only hosting:admin \
+            --project zyiarah-app --non-interactive 2>&1 \
+            | tee "$RUNNER_TEMP/deploy.log"
+
+      # فشلُ النشرِ كان يَترُكُ **علامةً حمراءَ وحدَها**: سجلُّ التشغيلِ
+      # يُخدَمُ من مُضيفٍ آخرَ ولا يُقرأُ من الـAPI، و`check-runs` تُعيدُ
+      # `output` فارغاً — فلا يُشخَّصُ إلّا بفتحِ الصفحةِ بيد. فالخَرْجُ
+      # يُنشَرُ الآن في ملخَّصِ الوظيفةِ وكتنبيهاتٍ تُقرأُ عبر
+      # `check-runs/{id}/annotations`. (2026-10-05، بعد ثلاثِ دمجاتٍ
+      # فشلَ نشرُ دوالِّها بلا سببٍ مقروء.)
+      - name: Surface the failure
+        if: failure()
+        run: |
+          LOG="$RUNNER_TEMP/deploy.log"
+          {
+            echo "## ✗ فشلَ النشر"
+            echo
+            echo '```'
+            tail -n 60 "$LOG" 2>/dev/null || echo "(لا سجلّ — فشلَ قبل النشر)"
+            echo '```'
+            echo
+            echo "### ما يُفحَص"
+            echo "1. **صلاحيّات**: \`Firebase Hosting Admin\` على المشروع."
+            echo "2. **الهدف**: \`hosting:admin\` معرَّفٌ في \`.firebaserc\`؟"
+            echo "3. **البناء**: \`dist\` موجودٌ؟ البناءُ يَسبقُ النشرَ بقصد."
+            echo
+            echo "### المَخرَجُ اليدويّ"
+            echo '```'
+            echo "npm --prefix admin_panel run build && npx firebase-tools@15 deploy --only hosting:admin"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          grep -iE 'error|failed|denied|permission|403|400|HTTP Error' "$LOG" 2>/dev/null \
+            | tail -n 15 | while IFS= read -r line; do echo "::error::$line"; done || true
 
       - name: Remove key
         if: always()
