@@ -104,7 +104,9 @@ void main() {
     };
 
     final app = _code(_appEditor);
-    final i = app.indexOf("doc('app_update').set");
+    // المِرساةُ هي شكلُ الدفعةِ الذرّيّةِ (2026-10-05) — انظر
+    // test/settings_save_atomic_test.dart.
+    final i = app.indexOf("doc('app_update'), {");
     expect(i, greaterThan(-1), reason: 'كتابةُ app_update اختفت — حدِّث الحارس');
     final appBlock = app.substring(i, app.indexOf('));', i));
     final appKeys = RegExp(r"'(\w+)'\s*:")
@@ -114,7 +116,7 @@ void main() {
     expect(appKeys, expected, reason: 'مفاتيحُ شاشة التطبيق تخالف ما يقرؤه الخادم');
 
     final web = _code(_webEditor);
-    final j = web.indexOf('setDoc(updRef, {');
+    final j = web.indexOf("doc(db, 'system_configs', 'app_update'), {");
     expect(j, greaterThan(-1), reason: 'كتابةُ app_update في اللوحة اختفت');
     final webBlock = web.substring(j, web.indexOf('}, { merge: true })', j));
     final webKeys = RegExp(r'(\w+)\s*:')
