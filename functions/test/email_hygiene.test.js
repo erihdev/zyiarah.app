@@ -32,8 +32,15 @@ const helperSrc = (name) => {
   return src.substring(i, j + 2);
 };
 const _cleanEmail = new Function(helperSrc("_cleanEmail") + "; return _cleanEmail;")();
+const _escHtml = new Function(helperSrc("_escHtml") + "; return _escHtml;")();
+const _adminAlertShell = new Function(
+    helperSrc("_escHtml") + helperSrc("_adminAlertShell") +
+    "; return _adminAlertShell;")();
+// `_escHtml` يُضَمُّ: المُهرِّفُ صارَ واحداً للملفِّ بعد أن تبيّن أنّ شقيقَ
+// هذه الدالّةِ لا يُهرّبُ إطلاقاً.
 const _fallbackHtml = new Function(
-    helperSrc("_buildTemplateFallbackHtml") + "; return _buildTemplateFallbackHtml;")();
+    helperSrc("_escHtml") + helperSrc("_buildTemplateFallbackHtml") +
+    "; return _buildTemplateFallbackHtml;")();
 
 let passed = 0;
 const ok = (msg) => { passed++; console.log("  ok -", msg); };
@@ -109,5 +116,36 @@ const rules = fs.readFileSync(
 assert.ok(/request\.resource\.data\.email == request\.auth\.token\.email/
     .test(rules), "قاعدةُ البريدِ غائبة — السجلُّ يَبقى قابلاً للتلوين");
 ok("(f) وقواعدُ `users` تَربطُ حقلَ البريدِ ببريدِ المصادقة");
+
+// (g) **حقنُ HTML في بريدِ التنبيهِ الإداريّ — مُغلَق.**
+// `_buildTemplateFallbackHtml` كان يُعرّفُ `esc` محليّاً ويَستعمله، وشقيقُه
+// `_buildAdminAlertHtml` — على بُعدِ عشرينَ سطراً وبنفسِ المهمّةِ — يُحقِنُ
+// `${k}` و`${v}` **خامَّين**. والقيمُ هي `client_name` و`client_phone` و
+// `service_name` و`zone_name` و`amount` و`planName`…: حقولٌ يَكتبُها العميل.
+// فاسمٌ مثل `<a href="https://evil/">اضغط لتأكيد الطلب</a>` يَصلُ بريدَ
+// المالكِ من `no-reply@zyiarah.com` مع **كلِّ طلبٍ تُنشئُه**.
+assert.strictEqual(_escHtml("<a href=\"x\">hi</a>&'"),
+    "&lt;a href=&quot;x&quot;&gt;hi&lt;/a&gt;&amp;&#39;");
+assert.strictEqual(_escHtml(null), "");
+assert.strictEqual(_escHtml(0), "0", "الصفرُ قيمةٌ لا غياب");
+// والقشرةُ تُهرّبُ المفتاحَ والقيمةَ والعنوانَ — بحملٍ حقنيٍّ حقيقيّ.
+const injected = _adminAlertShell("<b>عنوان</b>", [
+  ["العميل", "<a href=\"https://evil/\">اضغط لتأكيد الطلب</a>"],
+  ["<img src=x>", "1 ر.س"],
+]);
+assert.ok(!/<a href/.test(injected), "رابطُ المهاجمِ وصلَ البريدَ");
+assert.ok(!/<img src=x>/.test(injected), "المفتاحُ غيرُ مُهرَّب");
+assert.ok(!/<b>عنوان<\/b>/.test(injected), "العنوانُ غيرُ مُهرَّب");
+assert.ok(/&lt;a href=/.test(injected), "لم يُهرَّب شيءٌ — تحقّقْ من النمط");
+// ولا يَبقى حقنٌ خامٌّ في الدالّةِ الإداريّة: الصفوفُ تَمرُّ بالقشرة.
+const adminHtml = body("async function _buildAdminAlertHtml");
+assert.ok(/return _adminAlertShell\(heading, rows\);/.test(adminHtml),
+    "الدالّةُ الإداريّةُ تَبني HTML بنفسِها مرّةً أخرى");
+assert.ok(!/\$\{v\}/.test(adminHtml) && !/\$\{rowsHtml\}/.test(adminHtml),
+    "عادَ الحقنُ الخامُّ `${v}`");
+// ومُهرِّبٌ واحدٌ للملفّ لا نسختان.
+assert.strictEqual((fn.match(/replace\(\/\[&<>"'\]\/g/g) || []).length, 1,
+    "نسختانِ من المُهرِّب — إحداهما ستَتخلّفُ عن الأخرى");
+ok("(g) بريدُ التنبيهِ الإداريِّ يُهرّبُ ما يَكتبُه العميل");
 
 console.log(`email_hygiene: ${passed} passed`);
