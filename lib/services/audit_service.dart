@@ -71,4 +71,8 @@ class ZyiarahAuditService {
 
   static const String actionUpdateOrderStatus = 'UPDATE_ORDER_STATUS';
   static const String actionAssignDriver = 'ASSIGN_DRIVER';
+
+  /// اعتمادُ مبلغٍ وسَمَه تحقّقُ السعرِ الخادميّ — قرارٌ ماليٌّ بشريٌّ
+  /// يُبطِلُ علمَ المكنسةِ، فلا بدَّ من أثرٍ باسمِ من اتّخذَه.
+  static const String actionReviewOrderPrice = 'REVIEW_ORDER_PRICE';
 }

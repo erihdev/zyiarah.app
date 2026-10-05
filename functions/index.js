@@ -2181,11 +2181,19 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
         // وهذا المسارُ كان يَمضي صامتاً. (التنبيهُ هنا لأنّ الوسمَ وحدَه
         // لا يَراه أحدٌ في حينِه.)
         console.warn(`[wallet-pricing] UNVERIFIABLE ${orderId}: priceable kind but no zone/base`);
-        await orderRef.update({price_unverifiable: true}).catch(() => {});
-        await queuePush("ADMIN_BROADCAST", "طلب تعذّر التحقّق من سعره ⚠️",
+        // **ثلاثُ مواضعَ تَسِمُ `price_unverifiable` ولا مكنسةَ لها** — فكانت
+        // الدفعةُ المُبتلَعةُ هي كلَّ ما هناك: تَفشلُ فلا يَعلمُ أحدٌ أبداً.
+        // الآن تُسجَّلُ نتيجةُ الدفعةِ في `ops_alerted_unverifiable`
+        // والمكنسةُ تَستعلمُ ما لم يُنبَّه.
+        const alertedU1 = await queuePush("ADMIN_BROADCAST", "طلب تعذّر التحقّق من سعره ⚠️",
             `الطلب #${od.code || orderId} مدفوعٌ من المحفظة ومن نوعٍ قابلٍ للتسعير لكن تعذّر التحقّق من مبلغه — يُرجى المراجعة.`,
             "admin_price_review", {orderId},
-            ["super_admin", "orders_manager", "accountant_admin"]).catch(() => {});
+            ["super_admin", "orders_manager", "accountant_admin"])
+            .then(() => true).catch(() => false);
+        await orderRef.update({
+          price_unverifiable: true,
+          ops_alerted_unverifiable: alertedU1,
+        }).catch(() => {});
       }
     } catch (e) {
       console.error("[wallet-pricing] recompute failed:", e.message);
@@ -2212,7 +2220,16 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
        amount < pkgExpectedGross * 0.5)) {
     await orderRef.update({
       price_mismatch: true,
+      // **العلمُ يُكتَبُ `false` صراحةً ولا يُترَكُ غائباً.** مكنسةُ
+      // `opsHealthSweep` تَستعلمُ مساواتَين الآن — الوسمَ و«لم يُنبَّه بعد» —
+      // فلا تَحوي نافذتُها إلّا ما لم يُنبَّه؛ ومستندٌ بحقلٍ **غائبٍ** لا
+      // يُطابقُ `== false` فيَسقطُ منها. وهذا المسارُ يَسِمُ بصمتٍ عمداً
+      // ويَتّكلُ على المسحِ وحدَه، فهو أوّلُ من يَخسرُ لو غابَ الحقل.
+      ops_alerted_mismatch: false,
       price_expected: pkgExpectedGross,
+      // والمدفوعُ يُحفَظُ: بطاقةُ المراجعةِ في شاشةِ الطلبِ تَقولُ «دُفع كذا
+      // مقابل كذا» بلا حسابٍ عكسيٍّ من النسبة.
+      price_paid: amount,
     }).catch(() => {});
   }
 
@@ -2421,20 +2438,27 @@ async function _verifyOrderPriceTierA(db, orderRef, orderId, od, paid, source) {
     const kind = (od.service_meta && od.service_meta.kind) || "hourly";
     if (ratio < 0.5 || suspiciousZero) {
       console.warn(`[price-shadow:${source}] UNDERPAID ${orderId}: paid=${paid} expected=${expected} net=${expectedNet} ratio=${ratio.toFixed(3)} kind=${kind}`);
+      // **التنبيهُ أوّلاً، ثمّ ادّعاؤه.** كان `ops_alerted_mismatch: true`
+      // يُكتَبُ **قبلَ** دفعةٍ مُبتلَعةٍ بـ`.catch(() => {})`: ففشلُ الدفعةِ
+      // يَترُكُ على المستندِ «نبّهنا عنه» وهو لم يُنبَّه، و`alertBatch`
+      // تُسقِطُ كلَّ مستندٍ العلمُ فيه `true` — فيُدفَنُ الوسمُ للأبد. وهو
+      // عكسُ النظامِ الذي تَنصُّ عليه `alertBatch` نفسُها: «الوسمُ **بعد**
+      // نجاحِ الإشعارِ فقط — فشلُ الإرسالِ يَترُكُ الفئةَ لدورةٍ قادمةٍ بدلَ
+      // إخراسِها للأبد».
+      const alertedM = await queuePush("ADMIN_BROADCAST", "مراجعة سعر طلب ⚠️",
+          `الطلب #${od.code || orderId} مدفوع ${paid} ر.س مقابل ${expectedNet} متوقَّع (${kind}) — يُرجى المراجعة.`,
+          "admin_price_review",
+          {orderId, ratio: String(Math.round(ratio * 1000) / 1000)},
+          ["super_admin", "orders_manager", "accountant_admin"])
+          .then(() => true).catch(() => false);
       await orderRef.update({
         price_mismatch: true,
-        // هذا المسار يُنبّه فوراً أدناه — الوسم يمنع opsHealthSweep من
-        // تكرار التنبيه نفسه؛ مسار المحفظة يَسِم بصمت فيغطيه الفحص الدوري.
-        ops_alerted_mismatch: true,
+        ops_alerted_mismatch: alertedM,
+        price_paid: paid,
         price_expected: expected,
         price_expected_net: expectedNet,
         price_shadow_ratio: Math.round(ratio * 1000) / 1000,
       }).catch(() => {});
-      await queuePush("ADMIN_BROADCAST", "مراجعة سعر طلب ⚠️",
-          `الطلب #${od.code || orderId} مدفوع ${paid} ر.س مقابل ${expectedNet} متوقَّع (${kind}) — يُرجى المراجعة.`,
-          "admin_price_review",
-          {orderId, ratio: String(Math.round(ratio * 1000) / 1000)},
-          ["super_admin", "orders_manager", "accountant_admin"]).catch(() => {});
       // Tier B: أقل من خُمس المتوقَّع، على طلبٍ حديث موثوق الحساب، بمخرجٍ ≥ 5 ر.س
       // (أرضية تمنع إيجابيةً كاذبة من التقريب على مقامٍ ضئيل عند كوبون ~100%).
       const egregious = ratio < 0.2 && expectedNet >= 5 && fresh &&
@@ -2445,11 +2469,15 @@ async function _verifyOrderPriceTierA(db, orderRef, orderId, od, paid, source) {
     // نوعٌ قابل للتسعير لكن تعذّر حسابه (منطقة غائبة/غير محلولة) → لا نُمرّره
     // بصمت؛ نُعلّم وننبّه (Tier A) — يسدّ ثغرة إسقاط zone_name للتهرّب من التحقّق.
     console.warn(`[price-shadow:${source}] UNVERIFIABLE ${orderId}: priceable kind but no zone/base`);
-    await orderRef.update({price_unverifiable: true}).catch(() => {});
-    await queuePush("ADMIN_BROADCAST", "طلب تعذّر التحقّق من سعره ⚠️",
+    const alertedU2 = await queuePush("ADMIN_BROADCAST", "طلب تعذّر التحقّق من سعره ⚠️",
         `الطلب #${od.code || orderId} من نوعٍ قابل للتسعير لكن تعذّر التحقّق من مبلغه — يُرجى المراجعة.`,
         "admin_price_review", {orderId},
-        ["super_admin", "orders_manager", "accountant_admin"]).catch(() => {});
+        ["super_admin", "orders_manager", "accountant_admin"])
+        .then(() => true).catch(() => false);
+    await orderRef.update({
+      price_unverifiable: true,
+      ops_alerted_unverifiable: alertedU2,
+    }).catch(() => {});
   }
   } catch (e) {
     console.error(`[price-shadow:${source}] ${orderId}:`, e.message);
@@ -2491,11 +2519,15 @@ async function _verifyStoreOrderPrice(db, ref, orderId, od, paid, source) {
     // يقين، لكن لا صمتَ أيضاً: نُنبّهُ كما يفعلُ نظيرُه في `orders`.
     if (base === null) {
       console.warn(`[store-price:${source}] UNVERIFIABLE ${orderId}: cart not priceable`);
-      await ref.update({price_unverifiable: true}).catch(() => {});
-      await queuePush("ADMIN_BROADCAST", "طلب متجر تعذّر التحقّق من سعره ⚠️",
+      const alertedU3 = await queuePush("ADMIN_BROADCAST", "طلب متجر تعذّر التحقّق من سعره ⚠️",
           `طلب المتجر #${od.code || orderId} تعذّر تسعيرُ سلّته من products — يُرجى المراجعة.`,
           "admin_price_review", {orderId},
-          ["super_admin", "orders_manager", "accountant_admin"]).catch(() => {});
+          ["super_admin", "orders_manager", "accountant_admin"])
+          .then(() => true).catch(() => false);
+      await ref.update({
+        price_unverifiable: true,
+        ops_alerted_unverifiable: alertedU3,
+      }).catch(() => {});
       return;
     }
     if (!(base > 0)) return;
@@ -2504,21 +2536,21 @@ async function _verifyStoreOrderPrice(db, ref, orderId, od, paid, source) {
     if (paid >= expected - 1) return;
     const ratio = Math.round((paid / expected) * 1000) / 1000;
     console.warn(`[store-price:${source}] UNDERPAID ${orderId}: paid=${paid} expected=${expected} ratio=${ratio}`);
+    // المكنسةُ تَمسحُ `store_orders` أيضاً الآن، فالعلمُ يُكتَبُ بقيمةِ
+    // نجاحِ الدفعةِ لا `true` دائماً — وبلا هذا الترتيبِ كان توسيعُ المسحِ
+    // **عقيماً**: العلمُ المضبوطُ سلفاً يُسكِتُه عن كلِّ مستند.
+    const alertedS = await queuePush("ADMIN_BROADCAST", "مراجعة سعر طلب متجر ⚠️",
+        `طلب المتجر #${od.code || orderId} مدفوع ${paid} ر.س مقابل ${expected} متوقَّع من أسعار products — يُرجى المراجعة.`,
+        "admin_price_review", {orderId, ratio: String(ratio)},
+        ["super_admin", "orders_manager", "accountant_admin"])
+        .then(() => true).catch(() => false);
     await ref.update({
       price_mismatch: true,
-      // **`opsHealthSweep` لا يَمسحُ `store_orders`** — استعلامُه
-      // `collection("orders").where("price_mismatch", "==", true)` — فلا
-      // تنبيهَ مزدوجاً، ولا تَعتمدْ عليه لطلباتِ المتجر: التنبيهُ أدناه هو
-      // كلُّ ما هناك. والعلمُ يُكتَبُ لأنّه صادقٌ لمن يَقرأُ المستند، ولئلّا
-      // يُكرَّرَ التنبيهُ إن وُسِّع المسحُ يوماً إلى هذه المجموعة.
-      ops_alerted_mismatch: true,
+      ops_alerted_mismatch: alertedS,
+      price_paid: paid,
       price_expected: expected,
       price_shadow_ratio: ratio,
     }).catch(() => {});
-    await queuePush("ADMIN_BROADCAST", "مراجعة سعر طلب متجر ⚠️",
-        `طلب المتجر #${od.code || orderId} مدفوع ${paid} ر.س مقابل ${expected} متوقَّع من أسعار products — يُرجى المراجعة.`,
-        "admin_price_review", {orderId, ratio: String(ratio)},
-        ["super_admin", "orders_manager", "accountant_admin"]).catch(() => {});
   } catch (e) {
     console.error(`[store-price:${source}] ${orderId}:`, e.message);
   }
@@ -4513,14 +4545,17 @@ exports.opsHealthSweep = onSchedule(
       // إشعار إداري واحد يلخّص الفئة (حتى 5 أكواد + العدد الكلي) ثم وسم كل
       // مستند كي لا يتكرر التنبيه في الدورات القادمة. الوسم **بعد** نجاح الإشعار
       // فقط — فشل الإرسال يترك الفئة كاملة لدورة قادمة بدل إخراسها للأبد.
-      const alertBatch = async (docs, flag, title, bodyOf) => {
+      // `audience` اختياريٌّ: فئاتُ السعرِ تَخصُّ المحاسبةَ أيضاً، ودفعاتُها
+      // الفوريّةُ تُرسَلُ إلى `accountant_admin` — فكانت المكنسةُ وحدَها
+      // تُخرِجُه من الجمهورِ لنفسِ الواقعة.
+      const alertBatch = async (docs, flag, title, bodyOf,
+          audience = ["super_admin", "orders_manager"]) => {
         const fresh = docs.filter(({d}) => d[flag] !== true);
         if (!fresh.length) return 0;
         const codes = fresh.slice(0, 5).map(({doc, d}) => codeOf(doc, d)).join("، ");
         const more = fresh.length > 5 ? ` و${fresh.length - 5} غيرها` : "";
         await queuePush("ADMIN_BROADCAST", title, bodyOf(codes + more, fresh.length),
-            "admin_order_alert", {count: fresh.length},
-            ["super_admin", "orders_manager"]);
+            "admin_order_alert", {count: fresh.length}, audience);
         for (const {doc} of fresh) {
           await doc.ref.update({[flag]: true}).catch(() => {});
         }
@@ -4631,19 +4666,53 @@ exports.opsHealthSweep = onSchedule(
         console.error("opsHealthSweep: wallet check failed:", e.message);
       }
 
-      // 5) طلبات موسومة price_mismatch (دفعُ محفظةٍ دون نصف السعر المتوقع مرّ
-      //    موسوماً لا مرفوضاً) لم تُراجَع — بلا هذا التنبيه يبقى الوسم بيانات ميتة.
-      try {
-        const snap = await db.collection("orders")
-            .where("price_mismatch", "==", true).limit(200).get();
-        const flagged = snap.docs.map((doc) => ({doc, d: doc.data()}));
-        const n = await alertBatch(flagged, "ops_alerted_mismatch",
-            "طلبات بمبلغ لا يطابق التسعيرة ⚠️",
-            (codes, c) => `${c} طلب دُفع بمبلغ أدنى من المتوقع ووُسم price_mismatch (${codes}) — ` +
-              "راجع المبالغ واسترد الفارق أو اعتمده.");
-        console.log(`opsHealthSweep: price_mismatch alerted=${n}`);
-      } catch (e) {
-        console.error("opsHealthSweep: price_mismatch check failed:", e.message);
+      // 5) وسومُ مراجعةِ السعرِ التي لم يُنبَّه عنها — **والنافذةُ تُصرَّفُ
+      //    الآن.** كان الاستعلامُ `where("price_mismatch","==",true).limit(200)`
+      //    على `orders` وحدَها، ولا شيءَ في المستودعِ يَمحو العلم: فكلُّ طلبٍ
+      //    وُسِمَ يَبقى في مجموعةِ الاستعلامِ للأبد، وهو عطلُ «نافذةٌ تَمتلئُ
+      //    بما لا يُزيلُه أحد» ثالثةً في هذه الجلسة. والسببُ الجذريُّ أنّ
+      //    **الوسمَ لم يكن له قارئٌ في أيِّ واجهة** (صفرُ ورودٍ في `lib/`
+      //    و`admin_panel/src/`)، فلا سبيلَ إلى اعتمادِه أصلاً. شاشةُ الطلبِ
+      //    تَعرضُه الآن وتَكتبُ `price_mismatch: false` عند الاعتماد.
+      //
+      //    والاستعلامُ مساواتانِ: الوسمُ و«لم يُنبَّه بعد» — فنافذتُه لا
+      //    تَحوي إلّا ما يَلزمُه تنبيه، ومساواتانِ بلا مدًى لا تَلزمُهما
+      //    فهرسٌ مركَّب (دمجُ zigzag — سابقةُ `referrals` الحيّة).
+      //    وكلُّ كاتبٍ يَكتبُ العلمَ صراحةً (`false` عند عدمِ الإرسال) لأنّ
+      //    الحقلَ الغائبَ لا يُطابقُ `== false`.
+      //
+      //    والمجموعتانِ معاً: `store_orders` يُوسَمُ بنفسِ الحقولِ من
+      //    `_verifyStoreOrderPrice`، و`try` لكلِّ مجموعةٍ على حِدة — كحلقةِ
+      //    إعادةِ الطابورَين، لأنّ سقوطَ الأولى كان يَقطعُ الثانية.
+      for (const coll of ["orders", "store_orders"]) {
+        try {
+          const mSnap = await db.collection(coll)
+              .where("price_mismatch", "==", true)
+              .where("ops_alerted_mismatch", "==", false).limit(200).get();
+          const n = await alertBatch(
+              mSnap.docs.map((doc) => ({doc, d: doc.data()})),
+              "ops_alerted_mismatch",
+              "طلبات بمبلغ لا يطابق التسعيرة ⚠️",
+              (codes, c) => `${c} طلب دُفع بمبلغ أدنى من المتوقع ووُسم price_mismatch (${codes}) — ` +
+                "راجع المبالغ واسترد الفارق أو اعتمده من شاشة الطلب.",
+              ["super_admin", "orders_manager", "accountant_admin"]);
+          // و«تعذّر التحقّق» فئةٌ ثانيةٌ لم تكن لها مكنسةٌ إطلاقاً: ثلاثةُ
+          // مواضعَ تَسِمُها ودفعةٌ واحدةٌ مُبتلَعةٌ هي كلُّ ما هناك.
+          const uSnap = await db.collection(coll)
+              .where("price_unverifiable", "==", true)
+              .where("ops_alerted_unverifiable", "==", false).limit(200).get();
+          const u = await alertBatch(
+              uSnap.docs.map((doc) => ({doc, d: doc.data()})),
+              "ops_alerted_unverifiable",
+              "طلبات تعذّر التحقّق من سعرها ⚠️",
+              (codes, c) => `${c} طلب من نوعٍ قابل للتسعير تعذّر التحقّق من مبلغه (${codes}) — ` +
+                "راجعه واعتمده من شاشة الطلب.",
+              ["super_admin", "orders_manager", "accountant_admin"]);
+          console.log(`opsHealthSweep[${coll}]: price_mismatch alerted=${n}, ` +
+            `price_unverifiable alerted=${u}`);
+        } catch (e) {
+          console.error(`opsHealthSweep: price review check failed (${coll}):`, e.message);
+        }
       }
 
       // 5-bis) إلغاءٌ مدفوعٌ لم يُردّ إلى المحفظة — **إعادةُ المحاولةِ لا

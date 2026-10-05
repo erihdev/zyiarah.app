@@ -12,6 +12,12 @@ import ServiceMetaTable from '../components/ServiceMetaTable.tsx';
 // هو مرآةُ الدالّةِ نفسِها في `service_meta_view.dart`، فمَوضعُه حيثُ تُختبَرُ
 // المرآة — وتصديرُ دالّةٍ من ملفِّ مُكوِّنٍ يَكسرُ fast-refresh في React.
 import { metaSummary } from '../utils/serviceMeta.ts';
+// وسمُ مراجعةِ السعرِ: الإدارةُ تَعملُ من سطحَين، فقارئٌ في التطبيقِ وحدَه
+// يَترُكُ الطلبَ عاديَّ المنظرِ لمن يَعملُ من اللوحة.
+import { priceReviewOf, priceReviewApprovalPayload } from '../utils/priceReview.ts';
+import PriceReviewBadge from '../components/PriceReviewBadge.tsx';
+import { auth } from '../services/firebase.ts';
+import { logAudit, AUDIT } from '../services/audit.ts';
 
 // تنسيق تاريخ لحقل datetime-local (YYYY-MM-DDTHH:mm).
 const toDatetimeLocal = (dt: Date) => {
@@ -272,6 +278,34 @@ export default function Orders() {
         }
     };
 
+    // **اعتمادُ المبلغِ الموسوم.** يُبطِلُ علمَي الاستعلامِ فيَخرُجُ المستندُ
+    // من نافذةِ `opsHealthSweep` — وهو التصريفُ الذي لم يكن له سبيلٌ من قبل،
+    // فكانت النافذةُ تَمتلئُ بما وُسِمَ ولا يُزيلُه أحد.
+    const handleApprovePrice = async (order: OrderRecord) => {
+        const code = order.code || order.id.substring(0, 6).toUpperCase();
+        if (!await confirm(`اعتماد المبلغ المدفوع للطلب #${code} كما هو؟ سيُرفع وسم المراجعة.`)) return;
+        try {
+            await updateDoc(doc(db, 'orders', order.id), {
+                ...priceReviewApprovalPayload(auth.currentUser?.email ?? 'Unknown Admin'),
+                price_reviewed_at: Timestamp.now(),
+                updated_at: Timestamp.now(),
+            });
+            await logAudit(AUDIT.REVIEW_ORDER_PRICE, {
+                decision: 'approved',
+                order_code: code,
+                collection: 'orders',
+            }, order.id);
+            toast.success('تم اعتماد المبلغ');
+        } catch (err) {
+            // console.error وحدَه كان يُبلَعُ: الصفُّ لا يَتغيّرُ (لا كتابة ⇒ لا
+            // تحديثَ للمُستمِع) فيَحسبُ الأدمنُ أنّه أخطأَ النقر.
+            console.error('approve price failed:', err);
+            toast.error(err instanceof Error ? err.message : 'تعذّر اعتماد المبلغ');
+        } finally {
+            setActionMenuId(null);
+        }
+    };
+
     const handleCancelOrder = async (order: OrderRecord) => {
         if (!await confirm(`هل أنت متأكد من إلغاء الطلب #${order.code || order.id.substring(0, 6).toUpperCase()}؟`)) return;
         setIsCancelling(true);
@@ -433,11 +467,17 @@ export default function Orders() {
                                                 <div className="text-[11px] font-bold text-[#660033] mt-0.5">{metaSummary(order.service_meta)}</div>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 font-bold text-emerald-600">{order.amount}</td>
+                                        <td className="px-6 py-4 font-bold text-emerald-600">
+                                            {order.amount}
+                                            <PriceReviewBadge r={priceReviewOf(order as unknown as Record<string, unknown>)} />
+                                        </td>
                                         <td className="px-6 py-4 font-medium text-slate-500 text-sm">{order.date}</td>
                                         <td className="px-6 py-4"><StatusBadge status={order.status} /></td>
                                         <td className="px-6 py-4 text-center relative">
-                                            {(!isFinalStatus(order) || canBnplRefund(order)) && (
+                                            {/* الطلبُ الموسومُ قد يكون `completed` — وشرطُ الظهورِ كان
+                                                يُخفي القائمةَ عن النهائيّ، فيَصيرُ الاعتمادُ غيرَ قابلٍ للوصول. */}
+                                            {(!isFinalStatus(order) || canBnplRefund(order) ||
+                                              priceReviewOf(order as unknown as Record<string, unknown>).actionable) && (
                                                 <button
                                                     type="button"
                                                     title="الإجراءات"
@@ -449,6 +489,15 @@ export default function Orders() {
                                             )}
                                             {actionMenuId === order.id && (
                                                 <div ref={menuRef} className="absolute left-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-slate-100 z-20 overflow-hidden">
+                                                    {priceReviewOf(order as unknown as Record<string, unknown>).actionable && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleApprovePrice(order)}
+                                                            className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-rose-700 hover:bg-rose-50 transition-colors text-right"
+                                                        >
+                                                            <CheckCircle2 size={16} />اعتماد المبلغ
+                                                        </button>
+                                                    )}
                                                     {(order.status === 'pending' || order.status === 'pending_admin_approval') && (
                                                         <button
                                                             type="button"
