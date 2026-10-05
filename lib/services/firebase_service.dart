@@ -9,6 +9,7 @@ import 'package:zyiarah/services/notification_service.dart';
 import 'dart:math';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/upload_content_type.dart';
+import 'package:zyiarah/utils/staff_role.dart';
 
 /// خدمة إدارة Firebase لتطبيق زيارة
 class ZyiarahFirebaseService {
@@ -115,20 +116,45 @@ class ZyiarahFirebaseService {
   // --- استرجاع دور المستخدم وتوجيهه ---
   Future<String?> getUserRole(String uid, {String? phone}) async {
     try {
-      // 1. التحقق أولاً من مجموعة المديرين (UID-based)
-      DocumentSnapshot adminDoc = await _db.collection('admins').doc(uid).get().timeout(kNetCallTimeout);
-      if (adminDoc.exists && adminDoc.data() != null) {
-        final adminData = adminDoc.data() as Map<String, dynamic>;
-        // العودة بالدور الإداري التفصيلي (مثل accountant_admin, marketing_admin)
-        return adminData['staff_role'] ?? adminData['role'] ?? 'admin';
+      // 1. **`users` أوّلاً — وهو المستندُ الذي تَقرؤه القواعد.**
+      //
+      //    كان هذا الترتيبُ مقلوباً: `admins/{uid}` أوّلاً و`staff_role` منه،
+      //    و`users` لا يُقرأُ إلّا إن غابَ مستندُ `admins`. والقواعدُ
+      //    (`getUserData()` = `get(/users/$uid).data`) لا تَعرفُ `admins`
+      //    إطلاقاً — فسؤالٌ واحدٌ بمصدرَين، وما تَعرضُه الواجهةُ قد يُخالِفُ
+      //    ما يُجيزُه الخادم. والقاعدةُ ومُبرِّرُها في `lib/utils/staff_role.dart`.
+      //
+      //    والكلفةُ كما كانت: مستندُ موظّفٍ يَحملُ `role` و`staff_role` معاً
+      //    (`createAccountViaAdmin` يَكتبُهما و`_saveStaff` يُحدّثُهما)، فقراءةٌ
+      //    واحدةٌ تَكفي، و`admins` لا يُقرأُ إلّا لحسابٍ لا يَحملُ `users` دوراً.
+      DocumentSnapshot doc = await _db
+          .collection('users')
+          .doc(uid)
+          .get()
+          .timeout(kNetCallTimeout);
+      final Map<String, dynamic>? userData =
+          doc.exists ? doc.data() as Map<String, dynamic>? : null;
+      final String? fromUsers = roleFromUsersDoc(userData);
+      if (fromUsers != null) {
+        // مفتاحُ الإيقافِ كان يُكتَبُ في `admins` ولا يَقرؤه **شيء**: لا
+        // القواعدُ ولا الدوالُّ ولا هذا الموضع — فموظّفٌ «معطَّل» يَدخلُ
+        // ويَعملُ كأنّ شيئاً لم يَكن. يُقرأُ الآن من `users` (حيث تَقرأُ
+        // القواعدُ)، والإنفاذُ الكاملُ ينتظرُ نشرَ القواعدِ بيدٍ بشريّة.
+        if (staffAccountDisabled(userData, fromUsers)) return null;
+        return fromUsers;
       }
 
-      // 2. التحقق من مجموعة المستخدمين العامة
-      DocumentSnapshot doc = await _db.collection('users').doc(uid).get().timeout(kNetCallTimeout);
-      if (doc.exists && doc.data() != null) {
-        final data = doc.data() as Map<String, dynamic>;
-        return data['role'] ?? 'client';
+      // 2. احتياطٌ: حسابٌ لا يَحملُ `users` دوراً (أُنشئ بيدٍ في الكونسولِ أو
+      //    حسابُ تأسيسٍ قديم) — حجبُه كان سيُقفِلُ الإدارةَ.
+      DocumentSnapshot adminDoc = await _db
+          .collection('admins')
+          .doc(uid)
+          .get()
+          .timeout(kNetCallTimeout);
+      if (adminDoc.exists && adminDoc.data() != null) {
+        return roleFromAdminsDoc(adminDoc.data() as Map<String, dynamic>?);
       }
+      if (userData != null) return 'client';
 
       // 3. إذا لم يوجد، وكان هناك رقم جوال، نتحقق من مجموعة السائقين
       if (phone != null) {

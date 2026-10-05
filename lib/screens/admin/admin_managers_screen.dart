@@ -149,7 +149,25 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                                       // يضيع كخطأ غير معالَج ويرتد المفتاح صمتاً — ننتظر
                                       // ونُظهر النتيجة كنمط مفتاح السائقين في admin_drivers_screen.
                                       try {
-                                        await _db.collection('admins').doc(doc.id).update({'is_active': val});
+                                        // **كان يَكتبُ `admins` وحدَه —
+                                        // ولا قارئَ لذلك الحقلِ في المستودعِ
+                                        // كلِّه** (لا القواعدُ ولا الدوالُّ
+                                        // ولا `getUserRole`): فموظّفٌ
+                                        // «معطَّل» يَدخلُ ويَعملُ كأنّ شيئاً
+                                        // لم يَكن، والشاشةُ تَقولُ «معطّل».
+                                        // يُكتَبُ الآن في `users` كذلك — حيث
+                                        // تَقرأُ القواعدُ و`getUserRole` —
+                                        // ودفعةً ذرّيّةً كي لا يَفترِقَ
+                                        // العرضُ عن الإنفاذ.
+                                        final tb = _db.batch();
+                                        tb.update(
+                                            _db.collection('admins').doc(doc.id),
+                                            {'is_active': val});
+                                        tb.set(
+                                            _db.collection('users').doc(doc.id),
+                                            {'is_active': val},
+                                            SetOptions(merge: true));
+                                        await tb.commit();
                                         await _audit.logAction(action: 'TOGGLE_ADMIN_STATUS', details: {'email': admin['email'], 'new_status': val});
                                         if (context.mounted) {
                                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -453,8 +471,19 @@ class _ManagerFormSheetState extends State<_ManagerFormSheet> {
           'staff_role': role,
           'updated_at': FieldValue.serverTimestamp(),
         };
-        await FirebaseFirestore.instance.collection('users').doc(widget.docId).set(updates, SetOptions(merge: true));
-        await FirebaseFirestore.instance.collection('admins').doc(widget.docId).set({...updates, 'email': email}, SetOptions(merge: true));
+        // **دفعةٌ ذرّيّة (2026-10-05).** كانت كتابتَين متتاليتَين، و`users`
+        // هو ما تَقرؤه القواعدُ بينما `admins` هو ما تَعرضُه هذه الشاشةُ —
+        // ففشلُ الثانيةِ يَترُكُ القواعدَ على الدورِ الجديدِ والقائمةَ على
+        // القديم: تنزيلٌ ⇒ يُرى في القائمةِ بصلاحيّةٍ تَرفضُها القواعدُ في
+        // كلِّ كتابة، وترقيةٌ ⇒ يَملكُ صلاحيّةً لا تَظهرُ لمَن يُراجِعُ
+        // الوصول. (المصدرُ والاحتياطُ في `lib/utils/staff_role.dart`.)
+        final db = FirebaseFirestore.instance;
+        final batch = db.batch();
+        batch.set(db.collection('users').doc(widget.docId), updates,
+            SetOptions(merge: true));
+        batch.set(db.collection('admins').doc(widget.docId),
+            {...updates, 'email': email}, SetOptions(merge: true));
+        await batch.commit();
       }
       
       await ZyiarahAuditService().logAction(

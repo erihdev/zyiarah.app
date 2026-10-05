@@ -32,6 +32,21 @@ const {setDoc, doc, updateDoc, getDoc, getDocs, collection, query, addDoc,
     await setDoc(doc(db, "users/superA"), {role: "admin"});
     // a plain client
     await setDoc(doc(db, "users/client1"), {role: "client"});
+    // ── موظّفونَ «معطَّلون» (2026-10-05) ───────────────────────────────────
+    // مفتاحُ الإيقافِ كان يَكتبُ `admins/{id}.is_active` ولا قارئَ له في
+    // المستودعِ كلِّه، فالمعطَّلُ يَعملُ كأنّ شيئاً لم يَكن. وُسِمَ الآن في
+    // `users` (حيث تَقرأُ القواعدُ) — والبذرُ هنا بالصيغتَين: مستندُ
+    // `admins` موجودٌ أيضاً، لأنّ `isAdmin()` يُجيزُ بمجرّدِ وجودِه.
+    await setDoc(doc(db, "users/offMgr"),
+        {role: "admin", staff_role: "orders_manager", is_active: false});
+    await setDoc(doc(db, "admins/offMgr"),
+        {role: "admin", staff_role: "orders_manager", is_active: false});
+    await setDoc(doc(db, "users/offSuper"), {role: "admin", is_active: false});
+    await setDoc(doc(db, "users/offMarketer"),
+        {role: "admin", staff_role: "marketing_admin", is_active: false});
+    // وعميلةٌ بالحقلِ نفسِه: لا يَمَسُّها الشرطُ (محصورٌ بمُعيِّناتِ الموظّفين).
+    await setDoc(doc(db, "users/clientOff"),
+        {role: "client", is_active: false});
     // عميلٌ له كودُ إحالةٍ مكتوبٌ سلفاً، وآخرُ بلا كود (أوّلُ توليد).
     await setDoc(doc(db, "users/refOwner"), {role: "client", referral_code: "AAAA1111"});
     await setDoc(doc(db, "users/refNew"), {role: "client"});
@@ -231,6 +246,32 @@ const {setDoc, doc, updateDoc, getDoc, getDocs, collection, query, addDoc,
       addDoc(tkMsgs("client2"),
           {senderId: "client2", senderRole: "user", text: "x",
             sentAt: new Date()}), false);
+
+  // ═══ موظّفٌ موقوفٌ لا يَعملُ (STAGE-C) ═══
+  //
+  // الحالةُ قبلَ الإصلاح: `admins/{id}.is_active` بلا قارئٍ في المستودعِ
+  // كلِّه، فمفتاحُ «الإيقاف» زينةٌ — ومَن أوقفَه المالكُ يُحدِّثُ الطلباتَ
+  // ويَحذفُ المناطقَ ويَبثُّ كأنّه نشط. واختبارُ قضمٍ يُثبِتُ ذلك: بإزالةِ
+  // `staffEnabled()` تَنجحُ الأربعةُ التاليةُ كلُّها.
+  await check("staff off: orders_manager CANNOT update an order",
+      updateDoc(doc(asUser("offMgr"), "orders/o1"), {status: "assigned"}),
+      false);
+  await check("staff off: super_admin CANNOT write system_configs",
+      setDoc(doc(asUser("offSuper"), "system_configs/hourly_settings"),
+          {max_orders_per_day: 7}, {merge: true}), false);
+  await check("staff off: marketing_admin CANNOT write a product",
+      setDoc(doc(asUser("offMarketer"), "products/p1"), {price: 1},
+          {merge: true}), false);
+  // و`isAdmin()` يُجيزُ بمجرّدِ وجودِ مستندِ `admins` — فالشرطُ يَسبقُ ذلك.
+  await check("staff off: an existing admins doc does NOT revive access",
+      getDoc(doc(asUser("offMgr"), "users/client1")), false);
+  // والعميلةُ بالحقلِ نفسِه لا يَمَسُّها الشرط: تَقرأُ مستندَها كما كانت.
+  await check("client with is_active:false is untouched by the staff gate",
+      getDoc(doc(asUser("clientOff"), "users/clientOff")), true);
+  // والنشطُ ما زال يَعمل — فالتضييقُ ليس إقفالاً للإدارة.
+  await check("an active orders_manager still updates an order",
+      updateDoc(doc(asUser("ordersMgr"), "orders/o1"), {status: "scheduled"}),
+      true);
 
   await testEnv.cleanup();
   console.log(`\nRole test: ${pass} passed, ${fail} failed`);
