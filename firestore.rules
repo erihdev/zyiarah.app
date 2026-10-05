@@ -110,7 +110,23 @@ service cloud.firestore {
                      'total_orders', 'is_blocked', 'status', 'visits_remaining',
                      'subscription_expiry', 'subscription_total_visits',
                      // خادمية فقط (activateContractOnPaid) — منعُ تزييف بطاقة اشتراك.
-                     'has_active_subscription', 'subscription_type']));
+                     'has_active_subscription', 'subscription_type',
+                     // SECURITY: رابطُ الإحالة يكتبه `applyReferralCode` وحده
+                     // (Admin SDK). لو كتبها المالك بنفسه نسب إحالتَه لمن يشاء —
+                     // والمكافأة 50 ر.س تُصرف على `referrals.referrer_id` الذي
+                     // يُشتقّ من هذه القراءة.
+                     'used_referral_code', 'referred_by']) &&
+          // SECURITY: `referral_code` **يُكتب مرّةً واحدة**.
+          //
+          // `getOrCreateReferralCode` يولّده من العميل ويكتبه على مستنده، فلا
+          // يمكن منعُه كلّيّاً. لكنّ `applyReferralCode` يحلّ المُحيلَ بـ
+          // `where('referral_code','==',code).limit(1)` — فمن يستطيع **تغيير**
+          // كوده يضبطه على كود غيره، فتُرجِع الاستعلامةُ أحدَ المستندَين، وقد
+          // تُنسب إحالةٌ (ومكافأتُها) إلى غير صاحبها. الكتابةُ مسموحةٌ ما دام
+          // الحقلُ غائباً أو فارغاً، وممنوعةٌ بعد ذلك.
+          (!request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['referral_code']) ||
+           resource.data.get('referral_code', '') == ''));
 
       allow delete: if isSuperAdmin();
     }
