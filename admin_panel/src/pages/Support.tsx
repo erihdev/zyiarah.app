@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { LifeBuoy, Search, MessageSquare, AlertCircle, CheckCircle2, Send, Clock } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, where, limit, Timestamp, doc, updateDoc, addDoc, serverTimestamp, getCountFromServer, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
-import { db } from '../services/firebase.ts';
+import { db, auth } from '../services/firebase.ts';
 import { useNow } from '../hooks/useNow.ts';
 import { useNotification } from '../components/notificationContext.ts';
+import { ticketMessageIsFromTeam } from '../utils/ticketAuthorship';
 
 // المجموعة الصحيحة هي support_tickets (يكتبها العميل في support_screen.dart والدوال في functions/index.js).
 // كانت اللوحة سابقاً مرتبطة بمجموعة وهمية 'tickets' بأسماء حقول خاطئة → صفحة الدعم فارغة دائماً
@@ -12,6 +13,7 @@ interface SupportMessage {
     id: string;
     text: string;
     senderRole?: string;
+    senderUid?: string | null;
     senderId?: string;
     senderName?: string;
     sentAt?: Timestamp;
@@ -113,7 +115,11 @@ export default function Support() {
         (t.userEmail || '').includes(searchTerm)
     );
 
-    const isAdminMsg = (m: SupportMessage) => m.senderRole === 'admin' || m.senderId === 'admin';
+    // القاعدةُ المشترَكةُ لا تعدادٌ محلّيّ: الحقلانِ يَكتبُهما العميلُ،
+    // وتطبيقُ الإدارةِ كان يَقرأُ `senderRole` وحدَه فيُخالِفُ هذا السطحَ
+    // على المستندِ نفسِه. (التفصيلُ في `utils/ticketAuthorship.ts`.)
+    const isAdminMsg = (m: SupportMessage) =>
+        ticketMessageIsFromTeam(m, selected?.userId);
 
     const handleSend = async () => {
         if (!reply.trim() || !selected || sending) return;
@@ -126,6 +132,9 @@ export default function Support() {
                 senderRole: 'admin',
                 senderId: 'admin',
                 senderName: 'فريق زيارة',
+                // **uid الأدمنِ الحقيقيُّ** — المِعيارُ الذي لا تَكتبُه
+                // العميلة، وسجلُّ «أيُّ أدمنٍ أجاب» (لم يُسجَّلْ في أيِّ سطح).
+                senderUid: auth.currentUser?.uid ?? null,
                 sentAt: serverTimestamp(),
             });
             await updateDoc(doc(db, 'support_tickets', selected.id), {

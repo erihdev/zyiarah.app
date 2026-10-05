@@ -346,10 +346,42 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
 
       match /messages/{messageId} {
-        allow read, create: if isLoggedIn() && (
+        allow read: if isLoggedIn() && (
           request.auth.uid ==
             get(/databases/$(database)/documents/support_tickets/$(ticketId)).data.userId
           || isAdmin()
+        );
+
+        // ⚠️⚠️ **ردٌّ مُلفَّقٌ باسمِ «فريق زيارة» يُسكِتُ تنبيهَ الدعمِ عن
+        // نفسِه (2026-10-05).** كان `create` بلا قيدٍ على **المحتوى**: مالكةُ
+        // التذكرةِ تُنشئُ رسالةً بأيِّ حقول. وأربعةُ قُرّاءٍ يُقرّرونَ «أهذا
+        // منّا أم منها؟» من حقلَين تَكتبُهما هي:
+        //
+        //   • `sendNotificationOnTicketReply` (خادميّ): يَتفرّعُ على
+        //     `senderRole === "admin" || senderId === "admin"` — فالفرعُ
+        //     الأوّلُ «ردُّ الدعم ⇒ أشعِرْ صاحبةَ التذكرة»، والثاني «ردُّ
+        //     العميلةِ ⇒ أشعِرِ الإدارة». فرسالةٌ تَحملُ الادّعاءَ **تُسقِطُ
+        //     تنبيهَ «رد جديد على تذكرة دعم» عن مديرِ الطلباتِ كلَّه**: تَكتبُ
+        //     إلى الدعمِ ولا يُخبَرُ أحد، وتُرسِلُ إلى نفسِها «تم الرد على
+        //     تذكرتك 💬».
+        //   • `Support.tsx` و`admin_ticket_details_screen`: يَرسمانِ الرسالةَ
+        //     **في جهةِ الفريقِ** بنصِّها، فالخيطُ يُقرأُ عند الأدمنِ كأنّ
+        //     الفريقَ أجابَ — ونصُّها من اختيارِها («تم استرداد المبلغ كاملاً»).
+        //     وهي عائلةُ حقنِ HTML في بريدِ التنبيهِ الإداريِّ: محتوى العميلةِ
+        //     يُعرَضُ على المالكِ بسلطتِنا.
+        //
+        // فالمالكةُ تُنشئُ بحقولِ التطبيقِ وحدَها، و`senderRole` إن كُتِبَ
+        // فـ`user`، و`senderId` إن كُتِبَ فهو uid نفسِها. والإداريُّ بلا قيد.
+        // (مُثبَتٌ على المُحاكي: بالقاعدةِ القديمةِ يَنجحُ التلفيقُ.)
+        allow create: if isAdmin() || (
+          isLoggedIn()
+          && request.auth.uid ==
+            get(/databases/$(database)/documents/support_tickets/$(ticketId)).data.userId
+          && request.resource.data.keys()
+              .hasOnly(['senderId', 'senderRole', 'text', 'sentAt'])
+          && request.resource.data.get('senderRole', 'user') == 'user'
+          && request.resource.data.get('senderId', request.auth.uid)
+              == request.auth.uid
         );
       }
     }

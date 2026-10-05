@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zyiarah/utils/ticket_authorship.dart';
 
 class AdminTicketDetailsScreen extends StatefulWidget {
   final String ticketId;
@@ -16,6 +18,34 @@ class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final TextEditingController _replyCtrl = TextEditingController();
   bool _isSending = false;
+
+  /// صاحبُ التذكرة — **المِعيارُ البنيويُّ** لتمييزِ ردِّ الفريقِ من ردِّها.
+  /// الشاشةُ كانت تَقرأُ الادّعاءَ (`senderRole`) وحدَه، وهو حقلٌ تَكتبُه
+  /// العميلة (التفصيلُ في `lib/utils/ticket_authorship.dart`). ويُقرَأُ هنا
+  /// بقراءةٍ واحدةٍ لأنّ الشاشةَ تُفتَحُ أيضاً من رابطٍ عميقٍ لا يَحملُ غيرَ
+  /// المعرّف.
+  String? _ownerUid;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOwner();
+  }
+
+  Future<void> _loadOwner() async {
+    try {
+      final snap = await _db
+          .collection('support_tickets')
+          .doc(widget.ticketId)
+          .get()
+          .timeout(kNetCallTimeout);
+      if (!mounted) return;
+      setState(() => _ownerUid = snap.data()?['userId'] as String?);
+    } catch (_) {
+      // تعذّرَ تحديدُ المالك: القاعدةُ تَسقطُ على الادّعاءِ كما كانت قبلَها،
+      // فالخيطُ يُعرَضُ ولا يُحجَبُ — فشلُ تمييزٍ لا فشلُ شاشة.
+    }
+  }
 
   @override
   void dispose() {
@@ -43,6 +73,9 @@ class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
         'senderRole': 'admin',
         // (تحسين من الويب) اسم المُرسِل يظهر للعميل بدل «إدارة» مجهّلة.
         'senderName': 'فريق زيارة',
+        // **uid الأدمنِ الحقيقيُّ**: هو المِعيارُ الذي لا تَكتبُه العميلة،
+        // وهو أيضاً سجلُّ «أيُّ أدمنٍ أجاب» ولم يَكُنْ يُسجَّلُ في أيِّ سطح.
+        'senderUid': FirebaseAuth.instance.currentUser?.uid,
         'sentAt': FieldValue.serverTimestamp(),
       });
       batch.update(ticketRef, {
@@ -130,8 +163,10 @@ class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
                     itemCount: docs.length,
                     itemBuilder: (context, index) {
                       final msg = docs[index].data() as Map<String, dynamic>;
-                      final senderRole = msg['senderRole'] ?? '';
-                      final isUser = senderRole != 'admin';
+                      // القاعدةُ المشترَكةُ لا تعدادٌ محلّيّ: هذا الموضعُ
+                      // كان يَقرأُ `senderRole` وحدَه فيُخالِفُ اللوحةَ
+                      // والخادمَ على المستندِ نفسِه.
+                      final isUser = !ticketMessageIsFromTeam(msg, _ownerUid);
 
                       // RTL Logic: Me (Admin) on the Right, Other (User) on the Left
                       final isMe = !isUser;
