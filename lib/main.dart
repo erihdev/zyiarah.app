@@ -273,23 +273,20 @@ class AuthWrapper extends StatelessWidget {
       } else if (['admin', 'super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin'].contains(role)) {
         return const AdminDashboardScreen();
       } else {
-        // (دمج من لوحة الويب) وضع الصيانة — يُقفل التطبيق **للعملاء فقط** (الإدارة
-        // والسائقون يبقون للعمل/الإيقاف). fail-open: تعذّر القراءة أو غياب العلم ⇒
-        // التطبيق يعمل عادياً؛ maintenance_mode==true فقط يُظهر شاشة الصيانة.
-        return StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('system_configs')
-              .doc('main_settings')
-              .snapshots()
-            .firstEventTimeout(),
-          builder: (context, snap) {
-            final data = snap.data?.data() as Map<String, dynamic>?;
-            if (data != null && data['maintenance_mode'] == true) {
-              return const _MaintenanceScreen();
-            }
-            return const ClientDashboard();
-          },
-        );
+        // **وضعُ الصيانةِ يُقرَّرُ في `_maintenanceGate` وحدَه** (في
+        // `MaterialApp.builder`، فوقَ كلِّ الشاشات). كان هنا `StreamBuilder`
+        // ثانٍ على المستندِ نفسِه — **نسخةٌ ثانيةٌ من القرارِ، ولا يُرى
+        // خَرْجُها أبداً**: البوّابةُ الخارجيّةُ تُغلِّفُ ناتجَ هذا الفرعِ،
+        // فحين تُظهِرُ شاشةَ الصيانةِ لا يُعرَضُ ما تَحتَها. فكلُّ ما كان
+        // يُنتجُه مُستمِعُ Firestore ثانٍ لكلِّ عميلةٍ مسجَّلة.
+        //
+        // **والنسختانِ كانتا تَختلفان**، وهذا هو الأهمّ: البوّابةُ تُغلِقُ
+        // على `role == 'client'` بعينِه وتَقولُ «إدارة/سائق/**دورٌ غيرُ
+        // معروف** ⇒ لا يُقفل (fail-open)»، وهذه الكتلةُ تُغلِقُ على العَلَمِ
+        // وحدَه — فدورٌ غيرُ معروفٍ (لا `null`، فذاك له `_RoleUnavailableScreen`)
+        // يَصلُ هذا الفرعَ ويُقفَلُ **خلافاً للقرارِ الموثَّقِ** على بُعدِ
+        // خمسينَ سطراً. فحذفُها يُطابِقُ السلوكَ بالقرار.
+        return const ClientDashboard();
       }
     }
 
