@@ -91,7 +91,21 @@ void main() {
       expect(b,
           contains('(before.staff_role || null) !== (after.staff_role || null)'));
       expect(b, contains('if (!roleChanged && !staffChanged) return null;'));
-      expect(b, contains('role_synced_at'));
+      // **وُسِمَ الحِمْلُ باسمِه لا بحقولِه (2026-10-05).** كان الفحصُ يَشدُّ
+      // النصَّ `role_synced_at` داخلَ جسمِ المُشغّل، فحين اُستُخرِجَ الحِمْلُ
+      // إلى `_tokenRolePayload` — لأنّ مكنسةَ الانحرافِ تَكتبُ الشكلَ نفسَه
+      // وكانت نسخةً ثانيةً — سقطَ الفحصُ **بالنقلِ لا بالانحراف**، وهو نمطٌ
+      // مسجَّلٌ في هذا المستودع. فالشدُّ الآن إلى النداءِ **وإلى الحِمْلِ في
+      // موضعِه الواحد**: أشدُّ من النصِّ الذي كان، لأنّ نسخةً إنلاين ثانيةً
+      // تُسقطُه أيضاً.
+      expect(b, contains('_tokenRolePayload('),
+          reason: 'المُشغّلُ لا يَكتبُ حِمْلَ الوسمِ المشترَك');
+      final int pi = idx.indexOf('function _tokenRolePayload(');
+      expect(pi, greaterThan(0), reason: 'موضعُ الحِمْلِ الواحدُ اختفى');
+      expect(idx.substring(pi, pi + 400), contains('role_synced_at'),
+          reason: 'حِمْلُ الوسمِ لا يَكتبُ طابعَ المزامنة');
+      expect(RegExp(r'function _tokenRolePayload\(').allMatches(idx).length, 1,
+          reason: 'نسخةٌ ثانيةٌ من الحِمْلِ — وهي ما كان يَنحرِف');
       // ولا يُنشئُ رمزاً لمن لا رمزَ له — الرمزَ يَكتبُه الجهازُ وحدَه.
       expect(b, contains('if (!tokSnap.exists) return null;'));
     });

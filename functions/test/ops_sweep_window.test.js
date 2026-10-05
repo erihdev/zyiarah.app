@@ -253,4 +253,97 @@ test("(ن٣) وغيابُ المالكِ وحدَه يُبقي العلمَ — 
       /unknown=\$\{unknown\}/.test(blk),
   "العدّادانِ لا يُطبَعان — فالتراكمُ يَبقى غيرَ مرئيّ");
 });
+// ═══ (١٤) مهمّةٌ فشلَ فكُّ إسنادِها عن سائقٍ معطَّل ═══
+//
+// `unassignJobsOnDriverDisable` كان يَبتلعُ فشلَ التحديثِ لكلِّ مستندٍ
+// (`.catch` يَطبعُ) **ويَعُدُّه ناجحاً** — فالتنبيهُ يَقولُ «أُعيدت لقائمة
+// الإسناد» عن مهمّةٍ ما زالت مُسنَدةً لمن لا يَعمل، والمُشغّلُ بلا `retry`.
+test("(١٤) العدُّ على النجاحِ وحدَه، والفشلُ يَكتبُ علَمَه", () => {
+  const i = src.indexOf("exports.unassignJobsOnDriverDisable");
+  assert.ok(i > 0, "المُشغّلُ اختفى");
+  const seg = src.slice(i, i + 3400);
+  assert.ok(!/\}\)\.catch\(\(e\) =>\s*\n?\s*console\.error\(`unassignJobsOnDriverDisable/
+      .test(seg), "الفشلُ ما زال مُبتلَعاً بـ.catch على التحديث");
+  assert.ok(/try \{[\s\S]{0,160}?update\(_unassignPayload\([\s\S]{0,40}?\);\s*\n\s*n\+\+;/
+      .test(seg), "العدُّ ليس داخلَ مسارِ النجاح");
+  assert.ok(seg.includes("unassign_pending: true"),
+      "الفشلُ لا يَكتبُ علَمَه — فلا تَراه المكنسة");
+  assert.ok(seg.includes("failed++"), "الفشلُ غيرُ معدود");
+  assert.ok(/failed > 0/.test(seg),
+      "التنبيهُ لا يُفرِّقُ المُعادَ من المتعذّر — وهي الدعوى المَحروسة");
+});
+
+test("(١٥) والمكنسةُ تَستعلمُ العلَمَ لا الحالة، وتُعيدُ نفسَ الحِمْل", () => {
+  const i = src.indexOf("exports.opsHealthSweep");
+  const sweep = src.slice(i);
+  assert.ok(sweep.includes(".where(\"unassign_pending\", \"==\", true)"),
+      "لا مكنسةَ على العلَم");
+  // الحالةُ (`assigned`) هي حالةُ كلِّ مهمّةٍ قائمةٍ — استعلامُها يَغرق.
+  assert.ok(!/unassign[\s\S]{0,400}?where\("status", "in", \["scheduled"/.test(sweep),
+      "المكنسةُ تَستعلمُ الحالةَ فتَغرقُ فيها");
+  // **والحِمْلُ موضعٌ واحدٌ بمُنادِيَين.** كتبتُه أوّلاً مرّتَين — في
+  // المُشغّلِ وفي المكنسةِ — وهو عينُ «قرارٌ مكتوبٌ مرّتَين يَنحرِف»
+  // الذي يُصحّحُه هذا المستودعُ مرّةً بعد مرّة: نسخةٌ تَفقدُ حقلاً تُنتجُ
+  // مهمّةً «مُستردَّةً» بحقولِ سائقٍ باقيةٍ فلا تُسنَدُ لأحد. فالفحصُ
+  // يَشدُّ التعريفَ الواحدَ والمُنادِيَين، لا تشابهَ النصَّين.
+  assert.strictEqual(
+      (src.match(/function _unassignPayload\(/g) || []).length, 1,
+      "تعريفُ الحِمْلِ ليس موضعاً واحداً");
+  assert.ok(sweep.includes("_unassignPayload(\"driver_disabled\")"),
+      "المكنسةُ لا تُعيدُ نفسَ الحِمْل");
+  assert.strictEqual(
+      (src.match(/_unassignPayload\("driver_disabled"\)/g) || []).length, 2,
+      "المُنادِيانِ ليسا اثنَين — فنسخةٌ إنلاين عادت");
+  // والحِمْلُ نفسُه يَمحو العلَمَين، وإلّا بَقيَ المستندُ في المجموعةِ أبداً.
+  const defI = src.indexOf("function _unassignPayload(");
+  const def = src.slice(defI, defI + 700);
+  for (const f of ["unassign_pending", "unassign_driver_id"]) {
+    assert.ok(new RegExp(f + ": FieldValue\\.delete\\(\\)").test(def),
+        `النجاحُ لا يَمحو ${f} — فالمستندُ يَبقى في مجموعةِ المكنسةِ للأبد`);
+  }
+});
+
+// ═══ (١٦) رمزُ دفعٍ موسومٌ بدورٍ قديم ═══
+//
+// توجيهُ تنبيهاتِ الإدارةِ يَستعلمُ `fcm_tokens.role`، و`syncRoleToPushToken`
+// يُصحّحُها بـ`.catch(() => {})` — ففشلٌ عابرٌ يُعيدُ العطلَ الذي كُتبت له.
+// والفحصُ **بنيويٌّ**: يُقابِلُ الرمزَ بـ`users` فلا علَمَ يُلفَّق.
+test("(١٦) فحصُ انحرافِ دورِ الرمزِ بنيويٌّ ويُقابِلُ users", () => {
+  const i = src.indexOf("exports.opsHealthSweep");
+  const sweep = src.slice(i);
+  assert.ok(sweep.includes("db.collection(\"fcm_tokens\")"),
+      "لا فحصَ لانحرافِ الرمز");
+  assert.ok(/where\("role", "in", STAFF_TOKEN_ROLES\)/.test(sweep),
+      "الجمهورُ ليس رموزَ الموظّفينَ وحدَها");
+  assert.ok(/collection\("users"\)\.doc\(doc\.id\)/.test(sweep),
+      "لا مُقابلةَ بـusers — فالفحصُ يُصدّقُ الرمزَ نفسَه");
+  // **والمُقارنةُ تَحكُمُ الكتابةَ، لا تَحضُرُ فحسب.** أوّلُ صياغةٍ أثبتَت
+  // حضورَ `users` و`role_synced_at` وحدَهما، فمرَّ اختبارُ قضمٍ جعلَ الشرطَ
+  // `if (false)` **أخضرَ**: درسُ «الاسمُ ليس القدرة» واقعاً عليَّ مرّةً أخرى.
+  assert.ok(/if \(_tokenRoleDrifted\(doc\.data\(\), u\)\) \{[\s\S]{0,200}?_tokenRolePayload\(u\)/
+      .test(sweep),
+  "الكتابةُ ليست مشروطةً بالمُقارنةِ — فتصحيحٌ يَجري دائماً أو لا يَجري أبداً");
+  assert.ok(sweep.includes("role_synced_at") ||
+      sweep.includes("_tokenRolePayload(u)"), "لا تصحيحَ يُكتَب");
+  // ومستخدمٌ زال ورمزُه باقٍ: هو العطلُ المسجَّلُ بعينِه.
+  assert.ok(/if \(!u\) \{[\s\S]{0,200}?doc\.ref\.delete\(\)/.test(sweep),
+      "رمزُ مستخدمٍ محذوفٍ لا يُحذَف");
+});
+
+test("(١٧) ولا فهرسَ مركَّباً أُضيفَ لأيٍّ منهما", () => {
+  const idx = JSON.parse(fs.readFileSync(
+      path.join(__dirname, "../../firestore.indexes.json"), "utf8"));
+  for (const coll of ["fcm_tokens"]) {
+    const hit = (idx.indexes || []).filter((x) => x.collectionGroup === coll);
+    assert.strictEqual(hit.length, 0,
+        `${coll} صارَ له فهرسٌ مركَّب — مساواةٌ/in على حقلٍ واحدٍ لا تَلزمُها`);
+  }
+  // و`unassign_pending` مساواةٌ واحدةٌ على `orders` — لا فهرسَ لها وحدَها.
+  const orderIdx = (idx.indexes || []).filter((x) =>
+    x.collectionGroup === "orders" &&
+      x.fields.length === 1 && x.fields[0].fieldPath === "unassign_pending");
+  assert.strictEqual(orderIdx.length, 0, "فهرسٌ أحاديٌّ لا لزومَ له");
+});
+
+
 console.log(`\nops_sweep_window tests: ${passed} passed`);

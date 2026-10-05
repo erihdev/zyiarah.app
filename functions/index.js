@@ -4349,6 +4349,30 @@ exports.freeDriverOnOrderCancel = onDocumentUpdated(
     },
 );
 
+/**
+ * حِمْلُ فكِّ الإسنادِ عن سائقٍ معطَّل — **موضعٌ واحدٌ بمُنادِيَين**:
+ * المُشغّلُ عند التعطيل، ومكنسةُ إعادةِ المحاولةِ في `opsHealthSweep`.
+ * دالّةٌ لا ثابتٌ، لأنّ `serverTimestamp()` يُبنى لكلِّ كتابة. وكان مكتوباً
+ * مرّتَين فأُوحِّد: نسخةٌ ثانيةٌ تَنحرِفُ — وانحرافُها هنا يَعني مهمّةً
+ * تُستَردُّ بحقولٍ ناقصةٍ فتَبقى غيرَ قابلةٍ للإسناد.
+ * @param {string} reason سببُ فكِّ الإسنادِ كما يُدوَّنُ على المستند.
+ * @return {Record<string, unknown>} حِمْلُ التحديث.
+ */
+function _unassignPayload(reason) {
+  return {
+    driver_id: FieldValue.delete(),
+    driver_name: FieldValue.delete(),
+    assigned_driver: FieldValue.delete(),
+    driver_phone: FieldValue.delete(),
+    // pending المدفوع تلتقطه sweepUnassignedPaidOrders كل 5 دقائق.
+    status: "pending",
+    unassigned_reason: reason,
+    unassign_pending: FieldValue.delete(),
+    unassign_driver_id: FieldValue.delete(),
+    updated_at: FieldValue.serverTimestamp(),
+  };
+}
+
 // ════════════════════════════════════════════════════════════════════════
 // تعطيل/إيقاف سائق كان يترك مهامه **المستقبلية** مسندةً له: لا أحد ينفّذها،
 // ولا مكنسة تلتقطها (driver_id ممتلئ)، والعميل ينتظر سائقاً لن يأتي. نفكّ
@@ -4375,29 +4399,46 @@ exports.unassignJobsOnDriverDisable = onDocumentUpdated(
           .get();
 
       let n = 0;
+      let failed = 0;
       for (const doc of snap.docs) {
         const d = doc.data();
         const sd = d.service_date && d.service_date.toDate ?
           d.service_date.toDate().getTime() : null;
         if (sd !== null && sd < nowMs) continue; // فات موعدها — شأن مكانس الإنقاذ
-        await doc.ref.update({
-          driver_id: FieldValue.delete(),
-          driver_name: FieldValue.delete(),
-          assigned_driver: FieldValue.delete(),
-          driver_phone: FieldValue.delete(),
-          // pending المدفوع تلتقطه sweepUnassignedPaidOrders كل 5 دقائق.
-          status: "pending",
-          unassigned_reason: "driver_disabled",
-          updated_at: FieldValue.serverTimestamp(),
-        }).catch((e) =>
-          console.error(`unassignJobsOnDriverDisable ${doc.id}:`, e.message));
-        n++;
+        // ⚠️ **كان `.catch` يَبتلعُ الفشلَ و`n++` يَجري على كلِّ حال
+        //    (2026-10-05).** فمهمّةٌ فشلَ فكُّ إسنادِها تَبقى **مُسنَدةً
+        //    لسائقٍ معطَّل**: لا سَحبَ، ولا محاولةً ثانيةً (المُشغّلُ بلا
+        //    `retry`)، ولا علَمَ — و`sweepUnassignedPaidOrders` تَستعلمُ
+        //    `status == "pending"` فلا تَراها (حالتُها بقيت `scheduled`
+        //    أو `assigned`). والعدّادُ كان يَضمُّها، فالتنبيهُ يَقولُ
+        //    «أُعيدت لقائمة الإسناد» عن مهمّةٍ لم تُعَد: **دعوى تُخالِفُ
+        //    الحالةَ**، فيَطمئنُّ الأدمنُ ولا يُسنِدُ أحداً، والعميلةُ
+        //    تَنتظرُ سائقاً لن يَأتي حتى يَستردَّ `autoResolveUnfulfilled`
+        //    مالَها بعد فواتِ الموعد.
+        //
+        //    فالعدُّ على النجاحِ وحدَه، والفشلُ يَكتبُ **علَمَه** (لا
+        //    الحالةَ: الحالةُ هنا `assigned` وهي الحالةُ السليمةُ لكلِّ
+        //    مهمّةٍ قائمةٍ فتَغرقُ فيها) والمكنسةُ تَستعلمُ العلم.
+        try {
+          await doc.ref.update(_unassignPayload("driver_disabled"));
+          n++;
+        } catch (e) {
+          console.error(`unassignJobsOnDriverDisable ${doc.id}:`, e.message);
+          failed++;
+          await doc.ref.update({
+            unassign_pending: true,
+            unassign_driver_id: driverId,
+          }).catch(() => {});
+        }
       }
 
-      if (n > 0) {
+      if (n > 0 || failed > 0) {
+        const tail = failed > 0 ?
+          ` و**${failed} تعذّر فكُّ إسنادِها** وما زالت معه — تُعاد المحاولة.` :
+          " وستُوزَّع تلقائياً أو يدوياً.";
         await queuePush("ADMIN_BROADCAST", "فُكّ إسناد مهام سائق معطَّل ⚠️",
-            `عُطّل السائق ${after.name || driverId} وله ${n} مهمة مستقبلية — ` +
-            "أُعيدت لقائمة الإسناد وستُوزَّع تلقائياً أو يدوياً.",
+            `عُطّل السائق ${after.name || driverId}: ${n} مهمة أُعيدت ` +
+            `لقائمة الإسناد${tail}`,
             "admin_order_alert", {driverId}).catch(() => {});
       }
       console.log(`unassignJobsOnDriverDisable: ${driverId} → ${n} unassigned`);
@@ -5288,6 +5329,67 @@ exports.opsHealthSweep = onSchedule(
       } catch (e) {
         console.error("opsHealthSweep: contract visits retry failed:",
             e.message);
+      }
+
+      // 5-quinquies) **مهمّةٌ فشلَ فكُّ إسنادِها عن سائقٍ معطَّل
+      //    (2026-10-05).** `unassignJobsOnDriverDisable` كان يَبتلعُ فشلَ
+      //    التحديثِ لكلِّ مستندٍ ويَعُدُّه ناجحاً، والمُشغّلُ بلا `retry`:
+      //    فالمهمّةُ تَبقى مُسنَدةً لمن لا يَعمل. والاستعلامُ على **العلمِ**
+      //    لا على الحالة (`assigned` هي حالةُ كلِّ مهمّةٍ قائمةٍ فتَغرقُ
+      //    فيها) — مساواةٌ واحدةٌ ⇒ لا فهرسَ مركَّب.
+      try {
+        const uSnap = await db.collection("orders")
+            .where("unassign_pending", "==", true).limit(100).get();
+        let fixed = 0; let stuck = 0;
+        for (const doc of uSnap.docs) {
+          try {
+            await doc.ref.update(_unassignPayload("driver_disabled"));
+            fixed++;
+          } catch (e2) {
+            stuck++;
+            console.error(`opsHealthSweep: unassign ${doc.id}:`, e2.message);
+          }
+        }
+        console.log(`opsHealthSweep: unassign retried=${fixed} stuck=${stuck}`);
+      } catch (e) {
+        console.error("opsHealthSweep: unassign retry failed:", e.message);
+      }
+
+      // 5-sexies) **رمزُ دفعٍ موسومٌ بدورٍ قديم.** توجيهُ تنبيهاتِ الإدارةِ
+      //    يَستعلمُ `fcm_tokens.role`/`staff_role`، و`syncRoleToPushToken`
+      //    يُصحّحُها عند تغييرِ الدور — بـ`.catch(() => {})`: فشلٌ عابرٌ
+      //    يُعيدُ العطلَ الذي كُتبت له (هاتفُ مَن أُقصي يَبقى مشتركاً في
+      //    تنبيهاتِ الإدارة). و**الكونسولُ مسارٌ رابعٌ بلا شفرةٍ** يُغيّرُ
+      //    الدورَ بلا إطلاقِ أيِّ مُشغّل.
+      //
+      //    فالفحصُ **بنيويٌّ لا على علَم**: يُقارِنُ ما على الرمزِ بما في
+      //    `users` — فلا علَمَ يُلفَّقُ، ولا نافذةَ تَزدحمُ (الجمهورُ
+      //    رموزُ الموظّفينَ وحدَها، وهي عشراتٌ لا آلاف)، ويُغطّي تعديلَ
+      //    الكونسولِ أيضاً. و`in` على حقلٍ واحدٍ ⇒ لا فهرسَ مركَّب.
+      try {
+        const STAFF_TOKEN_ROLES = ["admin", "super_admin"];
+        const tSnap = await db.collection("fcm_tokens")
+            .where("role", "in", STAFF_TOKEN_ROLES).limit(300).get();
+        let drifted = 0;
+        for (const doc of tSnap.docs) {
+          const uSnapshot = await db.collection("users").doc(doc.id).get();
+          const u = uSnapshot.exists ? uSnapshot.data() : null;
+          if (!u) {
+            // المستخدمُ زال ولم يُحذَفِ الرمز: هو بعينُه العطلُ المسجَّل.
+            await doc.ref.delete().catch(() => {});
+            drifted++;
+            continue;
+          }
+          if (_tokenRoleDrifted(doc.data(), u)) {
+            await doc.ref.set(_tokenRolePayload(u), {merge: true})
+                .catch(() => {});
+            drifted++;
+          }
+        }
+        console.log(`opsHealthSweep: staff token drift fixed=${drifted} ` +
+          `scanned=${tSnap.size}`);
+      } catch (e) {
+        console.error("opsHealthSweep: token drift check failed:", e.message);
       }
 
       // 6) إشعارات لم يلمسها processNotificationTriggers أصلاً (انقطاع الدوال 8–18
@@ -6523,6 +6625,34 @@ exports.deleteStaffAccount = onCall({cpu: 0.083}, async (request) => {
 //
 // الحذفُ هنا شبكةُ أمانٍ لا بديلٌ عن `deleteStaffAccount`: ذاك يَحذفُ Auth
 // (وهو ما لا يَقدِرُ عليه مُشغّلٌ أو عميل) ويُدوّنُ السجلّ.
+/**
+ * الحِمْلُ الذي يُوسَمُ به رمزُ الإشعاراتِ من مستندِ المستخدم — **موضعٌ
+ * واحدٌ بمُنادِيَين**: المُشغّلُ عند تغييرِ الدور، ومكنسةُ الانحرافِ في
+ * `opsHealthSweep`. كُتبَ مرّةً في كلٍّ منهما أوّلاً، وهو عينُ «قرارٌ
+ * مكتوبٌ مرّتَين يَنحرِف» الذي يَتكرّرُ في هذا المستودع.
+ * @param {Record<string, unknown>|null} u مستندُ `users/{uid}`.
+ * @return {Record<string, unknown>} حِمْلُ الوسمِ.
+ */
+function _tokenRolePayload(u) {
+  return {
+    role: (u && u.role) || "client",
+    staff_role: (u && u.staff_role) || null,
+    role_synced_at: FieldValue.serverTimestamp(),
+  };
+}
+
+/**
+ * هل وسمُ الرمزِ يُخالِفُ مستندَ المستخدم.
+ * @param {Record<string, unknown>} tok مستندُ `fcm_tokens/{uid}`.
+ * @param {Record<string, unknown>|null} u مستندُ `users/{uid}`.
+ * @return {boolean} صحيحٌ متى انحرفَ أحدُ الحقلَين.
+ */
+function _tokenRoleDrifted(tok, u) {
+  const want = _tokenRolePayload(u);
+  return (tok.role || null) !== want.role ||
+    (tok.staff_role || null) !== want.staff_role;
+}
+
 exports.syncRoleToPushToken = onDocumentWritten(
     {document: "users/{uid}", cpu: 0.083},
     async (event) => {
@@ -6550,11 +6680,8 @@ exports.syncRoleToPushToken = onDocumentWritten(
       // لا نُنشئُ مستندَ رمزٍ لمن لا رمزَ له — الرمزُ نفسُه يَكتبُه الجهاز.
       const tokSnap = await tokRef.get();
       if (!tokSnap.exists) return null;
-      await tokRef.set({
-        role: after.role || "client",
-        staff_role: after.staff_role || null,
-        role_synced_at: FieldValue.serverTimestamp(),
-      }, {merge: true}).catch(() => {});
+      await tokRef.set(_tokenRolePayload(after), {merge: true})
+          .catch(() => {});
       return null;
     });
 
