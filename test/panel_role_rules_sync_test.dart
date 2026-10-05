@@ -350,4 +350,140 @@ void main() {
       expect(rulesRaw, contains('isSuperAdmin'));
     });
   });
+  // ══════════════════════════════════════════════════════════════════════
+  // والجهةُ الأخرى: بلاطاتُ `admin_more_screen` في تطبيقِ الإدارة.
+  //
+  // لكلِّ بلاطةٍ `'roles': [...]` يَدويّةٌ تَحكمُ مَن يَرى الشاشةَ — قائمةٌ
+  // بلا قارئٍ كخريطةِ اللوحةِ تماماً. والتطبيقُ **سليمٌ** عليها اليوم (عشرون
+  // بلاطةً، ثلاثةٌ وثلاثون فحصَ كتابة): المخالفتانِ الوحيدتانِ مُحجوبتانِ في
+  // الواجهةِ بشرطِ دورٍ صريحٍ موثَّقٍ في الشفرة — وهو ما جعلَ اللوحةَ هي
+  // الشاذّةَ لا القاعدةَ ولا التطبيق. فهذا الفحصُ يُبقيه كذلك.
+  //
+  // **وأوّلُ صياغةٍ لهذا الجزءِ كانت عقيمةً تماماً:** بحثت عن
+  // `=> const XScreen(` بينما البلاطةُ تَكتبُ `'page': const XScreen(),` —
+  // فصفرُ بلاطةٍ انحلَّ إلى شاشةٍ، و«صفرُ مخالفات» كان يَعني «صفرَ فحوص»،
+  // وكِدتُ أُسجّلُها نتيجةً نظيفة. فأُضيفَ عدُّ الفحوصِ أدناه شرطاً.
+  group('بلاطاتُ تطبيقِ الإدارةِ مقابلَ firestore.rules', () {
+    final String more = read('lib/screens/admin/admin_more_screen.dart');
+
+    final pairs = <List<Object>>[];
+    for (final m in RegExp(r"'page':\s*(?:const\s+)?(\w+)\(").allMatches(more)) {
+      final after = more.substring(
+          m.end, (m.end + 400).clamp(0, more.length));
+      final rm = RegExp(r"'roles':\s*\[([^\]]*)\]").firstMatch(after);
+      pairs.add([
+        m.group(1)!,
+        rm == null
+            ? <String>{}
+            : rm
+                .group(1)!
+                .split(',')
+                .map((x) => x.trim().replaceAll("'", ''))
+                .where((x) => x.isNotEmpty)
+                .toSet(),
+      ]);
+    }
+
+    final cls2file = <String, String>{};
+    for (final f in Directory('lib/screens/admin').listSync().whereType<File>()) {
+      if (!f.path.endsWith('.dart')) continue;
+      final src = f.readAsStringSync();
+      for (final m in RegExp(
+              r'class (\w+) extends (?:StatelessWidget|StatefulWidget)')
+          .allMatches(src)) {
+        cls2file[m.group(1)!] = f.path;
+      }
+    }
+
+    Set<String> writesOf(String path) {
+      final src = File(path)
+          .readAsStringSync()
+          .split('\n')
+          .where((l) => !l.trimLeft().startsWith('//'))
+          .join('\n');
+      final out = <String>{};
+      for (final m in RegExp(
+              r"collection\('([\w_]+)'\)[\s\S]{0,220}?\.(set|update|delete|add)\(")
+          .allMatches(src)) {
+        out.add('${m.group(2)}|${m.group(1)}');
+      }
+      return out;
+    }
+
+    const vmap = {
+      'set': ['write', 'create', 'update'],
+      'add': ['write', 'create'],
+      'update': ['write', 'update'],
+      'delete': ['write', 'delete'],
+    };
+
+    // المخالفتانِ المُعلَنتان، وكلتاهما حَجبٌ صريحٌ في الواجهة.
+    const declaredTiles = <String, String>{
+      // زرُّ الحذفِ النهائيِّ للعقدِ مشروطٌ بـ`_canDeleteContracts`.
+      'AdminContractsScreen|delete|contracts': 'orders_manager',
+      // وبندُ «الحذف النهائي» في قائمةِ المستخدمِ مشروطٌ بـ`_role == 'super_admin'`.
+      'AdminUsersScreen|set|account_deletions': 'orders_manager',
+    };
+
+    test('كلُّ بلاطةٍ تَحلُّ إلى شاشةٍ وتُفحَصُ كتاباتُها فعلاً', () {
+      expect(pairs.length, greaterThanOrEqualTo(18),
+          reason: 'لم تُقرأ بلاطاتُ admin_more_screen');
+      final unmapped = pairs
+          .where((p) => !cls2file.containsKey(p[0] as String))
+          .map((p) => p[0] as String)
+          .toList();
+      expect(unmapped, isEmpty, reason: 'شاشاتٌ لم تُربَط بملفّها: $unmapped');
+      final noRoles = pairs
+          .where((p) => (p[1] as Set<String>).isEmpty)
+          .map((p) => p[0] as String)
+          .toList();
+      expect(noRoles, isEmpty, reason: "بلاطاتٌ بلا 'roles': $noRoles");
+    });
+
+    test('ولا بلاطةٌ تَمنحُ دوراً كتابةً تَرفضُها القواعدُ — المجموعةُ كلُّها',
+        () {
+      final found = <String, String>{};
+      var checks = 0;
+      for (final p in pairs) {
+        final cls = p[0] as String;
+        final roles = p[1] as Set<String>;
+        final file = cls2file[cls];
+        if (file == null) continue;
+        for (final w in writesOf(file)) {
+          final verb = w.split('|')[0];
+          final coll = w.split('|')[1];
+          checks++;
+          final per = colls[coll];
+          expect(per, isNotNull,
+              reason: '$cls يَكتبُ $coll ولا كتلةَ قواعدَ له');
+          final allowed = <String>{};
+          for (final v in vmap[verb]!) {
+            allowed.addAll(per![v] ?? <String>{});
+          }
+          // `super_admin` يُستثنى: البلاطاتُ تَكتبُه ولا تَكتبُ `admin`،
+          // والقواعدُ تَعدُّهما سواءً — فمقارنتُه ضجيجٌ لا إشارة.
+          final bad = (roles.difference(allowed)..remove('super_admin')).toList()
+            ..sort();
+          if (bad.isNotEmpty) found['$cls|$verb|$coll'] = bad.join(',');
+        }
+      }
+      // **العدُّ شرطٌ**: أوّلُ صياغةٍ فحصت صفراً وقالت «صفرَ مخالفات».
+      expect(checks, greaterThanOrEqualTo(25),
+          reason: 'عددُ فحوصِ الكتابةِ انهار — الفحصُ عقيم');
+      expect(found, equals(declaredTiles),
+          reason: 'فروقٌ غيرُ مُعلَنة:\n'
+              '  جديدةٌ: ${found.keys.toSet().difference(declaredTiles.keys.toSet())}\n'
+              '  زائلةٌ: ${declaredTiles.keys.toSet().difference(found.keys.toSet())}');
+    });
+
+    test('والمُعلَنتانِ محجوبتانِ في الواجهةِ بشرطِ دورٍ صريح', () {
+      final contracts = read('lib/screens/admin/admin_contracts_screen.dart');
+      expect(contracts,
+          contains("bool get _canDeleteContracts => const ['admin', 'super_admin']"));
+      expect(contracts, contains('if (_canDeleteContracts)'));
+      final users = read('lib/screens/admin/admin_users_screen.dart');
+      expect(users, contains("if (_role == 'super_admin')"));
+      expect(users, contains("collection('account_deletions')"));
+    });
+  });
 }
