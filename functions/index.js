@@ -1134,6 +1134,60 @@ async function isAllowedEmailRecipient(email) {
   return false;
 }
 
+/**
+ * تهريبُ HTML — **مُهرِّبٌ واحدٌ للملفّ.**
+ *
+ * كان `_buildTemplateFallbackHtml` يُعرّفُ `esc` محليّاً ويَستعمله، وشقيقُه
+ * `_buildAdminAlertHtml` — على بُعدِ عشرينَ سطراً، وبنفسِ المهمّةِ تماماً —
+ * يُحقِنُ `${k}` و`${v}` في HTML **خامَّين**. والقيمُ هي اسمُ العميلةِ
+ * وجوّالُها واسمُ الخدمةِ والمنطقةِ والمبلغ: حقولٌ **يَكتبُها العميلُ**.
+ * فاسمٌ مثل `<a href="https://evil/">اضغط لتأكيد الطلب</a>` يَصلُ بريدَ
+ * المالكِ **من `no-reply@zyiarah.com`** مع كلِّ طلبٍ تُنشئُه — حقنُ HTML
+ * في تنبيهٍ داخليّ، بلا حاجةٍ إلى أيِّ ثغرةٍ أخرى. (العملاءُ البريديّون
+ * يُسقِطون النصوصَ البرمجيّة، لكنّ الروابطَ والصورَ وتشويهَ التصميمِ تَعمل.)
+ *
+ * @param {unknown} v القيمة.
+ * @return {string} نصٌّ آمنٌ للحقنِ في HTML.
+ */
+function _escHtml(v) {
+  return String(v ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"}[c]));
+}
+
+/**
+ * قشرةُ بريدِ التنبيهِ الإداريِّ — نقيّةٌ وتُهرّبُ كلَّ ما يُحقَن.
+ *
+ * فُصِلت عن `_buildAdminAlertHtml` (التي تَقرأُ Firestore) كي تُختبَرَ
+ * بحملٍ حقنيٍّ حقيقيٍّ بلا محاكٍ.
+ *
+ * @param {string} heading العنوان.
+ * @param {Array<Array<unknown>>} rows أزواجُ (مفتاح، قيمة).
+ * @return {string} HTML.
+ */
+function _adminAlertShell(heading, rows) {
+  const rowsHtml = (rows || []).map(([k, v]) =>
+    "<tr><td style=\"padding:11px 10px;color:#64748b;font-size:14px;" +
+    "border-bottom:1px solid #f1f5f9\">" + _escHtml(k) + "</td>" +
+    "<td style=\"padding:11px 10px;font-weight:bold;color:#1e293b;" +
+    "text-align:left;border-bottom:1px solid #f1f5f9\">" + _escHtml(v) +
+    "</td></tr>").join("");
+  return "<div dir=\"rtl\" style=\"font-family:Tajawal,Arial,sans-serif;" +
+    "max-width:600px;margin:auto;background:#fff;border-radius:16px;" +
+    "overflow:hidden;border:1px solid #e2e8f0\">" +
+    "<div style=\"background:linear-gradient(135deg,#660033,#8B3D8C);" +
+    "padding:28px;text-align:center\">" +
+    "<h1 style=\"color:#fff;margin:0;font-size:22px\">" + _escHtml(heading) +
+    " 🔔</h1>" +
+    "<p style=\"color:#e9d5ea;margin:6px 0 0\">لوحة إدارة زيارة</p></div>" +
+    "<div style=\"padding:28px\">" +
+    "<p style=\"font-size:15px;color:#475569;margin:0 0 8px\">" +
+    "وصلك طلب جديد يحتاج مراجعتك — التفاصيل:</p>" +
+    "<table style=\"width:100%;border-collapse:collapse\">" + rowsHtml +
+    "</table></div>" +
+    "<div style=\"background:#f8fafc;padding:14px;text-align:center;" +
+    "color:#94a3b8;font-size:12px\">زيارة — إشعار إداري آلي</div></div>";
+}
+
 // يبني بريد HTML منسّقاً لتنبيهات الإدارة بتفاصيل الطلب/العميل بدل نصّ عارٍ.
 // يُرجع null إن لم يكن النوع تنبيهاً إدارياً معروفاً → يُستخدم النص العادي.
 async function _buildAdminAlertHtml(type, data) {
@@ -1189,20 +1243,8 @@ async function _buildAdminAlertHtml(type, data) {
     console.error("[EMAIL] admin alert html failed:", e.message);
     return null;
   }
-  const rowsHtml = rows.map(([k, v]) =>
-    `<tr><td style="padding:11px 10px;color:#64748b;font-size:14px;border-bottom:1px solid #f1f5f9">${k}</td>` +
-    `<td style="padding:11px 10px;font-weight:bold;color:#1e293b;text-align:left;border-bottom:1px solid #f1f5f9">${v}</td></tr>`).join("");
-  return `<div dir="rtl" style="font-family:Tajawal,Arial,sans-serif;max-width:600px;margin:auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0">
-  <div style="background:linear-gradient(135deg,#660033,#8B3D8C);padding:28px;text-align:center">
-    <h1 style="color:#fff;margin:0;font-size:22px">${heading} 🔔</h1>
-    <p style="color:#e9d5ea;margin:6px 0 0">لوحة إدارة زيارة</p>
-  </div>
-  <div style="padding:28px">
-    <p style="font-size:15px;color:#475569;margin:0 0 8px">وصلك طلب جديد يحتاج مراجعتك — التفاصيل:</p>
-    <table style="width:100%;border-collapse:collapse">${rowsHtml}</table>
-  </div>
-  <div style="background:#f8fafc;padding:14px;text-align:center;color:#94a3b8;font-size:12px">زيارة — إشعار إداري آلي</div>
-</div>`;
+  // الحقنُ كلُّه في القشرةِ المُهرِّبة — انظر `_escHtml`.
+  return _adminAlertShell(heading, rows);
 }
 
 /**
@@ -1225,8 +1267,9 @@ function _cleanEmail(raw) {
  * @return {string} HTML.
  */
 function _buildTemplateFallbackHtml(title, variables) {
-  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"}[c]));
+  // مُهرِّبٌ واحدٌ للملفّ: كان معرَّفاً هنا محليّاً، وشقيقُه الإداريُّ بلا
+  // تهريبٍ إطلاقاً — نسختانِ لمهمّةٍ واحدةٍ إحداهما غائبة.
+  const esc = _escHtml;
   const rows = Object.entries(variables || {})
       .filter(([k]) => !/url|link/i.test(k))
       .map(([k, v]) => `<tr><td style="padding:8px 12px;color:#64748b">${esc(k)}</td>` +
