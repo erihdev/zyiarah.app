@@ -2171,47 +2171,21 @@ exports.syncOrderLinkedRecords = onDocumentUpdated({document: "orders/{orderId}"
         }
       }
 
-      // 2. Subscription visit accounting
-      if (isSubscription && clientId) {
-        const userRef = db.collection("users").doc(clientId);
-        try {
-          if (afterStatus === "completed") {
-            await db.runTransaction(async (t) => {
-              const oSnap = await t.get(orderRef);
-              if (oSnap.get("visit_counted") === true) return; // already counted
-              const cId = oSnap.get("contract_id");
-              t.set(userRef, {
-                visits_remaining: FieldValue.increment(-1),
-              }, {merge: true});
-              // اخصم من عدّاد العقد نفسه أيضاً كي تعكس بطاقة الباقة رصيدها الفعلي
-              if (cId) {
-                t.set(db.collection("contracts").doc(cId), {
-                  visits_remaining: FieldValue.increment(-1),
-                }, {merge: true});
-              }
-              t.update(orderRef, {visit_counted: true});
-            });
-          } else if (afterStatus === "cancelled") {
-            await db.runTransaction(async (t) => {
-              const oSnap = await t.get(orderRef);
-              // Restore ONLY a visit that was actually consumed; a never-completed
-              // visit was part of the prepaid batch and must not mint a free visit.
-              if (oSnap.get("visit_counted") !== true) return;
-              const cId = oSnap.get("contract_id");
-              t.set(userRef, {
-                visits_remaining: FieldValue.increment(1),
-              }, {merge: true});
-              if (cId) {
-                t.set(db.collection("contracts").doc(cId), {
-                  visits_remaining: FieldValue.increment(1),
-                }, {merge: true});
-              }
-              t.update(orderRef, {visit_counted: false});
-            });
-          }
-        } catch (e) {
-          console.error(`[linked] visit accounting failed for ${orderId}:`, e.message);
-        }
+      // 2. Subscription visit accounting — في `rewards.js`، **ومع قولِ الفشل**.
+      //    كانت المعامَلتانِ إنلاين هنا بـ`catch` هو سطرُ `console.error`
+      //    وحدَه، وهذا المُشغّلُ بلا `retry` فلا يَعودُ لمستندٍ فاته الحدث:
+      //    فخصمٌ فاشلٌ يَترُكُ للعميلةِ زيارةً مدفوعةً استهلكَتها (تسريبُ
+      //    إيرادٍ صامت)، وردٌّ فاشلٌ يُفقدُها زيارةً تَستحقُّها — بلا تنبيهٍ
+      //    ولا محاولةٍ ثانية. والمكنسةُ تَستعلمُ **العلمَ** لا الحالة.
+      if (isSubscription && clientId &&
+          (afterStatus === "completed" || afterStatus === "cancelled")) {
+        await rewards.settleVisitAccounting(db, {
+          orderRef,
+          orderId,
+          clientId,
+          status: afterStatus,
+          code: after.code || orderId,
+        }, queuePush);
       }
       return null;
     });
@@ -5096,6 +5070,37 @@ exports.opsHealthSweep = onSchedule(
         console.log(`opsHealthSweep: coupon-count retried=${fixed} stuck=${stuck}`);
       } catch (e) {
         console.error("opsHealthSweep: coupon-count retry failed:", e.message);
+      }
+
+      // رصيدُ زياراتِ الاشتراكِ الذي تعذّرت تسويتُه. الاستعلامُ على **العلمِ**
+      // لا على الحالة: مجموعةُ `completed` تَمتلئُ بما نُجِح فيَسقطُ الفاشلُ من
+      // النافذة (نافذةُ البثِّ المجدول، ونافذةُ «مدفوعٌ وعالق»)، ومجموعةُ
+      // العلمِ لا تَحوي إلّا الفشل. ومساواةٌ واحدةٌ ⇒ لا فهرسَ مركَّب.
+      try {
+        const vSnap = await db.collection("orders")
+            .where(rewards.PENDING_FLAGS.visitAccounting, "==", true)
+            .limit(200).get();
+        let fixed = 0; let stuck = 0;
+        for (const doc of vSnap.docs) {
+          const d = doc.data();
+          if (!d.client_id) continue;
+          const r = await rewards.settleVisitAccounting(db, {
+            orderRef: doc.ref,
+            orderId: doc.id,
+            clientId: d.client_id,
+            // الاتّجاهُ من الحالةِ **الراهنة** لا من حالةِ لحظةِ الفشل.
+            status: d.status,
+            code: d.code || doc.id,
+            alreadyAlerted: d.visit_accounting_alerted === true,
+          }, queuePush);
+          if (r.settled) fixed++;
+          else if (r.failed) stuck++;
+        }
+        console.log(
+            `opsHealthSweep: visit-accounting retried=${fixed} stuck=${stuck}`);
+      } catch (e) {
+        console.error("opsHealthSweep: visit-accounting retry failed:",
+            e.message);
       }
 
       // 6) إشعارات لم يلمسها processNotificationTriggers أصلاً (انقطاع الدوال 8–18

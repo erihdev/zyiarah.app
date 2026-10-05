@@ -40,6 +40,7 @@ const {FieldValue} = require("firebase-admin/firestore");
 const PENDING_FLAGS = {
   qatrat: "qatrat_pending",
   couponCount: "coupon_count_pending",
+  visitAccounting: "visit_accounting_pending",
 };
 
 /**
@@ -191,7 +192,119 @@ async function countCouponUse(db, args, queuePush) {
   }
 }
 
+/**
+ * يُسوّي رصيدَ زياراتِ الاشتراكِ لطلبٍ بلغَ حالةً نهائيّة، ويَقولُ الفشل.
+ *
+ * **العطلُ الذي يُغلقُه:** الكتلةُ كانت إنلاين في `syncOrderLinkedRecords`
+ * بـ`catch` هو سطرُ `console.error` وحدَه، والمُشغّلُ `onDocumentUpdated`
+ * **بلا `retry`** فلا يَعودُ لمستندٍ فاته الحدث. فمعامَلةٌ تَفشلُ لتنازعٍ
+ * أو مهلةٍ تَعني:
+ *
+ *   • `completed` فشلَ خصمُه ⇒ العميلةُ تَحتفظُ بزيارةٍ مدفوعةٍ سلفاً
+ *     استهلكَتها فعلاً، وبطاقةُ الباقةِ في لوحتِها تَعرضُ رصيداً أكبرَ من
+ *     حقِّها فتَحجزُ زيارةً لا تَملكُها — تسريبُ إيرادٍ صامت.
+ *   • `cancelled` فشلَ ردُّه ⇒ **تَفقدُ** زيارةً مدفوعةً تَستحقُّها، وهو
+ *     مالُها، بلا كلمةٍ في أيِّ مكان.
+ *
+ * ولا شيءَ كان يَمسحُ عنه: لا علمَ، و`visit_counted` يَبقى كما كان فيَقرأُ
+ * الطلبُ «غيرَ محسوب» فلا يُميّزُه شيءٌ عن طلبٍ لم يُكتمل بعد.
+ *
+ * عديمُ الأثرِ التكراريِّ بالبناء: `visit_counted` يُقرأُ **طازجاً داخلَ
+ * المعامَلة** ويَحرُسُ الاتّجاهَين، والاتّجاهُ يُشتَقُّ من الحالةِ الراهنةِ
+ * لا من حدثٍ مُخزَّن — فإعادةُ المحاولةِ تُصحّحُ نفسَها ولو تغيّرت الحالةُ
+ * بينهما.
+ *
+ * @param {object} db Firestore.
+ * @param {object} args المعطيات.
+ * @param {object} args.orderRef مرجعُ الطلب.
+ * @param {string} args.orderId معرّفُ الطلب.
+ * @param {string} args.clientId معرّفُ العميلة.
+ * @param {string} args.status حالةُ الطلبِ الراهنة.
+ * @param {string} args.code رقمُ الطلبِ المعروض.
+ * @param {boolean} [args.alreadyAlerted] هل صُعِّدَ الفشلُ سابقاً؟
+ * @param {Function} queuePush طابورُ الإشعارات.
+ * @return {Promise<{settled: boolean, delta?: number, skipped?: string,
+ *   failed?: string}>} النتيجة.
+ */
+async function settleVisitAccounting(db, args, queuePush) {
+  const {orderRef, orderId, clientId, status, code} = args;
+  const userRef = db.collection("users").doc(clientId);
+  let skipped = null;
+  let delta = 0;
+  try {
+    await db.runTransaction(async (t) => {
+      const oSnap = await t.get(orderRef);
+      const counted = oSnap.get("visit_counted") === true;
+      if (status === "completed") {
+        if (counted) {
+          skipped = "already_counted";
+          return;
+        }
+        delta = -1;
+      } else if (status === "cancelled") {
+        // زيارةٌ لم تُستهلَك أصلاً لا تُردّ: كانت من الدفعةِ المدفوعةِ سلفاً،
+        // وردُّها يَخلقُ زيارةً مجّانيّة.
+        if (!counted) {
+          skipped = "never_counted";
+          return;
+        }
+        delta = 1;
+      } else {
+        // الحالةُ تَحرّكت بعد الفشل: لا شيءَ لِيُسوّى، والعلمُ يُمحى.
+        skipped = "not_terminal";
+        return;
+      }
+      const cId = oSnap.get("contract_id");
+      t.set(userRef, {
+        visits_remaining: FieldValue.increment(delta),
+      }, {merge: true});
+      // ومن عدّادِ العقدِ نفسِه كذلك كي تَعكسَ بطاقةُ الباقةِ رصيدَها الفعليّ.
+      if (cId) {
+        t.set(db.collection("contracts").doc(cId), {
+          visits_remaining: FieldValue.increment(delta),
+        }, {merge: true});
+      }
+      t.update(orderRef, {
+        visit_counted: delta < 0,
+        // العلمُ يُمحى عند النجاح كي لا تَتضخّمَ مجموعةُ المكنسة.
+        [PENDING_FLAGS.visitAccounting]: FieldValue.delete(),
+      });
+    });
+    if (skipped) {
+      // طلبٌ سُوّيَ سلفاً (أو تَحرّكت حالتُه) وما زال موسوماً: يُنظّفُ العلمُ
+      // فلا يُقرأُ للأبد.
+      await orderRef.update({
+        [PENDING_FLAGS.visitAccounting]: FieldValue.delete(),
+      }).catch(() => {});
+      return {settled: false, skipped};
+    }
+    return {settled: true, delta};
+  } catch (e) {
+    const note = e && e.message ? e.message : "unknown";
+    await orderRef.update({
+      [PENDING_FLAGS.visitAccounting]: true,
+      visit_accounting_failed_reason: note,
+      visit_accounting_alerted: true,
+    }).catch(() => {});
+    if (!args.alreadyAlerted && typeof queuePush === "function") {
+      const what = status === "cancelled"
+        ? "ردُّ زيارةٍ مدفوعةٍ إلى رصيد العميلة"
+        : "خصمُ زيارةٍ مستهلَكةٍ من رصيد العميلة";
+      await queuePush("ADMIN_BROADCAST",
+          "تعذّرت تسويةُ رصيد زيارات الاشتراك ⚠️",
+          `الطلب #${code} (${status}) — تعذّر ${what} (${note}). ` +
+          "المكنسة تُعيد المحاولة؛ إن تكرّر فالتسويةُ يدويّة على " +
+          "users/{uid}.visits_remaining وعلى عدّاد العقد.",
+          "admin_order_alert",
+          {orderId, code, visitAccountingFailed: true},
+          ["super_admin", "accountant_admin"]).catch(() => {});
+    }
+    return {settled: false, failed: note};
+  }
+}
+
 module.exports = {
+  settleVisitAccounting,
   PENDING_FLAGS,
   grantQatratPoints,
   countCouponUse,
