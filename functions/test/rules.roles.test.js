@@ -8,7 +8,8 @@ const {
   assertFails,
   assertSucceeds,
 } = require("@firebase/rules-unit-testing");
-const {setDoc, doc, updateDoc, getDoc} = require("firebase/firestore");
+const {setDoc, doc, updateDoc, getDoc, getDocs, collection, query,
+  where} = require("firebase/firestore");
 
 (async () => {
   const testEnv = await initializeTestEnvironment({
@@ -40,6 +41,13 @@ const {setDoc, doc, updateDoc, getDoc} = require("firebase/firestore");
     await setDoc(doc(db, "orders/o1"), {client_id: "someone", status: "pending", amount: 100});
     await setDoc(doc(db, "payroll_records/r1"), {amount: 100});
     await setDoc(doc(db, "store_orders/s1"), {client_id: "someone", is_paid: true, amount: 50});
+    // كوبوناتٌ ثلاثة: مُعلَنٌ، مخفيٌّ (قناةٌ خاصّة)، وموجَّهٌ إلى client1.
+    await setDoc(doc(db, "promo_codes/shown"),
+        {code: "SHOWN10", status: "active", show_in_offers: true, value: 10});
+    await setDoc(doc(db, "promo_codes/hidden"),
+        {code: "PARTNER50", status: "active", show_in_offers: false, value: 50});
+    await setDoc(doc(db, "promo_codes/mine"),
+        {code: "REFabc10", status: "active", target_user_id: "client1", value: 10});
   });
 
   const asUser = (uid) => testEnv.authenticatedContext(uid).firestore();
@@ -116,6 +124,41 @@ const {setDoc, doc, updateDoc, getDoc} = require("firebase/firestore");
   // بريدَه `victim@x.com` يَجتازُ الحارسَين، ويُرسِلُ الخادمُ بريداً من
   // `no-reply@zyiarah.com` بعنوانٍ ونصٍّ من اختيارِه إلى أيِّ عنوان:
   // مُرحِّلٌ مفتوحٌ بنطاقِ الشركة.
+  // ── `promo_codes`: السِرُّ هو الحارس ─────────────────────────────────
+  //
+  // كانت القراءةُ `if isLoggedIn()`: أيُّ عميلةٍ مسجَّلةٍ تَقرأُ **كلَّ** كودِ
+  // خصمٍ من الـSDK، ومنها ما وسَمَته الإدارةُ `show_in_offers: false` كي
+  // **لا** يُكشَف (تعليقُ `PromoCoupon`: «كي لا يُكشَفَ كودُ قناةٍ خاصّة…
+  // لعمومِ العملاء»). قرارٌ في الواجهةِ وحدَها، والبياناتُ مكشوفةٌ خلفَها.
+  //
+  // وقواعدُ Firestore تُجيزُ استعلامَ قائمةٍ متى أثبتَ مُرشِّحُه الشرط:
+  const promo = (db) => collection(db, "promo_codes");
+  await check("promo: client lists show_in_offers==true -> ALLOWED",
+      getDocs(query(promo(asUser("client1")),
+          where("show_in_offers", "==", true))), true);
+  await check("promo: client lists own targeted coupons -> ALLOWED",
+      getDocs(query(promo(asUser("client1")),
+          where("target_user_id", "==", "client1"))), true);
+  // وما لا يُثبِتُ الشرطَ يُرفَض — وهذا هو جوهرُ التضييق.
+  await check("promo: client lists the whole collection -> DENIED",
+      getDocs(promo(asUser("client1"))), false);
+  await check("promo: client queries by code (the old payment path) -> DENIED",
+      getDocs(query(promo(asUser("client1")),
+          where("code", "==", "PARTNER50"))), false);
+  await check("promo: client lists another user's targeted coupons -> DENIED",
+      getDocs(query(promo(asUser("client1")),
+          where("target_user_id", "==", "refOwner"))), false);
+  // وقراءةُ مستندٍ بعينِه تَتبعُ القاعدةَ نفسَها.
+  await check("promo: client gets a hidden coupon by id -> DENIED",
+      getDoc(doc(asUser("client1"), "promo_codes/hidden")), false);
+  await check("promo: client gets an advertised coupon by id -> ALLOWED",
+      getDoc(doc(asUser("client1"), "promo_codes/shown")), true);
+  await check("promo: client gets own targeted coupon by id -> ALLOWED",
+      getDoc(doc(asUser("client1"), "promo_codes/mine")), true);
+  // والإدارةُ تَقرأُ المجموعةَ كلَّها — شاشةُ الكوبوناتِ تَعتمدُ عليه.
+  await check("promo: admin lists the whole collection -> ALLOWED",
+      getDocs(promo(asUser("superA"))), true);
+
   await check("email: client writes a foreign email on own doc -> DENIED",
       updateDoc(doc(asUserEmail("client1", "me@zyiarah.com"), "users/client1"),
           {email: "victim@example.com"}), false);

@@ -22,8 +22,18 @@ void main() {
     expect(offers.contains('PromoCoupon.collectionPath'), isTrue);
     expect(offers.contains("'promo_codes'"), isFalse);
     expect(offers.contains('PromoCoupon.listableFor('), isTrue);
-    expect(offers.contains("where('status', isEqualTo: 'active')"), isTrue,
-        reason: 'الاستعلام نفسه الذي يبدأ به validateCoupon');
+    // **كان هذا يُثبّتُ «الاستعلامَ نفسَه الذي يبدأ به validateCoupon»** —
+    // وكلاهما زال: `validateCoupon` لم تَعد تَستعلمُ المجموعةَ أصلاً (صارت
+    // نداءً خادميّاً)، وهذه الشاشةُ صارت استعلامَين **يُثبِتانِ** شرطَ
+    // القاعدةِ الجديدة. والسببُ أنّ القراءةَ المفتوحة (`allow read: if
+    // isLoggedIn()`) كانت تَكشفُ كلَّ كودِ خصمٍ لكلِّ عميلة — ومنها ما
+    // وسَمَته الإدارةُ `show_in_offers: false` كي لا يُكشَف.
+    expect(offers.contains("where('show_in_offers', isEqualTo: true)"), isTrue,
+        reason: 'الاستعلامُ المُعلَنُ — يُثبِتُ الفرعَ الأوّلَ من القاعدة');
+    expect(offers.contains("where('target_user_id', isEqualTo: uid)"), isTrue,
+        reason: 'الاستعلامُ الموجَّهُ — يُثبِتُ الفرعَ الثاني');
+    expect(offers.contains("where('status', isEqualTo: 'active')"), isFalse,
+        reason: 'الاستعلامُ القديمُ يَقرأُ كلَّ كوبونٍ نشط');
     // أرقام الإحالة من الخدمة لا من نصّ ثابت.
     expect(offers.contains('ZyiarahReferralService.referrerRewardSar'), isTrue);
     expect(offers.contains('ZyiarahReferralService.refereeDiscountPercent'), isTrue);

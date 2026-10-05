@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -8,65 +7,66 @@ import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/upload_content_type.dart';
 
+/// نتيجةُ تحقّقِ كودِ الخصم: مؤهَّلٌ بحقولِه، أو سببُ رفضٍ من أسبابِ
+/// `couponProblem` الستّة (`not_found`/`inactive`/`expired`/`exhausted`/
+/// `other_user`/`other_zone`) — وترجمتُها في `kCouponRejectReasons`.
+class CouponValidation {
+  const CouponValidation.ok(this.coupon) : reason = null;
+  const CouponValidation.rejected(this.reason) : coupon = null;
+
+  /// حقولُ العرضِ التي يُعيدُها الخادم — لا المستندُ كلُّه.
+  final Map<String, dynamic>? coupon;
+
+  /// سببُ الرفضِ، أو `null` متى كان مؤهَّلاً.
+  final String? reason;
+
+  bool get ok => coupon != null;
+}
+
 /// خدمة إدارة دورة حياة الطلب - تطبيق زيارة
 class ZyiarahOrderService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // التحقق من كود الخصم
-  Future<Map<String, dynamic>?> validateCoupon(String code, {String? currentUserZone}) async {
+  /// **تحقّقُ كودِ الخصمِ صارَ خادميّاً.**
+  ///
+  /// كانت هذه الدالّةُ تَستعلمُ `promo_codes` من الجهازِ وتَفحصُ الشروطَ
+  /// الستّةَ بيدِها — **نسخةٌ ثانيةٌ بلغةٍ أخرى** من `couponProblem` في
+  /// `functions/coupons.js`، التي تَقولُ في ترويستِها إنّ «جهةً واحدةً
+  /// تَقرّرُ والطرفانِ يَسألانها». والنسختانِ كانتا مختلفتَين: المُرشِّحُ
+  /// `where('status','==','active')` هنا يَحجبُ مستنداً قديماً بلا `status`،
+  /// بينما الخادمُ يَقبلُ غيابَه (ويَقولُ عن نفسِه «نفسُ تسامحِ العميل»).
+  ///
+  /// والأهمُّ أنّ القراءةَ نفسَها كانت تَفتحُ المجموعةَ كلَّها: قاعدةُ
+  /// `promo_codes` هي `allow read: if isLoggedIn()`، فأيُّ عميلةٍ مسجَّلةٍ
+  /// تَقرأُ كلَّ كودِ خصمٍ — ومنها ما وسَمَته الإدارةُ `show_in_offers:
+  /// false` كي **لا** يُكشَف (تعليقُ `PromoCoupon` يَقولُه نصّاً: «كي لا
+  /// يُكشَفَ كودُ قناةٍ خاصّة… لعمومِ العملاء»). فالقرارُ كان في الواجهةِ
+  /// وحدَها.
+  ///
+  /// تُعيدُ [CouponValidation]: مؤهَّلٌ بحقولِ العرض، أو سببُ رفضٍ من أسبابِ
+  /// الخادمِ الستّة. والفشلُ البنيويُّ (شبكة/صلاحيات) **يُرمى** لا يُعادُ
+  /// رفضاً — رفضٌ زائفٌ كان يَتّهمُ كوبوناً سليماً بالبطلانِ أثناء انقطاعٍ
+  /// عابر.
+  Future<CouponValidation> validateCoupon(String code,
+      {String? currentUserZone}) async {
+    final trimmed = code.trim();
+    if (trimmed.isEmpty) return const CouponValidation.rejected('not_found');
     try {
-      final snapshot = await _db
-          .collection('promo_codes')
-          .where('code', isEqualTo: code.toUpperCase())
-          .where('status', isEqualTo: 'active')
-          .limit(1)
-          .get().timeout(kNetCallTimeout);
-
-      if (snapshot.docs.isEmpty) return null;
-
-      final data = snapshot.docs.first.data();
-      final expiry = data['expiry'];
-      final maxUses = (data['maxUses'] as num?)?.toInt() ?? 0;
-      final uses = (data['uses'] as num?)?.toInt() ?? 0;
-      final List<dynamic>? restrictedZones = data['restricted_zones'];
-
-      // تحقق من التاريخ
-      if (expiry != null) {
-        DateTime? expiryDate;
-        if (expiry is Timestamp) {
-          expiryDate = expiry.toDate();
-        } else if (expiry is String) {
-          expiryDate = DateTime.tryParse(expiry);
-        }
-        if (expiryDate != null && expiryDate.isBefore(DateTime.now())) {
-          return null;
-        }
+      final res = await FirebaseFunctions.instance
+          .httpsCallable('validateCouponCode')
+          .call({
+        'code': trimmed.toUpperCase(),
+        if (currentUserZone != null) 'zoneName': currentUserZone,
+      }).timeout(kNetCallTimeout);
+      final data = Map<String, dynamic>.from(res.data as Map);
+      if (data['ok'] == true && data['coupon'] is Map) {
+        return CouponValidation.ok(
+            Map<String, dynamic>.from(data['coupon'] as Map));
       }
-
-      // تحقق من عدد مرات الاستخدام (0 تعني غير محدود)
-      if (maxUses > 0 && uses >= maxUses) {
-        return null;
-      }
-
-      // تحقق من القيود الجغرافية
-      if (restrictedZones != null && restrictedZones.isNotEmpty) {
-        if (currentUserZone == null || !restrictedZones.contains(currentUserZone)) {
-          return null; // الكوبون غير متاح في هذه المنطقة
-        }
-      }
-
-      // كوبون موجَّه لمستخدم بعينه (إحالة/هدية) لا يستخدمه غيره — كان يُقبل لأي أحد.
-      final target = data['target_user_id'];
-      if (target != null &&
-          target != FirebaseAuth.instance.currentUser?.uid) {
-        return null;
-      }
-
-      return data;
+      final reason = data['reason'];
+      return CouponValidation.rejected(
+          reason is String && reason.isNotEmpty ? reason : 'not_found');
     } catch (e) {
-      // لا نُعيد null هنا: null لدى المستدعي تعني «الكود باطل/منتهٍ»، بينما هذا
-      // فشل بنيوي (شبكة/صلاحيات) — إعادته null كانت تعرض «كود غير صحيح» لكوبون
-      // سليم أثناء انقطاع عابر، فيظن العميل أن كوبونه فاسد بدل أن يعيد المحاولة.
       debugPrint('Error validating coupon: $e');
       rethrow;
     }

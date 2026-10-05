@@ -16,6 +16,7 @@ import 'package:zyiarah/screens/subscription_plans_screen.dart';
 import 'package:zyiarah/services/zyiarah_referral_service.dart';
 import 'package:zyiarah/theme/app_theme.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/stream_combine.dart';
 
 /// قسم «العروض».
 ///
@@ -74,19 +75,48 @@ class _ZyiarahOffersScreenState extends State<ZyiarahOffersScreen> {
 
     final uid = _uid;
     if (uid != null) {
-      _coupons = widget.coupons ??
-          FirebaseFirestore.instance
-              .collection(PromoCoupon.collectionPath)
-              .where('status', isEqualTo: 'active')
-              .snapshots()
-              .map(PromoCoupon.fromQuery)
-              .firstEventTimeout();
+      _coupons = widget.coupons ?? _listableCoupons(uid);
       _referral = widget.referralCode ??
           ZyiarahReferralService()
               .getOrCreateReferralCode(uid)
               .then<String?>((c) => c)
               .catchError((Object _) => null);
     }
+  }
+
+  /// **استعلامانِ يُثبِتانِ ما تَشترطُه القاعدة، لا استعلامٌ يَقرأُ الكلّ.**
+  ///
+  /// كان هذا استعلاماً واحداً `where('status','==','active')` على
+  /// `promo_codes` ثمّ تَرشيحٌ **في العميل** بـ`show_in_offers` و
+  /// `target_user_id` (في `PromoCoupon.isListableFor`). وقاعدةُ المجموعةِ
+  /// كانت `allow read: if isLoggedIn()` — فأيُّ عميلةٍ مسجَّلةٍ تَقرأُ كلَّ
+  /// كودِ خصمٍ في المستودعِ من الـSDK، ومنها ما وسَمَته الإدارةُ
+  /// `show_in_offers: false` **كي لا يُكشَف**: تعليقُ `PromoCoupon` يَقولُه
+  /// نصّاً («كي لا يُكشَفَ كودُ قناةٍ خاصّة… لعمومِ العملاء»). قرارٌ
+  /// مُنفَّذٌ في الواجهةِ وحدَها والبياناتُ مكشوفةٌ خلفَها.
+  ///
+  /// قواعدُ Firestore تُجيزُ استعلامَ قائمةٍ متى **أثبتَ** مُرشِّحُه شرطَ
+  /// الأمان، فالاستعلامُ صار اثنَين — المُعلَنُ، والموجَّهُ إليها — وكلٌّ
+  /// يُثبِتُ أحدَ فرعَي القاعدةِ الجديدة. والتَرشيحُ المحلّيُّ يَبقى كما هو
+  /// (انتهاءٌ وسقفُ استخدامٍ وترتيب): هو عن العرضِ لا عن الصلاحيّة.
+  ///
+  /// والدمجُ «آخرُ ما وصلَ من كلٍّ» لا تَتابعاً — ولماذا، في
+  /// `lib/utils/stream_combine.dart`.
+  Stream<List<PromoCoupon>> _listableCoupons(String uid) {
+    final col = FirebaseFirestore.instance.collection(PromoCoupon.collectionPath);
+    final advertised = col
+        .where('show_in_offers', isEqualTo: true)
+        .snapshots()
+        .map(PromoCoupon.fromQuery);
+    final personal = col
+        .where('target_user_id', isEqualTo: uid)
+        .snapshots()
+        .map(PromoCoupon.fromQuery);
+    return combineLatestById<PromoCoupon>(
+      advertised,
+      personal,
+      (c) => c.id,
+    ).firstEventTimeout();
   }
 
   Future<void> _handleTap(BuildContext context, Map<String, dynamic> data) async {

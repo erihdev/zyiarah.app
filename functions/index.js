@@ -1686,6 +1686,70 @@ exports.processNotificationTriggers = onDocumentCreated(
 // The wallet is (currently) client-writable, so this onCall is the trusted path:
 // it validates the points server-side and performs the conversion atomically.
 // Pairs with the deferred lockdown of the wallets write rule.
+/**
+ * **تحقّقُ كودِ الخصمِ خادميّاً — وقارئُ `promo_codes` العميليُّ يَزول.**
+ *
+ * `couponProblem` في `functions/coupons.js` تَقولُ في ترويستِها إنّها
+ * «تُطابقُ حرفيّاً ما يَفحصه `order_service.validateCoupon` في العميل، وهذا
+ * هو المقصود: **جهةٌ واحدةٌ تَقرّرُ والطرفان يَسألانها**». وكان الادّعاءُ
+ * كاذباً من وجهَين: العميلُ يَحملُ **نسخةً مكتوبةً بيدٍ** بلغةٍ أخرى ولا
+ * يَسألُ هذه الوحدةَ أصلاً، والنسختانِ **مختلفتان** — استعلامُ العميلِ
+ * يَشترطُ `status == 'active'` حرفيّاً، فمستندٌ قديمٌ بلا `status` **غيرُ
+ * مرئيٍّ** له، بينما `couponProblem` تَقبلُ الغيابَ وتَقولُ عن نفسِها «نفسُ
+ * تسامحِ العميل». فالتسامحُ كان مُبطَلاً بمُرشِّحِ الاستعلامِ لا مكتوباً.
+ *
+ * والأهمُّ: الكوبونُ كان يُحلَّلُ **في العميل**، فـ`promo_codes` قراءتُها
+ * `allow read: if isLoggedIn()` — وأيُّ عميلةٍ مسجَّلةٍ تَقرأُ **كلَّ** كودِ
+ * خصمٍ في المستودع، ومنها ما وسَمَته الإدارةُ `show_in_offers: false`
+ * بعينِه. وتعليقُ `PromoCoupon` يَقولُ غرضَ ذلك الحقلِ نصّاً: «الغيابُ = لا،
+ * كي لا يُكشَفَ كودُ قناةٍ خاصّة (شريك/مؤثّر) لعمومِ العملاء» — قرارٌ
+ * مُنفَّذٌ في الواجهةِ وحدَها، والبياناتُ مكشوفةٌ خلفَها.
+ *
+ * فالتحقّقُ هنا، والعميلُ لا يَحتاجُ بعدَه إلى قراءةِ المجموعةِ بالكودِ
+ * إطلاقاً — وهو شرطُ تضييقِ القاعدةِ (انظر `firestore.rules`).
+ *
+ * يُعيدُ `{ok:false, reason}` بأحدِ أسبابِ `couponProblem` الستّة، أو
+ * `{ok:true, coupon:{…}}` بالحقولِ التي تَعرضُها الشاشةُ وحدَها — لا
+ * المستندَ كلَّه (`uses`/`target_user_id` لا شأنَ للعميلِ بهما).
+ */
+exports.validateCouponCode = onCall({cpu: 0.083}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً");
+  }
+  const code = String((request.data && request.data.code) || "")
+      .trim().toUpperCase();
+  if (!code) {
+    throw new HttpsError("invalid-argument", "كود الخصم مطلوب");
+  }
+  const zoneName = request.data && request.data.zoneName ?
+    String(request.data.zoneName) : null;
+  // بلا مُرشِّحِ حالةٍ في الاستعلام: التسامحُ مع غيابِ `status` قرارُ
+  // `couponProblem` وحدَها، وإقحامُه هنا يُعيدُ الافتراقَ الذي أُزيل.
+  const snap = await getFirestore().collection("promo_codes")
+      .where("code", "==", code).limit(1).get();
+  const coupon = snap.empty ? null : snap.docs[0].data();
+  const reason = coupons.couponProblem(coupon, {
+    uid: request.auth.uid, zoneName,
+  });
+  if (reason) return {ok: false, reason};
+  return {
+    ok: true,
+    coupon: {
+      code: String(coupon.code || code),
+      type: coupon.type === "fixed" ? "fixed" : "percentage",
+      value: Number(coupon.value) || 0,
+      // السقفُ يُعاد: العميلُ كان يَتجاهله بينما `couponDiscount` تُطبّقه،
+      // فيَعرضُ خصماً أكبرَ مما يَمنحه الخادمُ ثمّ `trustedDiscount` تَأخذُ
+      // الأصغرَ — فيَصيرُ `discount_amount` على الطلبِ أكبرَ من المحسوبِ
+      // ويَنخفضُ `ratio` في تحقّقِ السعر. كامنٌ لا حيّ: لا محرّرَ يَكتبُ
+      // `max_discount` في المستودعِ كلِّه.
+      max_discount: coupon.max_discount != null ?
+        Number(coupon.max_discount) || 0 : null,
+      description: String(coupon.description || ""),
+    },
+  };
+});
+
 exports.redeemQatratPoints = onCall({cpu: 0.083}, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً");
