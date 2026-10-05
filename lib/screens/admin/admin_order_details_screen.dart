@@ -17,6 +17,7 @@ import 'package:zyiarah/screens/map_screen.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/phone_format.dart';
 import 'package:zyiarah/utils/price_review.dart';
+import 'package:zyiarah/utils/cancel_refund_notice.dart';
 
 class AdminOrderDetailsScreen extends StatefulWidget {
   final String orderId;
@@ -206,6 +207,43 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
           content: Text('ليست لديك صلاحية تعديل الطلبات — هذه العملية لمديري الطلبات فقط'),
           backgroundColor: Colors.red));
       return;
+    }
+    // حفظُ «ملغي» على طلبٍ مدفوعٍ يُودِعُ المبلغَ في محفظةِ العميلةِ تلقائياً
+    // (`creditCancelledRefund`) ولا يَستردُّ إلى البطاقة — وكان ذلك يَجري من
+    // قائمةٍ منسدلةٍ وزرِّ حفظٍ بلا كلمة. القاعدةُ واحدةٌ مع حوارِ العميلة:
+    // `cancel_refund_notice.dart`.
+    if (_currentStatus == 'cancelled' &&
+        (_orderData?['status'] ?? 'pending') != 'cancelled') {
+      final notice = cancelRefundNotice(
+        isPaid: _orderData?['is_paid'] == true,
+        paymentMethod: _orderData?['payment_method'] as String?,
+        amount: (_orderData?['amount'] as num?)?.toDouble(),
+      );
+      final line = cancelRefundAdminText(notice);
+      if (line.isNotEmpty) {
+        final go = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => Directionality(
+            textDirection: TextDirection.rtl,
+            child: AlertDialog(
+              title: const Text('تأكيد إلغاء الطلب'),
+              content: Text(line),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('تراجع')),
+                ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white),
+                    child: const Text('إلغاء الطلب')),
+              ],
+            ),
+          ),
+        );
+        if (go != true || !mounted) return;
+      }
     }
     setState(() => _isLoading = true);
     try {

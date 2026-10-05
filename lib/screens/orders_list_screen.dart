@@ -20,6 +20,7 @@ import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/order_activity.dart';
 import 'package:zyiarah/utils/crew_delay_notice.dart';
 import 'package:zyiarah/utils/time_format.dart';
+import 'package:zyiarah/utils/cancel_refund_notice.dart';
 
 // تحويل رقمي دفاعي — حقول Firestore (amount/total_amount/quotePrice) قد تصل نصّاً
 // أو null، و.toDouble()/as num المباشر كان يعطّل بطاقة الطلب داخل القائمة.
@@ -419,8 +420,17 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     );
   }
 
-  Future<void> _confirmCancelOrder(BuildContext context, String docId, String? code) async {
+  Future<void> _confirmCancelOrder(BuildContext context, String docId,
+      String? code, Map<String, dynamic> order) async {
     final messenger = ScaffoldMessenger.of(context);
+    // ماذا يَحدثُ لمالِها — ثلاثُ نتائجَ خادميّةٍ مختلفة، والحوارُ كان صامتاً
+    // عن الثلاثِ. انظر `cancel_refund_notice.dart`.
+    final notice = cancelRefundNotice(
+      isPaid: order['is_paid'] == true,
+      paymentMethod: order['payment_method'] as String?,
+      amount: (order['amount'] as num?)?.toDouble(),
+    );
+    final moneyLine = cancelRefundNoticeText(notice);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => Directionality(
@@ -429,7 +439,9 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text('إلغاء الطلب', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
           content: Text(
-            'هل أنتِ متأكدة من إلغاء الطلب #${code ?? docId}؟\nلا يمكن التراجع عن هذا الإجراء.',
+            'هل أنتِ متأكدة من إلغاء الطلب #${code ?? docId}؟\n'
+            'لا يمكن التراجع عن هذا الإجراء.'
+            '${moneyLine.isEmpty ? '' : '\n\n$moneyLine'}',
             style: GoogleFonts.tajawal(),
           ),
           actions: [
@@ -591,7 +603,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                 // بـ permission-denied — إلغاء ما بعد الإسناد يحتاج مساراً خادميّاً
                 // (Cloud Function أو توسيع القواعد)، فلا نعرض زرّاً معطوباً حتى حينه.
                 OutlinedButton.icon(
-                  onPressed: () => _confirmCancelOrder(context, docId, order['code']),
+                  onPressed: () => _confirmCancelOrder(context, docId, order['code'], order),
                   icon: const Icon(Icons.cancel_outlined, size: 16),
                   label: Text('إلغاء', style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold)),
                   style: OutlinedButton.styleFrom(
