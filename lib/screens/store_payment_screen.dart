@@ -215,7 +215,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
           if (mounted) {
             setState(() => _isLoading = false);
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('خطأ في بوابة تمارا: $e')),
+              const SnackBar(content: Text('تعذّر بدء الدفع بالتقسيط — أعيدي المحاولة أو اختاري طريقةً أخرى')),
             );
           }
           return;

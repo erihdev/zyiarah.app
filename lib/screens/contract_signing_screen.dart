@@ -202,7 +202,7 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
         ),
       );
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذّر إتمام التوقيع — أعيدي المحاولة')));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }

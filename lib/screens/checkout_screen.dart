@@ -242,8 +242,8 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                 // ... بقية المنطق الخاص بـ ZATCA والفاتورة ...
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text("خطأ في تسجيل بيانات الطلب: $e"),
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text("تعذّر حفظ بيانات الطلب — أعيدي المحاولة"),
                     backgroundColor: Colors.red,
                   ));
                 }

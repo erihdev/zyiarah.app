@@ -20,11 +20,28 @@ String _code(String path) => File(path)
     })
     .join('\n');
 
-const _screens = [
-  'lib/screens/hourly_details_screen.dart',
-  'lib/screens/sofa_rug_details_screen.dart',
-  'lib/screens/ac_service_details_screen.dart',
-];
+/// **مُشتقَّةٌ من المُستعمِلين، لا مكتوبةٌ بيدها.** كانت ثلاثاً وعددُ الشاشاتِ
+/// التي تُحدّدُ المنطقةَ **ثمانٍ** — والأربعُ التي كانت خارجَ القائمةِ تُحقّقُ
+/// الشروطَ الأربعةَ كلَّها أصلاً (فُحصت واحدةً واحدة)، فالعطبُ كان في قائمةِ
+/// الحارسِ وحدَها لا في الشفرة. والاشتقاقُ يَمنعُ تخلُّفَها مرّةً أخرى:
+/// شاشةٌ جديدةٌ تُحدّدُ المنطقةَ تَدخلُ النطاقَ وحدَها.
+///
+/// (مُنتقي الخريطةِ مُستثنىً: هو المُنتقى لا المُنادي، وله مجموعتُه أدناه.)
+List<String> _locatingScreens() {
+  final out = <String>[];
+  for (final f in Directory('lib/screens')
+      .listSync()
+      .whereType<File>()
+      .where((f) => f.path.endsWith('.dart'))) {
+    final path = f.path.replaceAll(r'\', '/');
+    if (path == _picker) continue;
+    if (f.readAsStringSync().contains('ZyiarahZoneLocator.locate')) {
+      out.add(path);
+    }
+  }
+  out.sort();
+  return out;
+}
 
 const _picker = 'lib/screens/location_picker_screen.dart';
 
@@ -87,8 +104,16 @@ void main() {
       expect(s.contains('debugPrint'), isTrue, reason: 'الفشل يجب أن يصل السجلّ');
     });
 
-    test('الشاشات الثلاث لا تستدعي Geolocator مباشرةً', () {
-      for (final p in _screens) {
+    test('الاشتقاقُ يَجدُ الشاشاتِ فعلاً — وإلّا فالفحوصُ أدناه جوفاء', () {
+      final found = _locatingScreens();
+      expect(found.length, greaterThanOrEqualTo(7),
+          reason: 'وُجد ${found.length} فقط: $found');
+      expect(found, contains('lib/screens/hourly_details_screen.dart'));
+      expect(found, isNot(contains(_picker)));
+    });
+
+    test('كلُّ شاشةٍ تُحدّدُ المنطقةَ لا تستدعي Geolocator مباشرةً', () {
+      for (final p in _locatingScreens()) {
         final s = _code(p);
         expect(s.contains('Geolocator.'), isFalse,
             reason: '$p ينسخ منطق الموقع بدل استعمال المصدر المشترك — '
@@ -96,8 +121,8 @@ void main() {
       }
     });
 
-    test('الشاشات الثلاث تستعمل الخدمة والبطاقة المشتركتين', () {
-      for (final p in _screens) {
+    test('كلُّها تستعمل الخدمةَ والبطاقةَ المشتركتَين', () {
+      for (final p in _locatingScreens()) {
         final s = _code(p);
         expect(s.contains('ZyiarahZoneLocator.locate'), isTrue, reason: p);
         expect(s.contains('ZyiarahZoneLocationCard'), isTrue, reason: p);
@@ -107,7 +132,7 @@ void main() {
     });
 
     test('لا شاشة تعرض «لم يُحدَّد موقعك» كسبب وحيد لكل الأعطال', () {
-      for (final p in _screens) {
+      for (final p in _locatingScreens()) {
         final s = _code(p);
         expect(s.contains('اختره من الزر بالأسفل'), isFalse,
             reason: '$p ما زال يعرض رسالة واحدة لكل الأسباب');
@@ -115,7 +140,7 @@ void main() {
     });
 
     test('زرّ «حدّد موقعي تلقائياً» يطلب الإذن صراحةً', () {
-      for (final p in _screens) {
+      for (final p in _locatingScreens()) {
         final s = _code(p);
         expect(s.contains('userInitiated: true'), isTrue,
             reason: '$p: بدون طلب صريح لن يظهر مربّع الإذن بعد رفض سابق');

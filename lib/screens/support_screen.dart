@@ -469,7 +469,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ في الإرسال: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تعذّر إرسال الرسالة — أعيدي المحاولة")));
       }
     } finally {
       setSending?.call(false);

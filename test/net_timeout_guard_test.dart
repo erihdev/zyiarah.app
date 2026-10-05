@@ -221,23 +221,52 @@ void main() {
     }
   });
 
+  /// كتلةُ `showSnackBar(...)` بحدودِها الحقيقيّةِ — **بموازنةِ الأقواس**.
+  ///
+  /// نافذةُ عدِّ أحرفٍ (٤٥٠ حرفاً) كانت تَتجاوزُ نهايةَ الشريطِ فتَلتقطُ ما
+  /// بعدَه: في `driver_dashboard` الشريطُ نصُّه عربيٌّ ثابتٌ تماماً، و`$e`
+  /// في `debugPrint` في الفرعِ **التالي** — إيجابيّةٌ كاذبةٌ محضة. والموازنةُ
+  /// ليست النمطَ غيرَ النَهِمِ الذي عطّل أوّلَ نسخةٍ من هذا الفحص: ذاك توقّف
+  /// عند قوسٍ مغلقٍ داخل `toString()`، والموازنةُ تَعُدُّ الفتحَ والإغلاقَ معاً
+  /// فتَجتازُه صحيحاً.
+  String snackBlock(String src, int start) {
+    final open = src.indexOf('(', start);
+    var depth = 1;
+    var i = open + 1;
+    while (i < src.length && depth > 0) {
+      if (src[i] == '(') depth++;
+      if (src[i] == ')') depth--;
+      i++;
+    }
+    return src.substring(start, i);
+  }
+
   test('لا نصَّ استثناءٍ خامّاً في وجه العميلة', () {
     // شاشةُ الدخول تُترجم رموزَ Firebase عمداً («رسائل عربية واضحة بدل استثناء
     // Firebase الإنجليزي الخام»)، وشاشتا الحجز كانتا تسرّبانه: شوهد
     // «[firebase_functions/internal] internal [0]» في شريطٍ أحمر بواجهةٍ عربيّة.
-    // لا نحاول تفكيك `Text(...)` بالأقواس: أوّلُ نسخةٍ فعلت ذلك بنمطٍ غيرِ نهم،
-    // فتوقّف عند القوس المغلق داخل `toString()` نفسه وصار الفحصُ **عاطلاً** —
-    // كشفه اختبارُ العضّة. الآن نأخذ كتلةَ الشريط كاملةً ونبحث فيها عن استبدالٍ
-    // لمتغيّر الاستثناء، أيّاً كان شكلُ النداء.
+    //
+    // **والنطاقُ كان خمسَ شاشاتٍ والقاعدةُ عامّة.** قاعدةُ المهلةِ في هذا
+    // الملفِّ وُسّعت إلى الـ٤١ كلِّها حين تبيّن أنّ العطلَ عامّ، وهذا الفحصُ
+    // بقي على الخمس — فوُجد **١٣ موضعاً** في وجه العميلةِ في ١١ شاشةً أخرى
+    // («خطأ في بوابة تمارا: Exception: فشل الاتصال ببوابة التقسيط: …» كان
+    // أسوأَها: بادئتانِ مكرّرتان و`Exception` بحرفٍ لاتينيّ). النطاقُ الآن
+    // **كلُّ شاشاتِ العميلة**.
+    //
+    // **والأدمنُ والسائقُ مُستثنيانِ بقصد:** النصُّ الخامُّ عندهما تشخيصٌ
+    // مطلوب — `admin_order_details` يَعرضُ «خطأ غير متوقع: $e» عن عمدٍ،
+    // و٦٢ موضعاً في شاشاتِ الإدارةِ على هذا النهج. إخفاؤه عنهم خسارةٌ لا ربح.
     final offenders = <String>[];
-    for (final p in _screens) {
-      final src = _code(p);
+    for (final f in _allScreens()) {
+      final path = f.path.replaceAll('\\', '/');
+      if (path.contains('/admin/')) continue;
+      if (path.split('/').last.startsWith('driver_')) continue;
+      final src = _code(path);
       for (final m in RegExp(r'showSnackBar\(').allMatches(src)) {
-        final end = (m.start + 450).clamp(0, src.length);
-        final block = src.substring(m.start, end);
+        final block = snackBlock(src, m.start);
         final hit = RegExp(r'\$\{?\s*e\b').firstMatch(block);
         if (hit != null) {
-          offenders.add('$p  ←  ...${block.substring(
+          offenders.add('$path  ←  ...${block.substring(
                   (hit.start - 40).clamp(0, block.length), hit.start + 30)
               .replaceAll(RegExp(r'\s+'), ' ').trim()}...');
         }
@@ -245,6 +274,23 @@ void main() {
     }
     expect(offenders, isEmpty,
         reason: '\n\nنصُّ الاستثناء يصل العميلة كما هو:\n  • ${offenders.join('\n  • ')}\n');
+  });
+
+  test('والنصُّ الخامُّ يَبقى للأدمنِ — تشخيصٌ لا عطل', () {
+    // لو صفرَت فقد أُخفي عن المالكِ ما يَحتاجُه.
+    var hits = 0;
+    for (final f in _allScreens()) {
+      final path = f.path.replaceAll('\\', '/');
+      if (!path.contains('/admin/')) continue;
+      final src = _code(path);
+      for (final m in RegExp(r'showSnackBar\(').allMatches(src)) {
+        if (RegExp(r'\$\{?\s*e\b').hasMatch(snackBlock(src, m.start))) {
+          hits++;
+        }
+      }
+    }
+    expect(hits, greaterThan(20),
+        reason: 'أُخفي نصُّ الاستثناء عن شاشاتِ الإدارة — وهو تشخيصُها');
   });
 
   test('المهلتان معرَّفتان مرّةً واحدة ولا تُكتبان بالأرقام', () {
@@ -257,5 +303,33 @@ void main() {
           reason: '$p: مهلةٌ مكتوبةٌ بالأرقام في موضعها — '
               'استعمل kNetCallTimeout/kAuthTimeout كي تتغيّر من مكانٍ واحد');
     }
+  });
+  group('مسارُ تمارا: لا نصَّ لاتينيّاً ولا سبباً مُلفَّقاً', () {
+    test('الغلافُ لا يَنسبُ السببَ خطأً', () {
+      final svc = _code('lib/services/tamara_service.dart');
+      // كان كلُّ خطأٍ يُلفُّ بـ«فشل الاتصال ببوابة التقسيط: » — فيُقرأ خطأُ
+      // المصادقةِ («يجب تسجيل الدخول أولاً») انقطاعاً في الشبكة.
+      expect(svc.contains('فشل الاتصال ببوابة التقسيط'), isFalse);
+      // ورسالةُ الخادمِ تَصلُ كما هي إن كانت عربيّةً، وإلّا نصٌّ عامّ.
+      // لا نُثبّتُ نصَّ الهروبِ نفسَه (يُفسَّرُ عند الكتابةِ فيَصيرُ حروفاً):
+      // نُثبّتُ القرارَ — فحصٌ على الرسالةِ ثمّ سقوطٌ على نصٍّ عربيٍّ عامّ.
+      expect(svc.contains('hasMatch(m)'), isTrue,
+          reason: 'فحصُ العربيّةِ هو ما يَمنعُ تسريبَ نصٍّ لاتينيّ');
+      expect(svc.contains('e.message'), isTrue,
+          reason: 'رسالةُ الخادمِ هي الأصلُ متى كانت عربيّة');
+      expect(svc.contains('تعذّر بدء الدفع بالتقسيط'), isTrue);
+    });
+
+    test('ورسائلُ الخادمِ في هذا المسارِ مكتوبةٌ للعميلة', () {
+      final fn = File('functions/index.js').readAsStringSync();
+      final i = fn.indexOf('exports.createTamaraCheckout');
+      final j = fn.indexOf('\nexports.', i + 10);
+      final body = fn.substring(i, j);
+      // لا «السيرفر» في وجهِ العميلة، ولا أمرٌ لها بما لا تَقدرُ عليه.
+      expect(body.contains('السيرفر'), isFalse);
+      expect(body.contains('تحقق من بيانات الطلب'), isFalse,
+          reason: 'أمرٌ لا تَقدرُ العميلةُ على تنفيذِه');
+      expect(body.contains('أعيدي المحاولة'), isTrue);
+    });
   });
 }

@@ -79,7 +79,7 @@ class _StoreScheduleScreenState extends State<StoreScheduleScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('تعذّر تحميل مناطق التوصيل: $e',
+          content: Text('تعذّر تحميل مناطق التوصيل — تحقّقي من اتصالكِ وأعيدي المحاولة',
               style: GoogleFonts.tajawal()),
           backgroundColor: Colors.red,
         ));
