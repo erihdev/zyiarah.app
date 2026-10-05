@@ -566,6 +566,18 @@ async function _deliverBroadcast(docRef, data) {
     const uniqTokens = [...new Set(
         excludeOptedOut(tokSnap.docs, optOut)
             .map((d) => d.data().token || d.data().fcmToken).filter(Boolean))];
+    // خريطةُ رمزٍ ← مرجعِ مستندِه. **تنظيفُ الرموزِ الميتةِ كان ميّتاً**:
+    // كان يَستعلمُ `where("token","==",bad)` والعميلُ يَكتبُ الحقلَ
+    // `fcmToken` وحدَه (بتعليقٍ صريحٍ في `notification_service`: «Backend
+    // expects 'fcmToken', not 'token'») ولا شيءَ في المستودعِ يَكتبُ
+    // `token` — فالاستعلامُ لا يُطابقُ مستنداً أبداً، والسطرُ يَطبعُ
+    // `cleaned=N` لِـN لم يُحذَف منها شيء. والتعليقُ أعلاه يَقولُ الصوابَ
+    // منذ البداية: «فالإسقاطُ بالمعرّف».
+    const refByToken = new Map();
+    for (const d of excludeOptedOut(tokSnap.docs, optOut)) {
+      const t = d.data().token || d.data().fcmToken;
+      if (t && !refByToken.has(t)) refByToken.set(t, d.ref);
+    }
     let sent = 0; let failed = 0; const invalid = [];
     for (let i = 0; i < uniqTokens.length; i += 500) {
       const chunk = uniqTokens.slice(i, i + 500);
@@ -584,11 +596,14 @@ async function _deliverBroadcast(docRef, data) {
       });
     }
     // نظّف الرموز الميتة (أجهزة أُلغي تثبيتها) كي لا تتضخّم المجموعة
+    let cleaned = 0;
     for (const bad of invalid) {
-      const q = await getFirestore().collection("fcm_tokens").where("token", "==", bad).limit(5).get();
-      for (const dd of q.docs) await dd.ref.delete().catch(() => {});
+      const ref = refByToken.get(bad);
+      if (!ref) continue;
+      await ref.delete().then(() => { cleaned++; }).catch(() => {});
     }
-    console.log(`broadcast(${target}) tokens: sent=${sent} failed=${failed} cleaned=${invalid.length} optOut=${optOut.size}`);
+    // `cleaned` صارَ المحذوفَ فعلاً لا عددَ الرموزِ الميتة — الرقمُ كان دعوى.
+    console.log(`broadcast(${target}) tokens: sent=${sent} failed=${failed} invalid=${invalid.length} cleaned=${cleaned} optOut=${optOut.size}`);
 
     let query = getFirestore().collection("users");
     if (target === "clients") {
@@ -6195,6 +6210,149 @@ exports.deleteDriverAccount = onCall({cpu: 0.083}, async (request) => {
   return {deleted: true, name, authDeleted};
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// حذفُ موظّفٍ كان ثلاثةَ مساراتٍ، ولا واحدٌ منها كاملاً — والنقصُ يَترك
+// جهازَه مشتركاً في تنبيهاتِ الإدارةِ إلى الأبد (2026-10-05)
+//
+// `fcm_tokens/{uid}` يَحملُ **نسخةً** من `role` و`staff_role`، وتوجيهُ البثِّ
+// وتنبيهاتِ `ADMIN_BROADCAST` يَستعلمُ عليها (`where("role","in",[…])` و
+// `where("staff_role","in",…)`). وكاتبُ تلك النسخةِ **واحدٌ**: تطبيقُ
+// المستخدمِ نفسِه عند الإقلاع أو الدخول أو تدويرِ الرمز.
+//
+// فحذفُ الموظّفِ كان:
+//   • `admin_managers_screen`: يَحذفُ `admins/{id}` و`users/{id}` — ولا Auth
+//     ولا رمزَ الإشعارات.
+//   • `Admins.tsx`: يَحذفُ `users/{id}` وحدَه — ولا `admins` ولا Auth ولا رمز.
+//   • `deleteDriverAccount` (السائق): يَحذفُ الأربعةَ كاملةً، وتعليقُه
+//     يُسمّي تنظيفَ الرمزِ بالاسم.
+//
+// فالقاعدةُ مُنفَّذةٌ في واحدٍ من ثلاثة — شكلُ `isAssignableDriver` (اثنان من
+// أربعة) ومفاتيحِ الإصدارِ بعينِه. والأثرُ **لا يُصحِّحُ نفسَه**: بزوالِ
+// `users/{id}` تَرفضُ القواعدُ أيَّ تحديثٍ للرمزِ (الشرطُ يُقارِنُ بـ
+// `getUserData()`، وقراءةُ مستندٍ غائبٍ تَرفضُ الكتابة)، فالرمزُ يَبقى
+// موسوماً `admin` ما بقي الجهاز: كلُّ تنبيهٍ إداريٍّ — رقمُ طلبٍ، مبلغٌ، اسمُ
+// عميلةٍ، فشلُ استردادٍ، عدمُ تطابقِ سعرٍ — يَصِلُ هاتفَ مَن أُقصي.
+//
+// وحسابُ Auth كان يَبقى حيّاً كذلك، فيَستطيعُ الدخولَ (ولا يَرى شيئاً:
+// `users/{id}` غائبٌ فتَرفضُه القواعدُ وشاشةُ الدور) — لكنّ الإشعاراتَ تَصِل.
+//
+// **والحارسُ الحقيقيُّ هو المُشغّلُ أدناه لا هذا النداء**: ثلاثةُ مساراتٍ
+// اليومَ وربعُها غداً، والكونسول رابعٌ لا شفرةَ فيه. فالنداءُ للاكتمالِ
+// الفوريِّ (Auth + المستندات) والمُشغّلُ لئلّا يَبقى مسارٌ بلا تنظيف.
+exports.deleteStaffAccount = onCall({cpu: 0.083}, async (request) => {
+  // **مدير عام فقط** — القواعدُ تَحصرُ الكتابةَ على `admins` بـ`isSuperAdmin()`
+  // (أي `getUserRole() in ['admin','super_admin']`)، و`_assertAdmin` يُجيزُ
+  // `orders_manager` كذلك: فاستعمالُه هنا كان سيَمنحُ مديرَ الطلباتِ حذفَ
+  // الموظّفين — أوسعَ من القواعد، وهو بعينُه ما يَمنعُه
+  // `panel_role_rules_sync_test`.
+  const {uid: actorUid, email: actorEmail} =
+      await _assertSuperAdmin(request);
+  const db = getFirestore();
+
+  const staffId = request.data && request.data.staffId;
+  if (!staffId) {
+    throw new HttpsError("invalid-argument", "معرّف الموظّف مطلوب");
+  }
+  // حارسُ تكامل، نظيرُ «لديه طلبات نشطة» في مسارِ السائق: مديرٌ عامٌّ يَحذفُ
+  // نفسَه يُقفلُ لوحةَ الإدارةِ على الجميع إن كان الأخير، ولا مسارَ استعادةٍ
+  // في التطبيق — فلا نَحذفُ بصمتٍ ونَطلبُ حساباً آخر.
+  if (staffId === actorUid) {
+    throw new HttpsError("failed-precondition",
+        "لا يمكنك حذف حسابك — اطلب من مدير عام آخر حذفه.");
+  }
+
+  const userRef = db.collection("users").doc(staffId);
+  const [adminSnap, userSnap] = await Promise.all([
+    db.collection("admins").doc(staffId).get(),
+    userRef.get(),
+  ]);
+  if (!adminSnap.exists && !userSnap.exists) {
+    throw new HttpsError("not-found", "الموظّف غير موجود");
+  }
+  const name = (adminSnap.exists && adminSnap.data().name) ||
+      (userSnap.exists && userSnap.data().name) || staffId;
+
+  // 1) Auth أوّلاً: لو فشلَ ما بعدَه نكونُ قد أغلقنا الدخولَ على أيِّ حال —
+  //    نفسُ ترتيبِ مسارِ السائقِ ولنفسِ السبب.
+  let authDeleted = true;
+  try {
+    await getAuth().deleteUser(staffId);
+  } catch (e) {
+    if (e.code === "auth/user-not-found") {
+      // موظّفٌ قديمٌ أُضيف قبل أن يُوفَّرَ الحسابُ عبر `createAccountViaAdmin`.
+      authDeleted = false;
+    } else {
+      throw e;
+    }
+  }
+
+  // 2) المستندات + رموزُ الإشعاراتِ (اسمَا المجموعةِ القديمُ والجديد).
+  await Promise.all([
+    db.collection("admins").doc(staffId).delete().catch(() => {}),
+    userRef.delete().catch(() => {}),
+    db.collection("fcm_tokens").doc(staffId).delete().catch(() => {}),
+    db.collection("fcm_token").doc(staffId).delete().catch(() => {}),
+  ]);
+
+  // مخطّطُ السجلِّ يُطابقُ كاتبَ العميل (`lib/services/audit_service.dart`):
+  // شاشةُ السجلِّ تُرتّبُ على `timestamp` وتُقارِنُ الإجراءَ بأحرفٍ كبيرة.
+  await db.collection("audit_logs").add({
+    action: "DELETE_STAFF",
+    admin_email: actorEmail,
+    actor_id: actorUid,
+    target_id: staffId,
+    details: {name, auth_deleted: authDeleted},
+    timestamp: FieldValue.serverTimestamp(),
+    platform: "Cloud Function (deleteStaffAccount)",
+  }).catch(() => {});
+
+  return {deleted: true, name, authDeleted};
+});
+
+// نسخةُ الدورِ على رمزِ الإشعاراتِ كان كاتبُها **واحداً**: تطبيقُ المستخدم.
+// فترقيةُ عميلةٍ إلى مديرةِ طلباتٍ — أو تغييرُ دورٍ فرعيٍّ — لا تَبلغُ
+// `fcm_tokens/{uid}` حتى يُعيدَ صاحبُها تشغيلَ التطبيق: فالمُرقَّى **لا
+// تَصِلُه تنبيهاتُ الإدارةِ** (توجيهُ `ADMIN_BROADCAST` يُرشِّحُ على
+// `staff_role`)، والمُنزَّلُ يَظلُّ يَستقبلُها. وهذا المُشغّلُ هو ما يُغني عن
+// تذكّرِ كلِّ مسارٍ: يَغطّي الشاشةَ واللوحةَ والكونسولَ وما يُكتَبُ غداً.
+//
+// الحذفُ هنا شبكةُ أمانٍ لا بديلٌ عن `deleteStaffAccount`: ذاك يَحذفُ Auth
+// (وهو ما لا يَقدِرُ عليه مُشغّلٌ أو عميل) ويُدوّنُ السجلّ.
+exports.syncRoleToPushToken = onDocumentWritten(
+    {document: "users/{uid}", cpu: 0.083},
+    async (event) => {
+      const uid = event.params.uid;
+      const before = event.data && event.data.before &&
+          event.data.before.exists ? event.data.before.data() : null;
+      const after = event.data && event.data.after &&
+          event.data.after.exists ? event.data.after.data() : null;
+      const tokRef = getFirestore().collection("fcm_tokens").doc(uid);
+
+      if (!after) {
+        // زالَ المستخدم: الرمزُ لا يُصحَّحُ بعدها أبداً (القواعدُ تُقارِنُ
+        // بـ`getUserData()`، وقراءةُ غائبٍ تَرفضُ الكتابة) فيَبقى موسوماً
+        // بدورِه القديمِ ويَستقبلُ تنبيهاتَ الإدارة.
+        await tokRef.delete().catch(() => {});
+        return null;
+      }
+      if (!before) return null; // إنشاءٌ جديد: لا رمزَ بعد.
+
+      const roleChanged = (before.role || null) !== (after.role || null);
+      const staffChanged =
+          (before.staff_role || null) !== (after.staff_role || null);
+      if (!roleChanged && !staffChanged) return null;
+
+      // لا نُنشئُ مستندَ رمزٍ لمن لا رمزَ له — الرمزُ نفسُه يَكتبُه الجهاز.
+      const tokSnap = await tokRef.get();
+      if (!tokSnap.exists) return null;
+      await tokRef.set({
+        role: after.role || "client",
+        staff_role: after.staff_role || null,
+        role_synced_at: FieldValue.serverTimestamp(),
+      }, {merge: true}).catch(() => {});
+      return null;
+    });
+
 /** Helper: verify caller is admin (super_admin or orders_manager) */
 async function _assertAdmin(request) {
   if (!request.auth) {
@@ -6215,6 +6373,36 @@ async function _assertAdmin(request) {
   if (!allowedRoles.includes(role)) {
     throw new HttpsError("permission-denied", "صلاحيات إدارية مطلوبة لهذه العملية");
   }
+}
+
+/**
+ * **المدير العام وحده.** `_assertAdmin` يُجيزُ `orders_manager` كذلك، وبعضُ
+ * العمليّاتِ تَحصرُها القواعدُ على `isSuperAdmin()` (مثلاً الكتابةُ على
+ * `admins`) — فاستعمالُ الأوّلِ هناك يَمنحُ صلاحيّةً أوسعَ من القواعد، وهو
+ * بعينُه ما يُراقبُه `panel_role_rules_sync_test`.
+ *
+ * والدورُ يُقرأُ **هنا** لا إنلاين عند كلِّ نداء: قاعدةٌ واحدةٌ في موضعٍ
+ * واحدٍ (`staff_role` ثمّ `role`، مرآةً لـ`getUserRole()` في القواعد).
+ * @param {object} request نداءُ onCall.
+ * @return {Promise<{uid: string, email: string}>} هويّةُ الفاعل.
+ */
+async function _assertSuperAdmin(request) {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً");
+  }
+  const uid = request.auth.uid;
+  const userDoc = await getFirestore().collection("users").doc(uid).get();
+  if (!userDoc.exists) {
+    throw new HttpsError("permission-denied", "المستخدم غير موجود");
+  }
+  const data = userDoc.data();
+  const allowedRoles = ["admin", "super_admin"];
+  if (!allowedRoles.includes(data.staff_role || data.role)) {
+    throw new HttpsError("permission-denied",
+        "هذه العملية للمدير العام فقط");
+  }
+  return {uid, email: (request.auth.token && request.auth.token.email) ||
+      "Unknown Admin"};
 }
 
 /** Helper: find order across all collections, return {ref, col, data} or null */

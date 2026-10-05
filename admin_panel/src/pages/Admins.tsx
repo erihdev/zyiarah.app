@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Shield, Key, Search, UserPlus, Trash2, Edit, UserCheck, Loader2 } from 'lucide-react';
-import { collection, query, where, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '../services/firebase.ts';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db, functions } from '../services/firebase.ts';
+import { httpsCallable } from 'firebase/functions';
 import { useNotification } from '../components/notificationContext.ts';
 
 interface AdminUser {
@@ -77,11 +78,20 @@ export default function Admins() {
         a.email?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    // **الحذفُ خادميٌّ الآن.** كان `deleteDoc(users/{id})` وحدَه: فمستندُ
+    // `admins/{id}` يَبقى، وحسابُ Auth يَبقى حيّاً، و`fcm_tokens/{id}` يَبقى
+    // موسوماً `role:'admin'` فيَستقبلُ جهازُ المُقصى كلَّ تنبيهٍ إداريٍّ إلى
+    // الأبد — ولا يُصحَّحُ أبداً، لأنّ القواعدَ تُقارِنُ الرمزَ بـ`users/{id}`
+    // وقد زال. والفشلُ كان صامتاً كذلك (`try/finally` بلا `catch`).
     const handleDelete = async (adminId: string) => {
         if (!await confirm('هل أنت متأكد من حذف هذا المشرف؟')) return;
         setDeletingId(adminId);
         try {
-            await deleteDoc(doc(db, 'users', adminId));
+            await httpsCallable(functions, 'deleteStaffAccount')({ staffId: adminId });
+            toast.success('تم حذف المشرف وإلغاء حسابه وإشعاراته');
+        } catch (e) {
+            console.error('deleteStaffAccount failed:', e);
+            toast.error('تعذّر حذف المشرف — لم يُحذف شيء. تحقّق من صلاحياتك أو الاتصال');
         } finally {
             setDeletingId(null);
         }

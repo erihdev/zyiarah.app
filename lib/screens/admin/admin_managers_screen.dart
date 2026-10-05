@@ -5,6 +5,7 @@ import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/zyiarah_strings.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class AdminManagersScreen extends StatefulWidget {
   const AdminManagersScreen({super.key});
@@ -410,15 +411,15 @@ class _ManagerFormSheetState extends State<_ManagerFormSheet> {
 
     setState(() => isSaving = true);
     try {
-      await FirebaseFirestore.instance.collection('admins').doc(widget.docId).delete();
-      // createAccountViaAdmin يكتب الحساب في users و admins معاً. حذف admins فقط كان
-      // يُبقي users/{id} بـ role:'admin' فيحتفظ «المحذوف» بصلاحياته. نحذف الاثنين.
-      await FirebaseFirestore.instance.collection('users').doc(widget.docId).delete();
-      await ZyiarahAuditService().logAction(
-        action: ZyiarahAuditService.actionDeleteStaff,
-        details: {'staff_id': widget.docId},
-        targetId: widget.docId,
-      );
+      // **الحذفُ خادميٌّ الآن.** كان هنا حذفُ مستندَين من الجهاز: فحسابُ Auth
+      // يَبقى حيّاً، و`fcm_tokens/{id}` يَبقى موسوماً `role: 'admin'` فيَستقبلُ
+      // جهازُ المُقصى كلَّ تنبيهٍ إداريٍّ إلى الأبد — ولا يُصحَّحُ أبداً، لأنّ
+      // القواعدَ تُقارِنُ الرمزَ بـ`users/{id}` وقد زال. مسارُ السائقِ
+      // (`deleteDriverAccount`) كان يَفعلُ الأربعةَ كاملةً منذ البداية.
+      // والسجلُّ يُكتَبُ خادميّاً بنفسِ المخطَّطِ فلا يُدوَّنُ مرّتَين.
+      await FirebaseFunctions.instance
+          .httpsCallable('deleteStaffAccount')
+          .call({'staffId': widget.docId});
       widget.onSuccess();
     } catch (e) {
        setState(() => isSaving = false);

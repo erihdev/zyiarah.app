@@ -187,14 +187,32 @@ t("المسارات الأربعة كلها تمرّ على دالّة الأه�
 t("القاعدة غير مكتوبة ثانيةً داخل index.js", () => {
   // كانت نسختان حرفيّتان، ويحفظ تطابقَهما **تعليق**. فمن أعاد كتابتها إنلاين
   // أعاد المشكلة كاملةً، ولن يُسقط الفحص أعلاه لأن الدالّة ستبقى منادَاة.
-  const inline = SRC.split("\n")
+  const lines = SRC.split("\n");
+  const inline = lines
       .map((l, i) => [i + 1, l])
       .filter(([, l]) => /staff_role\s*\|\|/.test(l));
-  // _assertAdmin يقرأ دور **الأدمن** لا السائق — سؤال آخر، ويبقى حيث هو.
-  const offenders = inline.filter(([ln]) => {
-    const ctx = SRC.split("\n").slice(Math.max(0, ln - 25), ln).join("\n");
-    return !/_assertAdmin|allowedRoles/.test(ctx);
-  });
+  // **الاستثناءُ بالاسمِ لا بالجِوار.** كانت القاعدةُ «لا يوجد `_assertAdmin`
+  // ولا `allowedRoles` في الخمسةِ والعشرينَ سطراً فوقَه» — فنصُّ تعليقٍ
+  // يَذكرُ `_assertAdmin` يُرضيها، وقد حدثَ: شرحٌ فوقَ `deleteStaffAccount`
+  // يُسمّيه فمرَّت قراءةٌ إنلاين للدور. فالإسنادُ الآن إلى **الدالّةِ
+  // المُحيطة** بالاسم، ولكلِّ مُستثنًى سببُه.
+  const ALLOWED = {
+    // يَقرآنِ دورَ **الأدمنِ** لا السائق — سؤالٌ آخرُ، وموضعُهما هو موضعُه.
+    "_assertAdmin": "دور الأدمن، قاعدة أخرى",
+    "_assertSuperAdmin": "دور الأدمن، قاعدة أخرى",
+    // لا يَحسبُ دوراً إطلاقاً: يَنسخُ الحقلَ من `users` إلى رمزِ الإشعارات
+    // كي لا تَبقى نسخةُ التوجيهِ بائتةً بعد ترقيةٍ أو تنزيل.
+    "syncRoleToPushToken": "نسخُ حقلٍ لا حسابُ دور",
+  };
+  const enclosing = (ln) => {
+    for (let i = ln - 1; i >= 0; i--) {
+      const m = lines[i].match(
+          /^(?:exports\.(\w+)\s*=|(?:async\s+)?function\s+(\w+)\s*\()/);
+      if (m) return m[1] || m[2];
+    }
+    return "<top-level>";
+  };
+  const offenders = inline.filter(([ln]) => !(enclosing(ln) in ALLOWED));
   assert.deepStrictEqual(
       offenders.map(([ln, l]) => `L${ln}: ${l.trim()}`), [],
       "دور السائق محسوبٌ إنلاين — استعمل hasDriverRole من drivers.js");

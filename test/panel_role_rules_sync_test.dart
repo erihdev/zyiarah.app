@@ -159,7 +159,22 @@ void main() {
   for (final f in Directory('admin_panel/src/pages').listSync().whereType<File>()) {
     if (!f.path.endsWith('.tsx')) continue;
     final name = f.uri.pathSegments.last.replaceAll('.tsx', '');
-    final src = f.readAsStringSync();
+    // **التعليقاتُ تُحجَبُ أوّلاً.** شرحُ إصلاحٍ يَقتبسُ النداءَ الذي أزاله
+    // (مثلاً «كان `deleteDoc(users/{id})` وحدَه») يُقرأُ كتابةً قائمةً،
+    // فيُبلِّغُ الحارسُ عن هدفٍ لم يُعرَف — وهو فخُّ «الحارسُ يَسقطُ على
+    // توثيقِه» في ثوبِ استخراجٍ. والمقابلةُ بالخامِّ بعدَه كي لا يُجوّفَه
+    // الحجب.
+    final raw = f.readAsStringSync();
+    final src = raw
+        .split('\n')
+        .map((l) {
+          final t = l.trimLeft();
+          return (t.startsWith('//') || t.startsWith('/*') || t.startsWith('*'))
+              ? ''
+              : l;
+        })
+        .join('\n');
+
     // المراجعُ الوسيطة: `const ref = doc(db, 'orders', id)` ثم
     // `updateDoc(ref, …)`. بلا حلِّها تَخرجُ صفحةٌ كلُّ كتاباتِها عبر مرجعٍ من
     // دائرةِ الفحصِ **بصمت** — وهو شكلُ الحارسِ العقيم.
@@ -257,7 +272,18 @@ void main() {
   };
 
   group('خريطةُ الأدوارِ في اللوحةِ مقابلَ firestore.rules', () {
-    test('الاستخراجُ ليس فارغاً — حارسٌ عقيمٌ أسوأُ من غيابِه', () {
+    test('الحجبُ لم يُفرِغ الفحصَ — الشرحُ ما زال يَذكرُ النداءَ المُزال', () {
+    // المقابلةُ بالخامّ، لازمةٌ بعد كلِّ حجبٍ للتعليقات: `Admins` لم يَعُد
+    // يَحذفُ المستندَ بنفسِه (صارَ `deleteStaffAccount`)، وشرحُ ذلك يَقتبسُ
+    // النداءَ القديم — فلو لم يَبقَ الاقتباسُ لَما كان للحجبِ ما يَحجب،
+    // ولَصارَ الفحصُ يَمرُّ على لا شيء.
+    final raw = File('admin_panel/src/pages/Admins.tsx').readAsStringSync();
+    expect(raw.contains('deleteDoc('), isTrue);
+    expect(raw.contains("httpsCallable(functions, 'deleteStaffAccount')"), isTrue,
+        reason: 'الحذفُ خادميٌّ — وإلّا عادت ثغرةُ رمزِ الإشعارات');
+  });
+
+  test('الاستخراجُ ليس فارغاً — حارسٌ عقيمٌ أسوأُ من غيابِه', () {
       expect(helpers.length, greaterThanOrEqualTo(5),
           reason: 'لم تُقرأ مُعيناتُ الأدوارِ من القواعد');
       expect(allRoles.length, equals(5), reason: 'isAdmin يَجمعُ الأدوارَ الخمسة');
