@@ -1208,11 +1208,32 @@ function _buildTemplateFallbackHtml(title, variables) {
     `</div></div></body></html>`;
 }
 
-exports.processNotificationTriggers = onDocumentCreated(
-    // retry: إعادة المحاولة عند فشل عابر (Resend/FCM) بدل فقد الإشعار للأبد. سجلّ
-    // الصندوق (step 1) بمعرّف حتمي كي لا يتكرّر عند الإعادة.
-    {document: "notification_triggers/{id}", secrets: ["RESEND_API_KEY"], cpu: 0.25, retry: true},
-    async (event) => {
+// ════════════════════════════════════════════════════════════════════════
+// طابورا الإشعارات: `notification_queue` خادميٌّ و`notification_triggers` للعميل.
+//
+// SECURITY: كانت الثقةُ تُحسَب من `trigger.createdBy === "server"` — **وهو حقلٌ
+// يَكتبه العميل**: قاعدةُ `notification_triggers` هي `allow create: if
+// isLoggedIn()` بلا أيِّ قيدٍ على الحقول، فأيُّ مستخدمٍ مسجَّلٍ يَكتب
+// `createdBy: "server"` فيُعَدُّ موثوقاً ويَتخطّى الحارسَ كلَّه: إشعارُ Push
+// وسجلٌّ داخلَ التطبيقِ بعنوانٍ ونصٍّ من اختيارِه إلى **أيِّ ضحيّة**، أو بثٌّ
+// إداريٌّ مزيَّف، أو بريدٌ من نطاقِ المنشأةِ إلى أيِّ عنوان (`recipientEmail`
+// يأتي من المستند). وهو عينُ التصيّدِ الذي كُتب الحارسُ لمنعه.
+//
+// ولا تستطيع الدالّةُ التمييزَ بين كاتبٍ وكاتبٍ من محتوى المستند — الذي
+// يُميّزُهما هو **مَن كتب**، ولا تَعرفُه إلّا القواعد. فالفصلُ بالمجموعة:
+// `notification_queue` **بلا قاعدةِ مطابقةٍ في firestore.rules**، فالعميلُ
+// ممنوعٌ منها بالافتراضِ المُغلَق، وAdmin SDK يَتخطّى القواعدَ أصلاً. فالكتابةُ
+// فيها إذنْ برهانُ أصلٍ خادميٍّ لا يُنتحَل. والثقةُ تُحسَب من **اسمِ المجموعة**
+// (`snap.ref.parent.id`) لا من حقل.
+//
+// مُعالِجٌ واحدٌ للطابورَين كي لا يَفترقا: ٣٤٠ سطراً من بريدٍ وقوالبَ ومرفقاتٍ
+// وإعادةِ محاولةٍ، ونسختان منها تَنحرفان.
+// ════════════════════════════════════════════════════════════════════════
+const _notifQueueOpts = {secrets: ["RESEND_API_KEY"], cpu: 0.25, retry: true};
+
+// retry: إعادة المحاولة عند فشل عابر (Resend/FCM) بدل فقد الإشعار للأبد. سجلّ
+// الصندوق (step 1) بمعرّف حتمي كي لا يتكرّر عند الإعادة.
+const _processNotifQueueDoc = async (event) => {
       const snap = event.data;
       if (!snap) return;
 
@@ -1245,7 +1266,10 @@ exports.processNotificationTriggers = onDocumentCreated(
         // Push + سجلّ داخل التطبيق باسم زيارة لأي ضحية (تصيّد). نحسب ثقة المُرسِل مرّة
         // (server أو موظّف بدور != client) ونرفض أي trigger موجَّه لغير مُنشئه.
         // (تصلّب ADMIN_BROADCAST يُعالَج على حدة — تدفّقات إدارية شرعية تكتبه.)
-        let senderIsTrusted = trigger.createdBy === "server";
+        // الثقةُ من **اسمِ المجموعة**: `notification_queue` لا قاعدةَ لها في
+        // firestore.rules فلا يَكتبها عميل. و`createdBy === "server"` لم يَعُد
+        // إشارةَ ثقةٍ — كان العميلُ يَكتبه بنفسِه.
+        let senderIsTrusted = snap.ref.parent.id === "notification_queue";
         if (!senderIsTrusted && trigger.createdBy) {
           try {
             const cu = await getFirestore().collection("users")
@@ -1545,7 +1569,18 @@ exports.processNotificationTriggers = onDocumentCreated(
         await snap.ref.update({giveUp: true});
         console.error(`Trigger ${event.params.id} gave up after ${attempts} attempts`);
       }
-    });
+    };
+
+// الطابورُ الخادميُّ: كلُّ ما فيه موثوقٌ لأنّ العميلَ لا يستطيع الكتابةَ فيه.
+exports.processServerNotificationQueue = onDocumentCreated(
+    {...{document: "notification_queue/{id}"}, ..._notifQueueOpts},
+    _processNotifQueueDoc);
+
+// طابورُ العميل: يبقى كما هو (التطبيقُ واللوحةُ يَكتبانه)، وكلُّ ما فيه
+// **غيرُ موثوقٍ** حتى يُثبت `createdBy` أنّه موظّف.
+exports.processNotificationTriggers = onDocumentCreated(
+    {...{document: "notification_triggers/{id}"}, ..._notifQueueOpts},
+    _processNotifQueueDoc);
 
 // 6b. Secure wallet — redeem Qatrat points for balance (server-authoritative).
 // The wallet is (currently) client-writable, so this onCall is the trusted path:
@@ -1626,7 +1661,8 @@ function _parseServiceMeta(s) {
 }
 
 async function queuePush(toUid, title, body, type, data, targetRoles, recipientEmail) {
-  await getFirestore().collection("notification_triggers").add({
+  // الطابورُ الخادميُّ — بلا قاعدةِ مطابقةٍ في firestore.rules، فلا يَكتبه عميل.
+  await getFirestore().collection("notification_queue").add({
     toUid: toUid,
     title: title,
     body: body,
@@ -4488,22 +4524,26 @@ exports.opsHealthSweep = onSchedule(
       //    فاته الحدث، فنعيد إنشاءه نسخةً جديدة (تُطلق الحدث) ونوسم الأصل. مرة واحدة
       //    فقط لكل مستند (redriven_from) كي لا يدور المكسور للأبد، وبنافذة 30 دقيقة
       //    إلى 3 أيام: الأحدث ما زال قيد المعالجة، والأقدم بريدٌ فات أوانه.
+      // الطابوران معاً، وكلُّ مستندٍ يُعاد إلى **طابورِه** — نسخُ مستندِ عميلٍ
+      // إلى الطابورِ الخادميِّ يَمنحُه ثقةً لم يَملكها.
       try {
-        const snap = await db.collection("notification_triggers")
-            .where("processed", "==", false)
-            .where("createdAt", "<=", new Date(now - 30 * 60 * 1000))
-            .orderBy("createdAt", "asc").limit(100).get();
         let redriven = 0;
-        for (const doc of snap.docs) {
-          const d = doc.data();
-          if (d.error || d.emailStatus || d.redriven_from) continue;
-          const ageMs = now - (d.createdAt?.toDate?.().getTime() || now);
-          if (ageMs > 3 * 24 * 60 * 60 * 1000) continue;
-          const copy = {...d, redriven_from: doc.id,
-            createdAt: FieldValue.serverTimestamp()};
-          await db.collection("notification_triggers").add(copy);
-          await doc.ref.update({processed: true, status: "redriven"});
-          redriven++;
+        for (const col of ["notification_queue", "notification_triggers"]) {
+          const snap = await db.collection(col)
+              .where("processed", "==", false)
+              .where("createdAt", "<=", new Date(now - 30 * 60 * 1000))
+              .orderBy("createdAt", "asc").limit(100).get();
+          for (const doc of snap.docs) {
+            const d = doc.data();
+            if (d.error || d.emailStatus || d.redriven_from) continue;
+            const ageMs = now - (d.createdAt?.toDate?.().getTime() || now);
+            if (ageMs > 3 * 24 * 60 * 60 * 1000) continue;
+            const copy = {...d, redriven_from: doc.id,
+              createdAt: FieldValue.serverTimestamp()};
+            await db.collection(col).add(copy);
+            await doc.ref.update({processed: true, status: "redriven"});
+            redriven++;
+          }
         }
         console.log(`opsHealthSweep: stalled triggers redriven=${redriven}`);
       } catch (e) {

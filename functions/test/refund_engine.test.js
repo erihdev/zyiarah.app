@@ -583,9 +583,14 @@ t("(و٥) العرف الجديد: لا وحدةٍ تستورد Firestore — ا
   assert.ok(mod.includes("async function autoResolveUnfulfilledPaidOrder(db,"));
 });
 
-t("(و٦) index.js ما زال يُصدّر ٦٢ دالّة", () => {
+t("(و٦) index.js ما زال يُصدّر ٦٣ دالّة", () => {
+  // كانت ٦٢ وصارت ٦٣ بإضافة `processServerNotificationQueue`: طابورُ الإشعاراتِ
+  // الخادميُّ (`notification_queue`) انفصلَ عن طابورِ العميلِ لأنّ الثقةَ كانت
+  // تُحسَب من `createdBy` — حقلٍ يَكتبه العميل. المُعالِجُ **واحدٌ مُشترَك**
+  // بين التسجيلَين، فالزيادةُ تسجيلٌ لا نسخةُ منطق. (الحارسُ يُجبر على مراجعةِ
+  // أيِّ تصديرٍ جديد — وقد أدّى ذلك هنا.)
   const n = (idx.match(/^exports\.\w+ = /gm) || []).length;
-  assert.strictEqual(n, 62, `عدد الصادرات ${n} ≠ 62`);
+  assert.strictEqual(n, 63, `عدد الصادرات ${n} ≠ 63`);
 });
 
 (async () => {
