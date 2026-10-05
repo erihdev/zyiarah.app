@@ -3161,6 +3161,11 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
       // تعيين سائق» للأبد رغم إسناد السائق.
       assigned_driver: d.name || "سائق",
       driver_phone: d.phone || "000000000",
+      // تقييمُ السائق لحظةَ الإسناد — شاشةُ التتبّع تعرضه للعميلة. لا يُكتب
+      // إلّا إن وُجد فعلاً: كانت الشاشةُ تعرض «★ 5.0» افتراضاً لكلِّ سائق،
+      // ولا شيءَ في المستودع يكتب هذا الحقل أصلاً، فكان الرقمُ مختلقاً دائماً.
+      ...(Number.isFinite(Number(d.rating_avg)) && Number(d.rating_avg) > 0 ?
+        {driver_rating_avg: Number(d.rating_avg)} : {}),
       assigned_at: FieldValue.serverTimestamp(),
       scheduled_at: Timestamp.fromDate(startDateTime),
       // service_date مطلوب حتى يحتسب مُحدِّد التوفّر هذه المهمة ضمن انشغال السائق
@@ -3744,6 +3749,11 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
       // تعيين سائق» للأبد في مسار الاعتماد اليدوي (كنب/مكيفات/متجر).
       assigned_driver: d.name || "سائق",
       driver_phone: d.phone || "000000000",
+      // تقييمُ السائق لحظةَ الإسناد — شاشةُ التتبّع تعرضه للعميلة. لا يُكتب
+      // إلّا إن وُجد فعلاً: كانت الشاشةُ تعرض «★ 5.0» افتراضاً لكلِّ سائق،
+      // ولا شيءَ في المستودع يكتب هذا الحقل أصلاً، فكان الرقمُ مختلقاً دائماً.
+      ...(Number.isFinite(Number(d.rating_avg)) && Number(d.rating_avg) > 0 ?
+        {driver_rating_avg: Number(d.rating_avg)} : {}),
       assigned_at: FieldValue.serverTimestamp(),
       scheduled_at: Timestamp.fromDate(startDateTime),
       service_date: Timestamp.fromDate(startDateTime),

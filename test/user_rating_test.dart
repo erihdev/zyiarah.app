@@ -106,4 +106,52 @@ void main() {
       expect(src.contains("key: ValueKey('qshimmer')"), isTrue);
     });
   });
+
+  group('تقييمُ السائق في شاشة التتبّع: لا نجمةَ بلا تقييم', () {
+    // العضوُ الثالث في العائلة، وأسوأُها: `data['driver_rating_avg'] ?? 5.0`
+    // — و**لا شيءَ في المستودع كان يكتب هذا الحقل إطلاقاً**. فالرقمُ مختلَقٌ
+    // دائماً لا أحياناً: كلُّ عميلةٍ تتتبّع طلبَها ترى «★ 5.0» لسائقها.
+    // (`aggregateDriverRating` يكتب `rating_avg` على مجموعة `drivers`، وقاعدةُ
+    // `drivers` تمنع العميلَ من قراءتها — فلا سبيلَ للشاشة إليها مباشرةً.)
+    final src =
+        File('lib/screens/order_tracking_screen.dart').readAsStringSync();
+
+    test('لا احتياطَ ثابتاً', () {
+      // الشيفرةُ تشرح القرارَ بذكر `?? 5.0` في تعليقها، فالفحصُ بلا حجبٍ
+      // يفشل على توثيقه هو — وقع ذلك فعلاً. نحجب أسطرَ التعليق ثمّ **نؤكّد
+      // أنّ العبارةَ ما زالت في النصّ الخام**، فالحجبُ المفرِط لا يُفرّغ
+      // الفحص. (درسُ حارسِ تمارا ونشرِ الدوالّ.)
+      final code = src
+          .split('\n')
+          .where((l) => !l.trimLeft().startsWith('//'))
+          .join('\n');
+      expect(code.contains('?? 5.0'), isFalse,
+          reason: 'عاد التقييمُ المخترَع لكلّ سائق');
+      expect(src.contains('?? 5.0'), isTrue,
+          reason: 'اختفى التعليقُ الشارح — الحجبُ بلا موضوع');
+    });
+
+    test('والنجمةُ مشروطةٌ بوجود رقمٍ حقيقيّ', () {
+      expect(src.contains('if (_ratingOf(data) != null)'), isTrue);
+      expect(src.contains('static double? _ratingOf('), isTrue);
+    });
+
+    test('وصفرٌ أو قيمةٌ تالفة = لا تقييم', () {
+      final i = src.indexOf('static double? _ratingOf(');
+      final body = src.substring(i, src.indexOf('\n  }\n', i));
+      expect(body.contains('d <= 0'), isTrue);
+      expect(body.contains('!d.isFinite'), isTrue);
+    });
+
+    test('والخادمُ يختمه عند الإسناد من مستند السائق', () {
+      final fn = File('functions/index.js').readAsStringSync();
+      final n = 'driver_rating_avg: Number(d.rating_avg)'.allMatches(fn).length;
+      expect(n, 2,
+          reason: 'موضعا الإسناد كلاهما يختم التقييم — واحدٌ فقط يترك نصفَ '
+              'الطلبات بلا نجمة');
+      expect(fn.contains('Number.isFinite(Number(d.rating_avg)) && Number(d.rating_avg) > 0'),
+          isTrue,
+          reason: 'سائقٌ بلا تقييمٍ بعد يجب ألّا يُختم بصفر');
+    });
+  });
 }
