@@ -240,4 +240,68 @@ void main() {
     expect(RegExp(r'\bacceptOrder\b').hasMatch(src), isFalse,
         reason: 'عاد acceptOrder — الإسنادُ مباشرٌ ولا يقبله السائق ولا يرفضه.');
   });
+
+  // ── عمًى «اسمٌ يُشبهُ حزمةً خارجيّة»: نداءُ الحزمةِ ليس استعمالاً ───────
+  //
+  // الفحصُ العامُّ أعلاه يَتخطّى أيَّ عضوٍ يُذكَرُ **مرّتَين داخلَ ملفِّه**
+  // (`own > 1`)، لأنّ الذكرَ الثانيَ يُفترَضُ أنّه نداءٌ حقيقيّ. وهذا يَنكسِرُ
+  // حين يَكون للعضوِ اسمٌ **تَحملُه حزمةٌ خارجيّةٌ أيضاً**: فجسمُ العضوِ
+  // يُنادي دالّةَ الحزمةِ بالاسمِ نفسِه، فيَصيرُ العدُّ اثنَين و«مستعمَلاً»
+  // وهو ميّت. أربعةٌ سُجّلت هكذا من قبل (`updatePassword`،
+  // `verifyPhoneNumber`، `verifyOTP`، `checkHourlySlotAvailability`)
+  // و**عُلِّقت الحلُّ على «قوائمَ صريحةٍ»** — وهي القوائمُ أعلاه، لكنّها
+  // قوائمُ **منعِ عودة** لا قوائمُ أعضاءٍ حيّةٍ تَحملُ أسماءَ حزم.
+  //
+  // فجاء خامسٌ: `ZyiarahCoreService.logEvent` — عدُّه داخلَ ملفِّه اثنانِ
+  // (سطرُ التعريفِ + `_analytics.logEvent(` من `firebase_analytics`) وصفرٌ
+  // في كلِّ المستودعِ خارجَه. حُذِف، وهذا الفحصُ هو ما يَمنعُ السادس:
+  // **عضوٌ اسمُه اسمُ دالّةٍ في حزمةٍ نَستوردُها يَلزمُه نداءٌ من خارجِ
+  // ملفِّ تعريفِه** — فنداءُ الحزمةِ لا يُعَدُّ استعمالاً له.
+  test('اسمٌ يُشبهُ حزمةً خارجيّة: يَلزمُه نداءٌ من خارجِ ملفِّه', () {
+    // لكلٍّ: الملفُّ المُعرِّف، وسببُ إدراجِه.
+    const collide = <String, List<String>>{
+      'logEvent': [
+        'lib/services/zyiarah_core_services.dart',
+        'firebase_analytics.logEvent — حُذِف 2026-10-05 بلا نداءٍ واحد',
+      ],
+    };
+    final others = [..._dartFiles('lib'), ..._dartFiles('test')];
+    for (final e in collide.entries) {
+      final name = e.key;
+      final owner = e.value[0];
+      final why = e.value[1];
+      // إمّا أن يَكون العضوُ قد حُذِف (فلا تعريفَ له)، أو له نداءٌ خارجيّ.
+      final ownerSrc = File(owner).existsSync()
+          ? _mask(File(owner).readAsStringSync())
+          : '';
+      final declared = RegExp('(?:Future<[^>]*>|void|[A-Z]\\w*|bool|int|'
+              'double|String)\\s+$name\\s*\\(')
+          .hasMatch(ownerSrc);
+      if (!declared) continue; // محذوفٌ — لا شيءَ يُفحَص
+      final used = others.any((f) {
+        final rel = f.path.replaceAll(r'\', '/');
+        if (rel == owner) return false;
+        return RegExp('\\b$name\\s*\\(').hasMatch(_mask(f.readAsStringSync()));
+      });
+      expect(used, isTrue,
+          reason: '$name مُعرَّفٌ في $owner بلا نداءٍ خارجيّ — '
+              'والفحصُ العامُّ أعمى عنه ($why)');
+    }
+  });
+
+  test('ولا عودةَ للعضوِ المحذوفِ ولا لاستيرادِه بلا مُستعمِل', () {
+    final src = _mask(
+        File('lib/services/zyiarah_core_services.dart').readAsStringSync());
+    expect(src.contains('FirebaseAnalytics'), isFalse,
+        reason: 'عادَ حقلُ التحليلاتِ بلا نداءٍ — أو وُصِّل فحدِّثِ الحارس');
+    // والمضادّة: شرحُ القرارِ (والاعتمادُ الباقي) ما زال في الخامّ، لئلّا
+    // يُحذَفَ الاعتمادُ لاحقاً على أنّه بلا مُستعمِل — وهو يَجمعُ تلقائيّاً.
+    final raw = File('lib/services/zyiarah_core_services.dart').readAsStringSync();
+    expect(raw.contains('firebase_analytics'), isTrue,
+        reason: 'اختفى شرحُ بقاءِ الاعتمادِ — فيُحذَفُ بلا علمٍ بأنّه يَجمع');
+    expect(File('pubspec.yaml').readAsStringSync().contains('firebase_analytics'),
+        isTrue,
+        reason: 'أُسقِطَ الاعتماد — قرارٌ تجاريٌّ يُغيّرُ ما يُجمَع، '
+            'ويَستلزمُ تحديثَ PrivacyInfo.xcprivacy معه');
+  });
 }

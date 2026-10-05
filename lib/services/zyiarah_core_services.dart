@@ -1,5 +1,4 @@
 import 'dart:math' show cos, sqrt, asin;
-import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/services.dart';
 
 /// خدمة إدارة العمليات الجوهرية (قفل الوقت والجيوفنسينج)
@@ -53,11 +52,25 @@ class ZyiarahCoreService {
   // --- 3. التوقيع الرقمي (Digital Signature) ---
 
   // --- 4. التحليلات (Business Analytics) ---
-  final FirebaseAnalytics _analytics = FirebaseAnalytics.instance;
-
-  Future<void> logEvent(String name, Map<String, dynamic>? parameters) async {
-    await _analytics.logEvent(name: name, parameters: parameters?.cast<String, Object>());
-  }
+  //
+  // **حُذِفَ `logEvent` و`_analytics` (2026-10-05): بلا نداءٍ واحد.** ولم
+  // يَرَهما `no_dead_code_test` لأنّ `logEvent` **يُطابقُ اسمَ دالّةٍ في
+  // حزمةِ `firebase_analytics` نفسِها**، فالعدُّ داخلَ الملفِّ كان اثنَين
+  // (سطرُ التعريفِ + `_analytics.logEvent(`) فتَخطّاه شرطُ `own > 1`. وهو
+  // الخامسُ من عمًى «اسمٌ يُشبهُ حزمةً خارجيّة» المسجَّلِ أعلاه
+  // (`updatePassword`، `verifyPhoneNumber`، `verifyOTP`،
+  // `checkHourlySlotAvailability`) — وله الآن فحصٌ صريحٌ يَطلبُ نداءً **من
+  // خارجِ ملفِّ التعريف**.
+  //
+  // **والاعتمادُ `firebase_analytics` باقٍ في `pubspec.yaml` عن قصد**، وهذا
+  // ليس تناقضاً: الـSDK يُهيّئُ نفسَه مع `Firebase.initializeApp` ويَجمعُ
+  // تلقائيّاً (`first_open`، `session_start`، مشاهداتُ الشاشات، معرّفُ نسخةِ
+  // التطبيق، موقعٌ تقريبيٌّ من الـIP) بلا سطرِ شفرةٍ واحد — وهو كذلك ما
+  // يُغذّي «المستخدمون بلا انهيارات» والجلسات في Crashlytics. فحذفُه قرارٌ
+  // تجاريٌّ (يُغيّرُ ما يُجمَع) لا تنظيفُ شفرةٍ ميّتة. وما جُمِعَ تلقائيّاً
+  // **مُعلَنٌ الآن** في `ios/Runner/PrivacyInfo.xcprivacy`، وكان ناقصاً.
+  // القرارُ المتبقّي للمالك: توصيلُ أحداثٍ مخصَّصةٍ للقُمع، أو إسقاطُ
+  // الاعتماد.
 
   // --- 5. نظام التفاعل الحسي (Sensory UI) ---
 
