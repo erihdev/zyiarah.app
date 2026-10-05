@@ -10,6 +10,16 @@ import 'package:flutter_test/flutter_test.dart';
 /// `firebase deploy` لم يكن إلّا أمراً يكتبه المالكُ بيده في طرفيّته.
 ///
 /// ما يحرسه هذا الملفّ ليس وجودَ الملفّ بل القراراتِ التي فيه.
+/// مساراتُ النشرِ في المستودعِ — مُشتَقّةٌ لا مكتوبة. قائمةٌ يدويّةٌ
+/// تَتخلّفُ عن هدفٍ جديدٍ بصمت، وهو ما جرى لهدفِ `web` (صفحةُ الهبوط).
+List<String> _deployWorkflowFiles() => Directory('.github/workflows')
+    .listSync()
+    .whereType<File>()
+    .map((f) => f.path.replaceAll(r'\', '/'))
+    .where((p) => p.endsWith('_deploy.yml'))
+    .toList()
+  ..sort();
+
 void main() {
   final String wf =
       File('.github/workflows/functions_deploy.yml').readAsStringSync();
@@ -193,18 +203,22 @@ void main() {
           reason: 'محوُ المفتاحِ يَجبُ أن يَبقى الأخيرَ وبـif: always()');
     });
 
-    // ── والقاعدةُ عامّةٌ: ثلاثةُ مساراتِ نشرٍ لا واحد ────────────────────
+    // ── والقاعدةُ عامّةٌ: كلُّ مسارِ نشرٍ لا واحد ─────────────────────────
     //
     // النمطُ الذي تَكرّر في هذه الجلسةِ مرّاتٍ: قاعدةٌ عامّةٌ مُنفَّذةٌ في
     // سطحٍ واحد. فحينَ صارَ فشلُ نشرِ الدوالِّ مقروءاً، كان مسارا نشرِ
-    // اللوحةِ والفهارسِ على العطلِ نفسِه — علامةٌ حمراءُ بلا سبب. والثلاثةُ
+    // اللوحةِ والفهارسِ على العطلِ نفسِه — علامةٌ حمراءُ بلا سبب. وكلُّها
     // تَكتبُ في الإنتاج، فالقاعدةُ تَلزمُها جميعاً.
-    test('المساراتُ الثلاثةُ كلُّها تَترُكُ أثراً مقروءاً عند الفشل', () {
-      const paths = [
-        '.github/workflows/functions_deploy.yml',
-        '.github/workflows/admin_deploy.yml',
-        '.github/workflows/firestore_indexes_deploy.yml',
-      ];
+    //
+    // **والقائمةُ مُشتَقّةٌ لا مكتوبة**، وذلك ليس تجميلاً: كانت ثلاثةَ أسماءٍ
+    // مكتوبةٍ بيدٍ، وهدفُ `web` (صفحةُ الهبوط) رابعٌ — فلو أُضيفَ سيرُه بلا
+    // تعديلِ هذه القائمةِ لَمَرَّ بلا أثرٍ مقروءٍ عند الفشل، وهو العطلُ
+    // نفسُه الذي يَحرُسُه هذا الفحص.
+    test('كلُّ مساراتِ النشرِ تَترُكُ أثراً مقروءاً عند الفشل', () {
+      final paths = _deployWorkflowFiles();
+      expect(paths.length, greaterThanOrEqualTo(4),
+          reason: 'مساراتُ النشرِ ${paths.length} — زالَ هدفٌ، وزوالُه قرارٌ '
+              'يُراجَعُ لا يَمُرُّ صمتاً');
       for (final f in paths) {
         // كلُّ ملفٍّ يُجرَّدُ من تعليقِه: هذه فحوصٌ **إيجابيّةٌ**، فحضورُ
         // الاسمِ في شرحٍ لا يَكفي.
@@ -225,9 +239,21 @@ void main() {
             reason: '$f: خَرْجُ النشرِ لا يُحفَظُ فلا شيءَ يُنشَر');
       }
       // والفهارسُ وحدَها: لا قواعدَ من الأتمتةِ بحال (حجزُ STAGE-C).
-      final idx = File(paths[2]).readAsStringSync();
+      // تُسمَّى بملفِّها لا بموضعِها في القائمة، فالقائمةُ صارت مُشتَقّةً.
+      const idxFile = '.github/workflows/firestore_indexes_deploy.yml';
+      expect(paths, contains(idxFile),
+          reason: 'سيرُ الفهارسِ اختفى — ومعه الفحصُ الذي يَمنعُ نشرَ القواعد');
+      final idx = File(idxFile).readAsStringSync();
       expect(idx.contains('firestore:rules'), isFalse,
           reason: 'نشرُ القواعدِ من الأتمتةِ ممنوعٌ — حجزُ STAGE-C');
+      // ولا هدفَ آخرَ يَنشرُ القواعدَ من الباب الخلفيّ.
+      for (final f in paths) {
+        final src = File(f).readAsStringSync();
+        expect(src.contains('firestore:rules'), isFalse,
+            reason: '$f: نشرُ القواعدِ من الأتمتةِ ممنوعٌ — حجزُ STAGE-C');
+        expect(RegExp(r'--only\s+firestore\s').hasMatch(src), isFalse,
+            reason: '$f: `--only firestore` العاريةُ تَشملُ القواعد');
+      }
     });
 
     // ── كاشفُ الانحراف: الالتزامُ بالتشغيلِ اليدويِّ صارَ فحصاً ────────
@@ -242,7 +268,7 @@ void main() {
     // والالتزامُ بتشغيلِ المساراتِ يدويّاً بعدَ دمجٍ بعلامةٍ كان **مكتوباً
     // في CLAUDE.md ويَعتمدُ على الذاكرةِ وحدَها** — وهو ما سقط. فصارَ فحصاً
     // مجدولاً: `schedule` و`workflow_dispatch` **لا تَكبِتُهما العلامة**.
-    test('كاشفُ الانحرافِ يُغطّي المساراتِ الثلاثةَ ولا يَنشرُ بنفسِه', () {
+    test('كاشفُ الانحرافِ يَشتقُّ أهدافَه كلَّها ولا يَنشرُ بنفسِه', () {
       const drift = '.github/workflows/deploy_drift.yml';
       expect(File(drift).existsSync(), isTrue,
           reason: 'كاشفُ الانحرافِ اختفى — فالالتزامُ عادَ إلى الذاكرة');
@@ -252,20 +278,38 @@ void main() {
           .where((l) => !l.trimLeft().startsWith('#'))
           .join('\n');
 
-      // (أ) يُغطّي **كلَّ** مسارِ نشرٍ في المستودع — مجموعةً لا عيّنة.
-      final deployWorkflows = Directory('.github/workflows')
-          .listSync()
-          .whereType<File>()
-          .map((f) => f.uri.pathSegments.last)
-          .where((n) => n.endsWith('_deploy.yml'))
-          .map((n) => n.replaceAll('.yml', ''))
+      // (أ) يُغطّي **كلَّ** مسارِ نشرٍ في المستودع — **باشتقاقٍ لا بقائمة**.
+      //     كانت قائمةَ ثلاثةِ أسماءٍ مكتوبةٍ في حلقةِ الشِّل، فتَخلّفت عن
+      //     هدفِ `web` (صفحةُ الهبوط) الذي لم يَكن له سيرٌ أصلاً: هدفٌ
+      //     بلا نشرٍ آليٍّ وبلا كاشفٍ يَراه. فالحلقةُ تَدورُ على
+      //     `*_deploy.yml` وتَفشلُ على عددٍ أقلَّ من الحدّ.
+      final deployWorkflows = _deployWorkflowFiles()
+          .map((p) => p.split('/').last.replaceAll('.yml', ''))
           .toSet();
-      expect(deployWorkflows.length, greaterThanOrEqualTo(3),
+      expect(deployWorkflows.length, greaterThanOrEqualTo(4),
           reason: 'لم تُعثَر مساراتُ النشر — فحصٌ أجوف');
+      expect(dCode.contains('.github/workflows/*_deploy.yml'), isTrue,
+          reason: 'الكاشفُ لا يَشتقُّ أهدافَه — فهدفٌ جديدٌ يَبقى خارجَه بصمت');
+      expect(dCode.contains(r'basename "$f" .yml'), isTrue,
+          reason: 'الكاشفُ لا يَستخرِجُ اسمَ السيرِ من ملفِّه');
+      expect(RegExp(r'-lt 3').hasMatch(dCode), isTrue,
+          reason: 'الكاشفُ بلا حدٍّ أدنى — فقائمةٌ فارغةٌ تُقرأُ «لا انحراف»');
+      // ولا اسمَ هدفٍ مكتوبٌ في شفرتِه: نسخةٌ ثانيةٌ تَنحرِف. (على المُجرَّدِ
+      // لأنّ تعليقَه يُسمّي `functions_deploy.yml` وهو يَحكي سببَه.)
       for (final w in deployWorkflows) {
-        expect(dCode.contains(w), isTrue,
-            reason: '$w خارجَ كاشفِ الانحراف — يُنشَرُ أو لا يُنشَرُ بلا علمِ أحد');
+        expect(dCode.contains(w), isFalse,
+            reason: 'اسمُ $w مكتوبٌ في شفرةِ الكاشفِ — والقائمةُ المكتوبةُ '
+                'هي ما تَخلّفَ عن هدفِ web');
       }
+      // والفحصُ أعلاه سالبٌ، فيَلزمُه إثباتُ أنّ المُجرَّدَ شفرةٌ لا فراغ —
+      // وإلّا كان «لا اسمَ فيه» صحيحاً عن ملفٍّ خالٍ. (أوّلُ صياغةٍ أسندَته
+      // إلى تعليقٍ يُسمّي `functions_deploy.yml` وهو تعليقٌ **ليس في
+      // الملفّ** — ادّعاءٌ عن توثيقٍ لم أقرأه، فأُسنِدَ إلى شفرةٍ حقيقيّة.)
+      expect(dCode.contains(r'gh api "repos/$REPO/actions/workflows/'), isTrue,
+          reason: 'المُجرَّدُ لا يَحملُ نداءَ الـAPI — فالتجريدُ أكلَ الشفرةَ '
+              'والفحصُ السالبُ أعلاه يَقرأُ فراغاً');
+      expect(dCode.contains('for f in'), isTrue,
+          reason: 'المُجرَّدُ بلا حلقةٍ — الفحصُ السالبُ أجوف');
 
       // (ب) ولا يَنشرُ بنفسِه: الحجبُ قد يكونُ مقصوداً (مراجعةُ آبل،
       //     حجزُ STAGE-C) فالقرارُ بشريّ.

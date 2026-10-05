@@ -1,0 +1,121 @@
+# نشرُ صفحةِ الهبوطِ إلى Firebase Hosting (هدف `web`) عند الدمج إلى main.
+#
+# ═══ لماذا ═══
+#
+# هدفُ `web` — وهو `zyiarah.com` نفسُه — لم يَكن في **أيِّ** سيرِ نشر:
+# `admin_deploy.yml` يَنشرُ `hosting:admin` وحدَه عن قصد («كي لا تُعادَ
+# الصفحةُ الرئيسيّةُ من هناك»)، و`landing_page` لم يَظهرْ في مُرشِّحِ مساراتِ
+# أيِّ ملفٍّ في `.github/`. فكلُّ تغييرٍ فيه يَصِلُ الإنتاجَ بـ`firebase
+# deploy --only hosting:web` تَكتبُه يدٌ بشريّة — **وكاشفُ الانحرافِ كان
+# أعمى عنه كذلك**، لأنّه يَدورُ على أهدافٍ لها ملفُّ سير. أي الحفرةُ التي
+# وُجدَ `functions_deploy.yml` لسدِّها، قائمةً على هدفٍ رابعٍ بلا علامةٍ
+# حمراءَ ولا خضراء.
+#
+# وما يَسكنُ هذا الهدفَ ليس زينةً: `privacy.html` هي الرابطُ الذي يَفتحُه
+# مُراجِعُ آبل (وغيابُ السياسةِ عنده رفضٌ بالبندِ 5.1.1)، و`support.html` هي
+# حقلُ الدعمِ الإلزاميُّ في المتجرَين، وصفحاتُ `payment-*` هي ما تُحوِّلُ
+# إليه بوّابةُ تمارا المتصفّحَ لحظةَ انتهاءِ الدفع. فإصلاحٌ هنا لا يُنشَرُ
+# هو إصلاحٌ لم يَحدُث.
+#
+# الاعتمادُ هو سرُّ `FIREBASE_SERVICE_ACCOUNT` نفسه؛ دورُ `Firebase Admin`
+# يشمل الاستضافة فلا يلزم دورٌ جديد.
+name: Deploy Landing Page
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'landing_page/**'
+      - 'privacy_policy.md'
+      - 'firebase.json'
+      - '.firebaserc'
+      - '.github/workflows/landing_deploy.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-landing
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy web hosting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Create placeholder .env
+        run: touch .env
+
+      # لا يُنشَر ما لم يُفحَص. والفحصُ هو حارسُ الصفحاتِ نفسُه لا نسخةٌ
+      # ثانيةٌ من منطقِه (نسخةٌ ثانيةٌ تَنحرِف): يُثبّتُ أنّ كلَّ مسارٍ
+      # نَنشرُه على `zyiarah.com` له ملفٌّ مَخدوم، وأنّ الاحتياطيَّ الثابتَ
+      # لسياسةِ الخصوصيّةِ مطابقٌ لـ`privacy_policy.md` بايتاً ببايت.
+      # مكرّرٌ هنا عمداً لأنّ هذا المسار يكتب في الإنتاج وقد يُشغَّل يدويّاً
+      # على حالةٍ لم تمرّ بـPR.
+      - name: Guard the published pages
+        run: |
+          flutter test test/public_url_pages_test.dart \
+                       test/privacy_url_fallback_test.dart
+
+      - name: Write service account key
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA_JSON" ]; then
+            echo "::error::سرُّ FIREBASE_SERVICE_ACCOUNT غير مضبوط في إعدادات المستودع"
+            exit 1
+          fi
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+
+      # `hosting:web` وحده — هدفُ `admin` له سيرُه، ولا يُعادُ نشرُ اللوحةِ
+      # من هنا بـ`dist` قد لا يكونُ مبنيّاً أصلاً.
+      # `pipefail` حاملٌ لا زينة: بلاهُ يَحجبُ `tee` خروجَ `firebase`
+      # فيَمرُّ فشلُ النشرِ أخضرَ — أسوأُ من الفشلِ نفسِه.
+      - name: Deploy
+        run: |
+          set -o pipefail
+          npx --yes firebase-tools@15 deploy --only hosting:web \
+            --project zyiarah-app --non-interactive 2>&1 \
+            | tee "$RUNNER_TEMP/deploy.log"
+
+      # سجلُّ التشغيلِ يُخدَمُ من مُضيفٍ آخرَ ولا يُقرأُ من الـAPI
+      # (`check-runs` تُعيدُ `output` فارغاً)، فالسببُ يُنشَرُ في ملخَّصِ
+      # الوظيفةِ وكتنبيهاتٍ تُقرأُ عبر `check-runs/{id}/annotations`.
+      - name: Surface the failure
+        if: failure()
+        run: |
+          LOG="$RUNNER_TEMP/deploy.log"
+          {
+            echo "## ✗ فشلَ نشرُ صفحةِ الهبوط"
+            echo
+            echo '```'
+            tail -n 60 "$LOG" 2>/dev/null || echo "(لا سجلّ — فشلَ قبل النشر)"
+            echo '```'
+            echo
+            echo "### ما يُفحَص"
+            echo "1. **الحارس**: فشلَ \`public_url_pages_test\`؟ ثَمّ مسارٌ"
+            echo "   نَنشرُه بلا صفحة — أضِفْ الصفحةَ لا تُرخِ الحارس."
+            echo "2. **صلاحيّات**: \`Firebase Hosting Admin\` على المشروع."
+            echo "3. **الهدف**: \`hosting:web\` معرَّفٌ في \`.firebaserc\`"
+            echo "   (الموقعُ \`zyiarah-web\`)؟"
+            echo
+            echo "### المَخرَجُ اليدويّ"
+            echo '```'
+            echo "npx firebase-tools@15 deploy --only hosting:web --project zyiarah-app"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          grep -iE 'error|failed|denied|permission|403|400|HTTP Error' "$LOG" 2>/dev/null \
+            | tail -n 15 | while IFS= read -r line; do echo "::error::$line"; done || true
+
+      - name: Remove key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sa.json"
