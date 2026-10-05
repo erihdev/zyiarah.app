@@ -131,6 +131,14 @@
       ]
     },
     {
+      "collectionGroup": "notification_queue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "processed", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "support_tickets",
       "queryScope": "COLLECTION",
       "fields": [

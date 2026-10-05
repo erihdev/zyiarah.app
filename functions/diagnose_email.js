@@ -19,30 +19,37 @@ async function diagnose() {
     console.log("❌ Email Settings MISSING");
   }
 
-  console.log("\nChecking Notification Triggers...");
-  const pending = await db.collection("notification_triggers")
-      .where("processed", "==", false)
-      .orderBy("createdAt", "desc")
-      .limit(5)
-      .get();
+  // **الطابوران.** الدفعُ الخادميُّ (`queuePush`) انتقل إلى
+  // `notification_queue` — بلا قاعدةِ مطابقةٍ في firestore.rules فلا يَكتبه
+  // عميل — وبقي `notification_triggers` لكتابةِ التطبيقِ واللوحة. وهذا
+  // التشخيصُ هو ما يُشغَّلُ حين يَتعطّلُ البريد، فقراءةُ طابورٍ واحدٍ تَقولُ
+  // «صفرٌ معلَّق» بينما الطابورُ الآخرُ مُتراكم: تشخيصٌ يُطمئنُ على عطل.
+  for (const col of ["notification_queue", "notification_triggers"]) {
+    console.log(`\nChecking ${col}...`);
+    const pending = await db.collection(col)
+        .where("processed", "==", false)
+        .orderBy("createdAt", "desc")
+        .limit(5)
+        .get();
 
-  console.log(`Found ${pending.size} pending triggers.`);
+    console.log(`Found ${pending.size} pending triggers.`);
 
-  pending.forEach((doc) => {
-    const data = doc.data();
-    const errMsg = data.error || "None";
-    console.log(`- ID: ${doc.id} | Type: ${data.type} | Error: ${errMsg}`);
-  });
+    pending.forEach((doc) => {
+      const data = doc.data();
+      const errMsg = data.error || "None";
+      console.log(`- ID: ${doc.id} | Type: ${data.type} | Error: ${errMsg}`);
+    });
 
-  const failed = await db.collection("notification_triggers")
-      .where("error", "!=", null)
-      .limit(5)
-      .get();
+    const failed = await db.collection(col)
+        .where("error", "!=", null)
+        .limit(5)
+        .get();
 
-  console.log(`\nFound ${failed.size} triggers with errors.`);
-  failed.forEach((doc) => {
-    console.log(`- ID: ${doc.id} | Error: ${doc.data().error}`);
-  });
+    console.log(`Found ${failed.size} triggers with errors.`);
+    failed.forEach((doc) => {
+      console.log(`- ID: ${doc.id} | Error: ${doc.data().error}`);
+    });
+  }
 
   process.exit(0);
 }
