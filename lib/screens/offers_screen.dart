@@ -193,7 +193,7 @@ class _ZyiarahOffersScreenState extends State<ZyiarahOffersScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        if (b.hasError) _inlineError('تعذّر تحميل العروض، تحقّق من الاتصال'),
+        if (b.hasError) _inlineError('تعذّر تحميل العروض، تحقّقي من الاتصال'),
         for (final data in banners) _bannerCard(data),
         if (banners.isEmpty && !b.hasError && coupons.isEmpty && !(k?.hasError ?? false))
           _emptyOffers(),
@@ -205,7 +205,7 @@ class _ZyiarahOffersScreenState extends State<ZyiarahOffersScreen> {
         if (_uid == null)
           _hintCard(Icons.login_rounded, 'سجّل الدخول لرؤية كوبوناتك وكود الإحالة')
         else if (k?.hasError ?? false)
-          _inlineError('تعذّر تحميل الكوبونات، تحقّق من الاتصال')
+          _inlineError('تعذّر تحميل الكوبونات، تحقّقي من الاتصال')
         else if (couponsWaiting)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 24),

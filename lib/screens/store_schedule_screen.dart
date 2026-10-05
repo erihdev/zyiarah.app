@@ -165,7 +165,7 @@ class _StoreScheduleScreenState extends State<StoreScheduleScreen> {
       if (!mounted) return;
       if (_zones.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('تعذّر تحميل مناطق التوصيل — تحقّق من اتصالك وأعد المحاولة',
+          content: Text('تعذّر تحميل مناطق التوصيل — تحقّقي من اتصالك وأعيدي المحاولة',
               style: GoogleFonts.tajawal()),
           backgroundColor: Colors.red,
         ));
@@ -196,7 +196,7 @@ class _StoreScheduleScreenState extends State<StoreScheduleScreen> {
       return;
     }
     if (_selectedSlot == null) {
-      _snack('اختر اليوم ووقت التوصيل');
+      _snack('اختاري اليوم ووقت التوصيل');
       return;
     }
 

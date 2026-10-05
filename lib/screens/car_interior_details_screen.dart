@@ -231,7 +231,7 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
       return;
     }
     if (_selectedSlot == null) {
-      _snack('اختر اليوم ووقت البدء');
+      _snack('اختاري اليوم ووقت البدء');
       return;
     }
 

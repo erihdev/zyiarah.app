@@ -87,7 +87,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
             final messenger = ScaffoldMessenger.of(context);
             Navigator.of(context).pop();
             messenger.showSnackBar(const SnackBar(
-              content: Text('تعذّر تحميل صفحة الدفع — تحقّق من الاتصال'),
+              content: Text('تعذّر تحميل صفحة الدفع — تحقّقي من الاتصال'),
               backgroundColor: Colors.red,
             ));
           },

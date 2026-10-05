@@ -301,7 +301,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
         // نفس صياغة الرسالة الأخرى في هذا الملفّ — لا نصَّ استثناءٍ للعميلة.
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text(
-              'تعذّر تحميل مناطق الخدمة — تحقّق من اتصالك وأعد المحاولة'),
+              'تعذّر تحميل مناطق الخدمة — تحقّقي من اتصالك وأعيدي المحاولة'),
           backgroundColor: Colors.red,
         ));
       }
@@ -416,7 +416,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       if (!mounted) return;
       if (_zones.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('تعذّر تحميل مناطق الخدمة — تحقّق من اتصالك وأعد المحاولة'),
+            content: Text('تعذّر تحميل مناطق الخدمة — تحقّقي من اتصالك وأعيدي المحاولة'),
             backgroundColor: Colors.red));
         return;
       }
@@ -597,7 +597,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       return;
     }
     if (_selectedType == null || _selectedCrews == null || totalAmount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("اختر نوع السكن وعدد الكوادر أولاً")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("اختاري نوع السكن وعدد الكوادر أولاً")));
       return;
     }
     // **مجهولةٌ لا ممتلئة.** حين يفشل جلبُ الإتاحة يُستبدَل شريطُ التواريخ
@@ -632,7 +632,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     final int? feasibleStart = _firstFeasibleStart(_selectedDate);
     if (feasibleStart == null || _dateUnavailable(_selectedDate)) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("اكتملت مواعيد هذا اليوم — اختر يوماً آخر متاحاً")));
+          content: Text("اكتملت مواعيد هذا اليوم — اختاري يوماً آخر متاحاً")));
       return;
     }
     final serviceDateTime = DateTime(
@@ -746,7 +746,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                     const SizedBox(height: 30),
                     
                     if (_selectedLocation != null) ...[
-                      const Text("اختر نوع سكنك:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                      const Text("اختاري نوع سكنك:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
                       const SizedBox(height: 6),
                       // **قبل** الضريبة: البطاقاتُ أدناه تعرض `opt.basePrice`.
                       // كان النصُّ «شاملة الضريبة» — دعوى تناقض الرقمَ تحتها،
@@ -1068,7 +1068,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
             const SizedBox(width: 12),
             const Expanded(
               child: Text(
-                'تعذّر تحميل المواعيد المتاحة.\nتحقّق من اتصالك وأعد المحاولة.',
+                'تعذّر تحميل المواعيد المتاحة.\nتحقّقي من اتصالك وأعيدي المحاولة.',
                 style: TextStyle(fontSize: 13, color: Color(0xFF991B1B), height: 1.5),
               ),
             ),
@@ -1125,7 +1125,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
             onTap: isClosed
                 ? () {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text("لا نخدم منطقتك في هذا اليوم. اختر يوماً متاحاً (الأخضر).",
+                      content: Text("لا نخدم منطقتك في هذا اليوم. اختاري يوماً متاحاً (الأخضر).",
                           style: TextStyle(fontWeight: FontWeight.bold)),
                       backgroundColor: Color(0xFF64748B),
                       duration: Duration(seconds: 2),

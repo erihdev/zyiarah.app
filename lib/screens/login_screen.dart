@@ -61,20 +61,20 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
         'user-not-found' || 'wrong-password' || 'invalid-credential' =>
           'البريد الإلكتروني أو كلمة المرور غير صحيحة',
         'invalid-email' => 'صيغة البريد الإلكتروني غير صحيحة',
-        'user-disabled' => 'تم إيقاف هذا الحساب — تواصل مع الدعم',
+        'user-disabled' => 'تم إيقاف هذا الحساب — تواصلي مع الدعم',
         'too-many-requests' =>
-          'محاولات كثيرة — انتظر قليلاً ثم أعد المحاولة',
+          'محاولات كثيرة — انتظر قليلاً ثم أعيدي المحاولة',
         'network-request-failed' =>
-          'تعذّر الاتصال — تحقّق من الإنترنت وأعد المحاولة',
-        _ => 'تعذّر تسجيل الدخول، أعد المحاولة',
+          'تعذّر الاتصال — تحقّقي من الإنترنت وأعيدي المحاولة',
+        _ => 'تعذّر تسجيل الدخول، أعيدي المحاولة',
       };
       _showError(message);
     } on TimeoutException {
       // نداءٌ لا يردّ ولا يرمي: شبكةٌ «متّصلة» خلف بوّابةِ تسجيل أو وكيلٍ شفّاف.
       // بلا مهلة كان الزرُّ يبقى دوّاراً إلى الأبد بلا رسالة ولا مخرج.
-      _showError('تعذّر الاتصال — تحقّق من الإنترنت وأعد المحاولة');
+      _showError('تعذّر الاتصال — تحقّقي من الإنترنت وأعيدي المحاولة');
     } catch (_) {
-      _showError('تعذّر تسجيل الدخول، أعد المحاولة');
+      _showError('تعذّر تسجيل الدخول، أعيدي المحاولة');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -132,7 +132,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  "سجل دخولك باستخدام البريد الإلكتروني\nوكلمة المرور",
+                  "سجّلي دخولك باستخدام البريد الإلكتروني\nوكلمة المرور",
                   textAlign: TextAlign.center,
                   style: GoogleFonts.tajawal(
                     fontSize: 18,

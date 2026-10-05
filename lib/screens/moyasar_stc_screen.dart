@@ -350,7 +350,7 @@ class _PhoneStep extends StatelessWidget {
           const SizedBox(height: 24),
 
           Text(
-            'أدخل رقم هاتف STC Pay',
+            'أدخلي رقم هاتف STC Pay',
             style: GoogleFonts.tajawal(
               fontSize: 20,
               fontWeight: FontWeight.bold,

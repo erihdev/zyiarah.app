@@ -49,7 +49,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
     final normalizedPhone =
         phoneDigits.startsWith('966') ? phoneDigits.substring(3) : phoneDigits;
     if (!RegExp(r'^0?5\d{8}$').hasMatch(normalizedPhone)) {
-      _showError('رقم الجوال غير صحيح — أدخل رقماً سعودياً يبدأ بـ 05');
+      _showError('رقم الجوال غير صحيح — أدخلي رقماً سعودياً يبدأ بـ 05');
       return;
     }
 
@@ -141,14 +141,14 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
         'invalid-email' => 'صيغة البريد الإلكتروني غير صحيحة',
         'weak-password' => 'كلمة المرور ضعيفة — استخدم 6 أحرف أو أكثر',
         'network-request-failed' =>
-          'تعذّر الاتصال — تحقّق من الإنترنت وأعد المحاولة',
-        _ => 'تعذّر إنشاء الحساب، أعد المحاولة',
+          'تعذّر الاتصال — تحقّقي من الإنترنت وأعيدي المحاولة',
+        _ => 'تعذّر إنشاء الحساب، أعيدي المحاولة',
       };
       _showError(msg);
     } on TimeoutException {
-      _showError('تعذّر الاتصال — تحقّق من الإنترنت وأعد المحاولة');
+      _showError('تعذّر الاتصال — تحقّقي من الإنترنت وأعيدي المحاولة');
     } catch (_) {
-      _showError('تعذّر إنشاء الحساب، أعد المحاولة');
+      _showError('تعذّر إنشاء الحساب، أعيدي المحاولة');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -217,7 +217,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
                 const SizedBox(height: 40),
                 
                 _buildFieldLabel("الاسم"),
-                _buildTextField(_nameController, "أدخل الاسم الكامل"),
+                _buildTextField(_nameController, "أدخلي الاسم الكامل"),
                 
                 const SizedBox(height: 15),
                 _buildFieldLabel("رقم الجوال"),
@@ -251,7 +251,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
                 _buildFieldLabel("كود الإحالة (اختياري)"),
                 _buildTextField(
                   _referralCodeController,
-                  "أدخل كود الإحالة إن وجد",
+                  "أدخلي كود الإحالة إن وجد",
                   textCapitalization: TextCapitalization.characters,
                 ),
 

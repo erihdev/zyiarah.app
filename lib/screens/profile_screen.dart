@@ -407,7 +407,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
             setState(() => _isLoading = false);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('فشل حفظ التفضيلات، تحقق من اتصالك',
+                content: Text('فشل حفظ التفضيلات، تحقّقي من اتصالك',
                     style: GoogleFonts.tajawal()),
                 backgroundColor: Colors.red,
               ),
@@ -455,7 +455,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content:
-                Text('تعذّر حذف الحساب، حاول لاحقاً', style: GoogleFonts.tajawal()),
+                Text('تعذّر حذف الحساب، حاولي لاحقاً', style: GoogleFonts.tajawal()),
             backgroundColor: Colors.red,
           ),
         );
