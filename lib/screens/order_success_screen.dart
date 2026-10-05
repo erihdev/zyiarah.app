@@ -9,8 +9,8 @@ import 'package:zyiarah/models/invoice_view.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:zyiarah/widgets/zatca_invoice_card.dart';
-import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/invoice_stamp.dart';
 
 class ZyiarahOrderSuccessScreen extends StatefulWidget {
   final String orderCode;
@@ -69,12 +69,11 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen>
     setState(() => _retryingInvoice = true);
     try {
       final double amount = (data['amount'] as num?)?.toDouble() ?? 0;
-      final double vat = vatInGross(amount);
-      final String qrData = ZatcaService.generateZatcaQrCode(
-        timestamp: DateTime.now(),
-        totalAmount: amount,
-        vatAmount: vat,
-      );
+      // إعادةُ التوليدِ قد تكون بعد أيّام: اللحظةُ من الوثيقة (paid_at ثمّ
+      // created_at) لا `DateTime.now()` — وإلّا طُبع تاريخُ اليومِ على
+      // فاتورةٍ ضريبيّةٍ لطلبٍ دُفع قبل أيّام.
+      final DateTime issuedAt = invoiceIssuedAt(data);
+      final String qrData = invoiceQrFor(issuedAt: issuedAt, total: amount);
       // نمسح علامة الفشل حتى يعود الدوّار أثناء المحاولة.
       await FirebaseFirestore.instance
           .collection(widget.invoiceCollection)
@@ -85,6 +84,7 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen>
         orderCode: widget.orderCode,
         amount: amount,
         qrData: qrData,
+        issuedAt: issuedAt,
         serviceName: (data['service_name'] as String?) ?? '-',
         discountAmount: (data['discount_amount'] as num?)?.toDouble() ?? 0,
         couponCode: data['coupon_code'] as String?,

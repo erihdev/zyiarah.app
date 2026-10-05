@@ -15,7 +15,6 @@ import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/utils/moyasar_util.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:intl/intl.dart' as intl;
-import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -37,6 +36,7 @@ import 'package:zyiarah/utils/terrain_surcharge.dart';
 import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/error_report.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/invoice_stamp.dart';
 
 
 
@@ -1176,7 +1176,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     // ويفشل التحديث بصمت فتضيع فاتورة الاشتراك الضريبية كلياً.
     final String bgInvoiceDocId = widget.contractId ?? id;
     final double bgTotal = totalWithVat;
-    final double bgVat = vatAmount;
     final double bgDiscount = _discountAmount;
     final String? bgCoupon = _appliedCoupon;
     final String bgServiceName = widget.serviceName;
@@ -1226,16 +1225,17 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           }
         }
 
-        final String qrData = ZatcaService.generateZatcaQrCode(
-          timestamp: DateTime.now(),
-          totalAmount: bgTotal,
-          vatAmount: bgVat,
-        );
+        // الإصدارُ الآن (الدفعُ تأكّد قبل أسطر) — واللحظةُ تُلتقَط مرّةً
+        // واحدةً للمطبوعِ والرمزِ معاً.
+        final DateTime bgIssuedAt = DateTime.now();
+        final String qrData =
+            invoiceQrFor(issuedAt: bgIssuedAt, total: bgTotal);
         final String? invoiceUrl = await ZyiarahPdfService.generateAndUploadInvoice(
           orderId: bgInvoiceDocId,
           orderCode: code,
           amount: bgTotal,
           qrData: qrData,
+          issuedAt: bgIssuedAt,
           serviceName: bgServiceName,
           discountAmount: bgDiscount,
           couponCode: bgCoupon,

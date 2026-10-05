@@ -2,7 +2,6 @@ import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
-import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -11,8 +10,8 @@ import 'package:zyiarah/services/audit_service.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/services/counter_service.dart';
 import 'package:zyiarah/services/order_service.dart';
-import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/invoice_stamp.dart';
 
 class TamaraCheckoutScreen extends StatefulWidget {
   final String checkoutUrl;
@@ -252,12 +251,10 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
               }
 
               // توليد بيانات ZATCA وتوليد الفاتورة في الخلفية (باستخدام الحسابات الصحيحة)
-              final double vatAmount = vatInGross(widget.amount);
-              final String qrData = ZatcaService.generateZatcaQrCode(
-                timestamp: DateTime.now(),
-                totalAmount: widget.amount,
-                vatAmount: vatAmount,
-              );
+              // لحظةٌ واحدةٌ مُلتقَطةٌ للمطبوعِ والرمزِ معاً.
+              final DateTime issuedAt = DateTime.now();
+              final String qrData =
+                  invoiceQrFor(issuedAt: issuedAt, total: widget.amount);
 
               // جلب الكود المنشأ حديثاً لإدراجه في الفاتورة. للاشتراك كودُه معرّفُ
               // عقده — ولا نقرأ orders/{id} أصلاً: لا مستند طلب للعقد، وقراءة مستند
@@ -281,6 +278,7 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                 orderCode: orderCode,
                 amount: widget.amount,
                 qrData: qrData,
+                issuedAt: issuedAt,
                 serviceName: widget.serviceType,
                 discountAmount: widget.discountAmount,
                 couponCode: widget.couponCode,
