@@ -1937,44 +1937,16 @@ exports.onOrderRewards = onDocumentUpdated({document: "orders/{orderId}", cpu: 0
         if (clientId && after.is_paid === true && after.needs_refund === true &&
             after.payment_method !== "subscription" && amount > 0 &&
             after.payment_status !== "refunded") {
-          const walletRef = db.collection("wallets").doc(clientId);
-          const txRef = walletRef.collection("transactions").doc(`refund_${orderId}`);
-          let didFlip = false;
-          try {
-            await db.runTransaction(async (t) => {
-              const oSnap = await t.get(orderRef);
-              // قراءة طازجة داخل المعاملة: إن سبق إيداع المحفظة أو ردّت البوابة الدفعة
-              // (payment_status='refunded')، لا نودِع ثانيةً — يمنع استرداداً مزدوجاً
-              // (بطاقة + محفظة) حين يسبق ردُّ البوابة تنفيذَ هذه المعاملة. الفحص الخارجي
-              // كان يعتمد لقطة حدثٍ قديمة قد تسبق كتابة payment_status='refunded'.
-              if (oSnap.get("refund_credited") === true ||
-                  oSnap.get("payment_status") === "refunded" ||
-                  // (#18) الاسترداد الآلي طالبَ الطلب سلفاً — لا نودِع المحفظة ثانيةً
-                  // (يمنع دفعاً مزدوجاً: بطاقة + محفظة عند إلغاء العميل أثناء نافذة البوابة).
-                  oSnap.get("auto_refund_processed") === true) return;
-              t.set(walletRef, {
-                balance: FieldValue.increment(amount),
-                last_updated: FieldValue.serverTimestamp(),
-              }, {merge: true});
-              t.create(txRef, {
-                amount: amount, points: 0, type: "refund",
-                description: `إعادة رصيد للطلب الملغي رقم #${code}`,
-                order_id: orderId,
-                created_at: FieldValue.serverTimestamp(),
-              });
-              t.update(orderRef, {refund_credited: true});
-              didFlip = true;
-            });
-          } catch (e) {
-            console.error(`[rewards] refund txn failed for ${orderId}:`, e.message);
-          }
-          if (didFlip) {
-            await queuePush(clientId, "تم إعادة رصيد لمحفظتك 💰",
-                // `.toFixed(2)` كثلاثةِ نظائرِها في الملفّ — كانت وحدَها خامّاً،
-                // فتُقرأُ «172.5 ر.س» بينما رسائلُ الاسترداد تَقولُ «172.50».
-                `تم إيداع مبلغ ${amount.toFixed(2)} ر.س في محفظتك للطلب الملغي #${code}.`,
-                "wallet_credit", {orderId: orderId});
-          }
+          // **المنطقُ انتقلَ إلى `refunds.creditCancelledRefund`.** كان
+          // هنا إنلاين و`catch`ه سطرَ `console.error` وحدَه: فشلُ المعامَلةِ
+          // يَعني محفظةً لم تُودَع، ولا دفعةً للعميلة، ولا تنبيهاً للإدارة،
+          // ولا محاولةً ثانيةً (هذا المُشغّلُ بلا `retry` ولا يَعودُ لمستندٍ
+          // فاته الحدث) — مالُ العميلةِ يَبقى عندنا بلا أثر. والدالّةُ الآن
+          // تُصعّدُ الفشلَ مرّةً واحدةً، و`opsHealthSweep` يُعيدُ المحاولة.
+          await refunds.creditCancelledRefund(db, {
+            orderRef, orderId, clientId, amount, code,
+            alreadyAlerted: after.refund_credit_alerted === true,
+          }, queuePush);
         }
       }
       return null;
@@ -4699,6 +4671,48 @@ exports.opsHealthSweep = onSchedule(
         console.log(`opsHealthSweep: price_mismatch alerted=${n}`);
       } catch (e) {
         console.error("opsHealthSweep: price_mismatch check failed:", e.message);
+      }
+
+      // 5-bis) إلغاءٌ مدفوعٌ لم يُردّ إلى المحفظة — **إعادةُ المحاولةِ لا
+      //    التنبيهُ وحدَه.** `onOrderRewards` يُودِع داخلَ معامَلةٍ، وفشلُها
+      //    كان سطرَ `console.error` وحدَه: لا محفظةً أُودِعت، ولا دفعةً
+      //    للعميلة، ولا تنبيهاً للإدارة، ولا محاولةً ثانية — لأنّ
+      //    `onDocumentUpdated` بلا `retry` ولا يَعودُ لمستندٍ فاته الحدث.
+      //    فمالُ العميلةِ يَبقى عندنا بلا أثر. وهو نفسُ البُرجِ الصامتِ الذي
+      //    أُغلق في `autoResolveUnfulfilledPaidOrder`، من مسارٍ آخر.
+      //
+      //    والإيداعُ عديمُ الأثرِ التكراريِّ بالبناء (`refund_credited` +
+      //    `t.create` على معرّفٍ حتميٍّ `refund_{orderId}`) فإعادتُه آمنة.
+      //    مساواتانِ بلا مدًى ⇒ لا فهرسَ مركَّب (سابقةُ `referrals`).
+      try {
+        const snap = await db.collection("orders")
+            .where("status", "==", "cancelled")
+            .where("needs_refund", "==", true).limit(200).get();
+        let retried = 0; let stuck = 0;
+        for (const doc of snap.docs) {
+          const d = doc.data();
+          if (d.is_paid !== true) continue;
+          if (d.refund_credited === true) continue;
+          if (d.payment_status === "refunded") continue;
+          if (d.auto_refund_processed === true) continue;
+          if (d.payment_method === "subscription") continue;
+          const amt = Number(d.amount || 0);
+          if (!(amt > 0)) continue;
+          if (!d.client_id) continue;
+          const r = await refunds.creditCancelledRefund(db, {
+            orderRef: doc.ref,
+            orderId: doc.id,
+            clientId: d.client_id,
+            amount: amt,
+            code: d.code || doc.id,
+            alreadyAlerted: d.refund_credit_alerted === true,
+          }, queuePush);
+          if (r.credited) retried++;
+          else if (r.failed) stuck++;
+        }
+        console.log(`opsHealthSweep: cancelled-refund retried=${retried} stuck=${stuck}`);
+      } catch (e) {
+        console.error("opsHealthSweep: cancelled-refund retry failed:", e.message);
       }
 
       // 6) إشعارات لم يلمسها processNotificationTriggers أصلاً (انقطاع الدوال 8–18

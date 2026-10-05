@@ -353,6 +353,94 @@ async function autoResolveUnfulfilledPaidOrder(db, secret, orderDoc, deps = {}) 
   return {handled: true, action};
 }
 
+/**
+ * **إيداعُ استردادِ طلبٍ مُلغًى في المحفظة، مرّةً واحدةً، ومع قولِ الفشل.**
+ *
+ * كان هذا المنطقُ إنلاين في `onOrderRewards`، و`catch`ه سطرَ `console.error`
+ * وحدَه: فإن فشلت المعامَلةُ (تنازعٌ، مهلة) لم تُودَع المحفظةُ، ولم يُبلَّغ
+ * أحد — لا العميلةُ ولا الإدارة — ولم تُحاوَل ثانيةً، لأنّ
+ * `onDocumentUpdated` بلا `retry` ولا يَعودُ لمستندٍ فاته الحدث. فمالُ
+ * العميلةِ يَبقى عند العملِ بلا أثرٍ في أيِّ مكانٍ خارجَ سطرِ سجلّ. وهو
+ * **نفسُ الحفرةِ** التي أُغلقت في `autoResolveUnfulfilledPaidOrder`، مفتوحةً
+ * من مسارٍ آخر: إلغاءٌ لطلبٍ مدفوع.
+ *
+ * فصارت هنا: حُرّاسُ عدمِ التكرارِ كما كانوا (قراءةٌ طازجةٌ داخلَ المعامَلة)،
+ * والنجاحُ يُبلِغُ العميلة، والفشلُ **يُصعَّدُ مرّةً واحدة** على علمٍ خاصٍّ
+ * به (`refund_credit_alerted`) كي لا يُسكِته علمٌ آخر — ويَبقى
+ * `needs_refund: true` فتَجدَه المكنسةُ وتُعيدَ المحاولة.
+ *
+ * @param {object} db Firestore.
+ * @param {object} args المعطيات.
+ * @param {object} args.orderRef مرجعُ الطلب.
+ * @param {string} args.orderId معرّفُ الطلب.
+ * @param {string} args.clientId معرّفُ العميلة.
+ * @param {number} args.amount المبلغُ بالريال.
+ * @param {string} args.code رقمُ الطلبِ المعروض.
+ * @param {boolean} args.alreadyAlerted هل صُعِّدَ الفشلُ سابقاً؟
+ * @param {Function} queuePush طابورُ الإشعارات.
+ * @return {Promise<{credited: boolean, skipped?: string, failed?: string}>} النتيجة.
+ */
+async function creditCancelledRefund(db, args, queuePush) {
+  const {orderRef, orderId, clientId, amount, code} = args;
+  const walletRef = db.collection("wallets").doc(clientId);
+  const txRef = walletRef.collection("transactions").doc(`refund_${orderId}`);
+  let skipped = null;
+  try {
+    let didFlip = false;
+    await db.runTransaction(async (t) => {
+      const oSnap = await t.get(orderRef);
+      // قراءةٌ طازجةٌ داخلَ المعامَلة: إن سبق إيداعُ المحفظةِ أو ردّت البوّابةُ
+      // الدفعةَ أو طالبَها الاستردادُ الآليّ، لا نُودِعُ ثانيةً — يَمنعُ
+      // استرداداً مزدوجاً (بطاقة + محفظة).
+      if (oSnap.get("refund_credited") === true ||
+          oSnap.get("payment_status") === "refunded" ||
+          oSnap.get("auto_refund_processed") === true) {
+        skipped = "already_settled";
+        return;
+      }
+      t.set(walletRef, {
+        balance: FieldValue.increment(amount),
+        last_updated: FieldValue.serverTimestamp(),
+      }, {merge: true});
+      t.create(txRef, {
+        amount: amount, points: 0, type: "refund",
+        description: `إعادة رصيد للطلب الملغي رقم #${code}`,
+        order_id: orderId,
+        created_at: FieldValue.serverTimestamp(),
+      });
+      t.update(orderRef, {refund_credited: true});
+      didFlip = true;
+    });
+    if (skipped) return {credited: false, skipped};
+    if (didFlip && typeof queuePush === "function") {
+      await queuePush(clientId, "تم إعادة رصيد لمحفظتك 💰",
+          `تم إيداع مبلغ ${amount.toFixed(2)} ر.س في محفظتك للطلب الملغي #${code}.`,
+          "wallet_credit", {orderId: orderId}).catch(() => {});
+    }
+    return {credited: didFlip};
+  } catch (e) {
+    const note = e && e.message ? e.message : "unknown";
+    // **التصعيدُ مرّةً واحدةً على علمٍ خاصّ.** `needs_refund` يَبقى كما هو:
+    // هو ما تَستعلمُه المكنسةُ لإعادةِ المحاولة.
+    await orderRef.update({
+      refund_credit_failed: true,
+      refund_credit_alerted: true,
+      refund_credit_failed_reason: note,
+    }).catch(() => {});
+    if (!args.alreadyAlerted && typeof queuePush === "function") {
+      await queuePush("ADMIN_BROADCAST",
+          "تعذّر إعادة رصيد طلبٍ مُلغًى — تدخّل يدوي 🚨",
+          `الطلب #${code} (${amount.toFixed(2)} ر.س) أُلغي وهو مدفوع، وتعذّر ` +
+          `إيداعُ المبلغ في محفظة العميلة (${note}). المبلغ ما يزال محصَّلاً — ` +
+          `يلزم إيداعٌ أو استردادٌ يدويّ من لوحة الطلبات.`,
+          "admin_order_alert",
+          {orderId, code, refundCreditFailed: true},
+          ["super_admin", "accountant_admin"]).catch(() => {});
+    }
+    return {credited: false, failed: note};
+  }
+}
+
 module.exports = {
   FAILURE_NOTES,
   ESCALATED_REASONS,
@@ -362,4 +450,5 @@ module.exports = {
   notifyAutoRefund,
   escalateFailedAutoRefund,
   autoResolveUnfulfilledPaidOrder,
+  creditCancelledRefund,
 };
