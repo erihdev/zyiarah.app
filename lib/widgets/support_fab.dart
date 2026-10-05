@@ -4,16 +4,24 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/screens/support_screen.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/phone_format.dart';
 
-/// يُنقّي رقم الدعم المخزَّن في اللوحة إلى أرقام فقط (مع + اختيارية في البداية).
-/// القيمة الحيّة كانت «+966 53 048 9016» بعلامات اتجاه (U+202D/U+202C)
-/// ومسافات، فصار الرابط `wa.me/%E2%80%AD+966%2053…` ويرفضه واتساب والهاتف معاً.
-/// [forWhatsapp] يُسقط علامة + أيضاً لأن wa.me يقبل الأرقام الدولية العارية فقط.
-String supportContactDigits(String? raw, {bool forWhatsapp = false}) {
+/// يُنقّي رقم الدعم المخزَّن في اللوحة لرابطِ **`tel:`** — أرقامٌ فقط مع `+`
+/// اختياريّةٍ في البداية. القيمة الحيّة كانت «+966 53 048 9016» بعلامات اتجاه
+/// (U+202D/U+202C) ومسافات، فصار الرابط `tel:%E2%80%AD+966%2053…` ويرفضه
+/// الهاتف.
+///
+/// **واتساب ليس من شأنها.** كان لها معامِلٌ `forWhatsapp` يُسقط `+` فقط —
+/// فرقمٌ محلّيٌّ (`0530489016`) يَخرج كما هو و`wa.me` يَرفضه، بينما
+/// `whatsappNumber` في `utils/phone_format.dart` تُلحق 966 بالمحلّيّ وتُسقط
+/// غيرَ الأرقامِ أصلاً (فتُغطّي علاماتَ الاتجاهِ نفسَها). قاعدتان لسؤالٍ
+/// واحدٍ وإحداهما أضعف — فبقيت هذه للهاتفِ وحدَه، وواتساب كلُّه يمرّ
+/// بالدالّةِ الواحدة.
+String supportContactDigits(String? raw) {
   if (raw == null) return '';
   final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
   if (digits.isEmpty) return '';
-  final plus = !forWhatsapp && raw.trim().contains('+') ? '+' : '';
+  final plus = raw.trim().contains('+') ? '+' : '';
   return '$plus$digits';
 }
 
@@ -117,9 +125,8 @@ class ZyiarahSupportFab extends StatelessWidget {
                   final data = snapshot.data?.data() as Map<String, dynamic>?;
                   // لا قيم افتراضية بعد اليوم: زر غائب خير من رقم يتصل بلا أحد.
                   // toString لا cast: لو خُزّن الرقم كـ num من اللوحة لا نريد استثناء cast.
-                  final whatsapp = supportContactDigits(
-                      data?['support_whatsapp']?.toString(),
-                      forWhatsapp: true);
+                  final whatsapp =
+                      whatsappNumber(data?['support_whatsapp']?.toString());
                   final phone =
                       supportContactDigits(data?['support_phone']?.toString());
                   return Column(
