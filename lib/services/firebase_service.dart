@@ -8,6 +8,7 @@ import 'package:zyiarah/firebase_options.dart';
 import 'package:zyiarah/services/notification_service.dart';
 import 'dart:math';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/upload_content_type.dart';
 
 /// خدمة إدارة Firebase لتطبيق زيارة
 class ZyiarahFirebaseService {
@@ -185,7 +186,10 @@ class ZyiarahFirebaseService {
   Future<String?> uploadWorkerPhoto(Uint8List fileData, String fileName) async {
     try {
       final ref = FirebaseStorage.instance.ref().child('worker_photos/$fileName');
-      final uploadTask = await ref.putData(fileData);
+      // النوعُ يُصرَّحُ: `putData` بلا بياناتٍ وصفيّةٍ يَرفعُ
+      // octet-stream، وقاعدةُ المخزنِ تَحصرُ المسارَ في `image/*`.
+      final uploadTask = await ref.putData(fileData,
+          SettableMetadata(contentType: imageContentTypeFor(fileName)));
       return await uploadTask.ref.getDownloadURL();
     } catch (e) {
       if (kDebugMode) print("Error uploading photo: $e");

@@ -60,4 +60,34 @@ function isProjectStorageUrl(u, projectId) {
   return projectBuckets(projectId).has(decodeURIComponent(m[1]));
 }
 
-module.exports = {MAX_ATTACHMENT_BYTES, projectBuckets, isProjectStorageUrl};
+/**
+ * مسارُ الكائنِ داخلَ الدلو من رابطِ تنزيلٍ لمخزنِ المشروع.
+ *
+ * يُضاف هنا لا في `index.js` لأنّ فحصَ المضيفِ والدلوِ مكتوبٌ في هذا الملفِّ
+ * أصلاً، ونسخةٌ ثانيةٌ منه هي بعينها ما يُحذّرُ منه هذا المستودعُ في كلِّ
+ * شريحة. فصارت الوحدةُ تَملكُ «روابطَ مخزنِ المشروع» لقارئَين: مرفقاتُ
+ * البريد، وحذفُ الكائنِ الإداريُّ (`deleteStorageObject`).
+ *
+ * @param {*} u الرابط.
+ * @param {?string} projectId معرّف المشروع.
+ * @return {?string} المسارُ المفكوكُ، أو `null` إن لم يكن رابطاً للمشروع.
+ */
+function storageObjectPath(u, projectId) {
+  if (!isProjectStorageUrl(u, projectId)) return null;
+  const m = new URL(String(u)).pathname.match(/^\/v0\/b\/[^/]+\/o\/(.+)$/);
+  if (!m) return null;
+  let path;
+  try {
+    path = decodeURIComponent(m[1]);
+  } catch {
+    return null;
+  }
+  // لا تجاوزَ للمجلّدات ولا مسارٌ مطلق: الحارسُ أعلاه عن الأصلِ، وهذا عن
+  // الشكل — فمسارٌ فيه `..` يَخرُجُ من البادئةِ المسموحةِ بعدَ التطبيع.
+  if (!path || path.startsWith("/") || path.includes("..")) return null;
+  return path;
+}
+
+module.exports = {
+  MAX_ATTACHMENT_BYTES, projectBuckets, isProjectStorageUrl, storageObjectPath,
+};

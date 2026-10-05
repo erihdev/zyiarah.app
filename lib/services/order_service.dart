@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/upload_content_type.dart';
 
 /// خدمة إدارة دورة حياة الطلب - تطبيق زيارة
 class ZyiarahOrderService {
@@ -284,7 +285,8 @@ class ZyiarahOrderService {
     if (evidence != null) {
       try {
         final ref = FirebaseStorage.instance.ref().child('order_feedback/${orderId}_${DateTime.now().millisecondsSinceEpoch}.jpg');
-        await ref.putFile(evidence);
+        await ref.putFile(evidence,
+            SettableMetadata(contentType: imageContentTypeFor(evidence.path)));
         evidenceUrl = await ref.getDownloadURL();
       } catch (e) {
         debugPrint("Error uploading feedback evidence: $e");

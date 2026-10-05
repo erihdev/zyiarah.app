@@ -3,40 +3,95 @@ rules_version = '2';
 // قواعد أمان Firebase Storage — لم تكن منشورة من المشروع (كانت قواعد الكونسول
 // الافتراضية تحظر الرفع فيفشل رفع البنرات/المنتجات). تغطّي كل مسارات الرفع في
 // التطبيق. القراءة عبر رابط التنزيل (token) تعمل دائماً؛ هذه القواعد تحكم الكتابة.
+//
+// ═══ تشديدُ 2026-10-05 ═══
+//
+// كانت كلُّ مساراتِ الرفعِ تَقول `allow write/delete: if request.auth != null`
+// بلا نوعٍ ولا تمييزِ إنشاءٍ من استبدال. والنتيجةُ ثلاثُ ثغراتٍ لأيِّ **عميلةٍ
+// مسجَّلة**:
+//
+//   ١) **استضافةٌ مجّانيّةٌ لأيِّ ملفّ**: `banners/` و`products/` و
+//      `worker_photos/` قراءتُها عامّة، فرفعُ صفحةِ تصيّدٍ أو برمجيّةٍ خبيثةٍ
+//      يُنتجُ رابطاً على نطاقِ جوجل مربوطاً بدلوِ الشركة — وكلفةُ تخزينٍ
+//      وخروجٍ على فاتورةِ المالك.
+//   ٢) **تشويهُ المتجر**: المسارُ `{file=**}` بلا ملكيّة، فاستبدالُ صورةِ
+//      منتجٍ أو بنرٍ قائمٍ بأيِّ محتوًى يُعرَضُ **لكلِّ العملاء** بلا أيِّ
+//      إجراءٍ إداريّ.
+//   ٣) **حذفُ كلِّ الصور**: `allow delete: if request.auth != null`.
+//
+// والقواعدُ **لا تَستطيعُ قراءةَ Firestore**، فلا سبيلَ فيها إلى معرفةِ
+// الدور — والمشروعُ لا يَضبطُ «custom claims» اليوم. فالمخرجُ:
+//
+//   • `allow create` وحدَه (لا `update`): كلُّ مسارِ رفعٍ في التطبيق يُسمّي
+//     ملفَّه بطابعٍ زمنيٍّ فريد (`banners/{millis}.jpg`،
+//     `products/{millis}.jpg`، `order_feedback/{orderId}_{millis}.jpg`)
+//     فلا يُكسَرُ شيء، ويَسقطُ الاستبدال.
+//   • `contentType` صورةً (أو PDF للفواتير) — فلا ملفَّ غيرَ صورةٍ أصلاً.
+//     ولذلك صُرِّح النوعُ في مواضعِ الرفعِ الأربعة
+//     (`lib/utils/upload_content_type.dart`): `putData` بلا بياناتٍ وصفيّةٍ
+//     يَرفعُ `application/octet-stream` فكان سيُرفَض.
+//   • الحذفُ خادميٌّ: `deleteStorageObject` (onCall + `_assertAdmin`)
+//     بقائمةِ بادئاتٍ مسموحة — نفسُ نمطِ `deleteDriverAccount`.
+//
+// **بقيّةٌ مُعلَنة**: `invoices/{orderId}.pdf` ما زال قابلاً للكتابةِ من أيِّ
+// مسجَّل (مسارُ إعادةِ توليدِ الفاتورةِ يَستبدلُ نفسَ الكائنِ عمداً، ومسارُ
+// الإدارةِ يُعيدُ توليدَها لطلبِ عميلةٍ أخرى) — فحصرُه يَلزمُه إمّا مسارٌ
+// بـuid أو claims أو رفعٌ خادميّ، وكلُّها قراراتُ تتابعٍ للمالك. النوعُ
+// والحجمُ محصورانِ الآن على الأقلّ.
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // البنرات الإعلانية — تُعرض للعملاء (قراءة عامة)، يكتبها مستخدم مُصادَق (الأدمن عبر الواجهة)
+    // البنرات الإعلانية — تُعرض للعملاء (قراءة عامة)، يكتبها مستخدم مُصادَق
+    // (الأدمن عبر الواجهة). إنشاءٌ فقط: الاسمُ فريدٌ بطابعٍ زمنيّ.
     match /banners/{file=**} {
       allow read: if true;
-      allow write: if request.auth != null && request.resource.size < 10 * 1024 * 1024;
-      allow delete: if request.auth != null;
+      allow create: if request.auth != null &&
+        request.resource.size < 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+      allow update, delete: if false;
     }
 
     // صور منتجات المتجر — تُعرض للعملاء
     match /products/{file=**} {
       allow read: if true;
-      allow write: if request.auth != null && request.resource.size < 10 * 1024 * 1024;
-      allow delete: if request.auth != null;
+      allow create: if request.auth != null &&
+        request.resource.size < 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+      allow update, delete: if false;
     }
 
     // صور العاملات
     match /worker_photos/{file=**} {
       allow read: if true;
-      allow write: if request.auth != null && request.resource.size < 10 * 1024 * 1024;
-      allow delete: if request.auth != null;
+      allow create: if request.auth != null &&
+        request.resource.size < 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+      allow update, delete: if false;
     }
 
     // إثبات إكمال الطلب (يرفعه السائق) — قراءة للمصادَقين فقط
     match /order_feedback/{file=**} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.resource.size < 15 * 1024 * 1024;
+      allow create: if request.auth != null &&
+        request.resource.size < 15 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+      // إثباتٌ ميدانيٌّ لا يُستبدَل ولا يُحذَف من واجهة.
+      allow update, delete: if false;
     }
 
-    // فواتير PDF (يرفعها العميل بعد الدفع) — قراءة للمصادَقين فقط
+    // فواتير PDF (يرفعها العميل بعد الدفع) — قراءة للمصادَقين فقط.
+    // الكتابةُ تَشملُ الاستبدالَ عمداً: إعادةُ توليدِ فاتورةٍ فشلت تَكتبُ
+    // نفسَ الكائن (`invoices/{orderId}.pdf`). انظر «بقيّةٌ مُعلَنة» أعلاه.
     match /invoices/{file=**} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.resource.size < 15 * 1024 * 1024;
+      // **`create, update` لا `write`**: في قواعدِ المخزنِ تَشملُ `write`
+      // الحذفَ أيضاً، وقواعدُ السماحِ تُجمَعُ بـOR — فـ`allow delete: if
+      // false` بعدَها لا يَسحبُ شيئاً. (أوّلُ صياغةٍ لهذا التشديدِ وقعت فيها.)
+      allow create, update: if request.auth != null &&
+        request.resource.size < 15 * 1024 * 1024 &&
+        request.resource.contentType == 'application/pdf';
+      // الفاتورةُ مستندٌ ضريبيّ: لا تُحذَفُ من واجهةٍ بحال.
+      allow delete: if false;
     }
 
     // كل ما عدا ذلك ممنوع

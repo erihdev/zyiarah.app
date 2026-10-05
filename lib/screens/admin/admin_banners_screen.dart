@@ -8,6 +8,8 @@ import 'package:zyiarah/services/audit_service.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:zyiarah/utils/upload_content_type.dart';
 
 class AdminBannersScreen extends StatefulWidget {
   const AdminBannersScreen({super.key});
@@ -47,10 +49,22 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
           final data = docSnap.data();
           final String? imageUrl = data?['imageUrl'];
           if (imageUrl != null && imageUrl.isNotEmpty) {
+            // **الحذفُ خادميّ.** `storage.rules` لا تَقرأُ Firestore فلا
+            // تَعرفُ الدورَ، وكانت تَسمحُ لأيِّ مسجَّلٍ بالحذف — فحُصِر
+            // الحذفُ في `deleteStorageObject` بعد `_assertAdmin`. والفشلُ
+            // يُقال: `debugPrint` وحدَه كان يَترُكُ كائناً معلّقاً بلا أثر.
             try {
-              await FirebaseStorage.instance.refFromURL(imageUrl).delete();
+              await FirebaseFunctions.instance
+                  .httpsCallable('deleteStorageObject')
+                  .call({'url': imageUrl})
+                  .timeout(kNetCallTimeout);
             } catch (storageErr) {
-              debugPrint("Failed to delete banner image from storage: $storageErr");
+              debugPrint('deleteStorageObject failed: $storageErr');
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('حُذف السجل، وتعذّر حذف الصورة من المخزن'),
+                    backgroundColor: Colors.orange));
+              }
             }
           }
         }
@@ -140,9 +154,20 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                               final storageRef = FirebaseStorage.instance.ref().child('banners/${DateTime.now().millisecondsSinceEpoch}.jpg');
                               UploadTask uploadTask;
                               if (kIsWeb) {
-                                uploadTask = storageRef.putData(await file.readAsBytes());
+                                // النوعُ يُصرَّحُ: `putData` بلا بياناتٍ
+                                // وصفيّةٍ يَرفعُ octet-stream، وقاعدةُ
+                                // المخزنِ تَحصرُ المسارَ في `image/*`.
+                                uploadTask = storageRef.putData(
+                                    await file.readAsBytes(),
+                                    SettableMetadata(
+                                        contentType:
+                                            imageContentTypeFor(file.name)));
                               } else {
-                                uploadTask = storageRef.putFile(File(file.path));
+                                uploadTask = storageRef.putFile(
+                                    File(file.path),
+                                    SettableMetadata(
+                                        contentType:
+                                            imageContentTypeFor(file.path)));
                               }
 
                               final TaskSnapshot snapshot = await uploadTask;
