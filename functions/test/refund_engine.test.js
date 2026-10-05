@@ -593,6 +593,138 @@ t("(و٦) index.js ما زال يُصدّر ٦٣ دالّة", () => {
   assert.strictEqual(n, 63, `عدد الصادرات ${n} ≠ 63`);
 });
 
+// ── إعادةُ رصيدِ طلبٍ مُلغًى: مرّةً واحدةً، ومع قولِ الفشل ─────────────────
+//
+// كان المنطقُ إنلاين في `onOrderRewards` و`catch`ه سطرَ `console.error` وحدَه:
+// فشلُ المعامَلةِ يَعني محفظةً لم تُودَع، ولا دفعةً للعميلة، ولا تنبيهاً
+// للإدارة، ولا محاولةً ثانية — `onDocumentUpdated` بلا `retry` ولا يَعودُ
+// لمستندٍ فاته الحدث. **مالُ العميلةِ يَبقى عندنا بلا أثرٍ خارجَ سطرِ سجلّ**،
+// وهي الحفرةُ نفسُها التي أُغلقت في `autoResolveUnfulfilledPaidOrder` من مسارٍ
+// آخر: إلغاءُ طلبٍ مدفوع.
+tAsync("(ح١) النجاح: المحفظةُ تُودَع، الطلبُ يُوسَم، والعميلةُ تُبلَّغ", async () => {
+  const db = fakeDb({"orders/o1": {code: "A1", amount: 230, client_id: "c1"}});
+  const pushes = [];
+  const r = await engine.creditCancelledRefund(db, {
+    orderRef: db._ref("orders/o1"), orderId: "o1", clientId: "c1",
+    amount: 230, code: "A1",
+  }, async (...a) => {
+    pushes.push(a);
+    return null;
+  });
+  assert.strictEqual(r.credited, true);
+  assert.deepStrictEqual(db._store.get("wallets/c1").balance,
+      FieldValue.increment(230));
+  assert.strictEqual(db._store.get("orders/o1").refund_credited, true);
+  const tx = db._store.get("wallets/c1/transactions/refund_o1");
+  assert.strictEqual(tx.amount, 230);
+  assert.strictEqual(tx.type, "refund");
+  assert.strictEqual(pushes.length, 1);
+  assert.strictEqual(pushes[0][0], "c1");
+});
+
+tAsync("(ح٢) الحُرّاسُ الثلاثةُ تَمنعُ إيداعاً ثانياً — ولا دفعةَ عندها", async () => {
+  for (const guard of [
+    {refund_credited: true},
+    {payment_status: "refunded"},
+    {auto_refund_processed: true},
+  ]) {
+    const db = fakeDb({
+      "orders/o1": {code: "A1", amount: 230, client_id: "c1", ...guard},
+    });
+    const pushes = [];
+    const r = await engine.creditCancelledRefund(db, {
+      orderRef: db._ref("orders/o1"), orderId: "o1", clientId: "c1",
+      amount: 230, code: "A1",
+    }, async () => pushes.push(1));
+    assert.strictEqual(r.credited, false, JSON.stringify(guard));
+    assert.strictEqual(r.skipped, "already_settled", JSON.stringify(guard));
+    assert.strictEqual(db._store.get("wallets/c1"), undefined,
+        `أُودِعت المحفظةُ رغم ${JSON.stringify(guard)}`);
+    assert.strictEqual(pushes.length, 0, "دفعةٌ للعميلة بلا إيداع");
+  }
+});
+
+tAsync("(ح٣) الفشل: يُوسَم ويُصعَّد، و`needs_refund` يَبقى للمكنسة", async () => {
+  const db = fakeDb({
+    "orders/o1": {code: "A1", amount: 230, client_id: "c1", needs_refund: true},
+  });
+  db.runTransaction = async () => {
+    throw new Error("ABORTED: too much contention");
+  };
+  const pushes = [];
+  const r = await engine.creditCancelledRefund(db, {
+    orderRef: db._ref("orders/o1"), orderId: "o1", clientId: "c1",
+    amount: 230, code: "A1",
+  }, async (...a) => {
+    pushes.push(a);
+    return null;
+  });
+  assert.strictEqual(r.credited, false);
+  assert.ok(r.failed, "الفشلُ لم يُعَد");
+  const d = db._store.get("orders/o1");
+  assert.strictEqual(d.refund_credit_failed, true);
+  assert.strictEqual(d.refund_credit_alerted, true);
+  assert.ok(d.refund_credit_failed_reason, "السببُ لم يُثبَّت");
+  // **`needs_refund` لا يُلمَس**: هو ما تَستعلمُه المكنسةُ لإعادةِ المحاولة.
+  assert.strictEqual(d.needs_refund, true);
+  assert.strictEqual(pushes.length, 1, "لم يُصعَّد الفشل");
+  assert.strictEqual(pushes[0][0], "ADMIN_BROADCAST");
+  assert.deepStrictEqual(pushes[0][5], ["super_admin", "accountant_admin"]);
+});
+
+tAsync("(ح٤) ولا يُصعَّدُ مرّتَين — `alreadyAlerted` يُسكِتُ الثانية", async () => {
+  const db = fakeDb({"orders/o1": {code: "A1", amount: 230, client_id: "c1"}});
+  db.runTransaction = async () => {
+    throw new Error("ABORTED");
+  };
+  const pushes = [];
+  const r = await engine.creditCancelledRefund(db, {
+    orderRef: db._ref("orders/o1"), orderId: "o1", clientId: "c1",
+    amount: 230, code: "A1", alreadyAlerted: true,
+  }, async () => pushes.push(1));
+  assert.strictEqual(r.credited, false);
+  // الوسمُ يُكتَبُ كلَّ مرّةٍ (السببُ يُحدَّث)، والتنبيهُ مرّةً واحدة.
+  assert.strictEqual(db._store.get("orders/o1").refund_credit_failed, true);
+  assert.strictEqual(pushes.length, 0, "تنبيهٌ مكرَّرٌ للإدارة");
+});
+
+t("(ح٥) `index.js` لا يَحملُ الإيداعَ إنلاين بعد اليوم", () => {
+  // يُجرَّدُ من التعليقِ أوّلاً: الشفرةُ تَشرحُ النقلَ بذكرِ اسمِ الدالّة.
+  const code = codeOf(idx);
+  // لولا هذا لعادت النسخةُ الإنلاين في الميزةِ القادمةِ ولا يَسقطُ شيء.
+  assert.ok(!/transactions"\)\s*\.doc\(`refund_\$\{orderId\}`\)/.test(code),
+      "بناءُ معامَلةِ الاسترداد عاد إلى index.js");
+  assert.ok(code.includes("refunds.creditCancelledRefund(db, {"),
+      "`onOrderRewards` لا يُنادي المحرّك");
+  // والمكنسةُ تُنادي الدالّةَ نفسَها — التنبيهُ وحدَه لا يُعيدُ المال.
+  assert.ok(/cancelled-refund retried=/.test(code),
+      "مكنسةُ إعادةِ المحاولةِ غائبة");
+  assert.ok(/\.where\("status", "==", "cancelled"\)\s*\n\s*\.where\("needs_refund", "==", true\)/
+      .test(code), "استعلامُ المكنسةِ ليس بمساواتَين على الحالةِ والعلم");
+  // والمضادّة: الاسمُ ما زال في الخامّ (التعليقُ الشارحُ للنقل) — فلو غابَ
+  // لكانَ التجريدُ حَجبَ أكثرَ من التعليقات.
+  assert.ok(idx.includes("creditCancelledRefund"),
+      "اختفى الاسمُ من الملفِّ كلِّه — راجِعْ ما جرّده الفحص");
+});
+
+t("(ح٦) وحُرّاسُ المكنسةِ هي حُرّاسُ المحرّكِ نفسُها — مجموعةً", () => {
+  const code = codeOf(idx);
+  const engineSrc = codeOf(mod);
+  // حارسٌ في المكنسةِ لا يَعرفُه المحرّكُ = إيداعٌ يُتخطّى بصمت؛ والعكسُ
+  // = قراءةٌ زائدةٌ كلَّ دورة. الطرفانِ يَتحرّكانِ معاً أو يَسقطُ الفحص.
+  const sweep = code.slice(code.indexOf("cancelled-refund") - 2000,
+      code.indexOf("cancelled-refund"));
+  for (const f of ["refund_credited", "payment_status", "auto_refund_processed",
+    "is_paid", "subscription"]) {
+    assert.ok(sweep.includes(f), `حارسُ ${f} غائبٌ عن المكنسة`);
+  }
+  const eng = engineSrc
+      .slice(engineSrc.indexOf("async function creditCancelledRefund"));
+  for (const f of ["refund_credited", "payment_status", "auto_refund_processed"]) {
+    assert.ok(eng.includes(f), `حارسُ ${f} غائبٌ عن المحرّك`);
+  }
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try {
