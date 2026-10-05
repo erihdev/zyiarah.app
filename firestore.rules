@@ -536,6 +536,20 @@ service cloud.firestore {
           'paid_confirmed', 'visits_generated', 'visits_generated_at',
           'activatedAt', 'activated_at', 'adminApprovedAt', 'paid_at',
           'visits_remaining', 'visits_total', 'expiry', 'amount',
+          // ⚠️ **أعلامُ التفعيلِ والتوليدِ وإعادةِ المحاولة (2026-10-05).**
+          // `contract_visits_pending` هو ما تَستعلمُه مكنسةُ إعادةِ توليدِ
+          // الزيارات، و`_generateContractVisits` يُنشئُ زياراتٍ بـ
+          // `is_paid: true` و`amount: 0` بعددِ `planVisits` الذي يَكتبُه
+          // العميلُ — فضبطُه سلفاً على عقدٍ غيرِ مدفوعٍ كان سيَكونُ **خدمةً
+          // مجّانيّةً بعددٍ يَختارُه**. (المكنسةُ تَشترطُ `is_paid == true`
+          // كذلك، وهو الحارسُ العاملُ فعلاً ما دامت القواعدُ محجوزةً.)
+          'contract_visits_pending', 'contract_visits_error',
+          'contract_visits_alerted',
+          'contract_activation_failed', 'contract_activation_error',
+          // ووسمُ فشلِ تحقّقِ الباقة: صارَ له قارئٌ في شاشةِ العقودِ
+          // الإداريّة، فتلفيقُه يُظهِرُ للأدمنِ سبباً لم يُكتَب.
+          'plan_validation_failed', 'plan_validation_error',
+          'plan_validation_at',
         ]);
       allow read: if isLoggedIn() &&
         (request.auth.uid == resource.data.userId || isAdmin());

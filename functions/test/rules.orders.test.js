@@ -331,6 +331,36 @@ const {setDoc, updateDoc, doc} = require("firebase/firestore");
       })),
       true);
 
+  // ─── العقود: علَمُ إعادةِ المحاولةِ كان سيَصيرُ خدمةً مجّانيّة ──────────
+  //
+  // `contract_visits_pending` هو ما تَستعلمُه مكنسةُ إعادةِ التوليد، و
+  // `_generateContractVisits` يُنشئُ زياراتٍ بـ`is_paid: true` و`amount: 0`
+  // بعددِ `planVisits` **الذي يَكتبُه العميلُ** عند الإنشاء. (المكنسةُ
+  // تَشترطُ `is_paid == true` أيضاً — حارسانِ لأنّ القواعدَ محجوزةٌ.)
+  const kContract = (extra) => Object.assign(
+      {userId: uid, status: "pending", is_paid: false,
+        planPrice: 500, planVisits: 4, planName: "باقة شهرية"},
+      extra);
+  await check("contract: contract_visits_pending at create -> DENIED",
+      setDoc(doc(db, "contracts/kf1"),
+          kContract({contract_visits_pending: true})),
+      false);
+  await check("contract: contract_activation_failed at create -> DENIED",
+      setDoc(doc(db, "contracts/kf2"),
+          kContract({contract_activation_failed: true})),
+      false);
+  await check("contract: plan_validation_failed at create -> DENIED",
+      setDoc(doc(db, "contracts/kf3"),
+          kContract({plan_validation_failed: true})),
+      false);
+  await check("contract: the app's own signing create -> ALLOWED",
+      setDoc(doc(db, "contracts/kok1"), kContract({
+        userName: "عميلة", userPhone: "0500000000",
+        booking_date: "2026-11-01", booking_time_slot: "10:00",
+        zone_name: "فيفا", hours: 4, createdAt: new Date(),
+      })),
+      true);
+
   await testEnv.cleanup();
   console.log(`\nRules test: ${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);

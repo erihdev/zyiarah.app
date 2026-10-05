@@ -7,6 +7,7 @@ import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/contract_health.dart';
 
 class AdminContractsScreen extends StatefulWidget {
   const AdminContractsScreen({super.key});
@@ -192,6 +193,9 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
       ),
       child: Column(
         children: [
+          // شارةُ الصفّ: الدفعةُ تُسمّي معرّفَ العقدِ، فبلا علامةٍ في القائمةِ
+          // يَبحثُ الأدمنُ بعينِه عن عقدٍ لا يُميّزُه شيء.
+          _contractHealthChip(data),
           // Header Section
           Padding(
             padding: const EdgeInsets.all(16),
@@ -413,6 +417,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
             _buildDetailRow("قيمة التعاقد", "${data['planPrice'] ?? 0} ر.س"),
             _buildDetailRow("الزيارات المتاحة", "${data['planVisits'] ?? 0} زيارة"),
             _buildDetailRow("رقم الاتصال", data['userPhone'] ?? 'غير مسجل'),
+            _contractHealthBanner(data),
             const Divider(height: 32),
             if (data['status'] == 'active' || data['status'] == 'approved_waiting_payment')
               SizedBox(
@@ -469,6 +474,83 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
             const SizedBox(height: 16),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _contractHealthChip(Map<String, dynamic> data) {
+    final ContractHealth h = contractHealthOf(data);
+    if (h == ContractHealth.ok) return const SizedBox.shrink();
+    final bool human = contractNeedsHuman(h);
+    final Color accent =
+        human ? const Color(0xFFB91C1C) : const Color(0xFFB45309);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.08),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      child: Row(
+        children: [
+          Icon(human ? Icons.gavel_rounded : Icons.autorenew_rounded,
+              size: 14, color: accent),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(kContractHealthTitles[h] ?? '',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.tajawal(
+                    fontSize: 11, fontWeight: FontWeight.w700, color: accent)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// **وسمُ التفعيلِ كان بلا قارئ** — الأدمنُ يَتلقّى «لم يُفعَّل — راجعه
+  /// يدوياً» ثمّ يَفتحُ عقداً يُشبهُ أيَّ معلَّقٍ غيرِ مدفوع. التفصيلُ في
+  /// `lib/utils/contract_health.dart`.
+  Widget _contractHealthBanner(Map<String, dynamic> data) {
+    final ContractHealth h = contractHealthOf(data);
+    if (h == ContractHealth.ok) return const SizedBox.shrink();
+    final bool human = contractNeedsHuman(h);
+    final Color accent =
+        human ? const Color(0xFFB91C1C) : const Color(0xFFB45309);
+    final String? reason = contractHealthReason(data);
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: accent.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(human ? Icons.gavel_rounded : Icons.autorenew_rounded,
+                  size: 16, color: accent),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(kContractHealthTitles[h] ?? '',
+                    style: GoogleFonts.tajawal(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: accent)),
+              ),
+            ],
+          ),
+          if (reason != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text('السبب الذي سجّله الخادم: $reason',
+                  style: GoogleFonts.tajawal(
+                      fontSize: 11, color: Colors.grey.shade800)),
+            ),
+        ],
       ),
     );
   }

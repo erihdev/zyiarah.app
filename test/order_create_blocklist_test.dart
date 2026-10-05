@@ -49,6 +49,7 @@ const Map<String, String> _notAnOrderFlag = {
   'missing': 'مفتاحُ عائدٍ (مستندٌ غائب)',
   'paid': 'مفتاحُ عائدِ rewards.payReferralBonus',
   'processed': 'مفتاحُ عائدٍ/حقلُ طابورِ الإشعاراتِ لا الطلب',
+  'activated': 'مفتاحُ عائدِ _activateContractNow',
   'received': 'جسمُ ردِّ الويب هوك (res.json)',
   'rescheduled': 'مفتاحُ عائدِ rescheduleAssignedOrder',
   'settled': 'مفتاحُ عائدِ rewards.settleVisitAccounting',
@@ -71,7 +72,38 @@ const Map<String, String> _notAnOrderFlag = {
       'مكتوبٌ ولا قارئَ له في المستودعِ كلِّه — فتلفيقُه لا يُغيّرُ شيئاً '
           '(والمِقصَلةُ referrals.status داخلَ المعامَلة، والمجموعةُ '
           'allow write: if false)',
+  // **حقولُ مستندِ العقدِ لا الطلب** — محجوبةٌ في قاعدةِ إنشاءِ `contracts`،
+  // والفحصُ أدناه يُثبِتُ ذلك بدلَ أن يَقبلَ الدعوى (كلمةُ `[contracts]`
+  // هي مفتاحُ التحقّق).
+  'contract_activation_failed': '[contracts] فشلُ معامَلةِ التفعيل',
+  'contract_visits_pending': '[contracts] علَمُ إعادةِ توليدِ الزيارات',
 };
+
+/// قائمةُ منعِ الإنشاءِ في قاعدةِ **العقود** — بموازنةِ الأقواس.
+Set<String> _contractBlocklist(String rules) {
+  final i = rules.indexOf('match /contracts/{');
+  if (i < 0) throw StateError('كتلةُ قاعدةِ العقودِ اختفت');
+  final seg = rules.substring(i, rules.indexOf('allow read', i));
+  final h = seg.indexOf('hasAny([');
+  if (h < 0) throw StateError('قائمةُ منعِ العقودِ اختفت');
+  final open = seg.indexOf('[', h);
+  int depth = 0, end = -1;
+  for (int j = open; j < seg.length; j++) {
+    if (seg[j] == '[') depth++;
+    if (seg[j] == ']') {
+      depth--;
+      if (depth == 0) {
+        end = j;
+        break;
+      }
+    }
+  }
+  if (end <= open) throw StateError('تعذّرَ اقتطاعُ قائمةِ العقود');
+  return RegExp(r"'([a-zA-Z0-9_]+)'")
+      .allMatches(seg.substring(open, end))
+      .map((m) => m.group(1)!)
+      .toSet();
+}
 
 String _stripJs(String src) => src
     .split('\n')
@@ -426,5 +458,25 @@ void main() {
     final util = File('lib/utils/price_review.dart').readAsStringSync();
     expect(util.contains("order['price_reviewed_at'] != null"), isTrue,
         reason: 'القاعدةُ لم تَعُد تَقرأُ price_reviewed_at — يُراجَع التعليل');
+  });
+
+
+  // ═══ و«حقلُ عقدٍ لا طلب» دعوى تُتحقَّق، لا تُقبَل ═══
+  //
+  // مُدخَلاتُ `_notAnOrderFlag` المعلَّمةُ بـ`[contracts]` تَقولُ إنّ العلَمَ
+  // محجوبٌ في قاعدةِ إنشاءِ العقودِ بدلَ قائمةِ الطلبات. فتلك الدعوى
+  // تُقابَلُ بالقائمةِ الأخرى: إعفاءٌ بسببٍ كاذبٍ أسوأُ من إعفاءٍ بلا سبب.
+  test('كلُّ إعفاءٍ بحجّةِ «حقلُ عقد» محجوبٌ فعلاً في قاعدةِ العقود', () {
+    final contractBlocked = _contractBlocklist(rules);
+    expect(contractBlocked.length, greaterThanOrEqualTo(14),
+        reason: 'اقتطاعُ قائمةِ العقودِ أخطأ (${contractBlocked.length})');
+    final claimed = _notAnOrderFlag.entries
+        .where((e) => e.value.contains('[contracts]'))
+        .map((e) => e.key)
+        .toSet();
+    expect(claimed, isNotEmpty, reason: 'لا مُدخَلَ معلَّماً — الفحصُ أجوف');
+    expect(claimed.difference(contractBlocked), isEmpty,
+        reason: 'أُعفيَ بحجّةِ «حقلُ عقد» وهو غيرُ محجوبٍ هناك: '
+            '${claimed.difference(contractBlocked)}');
   });
 }

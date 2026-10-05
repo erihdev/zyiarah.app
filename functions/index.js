@@ -3831,6 +3831,188 @@ async function _generateContractVisits(db, contractRef, c) {
 
 // مُشغّل: عند تأكيد دفع العقد (is_paid يصبح true عبر verify/webhook/wallet) نفعّل
 // خادميّاً: status='active' + منح الزيارات + توليدها + إسناد السائقين. idempotent.
+/**
+ * تفعيلُ عقدٍ مدفوعٍ: مطالبةٌ ذرّيّةٌ + تحقّقُ الباقةِ + توليدُ الزياراتِ
+ * + الإشعارات. **قاعدةٌ واحدةٌ بمُنادِيَين** — المُشغّلُ عند قلبِ `is_paid`،
+ * والمكنسةُ عند عقدٍ مدفوعٍ بقي `pending` (فالمُشغّلُ بلا `retry` ولا يَعودُ
+ * لمستندٍ فاته الحدث). وكانت هذه الشفرةُ داخلَ المُشغّلِ وحدَه، فلا سبيلَ
+ * لإعادةِ محاولتِها إلّا بنسخةٍ ثانيةٍ تَنحرِف.
+ * @param {FirebaseFirestore.Firestore} db
+ * @param {FirebaseFirestore.DocumentReference} contractRef مستندُ العقد.
+ * @param {string} contractId معرّفُه (للإشعاراتِ والسجلّ).
+ * @return {Promise<{activated: boolean, reason?: string}>}
+ */
+async function _activateContractNow(db, contractRef, contractId) {
+  // مطالبة ذرّية (idempotent) بالتفعيل + التوليد
+  //
+  // ⚠️ **كانت بلا `try`، والمُشغّلُ بلا `retry` (2026-10-05).** فمعامَلةٌ
+  // تَفشلُ لتنازعٍ أو مهلةٍ تَرفعُ الاستثناءَ خارجَ المُعالِج، و
+  // `onDocumentUpdated` لا يَعودُ لمستندٍ فاته الحدث: فيَبقى العقدُ
+  // `is_paid: true` و`status: 'pending'` — لا تفعيلَ، ولا
+  // `visits_remaining`، ولا زيارةَ واحدة، ولا سائق، **ولا تنبيهَ من أيِّ
+  // نوع**، ولا محاولةَ ثانية. و`client_dashboard` يُرشِّحُ
+  // `m['status'] != 'active'` فيَحجبُ العقدَ: فبطاقةُ الاشتراكِ **لا
+  // تَظهرُ أصلاً** لعميلةٍ دفعت أغلى مبلغٍ في التطبيق (باقةُ زيارات).
+  // وهي سادسُ مرّةٍ لعائلةِ «الفشلُ يَكتبُ سطراً ويُنسي» وأكبرُها مالاً.
+  //
+  // والعلَمُ هنا **أفضلُ جهد** لا شبكةَ أمان: كتابتُه قد تَفشلُ لنفسِ
+  // سببِ فشلِ المعامَلة. والشبكةُ الحقيقيّةُ في `opsHealthSweep` وهي
+  // **على الحالةِ لا على علَم** — عقدٌ مدفوعٌ ما زال `pending` هو
+  // الحالةُ المتناقضةُ بعينِها، فلا تَضيعُ وإن ضاعَ العلَم.
+  let claim;
+  try {
+    claim = await db.runTransaction(async (tx) => {
+    const s = await tx.get(contractRef);
+    const c = s.data() || {};
+    if (c.visits_generated === true) return null;
+    // (إغلاق ثغرة العقد المُسعَّر عميلياً) نتحقّق من السعر/الزيارات ضد الباقة
+    // قبل التفعيل — عقد بسعر مُتلاعَب به يُختَم بالفشل ولا يُفعَّل ولا تُمنح زيارات،
+    // ويُنبَّه الأدمن (لا نرمي: مشغّلات Firestore لا تُعيد المحاولة فيضيع الخطأ صامتاً).
+    try {
+      await _validateContractPlan(db, c, tx);
+    } catch (e) {
+      tx.update(contractRef, {
+        plan_validation_failed: true,
+        plan_validation_error: String(e.message || e),
+        plan_validation_at: FieldValue.serverTimestamp(),
+      });
+      return {__invalid: String(e.message || e)};
+    }
+    tx.update(contractRef, {
+      status: "active",
+      activated_at: FieldValue.serverTimestamp(),
+      visits_generated: true,
+      visits_generated_at: FieldValue.serverTimestamp(),
+    });
+    // منح رصيد الزيارات + حقول عرض الاشتراك ذرّياً — بدونها كانت بطاقة الاشتراك
+    // في لوحة العميل لا تظهر أبداً (has_active_subscription تبقى false).
+    if (c.userId && Number(c.planVisits || 0) > 0) {
+      const pv = Number(c.planVisits);
+      // انتهاء الاشتراك = تاريخ آخر زيارة مجدولة + مهلة 7 أيام (بدل ثابت 90 يوماً
+      // بلا صلة بالباقة). نشتق آخر تاريخ من scheduled_visits، أو من booking_date
+      // بنمط الأسبوع (التاريخ الأول + (العدد-1)×7 أيام) كما يولّد _generateContractVisits.
+      let lastVisitMs = Date.now();
+      if (Array.isArray(c.scheduled_visits) && c.scheduled_visits.length > 0) {
+        for (const v of c.scheduled_visits.slice(0, pv)) {
+          const dp = String(v.date || "").split("-").map(Number);
+          if (dp.length === 3 && !dp.some(isNaN)) {
+            const ms = Date.UTC(dp[0], dp[1] - 1, dp[2]);
+            if (ms > lastVisitMs) lastVisitMs = ms;
+          }
+        }
+      } else if (c.booking_date) {
+        const bp = String(c.booking_date).split("-").map(Number);
+        if (bp.length === 3 && !bp.some(isNaN)) {
+          lastVisitMs = Date.UTC(bp[0], bp[1] - 1, bp[2] + Math.max(0, pv - 1) * 7);
+        }
+      }
+      const expiryMs = Math.max(
+          lastVisitMs + 7 * 24 * 60 * 60 * 1000, // مهلة بعد آخر زيارة
+          Date.now() + 24 * 60 * 60 * 1000); // لا يقلّ عن يوم من الآن
+      tx.set(db.collection("users").doc(c.userId), {
+        visits_remaining: FieldValue.increment(pv),
+        has_active_subscription: true,
+        subscription_total_visits: pv,
+        subscription_type: c.planName || "باقة زيارة",
+        subscription_expiry: Timestamp.fromMillis(expiryMs),
+      }, {merge: true});
+      // عدّادات مستقلّة لكل عقد — كي تعرض الرئيسية بطاقة منفصلة لكل باقة نشطة
+      // (الشهرية + الأسبوعية معاً) بدل طمس حقول المستخدم المجمّعة بعضها بعضاً.
+      tx.set(contractRef, {
+        visits_remaining: pv,
+        visits_total: pv,
+        expiry: Timestamp.fromMillis(expiryMs),
+      }, {merge: true});
+    }
+    return c;
+    });
+  } catch (e) {
+    console.error(`_activateContractNow: claim txn failed for ` +
+      `${contractId}:`, e.message);
+    await contractRef.update({
+      contract_activation_failed: true,
+      contract_activation_error: String(e.message || e),
+    }).catch(() => {});
+    await queuePush("ADMIN_BROADCAST", "تفعيل عقد مدفوع فشل ⚠️",
+        `العقد ${contractId} مدفوع ولم يُفعَّل (فشل المعامَلة) — ` +
+        "لا زيارات ولا بطاقة اشتراك عند العميلة. تُعاد المحاولة دوريّاً.",
+        "contract_activation_failed", {contractId: contractId},
+        ["super_admin", "orders_manager", "accountant_admin"]).catch(() => {});
+    return {activated: false, reason: "txn_failed"};
+  }
+  if (!claim) return {activated: false, reason: "already"};
+  if (claim.__invalid) {
+    console.error(`_activateContractNow: plan validation failed for ` +
+      `${contractId}: ${claim.__invalid}`);
+    await queuePush("ADMIN_BROADCAST", "عقد مدفوع بسعر لا يطابق الباقة ⚠️",
+        `العقد ${contractId} دُفع لكن سعره/زياراته لا تطابق الباقة ` +
+        `(${claim.__invalid}). لم يُفعَّل — راجعه يدوياً.`,
+        "contract_plan_mismatch", {contractId: contractId},
+        ["orders_manager"]).catch(() => {});
+    return {activated: false, reason: "invalid_plan"};
+  }
+  // المعرّفات حتمية فإعادة التوليد idempotent. لا نُعيد راية visits_generated عند
+  // الفشل حتى لا يتكرّر منح الزيارات.
+  //
+  // ⚠️ **وكان هذا الفرعُ `console.error` وحدَه، وتعليقُه يَقول «أي نقصٍ
+  // يُكمِله مسار إداري» — وذلك المسارُ لا وجودَ له (2026-10-05).**
+  // `_generateContractVisits` يُولّدُ الزياراتِ **تِباعاً** (`await
+  // orderRef.set` ثمّ إسنادُ سائقٍ لكلِّ زيارة)، فاستثناءٌ عند الزيارةِ
+  // *i* يَترُكُ 1..i−1 منشأةً و i..N **غائبة**: نقصٌ جزئيٌّ حقيقيّ. و
+  // `status` صارَ `active` و`visits_remaining` مُنِحَ، فبطاقةُ الاشتراكِ
+  // في لوحتِها تَعرضُ «N زيارة متبقية» بشريطِ تقدّمٍ — **ورصيدٌ لا
+  // يُنفِقُه أيُّ مسارٍ عميليّ** (`visits_remaining` له أربعُ قراءاتٍ في
+  // `lib/` كلُّها عرضٌ، ولا موضعَ يَخصِمُه)، ولا زيارةَ مجدولةً خلفَه.
+  //
+  // و«المسارُ الإداريُّ» المقصودُ هو `exports.generateSubscriptionVisits`:
+  // نداءٌ **بلا مُنادٍ واحدٍ** في العميل (الموضعانِ في
+  // `contract_signing_screen` تعليقانِ يُسمّيانِ حقولَه)، وهو على قائمةِ
+  // الحذفِ في `functions_delete_once.yml` بملاحظةِ «استبدلها مُشغِّل
+  // activateContractOnPaid» — فالتعليقانِ يُشيرُ كلٌّ منهما إلى الآخرِ
+  // ولا يَعملُ أيٌّ منهما. ولا شاشةَ إداريّةَ تُعيدُ التوليدَ (الوحيدُ
+  // `_regenerate` في سجلِّ الفواتير).
+  //
+  // فالفشلُ يَكتبُ **علَمَه**، والمكنسةُ تَستعلمُ العلَمَ لا الحالةَ:
+  // `status == 'active'` هي الحالةُ السليمةُ لكلِّ عقدٍ فاعل، فاستعلامُها
+  // يَغرقُ فيها — تمييزٌ سجّلَه هذا المستودعُ عند `referral_payout_pending`.
+  // وإعادةُ التوليدِ آمنةٌ: المعرّفاتُ حتميّةٌ فتُكتَبُ فوقَ نفسِها.
+  try {
+    await _generateContractVisits(db, contractRef, claim);
+    await contractRef.update({
+      contract_visits_pending: FieldValue.delete(),
+    }).catch(() => {});
+  } catch (e) {
+    console.error("_activateContractNow generate:", e);
+    await contractRef.update({
+      contract_visits_pending: true,
+      contract_visits_error: String(e.message || e),
+    }).catch(() => {});
+    const alerted = await queuePush("ADMIN_BROADCAST",
+        "زيارات اشتراك مدفوع لم تُولَّد ⚠️",
+        `العقد ${contractId} فُعِّل ومُنِحت زياراته، لكن توليد ` +
+        "الزيارات فشل — رصيدٌ بلا مواعيد. تُعاد المحاولة دوريّاً.",
+        "contract_visits_failed", {contractId: contractId},
+        ["super_admin", "orders_manager"])
+        .then(() => true).catch(() => false);
+    await contractRef.update({contract_visits_alerted: alerted})
+        .catch(() => {});
+  }
+  // إشعار إداري موحّد واحد لكل اشتراك (أسبوعي/شهري) — بريده يسرد جدول كل الزيارات
+  // (يُبنى في _buildAdminAlertHtml). داخل الـ claim الذرّي فيُرسل مرة واحدة لكل عقد،
+  // ويحلّ محلّ إشعارات «طلب خدمة جديد» المكتومة لكل زيارة.
+  await queuePush("ADMIN_BROADCAST", "اشتراك جديد! 📄",
+      `اشتراك جديد في (${claim.planName || "باقة"}) — ${Number(claim.planVisits || 0)} ` +
+      `زيارة. تفاصيل الجدول في البريد.`,
+      "new_contract_admin", {contractId: contractId},
+      ["orders_manager"]).catch(() => {});
+  if (claim.userId) {
+    await queuePush(claim.userId, "تم تفعيل باقتكِ ✨",
+        `فُعِّل اشتراككِ وأُضيفت ${Number(claim.planVisits || 0)} زيارة لحسابكِ.`,
+        "contract_activated", {contractId: contractId}).catch(() => {});
+  }
+  return {activated: true};
+}
+
 exports.activateContractOnPaid = onDocumentUpdated({document: "contracts/{contractId}", cpu: 0.25},
     async (event) => {
       const change = event.data;
@@ -3838,105 +4020,8 @@ exports.activateContractOnPaid = onDocumentUpdated({document: "contracts/{contra
       const before = change.before.data() || {};
       const after = change.after.data() || {};
       if (before.is_paid === true || after.is_paid !== true) return null;
-      const db = getFirestore();
-      const contractRef = change.after.ref;
-      // مطالبة ذرّية (idempotent) بالتفعيل + التوليد
-      const claim = await db.runTransaction(async (tx) => {
-        const s = await tx.get(contractRef);
-        const c = s.data() || {};
-        if (c.visits_generated === true) return null;
-        // (إغلاق ثغرة العقد المُسعَّر عميلياً) نتحقّق من السعر/الزيارات ضد الباقة
-        // قبل التفعيل — عقد بسعر مُتلاعَب به يُختَم بالفشل ولا يُفعَّل ولا تُمنح زيارات،
-        // ويُنبَّه الأدمن (لا نرمي: مشغّلات Firestore لا تُعيد المحاولة فيضيع الخطأ صامتاً).
-        try {
-          await _validateContractPlan(db, c, tx);
-        } catch (e) {
-          tx.update(contractRef, {
-            plan_validation_failed: true,
-            plan_validation_error: String(e.message || e),
-            plan_validation_at: FieldValue.serverTimestamp(),
-          });
-          return {__invalid: String(e.message || e)};
-        }
-        tx.update(contractRef, {
-          status: "active",
-          activated_at: FieldValue.serverTimestamp(),
-          visits_generated: true,
-          visits_generated_at: FieldValue.serverTimestamp(),
-        });
-        // منح رصيد الزيارات + حقول عرض الاشتراك ذرّياً — بدونها كانت بطاقة الاشتراك
-        // في لوحة العميل لا تظهر أبداً (has_active_subscription تبقى false).
-        if (c.userId && Number(c.planVisits || 0) > 0) {
-          const pv = Number(c.planVisits);
-          // انتهاء الاشتراك = تاريخ آخر زيارة مجدولة + مهلة 7 أيام (بدل ثابت 90 يوماً
-          // بلا صلة بالباقة). نشتق آخر تاريخ من scheduled_visits، أو من booking_date
-          // بنمط الأسبوع (التاريخ الأول + (العدد-1)×7 أيام) كما يولّد _generateContractVisits.
-          let lastVisitMs = Date.now();
-          if (Array.isArray(c.scheduled_visits) && c.scheduled_visits.length > 0) {
-            for (const v of c.scheduled_visits.slice(0, pv)) {
-              const dp = String(v.date || "").split("-").map(Number);
-              if (dp.length === 3 && !dp.some(isNaN)) {
-                const ms = Date.UTC(dp[0], dp[1] - 1, dp[2]);
-                if (ms > lastVisitMs) lastVisitMs = ms;
-              }
-            }
-          } else if (c.booking_date) {
-            const bp = String(c.booking_date).split("-").map(Number);
-            if (bp.length === 3 && !bp.some(isNaN)) {
-              lastVisitMs = Date.UTC(bp[0], bp[1] - 1, bp[2] + Math.max(0, pv - 1) * 7);
-            }
-          }
-          const expiryMs = Math.max(
-              lastVisitMs + 7 * 24 * 60 * 60 * 1000, // مهلة بعد آخر زيارة
-              Date.now() + 24 * 60 * 60 * 1000); // لا يقلّ عن يوم من الآن
-          tx.set(db.collection("users").doc(c.userId), {
-            visits_remaining: FieldValue.increment(pv),
-            has_active_subscription: true,
-            subscription_total_visits: pv,
-            subscription_type: c.planName || "باقة زيارة",
-            subscription_expiry: Timestamp.fromMillis(expiryMs),
-          }, {merge: true});
-          // عدّادات مستقلّة لكل عقد — كي تعرض الرئيسية بطاقة منفصلة لكل باقة نشطة
-          // (الشهرية + الأسبوعية معاً) بدل طمس حقول المستخدم المجمّعة بعضها بعضاً.
-          tx.set(contractRef, {
-            visits_remaining: pv,
-            visits_total: pv,
-            expiry: Timestamp.fromMillis(expiryMs),
-          }, {merge: true});
-        }
-        return c;
-      });
-      if (!claim) return null;
-      if (claim.__invalid) {
-        console.error(`activateContractOnPaid: plan validation failed for ` +
-          `${event.params.contractId}: ${claim.__invalid}`);
-        await queuePush("ADMIN_BROADCAST", "عقد مدفوع بسعر لا يطابق الباقة ⚠️",
-            `العقد ${event.params.contractId} دُفع لكن سعره/زياراته لا تطابق الباقة ` +
-            `(${claim.__invalid}). لم يُفعَّل — راجعه يدوياً.`,
-            "contract_plan_mismatch", {contractId: event.params.contractId},
-            ["orders_manager"]).catch(() => {});
-        return null;
-      }
-      // المعرّفات حتمية فإعادة التوليد idempotent. لا نُعيد راية visits_generated عند
-      // الفشل حتى لا يتكرّر منح الزيارات — أي نقص يُكمِله مسار إداري.
-      try {
-        await _generateContractVisits(db, contractRef, claim);
-      } catch (e) {
-        console.error("activateContractOnPaid generate:", e);
-      }
-      // إشعار إداري موحّد واحد لكل اشتراك (أسبوعي/شهري) — بريده يسرد جدول كل الزيارات
-      // (يُبنى في _buildAdminAlertHtml). داخل الـ claim الذرّي فيُرسل مرة واحدة لكل عقد،
-      // ويحلّ محلّ إشعارات «طلب خدمة جديد» المكتومة لكل زيارة.
-      await queuePush("ADMIN_BROADCAST", "اشتراك جديد! 📄",
-          `اشتراك جديد في (${claim.planName || "باقة"}) — ${Number(claim.planVisits || 0)} ` +
-          `زيارة. تفاصيل الجدول في البريد.`,
-          "new_contract_admin", {contractId: event.params.contractId},
-          ["orders_manager"]).catch(() => {});
-      if (claim.userId) {
-        await queuePush(claim.userId, "تم تفعيل باقتكِ ✨",
-            `فُعِّل اشتراككِ وأُضيفت ${Number(claim.planVisits || 0)} زيارة لحسابكِ.`,
-            "contract_activated", {contractId: event.params.contractId}).catch(() => {});
-      }
+      await _activateContractNow(getFirestore(), change.after.ref,
+          event.params.contractId);
       return null;
     });
 
@@ -5121,6 +5206,82 @@ exports.opsHealthSweep = onSchedule(
         console.log(`opsHealthSweep: rating-agg retried=${fixed} stuck=${stuck}`);
       } catch (e) {
         console.error("opsHealthSweep: rating-agg retry failed:", e.message);
+      }
+
+      // 5-quater) **عقدٌ مدفوعٌ لم يُفعَّل، وزياراتُ عقدٍ لم تُولَّد
+      //    (2026-10-05).** `opsHealthSweep` كان يَمسحُ `orders` و`store_orders`
+      //    و`wallets` و`promo_codes` — و**لا يَمسُّ `contracts` إطلاقاً**،
+      //    بينما باقةُ الاشتراكِ أغلى مبلغٍ في التطبيق.
+      //
+      //    والشقُّ الأوّلُ **على الحالةِ لا على علَم**، وذاك قرارٌ لا سهو:
+      //    علَمُ الفشلِ يُكتَبُ بعد فشلِ المعامَلةِ فقد يَفشلُ لنفسِ السبب،
+      //    أمّا «مدفوعٌ وما زال `pending`» فهي الحالةُ المتناقضةُ نفسُها ولا
+      //    تَحتاجُ أن يَنجحَ شيءٌ لتُرى. ومساواتانِ بلا مدًى ⇒ لا فهرسَ
+      //    مركَّب (`contracts` ليس له إلّا `userId`+`created_at`).
+      //    **ولا تَغرقُ**: العقدُ غيرُ المدفوعِ `pending` بـ`is_paid == false`
+      //    فيَخرُج، والمُفعَّلُ `active`. ويُتخطّى `plan_validation_failed`:
+      //    ذاك عدمُ تفعيلٍ **مقصودٌ** نُبِّه عنه سلفاً.
+      try {
+        const kSnap = await db.collection("contracts")
+            .where("is_paid", "==", true)
+            .where("status", "==", "pending").limit(100).get();
+        let revived = 0; let deliberate = 0;
+        for (const doc of kSnap.docs) {
+          const d = doc.data();
+          if (d.plan_validation_failed === true) {
+            deliberate++;
+            continue;
+          }
+          // **نُنادي المنطقَ نفسَه، لا نُعيدُ إطلاقَ المُشغّل.** لمسةُ
+          // المستندِ لا تُطلِقُه: شرطُه `before.is_paid !== true` وهو `true`
+          // سلفاً. ولذلك اُستُخرِجت `_activateContractNow` — قاعدةٌ واحدةٌ
+          // بمُنادِيَين، بدلَ نسخةٍ ثانيةٍ في المكنسةِ تَنحرِف.
+          const r = await _activateContractNow(db, doc.ref, doc.id);
+          if (r.activated) revived++;
+        }
+        console.log(`opsHealthSweep: contracts revived=${revived} ` +
+          `deliberate=${deliberate}`);
+      } catch (e) {
+        console.error("opsHealthSweep: contract activation retry failed:",
+            e.message);
+      }
+
+      //    والشقُّ الثاني **على العلَمِ** لأنّ حالتَه (`active`) هي الحالةُ
+      //    السليمةُ لكلِّ عقدٍ فاعلٍ فيَغرقُ فيها الفاشل، و«لا زيارةَ خلفَه»
+      //    ليس استعلاماً على مستندِ العقد. وإعادةُ التوليدِ آمنةٌ: معرّفاتُ
+      //    الزياراتِ حتميّةٌ (`sub_{contractId}_{i}`) فتُكتَبُ فوقَ نفسِها.
+      try {
+        // ⚠️ **و`is_paid` شرطٌ لا زينة.** `_generateContractVisits` يُنشئُ
+        //    زياراتٍ بـ`is_paid: true` و`amount: 0` بعددِ `planVisits`
+        //    **الذي يَكتبُه العميلُ** عند الإنشاء، ويُسنِدُ لها سائقاً. فلو
+        //    اكتفى الاستعلامُ بالعلَم لصارَ ضبطُه سلفاً على عقدٍ غيرِ مدفوعٍ
+        //    **خدمةً مجّانيّةً بعددٍ يَختارُه**: مكنسةٌ كُتبت لسدِّ صمتٍ
+        //    تَفتحُ ثغرةَ مال. والعلَمُ محجوبٌ في القواعدِ أيضاً، لكنّ
+        //    `firestore.rules` محجوزةٌ خلفَ STAGE-C فلا تُنشَرُ من الأتمتة —
+        //    فالحارسُ العاملُ اليومَ هو هذا الشرطُ. مساواتانِ بلا مدًى ⇒ لا
+        //    فهرسَ مركَّب.
+        const vSnap2 = await db.collection("contracts")
+            .where("contract_visits_pending", "==", true)
+            .where("is_paid", "==", true).limit(100).get();
+        let fixed = 0; let stuck = 0;
+        for (const doc of vSnap2.docs) {
+          try {
+            await _generateContractVisits(db, doc.ref, doc.data());
+            await doc.ref.update({
+              contract_visits_pending: FieldValue.delete(),
+              contract_visits_alerted: FieldValue.delete(),
+            });
+            fixed++;
+          } catch (e2) {
+            stuck++;
+            console.error(`opsHealthSweep: regen visits ${doc.id}:`, e2.message);
+          }
+        }
+        console.log(`opsHealthSweep: contract visits retried=${fixed} ` +
+          `stuck=${stuck}`);
+      } catch (e) {
+        console.error("opsHealthSweep: contract visits retry failed:",
+            e.message);
       }
 
       // 6) إشعارات لم يلمسها processNotificationTriggers أصلاً (انقطاع الدوال 8–18
