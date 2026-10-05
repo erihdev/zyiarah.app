@@ -25,6 +25,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   final TextEditingController _maxOrdersPerDayCtrl = TextEditingController();
   final TextEditingController _merchantNameCtrl = TextEditingController();
   final TextEditingController _vatNumberCtrl = TextEditingController();
+  // **السجلُّ التجاريُّ كان مطبوعاً على الفاتورةِ بلا محرّرٍ إطلاقاً** —
+  // ثابتٌ في `ZatcaService` تَعرضُه بطاقةُ الفاتورةِ كـ«السجل التجاري (CR)».
+  final TextEditingController _crNumberCtrl = TextEditingController();
   final TextEditingController _whatsappSupportCtrl = TextEditingController();
   final TextEditingController _phoneSupportCtrl = TextEditingController();
   final TextEditingController _adminEmailCtrl = TextEditingController();
@@ -59,6 +62,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
           setState(() {
             _merchantNameCtrl.text = data['merchant_name'] ?? "مؤسسة معاذ يحي محمد المالكي";
             _vatNumberCtrl.text = data['vat_number'] ?? "310885360200003";
+            _crNumberCtrl.text = data['cr_number'] ?? "7030376342";
             _whatsappSupportCtrl.text = data['support_whatsapp'] ?? "966500000000";
             _phoneSupportCtrl.text = data['support_phone'] ?? "920000000";
             _adminEmailCtrl.text = data['admin_email'] ?? "admin@zyiarah.com";
@@ -147,6 +151,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
       await _db.collection('system_configs').doc('main_settings').set({
         'merchant_name': _merchantNameCtrl.text.trim(),
         'vat_number': _vatNumberCtrl.text.trim(),
+        'cr_number': _crNumberCtrl.text.trim(),
         'support_whatsapp': _whatsappSupportCtrl.text.trim(),
         'support_phone': _phoneSupportCtrl.text.trim(),
         'admin_email': _adminEmailCtrl.text.trim(),
@@ -243,6 +248,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
     _maxOrdersPerDayCtrl.dispose();
     _merchantNameCtrl.dispose();
     _vatNumberCtrl.dispose();
+    _crNumberCtrl.dispose();
     _whatsappSupportCtrl.dispose();
     _phoneSupportCtrl.dispose();
     _adminEmailCtrl.dispose();
@@ -359,6 +365,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                           _buildPremiumField("اسم المنشأة الضريبي (ZATCA)", "الاسم", _merchantNameCtrl, Icons.business_rounded, keyboardType: TextInputType.text),
                           const SizedBox(height: 16),
                           _buildPremiumField("الرقم الضريبي (VAT)", "رقم", _vatNumberCtrl, Icons.account_balance_wallet_rounded),
+                          _buildPremiumField("السجل التجاري (CR)", "رقم", _crNumberCtrl, Icons.badge_rounded),
                         ],
                       ),
 
