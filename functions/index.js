@@ -1388,15 +1388,38 @@ const _processNotifQueueDoc = async (event) => {
           } else {
             try {
               const cu = await getFirestore().collection("users").doc(String(cb)).get();
+              // الدورُ من السجلّ: القواعدُ تَمنعُ المالكَ من كتابةِ `role`
+              // و`staff_role` (حكرٌ على المدير العام)، فهو موضعُ ثقةٍ.
               const r = cu.exists ? cu.data().role : null;
-              const cuEmail = cu.exists ?
-                (cu.data().email || cu.data().real_email) : null;
-              // موظّف (إدارة/سائق) مسموح؛ أو عميلٌ يُرسل لبريده المسجَّل هو نفسه (تأكيد
-              // ذاتي كتأكيد الطلب — لا تصيّد). كان بريد تأكيد العميل يُرفَض دائماً.
-              emailSenderOk = (r != null && r !== "client") ||
-                (!!cuEmail && !!recipientEmail &&
-                  String(cuEmail).toLowerCase() ===
-                    String(recipientEmail).toLowerCase());
+              if (r != null && r !== "client") {
+                emailSenderOk = true;
+              } else {
+                // **SECURITY: بريدُ «الإرسالِ إلى نفسِه» من المصادقةِ لا من
+                // السجلّ.** كان يُقارَنُ بـ`users/{uid}.email` — وهو حقلٌ
+                // **يَكتبُه العميلُ على مستندِه** (قواعدُ المالكِ تَمنعُ
+                // الدورَ والمحفظةَ والحظرَ ولا تَذكرُ البريد). فالمسارُ
+                // كان: اكتبْ بريدَك `victim@x.com`، ثمّ أنشئ
+                // `notification_triggers` موجَّهاً إلى نفسك بـ
+                // `recipientEmail: victim@x.com` وعنوانٍ ونصٍّ من اختيارك —
+                // فيَمرُّ من `isAllowedEmailRecipient` (مستندُك يَحملُ
+                // العنوانَ الآن) ومن هذا الحارسِ (الحقلانِ متساويان)،
+                // ويُرسِلُ الخادمُ بريداً **من `no-reply@zyiarah.com`**
+                // بمحتوًى من اختيارِ العميلِ إلى أيِّ عنوان: مُرحِّلٌ مفتوحٌ
+                // بنطاقِ الشركةِ وسُمعتِها — وهو عينُ ما يَقولُ تعليقُ هذا
+                // الحارسِ إنّه يَمنعُه («يمنع تصيّداً بنطاق الشركة»).
+                //
+                // بريدُ المصادقةِ لا يَكتبُه العميلُ في Firestore، والمسارُ
+                // الشرعيُّ الوحيدُ (`sendWelcomeEmail` عند التسجيل) يُرسِلُ
+                // إلى العنوانِ الذي سَجّلت به — أي بريدَ المصادقةِ نفسِه.
+                // و`real_email` حُذف: مقروءٌ هنا وحدَه، **ولا كاتبَ له في
+                // المستودعِ كلِّه** (بقيّةُ مخطَّطِ الدخولِ بالجوّالِ الذي
+                // لم يُشحَن أبداً) — فهو حقلٌ آخرُ مكشوفٌ لكتابةِ العميل.
+                const au = await getAuth().getUser(String(cb));
+                const authEmail = au && au.email ? String(au.email) : null;
+                emailSenderOk = !!authEmail && !!recipientEmail &&
+                  authEmail.toLowerCase() ===
+                    String(recipientEmail).toLowerCase();
+              }
             } catch {
               emailSenderOk = false;
             }
