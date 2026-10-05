@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>الدعم والمساعدة — زيارة</title>
+  <meta name="description" content="صفحة الدعم لتطبيق زيارة لخدمات التنظيف المنزلي — قنوات التواصل وطلب المساعدة." />
+  <!-- لماذا هذه الصفحة موجودة (2026-10-05):
+       `firebase.json` يَخدمُ `landing_page` بـ`cleanUrls: true` وبلا أيِّ
+       rewrite، فالمسارُ `/support` كان يُحَلُّ إلى `support.html` — وهو ملفٌّ
+       لم يَكن موجوداً، أي **404**. وذلك العنوانُ بعينُه هو:
+         • افتراضُ `support_url` في لوحةِ الإدارة، وزرُّ «الدعم» أعلى صفحةِ
+           الإعداداتِ يَفتحُه — فالمالكُ يَضغطُه فيَرى صفحةَ خطأ؛
+         • والعنوانُ الذي يَضَعُه المتجرانِ حقلاً **إلزاميّاً** (Support URL
+           في App Store Connect، ورابطُ/بريدُ الدعمِ في Play) — و404 هناك
+           سؤالُ مراجعةٍ يُعطّلُ الإصدار، كما كانت صفحةُ الخصوصيّةِ تَفعل.
+
+       ولا تُخترَعُ فيها بياناتُ تواصل: البريدُ `support@zyiarah.com` **منشورٌ
+       أصلاً** في تذييلِ `index.html` على الموقعِ نفسِه. وأرقامُ الواتساب
+       والهاتفِ تَسكنُ `system_configs/main_settings` وتُقرأُ بمصادقةٍ، فلا
+       تُنشَرُ هنا بقرارٍ مني — وقناةُ الدعمِ الأغنى (تذكرةٌ داخلَ التطبيقِ
+       مربوطةٌ بالحساب) هي ما تُوجَّهُ إليه العميلةُ، وهي موجودةٌ فعلاً
+       (`support_fab` + شاشةُ التذاكر).
+
+       وهي **ثابتةٌ بلا Firestore** عن قصد: إضافةُ قارئٍ لمستندٍ لا كاتبَ له
+       هي بعينِها العطلُ المُصلَحُ في بياناتِ البائعِ على الفاتورة. -->
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root { --purple: #660033; --purple-l: #A85782; --green: #7dc242; --text: #1e293b; --muted: #64748b; --gray: #f8fafc; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      color: var(--text); background: var(--gray); line-height: 1.9;
+    }
+    .top {
+      background: linear-gradient(135deg, var(--purple) 0%, var(--purple-l) 100%);
+      color: #fff; padding: 48px 24px 40px; text-align: center;
+    }
+    .top .logo {
+      width: 84px; height: 84px; background: #fff; border-radius: 22px;
+      display: inline-flex; align-items: center; justify-content: center;
+      margin-bottom: 20px; box-shadow: 0 16px 40px rgba(0,0,0,0.3); overflow: hidden;
+    }
+    .top .logo img { width: 100%; height: 100%; object-fit: contain; }
+    .top h1 { font-size: clamp(1.6rem, 4vw, 2.4rem); font-weight: 800; }
+    .top .sub { margin-top: 10px; color: rgba(255,255,255,0.85); font-size: 0.95rem; }
+    .wrap { max-width: 820px; margin: -24px auto 0; padding: 0 20px 60px; }
+    .card {
+      background: #fff; border-radius: 24px; padding: clamp(24px, 5vw, 48px);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.06);
+    }
+    h2 { font-size: 1.15rem; color: var(--purple); margin: 28px 0 10px; font-weight: 800; }
+    h2:first-of-type { margin-top: 0; }
+    p { color: #334155; font-size: 1.02rem; }
+    ol, ul { color: #334155; font-size: 1.02rem; padding-inline-start: 22px; margin-top: 8px; }
+    li { margin-bottom: 6px; }
+    .mail {
+      display: inline-flex; align-items: center; gap: 10px; margin-top: 14px;
+      background: var(--purple); color: #fff; text-decoration: none;
+      padding: 14px 22px; border-radius: 16px; font-weight: 800; font-size: 1.02rem;
+    }
+    .note {
+      margin-top: 22px; background: #f1f5f9; border-radius: 16px;
+      padding: 18px 20px; color: var(--muted); font-size: 0.95rem;
+    }
+    .back {
+      display: inline-flex; align-items: center; gap: 6px; margin-top: 28px;
+      color: var(--purple); font-weight: 700; text-decoration: none; font-size: 0.95rem;
+    }
+    footer { text-align: center; color: var(--muted); padding: 0 24px 40px; font-size: 0.85rem; }
+    footer a { color: var(--purple); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="logo"><img src="logo.png" alt="زيارة"
+      onerror="this.style.display='none';this.parentElement.innerHTML='<span style=\'font-size:2.4rem;font-weight:900;color:#660033\'>ز</span>'" /></div>
+    <h1>الدعم والمساعدة</h1>
+    <div class="sub">نحن هنا لمساعدتك في أيِّ وقت</div>
+  </header>
+
+  <main class="wrap">
+    <div class="card">
+      <h2>الدعم داخل التطبيق — الأسرع</h2>
+      <p>
+        أسرعُ طريقةٍ للمساعدة هي من داخل تطبيق «زيارة»: افتحي التطبيق واضغطي زرَّ
+        الدعم، فتَصِلُنا رسالتُك مربوطةً بحسابكِ وبطلبكِ فنَرُدُّ عليك في التطبيق
+        نفسِه — بلا حاجةٍ إلى شرحِ تفاصيلِ الحجز.
+      </p>
+      <ol>
+        <li>افتحي تطبيق «زيارة» وسجّلي الدخول.</li>
+        <li>اضغطي زرَّ الدعم (أيقونة المحادثة).</li>
+        <li>اكتبي استفساركِ — ويمكنكِ ربطُه بطلبٍ بعينِه.</li>
+      </ol>
+
+      <h2>البريد الإلكتروني</h2>
+      <p>إن لم تتمكّني من الوصول إلى التطبيق، راسِلينا على:</p>
+      <a class="mail" href="mailto:support@zyiarah.com">support@zyiarah.com</a>
+
+      <h2>ما يُسرّع مساعدتكِ</h2>
+      <ul>
+        <li>رقم الطلب إن كان الاستفسار عن حجزٍ أو فاتورة.</li>
+        <li>رقم الجوال أو البريد المسجَّل في حسابكِ.</li>
+        <li>وصفٌ موجزٌ لما حدث، ولقطةُ شاشةٍ إن أمكن.</li>
+      </ul>
+
+      <h2>حذف الحساب</h2>
+      <p>
+        يمكنكِ حذفَ حسابكِ من داخل التطبيق: «حسابي» ← حذف الحساب. وتُحفَظُ
+        الفواتيرُ الضريبيّةُ وسجلُّ الطلباتِ وفقاً لأنظمةِ هيئةِ الزكاةِ
+        والضريبةِ والجمارك.
+      </p>
+
+      <div class="note">
+        أوقاتُ الاستجابة: نسعى للردِّ خلال يومِ عملٍ واحد. وفي ما يتعلّقُ
+        بمدفوعاتٍ أو استردادٍ، اذكري رقمَ الطلبِ ليُراجَعَ فوراً.
+      </div>
+
+      <a class="back" href="/">← العودة للصفحة الرئيسية</a>
+    </div>
+  </main>
+
+  <footer>
+    <p>
+      <a href="/privacy">سياسة الخصوصية</a> ·
+      <a href="mailto:support@zyiarah.com">تواصل معنا</a>
+    </p>
+    <p style="margin-top:8px">© 2026 زيارة — مؤسسة معاذ يحي محمد المالكي</p>
+  </footer>
+</body>
+</html>

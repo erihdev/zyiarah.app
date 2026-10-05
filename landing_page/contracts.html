@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>عقود الباقات — زيارة</title>
+  <meta name="description" content="متابعة عقد باقة الاشتراك في تطبيق زيارة." />
+  <!-- لماذا هذه الصفحة (2026-10-05):
+       `zyiarah_messaging_service.notifyContractApproved` يُسلّمُ قالبَ
+       `contract-approved` في Resend المتغيّرَ `actionUrl` = هذا المسار، وهو
+       زرُّ البريدِ الذي يُرسَلُ للعميلةِ لحظةَ اعتمادِ عقدِها — وكان 404.
+       (وحينَ يَغيبُ القالبُ يَعملُ `_buildTemplateFallbackHtml`، وهو يُرشِّحُ
+       مفاتيحَ `url|link` فلا يَعرضُ الزرَّ أصلاً — فالوصولُ مشروطٌ بوجودِ
+       القالبِ في Resend، وذاك ما لا يُقرأُ من المستودع.)
+
+       والنصُّ يُطابِقُ ما يَقولُه الإشعارُ نفسُه: الاعتمادُ تَمَّ و**الدفعُ
+       باقٍ** لتفعيلِ الباقة (`activateContractOnPaid` يُفعّلُ عند قلبِ
+       `is_paid`) — لا «عقدُكِ نشط». -->
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root { --purple: #660033; --purple-l: #A85782; --text: #1e293b; --muted: #64748b; --gray: #f8fafc; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      color: var(--text); background: var(--gray); line-height: 1.9;
+    }
+    .top {
+      background: linear-gradient(135deg, var(--purple) 0%, var(--purple-l) 100%);
+      color: #fff; padding: 48px 24px 40px; text-align: center;
+    }
+    .top h1 { font-size: clamp(1.5rem, 4vw, 2.2rem); font-weight: 800; }
+    .top .sub { margin-top: 10px; color: rgba(255,255,255,0.85); font-size: 0.95rem; }
+    .wrap { max-width: 760px; margin: -24px auto 0; padding: 0 20px 60px; }
+    .card {
+      background: #fff; border-radius: 24px; padding: clamp(24px, 5vw, 44px);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.06);
+    }
+    h2 { font-size: 1.12rem; color: var(--purple); margin: 26px 0 10px; font-weight: 800; }
+    h2:first-of-type { margin-top: 0; }
+    p { color: #334155; font-size: 1.02rem; }
+    ol { color: #334155; font-size: 1.02rem; padding-inline-start: 22px; margin-top: 8px; }
+    li { margin-bottom: 6px; }
+    .note { margin-top: 22px; background: #f1f5f9; border-radius: 16px; padding: 18px 20px; color: var(--muted); font-size: 0.95rem; }
+    .back { display: inline-flex; gap: 6px; margin-top: 26px; color: var(--purple); font-weight: 700; text-decoration: none; font-size: 0.95rem; }
+    footer { text-align: center; color: var(--muted); padding: 0 24px 40px; font-size: 0.85rem; }
+    footer a { color: var(--purple); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <h1>عقود الباقات</h1>
+    <div class="sub">متابعة عقد اشتراكك وتفعيله</div>
+  </header>
+
+  <main class="wrap">
+    <div class="card">
+      <h2>عقدكِ معتمَد — يبقى الدفع</h2>
+      <p>
+        اعتمدَت الإدارةُ عقدَ باقتكِ. ولتفعيلِ الباقةِ وإضافةِ زياراتِها إلى
+        حسابكِ، أكمِلي الدفعَ من داخلِ تطبيق «زيارة».
+      </p>
+      <ol>
+        <li>افتحي تطبيق «زيارة» وسجّلي الدخول بالحسابِ نفسِه.</li>
+        <li>اذهبي إلى «عقودي» من حسابكِ.</li>
+        <li>افتحي العقدَ المعتمَدَ وأكمِلي الدفع.</li>
+      </ol>
+
+      <h2>بعد التفعيل</h2>
+      <p>
+        تُضافُ زياراتُ الباقةِ إلى حسابكِ وتُولَّدُ مواعيدُها تلقائيّاً، ويَصِلُكِ
+        إشعارٌ بذلك. وتَجدينَ نسخةَ العقدِ وفاتورتَه في التطبيق.
+      </p>
+
+      <div class="note">
+        لم يَظهر العقدُ في «عقودي»؟ تأكّدي أنّكِ دخلتِ بالحسابِ الذي وصلَكِ
+        عليه البريد، أو راسِلينا على
+        <a href="mailto:support@zyiarah.com">support@zyiarah.com</a>.
+      </div>
+
+      <a class="back" href="/support">← صفحة الدعم</a>
+    </div>
+  </main>
+
+  <footer>
+    <p>
+      <a href="/">الصفحة الرئيسية</a> ·
+      <a href="/privacy">سياسة الخصوصية</a> ·
+      <a href="/support">الدعم</a>
+    </p>
+    <p style="margin-top:8px">© 2026 زيارة — مؤسسة معاذ يحي محمد المالكي</p>
+  </footer>
+</body>
+</html>
