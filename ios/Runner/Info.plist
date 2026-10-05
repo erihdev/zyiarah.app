@@ -79,8 +79,11 @@
 		<string>نحتاج للوصول للمكتبة للسماح لك بحفظ صور الفواتير الضريبية أو تحديث ملفك الشخصي.</string>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
-		<key>NSMicrophoneUsageDescription</key>
-		<string>تابي يحتاج إلى الميكروفون للتحقق من هوية المستخدم</string>
+		<!-- NSMicrophoneUsageDescription حُذِف (2026-10-05): لا استعمالَ
+		     للميكروفونِ في المستودعِ كلِّه، وسببُه المُعلَنُ كان «تابي
+		     يحتاج إلى الميكروفون للتحقق من هوية المستخدم» — وتابي أُزيلت
+		     من العميلِ في 2026-09-30. ونصُّ سببٍ يُسمّي طرفاً ثالثاً ليس
+		     في التطبيقِ هو ما يَقرؤه مُراجِعُ آبل. -->
 		<key>UIStatusBarHidden</key>
 		<false/>
 	</dict>
