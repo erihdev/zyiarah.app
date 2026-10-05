@@ -122,3 +122,89 @@ export function metaRows(meta: unknown): MetaRow[] {
             return [];
     }
 }
+
+/// تحويلٌ **صارم** مطابقٌ لـ`_num` في Dart (`double.tryParse ?? 0`): نصٌّ غيرُ
+/// رقميٍّ يصير صفراً. و`num` أعلى هذا الملفِّ أكثرُ تسامحاً (`parseFloat`،
+/// فـ`'4px'` تصير 4) — فرقٌ لا يَبلغُه شيءٌ يَكتبُه المشروعُ، ويُبقى كما هو
+/// كي يَبقى نقلُ هذه الدالّةِ من `Orders.tsx` محفوظَ السلوكِ حرفيّاً.
+const nStrict = (v: unknown): number => Number(v) || 0;
+
+/// ملخّصُ تفصيلِ الخدمةِ بسطرٍ واحد — **مرآةُ** `zyiarahServiceMetaSummary` في
+/// lib/widgets/service_meta_view.dart (مصدر الحقيقة). كانت هذه الدالة ترجع null
+/// لكل نوع عدا home_package، فيُسنِد الأدمن من الويب سائقاً وهو لا يرى عدد
+/// المكيفات ولا مقاسات الكنب ولا — الأخطر — عدد عاملات المناسبة وساعاتها،
+/// وهي جوهر الحجز نفسه.
+///
+/// ملاحظة: لا نستعمل o.worker_count / o.hours_contracted بديلاً؛ يحملهما **كل**
+/// طلب بقيم افتراضية (1 عاملة / 4 ساعات) فيطبعان بيانات كاذبة على غير محلّها.
+export const metaSummary = (meta: unknown): string | null => {
+    const m = meta as Record<string, unknown>;
+    if (!meta || typeof meta !== 'object') return null;
+    const parts: string[] = [];
+
+    switch (m.kind) {
+        // السيارات والمكيفات بنية بنود واحدة (label/count) — نفس الملخّص.
+        case 'ac_service':
+        case 'car_interior': {
+            if (!Array.isArray(m.lines)) return null;
+            for (const l of m.lines) {
+                const c = nStrict(l?.count);
+                if (c > 0) parts.push(`${l?.label ?? '-'} ×${c}`);
+            }
+            break;
+        }
+        case 'sofa_rug_sqm': {
+            if (!Array.isArray(m.pieces)) return null;
+            // تجميع حسب النوع: العدد والمقدار المسعَّر (م² للسجاد، م.ط للكنب).
+            const count: Record<string, number> = {};
+            const measure: Record<string, number> = {};
+            const unit: Record<string, string> = {};
+            for (const p of m.pieces) {
+                const label = `${p?.label ?? '-'}`.split(' ')[0]; // «كنب 1» → «كنب»
+                count[label] = (count[label] ?? 0) + 1;
+                // الطلبات القديمة (بلا billed_measure/uses_area) كانت كلها بالمساحة.
+                measure[label] = (measure[label] ?? 0) + nStrict(p?.billed_measure ?? p?.area_sqm);
+                unit[label] = p?.uses_area === false ? 'م.ط' : 'م²';
+            }
+            for (const label of Object.keys(count)) {
+                parts.push(`${label} ×${count[label]} (${measure[label].toFixed(2)} ${unit[label]})`);
+            }
+            break;
+        }
+        case 'store_products': {
+            if (!Array.isArray(m.items)) return null;
+            for (const it of m.items) {
+                const q = nStrict(it?.quantity);
+                if (q > 0) parts.push(`${it?.name ?? '-'} ×${q}`);
+            }
+            break;
+        }
+        case 'home_package': {
+            // نظيرُ Dart: `label is! String || label.isEmpty` — والنصُّ الفارغُ
+            // كاذبٌ في JS فالشرطانِ سواء.
+            if (typeof m.homeLabel !== 'string' || !m.homeLabel) return null;
+            const crews = nStrict(m.crewCount);
+            if (crews <= 0) return null;
+            parts.push(m.homeLabel);
+            parts.push(crews === 1 ? 'كادر واحد' : crews === 2 ? 'كادران' : `${crews} كوادر`);
+            const dur = nStrict(m.durationHours);
+            if (dur > 0) parts.push(`${dur}س`);
+            // تنبيه مبكّر: الطلب يحمل مواد يجب أن يجلبها السائق.
+            if (Array.isArray(m.materials) && m.materials.length > 0) {
+                parts.push(`+ ${m.materials.length} مادة`);
+            }
+            break;
+        }
+        case 'event_workers': {
+            const w = nStrict(m.workers);
+            const h = nStrict(m.event_hours);
+            if (w <= 0 || h <= 0) return null;
+            parts.push(w === 1 ? 'عاملة واحدة' : w === 2 ? 'عاملتان' : `${w} عاملات`);
+            parts.push(h === 2 ? 'ساعتان' : `${h} ساعات`);
+            break;
+        }
+        default:
+            return null;
+    }
+    return parts.length ? parts.join(' • ') : null;
+};

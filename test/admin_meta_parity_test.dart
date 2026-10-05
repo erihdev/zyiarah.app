@@ -58,8 +58,18 @@ void main() {
     }
   });
 
+  /// **سطحُ طلباتِ اللوحةِ كلُّه، لا ملفٌّ بعينه.** القواعدُ أدناه عن
+  /// «ما تَعرضُه اللوحةُ»، وكانت تَقرأُ `Orders.tsx` وحدَه — فحين انتقلَ
+  /// الملخّصُ إلى `utils/serviceMeta.ts` (موضعُه الصحيح: هو مرآةُ
+  /// `service_meta_view.dart` ويُختبَرُ هناك) سقطَ فحصانِ على **موضعِ** الشفرةِ
+  /// لا على معناها. فالنطاقُ صار الثلاثةَ معاً، ونقلٌ لاحقٌ بينها لا يَكسرُ شيئاً.
+  String webSurface() =>
+      read('admin_panel/src/pages/Orders.tsx') +
+      read('admin_panel/src/utils/serviceMeta.ts') +
+      read('admin_panel/src/components/ServiceMetaTable.tsx');
+
   test('لوحة الويب تعرض الأنواع الستة أيضاً', () {
-    final web = read('admin_panel/src/pages/Orders.tsx');
+    final web = webSurface();
     for (final k in kinds) {
       expect(web.contains("'$k'"), isTrue,
           reason: '$k غير معروض في لوحة الويب — الأدمن يُسنِد سائقاً بلا تفصيل');
@@ -67,7 +77,9 @@ void main() {
   });
 
   test('الويب لا يعرض حاجز home_package القديم', () {
-    final web = read('admin_panel/src/pages/Orders.tsx');
+    // النطاقُ هو السطحُ كلُّه: الحاجزُ كان في الملخّصِ، والملخّصُ انتقلَ إلى
+    // `utils/serviceMeta.ts` — فقراءةُ `Orders.tsx` وحدَه تَمرُّ **خاليةً**.
+    final web = webSurface();
     expect(web.contains("m.kind !== 'home_package'"), isFalse,
         reason: 'الحاجز الذي كان يُرجع null لكل نوع آخر');
   });
@@ -75,9 +87,19 @@ void main() {
   test('الويب لا يستعمل worker_count/hours_contracted بديلاً', () {
     // يحملهما **كل** طلب بقيم افتراضية (1 عاملة / 4 ساعات)، فعرضهما مباشرةً
     // يطبع بيانات كاذبة على طلبات لا علاقة لها بعدد العاملات.
-    final web = codeOnly('admin_panel/src/pages/Orders.tsx');
+    // وكذلك هنا: الملاحظةُ عن الملخّصِ، فالنطاقُ السطحُ كلُّه مُجرَّداً من
+    // التعليقاتِ (التعليقُ الشارحُ يُسمّي الحقلَين، فلولا التجريدُ سقطَ الفحصُ
+    // على توثيقِه).
+    final web = codeOnly('admin_panel/src/pages/Orders.tsx') +
+        codeOnly('admin_panel/src/utils/serviceMeta.ts') +
+        codeOnly('admin_panel/src/components/ServiceMetaTable.tsx');
     expect(web.contains('o.worker_count'), isFalse);
     expect(web.contains('o.hours_contracted'), isFalse);
+    // والمضادّة: الحقلانِ ما زالا مذكورَين في الخامِّ (التوثيق).
+    expect(
+        read('admin_panel/src/utils/serviceMeta.ts').contains('worker_count'),
+        isTrue,
+        reason: 'اختفى شرحُ القرارِ — راجِعْ ما جرّدَه الفحص');
   });
 
   test('الويب يعرض الجدول التفصيلي لا الملخّص فقط', () {
@@ -113,7 +135,7 @@ void main() {
   test('مواد التنظيف تظهر في الواجهتين', () {
     expect(read('lib/widgets/service_meta_view.dart').contains('materials'),
         isTrue);
-    final web = read('admin_panel/src/pages/Orders.tsx');
+    final web = webSurface();
     expect(web.contains('m.materials'), isTrue);
     expect(web.contains('مادة'), isTrue, reason: 'وسم «+ N مادة» كما في التطبيق');
   });
