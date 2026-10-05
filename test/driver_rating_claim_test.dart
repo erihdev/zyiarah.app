@@ -55,7 +55,12 @@ void main() {
 
   final perf = read('lib/screens/admin/admin_staff_performance_screen.dart');
   final web = read('admin_panel/src/pages/Drivers.tsx');
-  final idx = read('functions/index.js');
+  // **النطاقُ هو الخادمُ كلُّه لا `index.js` وحدَه (2026-10-05).** قاعدةُ
+  // استثناءِ البذرِ انتقلَت إلى `functions/rewards.js` مع تجميعِ التقييم،
+  // فسقطَ هذا الفحصُ — وهو الدرسُ نفسُه الذي أفرغَ فحصَين عند نقلِ ملخّصِ
+  // `serviceMeta`: فحصٌ مشدودٌ إلى **ملفٍّ** يَخلو بالنقلِ لا بالانحراف.
+  // فيُقرأُ الخادمُ بملفَّيه معاً، ونقلٌ لاحقٌ بينهما لا يُخلي شيئاً.
+  final idx = "${read('functions/index.js')}\n${read('functions/rewards.js')}";
 
   group('الخادمُ نفسُه يَستثني البذر', () {
     test('المتوسّطُ يُؤسَّس من الصفرِ عند أوّلِ تقييم', () {
@@ -203,7 +208,8 @@ void main() {
 void _serverOwnsRatingSideEffects() {
   final svc = File('lib/services/order_service.dart').readAsStringSync();
   final msg = File('lib/services/zyiarah_messaging_service.dart').readAsStringSync();
-  final idx = File('functions/index.js').readAsStringSync();
+  final idx = '${File('functions/index.js').readAsStringSync()}\n'
+      '${File('functions/rewards.js').readAsStringSync()}';
 
   String code(String src) => src.split('\n').where((l) {
         final t = l.trimLeft();
@@ -244,8 +250,13 @@ void _serverOwnsRatingSideEffects() {
     test('والخادمُ يُجمّعُ ويُنبّهُ فعلاً — فالحذفُ لا يُفقِدُ شيئاً', () {
       expect(idx.contains('exports.aggregateDriverRating'), isTrue);
       expect(idx.contains('exports.notifyAdminOnLowRating'), isTrue);
-      // كلاهما مرّةً واحدةً لكلِّ طلب (before.rating غائب).
-      expect(RegExp(r'before\.rating != null').allMatches(idx).length, 2);
+      // كلاهما مرّةً واحدةً لكلِّ طلب (before.rating غائب). **والعَدُّ على
+      // النصِّ المُجرَّدِ من التعليقات**: `rewards.js` يَشرحُ في رأسِه أنّ
+      // المانعَ كان حدثيّاً فيَذكرُ الشرطَ نصّاً — والعَدُّ على الخامِّ
+      // جعلَه ثلاثةً، وهو الفحصُ الساقطُ على توثيقِه نفسِه مرّةً أخرى.
+      expect(RegExp(r'before\.rating != null').allMatches(code(idx)).length, 2);
+      // والمضادّة: الشرطُ ما زال في الخامِّ، فلا يَكونُ التجريدُ قد أفرغَه.
+      expect(idx.contains('before.rating != null'), isTrue);
     });
 
     test('التعليقُ الكاذبُ أُزيل من الشفرةِ وبقي في شرحِ إزالتِه', () {

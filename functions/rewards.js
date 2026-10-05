@@ -42,6 +42,7 @@ const PENDING_FLAGS = {
   couponCount: "coupon_count_pending",
   visitAccounting: "visit_accounting_pending",
   referralPayout: "referral_payout_pending",
+  ratingAggregation: "rating_agg_pending",
 };
 
 /**
@@ -444,7 +445,102 @@ async function clearAndSkip(orderRef, why) {
   return {paid: false, skipped: why};
 }
 
+/**
+ * يُدخِلُ تقييمَ طلبٍ في متوسّطِ السائق، مرّةً واحدةً، ويَقولُ الفشل.
+ *
+ * **العطلُ الذي يُغلقُه:** المعامَلةُ كانت إنلاين في `aggregateDriverRating`
+ * و`catch`ها سطرُ `console.error` وحدَه، والمُشغّلُ بلا `retry`. والمتوسّطُ
+ * **تزايديٌّ** (`(avg * count + r) / (count + 1)`) لا يُعادُ حسابُه من كلِّ
+ * التقييمات — فمعامَلةٌ تَفشلُ تَعني أنّ ذلك التقييمَ **ضائعٌ من المتوسّطِ
+ * ومن العدّادِ إلى الأبد**. ولا مالَ فيه، لكنّ `rating_count` هو **المُميِّزُ**
+ * الذي تَقومُ عليه قاعدةُ «لا رقمَ قبل أن نعرفه» في `driver_rating.dart`،
+ * وشاشةُ الأداءِ تُرتّبُ به وتُسمّي «الأفضل» — فعدّادٌ ناقصٌ يُفسِدُ ترتيباً
+ * يَتّخذُ عليه الأدمنُ قراراً.
+ *
+ * **والمانعُ من التكرارِ كان حدثيّاً لا مستنديّاً** (`before.rating != null`)،
+ * فالدالّةُ لم تَكن آمنةً للنداءِ مرّتَين — ولا يُمكِنُ أن تُعادَ من مكنسة.
+ * فصارَ على الطلبِ علَمٌ (`rating_aggregated`) يُقرأُ **طازجاً داخلَ
+ * المعامَلة**، فالإعادةُ آمنةٌ والسلوكُ الظاهرُ كما كان (تقييمٌ يُحرَّرُ
+ * لاحقاً ما زالَ لا يُحتسَبُ مرّةً ثانية).
+ *
+ * @param {object} db Firestore.
+ * @param {object} args المعطيات.
+ * @param {object} args.orderRef مرجعُ الطلب.
+ * @param {string} args.orderId معرّفُ الطلب.
+ * @param {string} args.driverId معرّفُ السائق.
+ * @param {number} args.rating التقييمُ (1–5).
+ * @param {boolean} [args.alreadyAlerted] هل صُعِّدَ الفشلُ سابقاً؟
+ * @param {Function} queuePush طابورُ الإشعارات.
+ * @return {Promise<{aggregated: boolean, skipped?: string, failed?: string}>}
+ *   النتيجة.
+ */
+async function aggregateRating(db, args, queuePush) {
+  const {orderRef, orderId, driverId, rating} = args;
+  const r = Number(rating);
+  if (isNaN(r) || r < 1 || r > 5) {
+    return {aggregated: false, skipped: "invalid_rating"};
+  }
+  const ref = db.collection("drivers").doc(driverId);
+  let skipped = null;
+  try {
+    await db.runTransaction(async (tx) => {
+      const oSnap = await tx.get(orderRef);
+      if (oSnap.get("rating_aggregated") === true) {
+        skipped = "already_aggregated";
+        return;
+      }
+      const snap = await tx.get(ref);
+      if (!snap.exists) {
+        skipped = "no_driver";
+        return;
+      }
+      const d = snap.data();
+      const count = Number(d.rating_count || 0);
+      // البذر الثابت (rating: 5 بلا عدّاد) لا يدخل المتوسط — أول تقييم حقيقي
+      // يؤسس المتوسط من الصفر.
+      const avg = count > 0 ? Number(d.rating_avg || d.rating || 0) : 0;
+      const newCount = count + 1;
+      const newAvg = Math.round(((avg * count + r) / newCount) * 100) / 100;
+      tx.update(ref, {
+        rating_count: newCount,
+        rating_avg: newAvg,
+        rating: newAvg, // الحقل الذي تعرضه بطاقات الإدارة والعميل حالياً
+      });
+      tx.update(orderRef, {
+        rating_aggregated: true,
+        [PENDING_FLAGS.ratingAggregation]: FieldValue.delete(),
+      });
+    });
+    if (skipped) {
+      await orderRef.update({
+        [PENDING_FLAGS.ratingAggregation]: FieldValue.delete(),
+      }).catch(() => {});
+      return {aggregated: false, skipped};
+    }
+    return {aggregated: true};
+  } catch (e) {
+    const note = e && e.message ? e.message : "unknown";
+    await orderRef.update({
+      [PENDING_FLAGS.ratingAggregation]: true,
+      rating_agg_failed_reason: note,
+      rating_agg_alerted: true,
+    }).catch(() => {});
+    if (!args.alreadyAlerted && typeof queuePush === "function") {
+      await queuePush("ADMIN_BROADCAST",
+          "تعذّر إدخالُ تقييمٍ في متوسّطِ السائق ⚠️",
+          `تقييمُ الطلب #${args.code || orderId} (${r}★) لم يَدخُلْ متوسّطَ ` +
+          `السائقِ ولا عدّادَه (${note}). المتوسّطُ تزايديٌّ فالتقييمُ يَضيعُ ` +
+          "بلا إعادة؛ المكنسة تُعيد المحاولة.",
+          "admin_order_alert",
+          {orderId, driverId, ratingAggFailed: true},
+          ["super_admin", "orders_manager"]).catch(() => {});
+    }
+    return {aggregated: false, failed: note};
+  }
+}
+
 module.exports = {
+  aggregateRating,
   payReferralBonus,
   settleVisitAccounting,
   PENDING_FLAGS,

@@ -490,6 +490,117 @@ tAsync("(هـ٥) والمسارُ الاحتياطيُّ: مستندُ إحال�
       assert.ok(db._store.get("wallets/boss/transactions/refbonus_xyz99"));
     });
 
+// ── تجميعُ تقييمِ السائق ──────────────────────────────────────────────────
+tAsync("(و١) أوّلُ تقييمٍ يُؤسّسُ المتوسّطَ من الصفرِ لا من بذرِ ٥٫٠",
+    async () => {
+      const db = fakeDb({
+        "orders/o5": {code: "T5", rating: 4},
+        // البذرُ عند التوفير: rating 5 **بلا** عدّاد.
+        "drivers/d1": {rating: 5, name: "x"},
+      });
+      const r = await rewards.aggregateRating(db, {
+        orderRef: db._ref("orders/o5"), orderId: "o5", driverId: "d1",
+        rating: 4, code: "T5",
+      }, async () => null);
+      assert.strictEqual(r.aggregated, true);
+      const d = db._store.get("drivers/d1");
+      assert.strictEqual(d.rating_count, 1);
+      assert.strictEqual(d.rating_avg, 4, "بذرُ ٥٫٠ دخلَ المتوسّط");
+      assert.strictEqual(d.rating, 4);
+      assert.strictEqual(db._store.get("orders/o5").rating_aggregated, true);
+    });
+
+tAsync("(و١ب) وبذرٌ **غيرُ رقميٍّ** لا يُفسِدُ أوّلَ متوسّط", async () => {
+  // اختبارُ قضمٍ لم يَقضم كشفَ أنّ شرطَ `count > 0` ليس حسابيّاً: `avg * 0`
+  // صفرٌ أيّاً كان `avg`. فما يَحرُسُه حقّاً هو **البذرُ التالف**:
+  // `Number("ممتاز")` هو `NaN`، و`NaN * 0` هو `NaN`، فالمتوسّطُ كلُّه
+  // يَصيرُ `NaN` (وFirestore لا تَقبلُه فتَسقطُ الكتابة).
+  const db = fakeDb({
+    "orders/o5": {code: "T5", rating: 4},
+    "drivers/d1": {rating: "ممتاز"},
+  });
+  const r = await rewards.aggregateRating(db, {
+    orderRef: db._ref("orders/o5"), orderId: "o5", driverId: "d1",
+    rating: 4, code: "T5",
+  }, async () => null);
+  assert.strictEqual(r.aggregated, true);
+  const d = db._store.get("drivers/d1");
+  assert.strictEqual(d.rating_avg, 4,
+      `المتوسّطُ ${d.rating_avg} — بذرٌ تالفٌ تسرّبَ إلى الحساب`);
+  assert.strictEqual(d.rating_count, 1);
+});
+
+tAsync("(و٢) والمتوسّطُ التزايديُّ صحيح", async () => {
+  const db = fakeDb({
+    "orders/o6": {code: "T6", rating: 3},
+    "drivers/d1": {rating_count: 3, rating_avg: 5},
+  });
+  await rewards.aggregateRating(db, {
+    orderRef: db._ref("orders/o6"), orderId: "o6", driverId: "d1",
+    rating: 3, code: "T6",
+  }, async () => null);
+  const d = db._store.get("drivers/d1");
+  assert.strictEqual(d.rating_count, 4);
+  assert.strictEqual(d.rating_avg, 4.5, "(5*3 + 3) / 4 = 4.5");
+});
+
+tAsync("(و٣) **والإعادةُ آمنة**: المانعُ علَمٌ على المستندِ لا شرطُ حدث",
+    async () => {
+      // كان المانعُ `before.rating != null` — حدثيّاً، فالدالّةُ لم تَكن
+      // قابلةً للإعادةِ من مكنسةٍ أصلاً (تَحتسبُ التقييمَ مرّتَين).
+      const db = fakeDb({
+        "orders/o5": {code: "T5", rating: 4, rating_aggregated: true,
+          rating_agg_pending: true},
+        "drivers/d1": {rating_count: 1, rating_avg: 4},
+      });
+      const r = await rewards.aggregateRating(db, {
+        orderRef: db._ref("orders/o5"), orderId: "o5", driverId: "d1",
+        rating: 4, code: "T5",
+      }, async () => null);
+      assert.strictEqual(r.skipped, "already_aggregated");
+      assert.strictEqual(db._store.get("drivers/d1").rating_count, 1,
+          "احتُسِبَ التقييمُ مرّتَين");
+      assert.deepStrictEqual(db._store.get("orders/o5").rating_agg_pending,
+          FieldValue.delete());
+    });
+
+tAsync("(و٤) وتقييمٌ خارجَ المدى أو سائقٌ محذوفٌ ⇒ تخطٍّ لا فشل", async () => {
+  const bad = fakeDb({"orders/o5": {rating: 9}});
+  assert.strictEqual(
+      (await rewards.aggregateRating(bad, {
+        orderRef: bad._ref("orders/o5"), orderId: "o5", driverId: "d1",
+        rating: 9,
+      }, async () => null)).skipped, "invalid_rating");
+  const gone = fakeDb({"orders/o5": {rating: 4, rating_agg_pending: true}});
+  const r = await rewards.aggregateRating(gone, {
+    orderRef: gone._ref("orders/o5"), orderId: "o5", driverId: "ghost",
+    rating: 4,
+  }, async () => null);
+  assert.strictEqual(r.skipped, "no_driver");
+  assert.deepStrictEqual(gone._store.get("orders/o5").rating_agg_pending,
+      FieldValue.delete(), "علمٌ يَبقى على سائقٍ لا يَعودُ أبداً");
+});
+
+tAsync("(و٥) الفشل: العلمُ والسببُ، وتصعيدٌ واحد", async () => {
+  const db = fakeDb({
+    "orders/o5": {code: "T5", rating: 4}, "drivers/d1": {rating_count: 0},
+  });
+  db.runTransaction = async () => {
+    throw new Error("contention");
+  };
+  const pushes = [];
+  const r = await rewards.aggregateRating(db, {
+    orderRef: db._ref("orders/o5"), orderId: "o5", driverId: "d1",
+    rating: 4, code: "T5",
+  }, async (...a) => pushes.push(a));
+  assert.strictEqual(r.failed, "contention");
+  const o = db._store.get("orders/o5");
+  assert.strictEqual(o.rating_agg_pending, true);
+  assert.strictEqual(o.rating_agg_failed_reason, "contention");
+  assert.strictEqual(pushes.length, 1);
+  assert.deepStrictEqual(pushes[0][5], ["super_admin", "orders_manager"]);
+});
+
 // ── حُرّاسُ المصدر ────────────────────────────────────────────────────────
 const ROOT = path.join(__dirname, "..");
 const idxRaw = fs.readFileSync(path.join(ROOT, "index.js"), "utf8");
@@ -526,11 +637,17 @@ t("(ج١) index.js لا يَحملُ المعامَلاتِ إنلاين، وا�
     "المُحالةِ يَضيعانِ بلا تنبيهٍ ولا محاولةٍ ثانية");
   assert.ok(!idx.includes("async function processReferralRewardServer"),
       "الدالّةُ عادَت إلى index.js");
+  // والموضعُ الخامس: تجميعُ تقييمِ السائق — متوسّطٌ تزايديٌّ يَضيعُ بلا إعادة.
+  assert.ok(!idx.includes("aggregateDriverRating: ${event.params.orderId}"),
+      "`catch` تجميعِ التقييمِ الصامتُ عادَ");
+  assert.ok(!/tx\.update\(ref, \{\s*rating_count:/.test(idx),
+      "حسابُ المتوسّطِ عادَ إنلاين إلى index.js");
   for (const call of [
     "rewards.grantQatratPoints(db, {",
     "rewards.countCouponUse(db, {",
     "rewards.settleVisitAccounting(db, {",
     "rewards.payReferralBonus(db, {",
+    "rewards.aggregateRating(db, {",
   ]) {
     assert.ok(idx.includes(call), `النداءُ غائب: ${call}`);
   }
@@ -554,11 +671,17 @@ t("(ج٢) والمكنسةُ تَستعلمُ **العلمَ** لا الحالة
         idx.includes(`.where(rewards.PENDING_FLAGS.${k}, "==", true)`),
         `استعلامُ المكنسةِ لـ${k} ليس على علمِ الفشل (أو غائب)`);
   }
-  for (const line of [
-    /qatrat retried=/, /coupon-count retried=/, /visit-accounting retried=/,
-    /referral retried=/,
-  ]) {
-    assert.ok(line.test(idx), `سطرُ سجلِّ المكنسةِ غائب: ${line}`);
+  // ولكلِّ علَمٍ سطرُ سجلٍّ **في كتلتِه**. قائمةُ الأسطرِ المكتوبةُ كانت
+  // تَتخلّفُ عن العلمِ الخامسِ بصمت؛ وعَدُّ الأسطرِ في الملفِّ كلِّه
+  // يَتجاوزُ النطاقَ (مكنسةُ `refund_engine` لها سطرُها أيضاً) — فالرابطُ
+  // هو كتلةُ العلمِ نفسُها.
+  for (const k of names) {
+    const at = idx.indexOf(`.where(rewards.PENDING_FLAGS.${k}, "==", true)`);
+    const blk = idx.slice(at, at + 1400);
+    assert.ok(/opsHealthSweep: [a-z-]+ retried=/.test(blk),
+        `كتلةُ ${k} بلا سطرِ سجلّ — فشلٌ صامتٌ في المكنسةِ نفسِها`);
+    assert.ok(/alreadyAlerted:/.test(blk),
+        `كتلةُ ${k} لا تُمرّرُ alreadyAlerted — تصعيدٌ مكرَّرٌ كلَّ دورة`);
   }
 });
 

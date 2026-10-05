@@ -427,27 +427,20 @@ exports.aggregateDriverRating = onDocumentUpdated(
       const driverId = after.driver_id;
       if (!driverId) return null;
       const db = getFirestore();
-      const ref = db.collection("drivers").doc(driverId);
-      try {
-        await db.runTransaction(async (tx) => {
-          const snap = await tx.get(ref);
-          if (!snap.exists) return;
-          const d = snap.data();
-          const count = Number(d.rating_count || 0);
-          // البذر الثابت (rating: 5 بلا عدّاد) لا يدخل المتوسط — أول تقييم حقيقي
-          // يؤسس المتوسط من الصفر.
-          const avg = count > 0 ? Number(d.rating_avg || d.rating || 0) : 0;
-          const newCount = count + 1;
-          const newAvg = Math.round(((avg * count + r) / newCount) * 100) / 100;
-          tx.update(ref, {
-            rating_count: newCount,
-            rating_avg: newAvg,
-            rating: newAvg, // الحقل الذي تعرضه بطاقات الإدارة والعميل حالياً
-          });
-        });
-      } catch (e) {
-        console.error(`aggregateDriverRating: ${event.params.orderId} -> ${driverId} failed:`, e.message);
-      }
+      // **المنطقُ انتقلَ إلى `rewards.aggregateRating`.** كان هنا و`catch`ه
+      // سطرَ `console.error` وحدَه، والمتوسّطُ **تزايديٌّ** لا يُعادُ حسابُه
+      // من كلِّ التقييمات — فمعامَلةٌ تَفشلُ تَعني تقييماً ضائعاً من المتوسّطِ
+      // ومن `rating_count` إلى الأبد، وذلك العدّادُ هو مُميِّزُ «لا رقمَ قبل
+      // أن نعرفه» وأساسُ ترتيبِ شاشةِ الأداء. ومانعُ التكرارِ صارَ **علَماً
+      // على المستند** لا شرطاً على الحدث، فالإعادةُ من المكنسةِ آمنة.
+      const orderId = event.params.orderId;
+      await rewards.aggregateRating(db, {
+        orderRef: db.collection("orders").doc(orderId),
+        orderId,
+        driverId,
+        rating: r,
+        code: after.code || orderId,
+      }, queuePush);
       return null;
     });
 
@@ -5049,6 +5042,32 @@ exports.opsHealthSweep = onSchedule(
         console.log(`opsHealthSweep: referral retried=${fixed} stuck=${stuck}`);
       } catch (e) {
         console.error("opsHealthSweep: referral retry failed:", e.message);
+      }
+
+      // وتقييمٌ لم يَدخُلْ متوسّطَ السائق. الاستعلامُ على **العلمِ** لا على
+      // وجودِ `rating` — ذلك حالةٌ طبيعيّةٌ لكلِّ طلبٍ مُقيَّم.
+      try {
+        const gSnap = await db.collection("orders")
+            .where(rewards.PENDING_FLAGS.ratingAggregation, "==", true)
+            .limit(200).get();
+        let fixed = 0; let stuck = 0;
+        for (const doc of gSnap.docs) {
+          const d = doc.data();
+          if (!d.driver_id) continue;
+          const r = await rewards.aggregateRating(db, {
+            orderRef: doc.ref,
+            orderId: doc.id,
+            driverId: d.driver_id,
+            rating: d.rating,
+            code: d.code || doc.id,
+            alreadyAlerted: d.rating_agg_alerted === true,
+          }, queuePush);
+          if (r.aggregated) fixed++;
+          else if (r.failed) stuck++;
+        }
+        console.log(`opsHealthSweep: rating-agg retried=${fixed} stuck=${stuck}`);
+      } catch (e) {
+        console.error("opsHealthSweep: rating-agg retry failed:", e.message);
       }
 
       // 6) إشعارات لم يلمسها processNotificationTriggers أصلاً (انقطاع الدوال 8–18
