@@ -229,6 +229,10 @@ service cloud.firestore {
           // للثمانيةِ، و`final_amount` ١٤ قراءةً بلا كتابة.
           'ops_alerted_mismatch', 'ops_alerted_noshow',
           'ops_alerted_paid_awaiting', 'ops_alerted_stuck',
+          // و`ops_alerted_unverifiable` عضوٌ خامسٌ في العائلةِ نفسِها (أُضيف
+          // مع مكنسةِ «تعذّر التحقّق»)، و`price_paid` هو الرقمُ الذي تَعرضُه
+          // بطاقةُ المراجعةِ للإدارة — فكتابتُه عميليّاً تَكذبُ على من يُقرّر.
+          'ops_alerted_unverifiable', 'price_paid',
           'tamper_handled', 'tamper_blocked',
           'price_mismatch', 'price_unverifiable', 'price_expected',
           'price_expected_net', 'price_shadow_ratio',
@@ -241,6 +245,10 @@ service cloud.firestore {
           'refund_credit_failed', 'refund_credit_alerted',
           'qatrat_pending', 'qatrat_alerted',
           'coupon_count_pending', 'coupon_count_alerted',
+          // وقرارُ مراجعةِ السعرِ قرارٌ إداريٌّ موقَّعٌ باسمِ من اتّخذَه —
+          // عميلةٌ تُنشئُ طلبَها بـ`price_review_decision: 'approved'` تَكتبُ
+          // شهادةً لم يُوقّعها أحد.
+          'price_review_decision', 'price_reviewed_by', 'price_reviewed_at',
         ]);
 
       // Orders manager: full update (approve, assign driver -> scheduled, override status)

@@ -9,7 +9,14 @@ import {
   limit,
   Timestamp
 } from 'firebase/firestore';
-import { db } from '../services/firebase.ts';
+import { db, auth } from '../services/firebase.ts';
+// وسمُ مراجعةِ السعرِ: `_verifyStoreOrderPrice` يَسِمُ `store_orders` بنفسِ
+// حقولِ `orders`، وهذه إحدى شاشتَي عرضِها — ولم تكن تَذكرُ منه شيئاً.
+import {
+  priceReviewOf, priceReviewApprovalPayload, priceReviewLine,
+} from '../utils/priceReview.ts';
+import PriceReviewBadge from '../components/PriceReviewBadge.tsx';
+import { logAudit, AUDIT } from '../services/audit.ts';
 import { useNotification } from '../components/notificationContext.ts';
 import {
   ShoppingBag,
@@ -38,6 +45,16 @@ interface StoreOrder {
   status: 'pending' | 'awaiting_payment' | 'under_review' | 'delivering' | 'approved' | 'rejected' | 'processing' | 'shipped' | 'delivered' | 'completed' | 'pending_admin_approval';
   is_paid?: boolean;
   created_at: Timestamp;
+  // أعلامُ تحقّقِ السعرِ الخادميّ (Tier A — وسمٌ وتنبيهٌ لا رفض).
+  price_mismatch?: boolean;
+  price_unverifiable?: boolean;
+  price_paid?: number;
+  price_expected?: number;
+  price_expected_net?: number;
+  price_shadow_ratio?: number;
+  coupon_rejected_reason?: string;
+  price_reviewed_at?: Timestamp;
+  price_reviewed_by?: string;
 }
 
 // حالة مدفوعة = العميل دفع فعلاً؛ كانت اللوحة تعرضها كـ"قيد الانتظار" وتُظهر أزرار موافقة/رفض خطأً.
@@ -103,6 +120,25 @@ export default function StoreOrders() {
       // فيَظنُّ أنّه ضغطَ خطأً ويُعيد. والعميلةُ لا تُشعَر بشيء.
       console.error("Error updating order status:", error);
       toast.error(error instanceof Error ? error.message : 'تعذّر تحديث حالة الطلب');
+    }
+  };
+
+  // اعتمادُ المبلغِ الموسوم — يُبطِلُ علمَي الاستعلامِ فيَخرُجُ المستندُ من
+  // نافذةِ `opsHealthSweep`. بلا هذا المسارِ كان الوسمُ يَبقى للأبد.
+  const handleApprovePrice = async (id: string) => {
+    try {
+      await updateDoc(doc(db, 'store_orders', id), {
+        ...priceReviewApprovalPayload(auth.currentUser?.email ?? 'Unknown Admin'),
+        price_reviewed_at: Timestamp.now(),
+        updated_at: Timestamp.now()
+      });
+      await logAudit(AUDIT.REVIEW_ORDER_PRICE, {
+        decision: 'approved', collection: 'store_orders',
+      }, id);
+      toast.success('تم اعتماد المبلغ');
+    } catch (error) {
+      console.error("Error approving store order price:", error);
+      toast.error(error instanceof Error ? error.message : 'تعذّر اعتماد المبلغ');
     }
   };
 
@@ -190,6 +226,8 @@ export default function StoreOrders() {
                   }`}>
                     {STATUS_LABELS[order.status] ?? order.status}
                   </div>
+                  {/* في الرأسِ لا داخلَ التوسيع: الوسمُ يَجبُ أن يُرى بلا نقر. */}
+                  <PriceReviewBadge r={priceReviewOf(order as unknown as Record<string, unknown>)} />
                   <div className="bg-slate-50 p-1.5 rounded-lg text-slate-400">
                     {expandedOrders.has(order.id) ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                   </div>
@@ -249,6 +287,25 @@ export default function StoreOrders() {
                           <CheckCircle size={18} />
                           <span>بدء التوصيل</span>
                         </button>
+                      )}
+                      {priceReviewOf(order as unknown as Record<string, unknown>).actionable && (
+                        <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-4 space-y-2">
+                          <p className="text-sm font-bold text-rose-700">
+                            {priceReviewLine(priceReviewOf(order as unknown as Record<string, unknown>))}
+                          </p>
+                          <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                            الطلب لم يُرفض دفعُه (سياسة مقصودة) — راجع المبلغ واسترد الفارق،
+                            أو اعتمده كما هو.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => handleApprovePrice(order.id)}
+                            className="w-full flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white py-2.5 rounded-xl font-bold transition-all"
+                          >
+                            <CheckCircle size={16} />
+                            <span>اعتماد المبلغ</span>
+                          </button>
+                        </div>
                       )}
                       {(order.status === 'delivering' || order.status === 'shipped') && (
                         <button

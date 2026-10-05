@@ -16,6 +16,7 @@ import '../../utils/order_lifecycle.dart';
 import 'package:zyiarah/screens/map_screen.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/phone_format.dart';
+import 'package:zyiarah/utils/price_review.dart';
 
 class AdminOrderDetailsScreen extends StatefulWidget {
   final String orderId;
@@ -68,6 +69,9 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   /// العميقة فكانت اللوحة تَعِدهم بحفظٍ مصيره الرفض. الافتراض «عرض فقط» حتى
   /// يثبت الدور (كما تجلبه AdminDashboardScreen).
   bool _canEditOrders = false;
+
+  /// قيد اعتماد مبلغٍ موسوم — يمنع نقرتين متتاليتين.
+  bool _approvingPrice = false;
 
   Future<void> _fetchAdminRole() async {
     try {
@@ -621,6 +625,199 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
     }
   }
 
+  /// **بطاقةُ مراجعةِ السعر — القارئُ الذي لم يكن موجوداً.**
+  ///
+  /// تحقّقُ السعرِ الخادميُّ سياستُه «وسمٌ وتنبيهٌ لا رفض»، فمُخرَجُه أعلامٌ
+  /// على المستندِ ودفعةٌ إداريّةٌ نصُّها «راجع المبالغ واسترد الفارق أو
+  /// اعتمده» — ولم يكن لأيٍّ من تلك الأعلامِ قارئٌ في أيِّ واجهة، فالإدارةُ
+  /// تَفتحُ الطلبَ المُبلَّغَ عنه فتَراه طلباً عاديّاً تماماً. وشرحُ القرارِ
+  /// كاملاً في `lib/utils/price_review.dart`.
+  Widget _buildPriceReviewCard(Map<String, dynamic> data) {
+    final PriceReview r = priceReviewOf(data);
+    final bool pending = r.actionable;
+    final Color accent = pending
+        ? (r.kind == PriceReviewKind.underpaid
+            ? const Color(0xFFB91C1C)
+            : const Color(0xFFB45309))
+        : const Color(0xFF15803D);
+
+    String headline;
+    String explain;
+    if (r.kind == PriceReviewKind.underpaid) {
+      headline = 'مراجعة سعر — المبلغ أدنى من المتوقَّع';
+      // خصمٌ بلغَ السعرَ كاملاً: لا نسبةَ له (قسمةٌ على صفر) والمتوقَّعُ صفرٌ —
+      // فالصياغةُ تقول ما جرى بدل «دُفع 120 مقابل 0».
+      explain = r.suspiciousZero
+          ? 'الخصم المحتسب بلغ السعر كاملاً ومع ذلك دُفع مبلغ — راجعي الكوبون المستخدَم.'
+          : 'الطلب خُدم ولم يُرفض الدفع (سياسة مقصودة)، فالقرار قرارك: '
+              'استردي الفارق من عمليات الدفع أدناه، أو اعتمدي المبلغ.';
+    } else if (r.kind == PriceReviewKind.unverifiable) {
+      headline = 'تعذّر التحقّق من السعر';
+      explain = 'نوع الطلب قابل للتسعير لكن تعذّر حساب سعره خادميّاً '
+          '(منطقة غير محلولة، أو سلّة فيها منتج محذوف). هذا ليس نقصاً في '
+          'الدفع — هو أنّنا لم نتمكّن من المقارنة.';
+    } else {
+      headline = 'سعر هذا الطلب تُوثِّقه مراجعة سابقة';
+      explain = 'لا وسم قائم على المستند الآن.';
+    }
+
+    final String? reviewedBy = data['price_reviewed_by'] as String?;
+    final String? reason = r.couponRejectedReason;
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      color: pending ? const Color(0xFFFFFBEB) : const Color(0xFFF0FDF4),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(pending ? Icons.price_check_rounded : Icons.verified_rounded,
+                    color: accent, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(headline,
+                      style: GoogleFonts.tajawal(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: accent)),
+                ),
+              ],
+            ),
+            const Divider(),
+            // الأرقامُ كما سجّلَها الخادمُ لحظةَ الفحص — لا حسابَ عكسيّاً من
+            // النسبة، ولا `price_expected` قبلَ الخصمِ (يُضخّمُ الفارق).
+            if (r.paid != null || r.expected != null)
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (r.paid != null)
+                    _priceChip('المدفوع', '${r.paid!.toStringAsFixed(2)} ر.س'),
+                  if (r.expected != null)
+                    _priceChip('المتوقَّع', '${r.expected!.toStringAsFixed(2)} ر.س'),
+                  if (r.ratio != null)
+                    _priceChip('النسبة', '${(r.ratio! * 100).toStringAsFixed(1)}%'),
+                  if (r.shortfall != null)
+                    _priceChip('الفارق', '${r.shortfall!.toStringAsFixed(2)} ر.س'),
+                ],
+              ),
+            if (reason != null) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Icon(Icons.local_offer_outlined,
+                      size: 16, color: Colors.grey),
+                  const SizedBox(width: 6),
+                  // الكوبونُ المرفوضُ خادميّاً لا يُرفَضُ له الطلب، فالخصمُ
+                  // مُنح والمبلغُ نقص — والمحاسبةُ لم يكن لها سبيلٌ إلى معرفةِ
+                  // السببِ أصلاً.
+                  Expanded(
+                    child: Text(
+                      'كوبون مرفوض خادميّاً: '
+                      '${kCouponRejectReasons[reason] ?? reason}',
+                      style: GoogleFonts.tajawal(
+                          fontSize: 12, color: Colors.grey.shade800),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 10),
+            Text(explain, style: GoogleFonts.tajawal(fontSize: 12, height: 1.5)),
+            if (!pending && reviewedBy != null) ...[
+              const SizedBox(height: 8),
+              Text('اعتُمد بواسطة $reviewedBy',
+                  style: GoogleFonts.tajawal(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: accent)),
+            ],
+            if (pending && _canEditOrders) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: _approvingPrice
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.check_rounded, size: 18),
+                  label: Text(
+                      _approvingPrice ? 'جارٍ الاعتماد…' : 'اعتمدتُ المبلغ'),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: accent, foregroundColor: Colors.white),
+                  onPressed: _approvingPrice ? null : _approveOrderPrice,
+                ),
+              ),
+            ],
+            if (pending && !_canEditOrders) ...[
+              const SizedBox(height: 10),
+              Text('اعتماد المبلغ متاح لمديري الطلبات — هذه البطاقة للعرض لديك.',
+                  style: GoogleFonts.tajawal(
+                      fontSize: 12, color: Colors.grey.shade700)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _priceChip(String label, String value) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Text('$label: $value',
+            style:
+                GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.w700)),
+      );
+
+  /// يُبطِلُ علمَي الاستعلامِ ويُوقّعُ القرار. حقولُ الشاهدِ تَبقى.
+  Future<void> _approveOrderPrice() async {
+    if (_approvingPrice) return;
+    setState(() => _approvingPrice = true);
+    try {
+      final String by =
+          FirebaseAuth.instance.currentUser?.email ?? 'Unknown Admin';
+      await _db.collection(_srcCollection).doc(widget.orderId).update({
+        ...priceReviewApprovalPayload(by),
+        'price_reviewed_at': FieldValue.serverTimestamp(),
+      }).timeout(kNetCallTimeout);
+      await ZyiarahAuditService().logAction(
+        action: ZyiarahAuditService.actionReviewOrderPrice,
+        targetId: widget.orderId,
+        details: {
+          'order_code': _orderData?['code'] ?? widget.orderId,
+          'decision': 'approved',
+          'paid': '${_orderData?['price_paid'] ?? ''}',
+          'expected':
+              '${_orderData?['price_expected_net'] ?? _orderData?['price_expected'] ?? ''}',
+        },
+      );
+      await _fetchOrder();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('تم اعتماد المبلغ ✅'), backgroundColor: Colors.green));
+      }
+    } catch (e) {
+      // نصُّ الاستثناءِ الخامُّ مقصودٌ في شاشاتِ الإدارة (تشخيصٌ للمالك).
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('تعذّر اعتماد المبلغ: $e'),
+            backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _approvingPrice = false);
+    }
+  }
+
   Widget _buildMoyasarOperationsCard(Map<String, dynamic> data) {
     final String paymentId = data['moyasar_payment_id'] as String? ?? '';
     final String moyasarStatus = data['moyasar_status'] as String? ?? data['payment_status'] as String? ?? '';
@@ -1140,6 +1337,13 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                 ),
               ),
             ),
+            // ── مراجعة السعر (Tier A) ───────────────────────────────────────────
+            // تظهر لكل الأدوار الإدارية: المحاسب في جمهور التنبيه، والزرّ وحده
+            // محكوم بـ_canEditOrders كبقيّة الكتابات في هذه الشاشة.
+            if (priceReviewOf(data).needsCard) ...[
+              const SizedBox(height: 15),
+              _buildPriceReviewCard(data),
+            ],
             // ── Moyasar Payment Operations ──────────────────────────────────────
             // دوال ميسر (استرداد/إلغاء/تحصيل) تتحقق خادمياً من _assertAdmin الذي
             // يقصرها على admin/super_admin/orders_manager — عرض البطاقة للمحاسب/

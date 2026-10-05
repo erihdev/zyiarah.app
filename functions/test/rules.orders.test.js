@@ -120,6 +120,26 @@ const {setDoc, doc} = require("firebase/firestore");
           {client_id: uid, status: "pending", is_paid: false,
             coupon_count_pending: true, amount: 200}),
       false);
+  // وعلمُ فئةِ «تعذّر التحقّق» — عضوٌ خامسٌ في عائلةِ `alertBatch` (أُضيف مع
+  // مكنستِها): ضبطُه سلفاً يُسقِطُ المستندَ من نافذةِ التنبيهِ كأخواتِه.
+  await check("mute: ops_alerted_unverifiable at create -> DENIED",
+      setDoc(doc(db, "orders/mute8"),
+          {client_id: uid, status: "pending", is_paid: false,
+            ops_alerted_unverifiable: true, amount: 200}),
+      false);
+  // وشهادةُ المراجعةِ: `price_mismatch: false` هي ما تَكتبُه الإدارةُ عند
+  // الاعتماد، و`price_review_decision` توقيعُها — فعميلةٌ تُنشئُ طلبَها
+  // بهما تَكتبُ شهادةً لم يُوقّعها أحدٌ وتُخرِجُ مستندَها من المسحِ سلفاً.
+  await check("mute: price_review_decision at create -> DENIED",
+      setDoc(doc(db, "orders/mute9"),
+          {client_id: uid, status: "pending", is_paid: false,
+            price_review_decision: "approved", amount: 200}),
+      false);
+  await check("trust: price_paid at create -> DENIED",
+      setDoc(doc(db, "orders/mute10"),
+          {client_id: uid, status: "pending", is_paid: false,
+            price_paid: 1, amount: 200}),
+      false);
   // ولا يُكسَرُ الإنشاءُ الشرعيُّ: الحقولُ التي يَكتبُها التطبيقُ فعلاً تمرّ.
   await check("legit: the app's own create fields -> ALLOWED",
       setDoc(doc(db, "orders/ok3"),

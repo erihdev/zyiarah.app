@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/price_review.dart';
 
 class AdminStoreOrdersScreen extends StatefulWidget {
   const AdminStoreOrdersScreen({super.key});
@@ -46,6 +48,117 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
         final String msg = e is FirebaseException && e.code == 'permission-denied'
             ? 'لا تملك صلاحية تحديث طلبات المتجر'
             : 'حدث خطأ أثناء التحديث: $e';
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  /// **وسمُ مراجعةِ السعرِ على طلبِ متجرٍ كان بلا قارئٍ أيضاً.**
+  ///
+  /// `_verifyStoreOrderPrice` يَسِمُ المستندَ بنفسِ حقولِ `orders`
+  /// (`price_mismatch` / `price_unverifiable` / `price_expected` …) ويُنبّهُ
+  /// الإدارةَ بأكوادٍ — وهذه هي الشاشةُ الوحيدةُ التي تَعرضُ طلباتِ المتجر،
+  /// ولم تكن تَذكرُ شيئاً من ذلك. والاعتمادُ هو ما يُصرّفُ نافذةَ المكنسة.
+  Widget _priceReviewBanner(BuildContext context, String orderId,
+      Map<String, dynamic> order) {
+    final PriceReview r = priceReviewOf(order);
+    if (!r.needsCard) return const SizedBox.shrink();
+    final bool pending = r.actionable;
+    final Color accent =
+        pending ? const Color(0xFFB91C1C) : const Color(0xFF15803D);
+    final String line = r.kind == PriceReviewKind.underpaid
+        ? (r.paid != null && r.expected != null
+            ? 'مراجعة سعر: دُفع ${r.paid!.toStringAsFixed(2)} مقابل ${r.expected!.toStringAsFixed(2)} ر.س'
+            : 'مراجعة سعر: المبلغ أدنى من المتوقَّع')
+        : r.kind == PriceReviewKind.unverifiable
+            ? 'تعذّر تسعير السلّة من products — منتج محذوف أو عنصر بلا معرّف'
+            : 'سعر هذا الطلب اعتمدته مراجعة سابقة';
+
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: accent.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(pending ? Icons.price_check_rounded : Icons.verified_rounded,
+                  size: 16, color: accent),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(line,
+                    style: GoogleFonts.tajawal(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: accent)),
+              ),
+            ],
+          ),
+          if (r.couponRejectedReason != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'كوبون مرفوض خادميّاً: '
+                '${kCouponRejectReasons[r.couponRejectedReason] ?? r.couponRejectedReason}',
+                style:
+                    GoogleFonts.tajawal(fontSize: 11, color: Colors.grey.shade800),
+              ),
+            ),
+          if (pending)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                icon: const Icon(Icons.check_rounded, size: 16),
+                label: const Text('اعتمدتُ المبلغ'),
+                style: TextButton.styleFrom(foregroundColor: accent),
+                onPressed: () => _approveStorePrice(context, orderId),
+              ),
+            ),
+          if (!pending && order['price_reviewed_by'] != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text('اعتُمد بواسطة ${order['price_reviewed_by']}',
+                  style: GoogleFonts.tajawal(
+                      fontSize: 11, color: Colors.grey.shade700)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _approveStorePrice(BuildContext context, String orderId) async {
+    try {
+      final String by =
+          FirebaseAuth.instance.currentUser?.email ?? 'Unknown Admin';
+      await FirebaseFirestore.instance
+          .collection('store_orders')
+          .doc(orderId)
+          .update({
+        ...priceReviewApprovalPayload(by),
+        'price_reviewed_at': FieldValue.serverTimestamp(),
+      }).timeout(kNetCallTimeout);
+      await ZyiarahAuditService().logAction(
+        action: ZyiarahAuditService.actionReviewOrderPrice,
+        details: {'decision': 'approved', 'collection': 'store_orders'},
+        targetId: orderId,
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('تم اعتماد المبلغ ✅'),
+            backgroundColor: Colors.green));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        final String msg =
+            e is FirebaseException && e.code == 'permission-denied'
+                ? 'لا تملك صلاحية اعتماد مبالغ طلبات المتجر'
+                : 'تعذّر اعتماد المبلغ: $e';
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(msg), backgroundColor: Colors.red));
       }
@@ -299,6 +412,7 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
                             Text("الدفع: ${_paymentLabel(order)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
                           ],
                         ),
+                        _priceReviewBanner(context, orderDoc.id, order),
                         const SizedBox(height: 15),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,

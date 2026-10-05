@@ -21,6 +21,10 @@ export const AUDIT = {
     TOGGLE_SERVICE_STATUS: 'TOGGLE_SERVICE_STATUS',
     APPLY_PRICES_TO_ZONES: 'APPLY_PRICES_TO_ZONES',
     UPDATE_SETTINGS: 'UPDATE_SETTINGS',
+    // اعتمادُ مبلغٍ وسَمَه تحقّقُ السعرِ الخادميّ — قرارٌ ماليٌّ بشريٌّ
+    // يُبطِلُ علمَ المكنسةِ، فلا بدَّ من أثرٍ باسمِ من اتّخذَه. نظيرُه
+    // `ZyiarahAuditService.actionReviewOrderPrice` في التطبيق.
+    REVIEW_ORDER_PRICE: 'REVIEW_ORDER_PRICE',
 } as const;
 
 export type AuditAction = typeof AUDIT[keyof typeof AUDIT];
