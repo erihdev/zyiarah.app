@@ -46,7 +46,11 @@ assert.strictEqual(_cleanEmail(null), "");
 ok("(a) _cleanEmail يُسقط علامات الاتجاه والمسافات ويرفض ما بلا @");
 
 // (b) المعالج يمرّر المستلم عبر التنقية قبل أي استخدام.
-const proc = body("exports.processNotificationTriggers");
+// المُعالِجُ صار دالّةً واحدةً مُشترَكةً بين تسجيلَي طابورَي الإشعارات
+// (`notification_queue` الخادميُّ و`notification_triggers` للعميل) بعد أن تبيّن
+// أنّ الثقةَ كانت تُحسَب من `createdBy` — حقلٍ يَكتبه العميل. التنقيةُ نفسُها
+// لم تتغيّر، فنُعيد توجيهَ الحارسِ إلى اسمِ المُعالِجِ لا إلى التسجيل.
+const proc = body("const _processNotifQueueDoc");
 assert.ok(/let recipientEmail = _cleanEmail\(/.test(proc),
     "recipientEmail يجب أن يُشتقّ عبر _cleanEmail");
 ok("(b) processNotificationTriggers يُنقّي المستلم");

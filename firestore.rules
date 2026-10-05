@@ -520,8 +520,26 @@ service cloud.firestore {
 
     // SECURITY: notification_triggers acts as a write-only queue for clients/drivers.
     // They append triggers, which are securely processed by server-side Cloud Functions.
+    //
+    // ⚠️ `createdBy` **يجب أن يكون معرّف المُنشئ نفسه.** كان `allow create: if
+    // isLoggedIn()` بلا أيّ قيد على الحقول، فأيّ مستخدم مسجَّل يكتب
+    // `createdBy: "server"` — وكانت الدالّة تَحسبه موثوقاً من هذا الحقل وحده
+    // فيتخطّى حارسَ مكافحة الترحيل كلَّه: إشعار Push وسجلّ داخل التطبيق بعنوان
+    // ونصّ من اختياره إلى **أيّ ضحيّة**، أو بثّ إداريّ مزيَّف، أو بريد من نطاق
+    // المنشأة إلى أيّ عنوان (`recipientEmail` يأتي من المستند).
+    //
+    // الإصلاح الحامل للوزن خادميّ ولا ينتظر نشر القواعد: الدفع الخادميّ انتقل
+    // إلى `notification_queue` — **بلا قاعدة مطابقة هنا**، فالعميل ممنوع منها
+    // بالافتراض المُغلَق وAdmin SDK يتخطّى القواعد، والثقة تُحسَب من اسم
+    // المجموعة لا من حقل. وهذا القيد دفاعٌ في العمق: يمنع انتحال هويّة موظّف
+    // (الدالّة تقرأ `users/{createdBy}.role`) ويمنع عودة الثقة بالحقل.
+    //
+    // الكتبةُ الأربعة كلُّهم يكتبون معرّفهم: zyiarah_messaging_service (موضعان)،
+    // admin_compliance_screen، وContracts.tsx (أُضيف — كان غائباً فيُرفَض
+    // إشعارُ اعتماد العقد بصمت).
     match /notification_triggers/{triggerId} {
-      allow create: if isLoggedIn();
+      allow create: if isLoggedIn() &&
+        request.resource.data.get('createdBy', '') == request.auth.uid;
       allow read, delete: if isAdmin();
     }
 

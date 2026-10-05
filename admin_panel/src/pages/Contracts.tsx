@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, FileSignature, CheckCircle2, Clock, XCircle, AlertCircle, Calendar, CreditCard, Trash2, Info, Package, Plus, Pencil, Star, Loader2, PartyPopper } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, limit, Timestamp, doc, updateDoc, deleteDoc, addDoc, serverTimestamp, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
-import { db } from '../services/firebase.ts';
+import { db, auth } from '../services/firebase.ts';
 import { useNotification } from '../components/notificationContext.ts';
 
 interface ContractRecord {
@@ -592,6 +592,14 @@ export default function Contracts() {
                     body: `تم اعتماد عقد باقة (${planName}) من قبل الإدارة. يرجى إتمام الدفع لتفعيل الباقة.`,
                     type: 'contract_approved',
                     data: { planName, deepLink: 'zyiarah://app/contracts' },
+                    // **كان غائباً، والإشعارُ يُرفَض بصمت.** حارسُ مكافحةِ
+                    // الترحيلِ في `processNotificationTriggers` يَرفضُ أيَّ
+                    // trigger موجَّهٍ لغيرِ مُنشئه ما لم يُثبت `createdBy` أنّه
+                    // موظّف — وبلا الحقلِ يُحسَب غيرَ موثوقٍ فيُوسَم
+                    // `refused_untrusted_sender` ولا يَصلُ العميلةَ شيء. أي أنّ
+                    // اعتمادَ العقدِ من اللوحةِ كان صامتاً **بعد** الإصلاحِ
+                    // الذي أُضيف لإخراجه من الصمت.
+                    createdBy: auth.currentUser?.uid ?? null,
                     createdAt: serverTimestamp(),
                     processed: false,
                 });

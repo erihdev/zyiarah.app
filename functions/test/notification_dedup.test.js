@@ -68,7 +68,12 @@ t("زيارات الاشتراك لا تدفع «تم تأكيد حجزكِ» ل
 });
 
 t("إشعار التطبيق الذاتي «تم استلام طلبك» يشارك المطالبة في المعالج", () => {
-  const b = body("exports.processNotificationTriggers");
+  // المُعالِجُ صار دالّةً واحدةً مُشترَكةً بين تسجيلَين
+  // (`notification_queue` الخادميُّ و`notification_triggers` للعميل) بعد أن
+  // تبيّن أنّ الثقةَ كانت تُحسَب من `createdBy` — حقلٍ يَكتبه العميل. القرارُ
+  // المحروسُ هنا (مطالبةُ دفعِ الدفع) لم يتغيّر، فنُعيد توجيهَ الحارسِ إلى
+  // اسمِ المُعالِجِ لا إلى التسجيل — الذي صار سطرَين.
+  const b = body("const _processNotifQueueDoc");
   assert.ok(b.includes("type === \"order_update\" && toUid && trigger.createdBy === toUid"));
   assert.ok(b.includes("pushSkipped: \"payment_push_dedup\""));
   assert.ok(b.includes("!paymentDedupSkip && trigger.pushSent !== true"));
@@ -87,7 +92,8 @@ t("توليد زيارات الاشتراك: ملخّص واحد للعميل ل
 
 // ── (2) توجيه targetRoles فعلي ────────────────────────────────────────────────
 t("استعلام role لا يعيد كل الموظّفين — السوبر فقط يُضمّ دائماً", () => {
-  const b = body("exports.processNotificationTriggers");
+  // نفس إعادةِ التوجيه: المُعالِجُ صار دالّةً مُشترَكةً بين تسجيلَي الطابورَين.
+  const b = body("const _processNotifQueueDoc");
   assert.ok(b.includes("where(\"staff_role\", \"in\", targetRoles)"));
   assert.ok(b.includes(
       "if (sd.staff_role && sd.staff_role !== \"super_admin\" &&"));
