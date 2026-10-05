@@ -159,7 +159,7 @@ function App() {
           <Route path="support" element={guard('/support', <Support />)} />
           <Route path="admins" element={guard('/admins', <Admins />)} />
           <Route path="account-deletion" element={guard('/account-deletion', <AccountDeletion />)} />
-          <Route path="contracts" element={guard('/contracts', <Contracts />)} />
+          <Route path="contracts" element={guard('/contracts', <Contracts role={role} />)} />
           <Route path="store-products" element={guard('/store-products', <StoreProducts />)} />
           <Route path="store-orders" element={guard('/store-orders', <StoreOrders />)} />
           <Route path="settings" element={guard('/settings', <Settings role={role} />)} />

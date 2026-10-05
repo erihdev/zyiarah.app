@@ -8,7 +8,12 @@ export const PAGE_ROLES: Record<string, string[]> = {
   '/orders':           ['super_admin', 'admin', 'orders_manager'],
   // نفس أدوار «جدول المتابعة» في تطبيق الأدمن (admin_more_screen.dart).
   '/schedule':         ['super_admin', 'admin', 'orders_manager', 'accountant_admin'],
-  '/contracts':        ['super_admin', 'admin', 'orders_manager'],
+  // ثلاثُ مِلكيّاتٍ في صفحةٍ واحدة: العقودُ لمدير الطلبات
+  // (`contracts` update = isOrdersManager) والباقتانِ للمسوّق
+  // (`subscription_packages`/`event_worker_packages` write = isMarketingAdmin،
+  // وتطبيقُ الإدارةِ يَحصرُ محرّرَيهما في super_admin/marketing_admin).
+  // فالدورانِ يَبلغانِ الصفحةَ وهي تُخفي عن كلٍّ تبويبَ الآخرِ — كـ/settings.
+  '/contracts':        ['super_admin', 'admin', 'orders_manager', 'marketing_admin'],
   '/store-products':   ['super_admin', 'admin', 'marketing_admin'],
   '/store-orders':     ['super_admin', 'admin', 'orders_manager'],
   '/drivers':          ['super_admin', 'admin', 'orders_manager'],
