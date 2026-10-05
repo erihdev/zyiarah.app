@@ -102,6 +102,24 @@ const {setDoc, doc} = require("firebase/firestore");
           {client_id: uid, status: "pending", is_paid: false,
             auto_refund_processed: true, amount: 200}),
       false);
+  // وأعلامُ إعادةِ المحاولةِ: المكنسةُ تَستعلمُ **العلمَ** لا الحالةَ، فعلمٌ
+  // مضبوطٌ سلفاً يُدخِلُ طلباً سليماً في مجموعةِ إعادةِ المحاولةِ (أو يُسكِتُ
+  // تصعيدَ استردادٍ فاشل).
+  await check("mute: refund_credit_alerted at create -> DENIED",
+      setDoc(doc(db, "orders/mute5"),
+          {client_id: uid, status: "pending", is_paid: false,
+            refund_credit_alerted: true, amount: 200}),
+      false);
+  await check("mute: qatrat_pending at create -> DENIED",
+      setDoc(doc(db, "orders/mute6"),
+          {client_id: uid, status: "pending", is_paid: false,
+            qatrat_pending: true, amount: 200}),
+      false);
+  await check("mute: coupon_count_pending at create -> DENIED",
+      setDoc(doc(db, "orders/mute7"),
+          {client_id: uid, status: "pending", is_paid: false,
+            coupon_count_pending: true, amount: 200}),
+      false);
   // ولا يُكسَرُ الإنشاءُ الشرعيُّ: الحقولُ التي يَكتبُها التطبيقُ فعلاً تمرّ.
   await check("legit: the app's own create fields -> ALLOWED",
       setDoc(doc(db, "orders/ok3"),

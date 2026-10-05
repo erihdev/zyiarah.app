@@ -6322,7 +6322,13 @@ exports.tabbyWebhook = onRequest(
         return res.status(401).json({error: "Missing signature"});
       }
 
-      const rawBody = JSON.stringify(req.body);
+      // **التوقيعُ على البايتاتِ الخامّةِ لا على إعادةِ تسلسلِها.**
+      // `JSON.stringify(req.body)` ليس الجسمَ الذي وقّعه تابي: الجسمُ يُحلَّلُ
+      // ثم يُعادُ بناؤه، فتَختلفُ المسافاتُ وتهريبُ اليونيكود وصياغةُ الأرقام
+      // — فيَفشلُ HMAC على إشعارٍ شرعيٍّ ويُرَدُّ 401. و`req.rawBody` هو ما
+      // تُوفّره Firebase لهذا الغرضِ بعينِه (Buffer بالبايتاتِ كما وصلت).
+      // الاحتياطُ باقٍ كي لا يَسوءَ السلوكُ حيث لا يُوفَّرُ الخامّ.
+      const rawBody = req.rawBody || JSON.stringify(req.body);
       const expectedSig = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
 
       const sigBuf = Buffer.from(String(signature));

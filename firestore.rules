@@ -234,6 +234,13 @@ service cloud.firestore {
           'price_expected_net', 'price_shadow_ratio',
           'auto_refund_processed', 'auto_refund_alerted', 'stranded_alerted',
           'coupon_rejected_reason', 'final_amount',
+          // وأعلامُ إعادةِ المحاولةِ الخادميّةِ كأخواتِها: ضبطُها سلفاً
+          // يُعطّلُ المكنسةَ التي تَستعلمُها (`refund_credit_alerted` يُسكِتُ
+          // تصعيدَ استردادٍ فاشل، و`qatrat_pending`/`coupon_count_pending`
+          // تُدخِلانِ طلباً سليماً في مجموعةِ إعادةِ المحاولة).
+          'refund_credit_failed', 'refund_credit_alerted',
+          'qatrat_pending', 'qatrat_alerted',
+          'coupon_count_pending', 'coupon_count_alerted',
         ]);
 
       // Orders manager: full update (approve, assign driver -> scheduled, override status)
