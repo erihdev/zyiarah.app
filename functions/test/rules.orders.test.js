@@ -172,6 +172,38 @@ const {setDoc, updateDoc, doc} = require("firebase/firestore");
           {client_id: uid, status: "pending", is_paid: false,
             price_paid: 1, amount: 200}),
       false);
+  // ⚠️⚠️ **والعلَمُ الذي يُطفئُ تحقّقَ السعرِ على مسارٍ كاملٍ (2026-10-05).**
+  // كاتبُه الشرعيُّ `verifyMoyasarPayment` حين **يُنشئُ الخادمُ الطلبَ** من
+  // بيانات الدفع (Apple Pay) — فالمبلغُ لم يُعلِنْه العميلُ أصلاً. وهو
+  // مقروءٌ في موضعَين يُقرّرانِ المال: `_tamaraFlipPaid` يَتخطّى **Tier A
+  // كلَّه** إن كان `true`، وTier B يَنزعُ الإنفاذَ. فبوليانيٌّ واحدٌ عند
+  // الإنشاءِ يَشتري الإعفاءَ من الفحصَين.
+  await check("trust: server_created_from_payment at create -> DENIED",
+      setDoc(doc(db, "orders/mute11"),
+          {client_id: uid, status: "pending", is_paid: false,
+            server_created_from_payment: true, amount: 200}),
+      false);
+  // ⚠️ وعلَمُ كاشفِ الجغرافيا: `_flagZoneGeoMismatch` أوّلُ سطرٍ فيه
+  // `if (od.zone_geo_mismatch === true) return null;` — والكاشفُ مكتوبٌ
+  // لتلاعبٍ يُسمّيه في ترويسةِ نفسِه («عميلٌ في منطقة أغلى يمكنه إرسال
+  // اسم منطقة أرخص»). فضبطُه سلفاً يُسقِطُه كلَّه: لا وسمَ ولا تنبيه.
+  await check("mute: zone_geo_mismatch at create -> DENIED",
+      setDoc(doc(db, "orders/mute12"),
+          {client_id: uid, status: "pending", is_paid: false,
+            zone_geo_mismatch: true, amount: 200}),
+      false);
+  await check("trust: zone_geo_distance_m at create -> DENIED",
+      setDoc(doc(db, "orders/mute13"),
+          {client_id: uid, status: "pending", is_paid: false,
+            zone_geo_distance_m: 10, amount: 200}),
+      false);
+  // وحجزُ الاستردادِ الذرّيُّ: يُقرأُ داخلَ معامَلةِ الاسترداد، فضبطُه
+  // سلفاً يَحجبُ استردادَها هي — ضررٌ بلا مكسب، ويَبقى علمَ ثقةٍ خادميّاً.
+  await check("mute: refund_claimed at create -> DENIED",
+      setDoc(doc(db, "orders/mute14"),
+          {client_id: uid, status: "pending", is_paid: false,
+            refund_claimed: true, amount: 200}),
+      false);
   await check("mute: client_stranded_notified at create -> DENIED",
       setDoc(doc(db, "orders/mute11"),
           {client_id: uid, status: "pending", is_paid: false,

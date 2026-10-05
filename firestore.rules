@@ -292,6 +292,59 @@ service cloud.firestore {
           // عميلةٌ تُنشئُ طلبَها بـ`price_review_decision: 'approved'` تَكتبُ
           // شهادةً لم يُوقّعها أحد.
           'price_review_decision', 'price_reviewed_by', 'price_reviewed_at',
+          // ⚠️⚠️ **وعلَمٌ واحدٌ يُطفئُ تحقّقَ السعرِ على مسارٍ كاملٍ وينزعُ
+          // الإنفاذَ عن المسارِ الآخر (2026-10-05).** كاتبُه الشرعيُّ
+          // `verifyMoyasarPayment` حين **يُنشئُ الخادمُ الطلبَ بنفسِه** من
+          // بيانات الدفع (مسارُ Apple Pay / الدفعِ الأصليّ)، فالمبلغُ لم
+          // يُعلِنْه العميلُ أصلاً. وهو مقروءٌ في موضعَين يَقرّرانِ المال:
+          //
+          //   • `_tamaraFlipPaid`:  `if (col === "orders" &&
+          //     !data.server_created_from_payment) { … _verifyOrderPriceTierA }`
+          //     — فضبطُه سلفاً يُسقِطُ **تحقّقَ Tier A كلَّه** على مسارِ
+          //     تمارا: لا إعادةَ تسعيرٍ من المنطقة، ولا وسمَ
+          //     `price_mismatch`، ولا تنبيهَ إدارة.
+          //   • Tier B: `const egregious = … && od.server_created_from_payment
+          //     !== true;` — فضبطُه سلفاً يَنزعُ الإنفاذَ (الإلغاء/الاسترداد)
+          //     عن الطلبِ المُتلاعَبِ به على مسارِ ميسر.
+          //
+          // أي أنّ بوليانيّاً واحداً يَكتبُه العميلُ عند الإنشاءِ يَدّعي
+          // «الخادمُ أنشأني» فيَشتري الإعفاءَ من الفحصَين. صفرُ كتاباتٍ له
+          // في `lib/` واللوحة.
+          // و`reconciled` يُكتَبُ على السطرِ نفسِه في `reconcileOrphanPayments`
+          // علامةَ مصدرٍ كذلك — لا قارئَ له اليوم، فمنعُه اتّساق.
+          'server_created_from_payment', 'reconciled',
+
+          // ⚠️ **وعلَمٌ يُسكِتُ الكاشفَ المكتوبَ للتلاعبِ الذي يُسمّيه (2026-10-05).**
+          // `_flagZoneGeoMismatch` في `index.js` يَقولُ في ترويسةِ نفسِه:
+          // «المنطقة تُحَلّ باسم يرسله العميل (zone_name) بلا أي تحقّق أن
+          // الموقع فعلاً داخلها — عميلٌ في منطقة أغلى يمكنه إرسال اسم منطقة
+          // أرخص». فهو يَقيسُ المسافةَ من مركزِ المنطقةِ المُعلَنة، وعند
+          // تجاوزِ نصفِ القطرِ بهامشِ ٢٠٪ يَسِمُ الطلبَ ويُنبّهُ الإدارة.
+          // وأوّلُ سطرٍ فيه: `if (od.zone_geo_mismatch === true) return null;`
+          // — فعميلةٌ تُنشئُ طلبَها بهذا العلمِ تُسقِطُ الكاشفَ كلَّه: **لا
+          // وسمَ ولا تنبيه**، وتَدفعُ سعرَ المنطقةِ الأرخص. وهي عائلةُ
+          // `ops_alerted_mismatch` بعينِها (علَمٌ يَعني «فُحِصَ سلفاً»).
+          // و`zone_geo_distance_m` هو رقمُ البيّنةِ الذي يَقرؤه مَن يُراجِع.
+          'zone_geo_mismatch', 'zone_geo_distance_m',
+          // وما تحتَ هذا السطرِ **اتّساقٌ لا سدُّ هجوم**، ويُقالُ كذلك:
+          // `payment_amount_mismatch` و`coupon_rejected` (العلمُ البولياني،
+          // أمّا `coupon_rejected_reason` فممنوعٌ أعلاه وهو المقروء)
+          // و`auto_refund_failed` و`refund_after_assign_conflict` — **لا
+          // قارئَ لأيٍّ منها في المستودعِ كلِّه** (فُحِصَ `functions/` و`lib/`
+          // واللوحة)، فتلفيقُها لا يُغيّرُ سلوكاً اليوم؛ ومنعُها يَجعلُ
+          // إعطاءَها قارئاً غداً آمناً بلا تذكُّر. و`refund_claimed` **يُقرأُ**
+          // حجزاً ذرّيّاً داخلَ معامَلةِ الاسترداد، لكنّ كاتبَه عند الإنشاءِ
+          // هو المالكُ وحدَه (القاعدةُ تَشترطُ `client_id == uid`) فلا يَضرُّ
+          // إلّا استردادَ نفسِه — ضررٌ بلا مكسب، ويَبقى علمَ ثقةٍ خادميّاً.
+          'payment_amount_mismatch', 'coupon_rejected', 'coupon_overlimit',
+          'auto_refund_failed', 'refund_after_assign_conflict',
+          'tamper_gateway_failed', 'reopened_after_late_payment',
+          'refund_claimed', 'refund_claimed_at',
+          // وأعلامُ تكرارِ الإشعار: ضبطُها سلفاً يَمنعُ تذكيرَها بموعدِها
+          // أو دفعةَ تأكيدِ دفعِها — ضررُها على نفسِها، والإدارةُ وحدَها
+          // تُصفّرُها عند تغييرِ الموعد (وذاك `update` لا `create`).
+          'client_reminder_24h_sent', 'client_reminder_soon_sent',
+          'reminder_sent', 'payment_push_sent',
         ]);
 
       // Orders manager: full update (approve, assign driver -> scheduled, override status)
