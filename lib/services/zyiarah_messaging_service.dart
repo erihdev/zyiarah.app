@@ -130,22 +130,6 @@ class ZyiarahMessagingService {
     }
   }
 
-  /// تنبيه الإدارة بوجود تقييم منخفض (لرقابة الجودة)
-  Future<void> notifyAdminOfLowRating({
-    required String orderCode,
-    required double rating,
-    required String clientName,
-    String? comment,
-  }) async {
-    await triggerNotification(
-      toUid: 'ADMIN_BROADCAST',
-      title: "تحذير: تقييم منخفض ⚠️",
-      body: "قام العميل $clientName بتقييم الطلب #$orderCode بـ $rating نجوم. يرجى المراجعة.",
-      type: 'admin_security_alert',
-      data: {'code': orderCode, 'rating': rating, 'comment': comment},
-    );
-  }
-
   /// يجدول إشعار ليتم إرساله في وقت لاحق
   Future<void> scheduleBroadcast({
     required String title,
@@ -225,33 +209,6 @@ class ZyiarahMessagingService {
         attachmentUrls: invoiceUrl != null ? [invoiceUrl] : null,
       );
     }
-  }
-
-  /// Specialized: Low Rating Escalation (Admin Alert)
-  Future<void> alertReputationRisk({
-    required String orderCode,
-    required double rating,
-    required String? reason,
-    required String? comment,
-    required String? evidenceUrl,
-    required String clientName,
-  }) async {
-    final String targetAdmin = await _getAdminEmail();
-    
-    await sendTemplatedEmail(
-      recipient: targetAdmin,
-      subject: "⚠️ تنبيه جودة: تقييم منخفض للطلب #$orderCode",
-      templateId: "reputation-risk-alert",
-      variables: {
-        "orderCode": orderCode,
-        "rating": rating.toString(),
-        "reason": reason ?? 'غير محدد',
-        "comment": comment ?? 'لا يوجد تعليق',
-        "evidenceUrl": evidenceUrl ?? '',
-        "clientName": clientName,
-        "severity": rating <= 1.0 ? "CRITICAL" : "WARNING",
-      },
-    );
   }
 
   /// يُنقّي بريداً أدخله المستخدم: يُسقط علامات الاتجاه/التحكم (U+200F…) والمسافات

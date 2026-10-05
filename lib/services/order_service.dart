@@ -1,4 +1,3 @@
-import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -279,7 +278,6 @@ class ZyiarahOrderService {
 
     final data = orderDoc.data() as Map<String, dynamic>;
     if (data['rating'] != null) return; // منع التقييم المزدوج
-    final String? driverId = data['driver_id'];
     String? evidenceUrl;
 
     // 0. رفع صورة الإثبات إذا وجدت
@@ -314,56 +312,31 @@ class ZyiarahOrderService {
     });
     if (!didWrite) return; // سبق تقييمه — لا تنبيه ولا تحديث تجميعة مكرّر.
 
-    // 2. إطلاق رادار حماية السمعة الفاخر إذا كان التقييم منخفضاً
-    if (rating <= 2.0) {
-      ZyiarahMessagingService().alertReputationRisk(
-        orderCode: data['code'] ?? 'N/A',
-        rating: rating,
-        reason: reason,
-        comment: comment,
-        evidenceUrl: evidenceUrl,
-        clientName: data['client_name'] ?? 'عميل',
-      );
-
-      // تنبيه الإدارة اللحظي على الجوال
-      ZyiarahMessagingService().notifyAdminOfLowRating(
-        orderCode: data['code'] ?? orderId,
-        rating: rating,
-        clientName: data['client_name'] ?? 'عميل',
-        comment: comment,
-      );
-    }
-
-    // 2. تحديث معدل تقييم الكادر (أفضل-جهد): قواعد Firestore تمنع العميل من قراءة/تعديل
-    //    مستند السائق (rating_avg/rating_count محجوزة)، فكان الرفض يتسرّب من هنا
-    //    **بعد** حفظ التقييم على الطلب — فيرى العميل «تعذّر إرسال التقييم» بالأحمر
-    //    لتقييم مُسجَّل فعلاً. نبتلع الفشل: نجاح كتابة الطلب هو نجاح التقييم.
-    //    ملاحظة: لا يوجد Cloud Function يُجمِّع التقييمات حالياً — التجميعة الخادمية
-    //    مطلوبة لاحقاً (backlog) كي تتحرّك rating_avg/rating_count فعلياً.
-    if (driverId != null) {
-      final driverRef = _db.collection('drivers').doc(driverId);
-
-      try {
-        await _db.runTransaction((transaction) async {
-          final driverSnap = await transaction.get(driverRef);
-          if (!driverSnap.exists) return;
-
-          final driverData = driverSnap.data() as Map<String, dynamic>;
-          double currentAvg = (driverData['rating_avg'] ?? 5.0).toDouble();
-          int currentCount = (driverData['rating_count'] ?? 0).toInt();
-
-          // حساب المعدل الجديد: (المعدل القديم * العدد القديم + التقييم الجديد) / (العدد الجديد)
-          double newAvg = ((currentAvg * currentCount) + rating) / (currentCount + 1);
-
-          transaction.update(driverRef, {
-            'rating_avg': newAvg,
-            'rating_count': currentCount + 1,
-          });
-        });
-      } catch (e) {
-        // متوقَّع للعميل (permission-denied) — التقييم نفسه محفوظ على الطلب.
-        debugPrint('RATING_AGGREGATE_SKIPPED: $e');
-      }
-    }
+    // **لا تنبيهَ ولا تجميعةَ من هنا — الخادمُ يَفعلُ الاثنين، وما كان هنا ميتٌ.**
+    //
+    // كان بعد هذا السطرِ ثلاثةُ أشياء، ثلاثتُها لا تَعمل:
+    //
+    //  1. نداءانِ للإدارةِ عند تقييمٍ ≤ 2 (`alertReputationRisk` بريداً و
+    //     `notifyAdminOfLowRating` إشعاراً) — وكلاهما يُكتَبُ من **العميلة**
+    //     إلى `ADMIN_BROADCAST`، وحارسُ الانتحالِ في `index.js` يَرفضُ ذلك
+    //     صراحةً («وأي بثٍّ من عميل يُرفَض») فيَسِمُ المُشغّلَ
+    //     `refused_untrusted_sender`. فكلُّ تقييمٍ منخفضٍ كان يَترُكُ مستندَ
+    //     مُشغّلٍ مرفوضاً ولا يَصلُ شيء. والبديلُ قائمٌ خادميّاً:
+    //     `exports.notifyAdminOnLowRating` يُطلَقُ مرّةً واحدةً على كلِّ
+    //     تقييمٍ ≤ 2، وتعليقُه يُسمّي هذا المسارَ المحجوبَ بالاسم.
+    //
+    //  2. تجميعةُ معدَّلِ السائقِ: القواعدُ تَحصرُ الكتابةَ على `drivers`
+    //     بـ`isOrdersManager`، فالعميلةُ تُرفَضُ دائماً — وكان الرفضُ يُبتلَع.
+    //     والأسوأُ أنّها لو نَفذت يوماً لأفسدت الرقم: تَبذرُ المعدَّلَ
+    //     بـ`5.0` حين يَغيبُ، وهو ما يَتجنّبُه الخادمُ بنصِّ تعليقِه («البذرُ
+    //     الثابت لا يَدخلُ المتوسط»)، ثمّ تُضاعفُ العدَّ مع
+    //     `exports.aggregateDriverRating` الذي يُجمّعُ أصلاً.
+    //
+    //  3. تعليقٌ يَقولُ «لا يوجد Cloud Function يُجمِّع التقييمات حالياً —
+    //     مطلوبةٌ لاحقاً (backlog)». وهي قائمةٌ وتَعمل. من يَقرأُ ذلك قد
+    //     «يُصلحُه» بتوسيعِ القواعدِ فيُعيدَ الاحتسابَ المزدوج.
+    //
+    // فالعميلةُ تَكتبُ `rating` على الطلبِ وحدَه، والخادمُ يَتولّى الباقي —
+    // وهذا ما كان يَحدثُ فعلاً قبلَ هذا التنظيفِ أيضاً.
   }
 }
