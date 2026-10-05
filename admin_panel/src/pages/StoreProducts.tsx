@@ -31,6 +31,11 @@ interface Product {
   image_url: string;
   description: string;
   is_hidden: boolean;
+  // (قرار المالك) متجرٌ واحدٌ والمنتجُ يَختارُ جمهورَه. الغيابُ = 'client'
+  // توافقاً مع المستندات القديمة (`store_service.dart`) — وهذه اللوحةُ كانت
+  // **لا تَكتبُ الحقلَ إطلاقاً**، فكلُّ منتجٍ أُنشئ منها يَهبطُ في متجرِ
+  // العميلِ بصمتٍ ولا سبيلَ إلى وضعِه في متجرِ الشركات.
+  store_audience?: 'client' | 'companies';
 }
 
 export default function StoreProducts() {
@@ -48,7 +53,8 @@ export default function StoreProducts() {
     price: 0,
     image_url: '',
     description: '',
-    is_hidden: false
+    is_hidden: false,
+    store_audience: 'client' as 'client' | 'companies',
   });
 
   useEffect(() => {
@@ -72,7 +78,10 @@ export default function StoreProducts() {
         price: product.price,
         image_url: product.image_url,
         description: product.description,
-        is_hidden: product.is_hidden
+        is_hidden: product.is_hidden,
+        store_audience: product.store_audience === 'companies'
+          ? 'companies'
+          : 'client',
       });
     } else {
       setEditingProduct(null);
@@ -81,7 +90,8 @@ export default function StoreProducts() {
         price: 0,
         image_url: '',
         description: '',
-        is_hidden: false
+        is_hidden: false,
+        store_audience: 'client',
       });
     }
     setIsModalOpen(true);
@@ -196,7 +206,15 @@ export default function StoreProducts() {
               
               <div className="p-5 flex-1 flex flex-col">
                 <h3 className="font-bold text-slate-800 line-clamp-2 min-h-[3rem] mb-2">{product.name}</h3>
-                <p className="text-2xl font-black text-[#660033] mb-4">{product.price} <span className="text-xs font-bold text-slate-400">ر.س</span></p>
+                <p className="text-2xl font-black text-[#660033] mb-1">{product.price} <span className="text-xs font-bold text-slate-400">ر.س</span></p>
+                {/* شارةُ الجمهور — مرآةُ admin_store_screen: بلا هذه الشارةِ
+                    لا يَعرفُ الأدمنُ من اللوحةِ إلى أيِّ متجرٍ ينتمي المنتج. */}
+                {product.store_audience === 'companies' && (
+                  <span className="inline-block mb-3 px-2 py-0.5 rounded-lg bg-[#660033]/10 text-[#660033] text-[10px] font-extrabold">
+                    متجر الشركات
+                  </span>
+                )}
+                {product.store_audience !== 'companies' && <div className="mb-3" />}
                 
                 <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between gap-3">
                   <button 
@@ -288,6 +306,23 @@ export default function StoreProducts() {
                   value={formData.description}
                   onChange={(e) => setFormData({...formData, description: e.target.value})}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="prod-audience" className="text-sm font-bold text-slate-600 px-1">يظهر في</label>
+                <select
+                  id="prod-audience"
+                  aria-label="يظهر في"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 outline-none focus:ring-4 focus:ring-[#FAF1F6] focus:border-[#660033] transition-all font-medium"
+                  value={formData.store_audience}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    store_audience: e.target.value === 'companies' ? 'companies' : 'client',
+                  })}
+                >
+                  <option value="client">متجر العميل</option>
+                  <option value="companies">متجر الشركات</option>
+                </select>
               </div>
 
               <div className="pt-4 flex items-center justify-end gap-3">
