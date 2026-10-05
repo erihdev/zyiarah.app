@@ -43,6 +43,10 @@ const {setDoc, doc, updateDoc, getDoc} = require("firebase/firestore");
   });
 
   const asUser = (uid) => testEnv.authenticatedContext(uid).firestore();
+  // مع ادّعاءِ بريدٍ في الرمز — قواعدُ `users` تُقارِنُ `email` بـ
+  // `request.auth.token.email`.
+  const asUserEmail = (uid, email) =>
+    testEnv.authenticatedContext(uid, {email}).firestore();
   let pass = 0; let fail = 0;
   const check = async (name, promise, shouldSucceed) => {
     try {
@@ -103,6 +107,28 @@ const {setDoc, doc, updateDoc, getDoc} = require("firebase/firestore");
   // `getOrCreateReferralCode` يكتبه من العميل.
   await check("client CAN write referral_code when absent (first generation)",
       updateDoc(doc(asUser("refNew"), "users/refNew"), {referral_code: "BBBB2222"}), true);
+
+  // ── بريدُ السجلِّ يَجبُ أن يُطابقَ بريدَ المصادقة ──────────────────────
+  //
+  // `isAllowedEmailRecipient` يُجيزُ وجهةَ بريدٍ بالاستعلامِ
+  // `users.where('email','==',…)`، وحارسُ المُرسِلِ كان يُقارِنُ الحقلَ
+  // نفسَه بـ`recipientEmail` ليُجيزَ «عميلٌ يُرسلُ لبريدِه هو». فمن يَكتبُ
+  // بريدَه `victim@x.com` يَجتازُ الحارسَين، ويُرسِلُ الخادمُ بريداً من
+  // `no-reply@zyiarah.com` بعنوانٍ ونصٍّ من اختيارِه إلى أيِّ عنوان:
+  // مُرحِّلٌ مفتوحٌ بنطاقِ الشركة.
+  await check("email: client writes a foreign email on own doc -> DENIED",
+      updateDoc(doc(asUserEmail("client1", "me@zyiarah.com"), "users/client1"),
+          {email: "victim@example.com"}), false);
+  await check("email: client writes her own auth email -> ALLOWED",
+      updateDoc(doc(asUserEmail("client1", "me@zyiarah.com"), "users/client1"),
+          {email: "me@zyiarah.com"}), true);
+  // والمسارُ الشرعيُّ كما يَكتبُه التطبيقُ عند التسجيل (الجوّال مع البريد).
+  await check("email: the signup update (phone + auth email) -> ALLOWED",
+      updateDoc(doc(asUserEmail("client1", "me@zyiarah.com"), "users/client1"),
+          {phone: "0501234567", email: "me@zyiarah.com"}), true);
+  // ولا يُكسَرُ تعديلُ حقولٍ أخرى بلا لمسِ البريد.
+  await check("email: unrelated profile field, email untouched -> ALLOWED",
+      updateDoc(doc(asUser("client1"), "users/client1"), {name: "عميلة"}), true);
   await check("client CANNOT change an existing referral_code",
       updateDoc(doc(asUser("refOwner"), "users/refOwner"), {referral_code: "AAAA1111X"}), false);
   await check("client CANNOT hijack another user's code onto their own doc",

@@ -126,7 +126,21 @@ service cloud.firestore {
           // الحقلُ غائباً أو فارغاً، وممنوعةٌ بعد ذلك.
           (!request.resource.data.diff(resource.data).affectedKeys()
               .hasAny(['referral_code']) ||
-           resource.data.get('referral_code', '') == ''));
+           resource.data.get('referral_code', '') == '') &&
+          // SECURITY: `email` على السجلّ يَجبُ أن يُطابقَ بريدَ **المصادقة**.
+          //
+          // `isAllowedEmailRecipient` يَستعلمُ `users.where('email','==',…)`
+          // ليُجيزَ وجهةَ بريدٍ، وحارسُ المُرسِلِ كان يُقارِنُ هذا الحقلَ
+          // نفسَه بـ`recipientEmail` ليُجيزَ «عميلٌ يُرسلُ لبريدِه». فمن
+          // يَكتبُ بريدَه `victim@x.com` يَجتازُ الحارسَين ويُرسلُ بريداً
+          // من `no-reply@zyiarah.com` بمحتوًى من اختيارِه إلى أيِّ عنوان.
+          // (الحارسُ الخادميُّ صار يَقرأُ بريدَ المصادقة، وهذا دفاعٌ ثانٍ
+          // ويُبقي السجلَّ صادقاً لاستعلامِ الوجهة.) المسارُ الشرعيُّ
+          // الوحيدُ — تحديثُ التسجيل في `firebase_service` — يَكتبُ البريدَ
+          // الذي سُجِّل به، أي بريدَ المصادقةِ عينَه.
+          (!request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['email']) ||
+           request.resource.data.email == request.auth.token.email));
 
       allow delete: if isSuperAdmin();
     }
