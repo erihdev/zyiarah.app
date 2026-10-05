@@ -5,6 +5,7 @@ import 'package:zyiarah/models/wallet_model.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/error_report.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/qatrat.dart';
 
 class ZyiarahWalletService {
   // Singleton Pattern
@@ -48,8 +49,15 @@ class ZyiarahWalletService {
   /// «الحد الأدنى للاستبدال 50 نقطة»، «يجب تسجيل الدخول أولاً») ولا تُرجع
   /// `success:false` أبداً — فكان الابتلاع يرمي الرسالة الصحيحة ويعرض بدلاً منها
   /// رسالة مخترَعة. نترك الاستثناء يصعد لتعرضه الواجهة كما هو.
-  Future<bool> redeemQatratPoints({required String userId, required int pointsToRedeem}) async {
-    if (pointsToRedeem < 50) return false; // الحد الأدنى للاستبدال 50 نقطة
+  ///
+  /// **وتُعيد ما أودعَه الخادمُ، لا مجرَّدَ نجاح.** كانت تُعيد `bool` فتُهمل
+  /// `newBalance`/`newPoints` اللذَين تُعيدُهما الدالّةُ الخادميّة، وتُعيد
+  /// الشاشةُ حسابَ المبلغِ بنفسِها من ٥٠ مكتوبةٍ بيدٍ — فلو تَباعدَ الرقمان
+  /// يوماً لبُشِّرت العميلةُ بمبلغٍ لم يُودَع. سعرُ الصرفِ في
+  /// `lib/utils/qatrat.dart`، والأرقامُ المعروضةُ من هنا.
+  Future<QatratRedeemResult?> redeemQatratPoints(
+      {required String userId, required int pointsToRedeem}) async {
+    if (pointsToRedeem < kQatratRedeemMin) return null;
     final callable =
         FirebaseFunctions.instance.httpsCallable('redeemQatratPoints');
     final res = await callable.call<Map<String, dynamic>>(
@@ -68,7 +76,27 @@ class ZyiarahWalletService {
         reportSilent(e, st, reason: 'wallet_audit_log_failed');
       }
     }
-    return success;
+    if (!success) return null;
+    final d = res.data;
+    return QatratRedeemResult(
+      pointsRedeemed: pointsToRedeem,
+      newBalance: (d['newBalance'] as num?)?.toDouble(),
+      newPoints: (d['newPoints'] as num?)?.toInt(),
+    );
   }
 
+}
+
+/// ما أودعَه الخادمُ فعلاً. `newBalance`/`newPoints` قد يَغيبان على نسخةٍ
+/// خادميّةٍ أقدم — والشاشةُ تَقعُ حينها على نصٍّ بلا رقمٍ لا على رقمٍ مُختلَق.
+class QatratRedeemResult {
+  const QatratRedeemResult({
+    required this.pointsRedeemed,
+    required this.newBalance,
+    required this.newPoints,
+  });
+
+  final int pointsRedeemed;
+  final double? newBalance;
+  final int? newPoints;
 }

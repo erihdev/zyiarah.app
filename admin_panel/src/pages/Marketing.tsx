@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Tag, Trash2, PlusCircle, Calendar, Percent, X, Loader2 } from 'lucide-react';
-import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useNotification } from '../components/notificationContext.ts';
+import { endOfLocalDay } from '../utils/couponExpiry';
 
 interface PromoCode {
     id: string;
@@ -29,6 +30,11 @@ export default function Marketing() {
     const [newValue, setNewValue] = useState<number>(0);
     const [newMaxUses, setNewMaxUses] = useState<number>(100);
     const [newExpiry, setNewExpiry] = useState('');
+    // (قرار صريح، مرآةُ admin_coupons_screen.dart) الظهورُ في قسم العروض:
+    // الكوبونُ الجديد معروضٌ افتراضياً. وغيابُ الحقل = لا — فاللوحةُ كانت
+    // تُغفله فلا يظهر كوبونُها في التطبيق أبداً، بلا ما يقول ذلك.
+    const [newShowInOffers, setNewShowInOffers] = useState(true);
+    const [newDescription, setNewDescription] = useState('');
 
     useEffect(() => {
         const unsubscribe = onSnapshot(collection(db, 'promo_codes'), (snapshot) => {
@@ -86,7 +92,16 @@ export default function Marketing() {
                 uses: 0,
                 maxUses: newMaxUses,
                 status: 'active',
-                expiry: newExpiry,
+                // Timestamp لا نصّ: فحصُ الخادم كان
+                // `typeof c.expiry.toMillis === "function"`، والنصُّ لا يملكه
+                // فيُتخطّى الفحصُ كلُّه — كلُّ كوبونٍ أُنشئ من هنا كان بلا
+                // انتهاءٍ خادميّاً (والعميلُ يفحص النوعين فكان أصرمَ من الخادم).
+                // وآخرُ لحظةٍ من اليومِ المختار لا أوّلُها: منتصفُ الليل يُميت
+                // الكوبونَ في بداية اليومِ المكتوبِ على بطاقته.
+                expiry: Timestamp.fromDate(endOfLocalDay(newExpiry)),
+                restricted_zones: [],
+                show_in_offers: newShowInOffers,
+                description: newDescription.trim(),
                 createdAt: serverTimestamp(),
             });
             setIsAddModalOpen(false);
@@ -96,6 +111,8 @@ export default function Marketing() {
             setNewValue(0);
             setNewMaxUses(100);
             setNewExpiry('');
+            setNewShowInOffers(true);
+            setNewDescription('');
         } catch (error) {
             console.error("Error adding promo code: ", error);
             toast.error("حدث خطأ أثناء إضافة الكوبون.");
@@ -336,6 +353,34 @@ export default function Marketing() {
                                     />
                                 </div>
                             </div>
+
+                            <div className="space-y-2">
+                                <label className="block text-sm font-bold text-slate-700">الوصف (يظهر على بطاقة العرض)</label>
+                                <input
+                                    type="text"
+                                    aria-label="وصف الكوبون"
+                                    value={newDescription}
+                                    onChange={(e) => setNewDescription(e.target.value)}
+                                    className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-xl px-4 py-3 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 transition-all"
+                                    placeholder="خصم ترحيبي على أول طلب"
+                                />
+                            </div>
+
+                            <label className="flex items-center gap-3 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    aria-label="الظهور في قسم العروض"
+                                    checked={newShowInOffers}
+                                    onChange={(e) => setNewShowInOffers(e.target.checked)}
+                                    className="w-5 h-5 accent-rose-500 cursor-pointer"
+                                />
+                                <span className="text-sm font-bold text-slate-700">
+                                    يظهر في قسم «العروض» بالتطبيق
+                                    <span className="block text-xs font-normal text-slate-500">
+                                        أطفئه لكود قناة خاصة (شريك/مؤثّر) كي لا يُكشف لعموم العملاء.
+                                    </span>
+                                </span>
+                            </label>
 
                             <div className="pt-4 border-t border-slate-100 flex gap-3">
                                 <button

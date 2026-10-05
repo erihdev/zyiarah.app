@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Send, BellRing, Smartphone, Users, UserRound, History, Clock, CheckCircle2, MessageSquare, Plus, Trash2, Globe, CalendarClock, X } from 'lucide-react';
+import { Send, BellRing, Smartphone, Users, UserRound, History, Clock, CheckCircle2, MessageSquare, Plus, Trash2, Globe, CalendarClock, X, Megaphone } from 'lucide-react';
 import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, limit, type Timestamp, type DocumentData, type QuerySnapshot, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/notificationContext.ts';
@@ -54,6 +54,14 @@ export default function Notifications() {
     const [isScheduled, setIsScheduled] = useState(false);
     const [scheduleValue, setScheduleValue] = useState(defaultScheduleValue());
 
+    // (تفضيلات التنبيهات) البثّ **تسويقيٌّ افتراضياً**، والخادم يقرأ
+    // `operational` من `notifications_log` (`notify_prefs.isMarketingBroadcast`:
+    // كلُّ بثٍّ إلا التشغيليّ). ومحرّرُ Flutter (`admin_broadcast_screen`)
+    // يَملكُ هذا المُبدِّلَ وهذه اللوحةُ **لم تَكُن تَكتبُ الحقلَ إطلاقاً** —
+    // فإشعارُ صيانةٍ أو انقطاعٍ يُرسَل من هنا كان يُحجَب عن كلِّ عميلةٍ أوقفت
+    // «العروض والتسويق»، واللوحةُ تُظهرُ «أُرسل» بلا أيِّ إشارةٍ إلى ذلك.
+    const [isOperational, setIsOperational] = useState(false);
+
     const [sending, setSending] = useState(false);
     const [success, setSuccess] = useState(false);
     const [history, setHistory] = useState<NotificationLog[]>([]);
@@ -105,12 +113,14 @@ export default function Notifications() {
                 sent_at: isScheduled ? null : serverTimestamp(),
                 scheduled_at: isScheduled ? new Date(scheduleValue) : null,
                 status: isScheduled ? 'scheduled' : 'pending',
+                operational: isOperational,
             });
             setTitle('');
             setBody('');
             setPopupImage('');
             setButtons([]);
             setIsScheduled(false);
+            setIsOperational(false);
             setScheduleValue(defaultScheduleValue());
             setSuccess(true);
             setTimeout(() => setSuccess(false), 3000);
@@ -253,6 +263,29 @@ export default function Notifications() {
                             </div>
                         </div>
                     )}
+
+                    {/* ── تشغيلي أم تسويقي (مرآةُ admin_broadcast_screen) ── */}
+                    <div className="border-t border-slate-100 pt-5">
+                        <button
+                            type="button"
+                            aria-label="إشعار تشغيلي"
+                            aria-pressed={isOperational}
+                            onClick={() => setIsOperational(!isOperational)}
+                            className={`w-full flex items-start gap-3 px-4 py-3 rounded-xl border-2 transition-all text-right ${isOperational ? 'border-slate-800 bg-slate-50' : 'border-slate-200 hover:border-slate-300'}`}
+                        >
+                            <Megaphone size={18} className={`mt-0.5 shrink-0 ${isOperational ? 'text-slate-800' : 'text-slate-400'}`} />
+                            <span className="flex-1">
+                                <span className={`block font-bold text-sm ${isOperational ? 'text-slate-800' : 'text-slate-600'}`}>
+                                    إشعار تشغيلي (يصل حتى لمن أوقف العروض)
+                                </span>
+                                <span className="block text-xs text-slate-500 font-medium mt-0.5">
+                                    {isOperational
+                                        ? 'صيانة أو انقطاع أو تنبيه مواعيد — يصل كل المستهدفين'
+                                        : 'بثّ تسويقي: لا يصل من أوقف «العروض والتسويق» في تفضيلاته'}
+                                </span>
+                            </span>
+                        </button>
+                    </div>
 
                     {/* ── Scheduling section ── */}
                     <div className="border-t border-slate-100 pt-5">

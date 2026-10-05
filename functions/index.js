@@ -17,6 +17,9 @@ const {computeExpectedBasePrice, resolveMaterialsBase, applyTerrainSurcharge} =
 const {isMarketingBroadcast, excludeOptedOut} = require("./notify_prefs");
 const {countBookings, zoneDailyCap} = require("./capacity");
 const {grossFromBaseRounded, grossFromBase} = require("./vat");
+const {parseKsaIso, riyadhBookingFields, riyadhLocalDate, riyadhLocalSlot,
+  riyadhStamp} = require("./ksa_time");
+const coupons = require("./coupons");
 const {isAssignableDriver, assignabilityProblem, chunk, GET_ALL_CHUNK} =
   require("./drivers");
 const moyasar = require("./moyasar_api");
@@ -2018,9 +2021,10 @@ exports.countCouponUseOnOrderCreate = onDocumentUpdated({document: "orders/{orde
         await db.runTransaction(async (t) => {
           const oSnap = await t.get(orderRef);
           if (oSnap.get("coupon_counted") === true) return; // already counted
-          // نعلّم تجاوز الحدّ (maxUses) عند الاستهلاك: TOCTOU يسمح لطلبين متزامنين بتجاوز
-          // الحدّ (الخصم طُبِّق عميلياً سلفاً فلا يُلغى هنا). العلَم للمراجعة الإدارية —
-          // والمنع النهائي جزء من التسعير الخادمي (طور التشديد Phase 2).
+          // نعلّم تجاوز الحدّ (maxUses) عند الاستهلاك: TOCTOU يسمح لطلبين متزامنين
+          // بتجاوز الحدّ، والعلَم للمراجعة الإدارية. والمنعُ صار فعليّاً في
+          // التسعير الخادمي (coupons.couponProblem ⇒ "exhausted" فيُلغى الخصم
+          // ويُسَم coupon_rejected_reason) — وكان هذا التعليق يَعِد به قبل وجوده.
           const pSnap = await t.get(promoRef);
           const uses = Number(pSnap.get("uses") || 0);
           const maxUses = Number(pSnap.get("maxUses") || 0);
@@ -2063,12 +2067,9 @@ exports.notifyOnAppointmentChange = onDocumentUpdated(
       const driverChanged =
         (before.driver_id || null) !== (after.driver_id || null);
 
-      // توقيت الرياض (UTC+3): الدوال تعمل بـUTC — getHours() الخام كان يُعلن
-      // للطرفين ساعةً أبكر بثلاث ساعات من الموعد الفعلي (نفس تحويل بقية المنسّقات).
-      const when = new Date(aSd.toDate().getTime() + 3 * 60 * 60 * 1000);
-      const pad = (n) => String(n).padStart(2, "0");
-      const dateStr = `${when.getUTCFullYear()}-${pad(when.getUTCMonth() + 1)}-` +
-        `${pad(when.getUTCDate())} ${pad(when.getUTCHours())}:00`;
+      // توقيت الرياض (UTC+3) — الصيغة في ksa_time.js: الدوال تعمل بـUTC، فقراءة
+      // المكوّنات المحلية من لحظة زمنية تُعلن للطرفين ساعةً أبكر بثلاث ساعات.
+      const dateStr = riyadhStamp(aSd.toDate().getTime());
       const code = after.code || event.params.orderId;
       const oid = event.params.orderId;
 
@@ -2166,8 +2167,9 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
 
   const result = await db.runTransaction(async (t) => {
     const wSnap = await t.get(walletRef);
+    let oSnap = null;
     if (orderRef) {
-      const oSnap = await t.get(orderRef);
+      oSnap = await t.get(orderRef);
       if (!oSnap.exists) {
         throw new HttpsError("not-found", "الطلب غير موجود");
       }
@@ -2198,12 +2200,22 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
       created_at: FieldValue.serverTimestamp(),
     });
     if (orderRef) {
+      // دفاع في العمق لسباق cancelStaleUnpaidOrders: إن تأكّد دفعُ طلبٍ سبق أن
+      // ألغاه الكرون آلياً (cancel_reason='unpaid_expired' بعد نافذة الـ30 دقيقة)
+      // نُعيد فتحه (pending) بدل تركه ملغىً مدفوعاً بلا خدمة — داخل نفس معامَلة
+      // قلب is_paid فلا سباق. المسارات الثلاثة الأخرى (verify/webhook/reconcile)
+      // تفعل هذا، والمحفظة كانت الرابعة التي لا تفعله: التعليقُ الذي يصف هذا
+      // الدفاع كان قائماً في الملف بلا الكود الذي يصفه. كامنٌ لا حيّ اليوم —
+      // لا مسارَ واجهةٍ يُنشئ طلباً ثمّ يدفعه بالمحفظة بعد 30 دقيقة (الشاشة
+      // تسكّ معرّفاً جديداً لكل محاولة) — لكن payWithWallet نداءٌ عامّ يقبل أي
+      // معرّف طلبٍ يملكه العميل، فالتكافؤ هو الحارس.
       t.update(orderRef, {
         is_paid: true,
         payment_status: "paid",
         payment_method: "wallet",
         paid_at: FieldValue.serverTimestamp(),
         updated_at: FieldValue.serverTimestamp(),
+        ...refunds.reopenFieldsIfSystemCancelled(oSnap && oSnap.data()),
       });
     }
     return {success: true, newBalance: balance - amount};
@@ -2218,21 +2230,6 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
   }
   return result;
 });
-
-// دفاع في العمق لسباق cancelStaleUnpaidOrders: إن تأكّد دفعُ طلبٍ سبق أن ألغاه الكرون
-// آلياً (cancel_reason='unpaid_expired' — سباق نادر: بطاقة/Apple Pay تأكّدت بعد نافذة
-// الـ30 دقيقة عبر verify/webhook/reconcile)، نُعيد فتحه (pending) بدل تركه ملغى مدفوعاً
-// بلا خدمة. يُدمج داخل نفس معامَلة قلب is_paid فلا سباق. تمارا/تابي مستثناة أصلاً بالكرون.
-// يفكّ ISO قادماً من العملاء إلى **لحظة زمنية صحيحة**: سلسلة Dart المحلية بلا لاحقة
-// منطقة (2026-07-30T14:00:00.000) يفسّرها Node كـUTC بينما قصدُ المرسِل توقيت
-// الرياض — فكانت المواعيد تُخزَّن متأخرة 3 ساعات (ثم يضيف مشتقّ booking_time_slot
-// ثلاثاً أخرى للعرض). سلاسل الويب بـZ/إزاحة تمرّ كما هي.
-function _parseKsaIso(s) {
-  const d = new Date(s);
-  if (isNaN(d.getTime())) return d;
-  return /(?:Z|[+-]\d{2}:?\d{2})$/.test(String(s).trim()) ?
-    d : new Date(d.getTime() - 3 * 60 * 60 * 1000);
-}
 
 // (#1) عامل الذروة الخادمي — يعكس getSurgePricingFactor حرفياً (system_configs.surge_percent).
 async function _readSurgeFactor(db) {
@@ -2250,27 +2247,44 @@ async function _readSurgeFactor(db) {
 // (#1) الخصم **الموثوق** — يُعاد حسابه من مستند الكوبون (promo_codes)، لا من حقل
 // discount_amount الذي يكتبه العميل (وإلّا ضخّمه فألغى الإنفاذ). نأخذ الأصغر بين خصم
 // العميل والخصم الخادمي: لا يستطيع تجاوز القيمة الخادمية، ونحترم خصمه الأقل.
-async function _computeTrustedDiscount(db, od, expectedGross, surge) {
+//
+// والأهليّة في coupons.js لا هنا: كانت هذه الدالّة تُجيب **المقدار** وتُغفل
+// **مَن ومِن أين وكم مرّة** (target_user_id / restricted_zones / maxUses)،
+// فيثق الخادم بالعميل في الأهليّة وحدها — وهو عين ما وُجدت الدالّة لتمنعه.
+// وترفع {orderRef, orderId} كي يُسَم سببُ الرفض: رفضُ خصمٍ 10% يُنتج ratio=0.9
+// فلا يبلغ عتبة الوسم (0.5) — إنفاذٌ بلا وسمٍ تجميليّ.
+async function _computeTrustedDiscount(db, od, expectedGross, surge,
+    {orderRef = null, orderId = null} = {}) {
   const code = (od.coupon_code || "").toString().trim();
   if (!code) return 0;
   try {
     const q = await db.collection("promo_codes")
         .where("code", "==", code.toUpperCase()).limit(1).get();
-    if (q.empty) return 0; // لا كوبون خادمي → لا خصم موثوق (الطلب يدّعي خصماً وهميّاً)
-    const c = q.docs[0].data();
-    if (c.status && c.status !== "active") return 0;
-    if (c.expiry && typeof c.expiry.toMillis === "function" &&
-        c.expiry.toMillis() < Date.now()) return 0;
-    const value = Number(c.value) || 0;
-    let serverDiscount = c.type === "percentage" ?
-      expectedGross * surge * (value / 100) : value; // نسبة على المشحون المُذرَّى، أو ثابت
-    if (c.max_discount) {
-      serverDiscount = Math.min(serverDiscount, Number(c.max_discount) || serverDiscount);
+    const c = q.empty ? null : q.docs[0].data();
+    const problem = coupons.couponProblem(c, {
+      uid: od.client_id || od.userId || null,
+      zoneName: od.zone_name || null,
+    });
+    if (problem) {
+      console.warn(`[price-shadow] COUPON_REJECTED ${orderId || ""} ${code}: ${problem}`);
+      if (orderRef) {
+        await orderRef.update({
+          coupon_rejected: true,
+          coupon_rejected_reason: problem,
+        }).catch(() => {});
+      }
+      if (coupons.ESCALATED_PROBLEMS.has(problem)) {
+        await queuePush("ADMIN_BROADCAST", "كوبون غير مؤهَّل على طلب ⚠️",
+            `الطلب #${od.code || orderId || ""} استعمل الكود ${code} وهو ` +
+            `${problem === "other_user" ? "موجَّه لعميل آخر" : "مقيَّد بمنطقة أخرى"}` +
+            " — أُلغي الخصم خادميّاً، يُرجى المراجعة.",
+            "admin_coupon_review", {orderId: orderId || ""},
+            ["super_admin", "orders_manager", "accountant_admin"]).catch(() => {});
+      }
+      return 0;
     }
-    const clientDiscount = Number(od.discount_amount) || 0;
-    const trusted = clientDiscount > 0 ?
-      Math.min(clientDiscount, serverDiscount) : serverDiscount;
-    return Math.max(0, trusted);
+    return coupons.trustedDiscount(od.discount_amount,
+        coupons.couponDiscount(c, {chargedGross: expectedGross, surge}));
   } catch (e) {
     console.error("[price-shadow] discount recompute failed:", e.message);
     return 0;
@@ -2391,13 +2405,16 @@ exports.verifyMoyasarPayment = onCall(
               {service_meta: _parseServiceMeta(md.service_meta_json)} : {}),
           };
           if (md.service_date) {
-            const sd = _parseKsaIso(md.service_date);
+            const sd = parseKsaIso(md.service_date);
             if (!isNaN(sd.getTime())) {
               payload.service_date = Timestamp.fromDate(sd);
               if (isHourly) {
-                const pad = (n) => String(n).padStart(2, "0");
-                payload.booking_date = `${sd.getFullYear()}-${pad(sd.getMonth() + 1)}-${pad(sd.getDate())}`;
-                payload.booking_time_slot = `${pad(sd.getHours())}:00`;
+                // توقيت الرياض: قراءة المكوّنات المحلية من **لحظة زمنية** تعطي
+                // ساعة UTC — كانت تخزّن الخانة أبكر بثلاث ساعات من موعد العميلة،
+                // فيُحجز في capacity.js وقتٌ خاطئ ويبقى وقتُ الموعد فارغاً.
+                const bf = riyadhBookingFields(sd);
+                payload.booking_date = bf.bookingDate;
+                payload.booking_time_slot = bf.bookingTimeSlot;
               }
             }
           }
@@ -2479,7 +2496,8 @@ exports.verifyMoyasarPayment = onCall(
               const surge = await _readSurgeFactor(db);
               const expected = grossFromBaseRounded(base, surge);
               const trustedDiscount =
-                  await _computeTrustedDiscount(db, od, grossFromBase(base), surge);
+                  await _computeTrustedDiscount(db, od, grossFromBase(base),
+                      surge, {orderRef, orderId});
               const expectedNet = Math.max(0, expected - trustedDiscount);
               // expectedNet<=0 مع دفعٍ موجب = مريب (خصم يفوق السعر) → Tier A، لا نفترض ratio=1.
               const suspiciousZero = expectedNet <= 0 && paid > 0;
@@ -2577,6 +2595,29 @@ exports.verifyMoyasarPayment = onCall(
 async function processAccountDeletion(uid) {
   console.log(`Processing legal account deletion for user: ${uid}`);
   try {
+    // 0. رصيدُ المحفظةِ **قبل** حذفِ حسابِ المصادقة. لا شيءَ في هذا المسارِ
+    //    كان يَنظرُ إلى `wallets/{uid}`: تُحذف هويّةُ المصادقةِ ويبقى الرصيدُ
+    //    في وثيقةٍ مفتاحُها معرّفٌ لا يستطيع أحدٌ تسجيلَ الدخولِ به بعد اليوم
+    //    — **مالُ العميلةِ محجوزٌ إلى الأبد، بلا إشعارٍ ولا سجلِّ دَينٍ**.
+    //    لا نُصفّرُه: التصفيرُ يُتلف الدليلَ على الدَّين. نُسجّلُه على طلبِ
+    //    الحذفِ، ونَسِمُ المحفظةَ، ونُنبّه المحاسبةَ لتُسوّيَه خارج التطبيق.
+    //    وشاشةُ الملفِّ تُحذّر العميلةَ برصيدِها **قبل** التأكيد.
+    let strandedBalance = 0;
+    try {
+      const wSnap = await getFirestore().collection("wallets").doc(uid).get();
+      strandedBalance = wSnap.exists ? Number(wSnap.data().balance || 0) : 0;
+      if (!Number.isFinite(strandedBalance)) strandedBalance = 0;
+      if (strandedBalance > 0) {
+        await wSnap.ref.update({
+          owner_deleted: true,
+          owner_deleted_at: FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (wErr) {
+      // قراءةُ المحفظةِ تحسينٌ للسجلّ، لا تَحجبُ حقَّ الحذفِ (متطلّبُ Apple).
+      console.error(`[deletion] wallet read failed for ${uid}:`, wErr.message);
+    }
+
     // 1. Delete user from Firebase Auth
     try {
       await getAuth().deleteUser(uid);
@@ -2597,12 +2638,22 @@ async function processAccountDeletion(uid) {
     await getFirestore().collection("fcm_tokens").doc(uid).delete().catch(() => {});
     await getFirestore().collection("fcm_token").doc(uid).delete().catch(() => {});
 
-    // 4. Mark the request fully processed
+    // 4. Mark the request fully processed — ومعه الرصيدُ المحجوز، كي يبقى
+    //    الدَّينُ مكتوباً في مكانٍ يَقرؤه البشرُ لا في وثيقةِ محفظةٍ يتيمة.
     await getFirestore().collection("account_deletions").doc(uid).update({
       completed_at: FieldValue.serverTimestamp(),
       status: "deleted_fully_processed",
+      wallet_balance_at_deletion: strandedBalance,
     });
     console.log(`Successfully completed deletion workflow for ${uid}`);
+    if (strandedBalance > 0) {
+      await queuePush("ADMIN_BROADCAST", "رصيدُ محفظةٍ بعد حذفِ حساب 💸",
+          `حُذف حسابٌ ورصيدُ محفظته ${strandedBalance} ر.س — لا يستطيع صاحبُه ` +
+          "تسجيلَ الدخولِ بعد اليوم، فالتسويةُ يدويّة.",
+          "admin_wallet_stranded", {uid},
+          ["super_admin", "accountant_admin"]).catch((e) =>
+        console.error(`[deletion] stranded alert failed for ${uid}:`, e.message));
+    }
   } catch (error) {
     console.error(`Error processing account deletion for user ${uid}:`, error);
     // Record the failure so it can be retried/inspected by an admin
@@ -3101,13 +3152,11 @@ async function _isDriverFreeForSlot(db, driverId, startDateTime, endDateTime) {
  */
 async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
   const d = driverDoc.data();
-  // موعد الرياض (UTC+3): الدوال تعمل بـUTC، فحساب المكوّنات مباشرةً كان يعطي ساعة
-  // ناقصة 3 (07:00 بدل 10:00) → تذكير بوقت خاطئ + عدم احتساب الفترة في السعة.
-  const riyadh = new Date(startDateTime.getTime() + 3 * 60 * 60 * 1000);
-  const bookingDate = `${riyadh.getUTCFullYear()}-` +
-    `${String(riyadh.getUTCMonth() + 1).padStart(2, "0")}-` +
-    `${String(riyadh.getUTCDate()).padStart(2, "0")}`;
-  const timeSlot = `${String(riyadh.getUTCHours()).padStart(2, "0")}:00`;
+  // موعد الرياض (UTC+3) — الصيغة في ksa_time.js: حساب المكوّنات بـUTC مباشرةً
+  // كان يعطي ساعةً ناقصةً ثلاثاً (07:00 بدل 10:00) → تذكيرٌ بوقتٍ خاطئ وعدمُ
+  // احتساب الفترة في السعة.
+  const {bookingDate, bookingTimeSlot: timeSlot} =
+    riyadhBookingFields(startDateTime);
   const orderRef = db.collection("orders").doc(orderId);
 
   // معامَلة: نُعيد قراءة الطلب ولا نكتب فوقه إن كان مُسنَداً سلفاً أو لم يعد قابلاً
@@ -3651,7 +3700,7 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   if (!orderId || !driverId || !scheduledIso) {
     throw new HttpsError("invalid-argument", "البيانات ناقصة (الطلب/السائق/الموعد)");
   }
-  const startDateTime = _parseKsaIso(scheduledIso);
+  const startDateTime = parseKsaIso(scheduledIso);
   if (isNaN(startDateTime.getTime())) {
     throw new HttpsError("invalid-argument", "موعد غير صالح");
   }
@@ -3696,13 +3745,11 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   // (الثغرة #2) Transaction ذرّي: يُعيد فحص حالة الطلب قبل الإسناد لمنع التعيين
   // المزدوج عند موافقة مديرَين على نفس الطلب معاً.
   const d = driverData;
-  // موعد الرياض (UTC+3) — انظر _assignDriverScheduled: حساب المكوّنات بـUTC مباشرةً
-  // كان يخزّن ساعة/يوماً خاطئاً في booking_time_slot/booking_date.
-  const riyadh = new Date(startDateTime.getTime() + 3 * 60 * 60 * 1000);
-  const bookingDate = `${riyadh.getUTCFullYear()}-` +
-    `${String(riyadh.getUTCMonth() + 1).padStart(2, "0")}-` +
-    `${String(riyadh.getUTCDate()).padStart(2, "0")}`;
-  const timeSlot = `${String(riyadh.getUTCHours()).padStart(2, "0")}:00`;
+  // موعد الرياض (UTC+3) — الصيغة في ksa_time.js: حساب المكوّنات بـUTC مباشرةً
+  // كان يعطي ساعةً ناقصةً ثلاثاً (07:00 بدل 10:00) → تذكيرٌ بوقتٍ خاطئ وعدمُ
+  // احتساب الفترة في السعة.
+  const {bookingDate, bookingTimeSlot: timeSlot} =
+    riyadhBookingFields(startDateTime);
 
   // (تعليمات المنزل) ننسخها من مستند العميل إلى الطلب عند الإسناد اليدوي — نفس
   // منطق _assignDriverScheduled: السائق لا يستطيع قراءة users الأخرى بالقواعد.
@@ -3783,7 +3830,7 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
   }
   let parsedStart = null;
   if (scheduledIso) {
-    parsedStart = _parseKsaIso(scheduledIso);
+    parsedStart = parseKsaIso(scheduledIso);
     if (isNaN(parsedStart.getTime())) {
       throw new HttpsError("invalid-argument", "موعد غير صالح");
     }
@@ -3843,13 +3890,11 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
     }
     const upd = {rescheduled_at: FieldValue.serverTimestamp()};
     if (parsedStart) {
-      const riyadh = new Date(startDateTime.getTime() + 3 * 60 * 60 * 1000);
+      const rbf = riyadhBookingFields(startDateTime);
       upd.service_date = Timestamp.fromDate(startDateTime);
       upd.scheduled_at = Timestamp.fromDate(startDateTime);
-      upd.booking_date = `${riyadh.getUTCFullYear()}-` +
-        `${String(riyadh.getUTCMonth() + 1).padStart(2, "0")}-` +
-        `${String(riyadh.getUTCDate()).padStart(2, "0")}`;
-      upd.booking_time_slot = `${String(riyadh.getUTCHours()).padStart(2, "0")}:00`;
+      upd.booking_date = rbf.bookingDate;
+      upd.booking_time_slot = rbf.bookingTimeSlot;
       // موعد جديد = تذكيرات جديدة: كرونا تذكير السائق والعميل يتخطيان من سبق
       // تذكيره — نقلُ زيارةٍ بعد إرسال تذكيرها كان يترك موعدها الجديد بلا تذكير.
       upd.reminder_sent = false;
@@ -4105,13 +4150,6 @@ exports.remindDriversUpcomingTasks = onSchedule(
 // منفصلة عن تذكير السائق (reminder_sent) لتجنّب التعارض. التوقيت يُعرض من
 // booking_time_slot/booking_date المحليّين لتفادي انزياح المنطقة الزمنية.
 // ════════════════════════════════════════════════════════════════════════
-const _pad2 = (n) => String(n).padStart(2, "0");
-// إزاحة +3 ساعات ثم قراءة مكوّنات UTC = توقيت الرياض المحلي.
-const _riyadhLocalDate = (ms) => {
-  const r = new Date(ms + 3 * 60 * 60 * 1000);
-  return `${r.getUTCFullYear()}-${_pad2(r.getUTCMonth() + 1)}-${_pad2(r.getUTCDate())}`;
-};
-
 exports.remindClientsUpcomingAppointments = onSchedule(
     {schedule: "every 30 minutes", timeZone: "Asia/Riyadh"},
     async () => {
@@ -4144,14 +4182,13 @@ exports.remindClientsUpcomingAppointments = onSchedule(
         const rawName = (d.client_name || "").trim();
         const greet = ["", "عميل", "عميلة", "عميل زيارة", "عميلة زيارة"]
             .includes(rawName) ? "" : `${rawName}، `;
-        const timeStr = d.booking_time_slot ||
-          `${_pad2(new Date(apptMs + 3 * 60 * 60 * 1000).getUTCHours())}:00`;
+        const timeStr = d.booking_time_slot || riyadhLocalSlot(apptMs);
 
         // وسم اليوم (اليوم/غداً/بعد N أيام) بالتقويم المحلي.
-        const apptDateStr = d.booking_date || _riyadhLocalDate(apptMs);
+        const apptDateStr = d.booking_date || riyadhLocalDate(apptMs);
         const dDiff = Math.round(
             (new Date(`${apptDateStr}T00:00:00Z`).getTime() -
-             new Date(`${_riyadhLocalDate(now)}T00:00:00Z`).getTime()) / 86400000);
+             new Date(`${riyadhLocalDate(now)}T00:00:00Z`).getTime()) / 86400000);
         const dayLabel = dDiff <= 0 ? "اليوم" : dDiff === 1 ? "غداً" : `بعد ${dDiff} أيام`;
 
         // (باقات السكن) الساعة مُرساة آلياً ولم يخترها العميل — تذكير الغد لا
@@ -4592,13 +4629,16 @@ exports.reconcileOrphanPayments = onSchedule(
               {service_meta: _parseServiceMeta(md.service_meta_json)} : {}),
           };
           if (md.service_date) {
-            const sd = _parseKsaIso(md.service_date);
+            const sd = parseKsaIso(md.service_date);
             if (!isNaN(sd.getTime())) {
               payload.service_date = Timestamp.fromDate(sd);
               if (isHourly) {
-                const pad = (n) => String(n).padStart(2, "0");
-                payload.booking_date = `${sd.getFullYear()}-${pad(sd.getMonth() + 1)}-${pad(sd.getDate())}`;
-                payload.booking_time_slot = `${pad(sd.getHours())}:00`;
+                // توقيت الرياض: قراءة المكوّنات المحلية من **لحظة زمنية** تعطي
+                // ساعة UTC — كانت تخزّن الخانة أبكر بثلاث ساعات من موعد العميلة،
+                // فيُحجز في capacity.js وقتٌ خاطئ ويبقى وقتُ الموعد فارغاً.
+                const bf = riyadhBookingFields(sd);
+                payload.booking_date = bf.bookingDate;
+                payload.booking_time_slot = bf.bookingTimeSlot;
               }
             }
           }

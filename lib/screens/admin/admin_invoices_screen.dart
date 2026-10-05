@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/models/invoice_log_entry.dart';
-import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:zyiarah/theme/app_theme.dart';
+import 'package:zyiarah/utils/invoice_stamp.dart';
 
 /// سجل الفواتير الإلكترونية (ZATCA) للإدارة والمحاسب — تصميم Stitch `_61`.
 ///
@@ -130,11 +130,9 @@ class _AdminInvoicesScreenState extends State<AdminInvoicesScreen> {
     setState(() => _busy.add(e.docId));
     try {
       final v = e.view;
-      final qr = ZatcaService.generateZatcaQrCode(
-        timestamp: DateTime.now(),
-        totalAmount: v.total,
-        vatAmount: v.vat,
-      );
+      // `v.issuedAt` كان بين اليدَين و`DateTime.now()` يُمرَّر بجوارِه:
+      // إعادةُ توليدِ فاتورةٍ فشلت قبل أيّام كانت تَطبعُ تاريخَ اليوم.
+      final qr = invoiceQrFor(issuedAt: v.issuedAt, total: v.total);
       await FirebaseFirestore.instance
           .collection(e.source)
           .doc(e.docId)
@@ -144,6 +142,7 @@ class _AdminInvoicesScreenState extends State<AdminInvoicesScreen> {
         orderCode: v.orderCode,
         amount: v.total,
         qrData: qr,
+        issuedAt: v.issuedAt,
         serviceName: v.serviceName,
         discountAmount: v.discount,
         couponCode: v.couponCode,

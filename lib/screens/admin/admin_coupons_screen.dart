@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/coupon_expiry.dart';
 
 class AdminCouponsScreen extends StatefulWidget {
   const AdminCouponsScreen({super.key});
@@ -403,7 +404,11 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                           'value': couponVal,
                           'maxUses': int.tryParse(maxUsesCtrl.text) ?? 0,
                           'uses': data?['uses'] ?? 0,
-                          'expiry': Timestamp.fromDate(expiryDate),
+                          // آخر لحظة من اليوم المختار لا أوّله: showDatePicker
+                          // يُعيد منتصف الليل، و`expiry < now` تُميت الكوبون في
+                          // **بداية** اليوم المكتوب على بطاقته — فكوبون «ينتهي
+                          // اليوم» ميتٌ منذ الصباح. مرآةُ endOfLocalDay في اللوحة.
+                          'expiry': Timestamp.fromDate(endOfDayLocal(expiryDate)),
                           'status': status,
                           'restricted_zones': restrictedZones,
                           'show_in_offers': showInOffers,

@@ -60,6 +60,12 @@ class ZyiarahPdfService {
     required String orderCode,
     required double amount, // المبلغ النهائي المدفوع بعد الخصم (شامل الضريبة)
     required String qrData,
+    // لحظةُ **إصدارِ** الفاتورة لا لحظةُ توليدِ الملفّ: كان الطبعُ من
+    // `DateTime.now()`، فإعادةُ توليدِ فاتورةٍ فشلت قبل أيّام تَطبعُ تاريخَ
+    // اليومِ على فاتورةٍ ضريبيّةٍ لطلبٍ دُفع قبل أيّام — ويَحملُ رمزُها
+    // (Tag 3) التاريخَ الخاطئَ نفسَه. القاعدةُ في utils/invoice_stamp.dart،
+    // ويجب أن تكون **هي عينُها** المُمرَّرةُ إلى invoiceQrFor في النداء.
+    required DateTime issuedAt,
     required String serviceName,
     double discountAmount = 0.0, // الخصم الإجمالي
     String? couponCode,
@@ -121,7 +127,8 @@ class ZyiarahPdfService {
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
                 pw.Text(_ar('رقم الطلب / Order ID: #$orderCode')),
-                pw.Text(_ar('التاريخ / Date: ${DateTime.now().toString().substring(0, 16)}')),
+                pw.Text(_ar('التاريخ / Date: '
+                    '${intl.DateFormat('yyyy-MM-dd HH:mm').format(issuedAt)}')),
               ],
             ),
             pw.SizedBox(height: 30),

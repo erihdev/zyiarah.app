@@ -9,13 +9,13 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import 'package:zyiarah/services/tamara_service.dart';
 import 'package:zyiarah/services/moyasar_service.dart';
-import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:zyiarah/screens/moyasar_card_screen.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
 import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/invoice_stamp.dart';
 
 /// شاشة دفع طلب المتجر — تُفتح فور إنشاء الطلب (طلب مباشر، لا موافقة مسبقة).
 /// طرق الدفع المعتمدة: ميسر (بطاقة) + تمارا. لا دفع عند الاستلام — أُزيل من الجذور.
@@ -303,16 +303,16 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
 
     // 3) فاتورة ZATCA (المبلغ شامل الضريبة) — non-fatal
     try {
-      final String qr = ZatcaService.generateZatcaQrCode(
-        timestamp: DateTime.now(),
-        totalAmount: widget.total,
-        vatAmount: _vat,
-      );
+      // الإصدارُ الآن فعلاً (الدفعُ تمَّ قبل أسطر) — لكنّ اللحظةَ تُلتقَط
+      // **مرّةً واحدةً** فلا يَفترقُ المطبوعُ عن الرمز.
+      final DateTime issuedAt = DateTime.now();
+      final String qr = invoiceQrFor(issuedAt: issuedAt, total: widget.total);
       await ZyiarahPdfService.generateAndUploadInvoice(
         orderId: widget.storeOrderId,
         orderCode: widget.orderCode,
         amount: widget.total,
         qrData: qr,
+        issuedAt: issuedAt,
         serviceName: 'طلب منتجات من المتجر',
         collectionPath: 'store_orders',
       );

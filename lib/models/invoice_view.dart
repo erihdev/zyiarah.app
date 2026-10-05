@@ -1,5 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:zyiarah/services/zatca_service.dart';
+import 'package:zyiarah/utils/invoice_stamp.dart';
 import 'package:zyiarah/utils/vat.dart';
 
 /// ما تعرضه بطاقة «فاتورة ضريبية مبسطة» على شاشة نجاح الطلب — مشتقّ من وثيقة
@@ -94,7 +93,6 @@ class InvoiceView {
       {DateTime? now}) {
     double toD(dynamic v) =>
         v is num ? v.toDouble() : double.tryParse('$v') ?? 0.0;
-    DateTime? toT(dynamic v) => v is Timestamp ? v.toDate() : null;
     String? str(dynamic v) {
       if (v == null) return null;
       final s = v.toString().trim();
@@ -108,10 +106,8 @@ class InvoiceView {
       total: toD(data['amount']),
       discount: toD(data['discount_amount']),
       couponCode: str(data['coupon_code']),
-      issuedAt: toT(data['paid_at']) ??
-          toT(data['created_at']) ??
-          now ??
-          DateTime.now(),
+      // القاعدةُ في invoice_stamp.dart كي يَسألها مُولِّدُ PDF نفسُها.
+      issuedAt: invoiceIssuedAt(data, now: now),
       paymentMethod: str(data['payment_method']) ?? '',
       // الرقم المرجعي حسب البوّابة — كما يكتبه الخادم على الوثيقة.
       paymentRef: str(data['moyasar_payment_id']) ??
@@ -124,10 +120,8 @@ class InvoiceView {
   }
 
   /// رمز TLV/Base64 نفسه الذي يُطبع في PDF (البائع، الرقم الضريبي، الوقت،
-  /// الإجمالي شاملاً الضريبة، قيمة الضريبة).
-  String qrData() => ZatcaService.generateZatcaQrCode(
-        timestamp: issuedAt,
-        totalAmount: total,
-        vatAmount: vat,
-      );
+  /// الإجمالي شاملاً الضريبة، قيمة الضريبة) — وصار «نفسه» صحيحاً فعلاً:
+  /// كانت نسخةُ PDF تُبنى من `DateTime.now()` فتَحملُ الفاتورةُ الواحدةُ
+  /// رمزَين مختلفَين، والتعليقُ ينفي ذلك.
+  String qrData() => invoiceQrFor(issuedAt: issuedAt, total: total);
 }
