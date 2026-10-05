@@ -8,6 +8,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:zyiarah/utils/upload_content_type.dart';
 
 class AdminStoreScreen extends StatefulWidget {
   // قاعدة /products في firestore.rules تحصر الكتابة بـ isMarketingAdmin
@@ -78,10 +80,21 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
         await _db.collection('products').doc(id).delete();
 
         if (imageUrl != null && imageUrl.isNotEmpty) {
+          // **الحذفُ خادميّ** — نفسُ تعليلِ `admin_banners_screen`:
+          // `storage.rules` لا تَقرأُ Firestore فلا تَعرفُ الدورَ، فكانت
+          // تَسمحُ لأيِّ مسجَّلٍ بحذفِ كلِّ صورةِ منتجٍ في المتجر.
           try {
-            await FirebaseStorage.instance.refFromURL(imageUrl).delete();
+            await FirebaseFunctions.instance
+                .httpsCallable('deleteStorageObject')
+                .call({'url': imageUrl})
+                .timeout(kNetCallTimeout);
           } catch (storageErr) {
-            debugPrint("Failed to delete product image from storage: $storageErr");
+            debugPrint('deleteStorageObject failed: $storageErr');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('حُذف المنتج، وتعذّر حذف صورته من المخزن'),
+                  backgroundColor: Colors.orange));
+            }
           }
         }
 
@@ -171,9 +184,19 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                               
                               UploadTask uploadTask;
                               if (kIsWeb) {
-                                uploadTask = ref.putData(await file.readAsBytes());
+                                // انظر `upload_content_type.dart`: القاعدةُ
+                                // تَحصرُ المسارَ في `image/*`.
+                                uploadTask = ref.putData(
+                                    await file.readAsBytes(),
+                                    SettableMetadata(
+                                        contentType:
+                                            imageContentTypeFor(file.name)));
                               } else {
-                                uploadTask = ref.putFile(File(file.path));
+                                uploadTask = ref.putFile(
+                                    File(file.path),
+                                    SettableMetadata(
+                                        contentType:
+                                            imageContentTypeFor(file.path)));
                               }
                               
                               // Wait for upload to complete

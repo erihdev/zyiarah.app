@@ -118,4 +118,58 @@ t("(ط) الحدُّ عشرةُ ميغابايت", () => {
   });
 }
 
+// ═══ مسارُ الكائنِ من الرابطِ — قارئٌ ثانٍ لنفسِ الحارس ═══
+//
+// `deleteStorageObject` (حذفٌ إداريٌّ خادميّ) يَحتاجُ المسارَ من الرابط،
+// وفحصُ المضيفِ والدلوِ مكتوبٌ في هذه الوحدةِ أصلاً — فنسخةٌ ثانيةٌ منه في
+// `index.js` هي ما يُحذّرُ منه هذا المستودعُ في كلِّ شريحة.
+{
+  const PID = "zyiarah-app";
+  const url = (p) =>
+    `https://firebasestorage.googleapis.com/v0/b/${PID}.appspot.com/o/` +
+    `${encodeURIComponent(p)}?alt=media&token=x`;
+
+  t("(م) يُعيدُ المسارَ المفكوكَ لرابطِ المشروع", () => {
+    assert.strictEqual(a.storageObjectPath(url("banners/1.jpg"), PID),
+        "banners/1.jpg");
+    assert.strictEqual(
+        a.storageObjectPath(url("products/sub dir/2.png"), PID),
+        "products/sub dir/2.png");
+  });
+
+  t("(ن) ويَرفضُ ما ليس من المشروعِ — بنفسِ حارسِ المرفقات", () => {
+    assert.strictEqual(a.storageObjectPath("https://evil.com/x", PID), null);
+    assert.strictEqual(
+        a.storageObjectPath(url("banners/1.jpg"), "other-project"), null);
+    assert.strictEqual(a.storageObjectPath("not a url", PID), null);
+    assert.strictEqual(a.storageObjectPath(null, PID), null);
+  });
+
+  t("(ص) ويَرفضُ تجاوزَ المجلّداتِ والمسارَ المطلق", () => {
+    // بلا هذا يَخرُجُ المسارُ من البادئةِ المسموحةِ بعد التطبيع.
+    assert.strictEqual(a.storageObjectPath(url("../secret"), PID), null);
+    assert.strictEqual(a.storageObjectPath(url("banners/../x"), PID), null);
+    assert.strictEqual(a.storageObjectPath(url("/abs"), PID), null);
+  });
+
+  t("(ض) والحذفُ الإداريُّ يَستعملُها ولا يُعيدُ كتابةَ الفحص", () => {
+    const src = fs.readFileSync(
+        path.join(__dirname, "..", "index.js"), "utf8");
+    const i = src.indexOf("exports.deleteStorageObject");
+    assert.ok(i > 0, "الدالّةُ اختفت — فالحذفُ عادَ عميليّاً");
+    const fnBody = src.slice(i, src.indexOf("\nexports.", i + 10));
+    assert.ok(fnBody.includes("await _assertAdmin(request);"),
+        "بلا _assertAdmin يَحذفُ أيُّ مسجَّلٍ");
+    assert.ok(fnBody.includes("attachmentsGuard.storageObjectPath("),
+        "نسخةٌ ثانيةٌ من فحصِ الأصلِ في index.js");
+    // قائمةُ سماحٍ لا منع: الفواتيرُ وإثباتُ الإكمالِ خارجَها عمداً.
+    assert.ok(/ALLOWED_PREFIXES = \["banners\/", "products\/", "worker_photos\/"\]/
+        .test(fnBody), "قائمةُ البادئاتِ تغيّرت — الفاتورةُ مستندٌ ضريبيّ");
+    assert.ok(fnBody.includes("p) => path.startsWith(p)"),
+        "البادئةُ تُفحَصُ من أوّلِ المسارِ لا بالاحتواء");
+    // كائنٌ غائبٌ ليس فشلاً: الشاشةُ تَحذفُ مستندَ Firestore أوّلاً.
+    assert.ok(/e\.code === 404/.test(fnBody), "إعادةُ المحاولةِ تُظهرُ خطأً زائفاً");
+  });
+}
+
 console.log(`\nattachments tests: ${passed} passed`);

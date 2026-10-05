@@ -11,6 +11,7 @@ const {initializeApp} = require("firebase-admin/app");
 const {getFirestore, FieldValue, Timestamp, GeoPoint} = require("firebase-admin/firestore");
 const {getMessaging} = require("firebase-admin/messaging");
 const {getAuth} = require("firebase-admin/auth");
+const {getStorage} = require("firebase-admin/storage");
 const geofire = require("geofire-common");
 const {computeExpectedBasePrice, resolveMaterialsBase, applyTerrainSurcharge,
   resolveStoreCartBase} =
@@ -5923,6 +5924,58 @@ exports.moyasarWebhook = onRequest(
 // خادمي إجبارياً: حذف مستند drivers من العميل يترك حساب Auth حيّاً، وبوّابة الطرد
 // في لوحة السائق تشترط وجود المستند (`snapshot.data!.exists`) فتفشل مفتوحةً ويبقى
 // المطرود داخلاً. حذف حساب Auth هو ما يُغلق الباب فعلاً، وهو حكر على Admin SDK.
+/**
+ * حذفُ كائنٍ من المخزنِ — إداريٌّ وخادميٌّ حصراً.
+ *
+ * **سببُ وجودِها.** `storage.rules` لا تَستطيعُ قراءةَ Firestore، فلا سبيلَ
+ * فيها إلى معرفةِ الدور — وكانت قواعدُ `banners/` و`products/` و
+ * `worker_photos/` تَقول `allow write/delete: if request.auth != null`:
+ * **أيُّ عميلةٍ مسجَّلةٍ تَحذفُ كلَّ بنرٍ وكلَّ صورةِ منتجٍ في المتجر**،
+ * وتَستبدلُها بما شاءت. وهي محتوًى إداريٌّ يُعرَضُ لكلِّ العملاء.
+ *
+ * والمخرجُ بلا «custom claims» (لا يَضبطُها المشروعُ اليوم، وإدخالُها
+ * يَكسرُ حسابات الموظّفين القائمةَ حتى تُعادَ تهيئتُها) أن يَصيرَ الحذفُ
+ * خادميّاً: القواعدُ تَمنعُ حذفَ العميلِ، وهذه الدالّةُ تَحذفُ بـAdmin SDK
+ * بعدَ `_assertAdmin` — نفسُ نمطِ `deleteDriverAccount` (حذفُ Auth حكرٌ على
+ * Admin SDK، فالزرُّ العميليُّ كان يَترُكُ الحسابَ حيّاً).
+ *
+ * والبادئاتُ **قائمةُ سماحٍ** لا منع: مسارُ الفواتيرِ ومسارُ إثباتِ الإكمالِ
+ * خارجَها عمداً — لا مسوّغَ لحذفِهما من واجهةٍ، وفاتورةُ ZATCA مستندٌ ضريبيّ.
+ */
+exports.deleteStorageObject = onCall({cpu: 0.083}, async (request) => {
+  await _assertAdmin(request);
+  const raw = request.data && (request.data.url || request.data.path);
+  if (!raw || typeof raw !== "string") {
+    throw new HttpsError("invalid-argument", "رابط الملف مطلوب");
+  }
+  // الرابطُ يُفكَّكُ بنفسِ حارسِ المرفقات (`attachments.js`) — فحصُ المضيفِ
+  // والدلوِ مكتوبٌ هناك، ونسخةٌ ثانيةٌ منه هي ما يُحذّرُ منه هذا المستودع.
+  const path = raw.startsWith("http") ?
+    attachmentsGuard.storageObjectPath(raw, PROJECT_ID) :
+    (raw.startsWith("/") || raw.includes("..") ? null : raw);
+  if (!path) {
+    throw new HttpsError("invalid-argument", "رابط غير صالح لمخزن المشروع");
+  }
+  const ALLOWED_PREFIXES = ["banners/", "products/", "worker_photos/"];
+  if (!ALLOWED_PREFIXES.some((p) => path.startsWith(p))) {
+    throw new HttpsError("permission-denied",
+        "الحذف مسموح لصور البنرات والمنتجات والعاملات فقط");
+  }
+  try {
+    await getStorage().bucket().file(path).delete();
+  } catch (e) {
+    // **عديمُ الأثرِ التكراريِّ**: كائنٌ غائبٌ ليس فشلاً — الشاشةُ تَحذفُ
+    // مستندَ Firestore أوّلاً، فإعادةُ المحاولةِ بعد انقطاعٍ تَجدُ الكائنَ
+    // محذوفاً سلفاً وكانت سَتُظهِرُ خطأً لا معنى له.
+    if (e && (e.code === 404 || e.code === "404")) {
+      return {deleted: false, missing: true};
+    }
+    console.error("[storage] delete failed:", path, e.message);
+    throw new HttpsError("internal", "تعذّر حذف الملف من المخزن");
+  }
+  return {deleted: true, path};
+});
+
 exports.deleteDriverAccount = onCall({cpu: 0.083}, async (request) => {
   await _assertAdmin(request);
   const driverId = request.data && request.data.driverId;
