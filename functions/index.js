@@ -12,7 +12,8 @@ const {getFirestore, FieldValue, Timestamp, GeoPoint} = require("firebase-admin/
 const {getMessaging} = require("firebase-admin/messaging");
 const {getAuth} = require("firebase-admin/auth");
 const geofire = require("geofire-common");
-const {computeExpectedBasePrice, resolveMaterialsBase, applyTerrainSurcharge} =
+const {computeExpectedBasePrice, resolveMaterialsBase, applyTerrainSurcharge,
+  resolveStoreCartBase} =
   require("./pricing");
 const priceVerify = require("./price_verify");
 const {isMarketingBroadcast, excludeOptedOut} = require("./notify_prefs");
@@ -2499,6 +2500,68 @@ async function _verifyOrderPriceTierA(db, orderRef, orderId, od, paid, source) {
   return null;
 }
 
+/**
+ * تحقّقُ سعرِ **طلبِ المتجر** (Tier A، وسمٌ وتنبيهٌ لا رفض).
+ *
+ * `store_service.dart` يُسعّرُ السلّةَ من `products` داخلَ معامَلةٍ ويَكتبُ
+ * `total_amount` و`items` — **لكنّه يَفعلُ ذلك في العميل**، واسمُ متغيّرِه
+ * `serverCalculatedTotal` يُوهِمُ بغيرِ ذلك. ومُتلاعبٌ يَكتبُ المستندَ من
+ * الـSDK مباشرةً يُعلِنُ ما شاء: القواعدُ تَشترطُ `is_paid: false`
+ * و`client_id` ولا تَفحصُ المبلغ، وفحصُ `moyasarWebhook` الوحيدُ «المدفوعُ =
+ * المُعلَن» وكلُّ حقولِ `expectedAmount` يَكتبُها هو. فسلّةٌ بخمسِ مئةٍ
+ * تُعلَنُ بريالٍ وتُدفَعُ بريالٍ وتُشحَن — ولا تحقّقَ خادميٌّ للمتجرِ من أيِّ
+ * نوعٍ أصلاً (`computeExpectedBasePrice` تُعيدُ `null` له، فسلسلةُ Tier A
+ * كلُّها مقصورةٌ على `orders`).
+ *
+ * **وسمٌ وتنبيهٌ فقط، ولا رفضَ بحال** — والقرارُ مقصود: الرفضُ يَحجبُ دفعةَ
+ * عميلةٍ حقيقيّةٍ إن أخطأتُ في الضريبةِ أو التقريب، وهو عينُ ما عضَّ مسارَ
+ * المحفظةِ مرّتَين هذه الجلسة (كوبونُ ما فوقَ 50%، ثمّ المتوقَّعُ صفراً).
+ * فالمُلحُّ هو «لا يَعرفُ أحد»، وهذا ما يُغلقه.
+ *
+ * @param {object} db Firestore
+ * @param {object} ref مرجعُ مستندِ طلبِ المتجر
+ * @param {string} orderId معرّفُه
+ * @param {object} od بياناتُه
+ * @param {number} paid المبلغُ المخصومُ فعلاً بالريال
+ * @param {string} source المسارُ المُنادي — للسجلّ
+ * @return {Promise<void>}
+ */
+async function _verifyStoreOrderPrice(db, ref, orderId, od, paid, source) {
+  try {
+    if (!(paid > 0)) return;
+    const base = await resolveStoreCartBase(db, od && od.items);
+    // `null` = تعذّر التسعير (منتجٌ محذوفٌ أو عنصرٌ بلا معرّف) — لا وسمَ بلا
+    // يقين، لكن لا صمتَ أيضاً: نُنبّهُ كما يفعلُ نظيرُه في `orders`.
+    if (base === null) {
+      console.warn(`[store-price:${source}] UNVERIFIABLE ${orderId}: cart not priceable`);
+      await ref.update({price_unverifiable: true}).catch(() => {});
+      await queuePush("ADMIN_BROADCAST", "طلب متجر تعذّر التحقّق من سعره ⚠️",
+          `طلب المتجر #${od.code || orderId} تعذّر تسعيرُ سلّته من products — يُرجى المراجعة.`,
+          "admin_price_review", {orderId},
+          ["super_admin", "orders_manager", "accountant_admin"]).catch(() => {});
+      return;
+    }
+    if (!(base > 0)) return;
+    const expected = grossFromBaseRounded(base);
+    // تفاوتُ ريالٍ واحدٍ مسموحٌ: التقريبُ ورسومٌ قد تُضافُ إداريّاً.
+    if (paid >= expected - 1) return;
+    const ratio = Math.round((paid / expected) * 1000) / 1000;
+    console.warn(`[store-price:${source}] UNDERPAID ${orderId}: paid=${paid} expected=${expected} ratio=${ratio}`);
+    await ref.update({
+      price_mismatch: true,
+      ops_alerted_mismatch: true,
+      price_expected: expected,
+      price_shadow_ratio: ratio,
+    }).catch(() => {});
+    await queuePush("ADMIN_BROADCAST", "مراجعة سعر طلب متجر ⚠️",
+        `طلب المتجر #${od.code || orderId} مدفوع ${paid} ر.س مقابل ${expected} متوقَّع من أسعار products — يُرجى المراجعة.`,
+        "admin_price_review", {orderId, ratio: String(ratio)},
+        ["super_admin", "orders_manager", "accountant_admin"]).catch(() => {});
+  } catch (e) {
+    console.error(`[store-price:${source}] ${orderId}:`, e.message);
+  }
+}
+
 exports.verifyMoyasarPayment = onCall(
     {secrets: ["MOYASAR_SECRET_KEY"], cpu: 0.25},
     async (request) => {
@@ -2651,6 +2714,10 @@ exports.verifyMoyasarPayment = onCall(
       // آليّ للدفع الناقص الصارخ — خلف ENFORCE_PRICE_TIER_B، **وهي مُفعَّلةٌ بقرار
       // المالك 2026-07-31** (هذا السطرُ كان ما زال يقول «مطفأة»، انظر رأس الملفّ).
       // والفحصُ نفسُه في `_verifyOrderPriceTierA` — مصدرٌ واحدٌ للمسالكِ الثلاثة.
+      if (orderRef.parent.id === "store_orders") {
+        await _verifyStoreOrderPrice(db, orderRef, orderId, orderDoc.data(),
+            Number(paymentData.amount) / 100, "verify");
+      }
       let tierBReason = null;
       if (orderRef.parent.id === "orders") {
         const od = orderDoc.data();
@@ -5488,6 +5555,12 @@ exports.moyasarWebhook = onRequest(
                 // **قبلَ** فحصِه — فالويب هوكُ إن سَبَقَ (وتُطلقه ميسر من
                 // خادمٍ إلى خادمٍ لحظةَ الدفع) استَهلكَ الفحصَ كلَّه، ومُتلاعبٌ
                 // لا يُنادي النداءَ أصلاً.
+                // طلبُ المتجر: سلّتُه تُعاد تسعيرُها من `products`. وسمٌ
+                // وتنبيهٌ لا رفض — انظر ترويسةَ `_verifyStoreOrderPrice`.
+                if (col === "store_orders") {
+                  await _verifyStoreOrderPrice(getFirestore(), ref, orderId,
+                      data, Number(verifiedPayment.amount) / 100, "webhook");
+                }
                 let tierB = null;
                 if (col === "orders") {
                   const method = data.payment_method || "";

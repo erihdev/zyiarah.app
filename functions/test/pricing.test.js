@@ -2,7 +2,8 @@
 // اختبارات تكافؤ التسعير الخادمي — تشغيل: node test/pricing.test.js
 const assert = require("assert");
 const {computeExpectedBasePrice, acPriceField, carPriceField,
-  terrainSurchargePercent, applyTerrainSurcharge} = require("../pricing");
+  terrainSurchargePercent, applyTerrainSurcharge,
+  resolveStoreCartBase} = require("../pricing");
 
 let passed = 0;
 function t(name, fn) {
@@ -222,4 +223,79 @@ t("terrain surcharge applies on the pre-VAT base only; null/0 pass through", () 
   assert.ok(Math.abs(withTerrain - 118.8) < 1e-9, `got ${withTerrain}`);
 });
 
-console.log(`\n${passed} pricing tests passed.`);
+
+// ─────────── سلّةُ المتجرِ تُعادُ تسعيرُها من products ───────────
+//
+// `store_service.dart` يُسعّرُها من `products` لكن **في العميل**، ومُتلاعبٌ
+// يَكتبُ المستندَ من الـSDK يُعلِنُ ما شاء — ولا تحقّقَ خادميّاً للمتجرِ من
+// أيِّ نوع. العقدُ هنا عقدُ `resolveMaterialsBase` نفسُه: `null` = تعذّر.
+/** `db` مُزيَّفٌ: `products` بالمعرّف. */
+function fakeProducts(byId) {
+  return {collection(c) {
+    assert.strictEqual(c, "products");
+    return {doc(id) {
+      return {get: async () => {
+        const d = byId[id];
+        return {exists: !!d, data: () => d};
+      }};
+    }};
+  }};
+}
+
+async function ta(name, fn) {
+  await fn();
+  passed++;
+  console.log("  ok -", name);
+}
+
+(async () => {
+  const db = fakeProducts({
+    p1: {price: 25}, p2: {price: 10.5}, zero: {price: 0}, bad: {price: "x"},
+  });
+
+  await ta("السلّةُ تُجمَعُ سعراً × كمّيّة", async () => {
+    assert.strictEqual(
+        await resolveStoreCartBase(db, [{id: "p1", quantity: 2}]), 50);
+    assert.strictEqual(
+        await resolveStoreCartBase(db,
+            [{id: "p1", quantity: 1}, {id: "p2", quantity: 2}]), 46);
+  });
+
+  await ta("و`product_id` مقبولٌ كمعرّفٍ كذلك (اسمُ موادِّ التنظيف)", async () => {
+    assert.strictEqual(
+        await resolveStoreCartBase(db, [{product_id: "p1", quantity: 1}]), 25);
+  });
+
+  await ta("سلّةٌ فارغةٌ صفرٌ لا null — لا شيءَ يُقارَن", async () => {
+    assert.strictEqual(await resolveStoreCartBase(db, []), 0);
+    assert.strictEqual(await resolveStoreCartBase(db, null), 0);
+    assert.strictEqual(await resolveStoreCartBase(db, undefined), 0);
+  });
+
+  await ta("وتعذّرُ التسعيرِ `null`: بلا معرّف، كمّيّةٌ غيرُ موجبة، محذوف، سعرٌ فاسد",
+      async () => {
+        for (const items of [
+          [{quantity: 1}],
+          [{id: "p1", quantity: 0}],
+          [{id: "p1", quantity: -2}],
+          [{id: "ghost", quantity: 1}],
+          [{id: "zero", quantity: 1}],
+          [{id: "bad", quantity: 1}],
+          // عنصرٌ واحدٌ فاسدٌ يُبطِلُ السلّةَ كلَّها (لا تسعيرَ جزئيّ).
+          [{id: "p1", quantity: 1}, {id: "ghost", quantity: 1}],
+        ]) {
+          assert.strictEqual(await resolveStoreCartBase(db, items), null,
+              `expected null for ${JSON.stringify(items)}`);
+        }
+      });
+
+  await ta("والكمّيّةُ النصّيّةُ تُحوَّل", async () => {
+    assert.strictEqual(
+        await resolveStoreCartBase(db, [{id: "p1", quantity: "3"}]), 75);
+  });
+
+  console.log(`\n${passed} pricing tests passed.`);
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
