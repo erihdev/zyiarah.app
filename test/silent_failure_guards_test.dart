@@ -34,10 +34,22 @@ void main() {
   group('المحفظة تقول الحقيقة', () {
     test('الخدمة لا تبتلع خطأ الدالة الخادمية', () {
       final s = _code('lib/services/zyiarah_wallet_service.dart');
-      final i = s.indexOf('Future<bool> redeemQatratPoints');
+      // صارت تُعيد `QatratRedeemResult?` لا `bool`: الشاشةُ كانت تَحسبُ المبلغَ
+      // المعروضَ بنفسِها وتُهمل `newBalance` الذي يُعيدُه الخادم. القرارُ
+      // المحروسُ هنا لم يتغيّر — **لا ابتلاعَ لرسالةِ الخادمِ العربيّة** —
+      // فنُعيد توجيهَ الحارسِ ونُوسّعه: `return null` داخلَ `catch` هو ابتلاعُ
+      // الشكلِ الجديد، تماماً كما كان `return false`.
+      final i = s.indexOf('Future<QatratRedeemResult?> redeemQatratPoints');
+      expect(i, greaterThan(-1),
+          reason: 'توقيعُ الدالّةِ تغيّر — راجِع ما يَحرسُه هذا الفحص');
       final body = s.substring(i, s.indexOf('\n  }', i));
-      expect(RegExp(r'catch\s*\([^)]*\)\s*\{\s*return false;').hasMatch(body), isFalse,
-          reason: 'ابتلاع الخطأ يرمي رسالة الخادم العربية ويُظهر رسالة مخترَعة');
+      for (final swallow in ['return false;', 'return null;']) {
+        expect(
+            RegExp('catch\\s*\\([^)]*\\)\\s*\\{\\s*${RegExp.escape(swallow)}')
+                .hasMatch(body),
+            isFalse,
+            reason: 'ابتلاع الخطأ يرمي رسالة الخادم العربية ويُظهر رسالة مخترَعة');
+      }
     });
 
     test('الواجهة تعرض سبب الخادم ولا تخترع «تحتاج 50 نقطة»', () {

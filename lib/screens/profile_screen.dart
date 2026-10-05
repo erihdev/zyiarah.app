@@ -17,6 +17,7 @@ import 'package:zyiarah/services/zyiarah_wallet_service.dart';
 import 'package:zyiarah/services/zyiarah_referral_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/qatrat.dart';
 
 class ZyiarahProfileScreen extends StatefulWidget {
   const ZyiarahProfileScreen({super.key});
@@ -162,28 +163,42 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
 
   Future<void> _redeemQatrat() async {
     final uid = _auth.currentUser?.uid;
-    if (uid == null || _isRedeeming || _walletError || _qatratPoints < 50) return;
+    if (uid == null ||
+        _isRedeeming ||
+        _walletError ||
+        qatratRedeemable(_qatratPoints) == 0) {
+      return;
+    }
 
     HapticFeedback.mediumImpact();
     setState(() => _isRedeeming = true);
 
     try {
-      // Round down to nearest 50
-      final toRedeem = (_qatratPoints ~/ 50) * 50;
-      final success = await ZyiarahWalletService()
+      final toRedeem = qatratRedeemable(_qatratPoints);
+      final result = await ZyiarahWalletService()
           .redeemQatratPoints(userId: uid, pointsToRedeem: toRedeem);
 
       if (mounted) {
-        if (success) {
-          final earned = toRedeem / 50.0;
+        if (result != null) {
+          // **الرقمُ المعروضُ من الخادمِ لا من حسابٍ محلّيّ.** كانت الشاشةُ
+          // تحسب `toRedeem / 50.0` بنفسِها وتُهمل `newBalance` الذي يُعيدُه
+          // الخادم — فلو تَباعدَ سعرُ الصرفِ يوماً بُشِّرت العميلةُ بمبلغٍ
+          // لم يُودَع. وإن غابَ الرقمُ (خادمٌ أقدم) نقول نجاحاً بلا رقمٍ
+          // مُختلَق، كما تفعل بقيّةُ الشاشةِ مع «—».
+          final before = _walletBalance;
           await _loadWallet(uid);
           if (!mounted) return;
+          final credited =
+              result.newBalance == null ? null : result.newBalance! - before;
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Row(children: [
               const Icon(Icons.auto_awesome, color: Colors.amber, size: 18),
               const SizedBox(width: 10),
               Text(
-                'تم استبدال $toRedeem نقطة بـ ${earned.toStringAsFixed(2)} ر.س 🎉',
+                credited == null
+                    ? 'تم استبدال ${result.pointsRedeemed} نقطة 🎉'
+                    : 'تم استبدال ${result.pointsRedeemed} نقطة بـ '
+                        '${credited.toStringAsFixed(2)} ر.س 🎉',
                 style: GoogleFonts.tajawal(fontWeight: FontWeight.bold),
               ),
             ]),
@@ -988,7 +1003,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                                 ? '—'
                                 : canRedeem
                                     ? 'استبدال'
-                                    : '${50 - _qatratPoints} نقطة',
+                                    : '${qatratToNextRedeem(_qatratPoints)} نقطة',
                             key: ValueKey('$canRedeem|$_walletLoaded'),
                             style: GoogleFonts.tajawal(
                               fontSize: 11,
@@ -1444,11 +1459,52 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // النصُّ القديم كان يَقول «سيتم مسح كافة بياناتك، **فواتيرك**،
+              // وخدماتك السابقة نهائياً» — وهو غيرُ صحيح: الفاتورةُ الضريبيّةُ
+              // والطلبُ يُحفظان بحكم نظامِ ضريبةِ القيمةِ المضافة، ولا يَحذفُ
+              // `processAccountDeletion` إلّا حسابَ المصادقةِ ووثيقةَ المستخدمِ
+              // ورموزَ الإشعارات. نقولُ ما يحدثُ فعلاً.
               Text(
-                'سيتم مسح كافة بياناتك، فواتيرك، وخدماتك السابقة نهائياً. لا يمكن التراجع عن هذا الإجراء.',
+                'سيُحذف حسابك وبياناتك الشخصية نهائياً ولن تتمكّني من تسجيل '
+                'الدخول بعدها. أمّا الفواتير الضريبية وسجلّات الطلبات فتُحفظ '
+                'بحكم نظام ضريبة القيمة المضافة ولا يمكن حذفها.',
                 style: GoogleFonts.tajawal(height: 1.5),
               ),
               const SizedBox(height: 12),
+              // رصيدُ محفظةٍ قائمٌ = مالٌ يُحجَز إلى الأبد: المعرّفُ لا يَعودُ
+              // قابلاً لتسجيل الدخول، فلا سبيلَ لصاحبتِه إليه. تُقالُ لها
+              // **قبل** التأكيد، لا بعده (الخادمُ يُسجّل الدَّينَ ويُنبّه
+              // المحاسبةَ، لكنّ القرارَ قرارُها).
+              if (!_walletError && _walletBalance > 0) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange.shade300),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.account_balance_wallet_outlined,
+                          color: Colors.orange, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'لديك ${_walletBalance.toStringAsFixed(2)} ر.س في '
+                          'محفظتك. استخدميها أو تواصلي مع الدعم قبل الحذف — '
+                          'لن تتمكّني من الوصول إليها بعده.',
+                          style: GoogleFonts.tajawal(
+                              fontSize: 11,
+                              height: 1.5,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange.shade900),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -1461,7 +1517,12 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'حق النسيان: سيتم حذف كافة سجلات التتبع الخاصة بك.',
+                        // لا نَقُل «يُجهَّل»: لا شيءَ في المستودعِ يُجهّل
+                        // الطلباتِ المحفوظة — تَحملُ الاسمَ والجوّالَ كما
+                        // سُجّلا وقتَ الطلب. نَقولُ ما يحدث.
+                        'يُحذف ملفّك الشخصي ورموز إشعاراتك. وتبقى الطلبات '
+                        'والفواتير المحفوظة نظاماً حاملةً الاسم والجوّال '
+                        'المسجَّلين وقت الطلب.',
                         style:
                             GoogleFonts.tajawal(fontSize: 10, color: Colors.red),
                       ),

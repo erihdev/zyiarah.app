@@ -2595,6 +2595,29 @@ exports.verifyMoyasarPayment = onCall(
 async function processAccountDeletion(uid) {
   console.log(`Processing legal account deletion for user: ${uid}`);
   try {
+    // 0. رصيدُ المحفظةِ **قبل** حذفِ حسابِ المصادقة. لا شيءَ في هذا المسارِ
+    //    كان يَنظرُ إلى `wallets/{uid}`: تُحذف هويّةُ المصادقةِ ويبقى الرصيدُ
+    //    في وثيقةٍ مفتاحُها معرّفٌ لا يستطيع أحدٌ تسجيلَ الدخولِ به بعد اليوم
+    //    — **مالُ العميلةِ محجوزٌ إلى الأبد، بلا إشعارٍ ولا سجلِّ دَينٍ**.
+    //    لا نُصفّرُه: التصفيرُ يُتلف الدليلَ على الدَّين. نُسجّلُه على طلبِ
+    //    الحذفِ، ونَسِمُ المحفظةَ، ونُنبّه المحاسبةَ لتُسوّيَه خارج التطبيق.
+    //    وشاشةُ الملفِّ تُحذّر العميلةَ برصيدِها **قبل** التأكيد.
+    let strandedBalance = 0;
+    try {
+      const wSnap = await getFirestore().collection("wallets").doc(uid).get();
+      strandedBalance = wSnap.exists ? Number(wSnap.data().balance || 0) : 0;
+      if (!Number.isFinite(strandedBalance)) strandedBalance = 0;
+      if (strandedBalance > 0) {
+        await wSnap.ref.update({
+          owner_deleted: true,
+          owner_deleted_at: FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (wErr) {
+      // قراءةُ المحفظةِ تحسينٌ للسجلّ، لا تَحجبُ حقَّ الحذفِ (متطلّبُ Apple).
+      console.error(`[deletion] wallet read failed for ${uid}:`, wErr.message);
+    }
+
     // 1. Delete user from Firebase Auth
     try {
       await getAuth().deleteUser(uid);
@@ -2615,12 +2638,22 @@ async function processAccountDeletion(uid) {
     await getFirestore().collection("fcm_tokens").doc(uid).delete().catch(() => {});
     await getFirestore().collection("fcm_token").doc(uid).delete().catch(() => {});
 
-    // 4. Mark the request fully processed
+    // 4. Mark the request fully processed — ومعه الرصيدُ المحجوز، كي يبقى
+    //    الدَّينُ مكتوباً في مكانٍ يَقرؤه البشرُ لا في وثيقةِ محفظةٍ يتيمة.
     await getFirestore().collection("account_deletions").doc(uid).update({
       completed_at: FieldValue.serverTimestamp(),
       status: "deleted_fully_processed",
+      wallet_balance_at_deletion: strandedBalance,
     });
     console.log(`Successfully completed deletion workflow for ${uid}`);
+    if (strandedBalance > 0) {
+      await queuePush("ADMIN_BROADCAST", "رصيدُ محفظةٍ بعد حذفِ حساب 💸",
+          `حُذف حسابٌ ورصيدُ محفظته ${strandedBalance} ر.س — لا يستطيع صاحبُه ` +
+          "تسجيلَ الدخولِ بعد اليوم، فالتسويةُ يدويّة.",
+          "admin_wallet_stranded", {uid},
+          ["super_admin", "accountant_admin"]).catch((e) =>
+        console.error(`[deletion] stranded alert failed for ${uid}:`, e.message));
+    }
   } catch (error) {
     console.error(`Error processing account deletion for user ${uid}:`, error);
     // Record the failure so it can be retried/inspected by an admin
