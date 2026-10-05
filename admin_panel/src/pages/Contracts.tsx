@@ -546,9 +546,22 @@ const StatusBadge = ({ status }: { status: string }) => {
     }
 };
 
-export default function Contracts() {
+// **ثلاثُ مِلكيّاتٍ في صفحةٍ واحدة.** العقودُ شأنُ مدير الطلبات
+// (`contracts` update = `isOrdersManager()`، وتعليقُ القواعدِ يَقولُها نصّاً)،
+// وباقتا الاشتراكِ وعاملاتِ المناسباتِ شأنُ المسوّق (`subscription_packages` و
+// `event_worker_packages` write = `isMarketingAdmin()`، وتطبيقُ الإدارةِ
+// يَحصرُ محرّرَيهما في `['super_admin','marketing_admin']`). وكانت الصفحةُ
+// ممنوحةً لـ`orders_manager` وحدَه (والمسوّقُ لا يَبلغُها أصلاً): فمديرُ
+// الطلباتِ يَرى محرّرَي الباقاتِ وكلُّ حفظٍ وحذفٍ يُرفَض، والمسوّقُ — الدورُ
+// الذي عيّنته القواعدُ لها — لا يَصلُها. فتُخفى التبويباتُ كما في
+// `Settings.tsx` (نفسُ القرارِ: «كي لا يرى أزراراً ترفضها القواعد دائماً»).
+export default function Contracts({ role }: { role?: string | null }) {
     const { toast, confirm } = useNotification();
-    const [activeTab, setActiveTab] = useState<'contracts' | 'packages' | 'event_worker_packages'>('contracts');
+    const full = role === 'super_admin' || role === 'admin';
+    const canContracts = full || role === 'orders_manager';
+    const canPackages = full || role === 'marketing_admin';
+    const [activeTab, setActiveTab] = useState<'contracts' | 'packages' | 'event_worker_packages'>(
+        canContracts ? 'contracts' : 'packages');
     const [searchTerm, setSearchTerm] = useState('');
     const [contracts, setContracts] = useState<ContractRecord[]>([]);
     const [loading, setLoading] = useState(true);
@@ -644,37 +657,37 @@ export default function Contracts() {
 
             {/* تبويب: العقود | باقات الاشتراك | باقات عاملات المناسبات (إدارة الباقات كانت في التطبيق فقط) */}
             <div className="flex gap-2 bg-white p-1.5 rounded-2xl border-2 border-slate-100 w-fit">
-                <button
+                {canContracts && <button
                     type="button"
                     onClick={() => setActiveTab('contracts')}
                     className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'contracts' ? 'bg-[#660033] text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
                 >
                     <FileSignature size={16} />
                     العقود
-                </button>
-                <button
+                </button>}
+                {canPackages && <button
                     type="button"
                     onClick={() => setActiveTab('packages')}
                     className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'packages' ? 'bg-[#660033] text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
                 >
                     <Package size={16} />
                     باقات الاشتراك
-                </button>
-                <button
+                </button>}
+                {canPackages && <button
                     type="button"
                     onClick={() => setActiveTab('event_worker_packages')}
                     className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'event_worker_packages' ? 'bg-[#660033] text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
                 >
                     <PartyPopper size={16} />
                     باقات عاملات المناسبات
-                </button>
+                </button>}
             </div>
 
-            {activeTab === 'packages' && <PackagesSection />}
+            {canPackages && activeTab === 'packages' && <PackagesSection />}
 
-            {activeTab === 'event_worker_packages' && <EventWorkerPackagesSection />}
+            {canPackages && activeTab === 'event_worker_packages' && <EventWorkerPackagesSection />}
 
-            {activeTab === 'contracts' && (<>
+            {canContracts && activeTab === 'contracts' && (<>
             <div className="relative group">
                 <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#660033] transition-colors" size={20} />
                 <input
@@ -764,14 +777,19 @@ export default function Contracts() {
                                     >
                                         <Info size={20} />
                                     </button>
-                                    <button 
-                                        type="button" 
+                                    {/* `contracts` delete = isSuperAdmin في القواعد («العملياتُ
+                                        المدمّرة» بنصِّ تعليقِها)، والصفحةُ لمدير الطلبات —
+                                        فكان زرُّ «حذف السجل» بحوارِ تأكيدٍ ثم permission-denied
+                                        حتماً له. شاشةُ Flutter تُخفيه بـ`_canDeleteContracts`
+                                        وتُوثّقُ السبب؛ هذه الصفحةُ كانت الشاذّة. */}
+                                    {full && <button
+                                        type="button"
                                         onClick={() => handleDelete(contract.id)}
                                         className="p-3.5 bg-red-50 text-red-500 hover:bg-red-100 rounded-2xl transition-all active:scale-95"
                                         title="حذف السجل"
                                     >
                                         <Trash2 size={20} />
-                                    </button>
+                                    </button>}
                                 </div>
                             </div>
                         </div>
