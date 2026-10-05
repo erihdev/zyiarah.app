@@ -695,9 +695,19 @@ exports.releaseScheduledNotifications = onSchedule({schedule: "every 1 minutes",
     async () => {
       const db = getFirestore();
       const now = Timestamp.now();
-      // Single-inequality query (auto-indexed); status is filtered in code so a
-      // delivered doc (status:'sent') is never re-sent.
+      // **الاستعلامُ يَسألُ ما تَسألُه المطالبةُ أدناه.** كان مساواةً صفراً
+      // ومدًى واحداً (`scheduled_at <= now`) و«الحالةُ تُصفّى في الكود» — ومستندُ
+      // بثٍّ **مُرسَلٍ** يَحتفظُ بـ`scheduled_at` ماضيةً فيَظلُّ مطابقاً للأبد.
+      // والترتيبُ الضمنيُّ لاستعلامِ مدًى هو ذلك الحقلُ تصاعديّاً، فنافذةُ
+      // الخمسين تَمتلئُ بأقدمِ خمسينَ بثٍّ مُرسَلٍ ولا يَبلغُها بثٌّ جديدٌ حلَّ
+      // موعدُه: المطالبةُ تَنكُلُ عن كلِّ واحدٍ منها (`status !== "scheduled"`)
+      // والجديدُ لا يُقرأُ أصلاً. ولأنّ `onNotificationCreated` **لا** يُجدول
+      // مهمّةَ Cloud Task لما بَعُد عن 29 يوماً، فهذا الـcron هو مَساره
+      // الوحيدُ لا شبكةَ أمانِه — فالبثُّ لا يُرسَل، بلا أثرٍ في أيِّ مكان.
+      // (`scheduled_at: null` — مسارُ البثِّ الفوريِّ في اللوحة — لا يُطابق
+      // `<=` أصلاً: مُختبَرٌ على المُحاكي، كما لا يُطابقُه غيابُ الحقل.)
       const due = await db.collection("notifications_log")
+          .where("status", "==", "scheduled")
           .where("scheduled_at", "<=", now).limit(50).get();
       for (const doc of due.docs) {
         // مطالبة ذرّية قبل التسليم: نقلب scheduled→sending داخل معامَلة، فلو تداخل
