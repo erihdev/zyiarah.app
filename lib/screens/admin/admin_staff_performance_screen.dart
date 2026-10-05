@@ -40,21 +40,44 @@ class _AdminStaffPerformanceScreenState extends State<AdminStaffPerformanceScree
         // تحويل آمن: قد تُخزَّن هذه الحقول كنص → الضرب المباشر في الفرز ينهار.
         final int totalCompleted =
             int.tryParse('${driverData['completed_orders_count'] ?? 0}') ?? 0;
-        final double avgRating =
-            double.tryParse('${driverData['rating_avg'] ?? 5.0}') ?? 5.0;
+        // **بلا تقييمٍ ليس تقييماً ٥٫٠.** `aggregateDriverRating` يَكتبُ
+        // `rating_count` مع كلِّ تقييمٍ حقيقيّ، والبذرُ عند التوفير (`rating:
+        // 5.0`) يُكتب **بلا عدّاد** — وهو ما تَستثنيه الدالّةُ من المتوسّطِ
+        // صراحةً. فافتراضُ ٥٫٠ هنا كان يَفعلُ ما استثنته: يَعرضُ «٥٫٠ ★» لسائقٍ
+        // لم يُقيّمه أحد، **ويَضربُه في عددِ المُنجَز في الفرز** — فسائقٌ أتمّ
+        // ١٧ طلباً بلا تقييمٍ (٨٥) يَسبقُ من أتمّ ٢٠ بمتوسّطٍ حقيقيٍّ ٤٫٢ (٨٤)،
+        // وقد تُسمّي بطاقةُ «الأفضل» من لم يُقيّمه أحد. (نفسُ عطلِ «تقييمك
+        // ٤٫٩ ★» في ملفِّ العميلة.)
+        final int ratingCount =
+            int.tryParse('${driverData['rating_count'] ?? 0}') ?? 0;
+        final double? avgRating = ratingCount <= 0
+            ? null
+            : double.tryParse('${driverData['rating_avg'] ?? ''}');
 
         stats.add({
           'id': driverId,
           'name': driverName,
           'completed': totalCompleted,
           'rating': avgRating,
+          'rating_count': ratingCount,
           'phone': driverData['phone'] ?? '-',
           'status': driverData['status'] ?? 'offline',
         });
       }
 
-      // Sort by performance (Rating * volume)
-      stats.sort((a, b) => (b['rating'] * b['completed']).compareTo(a['rating'] * a['completed']));
+      // الفرز: المُقيَّمون أوّلاً بـ(المتوسّط × المُنجَز)، ثمّ غيرُ المُقيَّمين
+      // بعددِ المُنجَزِ وحدَه — فلا رقمٌ مُختلَقٌ يَرفعُ أحداً فوق مَن قُيِّم.
+      stats.sort((a, b) {
+        final ar = a['rating'] as double?;
+        final br = b['rating'] as double?;
+        if (ar == null && br == null) {
+          return (b['completed'] as int).compareTo(a['completed'] as int);
+        }
+        if (ar == null) return 1;
+        if (br == null) return -1;
+        return (br * (b['completed'] as int))
+            .compareTo(ar * (a['completed'] as int));
+      });
 
       if (mounted) {
         setState(() {
@@ -174,7 +197,11 @@ class _AdminStaffPerformanceScreenState extends State<AdminStaffPerformanceScree
             children: [
               _buildModernMiniStat("مهام", "${top['completed']}"),
               const SizedBox(width: 20),
-              _buildModernMiniStat("التقييم", "${top['rating'].toStringAsFixed(1)} ★"),
+              _buildModernMiniStat(
+                  "التقييم",
+                  top['rating'] == null
+                      ? "—"
+                      : "${(top['rating'] as double).toStringAsFixed(1)} ★"),
             ],
           ),
         ],
@@ -229,7 +256,11 @@ class _AdminStaffPerformanceScreenState extends State<AdminStaffPerformanceScree
                 children: [
                   const Icon(Icons.star, color: Colors.amber, size: 14),
                   const SizedBox(width: 4),
-                  Text("${staff['rating'].toStringAsFixed(1)}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(
+                      staff['rating'] == null
+                          ? "—"
+                          : (staff['rating'] as double).toStringAsFixed(1),
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
                 ],
               ),
               Text("${staff['completed']} مهمة", style: const TextStyle(fontSize: 10, color: Colors.blueGrey)),

@@ -16,7 +16,10 @@ interface DriverData {
     is_available: boolean;
     is_active?: boolean;
     is_suspended?: boolean;
-    rating: number;
+    // `rating` مبذورٌ ٥٫٠ عند التوفير و`aggregateDriverRating` يَستبدلُه بأوّلِ
+    // تقييمٍ حقيقيّ — فـ`rating_count` وحدَه يَفصلُ «قُيِّم» عن «بُذر».
+    rating?: number;
+    rating_count?: number;
     rides: number;
     monthly_salary: number;
     photo_url?: string;
@@ -367,7 +370,15 @@ export default function Drivers() {
                             </div>
 
                             <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-4 mb-4">
-                                <div className="text-center"><span className="block text-xs font-bold text-slate-400 mb-1">التقييم</span><div className="flex items-center justify-center gap-1 font-bold text-slate-700">{driver.rating} <Star size={14} className="text-amber-400 fill-amber-400" /></div></div>
+                                <div className="text-center"><span className="block text-xs font-bold text-slate-400 mb-1">التقييم</span><div className="flex items-center justify-center gap-1 font-bold text-slate-700">{
+                                    // بلا تقييمٍ ليس تقييماً ٥٫٠: البذرُ يُكتب
+                                    // بلا عدّاد، والدالّةُ الخادميّةُ تَستثنيه
+                                    // من المتوسّطِ صراحةً — فعرضُه «٥ ★» يَنسبُ
+                                    // إلى السائقِ ما لم يَقُله أحد.
+                                    (driver.rating_count ?? 0) > 0 && typeof driver.rating === 'number'
+                                        ? <>{driver.rating.toFixed(1)} <Star size={14} className="text-amber-400 fill-amber-400" /></>
+                                        : <span className="text-slate-400">—</span>
+                                }</div></div>
                                 <div className="text-center border-r border-slate-100"><span className="block text-xs font-bold text-slate-400 mb-1">الخدمات</span><span className="font-bold text-slate-700">{driver.rides}</span></div>
                                 <div className="text-center border-r border-slate-100"><span className="block text-xs font-bold text-slate-400 mb-1">الراتب</span><span className="font-bold text-emerald-600">{driver.monthly_salary} ر.س</span></div>
                             </div>
