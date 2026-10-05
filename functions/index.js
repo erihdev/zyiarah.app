@@ -771,6 +771,40 @@ exports.manualSendNotification = onCall({cpu: 0.083}, async (request) => {
 });
 
 // 4.5 Create Tamara checkout session (server-side — token never exposed to client)
+/**
+ * **مالكُ المستندِ المدفوعِ هو المُنادي — وإلّا `permission-denied`.**
+ *
+ * السؤالُ كان مكتوباً بثلاثةِ أشكالٍ في أربعةِ مساراتٍ ماليّة، و**مفقوداً في
+ * الرابع**: `payWithWallet` (`client_id !== uid`)، `payContractWithWallet`
+ * (`c.userId !== uid`)، `verifyMoyasarPayment` (`client_id || userId`)،
+ * و`createTamaraCheckout` **بلا أيِّ فحصٍ للملكيّة** — وتعليقُ قراءتِه يَقول
+ * «prevent client tampering»، وهو يَمنعُ تلاعبَ **المبلغِ** لا الملكيّة.
+ *
+ * فأيُّ مسجَّلٍ يَملكُ معرّفَ طلبٍ — سائقٌ يَرى طلباتَه المُسنَدةَ مثلاً —
+ * كان يُنشئُ جلسةَ تمارا على طلبِ عميلةٍ أخرى: صفحةُ الدفعِ تَعرضُ المبلغَ
+ * واسمَ الخدمة، و**بريدُ العميلةِ** يُرسَلُ إلى تمارا كـ`consumer.email`؛
+ * و`order_reference_id` معرّفُ الطلبِ نفسُه فدفعُه يَقلبُ **طلبَ غيرِه**
+ * مدفوعاً (`_tamaraFlipPaid` بلا فحصِ مبلغٍ أصلاً). ولا فحصَ `is_paid` كذلك،
+ * فجلسةٌ ثانيةٌ على طلبٍ مدفوعٍ = خصمٌ مكرَّرٌ واستردادُه يدويّ.
+ *
+ * التسامحُ مع غيابِ المالكِ مقصودٌ ومنقولٌ عن `verifyMoyasarPayment` بعينِه:
+ * ذاك المسارُ **يُنشئُ** الطلبَ من بيانات الدفعِ (مسارُ Apple Pay) فقد يَقرأُ
+ * مستنداً لم يُكتَبْ له مالكٌ بعد. ولا مسارَ في المستودعِ يُنشئُ طلباً بلا
+ * `client_id`، فالفرقُ نظريّ — والاتّساقُ مع الشقيقِ أولى من تباينٍ جديد.
+ * و`payContractWithWallet` يَبقى **أشدَّ** (غيابُ `userId` يَرفض) لأنّ العقودَ
+ * لا تُنشَأُ خادميّاً بلا مالك، وهو قرارٌ مكتوبٌ لا سهو.
+ *
+ * @param {Object} data بياناتُ المستند (طلب/طلبِ متجر/عقد).
+ * @param {string} uid معرّفُ المُنادي.
+ * @param {string} message رسالةُ الرفضِ بصيغةِ المسار.
+ */
+function _assertDocOwner(data, uid, message) {
+  const owner = (data && (data.client_id || data.userId)) || null;
+  if (owner && owner !== uid) {
+    throw new HttpsError("permission-denied", message);
+  }
+}
+
 exports.createTamaraCheckout = onCall(
     {secrets: ["TAMARA_API_TOKEN"], cpu: 0.25},
     async (request) => {
@@ -812,6 +846,14 @@ exports.createTamaraCheckout = onCall(
 
       if (trueAmount === null || isNaN(trueAmount) || trueAmount <= 0) {
         throw new HttpsError("not-found", "تعذّر العثور على الطلب أو أنّ مبلغه غير صالح — أعيدي المحاولة");
+      }
+
+      // الملكيّةُ: كان هذا المسارُ **الوحيدَ** من أربعةٍ ماليّةٍ بلا فحصٍ لها.
+      _assertDocOwner(info, request.auth.uid,
+          "لا يمكن بدء دفع طلب مستخدم آخر");
+      // ومدفوعٌ سلفاً لا يُفتَحُ له جلسةٌ ثانية: خصمٌ مكرَّرٌ واستردادُه يدويّ.
+      if (info.is_paid === true) {
+        throw new HttpsError("failed-precondition", "هذا الطلب مدفوعٌ بالفعل");
       }
 
       const amount = trueAmount;
@@ -2830,10 +2872,8 @@ exports.verifyMoyasarPayment = onCall(
       }
 
       // الملكية: مالك الطلب فقط يؤكّد دفعه.
-      const owner = orderDoc.data().client_id || orderDoc.data().userId;
-      if (owner && owner !== request.auth.uid) {
-        throw new HttpsError("permission-denied", "لا يمكن تأكيد دفع طلب مستخدم آخر");
-      }
+      _assertDocOwner(orderDoc.data(), request.auth.uid,
+          "لا يمكن تأكيد دفع طلب مستخدم آخر");
       // idempotent: مؤكَّد سلفاً.
       if (orderDoc.data().is_paid === true) {
         return {success: true, alreadyPaid: true};
