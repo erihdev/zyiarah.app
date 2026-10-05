@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/driver_rating.dart';
 
 class AdminStaffPerformanceScreen extends StatefulWidget {
   const AdminStaffPerformanceScreen({super.key});
@@ -48,11 +49,13 @@ class _AdminStaffPerformanceScreenState extends State<AdminStaffPerformanceScree
         // ١٧ طلباً بلا تقييمٍ (٨٥) يَسبقُ من أتمّ ٢٠ بمتوسّطٍ حقيقيٍّ ٤٫٢ (٨٤)،
         // وقد تُسمّي بطاقةُ «الأفضل» من لم يُقيّمه أحد. (نفسُ عطلِ «تقييمك
         // ٤٫٩ ★» في ملفِّ العميلة.)
+        // القاعدةُ صارت في موضعٍ واحد (`driver_rating.dart`) لأنّ سطحاً
+        // ثالثاً — `admin_drivers_screen` — كان ما زال يَعرضُ ٥٫٠ لمن لم
+        // يُقيّمه أحد، فوقَ «(٠ تقييم)» مباشرةً.
         final int ratingCount =
             int.tryParse('${driverData['rating_count'] ?? 0}') ?? 0;
-        final double? avgRating = ratingCount <= 0
-            ? null
-            : double.tryParse('${driverData['rating_avg'] ?? ''}');
+        final double? avgRating =
+            driverRatingOf(driverData['rating_avg'], ratingCount);
 
         stats.add({
           'id': driverId,

@@ -26,6 +26,21 @@ import 'package:flutter_test/flutter_test.dart';
 /// `admin_insights_screen._buildReputationSentinel` يَقرأ `rating ?? 5.0` على
 /// **الطلبات** لا السائقين، ويَشترط `rating_comment != null` — فالافتراضُ لا
 /// يُدخل طلباً غيرَ مُقيَّمٍ في قائمةِ «التقييمات المنخفضة». تُرك كما هو.
+///
+/// **وسطحٌ رابعٌ كان عطلاً فعليّاً، وهذا الحارسُ هو ما أخفاه (2026-10-05):**
+/// `admin_drivers_screen` — القائمةُ الرئيسةُ للسائقين في تطبيقِ الإدارة —
+/// كان يَعرضُ `(driver['rating_avg'] ?? 5.0).toStringAsFixed(1)` بنجمةٍ
+/// كهرمانيّةٍ، **وتحتَه مباشرةً «(٠ تقييم)»**: سطرانِ يُكذّبانِ أحدَهما الآخرَ
+/// في البطاقةِ عينِها. وشارةُ «متميّز» في الملفِّ نفسِه تَشترطُ العدّادَ
+/// بصحّة — فالقاعدةُ كانت معروفةً ومطبَّقةً في موضعٍ ومُغفَلةً في الآخر.
+///
+/// وهذا الحارسُ كان يَقرأُ **قائمةً مكتوبةً بيدٍ** من ملفَّين، والقاعدةُ
+/// عامّة — نمطُ «حارسٌ ضيّقٌ وقاعدةٌ عامّة» الذي تَكرّرَ في هذا المستودعِ
+/// مرّاتٍ (نصُّ الاستثناءِ الخامّ، و`no_dead_code_test`، و`zone_locator_test`).
+/// فالنطاقُ الآن **مُشتَقّ**: كلُّ ملفٍّ تحت `lib/` يَقرأُ `rating_avg` يَجبُ
+/// أن يَمرَّ بالقاعدةِ الواحدةِ (`lib/utils/driver_rating.dart`) أو يُستثنى
+/// بسببٍ مكتوبٍ هنا. والقاعدةُ نفسُها تُختبَرُ قيميّاً في
+/// `test/driver_rating_rule_test.dart`.
 void main() {
   _serverOwnsRatingSideEffects();
   final repo = Directory.current.path;
@@ -63,10 +78,16 @@ void main() {
       final code = stripLineComments(perf);
       expect(code, contains("driverData['rating_count']"),
           reason: 'الفاصلُ هو العدّادُ — بلا قراءتِه لا سبيلَ إلى التمييز');
-      expect(code, contains('ratingCount <= 0'));
+      // **كان هنا `ratingCount <= 0` نصّاً.** الشرطُ انتقلَ إلى القاعدةِ
+      // الواحدةِ حين ظهرَ السطحُ الرابع، فالتثبيتُ صارَ على النداءِ لا على
+      // نسخةٍ محليّةٍ منه — تحديثٌ مقصودٌ يُشدّدُ لا يُرخي: لو عادت نسخةٌ
+      // محليّةٌ سَقطَ فحصُ النطاقِ المُشتَقِّ أدناه.
+      expect(code, contains('driverRatingOf('),
+          reason: 'القاعدةُ في موضعٍ واحد — ونسخةٌ محليّةٌ هي ما سمحَ '
+              'لـadmin_drivers_screen بالانحراف');
       expect(code.contains("rating_avg'] ?? 5.0"), isFalse,
           reason: 'افتراضُ ٥٫٠ عاد');
-      expect(code.contains("?? 5.0") , isFalse,
+      expect(code.contains("?? 5.0"), isFalse,
           reason: 'أيُّ افتراضٍ لتقييمٍ غائبٍ في هذه الشاشةِ هو العطلُ نفسه');
     });
 
@@ -100,6 +121,74 @@ void main() {
       final insights = read('lib/screens/admin/admin_insights_screen.dart');
       expect(insights, contains("data['rating_comment'] != null"),
           reason: 'لو سقطَ شرطُ التعليقِ لصار `?? 5.0` هناك عطلاً فعليّاً');
+    });
+  });
+
+  group('النطاقُ مُشتَقٌّ لا مكتوبٌ بيد', () {
+    // **السطحُ الرابعُ نَجا لأنّ هذا الحارسَ كان قائمةَ ملفَّين.** فالنطاقُ
+    // الآن يُشتَقُّ من الشفرةِ: كلُّ قارئٍ لـ`rating_avg` تحت `lib/` إمّا
+    // يَمرُّ بالقاعدةِ أو يُستثنى بسببٍ مكتوبٍ أدناه.
+    //
+    // المستثنَون:
+    //   • `lib/utils/driver_rating.dart` — القاعدةُ نفسُها.
+    //   • `lib/models/user_model.dart` — ذِكرٌ في تعليقٍ لا قراءةٌ لحقل.
+    //   • `lib/screens/order_tracking_screen.dart` — يَقرأُ
+    //     `driver_rating_avg` على **الطلب** لا على مستندِ السائق، ولا
+    //     يَرسمُ نجمةً بلا قيمةٍ (مُعلَّلٌ في الملفِّ نفسِه).
+    const Set<String> exempt = {
+      'lib/utils/driver_rating.dart',
+      'lib/models/user_model.dart',
+      'lib/screens/order_tracking_screen.dart',
+    };
+
+    test('كلُّ قارئٍ لـrating_avg يَمرُّ بالقاعدةِ أو يُستثنى بسبب', () {
+      final List<String> offenders = [];
+      int scanned = 0;
+      for (final f in Directory('lib')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.dart'))) {
+        final rel = f.path.replaceFirst('$repo/', '');
+        final src = f.readAsStringSync();
+        if (!src.contains('rating_avg')) continue;
+        scanned++;
+        if (exempt.contains(rel)) continue;
+        final code = stripLineComments(src);
+        if (!code.contains('rating_avg')) continue; // ذِكرٌ في تعليقٍ فقط
+        if (!code.contains('driverRatingOf(') &&
+            !code.contains('driverRatingLabel(') &&
+            !code.contains('driverIsRated(')) {
+          offenders.add(rel);
+        }
+      }
+      expect(scanned, greaterThanOrEqualTo(4),
+          reason: 'المسحُ لم يَجد القُرّاءَ المعروفين — نمطٌ معطوبٌ لا شفرةٌ '
+              'سليمة (حارسٌ عقيمٌ أسوأُ من غائب)');
+      expect(offenders, isEmpty,
+          reason: 'قارئٌ لتقييمِ سائقٍ لا يَمرُّ بالقاعدةِ — وهو بعينِه ما '
+              'أخفاه هذا الحارسُ في `admin_drivers_screen`');
+    });
+
+    test('ولا افتراضَ ٥٫٠ باقياً في أيِّ شاشةٍ تَقرأُ تقييمَ سائق', () {
+      for (final rel in [
+        'lib/screens/admin/admin_drivers_screen.dart',
+        'lib/screens/admin/admin_staff_performance_screen.dart',
+      ]) {
+        final code = stripLineComments(read(rel));
+        expect(code.contains("rating_avg'] ?? 5.0"), isFalse,
+            reason: '$rel: افتراضُ ٥٫٠ عاد');
+      }
+      // والمضادّة: الرقمُ ما زال مذكوراً في شرحِ إزالتِه.
+      expect(read('lib/utils/driver_rating.dart').contains('5.0'), isTrue,
+          reason: 'اختفى شرحُ البذرِ — راجِعْ ما جرّدَه الفحص');
+    });
+
+    test('والقائمةُ الرئيسةُ لا تَرسمُ نجمةً لمن لم يُقيّمه أحد', () {
+      final code = stripLineComments(
+          read('lib/screens/admin/admin_drivers_screen.dart'));
+      expect(code, contains('driverIsRated('),
+          reason: 'النجمةُ الكهرمانيّةُ فوقَ «(٠ تقييم)» كانت التناقضَ عينَه');
+      expect(code, contains('driverRatingLabel('));
     });
   });
 }
