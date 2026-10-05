@@ -58,6 +58,175 @@ service cloud.firestore {
         getUserRole() in ['admin', 'super_admin'];
     }
 
+    // ─── أعلامُ الثقةِ الخادميّةِ: قائمةٌ واحدةٌ لمجموعتَي الطلبات ──────────
+    //
+    // **القاعدةُ كانت على سطحٍ واحدٍ من اثنَين (2026-10-05).** قائمةُ منعِ
+    // الإنشاءِ في `orders` بلغَت ٦١ اسماً، و`store_orders` كانت تَمنعُ
+    // **اسمَين** — بينما `_verifyStoreOrderPrice` يَكتبُ على طلبِ المتجرِ
+    // الأعلامَ نفسَها بحروفِها: `price_mismatch`، `price_unverifiable`،
+    // `price_paid`، `price_expected`، `price_shadow_ratio`،
+    // `ops_alerted_mismatch`، `ops_alerted_unverifiable`. فكلُّ ما حُجِبَ
+    // هناك كان مكشوفاً هنا.
+    //
+    // فالقائمةُ تَسكنُ مرّةً ويُنادِيها الموضعان، بدلَ نسخةٍ ثانيةٍ لا
+    // يَحفظُها إلّا التذكُّر — ونسخةٌ ثانيةٌ تَنحرِف، وهو ما تَكرّر في هذا
+    // المستودعِ مرّاتٍ (مرايا اللوحة، `isAssignableDriver` في اثنَين من
+    // أربعة). و`moyasar_payment_id` **فيها**: ظنَنتُ أوّلاً أنّ العميلَ
+    // يَكتبُه شرعاً عند بدءِ الدفعِ فأبقيتُه خاصّاً بالمتجر، وفحصُ «لا كاتبَ
+    // عميليّاً» أسقطَ ذلك الظنَّ — صفرُ كاتبٍ في `lib/` واللوحة. وأثرُ
+    // غيابِه مشروحٌ عند اسمِه أدناه: سلّةٌ غيرُ مدفوعةٍ تَصيرُ خالدة.
+    function serverTrustFlags() {
+      return [
+        'needs_refund', 'refund_credited', 'rewards_handled_by',
+        'qatrat_granted', 'visit_counted', 'coupon_counted', 'paid_confirmed',
+        // SECURITY: الإسناد قرار خادمي/إداري حصراً — عميلٌ يكتب driver_id عند الإنشاء
+        // كان يزرع سائقاً من اختياره في مهامّه ويتجاوز محرّك التوزيع (لا مسار شرعي
+        // في التطبيق يكتبه عند الإنشاء).
+        'driver_id',
+
+        // ⚠️ **أعلامُ الثقةِ الخادميّةُ (2026-10-05).** كانت القائمةُ ثمانيةً،
+        // وبقيةُ أعلامِ الخادمِ مكشوفةً للإنشاء — **وواحدٌ منها يُسكِتُ
+        // التنبيهَ الوحيدَ لمسارِ المحفظة**:
+        //
+        // `opsHealthSweep` يُنبّه عبر `alertBatch(docs, 'ops_alerted_mismatch')`،
+        // وهي **تُسقِطُ كلَّ مستندٍ العلمُ فيه `true` سلفاً** («نبّهنا عنه»).
+        // ومسارُ المحفظةِ يَسِمُ `price_mismatch` **بصمتٍ** ويَتّكلُ على هذا
+        // المسحِ وحدَه (تعليقُه في `index.js` يَقولُه: «مسار المحفظة يَسِم
+        // بصمت فيغطيه الفحص الدوري»). فعميلةٌ تُنشئُ طلبَها بـ
+        // `ops_alerted_mismatch: true` ثمّ تَدفعُ من المحفظةِ أقلَّ من نصفِ
+        // السعرِ وفوقَ خُمسِه (فلا يُرفَض): تُخدَم، ويُوسَمُ الطلبُ، **ولا
+        // يُنبَّهُ أحدٌ أبداً**.
+        //
+        // والثلاثةُ الأخرى من عائلةِ `alertBatch` نفسِها، و`tamper_handled`
+        // هو حجزُ Tier B (ضبطُه سلفاً يَجعلُ `voidOrRefundTampered` تُعيد
+        // «already» بلا نداءِ البوّابة)، و`final_amount` يَتقدّمُ تدرّجَ
+        // المبالغِ كلَّه في `amounts.js`.
+        //
+        // ولا كاتبَ شرعيّاً لأيٍّ منها في العميل: صفرُ كتاباتٍ في `lib/`
+        // للثمانيةِ، و`final_amount` ١٤ قراءةً بلا كتابة.
+        'ops_alerted_mismatch', 'ops_alerted_noshow',
+        'ops_alerted_paid_awaiting', 'ops_alerted_stuck',
+        // و`ops_alerted_unverifiable` عضوٌ خامسٌ في العائلةِ نفسِها (أُضيف
+        // مع مكنسةِ «تعذّر التحقّق»)، و`price_paid` هو الرقمُ الذي تَعرضُه
+        // بطاقةُ المراجعةِ للإدارة — فكتابتُه عميليّاً تَكذبُ على من يُقرّر.
+        'ops_alerted_unverifiable', 'price_paid',
+        'tamper_handled', 'tamper_blocked',
+        'price_mismatch', 'price_unverifiable', 'price_expected',
+        'price_expected_net', 'price_shadow_ratio',
+        'auto_refund_processed', 'auto_refund_alerted', 'stranded_alerted',
+        'coupon_rejected_reason', 'final_amount',
+        // وأعلامُ إعادةِ المحاولةِ الخادميّةِ كأخواتِها: ضبطُها سلفاً
+        // يُعطّلُ المكنسةَ التي تَستعلمُها (`refund_credit_alerted` يُسكِتُ
+        // تصعيدَ استردادٍ فاشل، و`qatrat_pending`/`coupon_count_pending`
+        // تُدخِلانِ طلباً سليماً في مجموعةِ إعادةِ المحاولة).
+        'refund_credit_failed', 'refund_credit_alerted',
+        'qatrat_pending', 'qatrat_alerted',
+        'coupon_count_pending', 'coupon_count_alerted',
+        // وتسويةُ رصيدِ زياراتِ الاشتراك (2026-10-05): `..._pending`
+        // يُدخِلُ طلباً سليماً في مجموعةِ إعادةِ المحاولة، و`..._alerted`
+        // يُسكِتُ التنبيهَ الوحيدَ على فشلِ خصمِ زيارةٍ مستهلَكةٍ أو ردِّ
+        // زيارةٍ مدفوعة. (و`visit_counted` نفسُه ممنوعٌ أعلاه — فضبطُه
+        // سلفاً كان يَعني زيارةً مجّانيّة.)
+        'visit_accounting_pending', 'visit_accounting_alerted',
+        // ومكافأةُ الإحالة: `..._pending` يُدخِلُ طلباً سليماً في
+        // مجموعةِ إعادةِ المحاولة، و`..._alerted` يُسكِتُ التنبيهَ على
+        // ضياعِ ٥٠ ر.س للمُحيلِ وكوبونِ المُحالة.
+        //
+        // والصرفُ المزدوجُ مسدودٌ بغيرِ هذه القائمة: المِقصَلةُ هي
+        // `referrals/{id}.status == "pending"` **داخلَ المعامَلة**،
+        // و`referrals` كلُّها `allow write: if false` فلا يَمَسُّها عميل.
+        // (أمّا `referral_processed` على الطلبِ فمَكتوبٌ ولا قارئَ له في
+        // المستودعِ كلِّه — فتلفيقُه لا يُغيّرُ شيئاً، ومنعُه زينةٌ.)
+        'referral_payout_pending', 'referral_payout_alerted',
+        // وتجميعُ التقييم: `rating_agg_pending` يُدخِلُ طلباً سليماً في
+        // مجموعةِ إعادةِ المحاولة، و`..._alerted` يُسكِتُ التنبيه.
+        // و`rating_aggregated` هو مانعُ التكرارِ الجديد: ضبطُه سلفاً
+        // يُسقِطُ تقييمَها من متوسّطِ السائقِ — لا مصلحةَ لها فيه
+        // (تَكتمُ تقييمَها نفسَه) فالمنعُ اتّساقٌ لا سدُّ هجوم، وتحديثُها
+        // محصورٌ بـ`hasOnly` لحقولِ التقييمِ فلا تَبلغُه بعد الإنشاءِ أصلاً.
+        'rating_agg_pending', 'rating_agg_alerted', 'rating_aggregated',
+        // وعلمُ «أُخبِرَت العميلةُ بتأخّرِ فريقِها»: مكنسةُ الإسنادِ
+        // تَستعلمُه كأخواتِه، فضبطُه سلفاً يُسكِتُ الدفعةَ الوحيدةَ التي
+        // تُخبرُها أنّ موعدَها فاتَ بلا فريق. لا كاتبَ له في `lib/` ولا
+        // مصلحةَ لعميلةٍ في إسكاتِ إشعارِ نفسِها — فالمنعُ اتّساقٌ مع
+        // العائلةِ لا سدُّ هجوم.
+        'client_stranded_notified',
+        // وقرارُ مراجعةِ السعرِ قرارٌ إداريٌّ موقَّعٌ باسمِ من اتّخذَه —
+        // عميلةٌ تُنشئُ طلبَها بـ`price_review_decision: 'approved'` تَكتبُ
+        // شهادةً لم يُوقّعها أحد.
+        'price_review_decision', 'price_reviewed_by', 'price_reviewed_at',
+        // ⚠️⚠️ **وعلَمٌ واحدٌ يُطفئُ تحقّقَ السعرِ على مسارٍ كاملٍ وينزعُ
+        // الإنفاذَ عن المسارِ الآخر (2026-10-05).** كاتبُه الشرعيُّ
+        // `verifyMoyasarPayment` حين **يُنشئُ الخادمُ الطلبَ بنفسِه** من
+        // بيانات الدفع (مسارُ Apple Pay / الدفعِ الأصليّ)، فالمبلغُ لم
+        // يُعلِنْه العميلُ أصلاً. وهو مقروءٌ في موضعَين يَقرّرانِ المال:
+        //
+        //   • `_tamaraFlipPaid`:  `if (col === "orders" &&
+        //     !data.server_created_from_payment) { … _verifyOrderPriceTierA }`
+        //     — فضبطُه سلفاً يُسقِطُ **تحقّقَ Tier A كلَّه** على مسارِ
+        //     تمارا: لا إعادةَ تسعيرٍ من المنطقة، ولا وسمَ
+        //     `price_mismatch`، ولا تنبيهَ إدارة.
+        //   • Tier B: `const egregious = … && od.server_created_from_payment
+        //     !== true;` — فضبطُه سلفاً يَنزعُ الإنفاذَ (الإلغاء/الاسترداد)
+        //     عن الطلبِ المُتلاعَبِ به على مسارِ ميسر.
+        //
+        // أي أنّ بوليانيّاً واحداً يَكتبُه العميلُ عند الإنشاءِ يَدّعي
+        // «الخادمُ أنشأني» فيَشتري الإعفاءَ من الفحصَين. صفرُ كتاباتٍ له
+        // في `lib/` واللوحة.
+        // و`reconciled` يُكتَبُ على السطرِ نفسِه في `reconcileOrphanPayments`
+        // علامةَ مصدرٍ كذلك — لا قارئَ له اليوم، فمنعُه اتّساق.
+        'server_created_from_payment', 'reconciled',
+
+        // ⚠️ **وعلَمٌ يُسكِتُ الكاشفَ المكتوبَ للتلاعبِ الذي يُسمّيه (2026-10-05).**
+        // `_flagZoneGeoMismatch` في `index.js` يَقولُ في ترويسةِ نفسِه:
+        // «المنطقة تُحَلّ باسم يرسله العميل (zone_name) بلا أي تحقّق أن
+        // الموقع فعلاً داخلها — عميلٌ في منطقة أغلى يمكنه إرسال اسم منطقة
+        // أرخص». فهو يَقيسُ المسافةَ من مركزِ المنطقةِ المُعلَنة، وعند
+        // تجاوزِ نصفِ القطرِ بهامشِ ٢٠٪ يَسِمُ الطلبَ ويُنبّهُ الإدارة.
+        // وأوّلُ سطرٍ فيه: `if (od.zone_geo_mismatch === true) return null;`
+        // — فعميلةٌ تُنشئُ طلبَها بهذا العلمِ تُسقِطُ الكاشفَ كلَّه: **لا
+        // وسمَ ولا تنبيه**، وتَدفعُ سعرَ المنطقةِ الأرخص. وهي عائلةُ
+        // `ops_alerted_mismatch` بعينِها (علَمٌ يَعني «فُحِصَ سلفاً»).
+        // و`zone_geo_distance_m` هو رقمُ البيّنةِ الذي يَقرؤه مَن يُراجِع.
+        'zone_geo_mismatch', 'zone_geo_distance_m',
+        // وما تحتَ هذا السطرِ **اتّساقٌ لا سدُّ هجوم**، ويُقالُ كذلك:
+        // `payment_amount_mismatch` و`coupon_rejected` (العلمُ البولياني،
+        // أمّا `coupon_rejected_reason` فممنوعٌ أعلاه وهو المقروء)
+        // و`auto_refund_failed` و`refund_after_assign_conflict` — **لا
+        // قارئَ لأيٍّ منها في المستودعِ كلِّه** (فُحِصَ `functions/` و`lib/`
+        // واللوحة)، فتلفيقُها لا يُغيّرُ سلوكاً اليوم؛ ومنعُها يَجعلُ
+        // إعطاءَها قارئاً غداً آمناً بلا تذكُّر. و`refund_claimed` **يُقرأُ**
+        // حجزاً ذرّيّاً داخلَ معامَلةِ الاسترداد، لكنّ كاتبَه عند الإنشاءِ
+        // هو المالكُ وحدَه (القاعدةُ تَشترطُ `client_id == uid`) فلا يَضرُّ
+        // إلّا استردادَ نفسِه — ضررٌ بلا مكسب، ويَبقى علمَ ثقةٍ خادميّاً.
+        'payment_amount_mismatch', 'coupon_rejected', 'coupon_overlimit',
+        'auto_refund_failed', 'refund_after_assign_conflict',
+        'tamper_gateway_failed', 'reopened_after_late_payment',
+        'refund_claimed', 'refund_claimed_at',
+        // ⚠️ **و`moyasar_payment_id` يُخلِّدُ سلّةً غيرَ مدفوعة (2026-10-05).**
+        // `cancelStaleUnpaidOrders` يُلغي الطلبَ المعلَّقَ غيرَ المدفوعِ بعد
+        // ثلاثينَ دقيقةً، وله استثناءٌ صريحٌ: `if (d.moyasar_payment_id)
+        // continue;` — أيُّ قيمةٍ صادقةٍ تُعفي. والحقلُ **خادميٌّ خالصٌ**:
+        // أربعةُ كُتّابٍ في `functions/index.js` وصفرُ كاتبٍ في `lib/` أو
+        // اللوحة (ثلاثُ قراءاتٍ فقط: سجلُّ الفواتيرِ وشاشةُ الطلبِ الإداريّة).
+        // فعميلةٌ تُنشئُ طلباً بـ`moyasar_payment_id: "x"` تَجعلُه **خالداً**:
+        // لا يُلغى أبداً، فيَبقى في طابورِ ما ينتظرُ قراراً إداريّاً وفي
+        // بلاطةِ «الطلبات المجدولة» عند المالك (`admin_insights_screen`
+        // تَعُدُّ `kPreDispatchStatuses` بلا سائق) إلى الأبد — وهي المكنسةُ
+        // الموجودةُ أصلاً كي لا تَتراكمَ السلالُ المتروكة. ولا مالَ فيها ولا
+        // سائقَ: `capacity.countBookings` يَتخطّى غيرَ المدفوع، و`pending`
+        // خارجُ `CONFLICT_STATUSES` بقصد — فهي تراكمٌ وتضخيمُ عدّادٍ لا خصم.
+        // وكان خارجَ القائمةِ لظنٍّ أنّ العميلَ يَكتبُه عند بدءِ الدفع.
+        'moyasar_payment_id',
+        // وأعلامُ تكرارِ الإشعار: ضبطُها سلفاً يَمنعُ تذكيرَها بموعدِها
+        // أو دفعةَ تأكيدِ دفعِها — ضررُها على نفسِها، والإدارةُ وحدَها
+        // تُصفّرُها عند تغييرِ الموعد (وذاك `update` لا `create`).
+        'client_reminder_24h_sent', 'client_reminder_soon_sent',
+        'reminder_sent', 'payment_push_sent',
+      ];
+    }
+
+
     // ─── User Profiles ────────────────────────────────────────────────────
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
@@ -213,86 +382,7 @@ service cloud.firestore {
         request.resource.data.get('status', 'pending') in
           ['pending', 'awaiting_payment'] &&
         request.resource.data.get('is_paid', false) == false &&
-        !request.resource.data.keys().hasAny([
-          'needs_refund', 'refund_credited', 'rewards_handled_by',
-          'qatrat_granted', 'visit_counted', 'coupon_counted', 'paid_confirmed',
-          // SECURITY: الإسناد قرار خادمي/إداري حصراً — عميلٌ يكتب driver_id عند الإنشاء
-          // كان يزرع سائقاً من اختياره في مهامّه ويتجاوز محرّك التوزيع (لا مسار شرعي
-          // في التطبيق يكتبه عند الإنشاء).
-          'driver_id',
-
-          // ⚠️ **أعلامُ الثقةِ الخادميّةُ (2026-10-05).** كانت القائمةُ ثمانيةً،
-          // وبقيةُ أعلامِ الخادمِ مكشوفةً للإنشاء — **وواحدٌ منها يُسكِتُ
-          // التنبيهَ الوحيدَ لمسارِ المحفظة**:
-          //
-          // `opsHealthSweep` يُنبّه عبر `alertBatch(docs, 'ops_alerted_mismatch')`،
-          // وهي **تُسقِطُ كلَّ مستندٍ العلمُ فيه `true` سلفاً** («نبّهنا عنه»).
-          // ومسارُ المحفظةِ يَسِمُ `price_mismatch` **بصمتٍ** ويَتّكلُ على هذا
-          // المسحِ وحدَه (تعليقُه في `index.js` يَقولُه: «مسار المحفظة يَسِم
-          // بصمت فيغطيه الفحص الدوري»). فعميلةٌ تُنشئُ طلبَها بـ
-          // `ops_alerted_mismatch: true` ثمّ تَدفعُ من المحفظةِ أقلَّ من نصفِ
-          // السعرِ وفوقَ خُمسِه (فلا يُرفَض): تُخدَم، ويُوسَمُ الطلبُ، **ولا
-          // يُنبَّهُ أحدٌ أبداً**.
-          //
-          // والثلاثةُ الأخرى من عائلةِ `alertBatch` نفسِها، و`tamper_handled`
-          // هو حجزُ Tier B (ضبطُه سلفاً يَجعلُ `voidOrRefundTampered` تُعيد
-          // «already» بلا نداءِ البوّابة)، و`final_amount` يَتقدّمُ تدرّجَ
-          // المبالغِ كلَّه في `amounts.js`.
-          //
-          // ولا كاتبَ شرعيّاً لأيٍّ منها في العميل: صفرُ كتاباتٍ في `lib/`
-          // للثمانيةِ، و`final_amount` ١٤ قراءةً بلا كتابة.
-          'ops_alerted_mismatch', 'ops_alerted_noshow',
-          'ops_alerted_paid_awaiting', 'ops_alerted_stuck',
-          // و`ops_alerted_unverifiable` عضوٌ خامسٌ في العائلةِ نفسِها (أُضيف
-          // مع مكنسةِ «تعذّر التحقّق»)، و`price_paid` هو الرقمُ الذي تَعرضُه
-          // بطاقةُ المراجعةِ للإدارة — فكتابتُه عميليّاً تَكذبُ على من يُقرّر.
-          'ops_alerted_unverifiable', 'price_paid',
-          'tamper_handled', 'tamper_blocked',
-          'price_mismatch', 'price_unverifiable', 'price_expected',
-          'price_expected_net', 'price_shadow_ratio',
-          'auto_refund_processed', 'auto_refund_alerted', 'stranded_alerted',
-          'coupon_rejected_reason', 'final_amount',
-          // وأعلامُ إعادةِ المحاولةِ الخادميّةِ كأخواتِها: ضبطُها سلفاً
-          // يُعطّلُ المكنسةَ التي تَستعلمُها (`refund_credit_alerted` يُسكِتُ
-          // تصعيدَ استردادٍ فاشل، و`qatrat_pending`/`coupon_count_pending`
-          // تُدخِلانِ طلباً سليماً في مجموعةِ إعادةِ المحاولة).
-          'refund_credit_failed', 'refund_credit_alerted',
-          'qatrat_pending', 'qatrat_alerted',
-          'coupon_count_pending', 'coupon_count_alerted',
-          // وتسويةُ رصيدِ زياراتِ الاشتراك (2026-10-05): `..._pending`
-          // يُدخِلُ طلباً سليماً في مجموعةِ إعادةِ المحاولة، و`..._alerted`
-          // يُسكِتُ التنبيهَ الوحيدَ على فشلِ خصمِ زيارةٍ مستهلَكةٍ أو ردِّ
-          // زيارةٍ مدفوعة. (و`visit_counted` نفسُه ممنوعٌ أعلاه — فضبطُه
-          // سلفاً كان يَعني زيارةً مجّانيّة.)
-          'visit_accounting_pending', 'visit_accounting_alerted',
-          // ومكافأةُ الإحالة: `..._pending` يُدخِلُ طلباً سليماً في
-          // مجموعةِ إعادةِ المحاولة، و`..._alerted` يُسكِتُ التنبيهَ على
-          // ضياعِ ٥٠ ر.س للمُحيلِ وكوبونِ المُحالة.
-          //
-          // والصرفُ المزدوجُ مسدودٌ بغيرِ هذه القائمة: المِقصَلةُ هي
-          // `referrals/{id}.status == "pending"` **داخلَ المعامَلة**،
-          // و`referrals` كلُّها `allow write: if false` فلا يَمَسُّها عميل.
-          // (أمّا `referral_processed` على الطلبِ فمَكتوبٌ ولا قارئَ له في
-          // المستودعِ كلِّه — فتلفيقُه لا يُغيّرُ شيئاً، ومنعُه زينةٌ.)
-          'referral_payout_pending', 'referral_payout_alerted',
-          // وتجميعُ التقييم: `rating_agg_pending` يُدخِلُ طلباً سليماً في
-          // مجموعةِ إعادةِ المحاولة، و`..._alerted` يُسكِتُ التنبيه.
-          // و`rating_aggregated` هو مانعُ التكرارِ الجديد: ضبطُه سلفاً
-          // يُسقِطُ تقييمَها من متوسّطِ السائقِ — لا مصلحةَ لها فيه
-          // (تَكتمُ تقييمَها نفسَه) فالمنعُ اتّساقٌ لا سدُّ هجوم، وتحديثُها
-          // محصورٌ بـ`hasOnly` لحقولِ التقييمِ فلا تَبلغُه بعد الإنشاءِ أصلاً.
-          'rating_agg_pending', 'rating_agg_alerted', 'rating_aggregated',
-          // وعلمُ «أُخبِرَت العميلةُ بتأخّرِ فريقِها»: مكنسةُ الإسنادِ
-          // تَستعلمُه كأخواتِه، فضبطُه سلفاً يُسكِتُ الدفعةَ الوحيدةَ التي
-          // تُخبرُها أنّ موعدَها فاتَ بلا فريق. لا كاتبَ له في `lib/` ولا
-          // مصلحةَ لعميلةٍ في إسكاتِ إشعارِ نفسِها — فالمنعُ اتّساقٌ مع
-          // العائلةِ لا سدُّ هجوم.
-          'client_stranded_notified',
-          // وقرارُ مراجعةِ السعرِ قرارٌ إداريٌّ موقَّعٌ باسمِ من اتّخذَه —
-          // عميلةٌ تُنشئُ طلبَها بـ`price_review_decision: 'approved'` تَكتبُ
-          // شهادةً لم يُوقّعها أحد.
-          'price_review_decision', 'price_reviewed_by', 'price_reviewed_at',
-        ]);
+        !request.resource.data.keys().hasAny(serverTrustFlags());
 
       // Orders manager: full update (approve, assign driver -> scheduled, override status)
       allow update: if isOrdersManager();
@@ -586,10 +676,37 @@ service cloud.firestore {
     match /store_orders/{orderId} {
       // SECURITY: client_id must match caller on create, و is_paid=false (كالـ /orders) —
       // وإلا أنشأ عميل عبر SDK طلب متجر مدفوعاً فيُشحَن مجاناً.
+      // ⚠️ **وكانت القائمةُ هنا اسمَين، والخادمُ يَكتبُ على طلبِ المتجرِ
+      //    أعلامَ المراجعةِ نفسَها (2026-10-05).** `_verifyStoreOrderPrice`
+      //    هو تحقّقُ السعرِ الوحيدُ لهذه المجموعةِ — فالسلّةُ تُعادُ
+      //    تسعيرُها من `products` خادميّاً، وسياستُه Tier A: وسمٌ وتنبيهٌ لا
+      //    رفض. فمُخرَجُه كلُّه أعلامٌ على المستند، وهي ما كان مكشوفاً:
+      //
+      //      • `price_mismatch: true` + `ops_alerted_mismatch: false` عند
+      //        الإنشاءِ يُدخِلُ المستندَ في نافذةِ المكنسةِ (الكتلةُ ٥:
+      //        مساواتانِ بهذين الحقلَين بعينِهما)، فتُنبّهُ الإدارةَ عن طلبٍ
+      //        «دُفع بمبلغ أدنى من المتوقع» **بلا دفعٍ أصلاً**. والنافذةُ
+      //        تُصرَّفُ نفسَها (`alertBatch` يَكتبُ العلمَ بعد الإرسال) فليس
+      //        سدّاً دائماً للنافذة — بل **حقنُ تنبيهاتٍ** في القناةِ التي
+      //        تَحملُ فشلَ الاستردادِ والتلاعبَ بالسعرِ والطلبَ المدفوعَ
+      //        العالق: ضجيجٌ يُغرِقُ الحقيقيَّ، مُولَّدٌ بالطلبِ بلا كلفة.
+      //      • `price_reviewed_at` وحدَه يَجعلُ `needsCard` صحيحةً و
+      //        `actionable` كاذبةً، فتَرسمُ `admin_store_orders_screen`
+      //        بطاقةً **خضراءَ** بأيقونةِ ✓ ونصِّ «سعر هذا الطلب اعتمدته
+      //        مراجعة سابقة»، ومع `price_reviewed_by` تُذيّلُها «اعتُمد
+      //        بواسطة …» — شهادةٌ لم يُوقّعها أحدٌ على الشاشةِ الوحيدةِ التي
+      //        تَعرضُ طلباتِ المتجر. (وسمُ الخادمِ يَغلبُها في العرضِ متى
+      //        وُسِمَ فعلاً، فالأثرُ ادّعاءٌ لا حَجبُ نقصٍ حقيقيّ — يُقالُ
+      //        كما هو.)
+      //
+      //    و`moyasar_payment_id` كان محجوباً هنا وحدَه بظنٍّ أنّ العميلَ
+      //    يَكتبُه شرعاً على `orders` — **وهو خادميٌّ خالصٌ** (صفرُ كاتبٍ في
+      //    `lib/` واللوحة)، فدخلَ القائمةَ المشتركةَ وزالَ الاستثناء. وأثرُ
+      //    غيابِه عن `orders` مشروحٌ عند اسمِه في `serverTrustFlags()`.
       allow create: if isLoggedIn() &&
         request.resource.data.client_id == request.auth.uid &&
         request.resource.data.get('is_paid', false) == false &&
-        !request.resource.data.keys().hasAny(['paid_confirmed', 'moyasar_payment_id']);
+        !request.resource.data.keys().hasAny(serverTrustFlags());
       // المحاسب يقرأ طلبات المتجر أيضاً: سجل الفواتير الإلكترونية يجمع فواتير
       // الخدمات والمتجر معاً (يحرسه rules.roles.test.js). الكتابة كما كانت.
       allow read: if isLoggedIn() &&
