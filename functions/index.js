@@ -30,6 +30,7 @@ const amounts = require("./amounts");
 // محرّك الاسترداد الآلي — **أوّل وحدة تلمس Firestore**: تستقبل `db` وسيطاً
 // ولا تستوردها، وكذلك `queuePush`، فتبقى قابلة للاختبار بلا محاكٍ.
 const refunds = require("./refund_engine");
+const rewards = require("./rewards");
 const attachmentsGuard = require("./attachments");
 // معرّفُ المشروع من بيئة التشغيل (Cloud Functions تضبطه) — يُقصر مرفقاتِ
 // البريد على مخزن هذا المشروع وحده.
@@ -1891,38 +1892,18 @@ exports.onOrderRewards = onDocumentUpdated({document: "orders/{orderId}", cpu: 0
       // ── COMPLETION: Qatrat points (+ referral) ──
       if (completed) {
         if (clientId && amount > 0) {
-          const points = Math.round(amount);
-          const walletRef = db.collection("wallets").doc(clientId);
-          const txRef = walletRef.collection("transactions").doc(`qatrat_${orderId}`);
-          let didFlip = false;
-          try {
-            await db.runTransaction(async (t) => {
-              const oSnap = await t.get(orderRef);
-              if (oSnap.get("qatrat_granted") === true) return;
-              t.set(walletRef, {
-                qatrat_points: FieldValue.increment(points),
-                last_updated: FieldValue.serverTimestamp(),
-              }, {merge: true});
-              t.create(txRef, {
-                amount: 0, points: points, type: "qatrat_reward",
-                description: `نقاط زيارة مكتسبة من الطلب المكتمل #${code}`,
-                order_id: orderId,
-                created_at: FieldValue.serverTimestamp(),
-              });
-              t.update(orderRef, {
-                qatrat_granted: true,
-                qatrat_granted_at: FieldValue.serverTimestamp(),
-              });
-              didFlip = true;
-            });
-          } catch (e) {
-            console.error(`[rewards] qatrat txn failed for ${orderId}:`, e.message);
-          }
-          if (didFlip) {
-            await queuePush(clientId, "حصلت على نقاط زيارة جديدة! ✨🎈",
-                `أضيفت ${points} نقطة زيارة لرصيدك مكافأة على الطلب #${code}.`,
-                "qatrat_credit", {orderId: orderId});
-          }
+          // **المنطقُ انتقلَ إلى `rewards.grantQatratPoints`.** كان هنا
+          // إنلاين و`catch`ه سطرَ `console.error` وحدَه: فشلُ المعامَلةِ
+          // يَعني نقاطاً لم تُضَف، ولا دفعةً للعميلة، ولا تنبيهاً للإدارة،
+          // ولا محاولةً ثانية (هذا المُشغّلُ بلا `retry` ولا يَعودُ لمستندٍ
+          // فاته الحدث). كان كلُّ ما يَبقى منه سطراً واحداً:
+          // `[rewards] qatrat txn failed for …`. والفشلُ الآن يَكتبُ علمَه
+          // و`opsHealthSweep` يُعيدُ المحاولة.
+          await rewards.grantQatratPoints(db, {
+            orderRef, orderId, clientId,
+            points: Math.round(amount), code,
+            alreadyAlerted: after.qatrat_alerted === true,
+          }, queuePush);
         }
         if (clientId) {
           await processReferralRewardServer(clientId, orderId);
@@ -2063,26 +2044,18 @@ exports.countCouponUseOnOrderCreate = onDocumentUpdated({document: "orders/{orde
       if (q.empty) return null;
       const promoRef = q.docs[0].ref;
 
-      try {
-        await db.runTransaction(async (t) => {
-          const oSnap = await t.get(orderRef);
-          if (oSnap.get("coupon_counted") === true) return; // already counted
-          // نعلّم تجاوز الحدّ (maxUses) عند الاستهلاك: TOCTOU يسمح لطلبين متزامنين
-          // بتجاوز الحدّ، والعلَم للمراجعة الإدارية. والمنعُ صار فعليّاً في
-          // التسعير الخادمي (coupons.couponProblem ⇒ "exhausted" فيُلغى الخصم
-          // ويُسَم coupon_rejected_reason) — وكان هذا التعليق يَعِد به قبل وجوده.
-          const pSnap = await t.get(promoRef);
-          const uses = Number(pSnap.get("uses") || 0);
-          const maxUses = Number(pSnap.get("maxUses") || 0);
-          const overLimit = maxUses > 0 && uses >= maxUses;
-          t.update(promoRef, {uses: FieldValue.increment(1)});
-          t.update(orderRef, overLimit ?
-            {coupon_counted: true, coupon_overlimit: true} :
-            {coupon_counted: true});
-        });
-      } catch (e) {
-        console.error(`[coupon] use-count failed for order ${event.params.orderId}:`, e.message);
-      }
+      // **المنطقُ انتقلَ إلى `rewards.countCouponUse`.** كان هنا إنلاين
+      // و`catch`ه سطرَ `console.error` وحدَه: فشلُ المعامَلةِ يَعني `uses`
+      // لم يُزَد، فكوبونٌ لمرّةٍ واحدةٍ يَبقى قابلاً للإنفاق — و
+      // `coupons.couponProblem` يَبني «exhausted» على ذلك العدّادِ بعينِه،
+      // فالمنعُ الخادميُّ يَسقطُ معه. والمُشغّلُ بلا `retry` ولا يَعودُ
+      // لمستندٍ فاته الحدث، فلا محاولةَ ثانية — وكلُّ ما يَبقى سطرٌ واحد:
+      // `[coupon] use-count failed for order …`. والفشلُ الآن يَكتبُ علمَه
+      // و`opsHealthSweep` يُعيدُ المحاولة.
+      await rewards.countCouponUse(db, {
+        orderRef, orderId: event.params.orderId, promoRef, code,
+        alreadyAlerted: after.coupon_count_alerted === true,
+      }, queuePush);
       return null;
     });
 
@@ -4713,6 +4686,66 @@ exports.opsHealthSweep = onSchedule(
         console.log(`opsHealthSweep: cancelled-refund retried=${retried} stuck=${stuck}`);
       } catch (e) {
         console.error("opsHealthSweep: cancelled-refund retry failed:", e.message);
+      }
+
+      // 5-ter) مكافآتٌ فشل منحُها: نقاطُ قطرات وعدُّ الكوبون — **إعادةُ
+      //    المحاولة.** كلٌّ كان `catch`ه سطرَ سجلٍّ وحدَه في مُشغّلٍ بلا
+      //    `retry`، فالعميلةُ تَخسرُ نقاطَها وكوبونُ المرّةِ الواحدةِ يَبقى
+      //    قابلاً للإنفاق، بلا تنبيهٍ ولا محاولةٍ ثانية.
+      //
+      //    **والاستعلامُ على علمِ الفشلِ لا على الحالة**: مجموعتُه لا تَحوي
+      //    إلّا ما فشل، فلا تَزدحمُ نافذتُها بما نُجِح — وهو العطلُ الذي
+      //    وُجد مرّتَين هذه الجلسة (نافذةُ البثِّ المجدول، ونافذةُ «مدفوعٌ
+      //    وعالق»). مساواةٌ واحدة ⇒ لا فهرسَ مركَّب، والنجاحُ يَمحو العلم.
+      try {
+        const qSnap = await db.collection("orders")
+            .where(rewards.PENDING_FLAGS.qatrat, "==", true).limit(200).get();
+        let fixed = 0; let stuck = 0;
+        for (const doc of qSnap.docs) {
+          const d = doc.data();
+          const amt = Number(d.amount || 0);
+          if (!d.client_id || !(amt > 0)) continue;
+          const r = await rewards.grantQatratPoints(db, {
+            orderRef: doc.ref,
+            orderId: doc.id,
+            clientId: d.client_id,
+            points: Math.round(amt),
+            code: d.code || doc.id,
+            alreadyAlerted: d.qatrat_alerted === true,
+          }, queuePush);
+          if (r.granted) fixed++;
+          else if (r.failed) stuck++;
+        }
+        console.log(`opsHealthSweep: qatrat retried=${fixed} stuck=${stuck}`);
+      } catch (e) {
+        console.error("opsHealthSweep: qatrat retry failed:", e.message);
+      }
+
+      try {
+        const cSnap = await db.collection("orders")
+            .where(rewards.PENDING_FLAGS.couponCount, "==", true)
+            .limit(200).get();
+        let fixed = 0; let stuck = 0;
+        for (const doc of cSnap.docs) {
+          const d = doc.data();
+          const cc = typeof d.coupon_code === "string" ? d.coupon_code.trim() : "";
+          if (!cc) continue;
+          const pq = await db.collection("promo_codes")
+              .where("code", "==", cc.toUpperCase()).limit(1).get();
+          if (pq.empty) continue;
+          const r = await rewards.countCouponUse(db, {
+            orderRef: doc.ref,
+            orderId: doc.id,
+            promoRef: pq.docs[0].ref,
+            code: cc,
+            alreadyAlerted: d.coupon_count_alerted === true,
+          }, queuePush);
+          if (r.counted) fixed++;
+          else if (r.failed) stuck++;
+        }
+        console.log(`opsHealthSweep: coupon-count retried=${fixed} stuck=${stuck}`);
+      } catch (e) {
+        console.error("opsHealthSweep: coupon-count retry failed:", e.message);
       }
 
       // 6) إشعارات لم يلمسها processNotificationTriggers أصلاً (انقطاع الدوال 8–18
