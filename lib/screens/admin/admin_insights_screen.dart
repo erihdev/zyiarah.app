@@ -9,6 +9,7 @@ import 'package:zyiarah/screens/admin/admin_orders_screen.dart';
 import 'package:zyiarah/screens/admin/admin_store_orders_screen.dart';
 import 'package:zyiarah/screens/admin/admin_contracts_screen.dart';
 import 'package:zyiarah/utils/vat.dart';
+import 'package:zyiarah/utils/order_activity.dart';
 
 class AdminInsightsScreen extends StatefulWidget {
   // الدور يصل من AdminDashboardScreen (مطبَّع: admin→super_admin) — نحتاجه لتخطي
@@ -194,7 +195,10 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
           cleaningRevenue += amount;
         }
       }
-      if (status == 'pending' || status == 'assigned' || status == 'in_progress') {
+      // «نشط» قاعدةٌ لا تعداد: كان التعدادُ ثلاثَ حالاتٍ فأسقطَ بصمتٍ كلَّ حالةٍ
+      // أُضيفت بعده — `scheduled` و`accepted` و`on_the_way` (طلبٌ سائقُه في
+      // الطريق لم يكن يُعدُّ نشطاً).
+      if (orderIsOpen(status)) {
         activeOrders++;
       }
     }
@@ -205,7 +209,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       if (status == 'paid' || status == 'completed' || status == 'approved') {
         maintenanceRevenue += d(data['quotePrice']);
       }
-      if (status == 'under_review' || status == 'waiting_payment' || status == 'approved') {
+      if (orderIsOpen(status)) {
         activeOrders++;
       }
     }
@@ -220,7 +224,10 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       if (storePaid) {
         storeRevenue += d(data['final_amount'] ?? data['total_amount'] ?? data['total_price']);
       }
-      if (sStatus == 'pending' || sStatus == 'processing') {
+      // لا أحدَ يَكتبُ `pending` ولا `processing` على طلبِ متجر — الدورةُ
+      // `awaiting_payment ⇒ under_review ⇒ delivering ⇒ delivered` — فكانت
+      // حصّةُ المتجرِ من هذا العدّادِ صفراً دائماً.
+      if (orderIsOpen(sStatus)) {
         activeOrders++;
       }
     }

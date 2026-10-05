@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, query, where, orderBy, limit, Timestamp, getCountFromServer, getAggregateFromServer, sum, or, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
+import { STORE_NEEDS_ACTION_STATUSES } from '../utils/orderActivity';
 
 interface RecentOrder {
     id: string;
@@ -223,10 +224,15 @@ export default function Dashboard() {
         // عدّاد المعلّق بمستمع مقيّد بالحالة (مجموعة صغيرة حيّة)، والإيراد بتجميع
         // sum() خادمي بنفس شرط «مدفوع» السابق (الطلب المدفوع يمرّ بـ
         // processing/shipped/delivered لا approved فقط).
+        // كان الشرطُ `status == 'pending'`، و**لا أحدَ يَكتبُ `pending`** على
+        // طلبِ متجر (الدورة: awaiting_payment ⇒ under_review ⇒ delivering ⇒
+        // delivered) — فالبطاقةُ صفرٌ أبداً وعنوانُها يُسمّي خطوةَ موافقةٍ
+        // أُلغيت. العددُ الآن ما يَنتظرُ نقرةً فعلاً (`orderActivity.ts`).
         const unsubPendingStore = onSnapshot(
-            query(collection(db, 'store_orders'), where('status', '==', 'pending')),
+            query(collection(db, 'store_orders'),
+                where('status', 'in', [...STORE_NEEDS_ACTION_STATUSES])),
             (snap: QuerySnapshot<DocumentData>) => setPendingStoreOrders(snap.size.toString()),
-            onErr('pending store orders')
+            onErr('store orders needing action')
         );
         (async () => {
             try {
@@ -309,7 +315,7 @@ export default function Dashboard() {
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <StatCard title="إيرادات المتجر (شامل الضريبة)" value={storeRevenue === null || clientStoreRevenue === null ? '...' : sar(storeRevenue + clientStoreRevenue)} icon={TrendingUp} trend="100" trendUp colorScheme="blue" />
-                    <StatCard title="طلبات بانتظار الموافقة" value={pendingStoreOrders} icon={Clock} trend="0" trendUp colorScheme="orange" />
+                    <StatCard title="طلبات متجر تحتاج إجراء" value={pendingStoreOrders} icon={Clock} trend="0" trendUp colorScheme="orange" />
                     <StatCard title="الإيراد الإجمالي الكلي (شامل الضريبة)" value={totalRevenue === null || storeRevenue === null || clientStoreRevenue === null ? '...' : sar(totalRevenue + storeRevenue + clientStoreRevenue)} icon={TrendingUp} trend="+" trendUp colorScheme="emerald" />
                 </div>
             </div>

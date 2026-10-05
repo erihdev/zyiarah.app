@@ -10,6 +10,7 @@ import {
   Timestamp
 } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
+import { useNotification } from '../components/notificationContext.ts';
 import {
   ShoppingBag,
   CheckCircle,
@@ -62,6 +63,7 @@ function statusTone(status: string): 'green' | 'red' | 'blue' | 'amber' {
 }
 
 export default function StoreOrders() {
+  const { toast } = useNotification();
   const [orders, setOrders] = useState<StoreOrder[]>([]);
   const [loading, setLoading] = useState(true);
   // فشل المستمع نهائي — حالة خطأ صريحة بزر إعادة بدل «لا توجد طلبات» المضلّلة.
@@ -96,7 +98,11 @@ export default function StoreOrders() {
         updated_at: Timestamp.now()
       });
     } catch (error) {
+      // كان `console.error` وحدَه: الأدمن يَنقرُ «جاري التوصيل» فلا يَحدثُ شيءٌ
+      // ولا تُقال كلمة — والصفُّ لا يَتغيّر (لا كتابةَ ⇒ لا مستمعَ يُحدِّث)،
+      // فيَظنُّ أنّه ضغطَ خطأً ويُعيد. والعميلةُ لا تُشعَر بشيء.
       console.error("Error updating order status:", error);
+      toast.error(error instanceof Error ? error.message : 'تعذّر تحديث حالة الطلب');
     }
   };
 

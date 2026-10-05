@@ -39,7 +39,7 @@ interface Product {
 }
 
 export default function StoreProducts() {
-  const { confirm } = useNotification();
+  const { confirm, toast } = useNotification();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -115,7 +115,10 @@ export default function StoreProducts() {
       }
       setIsModalOpen(false);
     } catch (error) {
+      // النافذةُ تَبقى مفتوحةً (إغلاقُها آخرُ سطرٍ في try) لكن بلا سببٍ معروض:
+      // الأدمنُ يَضغطُ «حفظ» فلا يُغلَق شيءٌ ولا تُقال كلمة.
       console.error("Error saving product:", error);
+      toast.error(error instanceof Error ? error.message : 'تعذّر حفظ المنتج');
     } finally {
       setIsSaving(false);
     }
