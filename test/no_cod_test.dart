@@ -88,7 +88,33 @@ void main() {
     final rules = File('firestore.rules').readAsStringSync();
     final i = rules.indexOf('Driver (Direct Dispatch)');
     expect(i, greaterThan(-1), reason: 'قاعدة السائق اختفت — حدِّث الحارس');
-    final block = rules.substring(i, rules.indexOf(']);', i));
+    // **الحدُّ بموازنةِ الأقواس لا بأوّلِ `]);`** — الفحصُ يَدّعي أنّه عن
+    // قائمةِ `hasOnly` الخاصّةِ بالسائق، وكان حدُّه يَتجاوزُها إلى فرعِ
+    // العميلِ الذي يَليها: فسطرٌ مشروعٌ هناك فيه `'is_paid'` (ربطُ
+    // `needs_refund` بالواقعِ عند الإلغاء) أسقطَ الفحصَ وقائمةُ السائقِ
+    // نظيفة. نفسُ فخِّ الحدِّ في `storage_hardening_test` (`indexOf('}')`
+    // يَقفُ عند `}` داخلَ `match /banners/{file=**}`) و`serviceMeta`
+    // (`indexOf('[')` يَلتقطُ قوسَ تعليقِ النوع) — ثالثُ مرّةٍ، فليُسجَّل.
+    final hs = rules.indexOf('hasOnly([', i);
+    expect(hs, greaterThan(-1), reason: 'قائمةُ hasOnly للسائقِ اختفت');
+    var depth = 0;
+    var end = -1;
+    for (var k = hs + 'hasOnly('.length; k < rules.length; k++) {
+      if (rules[k] == '[') depth++;
+      if (rules[k] == ']') {
+        depth--;
+        if (depth == 0) {
+          end = k;
+          break;
+        }
+      }
+    }
+    expect(end, greaterThan(hs), reason: 'تعذّر اقتطاعُ قائمةِ السائق');
+    final block = rules.substring(hs, end + 1);
+    // ولا يَصيرُ الفحصُ أجوفَ: القائمةُ تَحملُ ما يَحملُه السائقُ فعلاً.
+    expect(block.contains("'status'"), isTrue,
+        reason: 'الاقتطاعُ لم يُصِب قائمةَ السائق — فحصٌ على نصٍّ فارغ');
+    expect(block.contains("'driver_location'"), isTrue);
     for (final field in [
       "'is_paid'", "'paid_at'", "'cash_collected_by'",
       "'cash_confirmed'", "'cash_confirmed_at'",

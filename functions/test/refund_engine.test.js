@@ -712,8 +712,12 @@ t("(ح٥) `index.js` لا يَحملُ الإيداعَ إنلاين بعد ال
   // والمكنسةُ تُنادي الدالّةَ نفسَها — التنبيهُ وحدَه لا يُعيدُ المال.
   assert.ok(/cancelled-refund retried=/.test(code),
       "مكنسةُ إعادةِ المحاولةِ غائبة");
-  assert.ok(/\.where\("status", "==", "cancelled"\)\s*\n\s*\.where\("needs_refund", "==", true\)/
-      .test(code), "استعلامُ المكنسةِ ليس بمساواتَين على الحالةِ والعلم");
+  // **أُعيد توجيهُه وشُدِّد (2026-10-05):** كان يُثبّتُ مساواتَين، وصارت
+  // ثلاثاً بإضافةِ `is_paid` — لأنّ `needs_refund` يَكتبُه **العميلُ** على
+  // طلبِه عند الإلغاء (`hasOnly` في القواعد)، فكتابةٌ مباشرةٌ من الـSDK
+  // تَضَعُ `true` على طلبٍ غيرِ مدفوعٍ فتَشغلُ خانةً من الـ200 بلا حقّ.
+  assert.ok(/\.where\("status", "==", "cancelled"\)\s*\n\s*\.where\("needs_refund", "==", true\)\s*\n\s*\.where\("is_paid", "==", true\)/
+      .test(code), "استعلامُ المكنسةِ ليس بثلاثِ مساواتٍ (الحالة/العلم/المدفوع)");
   // والمضادّة: الاسمُ ما زال في الخامّ (التعليقُ الشارحُ للنقل) — فلو غابَ
   // لكانَ التجريدُ حَجبَ أكثرَ من التعليقات.
   assert.ok(idx.includes("creditCancelledRefund"),
@@ -736,6 +740,75 @@ t("(ح٦) وحُرّاسُ المكنسةِ هي حُرّاسُ المحرّكِ
   for (const f of ["refund_credited", "payment_status", "auto_refund_processed"]) {
     assert.ok(eng.includes(f), `حارسُ ${f} غائبٌ عن المحرّك`);
   }
+});
+
+// ── النافذةُ تَنضَح: كلُّ مَخرَجٍ يُسقِطُ الدَّينَ يَمسحُ العلم ──────────
+//
+// العائلةُ الرابعةُ من «نافذةٌ تَمتلئُ بما لا يُزيلُه أحد» في هذه الجلسة
+// (نافذةُ البثِّ المجدول، ونافذةُ «مدفوعٌ وعالق»، ثم هذه) — و**هذه كتبتُها
+// أنا** في الشريحةِ السابقةِ بعد أن وثّقتُ الدرسَ بنفسِه في `rewards.js`:
+// «الفشلُ يَكتبُ علمَه، والمكنسةُ تَستعلمُ العلمَ، فالمجموعةُ لا تَحوي إلّا
+// الفشل». استعملتُ النمطَ الصحيحَ للعلمَين الجديدَين وأخطأتُه هنا، لأنّ
+// `needs_refund` كان قائماً فبدا علماً جاهزاً — وهو **حالةُ دَينٍ** لا علمَ
+// فشل: يَبقى `true` بعد نجاحِ الاستردادِ فيَشغلُ خانتَه إلى الأبد.
+//
+// وأختاها في الملفِّ نفسِه على بُعدِ سبعينَ سطراً (`reopenFieldsIfSystemCancelled`
+// و`reconcileAndSettle`) تَكتبانِ `needs_refund: false` مع `refund_credited:
+// true` معاً — فالعُرفُ كان موجوداً والدالّةُ الجديدةُ وحدَها خرجت عليه.
+tAsync("(ح٧) النجاحُ يَمسحُ العلم — وإلّا بَقيَ في النافذةِ إلى الأبد", async () => {
+  const db = fakeDb({
+    "orders/o1": {code: "A1", amount: 230, client_id: "c1", needs_refund: true},
+    "wallets/c1": {balance: 10},
+  });
+  const r = await engine.creditCancelledRefund(db, {
+    orderRef: db._ref("orders/o1"), orderId: "o1", clientId: "c1",
+    amount: 230, code: "A1",
+  }, async () => null);
+  assert.strictEqual(r.credited, true);
+  const d = db._store.get("orders/o1");
+  assert.strictEqual(d.refund_credited, true);
+  assert.strictEqual(d.needs_refund, false,
+      "طلبٌ نُجِحَ استردادُه يَبقى في نافذةِ المكنسةِ ويُزحزحُ الفاشل");
+});
+
+tAsync("(ح٨) و«سُوِّيَ سلفاً» يَمسحُه كذلك — الدَّينُ غيرُ مستحقّ", async () => {
+  for (const settled of [
+    {refund_credited: true},
+    {payment_status: "refunded"},
+    {auto_refund_processed: true},
+  ]) {
+    const db = fakeDb({
+      "orders/o1": Object.assign(
+          {code: "A1", amount: 230, client_id: "c1", needs_refund: true},
+          settled),
+      "wallets/c1": {balance: 10},
+    });
+    const r = await engine.creditCancelledRefund(db, {
+      orderRef: db._ref("orders/o1"), orderId: "o1", clientId: "c1",
+      amount: 230, code: "A1",
+    }, async () => null);
+    assert.strictEqual(r.skipped, "already_settled");
+    assert.strictEqual(db._store.get("orders/o1").needs_refund, false,
+        `سُوِّيَ بـ${Object.keys(settled)[0]} والعلمُ باقٍ`);
+    // ولا إيداعَ مزدوجاً بحالٍ.
+    assert.strictEqual(db._store.get("wallets/c1").balance, 10);
+  }
+});
+
+t("(ح٩) والعُرفُ عُرفُ الملفِّ لا استثناءً — مجموعةُ مواضعِ المسح", () => {
+  const eng = codeOf(mod);
+  // ثلاثةُ مسارٍ تُسقِطُ الدَّينَ: الشقيقتانِ القائمتانِ ومَخرَجا الدالّةِ
+  // الجديدة (النجاحُ و«سُوِّيَ سلفاً»). والفشلُ **لا** يَمسح.
+  const sites = (eng.match(/needs_refund: false/g) || []).length;
+  assert.strictEqual(sites, 4,
+      `مواضعُ مسحِ needs_refund ${sites} ≠ 4 — موضعٌ زائدٌ أو ناقص، راجِعْه`);
+  const fn = eng.slice(eng.indexOf("async function creditCancelledRefund"));
+  const fail = fn.slice(fn.indexOf("refund_credit_failed: true"));
+  assert.ok(!fail.includes("needs_refund: false"),
+      "فرعُ الفشلِ يَمسحُ العلمَ — فلا تُعيدُ المكنسةُ المحاولةَ أبداً");
+  // والمضادّة: الشرحُ ما زال في الخامّ (الفحصُ يَقرأُ المُجرَّد).
+  assert.ok(mod.includes("نافذةُ البثِّ المجدول") || mod.includes("تَنضَح"),
+      "اختفى شرحُ القاعدةِ — فلا يَعرفُ القارئُ لِمَ تُمسَح");
 });
 
 (async () => {
