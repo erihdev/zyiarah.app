@@ -174,6 +174,84 @@ void main() {
           reason: 'نشرُ القواعدِ من الأتمتةِ ممنوعٌ — حجزُ STAGE-C');
     });
 
+    // ── كاشفُ الانحراف: الالتزامُ بالتشغيلِ اليدويِّ صارَ فحصاً ────────
+    //
+    // علامةُ `[skip ci]` مفتاحٌ واحدٌ فوقَ شيئَين: تَمنعُ بناءَ Codemagic —
+    // وهو استعمالُها المقصودُ أحياناً (دفعةٌ أثناء مراجعةِ آبل تُعيدُ
+    // المراجعةَ من الصفر) — **وتَمنعُ كذلك مساراتِ النشرِ الثلاثة**. وفي
+    // 2026-10-05 حمَلَ ثلاثةَ عشَرَ دمجاً العلامةَ عن قصد، فلم يَجرِ لها
+    // نشرٌ قطّ؛ وثلاثةٌ نظيفةٌ جرى لها النشرُ وفشل. فبلغَ المتروكُ **ستّةً
+    // وعشرينَ التزاماً** تَمسُّ `functions/**` مدمَجةً غيرَ منشورة.
+    //
+    // والالتزامُ بتشغيلِ المساراتِ يدويّاً بعدَ دمجٍ بعلامةٍ كان **مكتوباً
+    // في CLAUDE.md ويَعتمدُ على الذاكرةِ وحدَها** — وهو ما سقط. فصارَ فحصاً
+    // مجدولاً: `schedule` و`workflow_dispatch` **لا تَكبِتُهما العلامة**.
+    test('كاشفُ الانحرافِ يُغطّي المساراتِ الثلاثةَ ولا يَنشرُ بنفسِه', () {
+      const drift = '.github/workflows/deploy_drift.yml';
+      expect(File(drift).existsSync(), isTrue,
+          reason: 'كاشفُ الانحرافِ اختفى — فالالتزامُ عادَ إلى الذاكرة');
+      final d = File(drift).readAsStringSync();
+      final dCode = d
+          .split('\n')
+          .where((l) => !l.trimLeft().startsWith('#'))
+          .join('\n');
+
+      // (أ) يُغطّي **كلَّ** مسارِ نشرٍ في المستودع — مجموعةً لا عيّنة.
+      final deployWorkflows = Directory('.github/workflows')
+          .listSync()
+          .whereType<File>()
+          .map((f) => f.uri.pathSegments.last)
+          .where((n) => n.endsWith('_deploy.yml'))
+          .map((n) => n.replaceAll('.yml', ''))
+          .toSet();
+      expect(deployWorkflows.length, greaterThanOrEqualTo(3),
+          reason: 'لم تُعثَر مساراتُ النشر — فحصٌ أجوف');
+      for (final w in deployWorkflows) {
+        expect(dCode.contains(w), isTrue,
+            reason: '$w خارجَ كاشفِ الانحراف — يُنشَرُ أو لا يُنشَرُ بلا علمِ أحد');
+      }
+
+      // (ب) ولا يَنشرُ بنفسِه: الحجبُ قد يكونُ مقصوداً (مراجعةُ آبل،
+      //     حجزُ STAGE-C) فالقرارُ بشريّ.
+      expect(dCode.contains('firebase'), isFalse,
+          reason: 'الكاشفُ صارَ يَنشر — وذاك يَتجاوزُ حجباً قد يكونُ مقصوداً');
+      expect(dCode.contains('exit 1'), isTrue,
+          reason: 'لا يَفشلُ عند الانحراف — فلا يَصلُ بريدُ إشعارٍ لأحد');
+
+      // (ج) ومُحرِّكُه لا تَكبِتُه العلامة: لا `push` فيه بحال.
+      expect(dCode.contains('schedule:'), isTrue);
+      expect(dCode.contains('workflow_dispatch:'), isTrue);
+      expect(RegExp(r'^\s+push:', multiLine: true).hasMatch(dCode), isFalse,
+          reason: 'مُحرِّكُ push تَكبِتُه العلامةُ نفسُها — فالكاشفُ يَصمتُ '
+              'في الحالةِ التي وُجد لها بعينِها');
+
+      // (د) ومساراتُ كلِّ هدفٍ تُقرأُ من ملفِّ سيرِه لا تُكتَبُ ثانيةً.
+      // **قدرةٌ لا وجود**: أوّلُ صياغةٍ قالت `existsSync()` وحدَها،
+      // واختبارُ قضمٍ أجوَفَ الملفَّ إلى سطرٍ واحدٍ **فمرَّ أخضر** — وهو
+      // درسُ هذه الجلسةِ بعينِه (المقارنةُ على الأسماءِ لا على القدرة).
+      final reader = File('.github/scripts/deploy_paths.py');
+      expect(reader.existsSync(), isTrue, reason: 'قارئُ المساراتِ اختفى');
+      final r = reader.readAsStringSync();
+      expect(r.contains('def push_paths('), isTrue,
+          reason: 'القارئُ بلا دالّةِ الاستخراج — الكاشفُ أعمى عن كلِّ هدف');
+      expect(r.contains('paths:'), isTrue,
+          reason: 'لا يَقرأُ كتلةَ paths أصلاً');
+      expect(r.contains('sys.exit(1)'), isTrue,
+          reason: 'لا يَفشلُ على قائمةٍ فارغة — فيَقرأُ الكاشفُ «لا انحراف» '
+              'عن هدفٍ لم يَستخرِجْ مساراتَه');
+      expect(dCode.contains('deploy_paths.py'), isTrue,
+          reason: 'الكاشفُ يَحملُ نسخةً ثانيةً من المسارات — وهي تَنحرِف');
+      // ولكلِّ هدفٍ كتلةُ `paths:` فيها مدخلٌ واحدٌ على الأقلّ، وإلّا
+      // أعادَ القارئُ فراغاً وصارَ الكاشفُ أعمى عنه.
+      for (final w in deployWorkflows) {
+        final src = File('.github/workflows/$w.yml').readAsStringSync();
+        final i = src.indexOf('paths:');
+        expect(i, greaterThan(-1), reason: '$w: لا كتلةَ paths');
+        expect(RegExp(r"\n\s+- '[^']+'").hasMatch(src.substring(i)), isTrue,
+            reason: '$w: كتلةُ paths بلا مدخلٍ مُقتبَس — القارئُ يُعيدُ فراغاً');
+      }
+    });
+
     test('لا مفتاحَ مكتوبٌ في المستودع', () {
       expect(wf.contains('BEGIN PRIVATE KEY'), isFalse);
       expect(wf.contains('"private_key"'), isFalse);

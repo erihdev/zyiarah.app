@@ -1,0 +1,113 @@
+# كاشفُ انحرافِ النشر — **يُبلِّغُ ولا يَنشُر**.
+#
+# ═══ لماذا ═══
+#
+# علامةُ `[skip ci]` مفتاحٌ واحدٌ فوقَ شيئَين: تَمنعُ بناءَ Codemagic — وهو
+# استعمالُها المقصودُ أحياناً، لأنّ دفعةً إلى `main` أثناء مراجعةِ آبل
+# تُعيدُ المراجعةَ من الصفرِ بالبناءِ الجديد — **وتَمنعُ كذلك كلَّ سيرِ
+# Actions**، ومنها، منذ 2026-10-04، **مساراتُ النشرِ الثلاثة**. فاستعمالُها
+# لحمايةِ مراجعةٍ جاريةٍ يُسكِتُ نشرَ الدوالِّ واللوحةِ والفهارسِ **بلا أثر**.
+#
+# وهذا ما جرى في 2026-10-05: ثلاثةَ عشَرَ دمجاً حمَلَ العلامةَ عن قصد، فلم
+# يَجرِ لها نشرٌ قطّ؛ وثلاثةُ دمجاتٍ نظيفةٍ جرى لها النشرُ **وفشل**. فلم
+# يَصِلِ الإنتاجَ شيءٌ من إصلاحاتِ ذلك اليوم. والالتزامُ بتشغيلِ المساراتِ
+# يدويّاً بعدَ دمجٍ بعلامةٍ **مكتوبٌ في CLAUDE.md ويَعتمدُ على الذاكرةِ
+# وحدَها** — وهو ما سقط.
+#
+# فهذا السيرُ يُحوّلُ ذلك الاعتمادَ إلى فحص: لكلِّ هدفٍ، آخرُ نشرٍ **ناجحٍ**
+# له، ثمّ هل في `main` بعدَه التزاماتٌ تَمسُّ مساراتِه؟ فإن كان — فثَمّ شفرةٌ
+# مدمَجةٌ غيرُ منشورة، ويُقال.
+#
+# **ولا يَنشرُ بنفسِه بحال**: الحجبُ قد يكونُ مقصوداً (مراجعةُ آبل، حجزُ
+# STAGE-C)، فالقرارُ بشريّ. و`schedule` و`workflow_dispatch` **لا تَكبِتُهما
+# العلامة** — ولذلك يَعملُ هذا الفحصُ أصلاً.
+#
+# ومساراتُ كلِّ هدفٍ تُقرأُ من ملفِّ سيرِه عبرَ `.github/scripts/deploy_paths.py`
+# لا تُكتَبُ هنا ثانيةً: نسخةٌ ثانيةٌ تَنحرِفُ، وانحرافُ كاشفِ الانحرافِ
+# مُفارقةٌ لا تُحتَمل.
+name: Deploy Drift Check
+
+on:
+  schedule:
+    - cron: '41 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  check:
+    name: Is anything merged but unpublished?
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Compare each deploy target against main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          DRIFT=0
+          : > "$RUNNER_TEMP/drift.txt"
+          for wf in functions_deploy admin_deploy firestore_indexes_deploy; do
+            f=".github/workflows/$wf.yml"
+            if ! PATHS=$(python3 .github/scripts/deploy_paths.py "$f"); then
+              echo "::error::$f: تعذّر استخراجُ مساراتِه — الكاشفُ أعمى عن هذا الهدف"
+              echo "- **$wf**: تعذّر استخراجُ المسارات" >> "$RUNNER_TEMP/drift.txt"
+              DRIFT=1
+              continue
+            fi
+            SHA=$(gh api "repos/$REPO/actions/workflows/$wf.yml/runs?status=success&per_page=1" \
+                  --jq '.workflow_runs[0].head_sha // empty')
+            if [ -z "$SHA" ]; then
+              echo "::error::$wf: لا نشرَ ناجحاً قطّ — لم يُنشَر هذا الهدفُ أبداً"
+              echo "- **$wf**: لا نشرَ ناجحاً قطّ" >> "$RUNNER_TEMP/drift.txt"
+              DRIFT=1
+              continue
+            fi
+            git cat-file -e "$SHA^{commit}" 2>/dev/null \
+              || git fetch --no-tags --depth=1 origin "$SHA" 2>/dev/null || true
+            if ! git cat-file -e "$SHA^{commit}" 2>/dev/null; then
+              echo "::error::$wf: التزامُ آخرِ نشرٍ ($SHA) غيرُ موجودٍ — فُرِضَ انحرافٌ احتياطاً"
+              echo "- **$wf**: التزامُ آخرِ نشرٍ غيرُ موجودٍ في المستودع" >> "$RUNNER_TEMP/drift.txt"
+              DRIFT=1
+              continue
+            fi
+            # shellcheck disable=SC2086
+            N=$(git log --oneline "$SHA..origin/main" -- $PATHS | wc -l | tr -d ' ')
+            echo "$wf: آخرُ نشرٍ ناجح ${SHA:0:7} — التزاماتٌ بعدَه تَمسُّ الهدف: $N"
+            if [ "${N:-0}" -gt 0 ]; then
+              DRIFT=1
+              {
+                echo "- **$wf**: $N التزاماً مدمَجاً غيرَ منشور (آخرُ نشرٍ ناجح \`${SHA:0:7}\`)"
+                # shellcheck disable=SC2086
+                git log --format='  - %h %s' "$SHA..origin/main" -- $PATHS | head -n 10
+              } >> "$RUNNER_TEMP/drift.txt"
+              echo "::error::$wf: $N التزاماً مدمَجاً غيرَ منشور — شغِّلْ ذلك السيرَ يدويّاً"
+            fi
+          done
+
+          if [ "$DRIFT" -ne 0 ]; then
+            {
+              echo "## ✗ شفرةٌ مدمَجةٌ غيرُ منشورة"
+              echo
+              cat "$RUNNER_TEMP/drift.txt"
+              echo
+              echo "### الأسبابُ المعتادة"
+              echo "1. **علامةُ \`[skip ci]\`** في رسالةِ الدمج: تَمنعُ Codemagic"
+              echo "   **وكلَّ** سيرِ Actions ومنها النشر. فاستعمالُها لحمايةِ"
+              echo "   مراجعةِ آبل يُوجِبُ تشغيلَ مساراتِ النشرِ يدويّاً بعدَها."
+              echo "2. **فشلُ النشرِ نفسِه**: افتحْ ملخَّصَ آخرِ تشغيلٍ فاشل —"
+              echo "   صارَ يَحملُ سببَه منذ 2026-10-05."
+              echo
+              echo "### العلاج"
+              echo "من \`Actions\` ← المسارُ المعنيّ ← \`Run workflow\`."
+              echo "ولا يَنشرُ هذا الفحصُ بنفسِه: الحجبُ قد يكونُ مقصوداً."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "## ✓ لا انحراف — كلُّ هدفٍ منشورٌ من رأسِ main" >> "$GITHUB_STEP_SUMMARY"
