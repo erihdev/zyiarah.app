@@ -30,6 +30,7 @@ import 'package:zyiarah/providers/user_provider.dart';
 import 'package:zyiarah/providers/config_provider.dart';
 import 'package:zyiarah/providers/order_provider.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/services/zatca_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -127,6 +128,15 @@ void main() async {
   await ZyiarahNotificationService().initialize();
   ZyiarahDeepLinkService().initialize(navigatorKey);
   await GeofenceService.initialize(); // يبذر service_zones الافتراضية إن كانت فارغة
+  // **بياناتُ البائعِ على الفاتورةِ تُحمَّلُ مرّةً عند الإقلاع.** كانت
+  // `ensureConfigLoaded()` تُنادى في موضعَين فقط (خدمةُ الـPDF وشاشةُ
+  // النجاح)، فبقيَ موضعانِ يَبنيانِ رمزَ QR بلا تحميلٍ — سجلُّ الفواتير
+  // الإداريُّ و`InvoiceView.qrData()` — فيُمكنُ أن يَحملَ رمزٌ بياناتِ
+  // المنشأةِ الافتراضيّةَ بينما الـPDF يَحملُ المحفوظة: فاتورةٌ واحدةٌ
+  // برمزَين، وهو العطلُ الذي وُجدت `invoiceQrFor` لسدِّه. والنداءُ **بلا
+  // انتظار**: قراءةٌ واحدةٌ لا يَجوزُ أن تُؤخّرَ الإقلاع، والمِزلاجُ يَجعلُ
+  // النداءاتِ اللاحقةَ بلا كلفة.
+  ZatcaService.ensureConfigLoaded();
 
   runApp(
     MultiProvider(

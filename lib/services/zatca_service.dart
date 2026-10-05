@@ -1,42 +1,84 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:zyiarah/utils/error_report.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 
 /// خدمة متوافقة مع متطلبات هيئة الزكاة والضريبة والجمارك (ZATCA)
 /// تقوم بتوليد رمز الاستجابة السريعة (QR Code) بنظام التشفير (TLV) المطلوب قانونياً
 class ZatcaService {
   // بيانات المنشأة — قيم افتراضية تُستخدم كـ fallback إن غاب إعداد النظام،
-  // فلا تنكسر الفاتورة أبداً. تُحدَّث من system_configs/zatca_settings (E).
+  // فلا تنكسر الفاتورة أبداً.
+  //
+  // **كانت تُقرأُ من `system_configs/zatca_settings` — مستندٍ لا يَكتبُه
+  // شيءٌ في المستودعِ كلِّه (2026-10-05).** ومحرّرُ الإعداداتِ في تطبيقِ
+  // الإدارةِ يَكتبُ `merchant_name` و`vat_number` في
+  // `system_configs/main_settings`، فما يَكتبُه المالكُ **لا يَقرؤه أحد**:
+  // الاسمُ والرقمُ الضريبيُّ المطبوعانِ على كلِّ فاتورةٍ ضريبيّةٍ — وداخلَ
+  // رمزِ QR منها — ثابتانِ في الشفرةِ لا يُغيّرُهما أيُّ سطحٍ إداريّ، والشاشةُ
+  // تَعرضُهما حقلَين قابلَين للحفظ. وهي عائلةُ مفاتيحِ الإصدارِ بعينِها
+  // (قارئٌ يُفضّلُ حقلاً لا كاتبَ له)، واقعةً على وثيقةِ ضريبة.
+  //
+  // اليومَ الافتراضاتُ مطابقةٌ للواقعِ فلا فاتورةَ خاطئةٌ بعد — والعطلُ
+  // يَصيرُ حيّاً لحظةَ أن يُصحّحَ المالكُ اسماً أو رقماً.
+  //
+  // فالقراءةُ من `main_settings` (حيث يَكتبُ المحرّرانِ فعلاً)، ويَبقى
+  // `zatca_settings` **احتياطاً ثانياً** لمستندٍ قد يكون أُنشئ بيدٍ في
+  // الكونسول — نفسُ قرارِ احتياطِ `latest_build` ولنفسِ السبب: إصلاحُ
+  // الكاتبِ وحدَه لا يَكفي حين تكونُ في الإنتاجِ مستنداتٌ قائمة.
   static String merchantName = "مؤسسة معاذ يحي محمد المالكي";
   static String vatNumber = "310885360200003";
   static String crNumber = "7030376342";
 
   static bool _configLoaded = false;
 
+  /// المستندُ الذي يَكتبُه المحرّرانِ فعلاً، ثمّ احتياطٌ لمستندٍ قديم.
+  static const List<String> configDocs = ['main_settings', 'zatca_settings'];
+
   /// تحميل بيانات المنشأة من إعدادات النظام (يقرؤها أي مستخدم مسجَّل).
-  /// تُستدعى قبل توليد الفاتورة. عند أي خطأ تبقى القيم الافتراضية.
+  /// تُستدعى عند الإقلاع وقبل توليد الفاتورة. عند أي خطأ تبقى القيم
+  /// الافتراضية، فالفاتورة لا تنكسر.
   static Future<void> ensureConfigLoaded() async {
     if (_configLoaded) return;
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('system_configs')
-          .doc('zatca_settings')
-          .get().timeout(kNetCallTimeout);
-      if (doc.exists && doc.data() != null) {
+      // الأوّلُ يَفوزُ لكلِّ حقلٍ على حِدَة: `main_settings` هو ما يَحفظُه
+      // المالكُ، و`zatca_settings` يُكمِلُ ما لا يَحمله (مثلاً `cr_number`
+      // في مستندٍ أُنشئ بيدٍ قبل أن يَصيرَ للحقلِ محرّر).
+      for (final id in configDocs) {
+        final doc = await FirebaseFirestore.instance
+            .collection('system_configs')
+            .doc(id)
+            .get()
+            .timeout(kNetCallTimeout);
+        if (!doc.exists || doc.data() == null) continue;
         final d = doc.data()!;
         final m = (d['merchant_name'] as String?)?.trim();
         final v = (d['vat_number'] as String?)?.trim();
         final c = (d['cr_number'] as String?)?.trim();
-        if (m != null && m.isNotEmpty) merchantName = m;
-        if (v != null && v.isNotEmpty) vatNumber = v;
-        if (c != null && c.isNotEmpty) crNumber = c;
+        if (m != null && m.isNotEmpty && !_gotMerchant) {
+          merchantName = m;
+          _gotMerchant = true;
+        }
+        if (v != null && v.isNotEmpty && !_gotVat) {
+          vatNumber = v;
+          _gotVat = true;
+        }
+        if (c != null && c.isNotEmpty && !_gotCr) {
+          crNumber = c;
+          _gotCr = true;
+        }
       }
       _configLoaded = true;
-    } catch (_) {
-      // تبقى القيم الافتراضية — الفاتورة لا تنكسر
+    } catch (e, st) {
+      // بياناتُ البائعِ على وثيقةٍ ضريبيّة: الصمتُ عن المستخدمةِ صحيحٌ
+      // (الفاتورةُ تَصدرُ بالافتراضات) لكنّ الصمتَ عنّا ليس كذلك.
+      reportSilent(e, st, reason: 'zatca_config_load_failed');
     }
   }
+
+  static bool _gotMerchant = false;
+  static bool _gotVat = false;
+  static bool _gotCr = false;
 
   /// توليد رمز QR متوافق مع ZATCA للفواتير الإلكترونية (المرحلة الأولى والثانية)
   static String generateZatcaQrCode({
