@@ -144,6 +144,49 @@ async function resolveMaterialsBase(db, meta) {
   return base;
 }
 
+/**
+ * أساسُ سلّةِ المتجرِ من `products` — **إعادةُ تسعيرٍ خادميّةٌ لم تكن موجودة.**
+ *
+ * `store_service.dart` يُسعّرُ السلّةَ من `products` داخلَ معامَلةٍ ويَكتبُ
+ * `total_amount` و`items` بـ`{id, name, quantity, price}` — لكنّه يَفعلُ ذلك
+ * **في العميل**. ومُتلاعبٌ يَكتبُ مستندَ `store_orders` من الـSDK مباشرةً
+ * يُعلِنُ ما شاء: القواعدُ تَشترطُ `is_paid: false` و`client_id` ولا تَفحصُ
+ * المبلغ، وفحصُ `moyasarWebhook` الوحيدُ «المدفوعُ = المُعلَن»
+ * (`expectedAmount`)، وكلُّ حقولِ ذلك التدرّجِ يَكتبُها هو. فسلّةٌ بخمسِ مئةٍ
+ * تُعلَنُ بريالٍ وتُدفَعُ بريالٍ وتُشحَن.
+ *
+ * ولا تحقّقَ خادميّاً للمتجرِ من أيِّ نوع: `computeExpectedBasePrice` تُعيدُ
+ * `null` له (عناصرُه ليست خدمةً في منطقة)، فسلسلةُ Tier A كلُّها مقصورةٌ على
+ * `orders`. والبياناتُ اللازمةُ موجودةٌ في المستندِ نفسِه، والدالّةُ التي
+ * تَفعلُ هذا بالضبط موجودةٌ مجموعةً واحدةً بعيداً: `resolveMaterialsBase`.
+ *
+ * **نفسُ عقدِ `resolveMaterialsBase`**: `null` تعني «تعذّر التسعير» — عنصرٌ بلا
+ * معرّفٍ أو بكمّيّةٍ غيرِ موجبةٍ أو منتجٌ محذوفٌ أو سعرٌ غيرُ صالح — ولا يُرفَضُ
+ * دفعٌ بلا يقين. وسلّةٌ فارغةٌ تُعيدُ `0`.
+ *
+ * @param {object} db Firestore
+ * @param {Array} items مصفوفةُ `store_orders.items`
+ * @return {Promise<?number>} الأساسُ قبل الضريبة، أو `null` إن تعذّر
+ */
+async function resolveStoreCartBase(db, items) {
+  const list = Array.isArray(items) ? items : [];
+  if (list.length === 0) return 0;
+  let base = 0;
+  for (const it of list) {
+    // `store_service` يَكتبُ المعرّفَ في `id`؛ ونَقبلُ `product_id` كذلك
+    // لأنّه اسمُ الحقلِ في موادِّ التنظيفِ داخلَ طلبِ الخدمة.
+    const id = it && (it.id || it.product_id);
+    const qty = Number(it && it.quantity) || 0;
+    if (!id || qty <= 0) return null;
+    const snap = await db.collection("products").doc(String(id)).get();
+    if (!snap.exists) return null;
+    const price = Number(snap.data().price);
+    if (!price || isNaN(price) || price <= 0) return null;
+    base += price * qty;
+  }
+  return base;
+}
+
 // رسوم الوعورة (قرار المالك 2026-09-16 — تسعير القرى والوعورة): نسبة مئوية على
 // الأساس قبل الضريبة لطلبات القرى الجبلية/الوعرة. تُقرأ من مستند المنطقة الموثوق
 // فقط (terrain_surcharge_percent) — ما يكتبه الطلب/العميل لا يُقرأ. 0..100،
@@ -165,6 +208,7 @@ module.exports = {
   PRICEABLE_KINDS,
   computeExpectedBasePrice,
   resolveMaterialsBase,
+  resolveStoreCartBase,
   acPriceField,
   carPriceField,
   terrainSurchargePercent,

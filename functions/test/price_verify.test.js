@@ -167,8 +167,13 @@ function fakeDb({byId = {}, byName = {}} = {}) {
     // `_flagZoneGeoMismatch` — فعَدَّ الحارسُ ثلاثاً وسَقطَ على التوثيق.
     const code = idx.split("\n")
         .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
-    assert.strictEqual((code.match(/price_unverifiable/g) || []).length, 2,
-        "كتابةٌ في كلِّ مسار");
+    // **ثلاثةٌ الآن لا اثنان، وهذا تحديثٌ مقصودٌ لا إسكات.** أُضيف مسارُ
+    // طلبِ المتجر (`_verifyStoreOrderPrice`): سلّتُه لم تكن تُعادُ تسعيرُها
+    // خادميّاً إطلاقاً، فتعذّرُ تسعيرِها يَلزمُ أن يُوسَمَ ويُنبَّهَ عنه
+    // كنظيرِه في `orders`. (نفسُ ما جرى لحارسِ «ثلاثةُ مواضع» في
+    // `refund_engine.test.js` حين ظهرَ الرابع.)
+    assert.strictEqual((code.match(/price_unverifiable/g) || []).length, 3,
+        "كتابةٌ في كلِّ مسار: ميسر، المحفظة، وطلبُ المتجر");
     // ولا يُفرّغُ التجريدُ الفحص.
     assert.ok(idx.includes("price_unverifiable)"),
         "ذكرُ الوسمِ في الترويسةِ ما زال — فلو غابَ فالتجريدُ حَجبَ شيئاً");
@@ -308,6 +313,61 @@ function fakeDb({byId = {}, byName = {}} = {}) {
         "فلو أُطفئت فعلاً فهذا الفحصُ هو ما يُراجَع");
     assert.ok(idx.includes("فُعّلت بقرار المالك (2026-07-31)"),
         "سندُ القرارِ في رأسِ الملفّ ما زال");
+  });
+
+  // ─────── وطلبُ المتجرِ كان بلا تحقّقٍ من أيِّ نوع ───────
+
+  t("(٢٤) سلّةُ المتجرِ تُعادُ تسعيرُها خادميّاً — في المسارَين", () => {
+    assert.strictEqual(
+        (code.match(/_verifyStoreOrderPrice\(/g) || []).length, 3,
+        "التعريفُ + نداءانِ (verify / webhook)");
+    assert.ok(code.includes("col === \"store_orders\""),
+        "الويب هوكُ يَلزمُ أن يُفرِّعَ على المتجر");
+    assert.ok(code.includes("orderRef.parent.id === \"store_orders\""),
+        "والنداءُ كذلك");
+    // وإعادةُ التسعيرِ من `products` تَعيشُ في `pricing.js` لا هنا.
+    assert.ok(code.includes("resolveStoreCartBase("),
+        "تسعيرُ السلّةِ من products");
+    assert.ok(!/async function resolveStoreCartBase/.test(code),
+        "نسخةٌ ثانيةٌ في index.js — الوحدةُ هي موضعُها");
+  });
+
+  t("(٢٥) وسمٌ وتنبيهٌ لا رفض — قرارٌ مكتوب", () => {
+    const i = code.indexOf("async function _verifyStoreOrderPrice");
+    const j = code.indexOf("\n}\n", i);
+    const body = code.slice(i, j);
+    // لا رفضَ بحال: الرفضُ يَحجبُ دفعةَ عميلةٍ حقيقيّةٍ على خطأٍ في الضريبةِ
+    // أو التقريب — وهو ما عضَّ مسارَ المحفظةِ مرّتَين هذه الجلسة.
+    assert.ok(!body.includes("HttpsError"),
+        "الرفضُ أُدخِل — القرارُ كان «وسمٌ وتنبيهٌ لا رفض»");
+    assert.ok(!body.includes("throw "),
+        "لا رميَ من هذا المسار");
+    // والتعذّرُ يُنبّهُ ولا يَصمت (نظيرُ `price_unverifiable` في orders).
+    assert.ok(body.includes("price_unverifiable"),
+        "تعذّرُ التسعيرِ يَلزمُ أن يُوسَمَ ويُنبَّهَ عنه");
+    // والسببُ باقٍ في الخامّ.
+    assert.ok(idx.includes("وسمٌ وتنبيهٌ فقط، ولا رفضَ بحال"),
+        "شرحُ قرارِ «لا رفض» اختفى");
+  });
+
+  t("(٢٦) وتفاوتُ التقريبِ مسموحٌ بريالٍ واحدٍ لا أكثر", () => {
+    const i = code.indexOf("async function _verifyStoreOrderPrice");
+    const j = code.indexOf("\n}\n", i);
+    const body = code.slice(i, j);
+    // **النهايةُ جزءٌ من النمط**: `"paid >= expected - 1"` سابقةٌ نصّيّةٌ
+    // لـ`- 100`، فاختبارُ القضمِ مرَّ أخضرَ على هامشٍ أوسعَ مئةَ مرّة.
+    assert.ok(body.includes("paid >= expected - 1) return;"),
+        "هامشُ التقريبِ تغيّر — راجِعْ أثرَه على الدفعاتِ السليمة");
+    // والمقارنةُ على الإجماليِّ شاملَ الضريبةِ كما يُنشئُ المتجرُ الطلب.
+    assert.ok(body.includes("grossFromBaseRounded(base)"),
+        "المتجرُ يُنشئُ total_amount بـgrossFromBaseRounded — فالمقارنةُ نظيرتُها");
+    // وأنّ المسحَ الدوريَّ لا يَمسحُ هذه المجموعةَ مكتوبٌ حيث يُقرأ: الاعتمادُ
+    // عليه لطلباتِ المتجرِ وهمٌ، والتنبيهُ الفوريُّ هو كلُّ ما هناك.
+    assert.ok(idx.includes("لا يَمسحُ `store_orders`"),
+        "تنبيهُ أنّ المسحَ لا يُغطّي المتجرَ اختفى");
+    assert.ok(
+        /collection\("orders"\)\s*\n?\s*\.where\("price_mismatch"/.test(code),
+        "لو وُسّع المسحُ إلى store_orders فهذا الفحصُ هو ما يُراجَع");
   });
 
   // ─────────── قاعدةُ الوحدات ───────────
