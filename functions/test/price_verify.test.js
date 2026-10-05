@@ -237,7 +237,7 @@ function fakeDb({byId = {}, byName = {}} = {}) {
     assert.strictEqual(
         (code.match(/_verifyOrderPriceTierA\(/g) || []).length, 4,
         "التعريفُ + ثلاثةُ نداءات (verify / webhook / tamara)");
-    for (const src of ['"verify"', '"webhook"', '"tamara"']) {
+    for (const src of ["\"verify\"", "\"webhook\"", "\"tamara\""]) {
       assert.ok(code.includes(src),
           `المسلكُ ${src} لا يُسمّي نفسَه — فالسجلُّ لا يُميّزُ مَن وَسَم`);
     }
