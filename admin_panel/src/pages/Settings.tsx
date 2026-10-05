@@ -4,6 +4,7 @@ import { Save, Shield, Wallet, MapPin, Search, Smartphone, Loader2, CheckCircle2
 import { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, GeoPoint, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/notificationContext.ts';
+import { publishedBuild } from '../utils/buildGate.ts';
 import { logAudit, AUDIT } from '../services/audit.ts';
 import ZoneScheduleEditor from '../components/ZoneScheduleEditor.tsx';
 import { type ZoneSchedule } from '../utils/zoneSchedule.ts';
@@ -123,15 +124,18 @@ const zoneInputCls = 'w-full bg-white border border-slate-200 rounded-xl px-4 py
 // فرأى كلُّ مختبري أندرويد مطالبةَ تحديثٍ إجباريّةً زائفة لأسابيع (2026-08-31).
 interface AppUpdateConfig {
     enabled: boolean;
-    latest_build_ios: number;
-    latest_build_android: number;
+    // نصٌّ خامٌّ لا رقم: الصندوقُ الفارغُ يَبقى فارغاً. `parseInt('') || 0`
+    // كان يُنتجُ صفراً، والصفرُ قيمةٌ **تُطفئُ** بوّابةَ الإصدارِ عند الحفظ.
+    // و`publishedBuild` يَقبلُ النوعَين (مستنداتُ الكونسولِ اليدويّةُ نصّيّة).
+    latest_build_ios: number | string;
+    latest_build_android: number | string;
     force: boolean;
     message: string;
 }
 const defaultAppUpdate: AppUpdateConfig = {
     enabled: false,
-    latest_build_ios: 0,
-    latest_build_android: 0,
+    latest_build_ios: '',
+    latest_build_android: '',
     force: false,
     message: '',
 };
@@ -538,6 +542,17 @@ export default function Settings({ role }: { role?: string | null }) {
             toast.error('تعذّر تحميل الإعدادات الحالية — لا يمكن الحفظ فوقها بقيم افتراضية. أعد تحميل الصفحة أولاً.');
             return;
         }
+        // رقمُ البناءِ المنشور: نرفضُ غيرَ الصالحِ بدلَ ابتلاعِه. `parseInt('')
+        // || 0` كان يَكتبُ **صفراً**، والقارئُ يُفضّلُ حقلَ المنصّةِ على
+        // الاحتياطيِّ الموحّد و`currentBuild >= 0` صحيحٌ أبداً — فصندوقٌ فارغٌ
+        // واحدٌ يُطفئُ مطالبةَ التحديثِ لتلك المنصّةِ بصمت، وهي بوّابةُ نشرِ
+        // قواعدِ الأمانِ المحجوزة. (نفسُ رفضِ محرّرِ التطبيق.)
+        const iosBuild = publishedBuild(appUpdate.latest_build_ios);
+        const androidBuild = publishedBuild(appUpdate.latest_build_android);
+        if (iosBuild === null || androidBuild === null) {
+            toast.error('أدخِل رقمَ البناءِ المنشورِ للمنصّتَين (رقمٌ أكبرُ من صفر) — تركُه فارغاً يُطفئُ مطالبةَ التحديث');
+            return;
+        }
         setIsSaving(true);
         try {
             const docRef = doc(db, 'system_configs', 'main_settings');
@@ -548,8 +563,8 @@ export default function Settings({ role }: { role?: string | null }) {
                 // عدّادُها. لا نكتب latest_build الموحّد عمداً (انظر التعليق أعلاه).
                 setDoc(updRef, {
                     enabled: appUpdate.enabled,
-                    latest_build_ios: Number(appUpdate.latest_build_ios) || 0,
-                    latest_build_android: Number(appUpdate.latest_build_android) || 0,
+                    latest_build_ios: iosBuild,
+                    latest_build_android: androidBuild,
                     force: appUpdate.force,
                     message: appUpdate.message || '',
                 }, { merge: true }),
@@ -785,7 +800,7 @@ export default function Settings({ role }: { role?: string | null }) {
                                                                         type="number"
                                                                         min={0}
                                                                         value={appUpdate.latest_build_ios}
-                                                                        onChange={(e) => setAppUpdate(p => ({ ...p, latest_build_ios: parseInt(e.target.value) || 0 }))}
+                                                                        onChange={(e) => setAppUpdate(p => ({ ...p, latest_build_ios: e.target.value }))}
                                                                         className="w-full bg-white border border-slate-300 focus:border-[#8E2B5C] focus:ring-4 focus:ring-[#8E2B5C]/20 text-slate-800 font-bold text-sm rounded-xl px-5 py-3.5 outline-none transition-all shadow-sm text-left font-mono"
                                                                         dir="ltr"
                                                                         placeholder="261"
@@ -798,7 +813,7 @@ export default function Settings({ role }: { role?: string | null }) {
                                                                         type="number"
                                                                         min={0}
                                                                         value={appUpdate.latest_build_android}
-                                                                        onChange={(e) => setAppUpdate(p => ({ ...p, latest_build_android: parseInt(e.target.value) || 0 }))}
+                                                                        onChange={(e) => setAppUpdate(p => ({ ...p, latest_build_android: e.target.value }))}
                                                                         className="w-full bg-white border border-slate-300 focus:border-[#8E2B5C] focus:ring-4 focus:ring-[#8E2B5C]/20 text-slate-800 font-bold text-sm rounded-xl px-5 py-3.5 outline-none transition-all shadow-sm text-left font-mono"
                                                                         dir="ltr"
                                                                         placeholder="208"

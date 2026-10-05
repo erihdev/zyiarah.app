@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:ui';
+import 'package:zyiarah/utils/build_gate.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminSettingsScreen extends StatefulWidget {
@@ -93,10 +94,18 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
               setState(() {
                 _updateEnabled = u['enabled'] == true;
                 _updateForce = u['force'] == true;
+                // فارغٌ عند الغياب لا `0`: الصفرُ قيمةٌ **تُطفئُ** البوّابةَ
+                // لتلك المنصّةِ عند الحفظ (يُفضَّلُ على الاحتياطيِّ الموحّد)،
+                // فعرضُه يَدعو إلى حفظِه. والفارغُ يُظهرُ النصَّ الإرشاديَّ
+                // ويَمنعُ الحفظَ برسالةٍ أدناه.
                 _latestBuildIosCtrl.text =
-                    (u['latest_build_ios'] ?? u['latest_build'] ?? 0).toString();
-                _latestBuildAndroidCtrl.text =
-                    (u['latest_build_android'] ?? u['latest_build'] ?? 0).toString();
+                    (publishedBuild(u['latest_build_ios'] ?? u['latest_build'])
+                            ?? '')
+                        .toString();
+                _latestBuildAndroidCtrl.text = (publishedBuild(
+                            u['latest_build_android'] ?? u['latest_build']) ??
+                        '')
+                    .toString();
                 _updateMsgCtrl.text = u['message'] ?? '';
               });
             }
@@ -171,15 +180,33 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         'updated_at': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
+      // رقمُ البناءِ المنشورُ: نرفضُ غيرَ الصالحِ بدلَ ابتلاعِه — نفسُ شكلِ
+      // حدِّ الطلباتِ أعلاه، ولسببٍ أقوى. `int.tryParse('') ?? 0` كان يَكتبُ
+      // **صفراً**، والقارئُ يُفضّلُ حقلَ المنصّةِ على الاحتياطيِّ الموحّد
+      // و`currentBuild >= 0` صحيحٌ أبداً — فصندوقٌ فارغٌ واحدٌ يُطفئُ مطالبةَ
+      // التحديثِ لتلك المنصّةِ **بصمت**، والمفتاحُ والمفتاحُ الإجباريُّ
+      // يَبدوانِ عاملَين. وهي بوّابةُ نشرِ قواعدِ الأمانِ المحجوزة.
+      final int? iosBuild = publishedBuild(_latestBuildIosCtrl.text);
+      final int? androidBuild = publishedBuild(_latestBuildAndroidCtrl.text);
+      if (iosBuild == null || androidBuild == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('أدخِلي رقمَ البناءِ المنشورِ للمنصّتَين (رقمٌ أكبرُ '
+                'من صفر) — تركُه فارغاً يُطفئُ مطالبةَ التحديث'),
+            backgroundColor: Colors.red,
+          ));
+        }
+        return;
+      }
+
       // (دمج من الويب) إعداد التحديث الإجباري — يقرؤه app_update_service.dart.
       await _db.collection('system_configs').doc('app_update').set({
         'enabled': _updateEnabled,
         // المفاتيحُ التي يقرؤها app_update_service فعلاً — لكلّ منصّةٍ عدّادُها.
         // لا نكتب latest_build الموحّد: الخدمة لا تقرؤه إلا عند غياب حقل المنصّة،
         // وكتابتُه هي بعينها ما سبّب الإنذارَ الزائف.
-        'latest_build_ios': int.tryParse(_latestBuildIosCtrl.text.trim()) ?? 0,
-        'latest_build_android':
-            int.tryParse(_latestBuildAndroidCtrl.text.trim()) ?? 0,
+        'latest_build_ios': iosBuild,
+        'latest_build_android': androidBuild,
         'force': _updateForce,
         'message': _updateMsgCtrl.text.trim(),
       }, SetOptions(merge: true));
