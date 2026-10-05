@@ -62,6 +62,13 @@ export default function Accountants() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [drivers, setDrivers] = useState<Driver[]>([]);
     const [loading, setLoading] = useState(true);
+    // **فشلُ مستمعِ السائقينِ كان يُضخّمُ الربح.** كان `console.error` وحدَه،
+    // فـ`drivers` تَبقى `[]` و`totalPayroll` صفراً و«صافي الأرباح» =
+    // الإيرادُ الصافي **كلُّه** بلا رواتب — رقمُ مالٍ خاطئٌ في الاتجاهِ
+    // المتفائلِ بلا أيِّ علامة، بينما مستمعُ الإيرادِ ناجحٌ فالبطاقةُ
+    // تَبدو سليمة. فالأرقامُ المشتقّةُ منه تُقرأُ «—» عند الجهل، كقاعدةِ
+    // «لا رقمَ قبل أن نعرفه» في بقيّةِ المشروع.
+    const [driversError, setDriversError] = useState(false);
 
     useEffect(() => {
         const { start, end } = getMonthRange();
@@ -80,7 +87,11 @@ export default function Accountants() {
 
         const unsubDrivers = onSnapshot(collection(db, 'drivers'), (snap) => {
             setDrivers(snap.docs.map(d => d.data() as Driver));
-        }, (e: unknown) => { console.error("Accountants drivers listener error:", e); });
+            setDriversError(false);
+        }, (e: unknown) => {
+            console.error("Accountants drivers listener error:", e);
+            setDriversError(true);
+        });
 
         return () => { unsubOrders(); unsubDrivers(); };
     }, []);
@@ -172,7 +183,7 @@ export default function Accountants() {
                         <div className="h-7 w-28 bg-slate-100 rounded-lg animate-pulse"></div>
                     ) : (
                         <h3 className={`text-2xl font-extrabold ${netProfit >= 0 ? 'text-slate-800' : 'text-rose-600'}`}>
-                            {formatCurrency(netProfit)} <span className="text-sm font-bold text-slate-400">ر.س</span>
+                            {driversError ? '—' : formatCurrency(netProfit)} <span className="text-sm font-bold text-slate-400">ر.س</span>
                         </h3>
                     )}
                 </div>
@@ -188,9 +199,13 @@ export default function Accountants() {
                     {loading ? (
                         <div className="h-7 w-28 bg-slate-100 rounded-lg animate-pulse"></div>
                     ) : (
-                        <h3 className="text-2xl font-extrabold text-slate-800">{formatCurrency(totalPayroll)} <span className="text-sm font-bold text-slate-400">ر.س</span></h3>
+                        <h3 className="text-2xl font-extrabold text-slate-800">{driversError ? '—' : formatCurrency(totalPayroll)} <span className="text-sm font-bold text-slate-400">ر.س</span></h3>
                     )}
-                    <p className="text-xs text-slate-400 mt-1">{activeDrivers.length} موظف نشط من {drivers.length} مسجل</p>
+                    {driversError ? (
+                        <p className="text-xs text-rose-600 font-bold mt-1">تعذّر تحميل الكوادر — الرواتب وصافي الأرباح غير محسوبين.</p>
+                    ) : (
+                        <p className="text-xs text-slate-400 mt-1">{activeDrivers.length} موظف نشط من {drivers.length} مسجل</p>
+                    )}
                 </div>
 
                 {/* Order Count */}
@@ -256,7 +271,7 @@ export default function Accountants() {
                         </div>
                         <div className="flex items-center justify-between">
                             <span className="text-sm text-slate-500">عدد الكوادر النشطة</span>
-                            <span className="font-extrabold text-slate-800">{activeDrivers.length}</span>
+                            <span className="font-extrabold text-slate-800">{driversError ? '—' : activeDrivers.length}</span>
                         </div>
                         <div className="flex items-center justify-between mt-1">
                             <span className="text-sm text-slate-500">متوسط الراتب</span>
