@@ -17,6 +17,8 @@ const {computeExpectedBasePrice, resolveMaterialsBase, applyTerrainSurcharge} =
 const {isMarketingBroadcast, excludeOptedOut} = require("./notify_prefs");
 const {countBookings, zoneDailyCap} = require("./capacity");
 const {grossFromBaseRounded, grossFromBase} = require("./vat");
+const {parseKsaIso, riyadhBookingFields, riyadhLocalDate, riyadhLocalSlot,
+  riyadhStamp} = require("./ksa_time");
 const {isAssignableDriver, assignabilityProblem, chunk, GET_ALL_CHUNK} =
   require("./drivers");
 const moyasar = require("./moyasar_api");
@@ -2063,12 +2065,9 @@ exports.notifyOnAppointmentChange = onDocumentUpdated(
       const driverChanged =
         (before.driver_id || null) !== (after.driver_id || null);
 
-      // توقيت الرياض (UTC+3): الدوال تعمل بـUTC — getHours() الخام كان يُعلن
-      // للطرفين ساعةً أبكر بثلاث ساعات من الموعد الفعلي (نفس تحويل بقية المنسّقات).
-      const when = new Date(aSd.toDate().getTime() + 3 * 60 * 60 * 1000);
-      const pad = (n) => String(n).padStart(2, "0");
-      const dateStr = `${when.getUTCFullYear()}-${pad(when.getUTCMonth() + 1)}-` +
-        `${pad(when.getUTCDate())} ${pad(when.getUTCHours())}:00`;
+      // توقيت الرياض (UTC+3) — الصيغة في ksa_time.js: الدوال تعمل بـUTC، فقراءة
+      // المكوّنات المحلية من لحظة زمنية تُعلن للطرفين ساعةً أبكر بثلاث ساعات.
+      const dateStr = riyadhStamp(aSd.toDate().getTime());
       const code = after.code || event.params.orderId;
       const oid = event.params.orderId;
 
@@ -2166,8 +2165,9 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
 
   const result = await db.runTransaction(async (t) => {
     const wSnap = await t.get(walletRef);
+    let oSnap = null;
     if (orderRef) {
-      const oSnap = await t.get(orderRef);
+      oSnap = await t.get(orderRef);
       if (!oSnap.exists) {
         throw new HttpsError("not-found", "الطلب غير موجود");
       }
@@ -2198,12 +2198,22 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
       created_at: FieldValue.serverTimestamp(),
     });
     if (orderRef) {
+      // دفاع في العمق لسباق cancelStaleUnpaidOrders: إن تأكّد دفعُ طلبٍ سبق أن
+      // ألغاه الكرون آلياً (cancel_reason='unpaid_expired' بعد نافذة الـ30 دقيقة)
+      // نُعيد فتحه (pending) بدل تركه ملغىً مدفوعاً بلا خدمة — داخل نفس معامَلة
+      // قلب is_paid فلا سباق. المسارات الثلاثة الأخرى (verify/webhook/reconcile)
+      // تفعل هذا، والمحفظة كانت الرابعة التي لا تفعله: التعليقُ الذي يصف هذا
+      // الدفاع كان قائماً في الملف بلا الكود الذي يصفه. كامنٌ لا حيّ اليوم —
+      // لا مسارَ واجهةٍ يُنشئ طلباً ثمّ يدفعه بالمحفظة بعد 30 دقيقة (الشاشة
+      // تسكّ معرّفاً جديداً لكل محاولة) — لكن payWithWallet نداءٌ عامّ يقبل أي
+      // معرّف طلبٍ يملكه العميل، فالتكافؤ هو الحارس.
       t.update(orderRef, {
         is_paid: true,
         payment_status: "paid",
         payment_method: "wallet",
         paid_at: FieldValue.serverTimestamp(),
         updated_at: FieldValue.serverTimestamp(),
+        ...refunds.reopenFieldsIfSystemCancelled(oSnap && oSnap.data()),
       });
     }
     return {success: true, newBalance: balance - amount};
@@ -2218,21 +2228,6 @@ exports.payWithWallet = onCall({cpu: 0.083}, async (request) => {
   }
   return result;
 });
-
-// دفاع في العمق لسباق cancelStaleUnpaidOrders: إن تأكّد دفعُ طلبٍ سبق أن ألغاه الكرون
-// آلياً (cancel_reason='unpaid_expired' — سباق نادر: بطاقة/Apple Pay تأكّدت بعد نافذة
-// الـ30 دقيقة عبر verify/webhook/reconcile)، نُعيد فتحه (pending) بدل تركه ملغى مدفوعاً
-// بلا خدمة. يُدمج داخل نفس معامَلة قلب is_paid فلا سباق. تمارا/تابي مستثناة أصلاً بالكرون.
-// يفكّ ISO قادماً من العملاء إلى **لحظة زمنية صحيحة**: سلسلة Dart المحلية بلا لاحقة
-// منطقة (2026-07-30T14:00:00.000) يفسّرها Node كـUTC بينما قصدُ المرسِل توقيت
-// الرياض — فكانت المواعيد تُخزَّن متأخرة 3 ساعات (ثم يضيف مشتقّ booking_time_slot
-// ثلاثاً أخرى للعرض). سلاسل الويب بـZ/إزاحة تمرّ كما هي.
-function _parseKsaIso(s) {
-  const d = new Date(s);
-  if (isNaN(d.getTime())) return d;
-  return /(?:Z|[+-]\d{2}:?\d{2})$/.test(String(s).trim()) ?
-    d : new Date(d.getTime() - 3 * 60 * 60 * 1000);
-}
 
 // (#1) عامل الذروة الخادمي — يعكس getSurgePricingFactor حرفياً (system_configs.surge_percent).
 async function _readSurgeFactor(db) {
@@ -2391,13 +2386,16 @@ exports.verifyMoyasarPayment = onCall(
               {service_meta: _parseServiceMeta(md.service_meta_json)} : {}),
           };
           if (md.service_date) {
-            const sd = _parseKsaIso(md.service_date);
+            const sd = parseKsaIso(md.service_date);
             if (!isNaN(sd.getTime())) {
               payload.service_date = Timestamp.fromDate(sd);
               if (isHourly) {
-                const pad = (n) => String(n).padStart(2, "0");
-                payload.booking_date = `${sd.getFullYear()}-${pad(sd.getMonth() + 1)}-${pad(sd.getDate())}`;
-                payload.booking_time_slot = `${pad(sd.getHours())}:00`;
+                // توقيت الرياض: قراءة المكوّنات المحلية من **لحظة زمنية** تعطي
+                // ساعة UTC — كانت تخزّن الخانة أبكر بثلاث ساعات من موعد العميلة،
+                // فيُحجز في capacity.js وقتٌ خاطئ ويبقى وقتُ الموعد فارغاً.
+                const bf = riyadhBookingFields(sd);
+                payload.booking_date = bf.bookingDate;
+                payload.booking_time_slot = bf.bookingTimeSlot;
               }
             }
           }
@@ -3101,13 +3099,11 @@ async function _isDriverFreeForSlot(db, driverId, startDateTime, endDateTime) {
  */
 async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
   const d = driverDoc.data();
-  // موعد الرياض (UTC+3): الدوال تعمل بـUTC، فحساب المكوّنات مباشرةً كان يعطي ساعة
-  // ناقصة 3 (07:00 بدل 10:00) → تذكير بوقت خاطئ + عدم احتساب الفترة في السعة.
-  const riyadh = new Date(startDateTime.getTime() + 3 * 60 * 60 * 1000);
-  const bookingDate = `${riyadh.getUTCFullYear()}-` +
-    `${String(riyadh.getUTCMonth() + 1).padStart(2, "0")}-` +
-    `${String(riyadh.getUTCDate()).padStart(2, "0")}`;
-  const timeSlot = `${String(riyadh.getUTCHours()).padStart(2, "0")}:00`;
+  // موعد الرياض (UTC+3) — الصيغة في ksa_time.js: حساب المكوّنات بـUTC مباشرةً
+  // كان يعطي ساعةً ناقصةً ثلاثاً (07:00 بدل 10:00) → تذكيرٌ بوقتٍ خاطئ وعدمُ
+  // احتساب الفترة في السعة.
+  const {bookingDate, bookingTimeSlot: timeSlot} =
+    riyadhBookingFields(startDateTime);
   const orderRef = db.collection("orders").doc(orderId);
 
   // معامَلة: نُعيد قراءة الطلب ولا نكتب فوقه إن كان مُسنَداً سلفاً أو لم يعد قابلاً
@@ -3651,7 +3647,7 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   if (!orderId || !driverId || !scheduledIso) {
     throw new HttpsError("invalid-argument", "البيانات ناقصة (الطلب/السائق/الموعد)");
   }
-  const startDateTime = _parseKsaIso(scheduledIso);
+  const startDateTime = parseKsaIso(scheduledIso);
   if (isNaN(startDateTime.getTime())) {
     throw new HttpsError("invalid-argument", "موعد غير صالح");
   }
@@ -3696,13 +3692,11 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   // (الثغرة #2) Transaction ذرّي: يُعيد فحص حالة الطلب قبل الإسناد لمنع التعيين
   // المزدوج عند موافقة مديرَين على نفس الطلب معاً.
   const d = driverData;
-  // موعد الرياض (UTC+3) — انظر _assignDriverScheduled: حساب المكوّنات بـUTC مباشرةً
-  // كان يخزّن ساعة/يوماً خاطئاً في booking_time_slot/booking_date.
-  const riyadh = new Date(startDateTime.getTime() + 3 * 60 * 60 * 1000);
-  const bookingDate = `${riyadh.getUTCFullYear()}-` +
-    `${String(riyadh.getUTCMonth() + 1).padStart(2, "0")}-` +
-    `${String(riyadh.getUTCDate()).padStart(2, "0")}`;
-  const timeSlot = `${String(riyadh.getUTCHours()).padStart(2, "0")}:00`;
+  // موعد الرياض (UTC+3) — الصيغة في ksa_time.js: حساب المكوّنات بـUTC مباشرةً
+  // كان يعطي ساعةً ناقصةً ثلاثاً (07:00 بدل 10:00) → تذكيرٌ بوقتٍ خاطئ وعدمُ
+  // احتساب الفترة في السعة.
+  const {bookingDate, bookingTimeSlot: timeSlot} =
+    riyadhBookingFields(startDateTime);
 
   // (تعليمات المنزل) ننسخها من مستند العميل إلى الطلب عند الإسناد اليدوي — نفس
   // منطق _assignDriverScheduled: السائق لا يستطيع قراءة users الأخرى بالقواعد.
@@ -3783,7 +3777,7 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
   }
   let parsedStart = null;
   if (scheduledIso) {
-    parsedStart = _parseKsaIso(scheduledIso);
+    parsedStart = parseKsaIso(scheduledIso);
     if (isNaN(parsedStart.getTime())) {
       throw new HttpsError("invalid-argument", "موعد غير صالح");
     }
@@ -3843,13 +3837,11 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
     }
     const upd = {rescheduled_at: FieldValue.serverTimestamp()};
     if (parsedStart) {
-      const riyadh = new Date(startDateTime.getTime() + 3 * 60 * 60 * 1000);
+      const rbf = riyadhBookingFields(startDateTime);
       upd.service_date = Timestamp.fromDate(startDateTime);
       upd.scheduled_at = Timestamp.fromDate(startDateTime);
-      upd.booking_date = `${riyadh.getUTCFullYear()}-` +
-        `${String(riyadh.getUTCMonth() + 1).padStart(2, "0")}-` +
-        `${String(riyadh.getUTCDate()).padStart(2, "0")}`;
-      upd.booking_time_slot = `${String(riyadh.getUTCHours()).padStart(2, "0")}:00`;
+      upd.booking_date = rbf.bookingDate;
+      upd.booking_time_slot = rbf.bookingTimeSlot;
       // موعد جديد = تذكيرات جديدة: كرونا تذكير السائق والعميل يتخطيان من سبق
       // تذكيره — نقلُ زيارةٍ بعد إرسال تذكيرها كان يترك موعدها الجديد بلا تذكير.
       upd.reminder_sent = false;
@@ -4105,13 +4097,6 @@ exports.remindDriversUpcomingTasks = onSchedule(
 // منفصلة عن تذكير السائق (reminder_sent) لتجنّب التعارض. التوقيت يُعرض من
 // booking_time_slot/booking_date المحليّين لتفادي انزياح المنطقة الزمنية.
 // ════════════════════════════════════════════════════════════════════════
-const _pad2 = (n) => String(n).padStart(2, "0");
-// إزاحة +3 ساعات ثم قراءة مكوّنات UTC = توقيت الرياض المحلي.
-const _riyadhLocalDate = (ms) => {
-  const r = new Date(ms + 3 * 60 * 60 * 1000);
-  return `${r.getUTCFullYear()}-${_pad2(r.getUTCMonth() + 1)}-${_pad2(r.getUTCDate())}`;
-};
-
 exports.remindClientsUpcomingAppointments = onSchedule(
     {schedule: "every 30 minutes", timeZone: "Asia/Riyadh"},
     async () => {
@@ -4144,14 +4129,13 @@ exports.remindClientsUpcomingAppointments = onSchedule(
         const rawName = (d.client_name || "").trim();
         const greet = ["", "عميل", "عميلة", "عميل زيارة", "عميلة زيارة"]
             .includes(rawName) ? "" : `${rawName}، `;
-        const timeStr = d.booking_time_slot ||
-          `${_pad2(new Date(apptMs + 3 * 60 * 60 * 1000).getUTCHours())}:00`;
+        const timeStr = d.booking_time_slot || riyadhLocalSlot(apptMs);
 
         // وسم اليوم (اليوم/غداً/بعد N أيام) بالتقويم المحلي.
-        const apptDateStr = d.booking_date || _riyadhLocalDate(apptMs);
+        const apptDateStr = d.booking_date || riyadhLocalDate(apptMs);
         const dDiff = Math.round(
             (new Date(`${apptDateStr}T00:00:00Z`).getTime() -
-             new Date(`${_riyadhLocalDate(now)}T00:00:00Z`).getTime()) / 86400000);
+             new Date(`${riyadhLocalDate(now)}T00:00:00Z`).getTime()) / 86400000);
         const dayLabel = dDiff <= 0 ? "اليوم" : dDiff === 1 ? "غداً" : `بعد ${dDiff} أيام`;
 
         // (باقات السكن) الساعة مُرساة آلياً ولم يخترها العميل — تذكير الغد لا
@@ -4592,13 +4576,16 @@ exports.reconcileOrphanPayments = onSchedule(
               {service_meta: _parseServiceMeta(md.service_meta_json)} : {}),
           };
           if (md.service_date) {
-            const sd = _parseKsaIso(md.service_date);
+            const sd = parseKsaIso(md.service_date);
             if (!isNaN(sd.getTime())) {
               payload.service_date = Timestamp.fromDate(sd);
               if (isHourly) {
-                const pad = (n) => String(n).padStart(2, "0");
-                payload.booking_date = `${sd.getFullYear()}-${pad(sd.getMonth() + 1)}-${pad(sd.getDate())}`;
-                payload.booking_time_slot = `${pad(sd.getHours())}:00`;
+                // توقيت الرياض: قراءة المكوّنات المحلية من **لحظة زمنية** تعطي
+                // ساعة UTC — كانت تخزّن الخانة أبكر بثلاث ساعات من موعد العميلة،
+                // فيُحجز في capacity.js وقتٌ خاطئ ويبقى وقتُ الموعد فارغاً.
+                const bf = riyadhBookingFields(sd);
+                payload.booking_date = bf.bookingDate;
+                payload.booking_time_slot = bf.bookingTimeSlot;
               }
             }
           }

@@ -514,8 +514,10 @@ t("(و١) الأربعةُ المنقولة لم تَبقَ في index.js، وا
   assert.ok(/refunds\.autoResolveUnfulfilledPaidOrder\(\s*\n?\s*db, secret, doc, \{queuePush\}\)/
       .test(idx), "و`queuePush` يُحقَن — وبه يُصعّد المحرّك");
   assert.strictEqual(
-      (idx.match(/refunds\.reopenFieldsIfSystemCancelled\(/g) || []).length, 3,
-      "مواضعُ إعادة الفتح الثلاثة (verify/webhook/reconcile)");
+      (idx.match(/refunds\.reopenFieldsIfSystemCancelled\(/g) || []).length, 4,
+      "مواضعُ إعادة الفتح الأربعة (verify/webhook/reconcile/wallet) — كانت " +
+      "ثلاثةً، والمحفظة الرابعةُ التي لا تُعيد الفتح: تعليقُ الدفاع كان في " +
+      "index.js بلا كودِه، فيبقى الطلبُ ملغىً مدفوعاً بلا خدمة");
 });
 
 t("(و٢) قرارُ void-أم-refund لا يُكتب ثالثةً في index.js", () => {
