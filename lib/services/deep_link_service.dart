@@ -7,6 +7,10 @@ import 'package:zyiarah/screens/admin/admin_ticket_details_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/screens/order_tracking_screen.dart';
+import 'package:zyiarah/screens/contracts_list_screen.dart';
+import 'package:zyiarah/screens/support_screen.dart';
+import 'package:zyiarah/screens/admin/admin_contracts_screen.dart';
+import 'package:zyiarah/utils/notification_target.dart';
 
 class ZyiarahDeepLinkService {
   static final ZyiarahDeepLinkService _instance = ZyiarahDeepLinkService._internal();
@@ -37,25 +41,23 @@ class ZyiarahDeepLinkService {
   Future<void> handleNotificationTap(Map<String, dynamic> data) async {
     if (data.isEmpty) return;
 
-    final String? orderId = data['orderId']?.toString();
-    final String? ticketId = data['ticketId']?.toString();
-    final String? requestId = data['requestId']?.toString();
-
-    String? resource;
-    String? id;
-    if (orderId != null && orderId.isNotEmpty) {
-      resource = 'order';
-      id = orderId;
-    } else if (ticketId != null && ticketId.isNotEmpty) {
-      resource = 'ticket';
-      id = ticketId;
-    } else if (requestId != null && requestId.isNotEmpty) {
-      resource = 'maintenance';
-      id = requestId;
-    } else {
+    // الوجهةُ من القاعدةِ المشتركةِ لا من تعدادٍ هنا: كانت هذه الدالّةُ
+    // تَقرأُ `orderId`/`ticketId`/`requestId` وحدَها، فإشعارُ العقدِ — وهو
+    // يَحملُ `contractId` — لا يُفتَحُ من أيِّ سطح. (التفصيلُ في
+    // `lib/utils/notification_target.dart`.)
+    final target = notifTargetFromData(data);
+    final String? resource = switch (target.kind) {
+      NotifDest.order => 'order',
+      NotifDest.support => 'ticket',
+      NotifDest.maintenance => 'maintenance',
+      NotifDest.contracts => 'contract',
       // بثّ عام (global_broadcast) أو بلا معرّف وجهة → يبقى على الشاشة الحالية
-      return;
-    }
+      NotifDest.orders => null,
+      NotifDest.offers => null,
+      NotifDest.none => null,
+    };
+    final String? id = target.id;
+    if (resource == null || id == null || id.isEmpty) return;
 
     await _handleUri(Uri.parse('zyiarah://app/$resource/$id'));
   }
@@ -94,10 +96,29 @@ class ZyiarahDeepLinkService {
            ),
          );
        }
-    } else if (resource == 'ticket' && isAdmin) {
-       _navKey?.currentState?.push(
-         MaterialPageRoute(builder: (_) => AdminTicketDetailsScreen(ticketId: id))
-       );
+    } else if (resource == 'ticket') {
+       // **كان الفرعُ محصوراً بـ`isAdmin`**، والإشعارُ «تم الرد على تذكرتك 💬»
+       // يُرسَلُ إلى **صاحبةِ التذكرة** بـ`{ticketId}` — فنقرُه كان لا يَفعلُ
+       // شيئاً، وهو أكثرُ إشعارٍ في التطبيقِ معناه «تعالي اقرئي». شاشةُ الدعمِ
+       // تَسردُ تذاكرَها بالردودِ داخلَها، فالوصولُ إليها هو الوجهة.
+       if (isAdmin) {
+         _navKey?.currentState?.push(
+           MaterialPageRoute(builder: (_) => AdminTicketDetailsScreen(ticketId: id))
+         );
+       } else {
+         _navKey?.currentState?.push(
+           MaterialPageRoute(builder: (_) => const ZyiarahSupportScreen()),
+         );
+       }
+    } else if (resource == 'contract') {
+       // عقدٌ: «تم اعتماد عقدك — أكمِلي الدفع» و«تم تفعيل باقتك» و«جُدوِلت
+       // زياراتك». القائمتانِ (العميلةُ والإدارةُ) لا تَأخذانِ معرّفاً، والمعرّفُ
+       // يُحمَلُ في الرابطِ كي لا يَضيعَ إن صارتا تَقبلانِه.
+       _navKey?.currentState?.push(MaterialPageRoute(
+         builder: (_) => isAdmin
+             ? const AdminContractsScreen()
+             : const ZyiarahContractsListScreen(),
+       ));
     } else if (resource == 'maintenance') {
        // **كان فرعاً فارغاً** («For now, let's keep it safe») — فنقرةُ الإشعارِ
        // لا تَفعلُ شيئاً ولا تَقولُ شيئاً، وهو يَقرأ كفرعٍ مُعالَج.

@@ -1432,7 +1432,17 @@ const _processNotifQueueDoc = async (event) => {
                 title: title,
                 body: (body || "").replace(/<[^>]*>?/gm, ""),
                 type: type,
-                relatedId: data.orderId || data.code || event.params.id,
+                // **كان يَقعُ على `event.params.id`** — معرّفُ مستندِ الطابورِ
+                // التلقائيُّ. وهو عشرونَ محرفاً لا يَبدأُ بـ`ZY-` ولا
+                // بـ`trig_`، فـ`relatedLooksLikeOrderDoc` في العميلِ تَقرؤه
+                // **مستندَ طلبٍ صالحاً** وتَذهبُ به إلى `/track/<هذا>`:
+                // شاشةُ تتبّعِ طلبٍ لا وجودَ له، تحتَ زرٍّ يَقول «عرض الطلب
+                // والفاتورة» — وذلك ما كان يَحدُثُ لإشعاراتِ العقدِ، إذ لا
+                // تَحملُ `orderId` ولا `code`. و`relatedLooksLikeOrderDoc`
+                // تَستثني `trig_…` بنيّةِ استثناءِ هذا بعينِه، لكنّ الحقلَ
+                // يَحملُ المعرّفَ **عارياً** فلم يَستثنِه قطّ. فلا بديلَ
+                // مُختَرَع: `null` تَعني «لا مستندَ طلبٍ هنا».
+                relatedId: data.orderId || data.code || null,
                 isRead: false,
                 sentAt: FieldValue.serverTimestamp(),
               });
@@ -1447,7 +1457,10 @@ const _processNotifQueueDoc = async (event) => {
                 type: type,
                 data: data || {},
                 targetRoles: Array.isArray(targetRoles) ? targetRoles : null,
-                relatedId: data.orderId || data.ticketId || data.code || event.params.id,
+                // نفسُ البديلِ المُختَرَعِ المشروحِ أعلاه. ولا قارئَ له هنا
+                // (مُستمِعُ اللوحةِ لا يَقرأُ الحقلَ) — فالتسويةُ تَنزعُ فخّاً
+                // قبلَ أن يَقعَ فيه قارئٌ لاحق.
+                relatedId: data.orderId || data.ticketId || data.code || null,
                 createdAt: FieldValue.serverTimestamp(),
               });
         }

@@ -604,7 +604,11 @@ export default function Contracts({ role }: { role?: string | null }) {
                     title: 'تمت الموافقة على طلبك بنجاح! 📄',
                     body: `تم اعتماد عقد باقة (${planName}) من قبل الإدارة. يرجى إتمام الدفع لتفعيل الباقة.`,
                     type: 'contract_approved',
-                    data: { planName, deepLink: 'zyiarah://app/contracts' },
+                    // `deepLink` كان **لا يَقرؤه أحد**: مُعالِجُ نقرِ الإشعارِ في
+                    // التطبيق يَقرأُ مفاتيحَ المعرّفاتِ لا هذا الحقل، وقيمتُه بلا
+                    // معرّفٍ كان `_handleUri` يَرفضُها مرّتَين. `contractId` هو ما
+                    // تَفتحُ به القاعدةُ المشتركةُ «عقودي».
+                    data: { planName, contractId: id },
                     // **كان غائباً، والإشعارُ يُرفَض بصمت.** حارسُ مكافحةِ
                     // الترحيلِ في `processNotificationTriggers` يَرفضُ أيَّ
                     // trigger موجَّهٍ لغيرِ مُنشئه ما لم يُثبت `createdBy` أنّه

@@ -45,7 +45,8 @@ class ZyiarahMessagingService {
     }
   }
 
-  Future<void> notifyContractApproved(String userId, String planName, {String? customerEmail, String? clientName}) async {
+  Future<void> notifyContractApproved(String userId, String planName,
+      {String? customerEmail, String? clientName, String? contractId}) async {
     await triggerNotification(
       toUid: userId,
       title: "تمت الموافقة على طلبك بنجاح! 📄",
@@ -54,7 +55,11 @@ class ZyiarahMessagingService {
       data: {
         'planName': planName,
         'customerEmail': customerEmail,
-        'deepLink': 'zyiarah://app/contracts'
+        // `deepLink` كان **لا يَقرؤه أحد**: `handleNotificationTap` يَقرأُ
+        // مفاتيحَ المعرّفات، وقيمتُه (`zyiarah://app/contracts`) كان
+        // `_handleUri` يَرفضُها مرّتَين — بلا معرّفٍ، وبموردٍ لا فرعَ له.
+        // `contractId` هو ما تَفتحُ به القاعدةُ المشتركةُ «عقودي».
+        if (contractId != null && contractId.isNotEmpty) 'contractId': contractId,
       },
       template: {
         'id': 'contract-approved',
