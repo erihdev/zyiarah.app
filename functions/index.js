@@ -990,6 +990,30 @@ async function _tamaraFlipPaid(db, orderRef, eventType, tamaraOrderId) {
     if (flipped) {
       console.log(`tamaraWebhook: ${col}/${orderRef} marked PAID (${eventType})`);
       await notifyClientPaymentResult(col, orderRef, data, true);
+      // **تحقّقُ السعرِ الخادميُّ — لم يكن على هذا المسارِ شيءٌ منه.** هذه
+      // الدالّةُ تَقلبُ `is_paid` من الويب هوكِ ومن مسحِ
+      // `confirmPendingTamaraOrders`، وبلا أيِّ فحصِ مبلغٍ على الإطلاق: لا
+      // «المدفوعُ = المُعلَن» ولا إعادةَ تسعيرٍ من المنطقة.
+      //
+      // و`paid` هنا هو مبلغُ الطلبِ نفسُه لا مبلغٌ مستقلٌّ من البوّابة، وذلك
+      // **صحيحٌ** هنا: `createTamaraCheckout` يَبني الجلسةَ من
+      // `info.amount` الخادميِّ لا من وسيطٍ يُرسلُه العميل، فلا يُمكنُ أن
+      // يَختلفَ المدفوعُ عن المُعلَن. الشقُّ الذي يَهمُّ هو الآخر: **المُعلَنُ
+      // مقابلَ سعرِ المنطقة**، وهو ما يَفحصُه هذا النداء.
+      //
+      // Tier A وحدَه عمداً: `voidOrRefundTampered` يَستدعي بوّابةَ ميسر
+      // (`deps.gateway || moyasar`)، واستردادُ تمارا نداءٌ آخرُ بتوقيعٍ آخر —
+      // فإنفاذُه هنا قرارٌ ماليٌّ مستقلّ. والطلبُ يُوسَمُ وتُنبَّهُ الإدارةُ،
+      // وهو ما يَسدُّ «لا يَحدثُ شيءٌ ولا يُقالُ شيء».
+      if (col === "orders" && !data.server_created_from_payment) {
+        // `amounts.expectedAmount` لا تدرّجاً مكتوباً بيدِه — سؤالُه عينُ
+        // سؤالِها: «كم كان يجب أن يُدفَع؟» (وكانت هنا سلسلةُ حقلَين).
+        const amt = Number(amounts.expectedAmount(data));
+        if (amt > 0) {
+          await _verifyOrderPriceTierA(
+              db, ref, orderRef, data, amt, "tamara");
+        }
+      }
     }
     break;
   }
@@ -2364,6 +2388,117 @@ async function _computeTrustedDiscount(db, od, expectedGross, surge,
 // لتعليم «تعذّر التحقّق» حين يبدو الطلب قابلاً للتسعير لكن غابت منطقته/تعذّر حسابه.
 
 // 7. Secure Moyasar payment verification on Call function
+/**
+ * تحقّقُ السعرِ الخادميُّ (Tier A) — **مصدرٌ واحدٌ لكلِّ مسارٍ يَقلبُ `is_paid`
+ * على `orders`**، بعد أن كان مكتوباً داخل `verifyMoyasarPayment` وحدَه.
+ *
+ * **الثغرةُ التي يَسدّها:** الحقلُ `amount` على الطلبِ يَكتبه العميلُ، وهذا
+ * الفحصُ هو ما يُعيدُ حسابَ السعرِ من مستندِ المنطقةِ الموثوقِ ويَسِمُ النقصَ
+ * ويُنبّهُ الإدارة. وكانت المسالكُ خمسةً إلى `is_paid: true` على طلبٍ دفعته
+ * العميلة، والفحصُ على اثنتَين منها فقط — وكلتاهما `onCall` **يَختارُ العميلُ
+ * نداءَها**:
+ *
+ *   * `moyasarWebhook` لا يُعيدُ تسعيراً إطلاقاً. فحصُه الوحيدُ
+ *     `verifiedPayment.amount === expectedAmount(data)`، و`expectedAmount` هو
+ *     `final_amount ?? total_amount ?? planPrice ?? amount` — **وكلُّها يَكتبها
+ *     العميلُ عند الإنشاء**، فالمقارنةُ «المدفوعُ = المُعلَن» لا «المُعلَنُ =
+ *     سعرُ المنطقة». ومُعلِنُ ريالٍ يَدفعُ ريالاً فيَمرّ.
+ *   * و`verifyMoyasarPayment` يَرتدُّ مبكّراً على `is_paid === true` **قبلَ**
+ *     الفحص، فالويب هوكُ إن سَبَقَ (وهو يَسبقُ كثيراً: تُطلقه ميسر من خادمٍ
+ *     إلى خادمٍ لحظةَ الدفع، بينما النداءُ يَنتظرُ عودةَ التطبيق) **استَهلكَ
+ *     الفحصَ كلَّه**. ومُتلاعبٌ لا يُناديه أصلاً.
+ *   * و`_tamaraFlipPaid` (الويب هوك ومسحُ `confirmPendingTamaraOrders`) بلا
+ *     أيِّ فحصِ مبلغٍ على الإطلاق.
+ *
+ * فالنتيجةُ: وسمُ `price_mismatch` والتنبيهُ الإداريُّ و**Tier B**
+ * (`ENFORCE_PRICE_TIER_B === true`، أي الإلغاءُ/الاستردادُ الآليّ) كلُّها
+ * تُتخطّى بمجرّدِ عدمِ نداءِ `verifyMoyasarPayment`.
+ *
+ * Tier B هنا يُعادُ **سبباً** لا فعلاً: المُنادي يَملكُ معرّفَ الدفعةِ وسرَّ
+ * البوّابة. و`refunds.voidOrRefundTampered` **مُتماهلٌ** (يَحجزُ بمعامَلةٍ على
+ * `tamper_handled`)، فنداؤه من مسارَين لا يُلغي مرّتَين.
+ *
+ * @param {object} db Firestore
+ * @param {object} orderRef مرجعُ مستندِ الطلب
+ * @param {string} orderId معرّفُ الطلب
+ * @param {object} od بياناتُ الطلب
+ * @param {number} paid المبلغُ المخصومُ فعلاً بالريال
+ * @param {string} source المسارُ المُنادي — للسجلّ وحدَه (verify/webhook/tamara)
+ * @return {Promise<?string>} سببُ Tier B أو `null`
+ */
+async function _verifyOrderPriceTierA(db, orderRef, orderId, od, paid, source) {
+  try {
+  // حلّ المنطقة في `price_verify.resolveZone` (zone_id ثمّ الاسم) —
+  // مصدرٌ واحدٌ مع مسار المحفظة، وكان المسارانِ يَختلفان.
+  const zoneData = await priceVerify.resolveZone(db, od);
+  // تحقّق هندسي أن موقع الطلب داخل نصف قطر المنطقة المُعلَنة — الاسم وحده
+  // كان يكفي لتسعير منطقةٍ أرخص لعنوان أبعد. لا يحجب الدفع (وسم + تنبيه).
+  if (zoneData) {
+    await _flagZoneGeoMismatch(orderRef, orderId, od, zoneData)
+        .catch((e) => console.error(`[price-shadow:${source}] geo ${orderId}:`, e.message));
+  }
+  // مواد التنظيف المضافة داخل الطلب تُسعَّر من products قبل الحساب؛
+  // null = تعذّر التحقق ⇒ لا نُعيد تسعيراً ولا نرفض دفعاً بلا يقين.
+  const matBase = await resolveMaterialsBase(db, od.service_meta);
+  const base0 = (zoneData && matBase !== null) ?
+    computeExpectedBasePrice(
+        {...od, materials_base_resolved: matBase}, zoneData) : null;
+  // رسوم الوعورة (terrain_surcharge_percent على مستند المنطقة) فوق الأساس
+  // قبل الضريبة — الذروة والخصم الموثوق والضريبة تُحسب على الأساس المُرسَّم.
+  const base = base0 && base0 > 0 ?
+    applyTerrainSurcharge(base0, zoneData) : base0;
+  if (base && base > 0) {
+    const surge = await _readSurgeFactor(db);
+    const expected = grossFromBaseRounded(base, surge);
+    const trustedDiscount =
+        await _computeTrustedDiscount(db, od, grossFromBase(base),
+            surge, {orderRef, orderId});
+    const expectedNet = Math.max(0, expected - trustedDiscount);
+    // expectedNet<=0 مع دفعٍ موجب = مريب (خصم يفوق السعر) → Tier A، لا نفترض ratio=1.
+    const suspiciousZero = expectedNet <= 0 && paid > 0;
+    const ratio = expectedNet > 0 ? paid / expectedNet : (suspiciousZero ? 0 : 1);
+    const fresh = od.created_at &&
+        typeof od.created_at.toMillis === "function" &&
+        (Date.now() - od.created_at.toMillis()) < 2 * 60 * 60 * 1000;
+    const kind = (od.service_meta && od.service_meta.kind) || "hourly";
+    if (ratio < 0.5 || suspiciousZero) {
+      console.warn(`[price-shadow:${source}] UNDERPAID ${orderId}: paid=${paid} expected=${expected} net=${expectedNet} ratio=${ratio.toFixed(3)} kind=${kind}`);
+      await orderRef.update({
+        price_mismatch: true,
+        // هذا المسار يُنبّه فوراً أدناه — الوسم يمنع opsHealthSweep من
+        // تكرار التنبيه نفسه؛ مسار المحفظة يَسِم بصمت فيغطيه الفحص الدوري.
+        ops_alerted_mismatch: true,
+        price_expected: expected,
+        price_expected_net: expectedNet,
+        price_shadow_ratio: Math.round(ratio * 1000) / 1000,
+      }).catch(() => {});
+      await queuePush("ADMIN_BROADCAST", "مراجعة سعر طلب ⚠️",
+          `الطلب #${od.code || orderId} مدفوع ${paid} ر.س مقابل ${expectedNet} متوقَّع (${kind}) — يُرجى المراجعة.`,
+          "admin_price_review",
+          {orderId, ratio: String(Math.round(ratio * 1000) / 1000)},
+          ["super_admin", "orders_manager", "accountant_admin"]).catch(() => {});
+      // Tier B: أقل من خُمس المتوقَّع، على طلبٍ حديث موثوق الحساب، بمخرجٍ ≥ 5 ر.س
+      // (أرضية تمنع إيجابيةً كاذبة من التقريب على مقامٍ ضئيل عند كوبون ~100%).
+      const egregious = ratio < 0.2 && expectedNet >= 5 && fresh &&
+          od.server_created_from_payment !== true;
+      if (egregious && ENFORCE_PRICE_TIER_B) return "price_review";
+    }
+  } else if (priceVerify.isPriceableKind(od)) {
+    // نوعٌ قابل للتسعير لكن تعذّر حسابه (منطقة غائبة/غير محلولة) → لا نُمرّره
+    // بصمت؛ نُعلّم وننبّه (Tier A) — يسدّ ثغرة إسقاط zone_name للتهرّب من التحقّق.
+    console.warn(`[price-shadow:${source}] UNVERIFIABLE ${orderId}: priceable kind but no zone/base`);
+    await orderRef.update({price_unverifiable: true}).catch(() => {});
+    await queuePush("ADMIN_BROADCAST", "طلب تعذّر التحقّق من سعره ⚠️",
+        `الطلب #${od.code || orderId} من نوعٍ قابل للتسعير لكن تعذّر التحقّق من مبلغه — يُرجى المراجعة.`,
+        "admin_price_review", {orderId},
+        ["super_admin", "orders_manager", "accountant_admin"]).catch(() => {});
+  }
+  } catch (e) {
+    console.error(`[price-shadow:${source}] ${orderId}:`, e.message);
+  }
+  return null;
+}
+
 exports.verifyMoyasarPayment = onCall(
     {secrets: ["MOYASAR_SECRET_KEY"], cpu: 0.25},
     async (request) => {
@@ -2513,88 +2648,22 @@ exports.verifyMoyasarPayment = onCall(
       // يكشف الدفع الناقص (تلاعب العميل بحقل amount أو تضخيم الخصم) بإعادة حساب السعر من
       // تسعير المنطقة الموثوق + الخصم المُعاد حسابه من الكوبون (لا نثق بـ discount_amount).
       // Tier A: تعليم + تنبيه إداري **مع خدمة العميل** (يعمل دائماً). Tier B: استرداد/إلغاء
-      // آليّ للدفع الناقص الصارخ — **خلف ENFORCE_PRICE_TIER_B فقط** (مطفأة حتى تُثبِت السجلّات
-      // ألّا طلبَ شرعيّاً يبلغ ratio<0.2).
+      // آليّ للدفع الناقص الصارخ — خلف ENFORCE_PRICE_TIER_B، **وهي مُفعَّلةٌ بقرار
+      // المالك 2026-07-31** (هذا السطرُ كان ما زال يقول «مطفأة»، انظر رأس الملفّ).
+      // والفحصُ نفسُه في `_verifyOrderPriceTierA` — مصدرٌ واحدٌ للمسالكِ الثلاثة.
       let tierBReason = null;
       if (orderRef.parent.id === "orders") {
-        try {
-          const od = orderDoc.data();
-          const method = od.payment_method || "";
-          const paid = Number(paymentData.amount) / 100; // الشحن الفعلي من البوابة (لا od.amount)
-          const nonMoyasar = ["wallet", "subscription", "tamara", "tabby"]
-              .includes(method);
-          // الدفع الأصلي (Apple/Google/Samsung) يُنشأ خادميّاً بالكوبون مضمَّناً وبلا
-          // discount_amount — استثناؤه صريحٌ وإلزاميّ يمنع ردّ كل عميل native-pay بكوبون.
-          const skip = od.server_created_from_payment === true || nonMoyasar || !(paid > 0);
-          if (!skip) {
-            // حلّ المنطقة في `price_verify.resolveZone` (zone_id ثمّ الاسم) —
-            // مصدرٌ واحدٌ مع مسار المحفظة، وكان المسارانِ يَختلفان.
-            const zoneData = await priceVerify.resolveZone(db, od);
-            // تحقّق هندسي أن موقع الطلب داخل نصف قطر المنطقة المُعلَنة — الاسم وحده
-            // كان يكفي لتسعير منطقةٍ أرخص لعنوان أبعد. لا يحجب الدفع (وسم + تنبيه).
-            if (zoneData) {
-              await _flagZoneGeoMismatch(orderRef, orderId, od, zoneData)
-                  .catch((e) => console.error(`[price-shadow] geo ${orderId}:`, e.message));
-            }
-            // مواد التنظيف المضافة داخل الطلب تُسعَّر من products قبل الحساب؛
-            // null = تعذّر التحقق ⇒ لا نُعيد تسعيراً ولا نرفض دفعاً بلا يقين.
-            const matBase = await resolveMaterialsBase(db, od.service_meta);
-            const base0 = (zoneData && matBase !== null) ?
-              computeExpectedBasePrice(
-                  {...od, materials_base_resolved: matBase}, zoneData) : null;
-            // رسوم الوعورة (terrain_surcharge_percent على مستند المنطقة) فوق الأساس
-            // قبل الضريبة — الذروة والخصم الموثوق والضريبة تُحسب على الأساس المُرسَّم.
-            const base = base0 && base0 > 0 ?
-              applyTerrainSurcharge(base0, zoneData) : base0;
-            if (base && base > 0) {
-              const surge = await _readSurgeFactor(db);
-              const expected = grossFromBaseRounded(base, surge);
-              const trustedDiscount =
-                  await _computeTrustedDiscount(db, od, grossFromBase(base),
-                      surge, {orderRef, orderId});
-              const expectedNet = Math.max(0, expected - trustedDiscount);
-              // expectedNet<=0 مع دفعٍ موجب = مريب (خصم يفوق السعر) → Tier A، لا نفترض ratio=1.
-              const suspiciousZero = expectedNet <= 0 && paid > 0;
-              const ratio = expectedNet > 0 ? paid / expectedNet : (suspiciousZero ? 0 : 1);
-              const fresh = od.created_at &&
-                  typeof od.created_at.toMillis === "function" &&
-                  (Date.now() - od.created_at.toMillis()) < 2 * 60 * 60 * 1000;
-              const kind = (od.service_meta && od.service_meta.kind) || "hourly";
-              if (ratio < 0.5 || suspiciousZero) {
-                console.warn(`[price-shadow] UNDERPAID ${orderId}: paid=${paid} expected=${expected} net=${expectedNet} ratio=${ratio.toFixed(3)} kind=${kind}`);
-                await orderRef.update({
-                  price_mismatch: true,
-                  // هذا المسار يُنبّه فوراً أدناه — الوسم يمنع opsHealthSweep من
-                  // تكرار التنبيه نفسه؛ مسار المحفظة يَسِم بصمت فيغطيه الفحص الدوري.
-                  ops_alerted_mismatch: true,
-                  price_expected: expected,
-                  price_expected_net: expectedNet,
-                  price_shadow_ratio: Math.round(ratio * 1000) / 1000,
-                }).catch(() => {});
-                await queuePush("ADMIN_BROADCAST", "مراجعة سعر طلب ⚠️",
-                    `الطلب #${od.code || orderId} مدفوع ${paid} ر.س مقابل ${expectedNet} متوقَّع (${kind}) — يُرجى المراجعة.`,
-                    "admin_price_review",
-                    {orderId, ratio: String(Math.round(ratio * 1000) / 1000)},
-                    ["super_admin", "orders_manager", "accountant_admin"]).catch(() => {});
-                // Tier B: أقل من خُمس المتوقَّع، على طلبٍ حديث موثوق الحساب، بمخرجٍ ≥ 5 ر.س
-                // (أرضية تمنع إيجابيةً كاذبة من التقريب على مقامٍ ضئيل عند كوبون ~100%).
-                const egregious = ratio < 0.2 && expectedNet >= 5 && fresh &&
-                    od.server_created_from_payment !== true;
-                if (egregious && ENFORCE_PRICE_TIER_B) tierBReason = "price_review";
-              }
-            } else if (priceVerify.isPriceableKind(od)) {
-              // نوعٌ قابل للتسعير لكن تعذّر حسابه (منطقة غائبة/غير محلولة) → لا نُمرّره
-              // بصمت؛ نُعلّم وننبّه (Tier A) — يسدّ ثغرة إسقاط zone_name للتهرّب من التحقّق.
-              console.warn(`[price-shadow] UNVERIFIABLE ${orderId}: priceable kind but no zone/base`);
-              await orderRef.update({price_unverifiable: true}).catch(() => {});
-              await queuePush("ADMIN_BROADCAST", "طلب تعذّر التحقّق من سعره ⚠️",
-                  `الطلب #${od.code || orderId} من نوعٍ قابل للتسعير لكن تعذّر التحقّق من مبلغه — يُرجى المراجعة.`,
-                  "admin_price_review", {orderId},
-                  ["super_admin", "orders_manager", "accountant_admin"]).catch(() => {});
-            }
-          }
-        } catch (e) {
-          console.error(`[price-shadow] ${orderId}:`, e.message);
+        const od = orderDoc.data();
+        const method = od.payment_method || "";
+        const paid = Number(paymentData.amount) / 100; // الشحن الفعلي من البوابة (لا od.amount)
+        const nonMoyasar = ["wallet", "subscription", "tamara", "tabby"]
+            .includes(method);
+        // الدفع الأصلي (Apple/Google/Samsung) يُنشأ خادميّاً بالكوبون مضمَّناً وبلا
+        // discount_amount — استثناؤه صريحٌ وإلزاميّ يمنع ردّ كل عميل native-pay بكوبون.
+        const skip = od.server_created_from_payment === true || nonMoyasar || !(paid > 0);
+        if (!skip) {
+          tierBReason = await _verifyOrderPriceTierA(
+              db, orderRef, orderId, od, paid, "verify");
         }
       }
 
@@ -5411,6 +5480,39 @@ exports.moyasarWebhook = onRequest(
               if (data.is_paid) {
                 console.log(`moyasarWebhook: Order ${orderId} already paid — skipping (idempotent)`);
               } else {
+                // **تحقّقُ السعرِ الخادميُّ هنا أيضاً.** فحصُ المبلغِ أعلاه
+                // يُقارنُ «المدفوعَ بالمُعلَن»، و`expectedAmount` كلُّ حقولِه
+                // يَكتبها العميلُ عند الإنشاء — فمُعلِنُ ريالٍ يَدفعُ ريالاً
+                // ويَمرّ. وإعادةُ التسعيرِ من مستندِ المنطقةِ كانت في
+                // `verifyMoyasarPayment` وحدَه، وهو يَرتدُّ على `is_paid`
+                // **قبلَ** فحصِه — فالويب هوكُ إن سَبَقَ (وتُطلقه ميسر من
+                // خادمٍ إلى خادمٍ لحظةَ الدفع) استَهلكَ الفحصَ كلَّه، ومُتلاعبٌ
+                // لا يُنادي النداءَ أصلاً.
+                let tierB = null;
+                if (col === "orders") {
+                  const method = data.payment_method || "";
+                  const paidSar = Number(verifiedPayment.amount) / 100;
+                  const skipPv = data.server_created_from_payment === true ||
+                    ["wallet", "subscription", "tamara", "tabby"]
+                        .includes(method) || !(paidSar > 0);
+                  if (!skipPv) {
+                    tierB = await _verifyOrderPriceTierA(
+                        getFirestore(), ref, orderId, data, paidSar, "webhook");
+                  }
+                }
+                // **Tier A هنا، وTier B لا — وهذا قرارٌ لا سهو.** الوسمُ
+                // والتنبيهُ بلا رجعةٍ ماليّة، فيَعملانِ على كلِّ مسلك (وهو
+                // عينُ سياسةِ مسارِ المحفظة: «يَسِمُ ويَتّكلُ على المسحِ
+                // الدوريّ»). أمّا Tier B فيُلغي أو يَستردُّ بطاقةَ عميلةٍ بلا
+                // إنسانٍ في الحلقة، وسندُ تفعيلِه (رأسُ الملفّ: «صفرُ إنذارات
+                // طوال فترة المراقبة») جُمع من مسارِ النداءِ وحدَه — وإن كان
+                // الويب هوكُ يَسبقُه كثيراً فتلك العيّنةُ **لا تُغطّي سكّانَ
+                // هذا المسلك أصلاً**. فتفعيلُه هنا قرارُ المالكِ بعد أن
+                // تُظهرَ سجلّاتُ `[price-shadow:webhook]` أنّ السلوكَ واحد:
+                // سطرٌ واحدٌ يُعيدُ النداءَ المحجوبَ أدناه.
+                if (tierB) {
+                  console.warn(`[price-shadow:webhook] TIER_B_WOULD_BLOCK ${orderId} — Tier A وُسم وأُنبِئ؛ الإنفاذُ من هذا المسلك مؤجَّلٌ بقرار`);
+                }
                 // (سباق) فحص + تحديث داخل Transaction لمنع معالجة الدفعة مرتين
                 const flipped = await getFirestore().runTransaction(async (tx) => {
                   const snap = await tx.get(ref);

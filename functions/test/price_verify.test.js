@@ -211,6 +211,105 @@ function fakeDb({byId = {}, byName = {}} = {}) {
         "أرضيّةُ Tier B هي ما يَجعلُ «لا رفض» هنا متّسقاً");
   });
 
+  // ─────── كلُّ مسلكٍ إلى is_paid يُعيدُ التسعير ───────
+  //
+  // كان التحقّقُ على مسلكَين من خمسةٍ، وكلاهما `onCall` **يَختارُ العميلُ
+  // نداءَها**: `moyasarWebhook` بلا إعادةِ تسعيرٍ إطلاقاً (فحصُه «المدفوعُ =
+  // المُعلَن» و`expectedAmount` كلُّ حقولِه يَكتبها العميلُ عند الإنشاء)،
+  // و`_tamaraFlipPaid` بلا أيِّ فحصِ مبلغ. وفوقَ ذلك يَرتدُّ
+  // `verifyMoyasarPayment` على `is_paid === true` **قبلَ** فحصِه، فويب هوكٌ
+  // سابقٌ يَستهلكُ الفحصَ كلَّه.
+  const code = idx.split("\n")
+      .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+
+  t("(١٨) تحقّقُ السعرِ دالّةٌ واحدةٌ لا نسخةٌ لكلِّ مسلك", () => {
+    assert.strictEqual(
+        (code.match(/async function _verifyOrderPriceTierA\(/g) || []).length, 1,
+        "تعريفٌ واحد");
+    // إعادةُ التسعيرِ نفسُها في موضعَين فقط: الدالّةُ المُشترَكةُ ومسارُ
+    // المحفظة (وله سياستُه: يَسِمُ بصمتٍ ويَتّكلُ على المسحِ الدوريّ).
+    assert.strictEqual(
+        (code.match(/computeExpectedBasePrice\(/g) || []).length, 2,
+        "نسخةٌ ثالثةٌ مكتوبةٌ بيدِها — وهكذا افترقَ المسارانِ أوّلَ مرّة");
+  });
+
+  t("(١٩) والمسالكُ الثلاثةُ تُناديها", () => {
+    assert.strictEqual(
+        (code.match(/_verifyOrderPriceTierA\(/g) || []).length, 4,
+        "التعريفُ + ثلاثةُ نداءات (verify / webhook / tamara)");
+    for (const src of ["\"verify\"", "\"webhook\"", "\"tamara\""]) {
+      assert.ok(code.includes(src),
+          `المسلكُ ${src} لا يُسمّي نفسَه — فالسجلُّ لا يُميّزُ مَن وَسَم`);
+    }
+  });
+
+  t("(٢٠) وTier B يَبقى على مسارِ النداءِ وحدَه — بقرارٍ مكتوب", () => {
+    // الإنفاذُ (إلغاءٌ/استردادُ بطاقةٍ بلا إنسانٍ في الحلقة) **لم يُوسَّع**:
+    // سندُ تفعيلِه جُمع من مسارِ النداء، وإن كان الويب هوكُ يَسبقُه فتلك
+    // العيّنةُ لا تُغطّي سكّانَ هذا المسلك. فالويب هوكُ يَسِمُ ويُنبّهُ
+    // ويُسجّلُ ما **كان** سيَحجبه، والتفعيلُ قرارُ المالك.
+    assert.strictEqual(
+        (code.match(/refunds\.voidOrRefundTampered\(/g) || []).length, 1,
+        "توسيعُ الإنفاذِ قرارٌ ماليٌّ للمالكِ لا أثرٌ جانبيٌّ لإصلاحِ كشف");
+    assert.ok(code.includes("TIER_B_WOULD_BLOCK"),
+        "ولا بدَّ من أثرٍ يُقاسُ عليه القرارُ، وإلّا بقيت العيّنةُ ناقصة");
+    // وطلبٌ حُجب لا يُقلَبُ مدفوعاً من الويب هوك (الحارسُ القائم).
+    assert.ok(code.includes("cur.tamper_blocked === true"),
+        "القلبُ يَلزمُ أن يَرفضَ المحجوز");
+  });
+
+  t("(٢١) ومسلكُ تمارا Tier A وحدَه — بسببٍ مكتوب", () => {
+    const i = code.indexOf("async function _tamaraFlipPaid");
+    const j = code.indexOf("\n}\n", i);
+    const body = code.slice(i, j);
+    assert.ok(body.includes("_verifyOrderPriceTierA("),
+        "كان بلا أيِّ فحصِ مبلغ");
+    assert.ok(!body.includes("voidOrRefundTampered"),
+        "استردادُ تمارا نداءٌ آخرُ ببوّابةٍ أخرى — إنفاذُه قرارٌ مستقلّ");
+    // والسببُ مكتوبٌ في الخامّ لا في رأسي.
+    assert.ok(idx.includes("deps.gateway || moyasar"),
+        "شرحُ اقتصارِ تمارا على Tier A اختفى");
+  });
+
+  t("(٢٢) ومجموعةُ المسالكِ إلى is_paid: true مشدودةٌ كاملةً", () => {
+    // كما في `amounts.test.js`: تُقارَنُ **المجموعةُ كلُّها** لا وجودُ واحد،
+    // فمسلكٌ سادسٌ يَسقطُ فيُراجَع بدلَ أن يَمضيَ بلا تحقّق.
+    const names = [];
+    const lines = code.split("\n");
+    for (let n = 0; n < lines.length; n++) {
+      if (!/is_paid: true/.test(lines[n])) continue;
+      for (let k = n; k >= 0; k--) {
+        const m = lines[k].match(/^(?:exports\.(\w+)|async function (\w+)|function (\w+))/);
+        if (m) { names.push(m[1] || m[2] || m[3]); break; }
+      }
+    }
+    assert.deepStrictEqual([...new Set(names)].sort(), [
+      "_generateContractVisits", // زيارةُ عقدٍ: amount 0، مدفوعةٌ ضمنَ العقد
+      "_tamaraFlipPaid", // ويب هوكُ تمارا ومسحُه — Tier A
+      "generateSubscriptionVisits", // كالسابقِ، وبلا عميل
+      "moyasarCapturePayment", // قبضُ إدارةٍ لتفويضٍ قائم
+      "moyasarWebhook", // Tier A + Tier B
+      "payContractWithWallet", // عقدٌ: planPrice من المستندِ لا من وسيط
+      "payWithWallet", // تحقّقُه الخاصّ (سياسةٌ أخرى)
+      "reconcileOrphanPayments", // المبلغُ من البوّابةِ لا من العميل
+      "tabbyWebhook", // إرثيٌّ — لا جلسةَ تابي جديدة
+      "verifyMoyasarPayment", // Tier A + Tier B
+    ].sort());
+  });
+
+  t("(٢٣) ولا يَزعمُ الملفُّ أنّ Tier B مطفأة", () => {
+    // **هذا الفحصُ يَقرأُ الخامَّ لا المُجرَّد**، والفرقُ هو الفحصُ نفسُه:
+    // الزعمُ المنفيُّ **تعليقٌ**، فمسحُ أسطرِ التعليقِ يُعمي الفحصَ عمّا
+    // وُضع له — وهو ما أثبتَه اختبارُ القضمِ أوّلَ مرّة (أعادَ الزعمَ فمرَّ
+    // الفحصُ أخضرَ). ولذلك لا يُقتبَسُ اللفظُ كاملاً في شرحِ حذفِه.
+    assert.ok(!idx.includes("مطفأة حتى تُثبِت السجلّات"),
+        "الزعمُ قديمٌ: ENFORCE_PRICE_TIER_B = true بقرارِ المالك 2026-07-31");
+    assert.ok(/ENFORCE_PRICE_TIER_B = true/.test(code),
+        "فلو أُطفئت فعلاً فهذا الفحصُ هو ما يُراجَع");
+    assert.ok(idx.includes("فُعّلت بقرار المالك (2026-07-31)"),
+        "سندُ القرارِ في رأسِ الملفّ ما زال");
+  });
+
   // ─────────── قاعدةُ الوحدات ───────────
   t("(١٥) الوحدةُ لا تُهيّئُ Firestore — تَستقبلُ db", () => {
     const raw = fs.readFileSync(
