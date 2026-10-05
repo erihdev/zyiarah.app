@@ -19,6 +19,7 @@ import 'package:zyiarah/utils/order_tracking.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/order_activity.dart';
 import 'package:zyiarah/utils/crew_delay_notice.dart';
+import 'package:zyiarah/utils/time_format.dart';
 
 // تحويل رقمي دفاعي — حقول Firestore (amount/total_amount/quotePrice) قد تصل نصّاً
 // أو null، و.toDouble()/as num المباشر كان يعطّل بطاقة الطلب داخل القائمة.
@@ -475,7 +476,9 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
   Widget _buildOrderCard(BuildContext context, Map<String, dynamic> order, String docId) {
     final status = order['status'] ?? 'pending';
     final createdAt = (order['created_at'] as Timestamp?)?.toDate() ?? DateTime.now();
-    final dateStr = intl.DateFormat('yyyy/MM/dd HH:mm').format(createdAt);
+    // كان `HH:mm` — 24 ساعةً على بطاقةِ الطلبِ بينما مُنتقي الساعةِ يَعرضُ 12.
+    final dateStr = '${intl.DateFormat('yyyy/MM/dd').format(createdAt)} '
+        '${formatTime12(createdAt)}';
     
     final statusData = ZyiarahStatus.getOrderStatus(status);
     final statusColor = statusData['color'];
@@ -715,14 +718,12 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     );
     if (appt == null) return const SizedBox.shrink();
 
-    const days = ['', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'];
-    const months = ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
-    final dateStr = '${days[appt.weekday]} ${appt.day} ${months[appt.month]}';
-
-    final period = appt.hour < 12 ? 'صباحاً' : 'مساءً';
-    int h12 = appt.hour % 12;
-    if (h12 == 0) h12 = 12;
-    final timeStr = '$h12:${appt.minute.toString().padLeft(2, '0')} $period';
+    // أسماءُ الأيّامِ والشهورِ والتحويلُ إلى 12 ساعةً كلُّها كانت مكتوبةً هنا
+    // بيدٍ — وهي النسخةُ السادسةُ للتحويل، واختلفت عن المشترَكِ في تهجئةِ
+    // «الاثنين» وفي كلمةِ الفترة. القاعدةُ الآن في `time_format.dart` وحدَها،
+    // والصياغةُ الطويلةُ («مساءً») تَبقى لأنّ هذا الشريطُ جملةٌ مقروءة.
+    final dateStr = '${arabicWeekday(appt)} ${appt.day} ${arabicMonth(appt)}';
+    final timeStr = formatTime12(appt, longPeriod: true);
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);

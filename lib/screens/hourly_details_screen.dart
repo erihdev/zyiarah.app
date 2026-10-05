@@ -16,6 +16,7 @@ import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/date_strip.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/time_format.dart';
 
 
 class HourlyCleaningDetailsScreen extends StatefulWidget {
@@ -1090,7 +1091,6 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
         ),
       );
     }
-    const dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
     final now = DateTime.now();
     return SizedBox(
       height: 82,
@@ -1162,7 +1162,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    dayNames[date.weekday % 7],
+                    arabicWeekday(date),
                     style: TextStyle(
                       fontSize: 9,
                       color: isSelected
