@@ -48,7 +48,21 @@ void main() {
     test('بلا --force: حذفُ دالّةٍ قرارٌ بشريّ لا أثرٌ جانبيّ', () {
       expect(wf.contains('--non-interactive'), isTrue,
           reason: 'سؤالٌ تفاعليٌّ في CI يعني تعليقاً حتى المهلة');
-      expect(code.contains('--force'), isFalse,
+      // **النطاقُ هو نداءُ النشرِ وحدَه، لا الملفُّ كلُّه.** نصُّ رسالةِ
+      // الفشلِ (خطوةُ «Surface the failure») يَشرحُ القرارَ بتسميةِ العلمِ
+      // في `echo` — وهو **شفرةٌ لا تعليق**، فالتجريدُ لا يَحجبُه وسقطَ
+      // الفحصُ على رسالةٍ شرحيّة. وهو الفخُّ المسجَّلُ أحدَ عشرَ مرّةً في
+      // هذه الجلسة، بثوبٍ جديد: المحظورُ لم يَظهرْ في تعليقٍ بل في نصٍّ
+      // يُطبَع. والعلمُ في أيِّ موضعٍ آخرَ غيرُ ضارّ؛ الضارُّ أن يكونَ في
+      // النداء.
+      final iDep = wf.indexOf('- name: Deploy');
+      expect(iDep, greaterThan(-1), reason: 'خطوةُ النشرِ اختفت');
+      final nextStep = wf.indexOf('      - name:', iDep + 10);
+      final deployStep =
+          wf.substring(iDep, nextStep < 0 ? wf.length : nextStep);
+      expect(deployStep.contains('firebase-tools'), isTrue,
+          reason: 'الاقتطاعُ لم يُصِب نداءَ النشر — فحصٌ أجوف');
+      expect(deployStep.contains('--force'), isFalse,
           reason: '`--force` يوافق تلقائياً على **حذف** دوالّ غابت عن الشيفرة '
               '— فمسحُ ملفٍّ سهواً يمحوها من الإنتاج بلا سؤال');
       expect(wf.contains('--force'), isTrue,
@@ -83,6 +97,81 @@ void main() {
       final String pkg = File('functions/package.json').readAsStringSync();
       expect(pkg.contains('"node": "22"'), isTrue,
           reason: 'إن تغيّر محرّكُ الدوالّ فليتغيّر معه محرّكُ النشر');
+    });
+
+    // ── فشلٌ غيرُ قابلٍ للتشخيص (2026-10-05) ─────────────────────────
+    //
+    // ثلاثُ دمجاتٍ متتاليةٍ فشلت عند خطوةِ `Deploy` بينما `lint` و`npm test`
+    // وكتابةُ المفتاحِ خضراء — فبقيت إصلاحاتُ ذلك اليومِ الخادميّةُ
+    // **مدمَجةً وغيرَ عاملة**، وهي الحفرةُ التي وُجد هذا السيرُ لسدِّها،
+    // مفتوحةً بعلامةٍ حمراءَ بدلَ لا شيء. والسببُ لم يُعرَف لأنّ سجلَّ
+    // التشغيلِ **لا يُقرأُ إلّا من الواجهة** (يُخدَمُ من مُضيفٍ آخر، و
+    // `check-runs` تُعيدُ `output` فارغاً) — فالفشلُ كان بلا أثرٍ مقروء.
+    test('وفشلُ النشرِ يَترُكُ أثراً مقروءاً — لا علامةً حمراءَ وحدَها', () {
+      // **المُجرَّدُ لا الخامّ**: التعليقاتُ أدناه تُسمّي `pipefail` و`tee`
+      // لتَشرحَ القرار، فالفحصُ على الخامِّ يَمرُّ على توثيقِه هو — الفخُّ
+      // المسجَّلُ في رأسِ هذا الملفِّ، مقلوباً: هنا الأثرُ **إيجابيٌّ** فلا
+      // يَكفي الحضورُ في تعليق.
+      expect(code.contains('if: failure()'), isTrue,
+          reason: 'لا خطوةَ تَنشرُ سببَ الفشل');
+      expect(code.contains(r'$GITHUB_STEP_SUMMARY'), isTrue,
+          reason: 'السببُ لا يَظهرُ في ملخَّصِ الوظيفة');
+      expect(code.contains('::error::'), isTrue,
+          reason: 'لا تنبيهات — وهي الطريقُ الوحيدُ لقراءةِ السببِ عبر الـAPI');
+      expect(code.contains(r'tee "$RUNNER_TEMP/deploy.log"'), isTrue,
+          reason: 'خَرْجُ النشرِ لا يُحفَظُ فلا شيءَ يُنشَر');
+      // **`pipefail` حاملٌ لا زينة**: بلاهُ يَحجبُ `tee` خروجَ `firebase`
+      // فيَمرُّ فشلُ النشرِ **أخضرَ** — أسوأُ من الفشلِ نفسِه.
+      expect(code.contains('set -o pipefail'), isTrue,
+          reason: 'بلا pipefail يُخفي tee فشلَ النشرِ فيَمرُّ أخضر');
+      // والمَخرَجُ اليدويُّ مكتوبٌ حيث يُقرأُ عند الفشل.
+      expect(code.contains('npm --prefix functions run deploy'), isTrue,
+          reason: 'لا مَخرَجَ يدويٌّ في رسالةِ الفشل');
+      // وترتيبُ الخطوات: النشرُ، فالنشرُ على الملخَّص، فمحوُ المفتاح.
+      final iDeploy = wf.indexOf('- name: Deploy');
+      final iSurface = wf.indexOf('- name: Surface the failure');
+      final iRemove = wf.indexOf('- name: Remove key');
+      expect(iDeploy, greaterThan(-1));
+      expect(iSurface, greaterThan(iDeploy));
+      expect(iRemove, greaterThan(iSurface),
+          reason: 'محوُ المفتاحِ يَجبُ أن يَبقى الأخيرَ وبـif: always()');
+    });
+
+    // ── والقاعدةُ عامّةٌ: ثلاثةُ مساراتِ نشرٍ لا واحد ────────────────────
+    //
+    // النمطُ الذي تَكرّر في هذه الجلسةِ مرّاتٍ: قاعدةٌ عامّةٌ مُنفَّذةٌ في
+    // سطحٍ واحد. فحينَ صارَ فشلُ نشرِ الدوالِّ مقروءاً، كان مسارا نشرِ
+    // اللوحةِ والفهارسِ على العطلِ نفسِه — علامةٌ حمراءُ بلا سبب. والثلاثةُ
+    // تَكتبُ في الإنتاج، فالقاعدةُ تَلزمُها جميعاً.
+    test('المساراتُ الثلاثةُ كلُّها تَترُكُ أثراً مقروءاً عند الفشل', () {
+      const paths = [
+        '.github/workflows/functions_deploy.yml',
+        '.github/workflows/admin_deploy.yml',
+        '.github/workflows/firestore_indexes_deploy.yml',
+      ];
+      for (final f in paths) {
+        // كلُّ ملفٍّ يُجرَّدُ من تعليقِه: هذه فحوصٌ **إيجابيّةٌ**، فحضورُ
+        // الاسمِ في شرحٍ لا يَكفي.
+        final src = File(f)
+            .readAsStringSync()
+            .split('\n')
+            .where((l) => !l.trimLeft().startsWith('#'))
+            .join('\n');
+        expect(src.contains('if: failure()'), isTrue,
+            reason: '$f: لا خطوةَ تَنشرُ سببَ الفشل');
+        expect(src.contains(r'$GITHUB_STEP_SUMMARY'), isTrue,
+            reason: '$f: السببُ لا يَظهرُ في ملخَّصِ الوظيفة');
+        expect(src.contains('::error::'), isTrue,
+            reason: '$f: لا تنبيهات — وهي طريقُ قراءةِ السببِ عبر الـAPI');
+        expect(src.contains('set -o pipefail'), isTrue,
+            reason: '$f: بلا pipefail يُخفي tee فشلَ النشرِ فيَمرُّ أخضر');
+        expect(src.contains(r'tee "$RUNNER_TEMP/deploy.log"'), isTrue,
+            reason: '$f: خَرْجُ النشرِ لا يُحفَظُ فلا شيءَ يُنشَر');
+      }
+      // والفهارسُ وحدَها: لا قواعدَ من الأتمتةِ بحال (حجزُ STAGE-C).
+      final idx = File(paths[2]).readAsStringSync();
+      expect(idx.contains('firestore:rules'), isFalse,
+          reason: 'نشرُ القواعدِ من الأتمتةِ ممنوعٌ — حجزُ STAGE-C');
     });
 
     test('لا مفتاحَ مكتوبٌ في المستودع', () {

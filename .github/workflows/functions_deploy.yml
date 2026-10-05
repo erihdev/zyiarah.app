@@ -65,8 +65,70 @@ jobs:
           printf '%s' "$SA_JSON" > "$RUNNER_TEMP/sa.json"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
 
+      # `pipefail` لازمٌ: بلاهُ يَحجبُ `tee` خروجَ `firebase` فيَمرُّ فشلُ
+      # النشرِ أخضرَ — وهو أسوأُ من الفشلِ نفسِه.
       - name: Deploy
-        run: npx --yes firebase-tools@15 deploy --only functions --project zyiarah-app --non-interactive
+        run: |
+          set -o pipefail
+          npx --yes firebase-tools@15 deploy --only functions \
+            --project zyiarah-app --non-interactive 2>&1 \
+            | tee "$RUNNER_TEMP/deploy.log"
+
+      # ─────────────────────────────────────────────
+      # فشلُ النشرِ كان **غيرَ قابلٍ للتشخيص** (2026-10-05)
+      #
+      # ثلاثُ دمجاتٍ متتاليةٍ فشلت عند خطوةِ `Deploy` بينما `lint` و`npm test`
+      # وكتابةُ المفتاحِ كلُّها خضراء — فبقيت إصلاحاتُ ذلك اليومِ الخادميّةُ
+      # **مدمَجةً وغيرَ عاملة**، وهي الحفرةُ التي وُجد هذا السيرُ لسدِّها،
+      # مفتوحةً من جديدٍ بعلامةٍ حمراءَ بدلَ لا شيء.
+      #
+      # والسببُ لم يُعرَف، لأنّ **سجلَّ التشغيلِ لا يُقرأُ إلّا من الواجهة**:
+      # تُخدَمُ السجلّاتُ من مُضيفٍ آخر، فـ`gh api .../logs` يَرفضُ التحويلَ،
+      # و`check-runs` تُعيدُ `output` فارغاً. فلا يَبقى إلّا فتحُ الصفحةِ بيدٍ.
+      #
+      # فالخَرْجُ يُحفَظُ الآن ويُنشَرُ في **ملخَّصِ الوظيفةِ** وكـ**تنبيهاتٍ**
+      # (`::error::`) — والتنبيهاتُ تُقرأُ عبر
+      # `repos/{o}/{r}/check-runs/{id}/annotations`، فيَصيرُ الفشلُ التالي
+      # مُشخَّصاً من الواجهةِ ومن الـAPI بلا فتحِ سجلّ.
+      #
+      # ولا سرَّ في الخَرْج: المفتاحُ يُكتَبُ في ملفٍّ ولا يُطبَعُ قطّ، و
+      # `firebase` لا يَعرضُ إلّا معرّفَ المشروعِ وأسماءَ الدوالّ — وكلاهما
+      # في هذا الملفِّ أصلاً.
+      - name: Surface the failure
+        if: failure()
+        run: |
+          LOG="$RUNNER_TEMP/deploy.log"
+          {
+            echo "## ✗ فشلَ نشرُ الدوالّ"
+            echo
+            echo "آخرُ ستّينَ سطراً من خَرْجِ \`firebase deploy\`:"
+            echo '```'
+            tail -n 60 "$LOG" 2>/dev/null || echo "(لا سجلّ — فشلَ قبل النشر)"
+            echo '```'
+            echo
+            echo "### ما يُفحَصُ بالترتيب"
+            echo "1. **دالّةٌ جديدة؟** إنشاءُ دالّةٍ لأوّلِ مرّةٍ يَطلبُ أكثرَ"
+            echo "   مِمّا يَطلبُه تحديثُ القائم: \`Cloud Build Editor\` و"
+            echo "   \`Artifact Registry Administrator\` و\`Service Account User\`"
+            echo "   على حسابِ تشغيلِ الدوالّ. القائمةُ الكاملةُ في"
+            echo "   \`production_deployment_guide.md\` §1-ب."
+            echo "2. **دالّةٌ مجدولةٌ أو طابورُ مهامّ؟** \`Cloud Scheduler Admin\`"
+            echo "   و\`Cloud Tasks Admin\` — و\`Firebase Admin\` **لا يَشملُهما**"
+            echo "   (هذا بعينُه عطلُ أوّلِ نشرٍ آليٍّ في 2026-10-04)."
+            echo "3. **سرٌّ جديدٌ في \`defineSecret\`؟** يَلزمُه"
+            echo "   \`Secret Manager Admin\` وأن يكونَ السرُّ موجوداً."
+            echo "4. **دالّةٌ حُذفت من المصدر؟** لا \`--force\` هنا بقصد،"
+            echo "   فالنشرُ يَفشلُ بدلَ أن يَحذفَ من الإنتاجِ صامتاً. الحذفُ"
+            echo "   قرارٌ بشريٌّ يُنفَّذُ يدويّاً مرّةً واحدة."
+            echo
+            echo "### المَخرَجُ اليدويُّ ريثما يُصلَح"
+            echo '```'
+            echo "npm --prefix functions run deploy"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          # تنبيهاتٌ تُقرأُ عبر الـAPI — أسطرُ الخطأِ وحدَها، لا السجلُّ كلُّه.
+          grep -iE 'error|failed|denied|permission|403|400|HTTP Error' "$LOG" 2>/dev/null \
+            | tail -n 15 | while IFS= read -r line; do echo "::error::$line"; done || true
 
       - name: Remove key
         if: always()
