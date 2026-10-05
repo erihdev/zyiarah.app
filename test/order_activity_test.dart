@@ -242,4 +242,40 @@ void main() {
       expect(storeService.contains("'status': 'pending'"), isFalse);
     });
   });
+  group('ولا نسخةَ يدويّةً رابعةً للقاعدةِ بلا مراجعة', () {
+    test('المواضعُ الثلاثةُ الباقيةُ هي المعروفةُ وحدَها', () {
+      // ثلاثةُ فحوصٍ يدويّةٍ للانتهاءِ ما زالت في `lib/`، و**كلُّها صحيحةٌ في
+      // موضعِها** لأنّها تَقرأ `orders` وحدَها، و`delivered`/`rejected` لا
+      // يُكتبانِ عليها أبداً. فلا تُلمَس: لمسُ شفرةٍ سليمةٍ بلا خللٍ خلفَها
+      // مخاطرةٌ بلا مقابل. لكنّ رابعةً تَظهرُ غداً على `store_orders` تَعدُّ
+      // `delivered` نشطاً — وهذا الفحصُ يُجبرُ على مراجعتِها.
+      const known = {
+        'lib/providers/order_provider.dart',
+        'lib/screens/admin/admin_more_screen.dart',
+        'lib/screens/driver_dashboard.dart',
+      };
+      final found = <String>{};
+      for (final f in Directory('lib')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.dart'))) {
+        // **في السطرِ نفسِه**: فحصُ الانتهاءِ تعبيرٌ منطقيٌّ واحد. ومطابقةُ
+        // الملفِّ كلِّه التقطت `admin_order_details_screen` — وفيها
+        // `oldStatus != 'cancelled'` و`!= 'completed'` في سطرَين مختلفَين،
+        // وهو فحصُ **انتقالِ** حالةٍ لا فحصُ انتهاء.
+        for (final l in f.readAsStringSync().split('\n')) {
+          final t = l.trimLeft();
+          if (t.startsWith('//') || t.startsWith('///')) continue;
+          if (RegExp(r"!=\s*'completed'").hasMatch(l) &&
+              RegExp(r"!=\s*'cancelled'").hasMatch(l)) {
+            found.add(f.path.replaceAll('\\', '/'));
+          }
+        }
+      }
+      expect(found, equals(known),
+          reason: 'نسخةٌ يدويّةٌ جديدةٌ للانتهاء: إن كانت على `orders` فأضِفها '
+              'هنا، وإن كانت على `store_orders` فاستخدم `orderIsOpen` — '
+              'وإلّا عُدَّ الطلبُ المُسلَّمُ نشطاً');
+    });
+  });
 }

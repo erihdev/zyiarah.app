@@ -27,6 +27,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// **الطلبات** لا السائقين، ويَشترط `rating_comment != null` — فالافتراضُ لا
 /// يُدخل طلباً غيرَ مُقيَّمٍ في قائمةِ «التقييمات المنخفضة». تُرك كما هو.
 void main() {
+  _serverOwnsRatingSideEffects();
   final repo = Directory.current.path;
   String read(String rel) => File('$repo/$rel').readAsStringSync();
   String stripLineComments(String src) => src
@@ -99,6 +100,69 @@ void main() {
       final insights = read('lib/screens/admin/admin_insights_screen.dart');
       expect(insights, contains("data['rating_comment'] != null"),
           reason: 'لو سقطَ شرطُ التعليقِ لصار `?? 5.0` هناك عطلاً فعليّاً');
+    });
+  });
+}
+
+/// العميلةُ تَكتبُ `rating` على الطلبِ وحدَه — والخادمُ يُجمّعُ ويُنبّه.
+///
+/// كان `submitOrderRating` يَفعلُ ثلاثةَ أشياءَ لا تَعمل: نداءَين للإدارةِ من
+/// العميلةِ إلى `ADMIN_BROADCAST` (يَرفضُهما حارسُ الانتحالِ بنصِّه)، وتجميعةً
+/// لمعدَّلِ السائقِ تَرفضُها القواعدُ دائماً **ولو نَفذت أفسدت الرقم** (تَبذرُ
+/// `5.0` وتُضاعفُ العدَّ مع المُجمّعِ الخادميّ)، وتعليقاً يَنفي وجودَ المُجمّعِ
+/// الخادميِّ أصلاً ويُسمّيه «backlog».
+void _serverOwnsRatingSideEffects() {
+  final svc = File('lib/services/order_service.dart').readAsStringSync();
+  final msg = File('lib/services/zyiarah_messaging_service.dart').readAsStringSync();
+  final idx = File('functions/index.js').readAsStringSync();
+
+  String code(String src) => src.split('\n').where((l) {
+        final t = l.trimLeft();
+        return !t.startsWith('//') && !t.startsWith('///') && !t.startsWith('*');
+      }).join('\n');
+
+  group('آثارُ التقييمِ خادميّةٌ وحدَها', () {
+    test('العميلةُ لا تُجمّعُ معدَّلَ السائق', () {
+      final c = code(svc);
+      // النطاقُ جسمُ `submitOrderRating` وحدَه: `updateOrderStatus` تَلمسُ
+      // مستندَ السائقِ بحقّ (حالتُه وتفرُّغُه) ويُجيزُه له الدورُ، فحظرٌ على
+      // الملفِّ كلِّه كان توقّعاً خاطئاً — وقد سَقطَ عليه أوّلُ صياغةٍ لهذا
+      // الفحص.
+      final i = c.indexOf('submitOrderRating(');
+      expect(i, greaterThan(-1));
+      final body = c.substring(i);
+      expect(body.contains("collection('drivers')"), isFalse,
+          reason: 'القواعدُ تَرفضُها، ولو نَفذت لضاعفت العدَّ وبذرت 5.0');
+      expect(c.contains('rating_avg'), isFalse);
+      expect(c.contains('rating_count'), isFalse);
+    });
+
+    test('ولا تُنبّهُ الإدارةَ بنفسِها', () {
+      expect(code(svc).contains('ZyiarahMessagingService()'), isFalse,
+          reason: 'بثُّ العميلِ إلى ADMIN_BROADCAST يُرفَض خادميّاً');
+      // والدالّتانِ المرفوضتانِ أُزيلتا من الخدمةِ (وإلّا بَقيتا بلا مُنادٍ).
+      expect(msg.contains('alertReputationRisk'), isFalse);
+      expect(msg.contains('notifyAdminOfLowRating'), isFalse);
+    });
+
+    test('ما زالت تَكتبُ التقييمَ نفسَه ذرّياً', () {
+      expect(svc.contains("'rating': rating"), isTrue);
+      expect(svc.contains("'rating_comment': comment"), isTrue);
+      expect(svc.contains('runTransaction'), isTrue,
+          reason: 'منعُ التقييمِ المزدوجِ قرارٌ قائم');
+    });
+
+    test('والخادمُ يُجمّعُ ويُنبّهُ فعلاً — فالحذفُ لا يُفقِدُ شيئاً', () {
+      expect(idx.contains('exports.aggregateDriverRating'), isTrue);
+      expect(idx.contains('exports.notifyAdminOnLowRating'), isTrue);
+      // كلاهما مرّةً واحدةً لكلِّ طلب (before.rating غائب).
+      expect(RegExp(r'before\.rating != null').allMatches(idx).length, 2);
+    });
+
+    test('التعليقُ الكاذبُ أُزيل من الشفرةِ وبقي في شرحِ إزالتِه', () {
+      expect(code(svc).contains('لا يوجد Cloud Function'), isFalse);
+      expect(svc.contains('لا يوجد Cloud Function'), isTrue,
+          reason: 'لو غابَ من الخامِّ فالتجريدُ حَجبَ شيئاً');
     });
   });
 }
