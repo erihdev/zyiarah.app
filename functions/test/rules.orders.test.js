@@ -140,6 +140,11 @@ const {setDoc, doc} = require("firebase/firestore");
           {client_id: uid, status: "pending", is_paid: false,
             price_paid: 1, amount: 200}),
       false);
+  await check("mute: client_stranded_notified at create -> DENIED",
+      setDoc(doc(db, "orders/mute11"),
+          {client_id: uid, status: "pending", is_paid: false,
+            client_stranded_notified: true, amount: 200}),
+      false);
   // ولا يُكسَرُ الإنشاءُ الشرعيُّ: الحقولُ التي يَكتبُها التطبيقُ فعلاً تمرّ.
   await check("legit: the app's own create fields -> ALLOWED",
       setDoc(doc(db, "orders/ok3"),
