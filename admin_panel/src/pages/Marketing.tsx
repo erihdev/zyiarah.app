@@ -4,6 +4,7 @@ import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, serverTimest
 import { db } from '../services/firebase';
 import { useNotification } from '../components/notificationContext.ts';
 import { endOfLocalDay } from '../utils/couponExpiry';
+import { COUPON_ACTIVE, COUPON_DISABLED, couponIsActive } from '../utils/couponStatus';
 
 interface PromoCode {
     id: string;
@@ -12,7 +13,7 @@ interface PromoCode {
     value: number;
     uses: number;
     maxUses: number;
-    status: 'active' | 'expired';
+    status: string;
     expiry: string;
     createdAt?: { toDate: () => Date };
 }
@@ -133,7 +134,9 @@ export default function Marketing() {
 
     const toggleStatus = async (coupon: PromoCode) => {
         try {
-            const newStatus = coupon.status === 'active' ? 'expired' : 'active';
+            // القيمةُ من `couponStatus` — المحرّرانِ كانا يَكتبانِ مفردتَين.
+            const newStatus = couponIsActive(coupon.status)
+                ? COUPON_DISABLED : COUPON_ACTIVE;
             await updateDoc(doc(db, 'promo_codes', coupon.id), {
                 status: newStatus
             });
@@ -145,7 +148,7 @@ export default function Marketing() {
         }
     };
 
-    const activeCouponsCount = coupons.filter(c => c.status === 'active').length;
+    const activeCouponsCount = coupons.filter(c => couponIsActive(c.status)).length;
     const totalUsesThisMonth = coupons.reduce((sum, c) => sum + c.uses, 0); // Simplified for now, should calculate based on real usage logs later
 
     if (isLoading) {
@@ -213,7 +216,7 @@ export default function Marketing() {
                                     <td colSpan={6} className="px-6 py-12 text-center text-slate-400 font-medium">لا توجد كوبونات خصم حالياً.</td>
                                 </tr>
                             ) : coupons.map((coupon) => (
-                                <tr key={coupon.id} className={`transition-colors group ${coupon.status === 'expired' ? 'bg-slate-50/50 opacity-75' : 'hover:bg-rose-50/30'}`}>
+                                <tr key={coupon.id} className={`transition-colors group ${!couponIsActive(coupon.status) ? 'bg-slate-50/50 opacity-75' : 'hover:bg-rose-50/30'}`}>
                                     <td className="px-6 py-4">
                                         <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg border border-slate-200">
                                             <Tag size={14} className="text-slate-400" />
@@ -249,7 +252,7 @@ export default function Marketing() {
                                             onClick={() => toggleStatus(coupon)}
                                             className="transition-transform hover:scale-105"
                                         >
-                                            {coupon.status === 'active'
+                                            {couponIsActive(coupon.status)
                                                 ? <span className="text-emerald-600 bg-emerald-50 border border-emerald-100 px-3 py-1 rounded-full text-xs font-extrabold">نشط</span>
                                                 : <span className="text-rose-600 bg-rose-50 border border-rose-100 px-3 py-1 rounded-full text-xs font-extrabold">منتهي</span>}
                                         </button>
