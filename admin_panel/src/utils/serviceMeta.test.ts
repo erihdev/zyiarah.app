@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { metaHeadline, metaRows } from './serviceMeta.ts';
+import { metaHeadline, metaRows, metaSummary } from './serviceMeta.ts';
 
 // تفصيل `service_meta` — **مرآة** لـ `lib/widgets/service_meta_view.dart`،
 // وكانت بلا فحص واحد.
@@ -203,5 +203,64 @@ describe('metaRows — المدخلات الفاسدة لا تُسقط شاشة 
 
     it('نوع مجهول ⇒ فراغ', () => {
         expect(metaRows({ kind: 'نوع_جديد_لم_يُضَف' })).toEqual([]);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// الملخّصُ بسطرٍ واحد — الجدولُ **المشترك** مع
+// `test/service_meta_summary_test.dart`.
+//
+// `admin_meta_parity_test` كان يَفحصُ **بنيةً** (أنّ الأنواعَ الستّةَ مذكورةٌ
+// في الجهتَين) ولم يُقارِنْ خَرْجَي الدالّتَين قطّ — فانحرفَتا في فرعٍ واحد:
+// هذه الجهةُ تُلحقُ مدّةَ الباقةِ («4س») و«مصدرُ الحقيقة» في Dart لا يَحملها،
+// فبطاقةُ السائقِ لا تَذكرُ طولَ المهمّةِ بينما صفُّ اللوحةِ يَذكره.
+//
+// الكتلةُ أدناه تُقارَنُ حرفاً بحرفٍ بنظيرتِها في Dart (الفحصُ هناك يَقرأُ هذا
+// الملفّ) — فلا تُضافُ حالةٌ لجهةٍ دون الأخرى.
+// ──── SUMMARY-CASES-BEGIN ────
+const cases: { meta: unknown; want: string | null }[] =
+[
+  {"meta": {"kind": "ac_service", "lines": [{"label": "صيانة شباك", "count": 1}, {"label": "غسيل سبليت", "count": 2}]}, "want": "صيانة شباك ×1 • غسيل سبليت ×2"},
+  {"meta": {"kind": "car_interior", "lines": [{"label": "سيدان", "count": 1}]}, "want": "سيدان ×1"},
+  {"meta": {"kind": "ac_service", "lines": [{"label": "لا شيء", "count": 0}]}, "want": null},
+  {"meta": {"kind": "ac_service"}, "want": null},
+  {"meta": {"kind": "sofa_rug_sqm", "pieces": [{"label": "كنب 1", "billed_measure": 2.5, "uses_area": false}, {"label": "كنب 2", "billed_measure": 3, "uses_area": false}, {"label": "سجاد 1", "area_sqm": 6}]}, "want": "كنب ×2 (5.50 م.ط) • سجاد ×1 (6.00 م²)"},
+  {"meta": {"kind": "store_products", "items": [{"name": "منظف", "quantity": 2}]}, "want": "منظف ×2"},
+  {"meta": {"kind": "home_package", "homeLabel": "شقة متوسطة", "crewCount": 2, "durationHours": 4, "materials": [{}, {}]}, "want": "شقة متوسطة • كادران • 4س • + 2 مادة"},
+  {"meta": {"kind": "home_package", "homeLabel": "فيلا", "crewCount": 1}, "want": "فيلا • كادر واحد"},
+  {"meta": {"kind": "home_package", "homeLabel": "قصر", "crewCount": 3, "durationHours": 8}, "want": "قصر • 3 كوادر • 8س"},
+  {"meta": {"kind": "home_package", "homeLabel": "", "crewCount": 2}, "want": null},
+  {"meta": {"kind": "event_workers", "workers": 2, "event_hours": 2}, "want": "عاملتان • ساعتان"},
+  {"meta": {"kind": "event_workers", "workers": 3, "event_hours": 5}, "want": "3 عاملات • 5 ساعات"},
+  {"meta": {"kind": "event_workers", "workers": 1, "event_hours": 3}, "want": "عاملة واحدة • 3 ساعات"},
+  {"meta": {"kind": "event_workers", "workers": 0, "event_hours": 5}, "want": null},
+  {"meta": {"kind": "unknown_kind"}, "want": null},
+  {"meta": {}, "want": null}
+];
+// ──── SUMMARY-CASES-END ────
+
+describe('metaSummary — الجدولُ المشترك', () => {
+    it('الجدولُ غيرُ فارغٍ ويُغطّي الأنواعَ الستّة', () => {
+        expect(cases.length).toBeGreaterThanOrEqual(14);
+        const kinds = new Set(
+            cases.map(c => (c.meta as Record<string, unknown>)?.kind).filter(Boolean));
+        for (const k of ['ac_service', 'car_interior', 'sofa_rug_sqm',
+            'store_products', 'home_package', 'event_workers']) {
+            expect(kinds.has(k)).toBe(true);
+        }
+    });
+
+    cases.forEach((c, i) => {
+        const kind = (c.meta as Record<string, unknown>)?.kind ?? '(بلا نوع)';
+        it(`[${i}] ${String(kind)}`, () => {
+            expect(metaSummary(c.meta)).toBe(c.want);
+        });
+    });
+
+    it('ولا مُدخَلَ غيرَ كائنٍ يُسقطُ الدالّة', () => {
+        expect(metaSummary(null)).toBeNull();
+        expect(metaSummary(undefined)).toBeNull();
+        expect(metaSummary('garbage')).toBeNull();
+        expect(metaSummary(7)).toBeNull();
     });
 });

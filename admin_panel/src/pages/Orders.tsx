@@ -8,6 +8,10 @@ import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../services/firebase.ts';
 import { useNotification } from '../components/notificationContext.ts';
 import ServiceMetaTable from '../components/ServiceMetaTable.tsx';
+// الملخّصُ انتقلَ إلى `utils/serviceMeta.ts` بجوارِ `metaRows`/`metaHeadline`:
+// هو مرآةُ الدالّةِ نفسِها في `service_meta_view.dart`، فمَوضعُه حيثُ تُختبَرُ
+// المرآة — وتصديرُ دالّةٍ من ملفِّ مُكوِّنٍ يَكسرُ fast-refresh في React.
+import { metaSummary } from '../utils/serviceMeta.ts';
 
 // تنسيق تاريخ لحقل datetime-local (YYYY-MM-DDTHH:mm).
 const toDatetimeLocal = (dt: Date) => {
@@ -57,86 +61,6 @@ interface OrderRecord {
     worker_count?: number;
     hours_contracted?: number;
 }
-
-const n = (v: unknown): number => Number(v) || 0;
-
-/// ملخّص تفصيل الخدمة بسطر واحد — **مرآة** لـ zyiarahServiceMetaSummary في
-/// lib/widgets/service_meta_view.dart (مصدر الحقيقة). كانت هذه الدالة ترجع null
-/// لكل نوع عدا home_package، فيُسنِد الأدمن من الويب سائقاً وهو لا يرى عدد
-/// المكيفات ولا مقاسات الكنب ولا — الأخطر — عدد عاملات المناسبة وساعاتها،
-/// وهي جوهر الحجز نفسه.
-///
-/// ملاحظة: لا نستعمل o.worker_count / o.hours_contracted بديلاً؛ يحملهما **كل**
-/// طلب بقيم افتراضية (1 عاملة / 4 ساعات) فيطبعان بيانات كاذبة على غير محلّها.
-const pkgSummary = (o: OrderRecord): string | null => {
-    const m = o.service_meta;
-    if (!m) return null;
-    const parts: string[] = [];
-
-    switch (m.kind) {
-        // السيارات والمكيفات بنية بنود واحدة (label/count) — نفس الملخّص.
-        case 'ac_service':
-        case 'car_interior': {
-            if (!Array.isArray(m.lines)) return null;
-            for (const l of m.lines) {
-                const c = n(l?.count);
-                if (c > 0) parts.push(`${l?.label ?? '-'} ×${c}`);
-            }
-            break;
-        }
-        case 'sofa_rug_sqm': {
-            if (!Array.isArray(m.pieces)) return null;
-            // تجميع حسب النوع: العدد والمقدار المسعَّر (م² للسجاد، م.ط للكنب).
-            const count: Record<string, number> = {};
-            const measure: Record<string, number> = {};
-            const unit: Record<string, string> = {};
-            for (const p of m.pieces) {
-                const label = `${p?.label ?? '-'}`.split(' ')[0]; // «كنب 1» → «كنب»
-                count[label] = (count[label] ?? 0) + 1;
-                // الطلبات القديمة (بلا billed_measure/uses_area) كانت كلها بالمساحة.
-                measure[label] = (measure[label] ?? 0) + n(p?.billed_measure ?? p?.area_sqm);
-                unit[label] = p?.uses_area === false ? 'م.ط' : 'م²';
-            }
-            for (const label of Object.keys(count)) {
-                parts.push(`${label} ×${count[label]} (${measure[label].toFixed(2)} ${unit[label]})`);
-            }
-            break;
-        }
-        case 'store_products': {
-            if (!Array.isArray(m.items)) return null;
-            for (const it of m.items) {
-                const q = n(it?.quantity);
-                if (q > 0) parts.push(`${it?.name ?? '-'} ×${q}`);
-            }
-            break;
-        }
-        case 'home_package': {
-            if (!m.homeLabel) return null;
-            const crews = n(m.crewCount);
-            if (crews <= 0) return null;
-            parts.push(m.homeLabel);
-            parts.push(crews === 1 ? 'كادر واحد' : crews === 2 ? 'كادران' : `${crews} كوادر`);
-            const dur = n(m.durationHours);
-            if (dur > 0) parts.push(`${dur}س`);
-            // تنبيه مبكّر: الطلب يحمل مواد يجب أن يجلبها السائق.
-            if (Array.isArray(m.materials) && m.materials.length > 0) {
-                parts.push(`+ ${m.materials.length} مادة`);
-            }
-            break;
-        }
-        case 'event_workers': {
-            const w = n(m.workers);
-            const h = n(m.event_hours);
-            if (w <= 0 || h <= 0) return null;
-            parts.push(w === 1 ? 'عاملة واحدة' : w === 2 ? 'عاملتان' : `${w} عاملات`);
-            parts.push(h === 2 ? 'ساعتان' : `${h} ساعات`);
-            break;
-        }
-        default:
-            return null;
-    }
-    return parts.length ? parts.join(' • ') : null;
-};
 
 interface DriverOption { id: string; name: string; is_available: boolean; is_active: boolean; }
 
@@ -505,8 +429,8 @@ export default function Orders() {
                                         </td>
                                         <td className="px-6 py-4 font-medium text-slate-600">
                                             {order.type}
-                                            {pkgSummary(order) && (
-                                                <div className="text-[11px] font-bold text-[#660033] mt-0.5">{pkgSummary(order)}</div>
+                                            {metaSummary(order.service_meta) && (
+                                                <div className="text-[11px] font-bold text-[#660033] mt-0.5">{metaSummary(order.service_meta)}</div>
                                             )}
                                         </td>
                                         <td className="px-6 py-4 font-bold text-emerald-600">{order.amount}</td>
@@ -614,8 +538,8 @@ export default function Orders() {
                             <div>
                                 <h3 className="text-xl font-extrabold text-slate-800">تعيين سائق</h3>
                                 <p className="text-sm text-slate-500 mt-0.5">الطلب #{assignModal.code || assignModal.id.substring(0, 6).toUpperCase()} — {assignModal.customer}</p>
-                                {pkgSummary(assignModal) && (
-                                    <p className="text-xs font-bold text-[#660033] mt-1">{pkgSummary(assignModal)}</p>
+                                {metaSummary(assignModal.service_meta) && (
+                                    <p className="text-xs font-bold text-[#660033] mt-1">{metaSummary(assignModal.service_meta)}</p>
                                 )}
                             </div>
                             <button type="button" title="إغلاق" onClick={() => setAssignModal(null)} className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors">
@@ -678,8 +602,8 @@ export default function Orders() {
                             <div>
                                 <h3 className="text-xl font-extrabold text-slate-800">تعديل الزيارة</h3>
                                 <p className="text-sm text-slate-500 mt-0.5">الطلب #{editModal.code || editModal.id.substring(0, 6).toUpperCase()} — {editModal.customer}</p>
-                                {pkgSummary(editModal) && (
-                                    <p className="text-xs font-bold text-[#660033] mt-1">{pkgSummary(editModal)}</p>
+                                {metaSummary(editModal.service_meta) && (
+                                    <p className="text-xs font-bold text-[#660033] mt-1">{metaSummary(editModal.service_meta)}</p>
                                 )}
                             </div>
                             <button type="button" title="إغلاق" onClick={() => setEditModal(null)} className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors">
