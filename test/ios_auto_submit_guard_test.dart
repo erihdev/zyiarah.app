@@ -33,6 +33,35 @@ void main() {
     expect(f.readAsStringSync().trim(), isNotEmpty);
   });
 
+  // ── «عدّلِ الملفَّ مع كلِّ رقمِ نسخةٍ جديد» — أمرٌ بلا قارئ ────────────
+  //
+  // تعليقُ `codemagic.yaml` يَقولُها بالخطِّ العريضِ («**عدّل
+  // .github/whatsnew/whatsnew-ar مع كل رقم نسخة جديد.**») وكذلك CLAUDE.md،
+  // و**لا شيءَ كان يُقابِلُ النصَّ بالنسخة**. فالحارسُ القائمُ يَطلبُ أن
+  // يكونَ الملفُّ غيرَ فارغٍ وحدَه — وهو أخضرُ على نصٍّ يَصفُ إصداراً
+  // ماضياً. ورقمُ البناءِ يَتزايدُ آليّاً في CI، أمّا رقمُ **النسخةِ**
+  // فيُبدّله المالكُ بيدِه، فالنسيانُ هو الحالةُ الافتراضيّة: تَصدُرُ 1.2.51
+  // ومتجرُ آبل يَقولُ «ما الجديد في 1.2.50».
+  //
+  // وهي عائلةُ «ادّعاءٌ/أمرٌ بلا قارئ» التي تَكرّرت هنا (ترويسةُ
+  // `couponProblem`، تعليقُ `PromoCoupon`، «all HMAC-verified»، مرآةُ
+  // `access.ts`، بيانُ الخصوصيّة).
+  test('ورقمُ النسخةِ في «ما الجديد» هو رقمُ pubspec بعينِه', () {
+    final notes = File('.github/whatsnew/whatsnew-ar').readAsStringSync();
+    final pv = RegExp(r'^version:\s*([0-9]+\.[0-9]+\.[0-9]+)\+',
+            multiLine: true)
+        .firstMatch(read('pubspec.yaml'));
+    expect(pv, isNotNull, reason: 'تعذّر قراءةُ النسخةِ من pubspec.yaml');
+    final version = pv!.group(1)!;
+    // النصُّ يَفتتحُ بـ«ما الجديد في X:» — الرقمُ يُقرأُ منه لا يُفترَض.
+    final nv = RegExp(r'([0-9]+\.[0-9]+\.[0-9]+)').firstMatch(notes);
+    expect(nv, isNotNull,
+        reason: 'لا رقمَ نسخةٍ في «ما الجديد» — فلا يُعرَفُ أيَّ إصدارٍ يَصف');
+    expect(nv!.group(1), version,
+        reason: 'نصُّ «ما الجديد» يَصفُ ${nv.group(1)} والنسخةُ $version — '
+            'المتجرُ سيَعرضُ ملاحظاتَ إصدارٍ آخر');
+  });
+
   test('ios-release يولّد release_notes.json من الملف قبل النشر — لا عبر CM_ENV', () {
     expect(iosCode.contains('release_notes.json'), isTrue,
         reason: 'Codemagic تقرأ «ما الجديد» من هذا الملف في جذر المشروع عند النشر');
