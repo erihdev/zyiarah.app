@@ -120,6 +120,17 @@ const {setDoc, updateDoc, doc} = require("firebase/firestore");
           {client_id: uid, status: "pending", is_paid: false,
             coupon_count_pending: true, amount: 200}),
       false);
+  // وتسويةُ رصيدِ زياراتِ الاشتراك (2026-10-05): نفسُ العائلة.
+  await check("mute: visit_accounting_pending at create -> DENIED",
+      setDoc(doc(db, "orders/mute7a"),
+          {client_id: uid, status: "pending", is_paid: false,
+            visit_accounting_pending: true, amount: 200}),
+      false);
+  await check("mute: visit_accounting_alerted at create -> DENIED",
+      setDoc(doc(db, "orders/mute7b"),
+          {client_id: uid, status: "pending", is_paid: false,
+            visit_accounting_alerted: true, amount: 200}),
+      false);
   // وعلمُ فئةِ «تعذّر التحقّق» — عضوٌ خامسٌ في عائلةِ `alertBatch` (أُضيف مع
   // مكنستِها): ضبطُه سلفاً يُسقِطُ المستندَ من نافذةِ التنبيهِ كأخواتِه.
   await check("mute: ops_alerted_unverifiable at create -> DENIED",

@@ -233,6 +233,122 @@ tAsync("(ب٤) الفشل: العلمُ يُكتَب ويُصعَّدُ للتس
   assert.deepStrictEqual(pushes[0][5], ["super_admin", "marketing_admin"]);
 });
 
+// ── رصيدُ زياراتِ الاشتراك ────────────────────────────────────────────────
+tAsync("(د١) الإكمال: الزيارةُ تُخصَمُ من العميلةِ ومن العقد، والعلمُ يُمحى",
+    async () => {
+      const db = fakeDb({
+        "orders/o9": {
+          code: "S9", status: "completed", contract_id: "k1",
+          visit_accounting_pending: true,
+        },
+      });
+      const r = await rewards.settleVisitAccounting(db, {
+        orderRef: db._ref("orders/o9"), orderId: "o9", clientId: "c1",
+        status: "completed", code: "S9",
+      }, async () => null);
+      assert.strictEqual(r.settled, true);
+      assert.strictEqual(r.delta, -1);
+      assert.deepStrictEqual(db._store.get("users/c1").visits_remaining,
+          FieldValue.increment(-1));
+      assert.deepStrictEqual(db._store.get("contracts/k1").visits_remaining,
+          FieldValue.increment(-1),
+          "عدّادُ العقدِ لم يُخصَم — بطاقةُ الباقةِ تَعرضُ رصيداً خاطئاً");
+      const o = db._store.get("orders/o9");
+      assert.strictEqual(o.visit_counted, true);
+      assert.deepStrictEqual(o.visit_accounting_pending, FieldValue.delete());
+    });
+
+tAsync("(د٢) الإلغاء: تُردُّ زيارةٌ **استُهلكت** فقط", async () => {
+  const db = fakeDb({
+    "orders/o9": {code: "S9", status: "cancelled", visit_counted: true},
+  });
+  const r = await rewards.settleVisitAccounting(db, {
+    orderRef: db._ref("orders/o9"), orderId: "o9", clientId: "c1",
+    status: "cancelled", code: "S9",
+  }, async () => null);
+  assert.strictEqual(r.delta, 1);
+  assert.deepStrictEqual(db._store.get("users/c1").visits_remaining,
+      FieldValue.increment(1));
+  assert.strictEqual(db._store.get("orders/o9").visit_counted, false);
+});
+
+tAsync("(د٣) وإلغاءُ ما لم يُستهلَك لا يَخلقُ زيارةً مجّانيّة", async () => {
+  const db = fakeDb({
+    "orders/o9": {
+      code: "S9", status: "cancelled", visit_accounting_pending: true,
+    },
+  });
+  const r = await rewards.settleVisitAccounting(db, {
+    orderRef: db._ref("orders/o9"), orderId: "o9", clientId: "c1",
+    status: "cancelled", code: "S9",
+  }, async () => null);
+  assert.strictEqual(r.skipped, "never_counted");
+  assert.strictEqual(db._store.get("users/c1"), undefined,
+      "رُدَّت زيارةٌ لم تُستهلَك — دفعةٌ مدفوعةٌ سلفاً تُصبحُ مجّانيّة");
+  assert.deepStrictEqual(db._store.get("orders/o9").visit_accounting_pending,
+      FieldValue.delete(), "علمٌ يَبقى فتَقرؤه المكنسةُ للأبد");
+});
+
+tAsync("(د٤) والخصمُ مرّتَين ممتنع — `visit_counted` طازجٌ داخلَ المعامَلة",
+    async () => {
+      const db = fakeDb({
+        "orders/o9": {code: "S9", status: "completed", visit_counted: true},
+      });
+      const r = await rewards.settleVisitAccounting(db, {
+        orderRef: db._ref("orders/o9"), orderId: "o9", clientId: "c1",
+        status: "completed", code: "S9",
+      }, async () => null);
+      assert.strictEqual(r.skipped, "already_counted");
+      assert.strictEqual(db._store.get("users/c1"), undefined);
+    });
+
+tAsync("(د٥) حالةٌ تَحرّكت بعد الفشل ⇒ لا تسويةَ، والعلمُ يُمحى", async () => {
+  // المكنسةُ تُمرّرُ الحالةَ **الراهنة**: طلبٌ فشلَ خصمُه ثم أُعيد إلى
+  // `in_progress` لا يُسوّى، ولا يَبقى في مجموعةِ المكنسةِ للأبد.
+  const db = fakeDb({
+    "orders/o9": {
+      code: "S9", status: "in_progress", visit_accounting_pending: true,
+    },
+  });
+  const r = await rewards.settleVisitAccounting(db, {
+    orderRef: db._ref("orders/o9"), orderId: "o9", clientId: "c1",
+    status: "in_progress", code: "S9",
+  }, async () => null);
+  assert.strictEqual(r.skipped, "not_terminal");
+  assert.deepStrictEqual(db._store.get("orders/o9").visit_accounting_pending,
+      FieldValue.delete());
+});
+
+tAsync("(د٦) الفشل: العلمُ والسببُ، ويُصعَّدُ مرّةً لا مرّتَين", async () => {
+  const db = fakeDb({"orders/o9": {code: "S9", status: "completed"}});
+  db.runTransaction = async () => {
+    throw new Error("deadline exceeded");
+  };
+  const pushes = [];
+  const r = await rewards.settleVisitAccounting(db, {
+    orderRef: db._ref("orders/o9"), orderId: "o9", clientId: "c1",
+    status: "completed", code: "S9",
+  }, async (...a) => pushes.push(a));
+  assert.strictEqual(r.settled, false);
+  assert.strictEqual(r.failed, "deadline exceeded");
+  const o = db._store.get("orders/o9");
+  assert.strictEqual(o.visit_accounting_pending, true,
+      "بلا العلمِ لا تَراه المكنسةُ أبداً — وهو العطلُ بعينِه");
+  assert.strictEqual(o.visit_accounting_failed_reason, "deadline exceeded");
+  assert.strictEqual(o.visit_accounting_alerted, true);
+  assert.strictEqual(pushes.length, 1);
+  assert.strictEqual(pushes[0][0], "ADMIN_BROADCAST");
+  assert.deepStrictEqual(pushes[0][5], ["super_admin", "accountant_admin"]);
+
+  // ومحاولةٌ ثانيةٌ فاشلةٌ لا تُصعِّدُ مرّةً أخرى
+  const again = await rewards.settleVisitAccounting(db, {
+    orderRef: db._ref("orders/o9"), orderId: "o9", clientId: "c1",
+    status: "completed", code: "S9", alreadyAlerted: true,
+  }, async (...a) => pushes.push(a));
+  assert.strictEqual(again.failed, "deadline exceeded");
+  assert.strictEqual(pushes.length, 1, "تصعيدٌ مكرَّرٌ لكلِّ دورةِ مكنسة");
+});
+
 // ── حُرّاسُ المصدر ────────────────────────────────────────────────────────
 const ROOT = path.join(__dirname, "..");
 const idxRaw = fs.readFileSync(path.join(ROOT, "index.js"), "utf8");
@@ -249,35 +365,59 @@ function codeOf(src) {
 }
 const idx = codeOf(idxRaw);
 
-t("(ج١) index.js لا يَحملُ المعامَلتَين إنلاين، والنداءانِ يَمرّانِ بالوحدة", () => {
+t("(ج١) index.js لا يَحملُ المعامَلاتِ إنلاين، والنداءاتُ تَمرُّ بالوحدة", () => {
   assert.ok(!/transactions"\)\s*\.doc\(`qatrat_\$\{orderId\}`\)/.test(idx),
       "بناءُ معامَلةِ قطرات عادَ إلى index.js");
   assert.ok(!idx.includes("[coupon] use-count failed for order"),
       "`catch` عدِّ الكوبونِ الصامتُ عادَ");
   assert.ok(!idx.includes("[rewards] qatrat txn failed"),
       "`catch` قطراتِ الصامتُ عادَ");
-  assert.ok(idx.includes("rewards.grantQatratPoints(db, {"));
-  assert.ok(idx.includes("rewards.countCouponUse(db, {"));
-  // والمضادّة: الاسمانِ ما زالا في الخامِّ (التعليقُ الشارحُ للنقل).
+  // الموضعُ الثالث (2026-10-05): تسويةُ رصيدِ زياراتِ الاشتراك.
+  assert.ok(!idx.includes("[linked] visit accounting failed for"),
+      "`catch` تسويةِ الزياراتِ الصامتُ عادَ — خصمٌ فاشلٌ يَترُكُ زيارةً " +
+    "مدفوعةً للعميلةِ بعد استهلاكِها، وردٌّ فاشلٌ يُفقدُها واحدةً تَستحقُّها");
+  assert.ok(!/t\.set\(userRef, \{\s*visits_remaining: FieldValue/.test(idx),
+      "بناءُ معامَلةِ الزياراتِ عادَ إلى index.js");
+  // والنداءاتُ الثلاثةُ قائمة
+  for (const call of [
+    "rewards.grantQatratPoints(db, {",
+    "rewards.countCouponUse(db, {",
+    "rewards.settleVisitAccounting(db, {",
+  ]) {
+    assert.ok(idx.includes(call), `النداءُ غائب: ${call}`);
+  }
+  // والمضادّة: الأسماءُ ما زالت في الخامِّ (التعليقُ الشارحُ للنقل).
   assert.ok(idxRaw.includes("grantQatratPoints"));
   assert.ok(idxRaw.includes("qatrat txn failed"),
       "اختفى اقتباسُ السطرِ القديمِ من التوثيق — راجِعْ ما جرّده الفحص");
+  assert.ok(idxRaw.includes("visits_remaining"),
+      "الحقلُ اختفى من index.js كلِّه — راجِعْ المكنسةَ والنقل");
 });
 
 t("(ج٢) والمكنسةُ تَستعلمُ **العلمَ** لا الحالة — وهو جوهرُ العلاج", () => {
   // لو استُعلِمَت الحالةُ لازدحمت النافذةُ بما نُجِح، فلا يَبلغُها الفاشل.
-  assert.ok(idx.includes(".where(rewards.PENDING_FLAGS.qatrat, \"==\", true)"),
-      "استعلامُ قطرات ليس على علمِ الفشل");
-  assert.ok(idx.includes(".where(rewards.PENDING_FLAGS.couponCount, \"==\", true)"),
-      "استعلامُ عدِّ الكوبونِ ليس على علمِ الفشل");
-  assert.ok(/qatrat retried=/.test(idx), "مكنسةُ قطرات غائبة");
-  assert.ok(/coupon-count retried=/.test(idx), "مكنسةُ عدِّ الكوبونِ غائبة");
+  // ومجموعةُ الأعلامِ **مُشتَقّةٌ من الوحدةِ نفسِها**، فعلَمٌ رابعٌ بلا
+  // مكنسةٍ يَسقطُ الفحصَ بدلَ أن يَمرّ.
+  const names = Object.keys(rewards.PENDING_FLAGS);
+  assert.ok(names.length >= 3,
+      `أعلامُ الوحدةِ ${names.length} — انهارَ التعدادُ فالفحصُ فارغ`);
+  for (const k of names) {
+    assert.ok(
+        idx.includes(`.where(rewards.PENDING_FLAGS.${k}, "==", true)`),
+        `استعلامُ المكنسةِ لـ${k} ليس على علمِ الفشل (أو غائب)`);
+  }
+  for (const line of [
+    /qatrat retried=/, /coupon-count retried=/, /visit-accounting retried=/,
+  ]) {
+    assert.ok(line.test(idx), `سطرُ سجلِّ المكنسةِ غائب: ${line}`);
+  }
 });
 
 t("(ج٣) والنجاحُ يَمحو العلمَ — موضعانِ لكلِّ علمٍ لا أقلّ", () => {
   // علمٌ لا يُمحى يَجعلُ المكنسةَ تَقرأُ المنجَزَ للأبد (نفسُ عطلِ النافذة).
   const mod = codeOf(modRaw);
-  for (const flag of ["PENDING_FLAGS.qatrat", "PENDING_FLAGS.couponCount"]) {
+  for (const k of Object.keys(rewards.PENDING_FLAGS)) {
+    const flag = `PENDING_FLAGS.${k}`;
     const sites = mod.split(`[${flag}]: FieldValue.delete()`).length - 1;
     assert.ok(sites >= 2,
         `${flag}: مواضعُ المحوِ ${sites} — يَلزمُ المعامَلةُ والتنظيفُ معاً`);
