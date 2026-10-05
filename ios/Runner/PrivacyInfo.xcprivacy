@@ -1,5 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  بيانُ الخصوصيّة. **كلُّ نوعٍ هنا له شاهدٌ مُسمًّى في الشفرة** (2026-10-05):
+  كان البيانُ يُعلِنُ ثلاثةَ أنواعٍ من تسعةٍ تُجمَع، ويَصفُ الموقعَ الدقيقَ
+  بأنّه «غيرُ مرتبطٍ بالهويّة» وهو مرتبط. ونقصُ الإعلانِ هو الخطأُ الأخطرُ من
+  الزيادةِ: مراجعةُ آبل تُقارِنُه بأجوبةِ «خصوصيّةُ التطبيق» في App Store
+  Connect.
+
+    Name              users.name، orders.client_name                 مرتبط
+    EmailAddress      users.email، orders.client_email                مرتبط
+    PhoneNumber       users.phone، orders.client_phone                مرتبط
+    UserID            client_id/driver_id على كلِّ مستند              مرتبط
+    PurchaseHistory   orders/store_orders بمبالغِها وعناصرِها         مرتبط
+    PreciseLocation   delivery_location / driver_location على الطلب   مرتبط
+    DeviceID          fcm_tokens/{uid}.fcmToken + platform            مرتبط
+    PaymentInfo       حزمةُ `moyasar` تَعرضُ نموذجَ البطاقةِ داخلَ
+                      التطبيقِ وتُرسِلُه إلى ميسر — لا نَحفظُه نحن      غيرُ مرتبط
+    CoarseLocation    `firebase_analytics` (موقعٌ تقريبيٌّ من الـIP)   غيرُ مرتبط
+    ProductInteraction  الجمعُ التلقائيُّ للـSDK (مشاهداتُ الشاشات)    غيرُ مرتبط
+    OtherUsageData      الجمعُ التلقائيُّ (first_open، session_start)  غيرُ مرتبط
+    CrashData         Crashlytics — ولا `setUserIdentifier` في
+                      المستودعِ كلِّه، فعدمُ الارتباطِ صحيحٌ            غيرُ مرتبط
+
+  الأربعةُ الأخيرةُ من `firebase_analytics`: الـSDK يُهيّئُ نفسَه مع
+  `Firebase.initializeApp` ويَجمعُ **بلا سطرِ شفرةٍ واحد** — فحذفُ آخرِ نداءٍ
+  لنا (`logEvent`، كان ميّتاً) لا يُوقِفُ الجمع. ولا تَتبُّعَ (`NSPrivacyTracking
+  = false`): لا IDFA ولا شبكةَ إعلانات، و`NSPrivacyTrackingDomains` فارغة.
+
+  يَشدُّ المطابقةَ `test/privacy_manifest_test.dart`. و**أجوبةُ App Store
+  Connect ونموذجُ «أمان البيانات» في Play عملُ المالكِ** — لا يُولَّدانِ من
+  هذا الملفّ.
+-->
 <plist version="1.0">
 <dict>
 	<key>NSPrivacyTracking</key>
@@ -12,7 +43,7 @@
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypePreciseLocation</string>
 			<key>NSPrivacyCollectedDataTypeLinked</key>
-			<false/>
+			<true/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>
 			<false/>
 			<key>NSPrivacyCollectedDataTypePurposes</key>
@@ -42,6 +73,114 @@
 			<key>NSPrivacyCollectedDataTypePurposes</key>
 			<array>
 				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePhoneNumber</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeUserID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePurchaseHistory</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePaymentInfo</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeDeviceID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeCoarseLocation</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeProductInteraction</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeOtherUsageData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
 			</array>
 		</dict>
 	</array>
