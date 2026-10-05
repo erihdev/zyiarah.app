@@ -19,6 +19,7 @@ const {countBookings, zoneDailyCap} = require("./capacity");
 const {grossFromBaseRounded, grossFromBase} = require("./vat");
 const {parseKsaIso, riyadhBookingFields, riyadhLocalDate, riyadhLocalSlot,
   riyadhStamp} = require("./ksa_time");
+const coupons = require("./coupons");
 const {isAssignableDriver, assignabilityProblem, chunk, GET_ALL_CHUNK} =
   require("./drivers");
 const moyasar = require("./moyasar_api");
@@ -2020,9 +2021,10 @@ exports.countCouponUseOnOrderCreate = onDocumentUpdated({document: "orders/{orde
         await db.runTransaction(async (t) => {
           const oSnap = await t.get(orderRef);
           if (oSnap.get("coupon_counted") === true) return; // already counted
-          // نعلّم تجاوز الحدّ (maxUses) عند الاستهلاك: TOCTOU يسمح لطلبين متزامنين بتجاوز
-          // الحدّ (الخصم طُبِّق عميلياً سلفاً فلا يُلغى هنا). العلَم للمراجعة الإدارية —
-          // والمنع النهائي جزء من التسعير الخادمي (طور التشديد Phase 2).
+          // نعلّم تجاوز الحدّ (maxUses) عند الاستهلاك: TOCTOU يسمح لطلبين متزامنين
+          // بتجاوز الحدّ، والعلَم للمراجعة الإدارية. والمنعُ صار فعليّاً في
+          // التسعير الخادمي (coupons.couponProblem ⇒ "exhausted" فيُلغى الخصم
+          // ويُسَم coupon_rejected_reason) — وكان هذا التعليق يَعِد به قبل وجوده.
           const pSnap = await t.get(promoRef);
           const uses = Number(pSnap.get("uses") || 0);
           const maxUses = Number(pSnap.get("maxUses") || 0);
@@ -2245,27 +2247,44 @@ async function _readSurgeFactor(db) {
 // (#1) الخصم **الموثوق** — يُعاد حسابه من مستند الكوبون (promo_codes)، لا من حقل
 // discount_amount الذي يكتبه العميل (وإلّا ضخّمه فألغى الإنفاذ). نأخذ الأصغر بين خصم
 // العميل والخصم الخادمي: لا يستطيع تجاوز القيمة الخادمية، ونحترم خصمه الأقل.
-async function _computeTrustedDiscount(db, od, expectedGross, surge) {
+//
+// والأهليّة في coupons.js لا هنا: كانت هذه الدالّة تُجيب **المقدار** وتُغفل
+// **مَن ومِن أين وكم مرّة** (target_user_id / restricted_zones / maxUses)،
+// فيثق الخادم بالعميل في الأهليّة وحدها — وهو عين ما وُجدت الدالّة لتمنعه.
+// وترفع {orderRef, orderId} كي يُسَم سببُ الرفض: رفضُ خصمٍ 10% يُنتج ratio=0.9
+// فلا يبلغ عتبة الوسم (0.5) — إنفاذٌ بلا وسمٍ تجميليّ.
+async function _computeTrustedDiscount(db, od, expectedGross, surge,
+    {orderRef = null, orderId = null} = {}) {
   const code = (od.coupon_code || "").toString().trim();
   if (!code) return 0;
   try {
     const q = await db.collection("promo_codes")
         .where("code", "==", code.toUpperCase()).limit(1).get();
-    if (q.empty) return 0; // لا كوبون خادمي → لا خصم موثوق (الطلب يدّعي خصماً وهميّاً)
-    const c = q.docs[0].data();
-    if (c.status && c.status !== "active") return 0;
-    if (c.expiry && typeof c.expiry.toMillis === "function" &&
-        c.expiry.toMillis() < Date.now()) return 0;
-    const value = Number(c.value) || 0;
-    let serverDiscount = c.type === "percentage" ?
-      expectedGross * surge * (value / 100) : value; // نسبة على المشحون المُذرَّى، أو ثابت
-    if (c.max_discount) {
-      serverDiscount = Math.min(serverDiscount, Number(c.max_discount) || serverDiscount);
+    const c = q.empty ? null : q.docs[0].data();
+    const problem = coupons.couponProblem(c, {
+      uid: od.client_id || od.userId || null,
+      zoneName: od.zone_name || null,
+    });
+    if (problem) {
+      console.warn(`[price-shadow] COUPON_REJECTED ${orderId || ""} ${code}: ${problem}`);
+      if (orderRef) {
+        await orderRef.update({
+          coupon_rejected: true,
+          coupon_rejected_reason: problem,
+        }).catch(() => {});
+      }
+      if (coupons.ESCALATED_PROBLEMS.has(problem)) {
+        await queuePush("ADMIN_BROADCAST", "كوبون غير مؤهَّل على طلب ⚠️",
+            `الطلب #${od.code || orderId || ""} استعمل الكود ${code} وهو ` +
+            `${problem === "other_user" ? "موجَّه لعميل آخر" : "مقيَّد بمنطقة أخرى"}` +
+            " — أُلغي الخصم خادميّاً، يُرجى المراجعة.",
+            "admin_coupon_review", {orderId: orderId || ""},
+            ["super_admin", "orders_manager", "accountant_admin"]).catch(() => {});
+      }
+      return 0;
     }
-    const clientDiscount = Number(od.discount_amount) || 0;
-    const trusted = clientDiscount > 0 ?
-      Math.min(clientDiscount, serverDiscount) : serverDiscount;
-    return Math.max(0, trusted);
+    return coupons.trustedDiscount(od.discount_amount,
+        coupons.couponDiscount(c, {chargedGross: expectedGross, surge}));
   } catch (e) {
     console.error("[price-shadow] discount recompute failed:", e.message);
     return 0;
@@ -2477,7 +2496,8 @@ exports.verifyMoyasarPayment = onCall(
               const surge = await _readSurgeFactor(db);
               const expected = grossFromBaseRounded(base, surge);
               const trustedDiscount =
-                  await _computeTrustedDiscount(db, od, grossFromBase(base), surge);
+                  await _computeTrustedDiscount(db, od, grossFromBase(base),
+                      surge, {orderRef, orderId});
               const expectedNet = Math.max(0, expected - trustedDiscount);
               // expectedNet<=0 مع دفعٍ موجب = مريب (خصم يفوق السعر) → Tier A، لا نفترض ratio=1.
               const suspiciousZero = expectedNet <= 0 && paid > 0;
