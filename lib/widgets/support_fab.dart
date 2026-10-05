@@ -42,8 +42,9 @@ class ZyiarahSupportFab extends StatelessWidget {
       }
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('تعذّر الاتصال بالدعم: $e'),
+      debugPrint('support_fab: $e');
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('تعذّر الاتصال بالدعم — حاولي مجدداً'),
         backgroundColor: Colors.red,
       ));
     }

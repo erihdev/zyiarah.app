@@ -1319,7 +1319,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             child: AlertDialog(
               title: const Text('تعذّر إتمام الطلب'),
               content: Text(
-                  'إن كنت قد دُفعت فلا تقلق — سيُعالَج طلبك تلقائياً أو تواصلي مع الدعم '
+                  'إن كان المبلغُ قد خُصم فلا تقلقي — سيُعالَج طلبك تلقائياً أو تواصلي مع الدعم '
                   'مع الرقم المرجعي: ${code.isNotEmpty ? code : id}. لن يُخصم منك مرتين.'),
               actions: [
                 TextButton(
@@ -1634,7 +1634,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             const Expanded(child: Divider()),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Text('أو ادفع بـ',
+              child: Text('أو ادفعي بـ',
                   style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 13)),
             ),
             const Expanded(child: Divider()),
@@ -1665,7 +1665,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             const Expanded(child: Divider()),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Text('أو ادفع بـ',
+              child: Text('أو ادفعي بـ',
                   style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 13)),
             ),
             const Expanded(child: Divider()),
@@ -1735,7 +1735,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                   const Expanded(child: Divider()),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Text('أو ادفع بـ',
+                    child: Text('أو ادفعي بـ',
                         style:
                             GoogleFonts.tajawal(color: Colors.grey, fontSize: 13)),
                   ),

@@ -154,7 +154,7 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
                 controller: _searchController,
                 onChanged: (v) => setState(() => _searchQuery = v.trim()),
                 decoration: InputDecoration(
-                  hintText: 'ابحث عن منتج...',
+                  hintText: 'ابحثي عن منتج...',
                   hintStyle: GoogleFonts.tajawal(color: Colors.grey[400]),
                   prefixIcon: const Icon(Icons.search, color: Colors.grey),
                   suffixIcon: _searchQuery.isNotEmpty

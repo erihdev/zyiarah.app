@@ -227,7 +227,7 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
       return;
     }
     if (totalAmount <= 0) {
-      _snack('أضف سيارة واحدة على الأقل');
+      _snack('أضيفي سيارة واحدة على الأقل');
       return;
     }
     if (_selectedSlot == null) {

@@ -58,6 +58,15 @@ const List<String> _screens = [
 /// **كلُّ** شاشة — القاعدةُ أدناه عامّة: لا قراءةَ Firestore بلا مهلة في أيٍّ
 /// منها. بُدئ بخمسٍ ثمّ وُسِّع إلى الـ٤١ كلِّها حين تبيّن أنّ العطل عامّ:
 /// ٤١ قراءةً بلا مهلة في ٢٠ ملفّاً.
+/// الحوارانِ اللذانِ تَفتحُهما العميلةُ من لوحتِها — نفسُ قاعدةِ الشاشات.
+/// (المسحُ على `widgets`/`utils`/`providers`/`models` وجدَ موضعَين فقط، كلاهما
+/// في وجهِ العميلة، فالنطاقُ كلُّ `lib/widgets/` بلا استثناء.)
+List<File> _allWidgets() => Directory('lib/widgets')
+    .listSync(recursive: true)
+    .whereType<File>()
+    .where((f) => f.path.endsWith('.dart'))
+    .toList();
+
 List<File> _allScreens() => Directory('lib/screens')
     .listSync(recursive: true)
     .whereType<File>()
@@ -256,8 +265,15 @@ void main() {
     // **والأدمنُ والسائقُ مُستثنيانِ بقصد:** النصُّ الخامُّ عندهما تشخيصٌ
     // مطلوب — `admin_order_details` يَعرضُ «خطأ غير متوقع: $e» عن عمدٍ،
     // و٦٢ موضعاً في شاشاتِ الإدارةِ على هذا النهج. إخفاؤه عنهم خسارةٌ لا ربح.
+    //
+    // **والنطاقُ وُسّع ثالثةً إلى `lib/widgets/` (2026-10-05).** كان
+    // `lib/screens/**` وحدَه، و`rating_dialog` و`support_fab` حوارانِ
+    // تَفتحُهما العميلةُ من لوحتِها — فكان أحدُهما يَعرضُ «تعذّر فتح
+    // الكاميرا — … من الإعدادات: $e» والآخرُ «تعذّر الاتصال بالدعم: $e».
+    // ومسحُ `widgets`+`utils`+`providers`+`models` وجدَ هذَين وحدَهما، فلا
+    // موضعَ إداريّاً هناك يَلزمُ استثناؤه.
     final offenders = <String>[];
-    for (final f in _allScreens()) {
+    for (final f in [..._allScreens(), ..._allWidgets()]) {
       final path = f.path.replaceAll('\\', '/');
       if (path.contains('/admin/')) continue;
       if (path.split('/').last.startsWith('driver_')) continue;

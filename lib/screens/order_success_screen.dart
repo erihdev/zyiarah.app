@@ -54,7 +54,7 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen>
       debugPrint('share invoice failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('تعذّرت مشاركة الفاتورة، جرّب زرّ التحميل',
+            content: Text('تعذّرت مشاركة الفاتورة، جرّبي زرّ التحميل',
                 style: GoogleFonts.tajawal()),
             backgroundColor: Colors.redAccent));
       }
