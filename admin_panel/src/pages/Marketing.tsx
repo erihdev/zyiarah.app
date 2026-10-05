@@ -16,6 +16,11 @@ interface PromoCode {
     status: string;
     expiry: string;
     createdAt?: { toDate: () => Date };
+    // يُقرأان للعرض: الحصرُ الجغرافيُّ يُنفّذه الخادم (`functions/coupons.js`)
+    // والظهورُ في العروضِ يَقرؤه التطبيق — فكوبونٌ محصورٌ كان يَظهرُ في هذا
+    // الجدولِ كأنّه عامٌّ، ولا شيءَ في الصفِّ يَقول غيرَ ذلك.
+    restricted_zones?: string[];
+    show_in_offers?: boolean;
 }
 
 export default function Marketing() {
@@ -36,6 +41,13 @@ export default function Marketing() {
     // تُغفله فلا يظهر كوبونُها في التطبيق أبداً، بلا ما يقول ذلك.
     const [newShowInOffers, setNewShowInOffers] = useState(true);
     const [newDescription, setNewDescription] = useState('');
+    // (مرآةُ admin_coupons_screen.dart) الحصرُ الجغرافيّ: أسماءُ المناطق من
+    // `service_zones.name` — وهي ما يُقارنه `functions/coupons.js` بمنطقةِ
+    // الطلب. فارغٌ = متاحٌ لكلِّ المناطق. كانت اللوحةُ تَكتب `[]` ثابتاً فلا
+    // سبيلَ لحصرِ كوبونٍ منها ولا لمعرفةِ أنّ كوبوناً محصور.
+    const [zones, setZones] = useState<string[]>([]);
+    const [zonesFailed, setZonesFailed] = useState(false);
+    const [newZones, setNewZones] = useState<string[]>([]);
 
     useEffect(() => {
         const unsubscribe = onSnapshot(collection(db, 'promo_codes'), (snapshot) => {
@@ -69,6 +81,23 @@ export default function Marketing() {
         return () => unsubscribe();
     }, []);
 
+    useEffect(() => {
+        let alive = true;
+        getDocs(collection(db, 'service_zones')).then((snap) => {
+            if (!alive) return;
+            setZones(snap.docs
+                .map((d) => String((d.data() as Record<string, unknown>).name ?? ''))
+                .filter((n) => n.trim() !== ''));
+        }).catch((err) => {
+            // فشلُ الجلبِ يُقال: قائمةٌ فارغةٌ بلا تفسيرٍ كانت تَقرأُ كـ«لا
+            // مناطقَ معرّفة» فيُحفَظُ الكوبونُ عامّاً بلا قصد. (نفسُ ما يفعله
+            // محرِّرُ Flutter.)
+            console.error('service_zones error:', err);
+            if (alive) setZonesFailed(true);
+        });
+        return () => { alive = false; };
+    }, []);
+
     const handleAddCoupon = async (e: React.FormEvent) => {
         e.preventDefault();
         // تحقّق: النسبة 1-100 والمبلغ موجب (كان يُقبل 500% أو سالب).
@@ -100,7 +129,7 @@ export default function Marketing() {
                 // وآخرُ لحظةٍ من اليومِ المختار لا أوّلُها: منتصفُ الليل يُميت
                 // الكوبونَ في بداية اليومِ المكتوبِ على بطاقته.
                 expiry: Timestamp.fromDate(endOfLocalDay(newExpiry)),
-                restricted_zones: [],
+                restricted_zones: newZones,
                 show_in_offers: newShowInOffers,
                 description: newDescription.trim(),
                 createdAt: serverTimestamp(),
@@ -114,6 +143,9 @@ export default function Marketing() {
             setNewExpiry('');
             setNewShowInOffers(true);
             setNewDescription('');
+            // بلا تصفيرٍ يَلتصقُ حصرُ المنطقةِ بالكوبونِ التالي — نفسُ عطلِ
+            // مفتاحِ «تشغيليّ» في شاشة الإشعارات.
+            setNewZones([]);
         } catch (error) {
             console.error("Error adding promo code: ", error);
             toast.error("حدث خطأ أثناء إضافة الكوبون.");
@@ -221,6 +253,22 @@ export default function Marketing() {
                                         <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg border border-slate-200">
                                             <Tag size={14} className="text-slate-400" />
                                             <span className="font-mono font-bold text-slate-700 tracking-wider text-sm">{coupon.code}</span>
+                                            {/* الحصرُ والخفاءُ قرارانِ يُنفَّذانِ فعلاً (الخادمُ والتطبيق)
+                                                وكان الصفُّ لا يَقولُ عنهما شيئاً — فكوبونُ منطقةٍ
+                                                يَقرأُ كأنّه عامّ، وكودُ قناةٍ خاصّةٍ كأنّه معروض. */}
+                                            {Array.isArray(coupon.restricted_zones) && coupon.restricted_zones.length > 0 && (
+                                                <span
+                                                    title={coupon.restricted_zones.join('، ')}
+                                                    className="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-extrabold"
+                                                >
+                                                    {`محصور: ${coupon.restricted_zones.length} منطقة`}
+                                                </span>
+                                            )}
+                                            {coupon.show_in_offers === false && (
+                                                <span className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-extrabold">
+                                                    لا يظهر في العروض
+                                                </span>
+                                            )}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 font-extrabold text-rose-600">
@@ -387,6 +435,41 @@ export default function Marketing() {
                                     </span>
                                 </span>
                             </label>
+
+                            <div className="space-y-2">
+                                <label className="block text-sm font-bold text-slate-700">
+                                    المناطق
+                                    <span className="block text-xs font-normal text-slate-500">
+                                        {newZones.length === 0
+                                            ? 'متاح لكل المناطق — اختر مناطق لحصره بها.'
+                                            : `محصور لـ ${newZones.length} منطقة`}
+                                    </span>
+                                </label>
+                                {zonesFailed ? (
+                                    <p className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-xl px-4 py-3">
+                                        تعذّر تحميل المناطق — سيُحفظ الكوبون متاحاً لكل المناطق.
+                                    </p>
+                                ) : zones.length === 0 ? (
+                                    <p className="text-xs font-bold text-slate-400 px-1">جارٍ تحميل المناطق…</p>
+                                ) : (
+                                    <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
+                                        {zones.map((z) => (
+                                            <label key={z} className="flex items-center gap-3 px-4 py-2.5 cursor-pointer select-none hover:bg-slate-50">
+                                                <input
+                                                    type="checkbox"
+                                                    aria-label={`حصر على ${z}`}
+                                                    checked={newZones.includes(z)}
+                                                    onChange={(e) => setNewZones((prev) => e.target.checked
+                                                        ? [...prev, z]
+                                                        : prev.filter((x) => x !== z))}
+                                                    className="w-4 h-4 accent-rose-500 cursor-pointer"
+                                                />
+                                                <span className="text-sm font-bold text-slate-700">{z}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
 
                             <div className="pt-4 border-t border-slate-100 flex gap-3">
                                 <button
