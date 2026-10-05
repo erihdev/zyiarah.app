@@ -733,10 +733,21 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
       final String finalOrderId = _pendingOrderId;
 
-      if (_selectedPaymentMethod == 'subscription') {
-        await _processUnifiedSuccess(finalOrderId, 'subscription', isFree: true);
-
-      } else if (_selectedPaymentMethod == 'wallet') {
+      // (مُزال) كان هنا فرعُ `'subscription'` يُنشئ طلباً مجّانيّاً
+      // (`isFree: true`) — و`_selectedPaymentMethod` **لا يُضبَط إليه من أيّ
+      // موضع**: الخيارات المعروضة هي card/tamara/stc_pay/wallet فقط، وApple/
+      // Google Pay تُنادي `_processUnifiedSuccess` بأنفسها. فكان ميتاً.
+      //
+      // ولو وُصل يوماً لكان عطلاً صامتاً: الطلبُ يُنشَأ `is_paid: false` ولا
+      // شيءَ يَقلبُه، و**الإسنادُ مشروطٌ بانقلابِ `is_paid`** في
+      // `onOrderWritten` — فلا سائق، ولا عدٌّ في `capacity.js` (تَشترط
+      // `is_paid === true`)، ولا تذكيرٌ للعميلة، ثمّ يُلغيه
+      // `cancelStaleUnpaidOrders` بعد ثلاثين دقيقةً بـ`unpaid_expired`.
+      //
+      // وزياراتُ الاشتراكِ الحقيقيّةُ لا تَمرُّ هنا أصلاً: `activateContractOnPaid`
+      // يُولّدها خادميّاً `is_paid: true` عند تفعيل العقد، فتُسنَد وتُعدّ
+      // وتُذكَّر كأيِّ طلبٍ مدفوع.
+      if (_selectedPaymentMethod == 'wallet') {
         // --- Wallet Payment: Atomic balance deduction ---
         // رصيد غير مجلوب (فشل الجلب) ≠ رصيد صفري: لا نتهم العميل بأن «رصيدك
         // 0.00» من قيمة لم تُجلب أصلاً — نعيد الجلب فعلياً ونطلب المحاولة.
@@ -770,7 +781,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         // الخصم من المحفظة يتم خادمياً داخل _processUnifiedSuccess عبر
         // payWithWallet(orderId) بعد إنشاء الطلب — ذرّياً مع قلب is_paid على الطلب،
         // فلا يمكن تزوير is_paid ولا الخصم من العميل.
-        await _processUnifiedSuccess(finalOrderId, 'wallet', isFree: false);
+        await _processUnifiedSuccess(finalOrderId, 'wallet');
 
       } else if (_selectedPaymentMethod == 'tamara') {
         // تمارا تتطلّب وجود الطلب مسبقاً كي يجلب الخادم المبلغ الحقيقي (منع التلاعب)
@@ -1000,8 +1011,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   /// Unified Success Handler
-  Future<void> _processUnifiedSuccess(String id, String method, {bool isFree = false, String? paymentId}) async {
-    final double amountToSave = isFree ? 0.0 : totalWithVat;
+  /// (`isFree` أُزيل) كان الفرعُ الميتُ الوحيدُ الذي يُمرّره `true` هو
+  /// `'subscription'` — فكان المعاملُ `false` دائماً وفرعاهُ غيرَ قابلَين
+  /// للوصول. الحذفُ يُبقي السلوكَ حرفيّاً كما هو لكلِّ مسارٍ حيّ.
+  Future<void> _processUnifiedSuccess(String id, String method, {String? paymentId}) async {
+    final double amountToSave = totalWithVat;
     // code is generated per-branch below; maintenance uses id, contract uses contractId,
     // regular order generates atomically inside the transaction
     String code = '';
@@ -1010,7 +1024,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     // (0) تأكيد خادمي فوري: verifyMoyasarPayment يُنشئ الطلب من metadata إن غاب ويقلب
     // is_paid — فوري وموثوق، لا يعتمد على كتابة العميل (تفشل مع Apple Pay بعد تعليق
     // الخلفية على iOS). بهذا يظهر الطلب مؤكّداً لحظةَ نجاح الدفع دون انتظار المُصالِح الدوري.
-    if (!isFree && paymentId != null && method != 'wallet') {
+    if (paymentId != null && method != 'wallet') {
       try {
         final vres = await FirebaseFunctions.instance
             .httpsCallable('verifyMoyasarPayment').call({
@@ -1122,33 +1136,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
     // 1b. تأكيد الدفع خادمياً → يقلب is_paid على الطلب المُنشأ للتوّ (أنشأه العميل
     // is_paid=false). هذا ما يُغلق سكّ المحفظة: لا يمكن تزوير is_paid من العميل.
-    // يُتخطّى للعقد (لا مستند order) وللنقد والاشتراك المجاني.
-    if (!isFree) {
-      if (widget.contractId != null) {
-        // اشتراك: نقلب is_paid على العقد خادميّاً → يُفعّله activateContractOnPaid
-        // (status='active' + منح الزيارات + توليدها). تمارا تقلبه عبر webhook.
-        if (method == 'wallet') {
-          await FirebaseFunctions.instance.httpsCallable('payContractWithWallet').call({
-            'contractId': widget.contractId,
-          }).timeout(kNetCallTimeout);
-          if (mounted && _walletBalance != null) {
-            setState(() => _walletBalance = _walletBalance! - amountToSave);
-          }
-        } else if (paymentId != null) {
-          try {
-            await FirebaseFunctions.instance.httpsCallable('verifyMoyasarPayment').call({
-              'paymentId': paymentId,
-              'orderId': widget.contractId,
-            }).timeout(kNetCallTimeout);
-          } catch (e, st) {
-            reportSilent(e, st, reason: 'verify_contract_failed');
-          }
-        }
-      } else if (method == 'wallet') {
-        await FirebaseFunctions.instance.httpsCallable('payWithWallet').call({
-          'amount': amountToSave,
-          'orderId': id,
-          'description': 'دفع خدمة: ${widget.serviceName}',
+    if (widget.contractId != null) {
+      // اشتراك: نقلب is_paid على العقد خادميّاً → يُفعّله activateContractOnPaid
+      // (status='active' + منح الزيارات + توليدها). تمارا تقلبه عبر webhook.
+      if (method == 'wallet') {
+        await FirebaseFunctions.instance.httpsCallable('payContractWithWallet').call({
+          'contractId': widget.contractId,
         }).timeout(kNetCallTimeout);
         if (mounted && _walletBalance != null) {
           setState(() => _walletBalance = _walletBalance! - amountToSave);
@@ -1157,12 +1150,30 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         try {
           await FirebaseFunctions.instance.httpsCallable('verifyMoyasarPayment').call({
             'paymentId': paymentId,
-            'orderId': id,
+            'orderId': widget.contractId,
           }).timeout(kNetCallTimeout);
         } catch (e, st) {
-          // الـ webhook يؤكّد خادمياً حتى لو فشل هذا النداء — فلا نرمي.
-          reportSilent(e, st, reason: 'verify_moyasar_failed');
+          reportSilent(e, st, reason: 'verify_contract_failed');
         }
+      }
+    } else if (method == 'wallet') {
+      await FirebaseFunctions.instance.httpsCallable('payWithWallet').call({
+        'amount': amountToSave,
+        'orderId': id,
+        'description': 'دفع خدمة: ${widget.serviceName}',
+      }).timeout(kNetCallTimeout);
+      if (mounted && _walletBalance != null) {
+        setState(() => _walletBalance = _walletBalance! - amountToSave);
+      }
+    } else if (paymentId != null) {
+      try {
+        await FirebaseFunctions.instance.httpsCallable('verifyMoyasarPayment').call({
+          'paymentId': paymentId,
+          'orderId': id,
+        }).timeout(kNetCallTimeout);
+      } catch (e, st) {
+        // الـ webhook يؤكّد خادمياً حتى لو فشل هذا النداء — فلا نرمي.
+        reportSilent(e, st, reason: 'verify_moyasar_failed');
       }
     }
 
