@@ -207,20 +207,40 @@ void main() {
     final server = read('functions/coupons.js');
     final serverCode = stripLineComments(server);
 
-    test('العميلُ يَفحصُ الخمسةَ (ولا يُحذَف أحدُها بحجّةِ أنّ الخادمَ يَكفي)',
-        () {
-      final i = client.indexOf('Future<Map<String, dynamic>?> validateCoupon');
-      expect(i, greaterThan(0));
+    test('العميلُ يَسألُ القاعدةَ الواحدةَ ولا يَحملُ نسخةً منها', () {
+      // **كان هذا الفحصُ يُثبّتُ نسخةَ العميلِ المكتوبةَ بيد** («ولا يُحذَف
+      // أحدُها بحجّةِ أنّ الخادمَ يَكفي») — وهو حقٌّ في وقتِه: حذفُ الفحصِ
+      // العميليِّ بلا بديلٍ يَعني تطبيقَ كوبونٍ سيَرفضه الخادمُ بصمت.
+      //
+      // والقرارُ المحروسُ قائم — «لا يُطبَّقُ كوبونٌ مرفوض» — لكنّ النسخةَ
+      // زالت: `validateCoupon` تُنادي `validateCouponCode` التي تُنادي
+      // `couponProblem` نفسَها. فالتثبيتُ انتقلَ من **النسخةِ** إلى
+      // **النداءِ**، وهو أشدّ: النسختانِ كانتا **مختلفتَين** فعلاً
+      // (مُرشِّحُ `status` العميليُّ يَحجبُ مستنداً بلا حالة، والخادمُ
+      // يَقبلُه)، وهذا الفحصُ كان يَمرُّ أخضرَ على ذلك الافتراق.
+      final i = client.indexOf('Future<CouponValidation> validateCoupon');
+      expect(i, greaterThan(0), reason: 'توقيعُ الدالّةِ تغيّر — راجِعْ');
       final body = client.substring(i, client.indexOf('\n  }\n', i));
-      for (final rule in [
+      expect(body, contains("httpsCallable('validateCouponCode')"),
+          reason: 'العميلُ لم يَعد يَسألُ الخادم');
+      expect(body, contains('CouponValidation.rejected('),
+          reason: 'سببُ الرفضِ يَجبُ أن يَصلَ الشاشة');
+      // ولا نسخةَ ثانيةً باقيةً: لا استعلامَ للمجموعةِ ولا فحصَ حقلٍ.
+      final clientCode = stripLineComments(client);
+      for (final gone in [
         "'status', isEqualTo: 'active'",
         "data['expiry']",
         'maxUses > 0 && uses >= maxUses',
         "data['target_user_id']",
         "data['restricted_zones']",
       ]) {
-        expect(body, contains(rule), reason: 'العميلُ لم يَعد يَفحص: $rule');
+        expect(clientCode.contains(gone), isFalse,
+            reason: 'عادت نسخةُ العميلِ: $gone');
       }
+      // والشاشةُ تَمنعُ التطبيقَ على الرفض — وهو القرارُ الأصليُّ المحروس.
+      final pay = stripLineComments(read('lib/screens/payment_summary_screen.dart'));
+      expect(pay, contains('if (result.ok) {'));
+      expect(pay, contains('_appliedCoupon = null;'));
     });
 
     test('الخادمُ يَفحصُ الخمسةَ نفسَها — وثلاثةٌ منها كانت مُغفَلة', () {

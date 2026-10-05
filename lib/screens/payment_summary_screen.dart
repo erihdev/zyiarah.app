@@ -37,6 +37,7 @@ import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/error_report.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/invoice_stamp.dart';
+import 'package:zyiarah/utils/price_review.dart';
 
 
 
@@ -482,9 +483,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     if (_couponController.text.isEmpty) return;
     setState(() => _isValidatingCoupon = true);
 
-    final Map<String, dynamic>? couponData;
+    final CouponValidation result;
     try {
-      couponData = await _orderService.validateCoupon(
+      result = await _orderService.validateCoupon(
         _couponController.text,
         currentUserZone: widget.zoneName,
       );
@@ -505,7 +506,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     if (mounted) {
       setState(() {
         _isValidatingCoupon = false;
-        if (couponData != null) {
+        if (result.ok) {
+          final couponData = result.coupon!;
           _appliedCoupon = _couponController.text.toUpperCase();
           double value = ((couponData['value'] as num?) ?? 0).toDouble();
           if (couponData['type'] == 'percentage') {
@@ -517,6 +519,17 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             _couponPercent = null;
             _discountAmount = value;
           }
+          // **سقفُ `max_discount` يُطبَّق.** `couponDiscount` الخادميّةُ
+          // تُطبّقه وهذه الشاشةُ كانت تَتجاهله، فتَعرضُ خصماً أكبرَ مما
+          // يَمنحه الخادم؛ ثمّ `trustedDiscount` تَأخذُ الأصغرَ فيَصيرُ
+          // `discount_amount` المكتوبُ على الطلبِ أكبرَ من المحسوبِ
+          // ويَنخفضُ `ratio` في تحقّقِ السعر. كامنٌ لا حيّ: لا محرّرَ
+          // يَكتبُ الحقلَ في المستودعِ كلِّه.
+          final cap = (couponData['max_discount'] as num?)?.toDouble();
+          if (cap != null && cap > 0 && _discountAmount > cap) {
+            _discountAmount = cap;
+            _couponPercent = null;
+          }
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("تم تطبيق الكود بنجاح"), backgroundColor: Colors.green),
           );
@@ -524,9 +537,13 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           _appliedCoupon = null;
           _couponPercent = null;
           _discountAmount = 0.0;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("كود الخصم غير صحيح أو منتهي"), backgroundColor: Colors.red),
-          );
+          // **السببُ يُقال.** كانت الرسالةُ واحدةً لكلِّ رفض («غير صحيح أو
+          // منتهي») بينما الخادمُ يُعيدُ أحدَ ستّةِ أسباب — فعميلةٌ كوبونُها
+          // محصورٌ بمنطقةٍ أخرى تَقرأُ أنّ كودَها خاطئ.
+          final why = kCouponRejectReasons[result.reason] ??
+              'كود الخصم غير صحيح أو منتهي';
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(why), backgroundColor: Colors.red));
         }
         // تغيّر الإجمالي (تطبيق/إبطال كوبون) بعد إنشاء مستند الطلب في محاولة
         // سابقة: مبلغ المستند مجمّد على القديم والقواعد تمنع تحديثه من العميل —
