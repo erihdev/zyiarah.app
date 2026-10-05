@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/utils/order_lifecycle.dart';
+import 'package:zyiarah/utils/time_format.dart';
 
 /// مهمّة سائق كما تُقرأ من وثيقة الطلب لجدول المناوبات.
 ///
@@ -70,9 +71,10 @@ class DriverTask {
       h = when.hour;
       min = when.minute;
     }
-    final h12 = h % 12 == 0 ? 12 : h % 12;
-    final period = h < 12 ? 'ص' : 'م';
-    return '${h12.toString().padLeft(2, '0')}:${(min ?? 0).toString().padLeft(2, '0')} $period';
+    // التحليلُ أعلاه خاصٌّ بهذه البطاقة (خانةٌ قد تَحمِلُ «م»، و«غير محدد»)،
+    // أمّا التحويلُ فواحدٌ للمشروعِ كلِّه — كانت هذه النسخةَ السابعةَ منه.
+    // `padHour` يُبقي «09:30 ص» كما كانت: الوحدةُ حافظةٌ للسلوك.
+    return formatClock12(h, min ?? 0, padHour: true);
   }
 }
 

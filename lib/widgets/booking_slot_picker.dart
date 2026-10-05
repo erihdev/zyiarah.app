@@ -297,7 +297,6 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
 
   Widget _dateStrip() {
     final now = DateTime.now();
-    const dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
     return SizedBox(
       height: 82,
       child: ListView.builder(
@@ -370,7 +369,7 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    dayNames[date.weekday % 7],
+                    arabicWeekday(date),
                     style: GoogleFonts.tajawal(fontSize: 11, color: dayColor),
                   ),
                   const SizedBox(height: 2),

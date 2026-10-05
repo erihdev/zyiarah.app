@@ -312,6 +312,17 @@ class _ZyiarahSubscriptionPlansScreenState
   /// (2c) إضافة الزيارة المختارة (تاريخ + وقت) للجدول.
   /// التقويم نفسه يحجب الخانات الحمراء (غير المتاحة)؛ وزيارات الاشتراك المستقبلية
   /// يُسنَد لها السائق لاحقاً عند التوليد/الاعتماد، فلا حاجة لفحص شبكي إضافي هنا.
+  /// تسميةُ الزيارةِ المضافةِ بصياغةِ ما اختارتْه العميلةُ لا بصياغةِ التخزين:
+  /// شريطُ الأيّامِ يَعرضُ «الأحد 12/10» ومُنتقي الساعةِ «3:00 م»، فالرقاقةُ
+  /// تُطابقُهما. والتاريخُ مكتوبٌ `yyyy-MM-dd` بأيدينا فالتحليلُ آمن؛ وإن
+  /// تعذّرَ يُعادُ خامّاً لا يُخفى.
+  String _visitLabel(Map<String, String> v) {
+    final slot = formatSlot12(v['slot']);
+    final d = DateTime.tryParse(v['date'] ?? '');
+    if (d == null) return '${v['date']} • $slot';
+    return '${arabicWeekday(d)} ${d.day}/${d.month} • $slot';
+  }
+
   void _addVisit(int planVisits) {
     if (_selectedStartHour == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -707,7 +718,10 @@ class _ZyiarahSubscriptionPlansScreenState
                 final v = _scheduledVisits[i];
                 return Chip(
                   backgroundColor: const Color(0xFFF1E9FE),
-                  label: Text('زيارة ${i + 1}: ${v['date']} • ${v['slot']}',
+                  // كانت تَعرضُ المخزَّنَ خامّاً — «2026-10-12 • 15:00» — تحتَ
+                  // شريطٍ تَقرأُ فيه «الأحد 12/10» ومُنتقي ساعةٍ يَقولُ
+                  // «3:00 م». الرقاقةُ تُؤكّدُ ما اختارتْه، فتُطابقُ صياغتَه.
+                  label: Text('زيارة ${i + 1}: ${_visitLabel(v)}',
                       style: GoogleFonts.tajawal(fontSize: 12, color: _brand)),
                   deleteIcon: const Icon(Icons.close, size: 16),
                   onDeleted: () => setState(() => _scheduledVisits.removeAt(i)),
@@ -843,7 +857,6 @@ class _ZyiarahSubscriptionPlansScreenState
         ),
       );
     }
-    const dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
     final now = DateTime.now();
     return SizedBox(
       height: 82,
@@ -904,7 +917,7 @@ class _ZyiarahSubscriptionPlansScreenState
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    dayNames[date.weekday % 7],
+                    arabicWeekday(date),
                     style: TextStyle(
                       fontSize: 9, 
                       color: isSelected 

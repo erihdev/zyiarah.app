@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:zyiarah/utils/time_format.dart';
 
 /// مراحل تنفيذ الزيارة في شاشة التتبّع (تصميم Stitch «Live Dispatch Tracker»،
 /// 2026-09-16): خمس مراحل تبدأ بـ«تم استلام وتأكيد الطلب» (كانت الأولى «تم
@@ -58,10 +59,10 @@ class TrackingSteps {
   /// «الساعة 02:15 م» لليوم نفسه، وبالتاريخ لغيره.
   static String timeLabel(DateTime t, {DateTime? now}) {
     final n = now ?? DateTime.now();
-    final h12 = t.hour % 12 == 0 ? 12 : t.hour % 12;
-    final period = t.hour < 12 ? 'ص' : 'م';
     String two(int x) => x.toString().padLeft(2, '0');
-    final clock = '${two(h12)}:${two(t.minute)} $period';
+    // النسخةُ الثامنةُ من التحويلِ كانت هنا — الصياغةُ («الساعة»، والتبطين)
+    // تَبقى كما هي، والقاعدةُ تَنتقلُ إلى موضعِها الواحد.
+    final clock = formatTime12(t, padHour: true);
     final sameDay = t.year == n.year && t.month == n.month && t.day == n.day;
     return sameDay ? 'الساعة $clock' : '${t.year}/${two(t.month)}/${two(t.day)} $clock';
   }

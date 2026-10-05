@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/time_format.dart';
 
 class ZyiarahSupportScreen extends StatefulWidget {
   const ZyiarahSupportScreen({super.key});
@@ -147,7 +148,8 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
   Widget _buildTicketCard(String id, Map<String, dynamic> data) {
     final status = data['status'] ?? 'open';
     final createdAt = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
-    final formattedDate = intl.DateFormat('yyyy/MM/dd HH:mm').format(createdAt);
+    final formattedDate = '${intl.DateFormat('yyyy/MM/dd').format(createdAt)} '
+        '${formatTime12(createdAt)}';
 
     Color statusColor = Colors.orange;
     String statusText = "قيد المراجعة";
@@ -274,7 +276,9 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            intl.DateFormat('HH:mm').format((m['sentAt'] as Timestamp?)?.toDate() ?? (m['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now()),
+                            formatTime12((m['sentAt'] as Timestamp?)?.toDate() ??
+                                (m['timestamp'] as Timestamp?)?.toDate() ??
+                                DateTime.now()),
                             style: TextStyle(
                               fontSize: 9, 
                               color: isAdmin ? Colors.grey : Colors.white60,
