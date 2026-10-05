@@ -555,26 +555,32 @@ export default function Settings({ role }: { role?: string | null }) {
         }
         setIsSaving(true);
         try {
-            const docRef = doc(db, 'system_configs', 'main_settings');
-            const updRef = doc(db, 'system_configs', 'app_update');
-            await Promise.all([
-                setDoc(docRef, settings, { merge: true }),
-                // المفاتيحُ التي يقرؤها app_update_service فعلاً — لكلّ منصّةٍ
-                // عدّادُها. لا نكتب latest_build الموحّد عمداً (انظر التعليق أعلاه).
-                setDoc(updRef, {
-                    enabled: appUpdate.enabled,
-                    latest_build_ios: iosBuild,
-                    latest_build_android: androidBuild,
-                    force: appUpdate.force,
-                    message: appUpdate.message || '',
-                }, { merge: true }),
-                // نشر سياسة الخصوصية لمستند **عام** تقرأه صفحة zyiarah.com/privacy بلا
-                // تسجيل دخول (system_configs يتطلّب مصادقة فلا تصلح للصفحة العامة).
-                setDoc(doc(db, 'public_content', 'privacy'), {
-                    content: settings.privacy_policy || '',
-                    updated_at: new Date(),
-                }, { merge: true }),
-            ]);
+            // **دفعةٌ ذرّيّةٌ لا `Promise.all` (2026-10-05).** الثلاثُ كتاباتٍ
+            // كانت مستقلّةً، فانقطاعُ الشبكةِ في المنتصفِ يُنجحُ بعضَها:
+            // و`settings` يَحملُ `maintenance_mode`، فقد يُقفَلُ التطبيقُ على
+            // كلِّ عميلةٍ بينما يَقرأُ الأدمنُ «حدث خطأ أثناء حفظ الإعدادات»
+            // ولا يَعلمُ أنّ القفلَ جرى؛ ونسخةُ سياسةِ الخصوصيّةِ قد تُكتَبُ
+            // في `main_settings` دونَ المستندِ العامِّ الذي تَقرؤه صفحةُ
+            // zyiarah.com/privacy. والثلاثُ `isSuperAdmin()` فلا تَتبدّلُ
+            // الصلاحيّاتُ بالجمع. (نفسُ إصلاحِ محرّرِ التطبيق.)
+            const batch = writeBatch(db);
+            batch.set(doc(db, 'system_configs', 'main_settings'), settings, { merge: true });
+            // المفاتيحُ التي يقرؤها app_update_service فعلاً — لكلّ منصّةٍ
+            // عدّادُها. لا نكتب latest_build الموحّد عمداً (انظر التعليق أعلاه).
+            batch.set(doc(db, 'system_configs', 'app_update'), {
+                enabled: appUpdate.enabled,
+                latest_build_ios: iosBuild,
+                latest_build_android: androidBuild,
+                force: appUpdate.force,
+                message: appUpdate.message || '',
+            }, { merge: true });
+            // نشر سياسة الخصوصية لمستند **عام** تقرأه صفحة zyiarah.com/privacy بلا
+            // تسجيل دخول (system_configs يتطلّب مصادقة فلا تصلح للصفحة العامة).
+            batch.set(doc(db, 'public_content', 'privacy'), {
+                content: settings.privacy_policy || '',
+                updated_at: serverTimestamp(),
+            }, { merge: true });
+            await batch.commit();
 
             // Show brief success indication
             setSaveSuccess(true);

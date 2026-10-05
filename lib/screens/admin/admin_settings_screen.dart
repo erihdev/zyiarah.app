@@ -146,9 +146,65 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   }
 
   Future<void> _savePricing() async {
+    // ⚠️ **التحقّقُ كلُّه قبلَ أوّلِ كتابة، والكتاباتُ دفعةٌ ذرّيّة
+    //    (2026-10-05).** كان الترتيبُ: `main_settings` ← كتابة، ثمّ فحصُ
+    //    السعةِ و`return`، ثمّ `hourly_settings` و`public_content/privacy` ←
+    //    كتابة، ثمّ فحصُ رقمِ البناءِ و`return`، ثمّ `app_update` ← كتابة.
+    //    فخطأٌ في صندوقٍ واحدٍ يَترُكُ ما سبقَه **مكتوباً** والأدمنُ يَقرأُ
+    //    رسالةً حمراءَ فيَفهمُ أنّ الحفظَ لم يَجرِ — دعوى تُخالِفُ الحالةَ.
+    //
+    //    وأثقلُها أنّ `maintenance_mode` في الكتابةِ الأولى: تفعيلُ وضعِ
+    //    الصيانةِ مع صندوقِ سعةٍ غيرِ صالحٍ **يُقفِلُ التطبيقَ على كلِّ
+    //    عميلةٍ** (`_maintenanceGate` في `main.dart`) ثمّ يُقالُ للأدمنِ «الحدّ
+    //    اليومي يجب أن يكون رقماً أكبر من صفر»، فلا يَعلمُ أنّ القفلَ جرى.
+    //    وسياسةُ الخصوصيّةِ تُكتَبُ في `main_settings` قبلَ الفحصِ وفي
+    //    `public_content/privacy` بعدَه، فتَفترِقُ النسختانِ وتَخدمُ الصفحةُ
+    //    العامّةُ القديمةَ — وهي `zyiarah.com/privacy`، رابطُ سياسةِ
+    //    الخصوصيّةِ في App Store Connect.
+    //
+    //    ومحرِّرُ اللوحةِ كان يَفعلُ الصوابَ (`handleSave`: يَتحقّقُ ثمّ
+    //    يَكتب) — «قاعدةٌ عامّةٌ مُنفَّذةٌ في سطحٍ واحد» من جهةِ التطبيق.
+    //    والدفعةُ الذرّيّةُ تَسدُّ النصفَ الآخر: الأربعةُ كلُّها
+    //    `isSuperAdmin()` فلا تَتبدّلُ الصلاحيّاتُ بالجمع، وانقطاعُ الشبكةِ
+    //    في المنتصفِ كان يُنتجُ الحالةَ الجزئيّةَ نفسَها بلا صندوقٍ خاطئ.
+    //
+    // السعة اليومية: كان `int.tryParse(...) ?? 10` بلا حدّ أدنى — فيُكتب 0 أو
+    // رقم سالب حرفياً، وحدٌّ صفر **يُغلق الحجز في كل المناطق** بلا رسالة خطأ.
+    // نرفض غير الصالح بدل ابتلاعه (لوحة الويب ترفضه أصلاً — هذا تكافؤ معها).
+    final capacity = int.tryParse(_maxOrdersPerDayCtrl.text.trim());
+    if (capacity == null || capacity < 1) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('الحد اليومي للطلبات يجب أن يكون رقماً أكبر من صفر'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
+
+    // رقمُ البناءِ المنشورُ: نرفضُ غيرَ الصالحِ بدلَ ابتلاعِه — نفسُ شكلِ
+    // حدِّ الطلباتِ أعلاه، ولسببٍ أقوى. `int.tryParse('') ?? 0` كان يَكتبُ
+    // **صفراً**، والقارئُ يُفضّلُ حقلَ المنصّةِ على الاحتياطيِّ الموحّد
+    // و`currentBuild >= 0` صحيحٌ أبداً — فصندوقٌ فارغٌ واحدٌ يُطفئُ مطالبةَ
+    // التحديثِ لتلك المنصّةِ **بصمت**، والمفتاحُ والمفتاحُ الإجباريُّ
+    // يَبدوانِ عاملَين. وهي بوّابةُ نشرِ قواعدِ الأمانِ المحجوزة.
+    final int? iosBuild = publishedBuild(_latestBuildIosCtrl.text);
+    final int? androidBuild = publishedBuild(_latestBuildAndroidCtrl.text);
+    if (iosBuild == null || androidBuild == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('أدخِلي رقمَ البناءِ المنشورِ للمنصّتَين (رقمٌ أكبرُ '
+              'من صفر) — تركُه فارغاً يُطفئُ مطالبةَ التحديث'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
+
     setState(() => _isSaving = true);
     try {
-      await _db.collection('system_configs').doc('main_settings').set({
+      final batch = _db.batch();
+      batch.set(_db.collection('system_configs').doc('main_settings'), {
         'merchant_name': _merchantNameCtrl.text.trim(),
         'vat_number': _vatNumberCtrl.text.trim(),
         'cr_number': _crNumberCtrl.text.trim(),
@@ -162,50 +218,21 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         'maintenance_mode': _maintenanceMode,
       }, SetOptions(merge: true));
 
-      // السعة اليومية: كان `int.tryParse(...) ?? 10` بلا حدّ أدنى — فيُكتب 0 أو
-      // رقم سالب حرفياً، وحدٌّ صفر **يُغلق الحجز في كل المناطق** بلا رسالة خطأ.
-      // نرفض غير الصالح بدل ابتلاعه (لوحة الويب ترفضه أصلاً — هذا تكافؤ معها).
-      final capacity = int.tryParse(_maxOrdersPerDayCtrl.text.trim());
-      if (capacity == null || capacity < 1) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('الحد اليومي للطلبات يجب أن يكون رقماً أكبر من صفر'),
-            backgroundColor: Colors.red,
-          ));
-        }
-        return;
-      }
-      await _db.collection('system_configs').doc('hourly_settings').set({
+      // (باقات السكن) لم يتبقَّ من hourly_settings إلا **السعة اليومية**.
+      // ومحرِّرُ اللوحةِ يَحفظُها بزرٍّ مستقلٍّ (`handleSaveCapacity`) فلا
+      // تَدخلُ دفعتَه — فرقُ تقسيمٍ في الواجهةِ لا فرقُ قرار.
+      batch.set(_db.collection('system_configs').doc('hourly_settings'), {
         'max_orders_per_day': capacity,
       }, SetOptions(merge: true));
 
       // (دمج من الويب) نشر سياسة الخصوصية لمستند عام تقرأه zyiarah.com/privacy بلا دخول.
-      await _db.collection('public_content').doc('privacy').set({
+      batch.set(_db.collection('public_content').doc('privacy'), {
         'content': _privacyPolicyCtrl.text.trim(),
         'updated_at': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      // رقمُ البناءِ المنشورُ: نرفضُ غيرَ الصالحِ بدلَ ابتلاعِه — نفسُ شكلِ
-      // حدِّ الطلباتِ أعلاه، ولسببٍ أقوى. `int.tryParse('') ?? 0` كان يَكتبُ
-      // **صفراً**، والقارئُ يُفضّلُ حقلَ المنصّةِ على الاحتياطيِّ الموحّد
-      // و`currentBuild >= 0` صحيحٌ أبداً — فصندوقٌ فارغٌ واحدٌ يُطفئُ مطالبةَ
-      // التحديثِ لتلك المنصّةِ **بصمت**، والمفتاحُ والمفتاحُ الإجباريُّ
-      // يَبدوانِ عاملَين. وهي بوّابةُ نشرِ قواعدِ الأمانِ المحجوزة.
-      final int? iosBuild = publishedBuild(_latestBuildIosCtrl.text);
-      final int? androidBuild = publishedBuild(_latestBuildAndroidCtrl.text);
-      if (iosBuild == null || androidBuild == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('أدخِلي رقمَ البناءِ المنشورِ للمنصّتَين (رقمٌ أكبرُ '
-                'من صفر) — تركُه فارغاً يُطفئُ مطالبةَ التحديث'),
-            backgroundColor: Colors.red,
-          ));
-        }
-        return;
-      }
-
       // (دمج من الويب) إعداد التحديث الإجباري — يقرؤه app_update_service.dart.
-      await _db.collection('system_configs').doc('app_update').set({
+      batch.set(_db.collection('system_configs').doc('app_update'), {
         'enabled': _updateEnabled,
         // المفاتيحُ التي يقرؤها app_update_service فعلاً — لكلّ منصّةٍ عدّادُها.
         // لا نكتب latest_build الموحّد: الخدمة لا تقرؤه إلا عند غياب حقل المنصّة،
@@ -215,6 +242,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         'force': _updateForce,
         'message': _updateMsgCtrl.text.trim(),
       }, SetOptions(merge: true));
+
+      await batch.commit();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

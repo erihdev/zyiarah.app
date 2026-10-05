@@ -14,7 +14,16 @@ void main() {
     // قراءة عند فتح الشاشة.
     expect(s.contains("doc('app_update').get()"), isTrue);
     // كتابة عند الحفظ بالمفاتيح التي يقرؤها التطبيق فعلاً.
-    expect(s.contains("doc('app_update').set"), isTrue);
+    //
+    // وأُعيد توجيهُه ثالثةً (2026-10-05): الكتابةُ صارت **داخلَ دفعةٍ ذرّيّة**
+    // لأنّ الحفظَ كان يَكتبُ أربعةَ مستنداتٍ بالتتابعِ وبينها فاحِصان، فخطأُ
+    // صندوقٍ يَترُكُ ما سبقَه مكتوباً والأدمنُ يُقرأُ له «فشل». فالشكلُ
+    // المُثبَّتُ هو شكلُ الدفعةِ — ورجوعٌ إلى كتابةٍ مباشرةٍ يُسقطُ هذا
+    // الفحصَ أيضاً، لا حارسَ الترتيبِ وحدَه
+    // (test/settings_save_atomic_test.dart).
+    expect(s.contains("batch.set(_db.collection('system_configs')"
+        ".doc('app_update'), {"), isTrue,
+        reason: 'كتابةُ app_update ليست في الدفعةِ الذرّيّة');
     expect(s.contains("'enabled': _updateEnabled"), isTrue);
     // (كان يُثبِّت `latest_build` الموحّد — وهو المفتاح الذي **لا** تقرؤه الخدمة
     //  إلا عند غياب حقل المنصّة، فكان الحارس يحرس عطلاً. انظر app_update_keys_test.)
@@ -33,8 +42,12 @@ void main() {
 
   test('سياسة الخصوصية تُحفظ وتُنشَر للمستند العام (صفحة zyiarah.com/privacy)', () {
     expect(s.contains("'privacy_policy': _privacyPolicyCtrl"), isTrue);
-    expect(s.contains("collection('public_content').doc('privacy').set"), isTrue,
-        reason: 'بلا النشر العام لا تظهر السياسة على zyiarah.com/privacy');
+    expect(
+        s.contains(
+            "batch.set(_db.collection('public_content').doc('privacy'), {"),
+        isTrue,
+        reason: 'بلا النشر العام لا تظهر السياسة على zyiarah.com/privacy — '
+            'وهو في الدفعةِ الذرّيّةِ كي لا تَفترِقَ نسختا السياسة');
     expect(s.contains("'content': _privacyPolicyCtrl.text.trim()"), isTrue);
   });
 }
