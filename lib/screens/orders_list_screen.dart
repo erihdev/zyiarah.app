@@ -18,6 +18,7 @@ import 'package:go_router/go_router.dart';
 import 'package:zyiarah/utils/order_tracking.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/order_activity.dart';
+import 'package:zyiarah/utils/crew_delay_notice.dart';
 
 // تحويل رقمي دفاعي — حقول Firestore (amount/total_amount/quotePrice) قد تصل نصّاً
 // أو null، و.toDouble()/as num المباشر كان يعطّل بطاقة الطلب داخل القائمة.
@@ -526,6 +527,10 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           ),
           // موعد الخدمة المجدول — بارز حتى لا ينساه العميل
           _buildAppointmentBanner(order),
+          // وتحتَه: طلبٌ مدفوعٌ فاتَ موعدُه ولا فريقَ له. بلا هذا السطرِ
+          // تَقرأُ العميلةُ «قيد الانتظار» فوقَ «انتهى الموعد» وتَفهمُ أنّ
+          // خدمتَها انتهت — وهي لم تَبدأ. (الشرحُ في `crew_delay_notice.dart`.)
+          _buildCrewDelayNotice(order),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -658,6 +663,48 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
         ),
         DateTime.now(),
       );
+
+  /// سطرُ «تأخّر إسناد فريقكِ» — نظيرُ دفعةِ الخادمِ على البطاقةِ نفسِها.
+  ///
+  /// `service_date` حصراً لا `orderAppointment`: شرطُ الخادمِ هو الحقلُ نفسُه،
+  /// والبديلُ `booking_date` بلا خانةِ وقتٍ يُنتجُ منتصفَ الليل.
+  Widget _buildCrewDelayNotice(Map<String, dynamic> order) {
+    final bool show = crewDelayNotice(
+      isPaid: order['is_paid'] == true,
+      driverId: order['driver_id'] as String?,
+      status: '${order['status'] ?? ''}',
+      appointment: (order['service_date'] as Timestamp?)?.toDate(),
+      now: DateTime.now(),
+    );
+    if (!show) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7ED),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFDBA74)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.hourglass_top_rounded,
+              size: 18, color: Color(0xFFC2410C)),
+          const SizedBox(width: 8),
+          Expanded(
+            // 700 لا 600: تاجوال لا تَملكُ 600 أصلاً، والحزمةُ تَرتدُّ إلى
+            // خطِّ النظامِ بلا خطأٍ ظاهر (`font_assets_guard_test`).
+            child: Text(kCrewDelayMessage,
+                style: GoogleFonts.tajawal(
+                    fontSize: 12,
+                    height: 1.5,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF9A3412))),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildAppointmentBanner(Map<String, dynamic> order) {
     // نفسُ المُحلِّل الذي يقرّر التتبّع — موعدٌ واحد لا قراءتان قد تختلفان.

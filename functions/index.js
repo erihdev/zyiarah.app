@@ -221,9 +221,7 @@ exports.sendNotificationOnOrderStatusChange = onDocumentUpdated({document: "orde
       let title = "تحديث على طلبكِ";
       let body = "تغيّرت حالة طلبكِ.";
 
-      const rawName = (afterData.client_name || "").trim();
-      const greet = ["", "عميل", "عميلة", "عميل زيارة", "عميلة زيارة"]
-          .includes(rawName) ? "" : `${rawName}، `;
+      const greet = _clientGreeting(afterData);
 
       // FIX: field is `client_id` (snake_case) not `clientId`
       if (afterData.status === "accepted") {
@@ -936,9 +934,7 @@ async function notifyClientPaymentResult(col, orderId, data, success) {
       return;
     }
 
-    const rawName = (data?.client_name || "").trim();
-    const greet = ["", "عميل", "عميلة", "عميل زيارة", "عميلة زيارة"]
-        .includes(rawName) ? "" : `${rawName}، `;
+    const greet = _clientGreeting(data);
     const title = success ? "تم تأكيد دفعتكِ ✅" : "تعذّر إتمام الدفع ⚠️";
     const body = success ?
       `${greet}استلمنا دفعتكِ بنجاح ونبدأ بتجهيز طلبكِ فوراً 🌿` :
@@ -1695,6 +1691,24 @@ function _parseServiceMeta(s) {
   } catch {
     return null;
   }
+}
+
+/**
+ * مناداةُ العميلةِ باسمِها المسجَّل — أو بلا اسمٍ إن كان افتراضيّاً.
+ *
+ * كُتبت بيدٍ في **أربعةِ** مواضعَ متطابقةٍ حرفاً (تغيُّرُ حالةِ الطلب، نتيجةُ
+ * الدفع، تذكيرُ الموعد، تأكيدُ تمارا)، وكنتُ على وشكِ كتابةِ الخامسةِ —
+ * وهو شكلُ «٢٧ موضعاً للضريبة» بعينِه: إضافةُ اسمٍ افتراضيٍّ جديدٍ
+ * («زائرة» مثلاً) تَعني تعديلَ أربعةِ مواضعَ معاً، وموضعٌ منسيٌّ يُنادي
+ * العميلةَ «عميلة زيارة، موعدكِ…».
+ *
+ * @param {object} data مستندُ الطلب
+ * @return {string} بادئةٌ تَنتهي بفاصلةٍ ومسافة، أو نصٌّ فارغ
+ */
+function _clientGreeting(data) {
+  const rawName = ((data && data.client_name) || "").trim();
+  return ["", "عميل", "عميلة", "عميل زيارة", "عميلة زيارة"].includes(rawName) ?
+    "" : `${rawName}، `;
 }
 
 async function queuePush(toUid, title, body, type, data, targetRoles, recipientEmail) {
@@ -4362,10 +4376,7 @@ exports.remindClientsUpcomingAppointments = onSchedule(
         const apptMs = d.service_date.toMillis();
         const hoursUntil = (apptMs - now) / (60 * 60 * 1000);
         const serviceName = d.service_name || d.service_type || "خدمتك";
-        // مناداة العميلة باسمها المسجّل (إن لم يكن اسماً افتراضياً).
-        const rawName = (d.client_name || "").trim();
-        const greet = ["", "عميل", "عميلة", "عميل زيارة", "عميلة زيارة"]
-            .includes(rawName) ? "" : `${rawName}، `;
+        const greet = _clientGreeting(d);
         const timeStr = d.booking_time_slot || riyadhLocalSlot(apptMs);
 
         // وسم اليوم (اليوم/غداً/بعد N أيام) بالتقويم المحلي.
@@ -4396,10 +4407,19 @@ exports.remindClientsUpcomingAppointments = onSchedule(
           sent++;
         } else if (hoursUntil > 0 && hoursUntil <= 2.5 &&
                    d.client_reminder_soon_sent !== true) {
+          // **«فريقنا في الطريق إليكِ» وعدٌ، ولا يُقالُ بلا فريق.** الاستعلامُ
+          // يَشملُ `pending` و`realAppointment` يَكفيه `is_paid === true`، فطلبٌ
+          // مدفوعٌ **بلا سائقٍ إطلاقاً** كان يَتلقّى هذه الجملةَ قبلَ موعدِه
+          // بساعتَين — ثمّ لا يَأتي أحد. و`driverAssigned` أعلاه مبنيٌّ على
+          // **الحالةِ** ويُجيبُ سؤالاً آخرَ («هل هذا موعدٌ حقيقي»)؛ سؤالُ
+          // «هل يوجدُ فريق» يُجيبُه الحقلُ نفسُه.
+          const hasCrew = !!d.driver_id;
           await queuePush(
               d.client_id,
               "اقترب موعد زيارتكِ ⏰",
-              `${greet}«${serviceName}» بعد ساعتين (الساعة ${timeStr}). فريقنا في الطريق إليكِ 🚗`,
+              hasCrew ?
+                `${greet}«${serviceName}» بعد ساعتين (الساعة ${timeStr}). فريقنا في الطريق إليكِ 🚗` :
+                `${greet}«${serviceName}» بعد ساعتين (الساعة ${timeStr}). نُجهّز فريقكِ ونوافيكِ بتأكيد وصولِه 🌿`,
               "appointment_reminder",
               {orderId: doc.id},
           );
@@ -4447,8 +4467,8 @@ exports.sweepUnassignedPaidOrders = onSchedule(
         if (end.getTime() <= now) continue;
         // فات موعد البدء ولم يُسنَد بعد → أنذر الإدارة مبكراً (مرة واحدة) مع
         // استمرار المحاولة — كان الصمت يمتد حتى نهاية النافذة + ساعتين.
-        if (start.getTime() < now - 60 * 60 * 1000 &&
-            d.stranded_alerted !== true) {
+        const latestart = start.getTime() < now - 60 * 60 * 1000;
+        if (latestart && d.stranded_alerted !== true) {
           await queuePush(
               "ADMIN_BROADCAST",
               "طلب مدفوع تجاوز موعد بدئه بلا سائق ⚠️",
@@ -4457,6 +4477,29 @@ exports.sweepUnassignedPaidOrders = onSchedule(
               "admin_order_alert",
               {orderId: doc.id, code: d.code || doc.id}).catch(() => {});
           await doc.ref.update({stranded_alerted: true}).catch(() => {});
+        }
+        // **والعميلةُ تُخبَرُ أيضاً.** كان هذا المسارُ يُنبّهُ الإدارةَ وحدَها:
+        // فعميلةٌ دَفعت، وتَلقّت قبلَ ساعتَين «موعد زيارتكِ… 🌿»، ثمّ فاتَ
+        // موعدُها ولا فريق — ولا تَسمعُ شيئاً حتى نهايةِ النافذةِ
+        // (باقةُ ١٢ ساعةً = ١٢ ساعةَ صمت) حين يَرِدُها إشعارُ الاسترداد.
+        // الرسالةُ صادقةٌ بما نَعرفُه: نُحاولُ الآن، وإن تعذّر أُعيد المبلغُ
+        // كاملاً تلقائيّاً — وهو ما يَفعلُه `autoResolveUnfulfilledPaidOrder`
+        // فعلاً عند نهايةِ النافذة، فلا وعدَ بما لا يَحدث.
+        //
+        // **وعلمٌ خاصٌّ بها لا `stranded_alerted`**: علمٌ واحدٌ لجمهورَين
+        // يَجعلُ أسبقَهما يُسكِتُ الآخرَ — وهو العطلُ المسجَّلُ حرفيّاً في
+        // هذا المستودع (الإنذارُ المبكّرُ ضَبطَ `stranded_alerted` ساعاتٍ
+        // قبلَه بمعنًى آخرَ فأسكتَ تنبيهَ الاستردادِ الفاشل).
+        if (latestart && d.client_id && d.client_stranded_notified !== true) {
+          await queuePush(
+              d.client_id,
+              "نعمل على تأكيد فريقكِ ⏳",
+              `${_clientGreeting(d)}تأخّر إسنادُ فريقٍ لموعدكِ (#${d.code || doc.id}) ` +
+              `ونحن نعمل عليه الآن. وإن تعذّر علينا تنفيذُه أعدنا المبلغ كاملاً ` +
+              `تلقائيّاً. نأسف للانتظار 🌿`,
+              "order_delayed",
+              {orderId: doc.id, code: d.code || doc.id}).catch(() => {});
+          await doc.ref.update({client_stranded_notified: true}).catch(() => {});
         }
         try {
           const driver = await _findFreeDriverForSlot(db, {
@@ -5168,9 +5211,7 @@ exports.notifyClientOnDriverDeparture = onDocumentUpdated(
       // فقط عند الانتقال الفعلي إلى on_the_way
       if (before.status === "on_the_way" || after.status !== "on_the_way") return;
 
-      const rawName = (after.client_name || "").trim();
-      const greet = ["", "عميل", "عميلة", "عميل زيارة", "عميلة زيارة"]
-          .includes(rawName) ? "" : `${rawName}، `;
+      const greet = _clientGreeting(after);
       // queuePush لا _pushToUid: الأخير يتخطّى العميل بلا توكن FCM بلا أثر في
       // صندوق الوارد — عميل الويب لا يُخبَر بانطلاق سائقه إطلاقاً. queuePush تكتب
       // الوارد دائماً ثم تدفع.
