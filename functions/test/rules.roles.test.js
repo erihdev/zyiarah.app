@@ -8,7 +8,7 @@ const {
   assertFails,
   assertSucceeds,
 } = require("@firebase/rules-unit-testing");
-const {setDoc, doc, updateDoc, getDoc, getDocs, collection, query,
+const {setDoc, doc, updateDoc, getDoc, getDocs, collection, query, addDoc,
   where} = require("firebase/firestore");
 
 (async () => {
@@ -183,6 +183,54 @@ const {setDoc, doc, updateDoc, getDoc, getDocs, collection, query,
   // ولا يُمنع ما كان مسموحاً: حقولُ الملفّ العاديّة.
   await check("client CAN still edit their own name",
       updateDoc(doc(asUser("client1"), "users/client1"), {name: "سارة"}), true);
+
+  // ─── رسائلُ التذاكر: ردٌّ مُلفَّقٌ باسمِ الفريق ──────────────────────
+  //
+  // قاعدةُ `messages` كانت `allow create` بلا قيدٍ على المحتوى، وأربعةُ
+  // قُرّاءٍ يُقرّرونَ الكاتبَ من `senderRole`/`senderId`. وأثقلُها
+  // `sendNotificationOnTicketReply`: الادّعاءُ يُدخِلُ الرسالةَ في فرعِ «ردُّ
+  // الدعم» فيُسقِطُ تنبيهَ الإدارةِ عنها كلَّه.
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "support_tickets/tk1"),
+        {userId: "client1", subject: "س", status: "open"});
+  });
+  const tkMsgs = (uid) =>
+    collection(asUser(uid), "support_tickets/tk1/messages");
+  await check("ticket: client CANNOT forge a team reply in her own ticket",
+      addDoc(tkMsgs("client1"), {
+        text: "تم استرداد المبلغ كاملاً إلى بطاقتك ✅",
+        senderRole: "admin", senderName: "فريق زيارة", senderId: "admin",
+        sentAt: new Date(),
+      }), false);
+  await check("ticket: nor claim the admin role alone",
+      addDoc(tkMsgs("client1"),
+          {text: "x", senderRole: "admin", sentAt: new Date()}), false);
+  await check("ticket: nor forge senderId=admin alone",
+      addDoc(tkMsgs("client1"),
+          {text: "x", senderId: "admin", sentAt: new Date()}), false);
+  // ولا تَنتحلُ uid غيرِها (فالمِعيارُ البنيويُّ يُقرأُ «من الفريق»).
+  await check("ticket: nor a foreign senderId",
+      addDoc(tkMsgs("client1"),
+          {text: "x", senderId: "someoneElse", sentAt: new Date()}), false);
+  // ولا تُضيفُ `senderUid` — وهو المِعيارُ الذي يَكتبُه الأدمنُ وحدَه.
+  await check("ticket: nor smuggle senderUid",
+      addDoc(tkMsgs("client1"),
+          {text: "x", senderUid: "a9", sentAt: new Date()}), false);
+  // ولا يُكسَرُ مسارُ التطبيقِ: الحقولُ التي تَكتبُها الشاشةُ فعلاً تمرّ.
+  await check("ticket: the app's own client reply -> ALLOWED",
+      addDoc(tkMsgs("client1"), {
+        senderId: "client1", senderRole: "user", text: "مرحباً",
+        sentAt: new Date(),
+      }), true);
+  await check("ticket: and the first message (no senderRole) -> ALLOWED",
+      addDoc(tkMsgs("client1"),
+          {senderId: "client1", text: "نصّ التذكرة", sentAt: new Date()}),
+      true);
+  // ومَن ليست صاحبةَ التذكرةِ لا تَكتبُ فيها أصلاً.
+  await check("ticket: a stranger CANNOT post in someone else's ticket",
+      addDoc(tkMsgs("client2"),
+          {senderId: "client2", senderRole: "user", text: "x",
+            sentAt: new Date()}), false);
 
   await testEnv.cleanup();
   console.log(`\nRole test: ${pass} passed, ${fail} failed`);

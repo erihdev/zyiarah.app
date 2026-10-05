@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/ticket_authorship.dart';
 import 'package:zyiarah/utils/time_format.dart';
 
 class ZyiarahSupportScreen extends StatefulWidget {
@@ -250,9 +251,9 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
               children: [
                 ...messages.map((doc) {
                   final m = doc.data() as Map<String, dynamic>;
-                  final role = m['senderRole'] ?? '';
-                  final senderId = m['senderId'] ?? '';
-                  final isAdmin = role == 'admin' || senderId == 'admin';
+                  // القاعدةُ المشترَكةُ — والمالكُ هنا هي نفسُها.
+                  final isAdmin = ticketMessageIsFromTeam(
+                      m, FirebaseAuth.instance.currentUser?.uid);
 
                   return Align(
                     alignment: isAdmin ? Alignment.centerLeft : Alignment.centerRight,

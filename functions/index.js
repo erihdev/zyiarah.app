@@ -33,6 +33,7 @@ const amounts = require("./amounts");
 const refunds = require("./refund_engine");
 const rewards = require("./rewards");
 const attachmentsGuard = require("./attachments");
+const ticketAuthorship = require("./ticket_authorship");
 // معرّفُ المشروع من بيئة التشغيل (Cloud Functions تضبطه) — يُقصر مرفقاتِ
 // البريد على مخزن هذا المشروع وحده.
 const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "";
@@ -78,10 +79,15 @@ exports.sendNotificationOnTicketReply = onDocumentCreated({document: "support_ti
       if (!ticketDoc.exists) return null;
       const ticketData = ticketDoc.data();
 
-      // كشف رد الإدارة: تطبيق الأدمن يكتب senderRole:'admin' فقط، ولوحة الويب تكتب
-      // senderId:'admin' أيضاً — كان الفحص القديم على senderId فقط يفوّت ردود تطبيق الأدمن
-      // فلا يصل العميل إشعار «تم الرد على تذكرتك».
-      if (newMessage.senderRole === "admin" || newMessage.senderId === "admin") {
+      // كشف رد الإدارة: **القاعدةُ المشترَكةُ لا تعدادٌ هنا.** كان الفرعُ
+      // `senderRole === "admin" || senderId === "admin"` — وكلا الحقلَين
+      // تَكتبُهما العميلةُ، وقاعدةُ `messages` كانت بلا قيدٍ على المحتوى.
+      // فرسالةٌ تَحملُ الادّعاءَ تَدخلُ فرعَ «ردُّ الدعم» فتُسقِطُ تنبيهَ
+      // «رد جديد على تذكرة دعم» عن مديرِ الطلباتِ **كلَّه**: تَكتبُ إلى
+      // الدعمِ ولا يُخبَرُ أحد. والمِعيارُ الآن الفاعلُ لا الادّعاء.
+      // (`lib/utils/ticket_authorship.dart` يَحملُ الشرحَ كاملاً.)
+      if (ticketAuthorship.ticketMessageIsFromTeam(
+          newMessage, ticketData && ticketData.userId)) {
         // رد الدعم → أشعِر صاحب التذكرة (push + سجل داخل التطبيق).
         await queuePush(
             ticketData.userId,
