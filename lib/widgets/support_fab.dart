@@ -36,7 +36,7 @@ class ZyiarahSupportFab extends StatelessWidget {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!ok && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('تعذّر فتح تطبيق التواصل — تأكد من تثبيته على جهازك'),
+          content: Text('تعذّر فتح تطبيق التواصل — تأكّدي من تثبيته على جهازك'),
           backgroundColor: Colors.red,
         ));
       }

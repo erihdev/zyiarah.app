@@ -111,7 +111,7 @@ void main() {
 
   testWidgets('فشل بثّ الكوبونات → خطأ مضمَّن في قسمه فقط', (t) async {
     await pumpOffers(t, coupons: Stream.error(StateError('offline')));
-    expect(find.text('تعذّر تحميل الكوبونات، تحقّق من الاتصال'), findsOneWidget);
+    expect(find.text('تعذّر تحميل الكوبونات، تحقّقي من الاتصال'), findsOneWidget);
     expect(find.text('برنامج سفراء زيارة'), findsOneWidget);
     expect(t.takeException(), isNull);
   });

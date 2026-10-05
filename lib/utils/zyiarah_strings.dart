@@ -23,8 +23,8 @@ class ZyiarahStrings {
   static String get orderScheduled => isArabic ? "حجز مجدول" : "Scheduled booking";
   static String get driverAssigned => isArabic ? "تم تعيين السائق" : "Driver assigned";
   static String get orderAccepted => isArabic ? "تم تأكيد الحجز" : "Booking confirmed";
-  static String get tapToTrackMap => isArabic ? "اضغط للمتابعة المباشرة على الخريطة" : "Tap to track live on map";
-  static String get tapToViewDetails => isArabic ? "اضغط لعرض التفاصيل" : "Tap to view details";
+  static String get tapToTrackMap => isArabic ? "اضغطي للمتابعة المباشرة على الخريطة" : "Tap to track live on map";
+  static String get tapToViewDetails => isArabic ? "اضغطي لعرض التفاصيل" : "Tap to view details";
 
   // --- Support ---
 
@@ -41,7 +41,7 @@ class ZyiarahStrings {
 
   // --- Feedback & Ratings ---
   static String get lowRatingPrompt => isArabic ? "يؤسفنا سماع ذلك، ما هو السبب الرئيسي؟" : "We are sorry to hear that. What is the reason?";
-  static String get selectReasonHint => isArabic ? "اختر السبب..." : "Select reason...";
+  static String get selectReasonHint => isArabic ? "اختاري السبب..." : "Select reason...";
   static String get attachEvidence => isArabic ? "إرفاق صورة للمشكلة (اختياري)" : "Attach problem image (optional)";
   static String get evidenceAttached => isArabic ? "تم إرفاق صورة الإثبات" : "Evidence image attached";
   static List<String> get lowRatingReasons => isArabic 

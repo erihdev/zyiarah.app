@@ -224,7 +224,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
           if (mounted) {
             setState(() => _isLoading = false);
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('تعذّر بدء جلسة الدفع، حاول مجدداً')),
+              const SnackBar(content: Text('تعذّر بدء جلسة الدفع، حاولي مجدداً')),
             );
           }
           return;
@@ -413,7 +413,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
                           Expanded(
                             child: _deliveryLocation == null
                                 ? Text(
-                                    'اضغط لتحديد عنوان التوصيل',
+                                    'اضغطي لتحديد عنوان التوصيل',
                                     style: GoogleFonts.tajawal(color: Colors.red),
                                   )
                                 : Column(
@@ -457,7 +457,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Text('اختر طريقة الدفع',
+                  Text('اختاري طريقة الدفع',
                       style: GoogleFonts.tajawal(
                           fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 12),

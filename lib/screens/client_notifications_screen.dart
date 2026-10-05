@@ -431,7 +431,7 @@ class _ClientNotificationsScreenState extends State<ClientNotificationsScreen> {
                               if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                      content: Text('تعذّر حفظ التفضيل — حاول مجدداً'),
+                                      content: Text('تعذّر حفظ التفضيل — حاولي مجدداً'),
                                       backgroundColor: Colors.red),
                                 );
                               }
@@ -496,7 +496,7 @@ class _ClientNotificationsScreenState extends State<ClientNotificationsScreen> {
             style: GoogleFonts.tajawal(color: Colors.grey, fontSize: 15),
           ),
           if (_unreadOnly && _category == null)
-            Text('اضغط أيقونة السجل أعلاه لعرض المقروءة',
+            Text('اضغطي أيقونة السجل أعلاه لعرض المقروءة',
                 style: GoogleFonts.tajawal(color: Colors.grey[400], fontSize: 12)),
         ],
       ),

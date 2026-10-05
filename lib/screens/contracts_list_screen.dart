@@ -50,7 +50,7 @@ class ZyiarahContractsListScreen extends StatelessWidget {
               return Center(
                 child: Padding(
                   padding: const EdgeInsets.all(20.0),
-                  child: Text('تعذّر جلب العقود، تحقّق من الاتصال',
+                  child: Text('تعذّر جلب العقود، تحقّقي من الاتصال',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.tajawal(color: Colors.red)),
                 ),

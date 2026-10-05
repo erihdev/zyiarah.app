@@ -137,7 +137,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
           ),
           if (isActive) ...[
             const SizedBox(height: 10),
-            const Text("اضغط على الزر أدناه لفتح تذكرة جديدة", style: TextStyle(color: Colors.grey)),
+            const Text("اضغطي على الزر أدناه لفتح تذكرة جديدة", style: TextStyle(color: Colors.grey)),
           ],
         ],
       ),
@@ -332,7 +332,7 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
                             } catch (e) {
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('فشل إرسال الرسالة، حاول مجدداً')),
+                                  const SnackBar(content: Text('فشل إرسال الرسالة، حاولي مجدداً')),
                                 );
                               }
                             } finally {

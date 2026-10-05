@@ -374,7 +374,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     if (_currentUser == null) {
       return FirebaseAuth.instance.currentUser == null
           ? 'يرجى تسجيل الدخول لإتمام الدفع'
-          : 'جارٍ تحميل بيانات حسابك، حاول بعد لحظة';
+          : 'جارٍ تحميل بيانات حسابك، حاولي بعد لحظة';
     }
     return null;
   }
@@ -582,7 +582,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       data = result.data as Map;
     } catch (e) {
       debugPrint('[capacity] getHourlyAvailability failed: $e');
-      return 'تعذّر التحقق من توفّر الموعد. تحقّق من اتصالك وأعد المحاولة.';
+      return 'تعذّر التحقق من توفّر الموعد. تحقّقي من اتصالك وأعيدي المحاولة.';
     }
 
     final Map daily = data['dailyCounts'] as Map? ?? {};
@@ -600,7 +600,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     final int maxTeamsPerSlot = (data['maxTeamsPerSlot'] as num?)?.toInt() ?? 0;
 
     if (maxTeamsPerSlot <= 0) {
-      return 'لا يوجد فريق متاح حالياً. تواصل معنا لتحديد موعد.';
+      return 'لا يوجد فريق متاح حالياً. تواصلي معنا لتحديد موعد.';
     }
 
     final closedDates =
@@ -1319,7 +1319,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             child: AlertDialog(
               title: const Text('تعذّر إتمام الطلب'),
               content: Text(
-                  'إن كنت قد دُفعت فلا تقلق — سيُعالَج طلبك تلقائياً أو تواصل مع الدعم '
+                  'إن كنت قد دُفعت فلا تقلق — سيُعالَج طلبك تلقائياً أو تواصلي مع الدعم '
                   'مع الرقم المرجعي: ${code.isNotEmpty ? code : id}. لن يُخصم منك مرتين.'),
               actions: [
                 TextButton(
@@ -1557,7 +1557,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 child: TextField(
                   controller: _couponController,
                   decoration: InputDecoration(
-                    hintText: 'أدخل كود الخصم هنا',
+                    hintText: 'أدخلي كود الخصم هنا',
                     hintStyle: GoogleFonts.tajawal(fontSize: 13),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
@@ -1608,7 +1608,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('اختر طريقة الدفع',
+        Text('اختاري طريقة الدفع',
             style: GoogleFonts.tajawal(
                 fontWeight: FontWeight.bold, fontSize: 16)),
         const SizedBox(height: 15),

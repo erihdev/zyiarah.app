@@ -156,7 +156,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           );
         }
         if (snapshot.hasError) {
-          return const Center(child: Text('تعذّر تحميل البيانات، تحقّق من الاتصال'));
+          return const Center(child: Text('تعذّر تحميل البيانات، تحقّقي من الاتصال'));
         }
         // القسمة قاعدة واحدة (`orderIsOpen`) لا قائمتان: القائمتان كانتا
         // صحيحتين هنا، لكن أي حالة لا تَرِد في إحداهما تسقط من التبويبين معاً
@@ -210,7 +210,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           );
         }
         if (snapshot.hasError) {
-          return const Center(child: Text('تعذّر تحميل البيانات، تحقّق من الاتصال'));
+          return const Center(child: Text('تعذّر تحميل البيانات، تحقّقي من الاتصال'));
         }
         
         // دورة المتجر الحقيقية: awaiting_payment ⇒ under_review ⇒ delivering ⇒
@@ -427,7 +427,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text('إلغاء الطلب', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
           content: Text(
-            'هل أنت متأكد من إلغاء الطلب #${code ?? docId}؟\nلا يمكن التراجع عن هذا الإجراء.',
+            'هل أنتِ متأكدة من إلغاء الطلب #${code ?? docId}؟\nلا يمكن التراجع عن هذا الإجراء.',
             style: GoogleFonts.tajawal(),
           ),
           actions: [
@@ -460,7 +460,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
       // بعد فتح الشاشة) — رسالة ودّية بدل نص الاستثناء الخام للعميل.
       final raw = e.toString().replaceAll("Exception: ", "");
       final msg = raw.contains('permission-denied')
-          ? 'لا يمكن إلغاء الطلب في حالته الحالية — تواصل مع الدعم'
+          ? 'لا يمكن إلغاء الطلب في حالته الحالية — تواصلي مع الدعم'
           : 'خطأ: $raw';
       messenger.showSnackBar(
         SnackBar(

@@ -36,12 +36,12 @@ class _ZyiarahForgotPasswordScreenState extends State<ZyiarahForgotPasswordScree
         _showError(switch (e.code) {
           'invalid-email' => 'صيغة البريد الإلكتروني غير صحيحة',
           'user-not-found' => 'لا يوجد حساب بهذا البريد الإلكتروني',
-          'network-request-failed' => 'تعذّر الاتصال — تحقّق من الإنترنت',
-          _ => 'تعذّر إرسال الرابط، حاول لاحقاً',
+          'network-request-failed' => 'تعذّر الاتصال — تحقّقي من الإنترنت',
+          _ => 'تعذّر إرسال الرابط، حاولي لاحقاً',
         });
       }
     } catch (_) {
-      if (mounted) _showError('تعذّر إرسال الرابط، حاول لاحقاً');
+      if (mounted) _showError('تعذّر إرسال الرابط، حاولي لاحقاً');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -84,7 +84,7 @@ class _ZyiarahForgotPasswordScreenState extends State<ZyiarahForgotPasswordScree
             children: [
               const SizedBox(height: 20),
               Text(
-                "أدخل البريد الإلكتروني المسجل وسنقوم بإرسال رابط استعادة كلمة المرور",
+                "أدخلي البريد الإلكتروني المسجل وسنقوم بإرسال رابط استعادة كلمة المرور",
                 textAlign: TextAlign.center,
                 style: GoogleFonts.tajawal(fontSize: 16, color: Colors.grey[600]),
               ),

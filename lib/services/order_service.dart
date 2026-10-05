@@ -90,7 +90,7 @@ class ZyiarahOrderService {
       }
       // العميل لا يلغي طلباً قيد التنفيذ (يتواصل مع الدعم)؛ الإدارة تستطيع.
       if (currentStatus == 'in_progress' && cancelledBy != 'admin') {
-        throw Exception("لا يمكن إلغاء طلب قيد التنفيذ — تواصل مع الدعم");
+        throw Exception("لا يمكن إلغاء طلب قيد التنفيذ — تواصلي مع الدعم");
       }
 
       orderCode = orderData['code'] as String?;

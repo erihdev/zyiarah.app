@@ -77,7 +77,7 @@ class MoyasarService {
       final type = error['type']?.toString() ?? '';
       message = switch (type) {
         'account_inactive_error' => 'حساب الدفع قيد التفعيل — يرجى المحاولة لاحقاً',
-        'authentication_error' => 'خطأ في مفاتيح بوابة الدفع — تواصل مع الدعم',
+        'authentication_error' => 'خطأ في مفاتيح بوابة الدفع — تواصلي مع الدعم',
         'rate_limit_error' => 'كثرة الطلبات — يرجى الانتظار قليلاً والمحاولة مجدداً',
         'invalid_request_error' => error['message']?.toString() ?? 'بيانات الطلب غير صحيحة',
         _ => error['message']?.toString() ?? message,

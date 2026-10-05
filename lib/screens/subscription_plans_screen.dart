@@ -176,7 +176,7 @@ class _ZyiarahSubscriptionPlansScreenState
       if (_zones.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content:
-                Text('تعذّر تحميل مناطق الخدمة — تحقّق من اتصالك وأعد المحاولة'),
+                Text('تعذّر تحميل مناطق الخدمة — تحقّقي من اتصالك وأعيدي المحاولة'),
             backgroundColor: Colors.red));
         return;
       }
@@ -315,7 +315,7 @@ class _ZyiarahSubscriptionPlansScreenState
   void _addVisit(int planVisits) {
     if (_selectedStartHour == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('اختر وقتاً للزيارة أولاً')));
+        const SnackBar(content: Text('اختاري وقتاً للزيارة أولاً')));
       return;
     }
     if (_scheduledVisits.length >= planVisits) return;
@@ -456,7 +456,7 @@ class _ZyiarahSubscriptionPlansScreenState
                   children: [
                     Icon(Icons.wifi_off_outlined, size: 64, color: Colors.grey[300]),
                     const SizedBox(height: 16),
-                    Text('فشل تحميل الباقات، تحقق من اتصالك',
+                    Text('فشل تحميل الباقات، تحقّقي من اتصالك',
                         style: GoogleFonts.tajawal(fontSize: 16, color: Colors.grey)),
                     const SizedBox(height: 16),
                     ElevatedButton(
@@ -539,7 +539,7 @@ class _ZyiarahSubscriptionPlansScreenState
           const SizedBox(width: 14),
           Expanded(
             child: Text(
-              'اختر الباقة المناسبة لعائلتك. سيتم توجيه طلبك للإدارة للموافقة عليه قبل توقيع العقد الإلكتروني.',
+              'اختاري الباقة المناسبة لعائلتك. سيتم توجيه طلبك للإدارة للموافقة عليه قبل توقيع العقد الإلكتروني.',
               style: GoogleFonts.tajawal(fontSize: 13, height: 1.5, color: Colors.blueGrey[700]),
             ),
           ),
@@ -615,7 +615,7 @@ class _ZyiarahSubscriptionPlansScreenState
                       ),
                     ),
                     Text(
-                      'اختر تاريخ البدء ووقت تفعيل باقة: $title',
+                      'اختاري تاريخ البدء ووقت تفعيل باقة: $title',
                       style: GoogleFonts.tajawal(
                         fontSize: 12,
                         color: Colors.grey[600],
@@ -658,7 +658,7 @@ class _ZyiarahSubscriptionPlansScreenState
 
           // 4. Time Slot Header
           Text(
-            'اختر موعد كل زيارة ($visits زيارات):',
+            'اختاري موعد كل زيارة ($visits زيارات):',
             style: GoogleFonts.tajawal(
               fontSize: 15,
               fontWeight: FontWeight.bold,
@@ -772,7 +772,7 @@ class _ZyiarahSubscriptionPlansScreenState
               child: Text(
                 _scheduledVisits.length == visits
                     ? 'المتابعة لتوقيع العقد الإلكتروني'
-                    : 'اختر ${visits - _scheduledVisits.length} زيارة متبقية',
+                    : 'اختاري ${visits - _scheduledVisits.length} زيارة متبقية',
                 style: GoogleFonts.tajawal(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
@@ -986,7 +986,7 @@ class _ZyiarahSubscriptionPlansScreenState
           border: Border.all(color: Colors.grey.shade200),
         ),
         child: Text(
-          "اختر التاريخ أولاً لعرض الأوقات المتاحة",
+          "اختاري التاريخ أولاً لعرض الأوقات المتاحة",
           style: GoogleFonts.tajawal(color: Colors.grey),
           textAlign: TextAlign.center,
         ),
