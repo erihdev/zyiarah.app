@@ -65,6 +65,65 @@ void main() {
       expect(dash.contains("where('is_paid', '==', true)"), isTrue);
     });
 
+    test('طابورا الإشعارات: فهرسٌ لكلِّ مجموعةٍ لا فهرسٌ مُشترَك', () {
+      // **الفهارسُ في Firestore لكلِّ مجموعةٍ على حِدة.** `opsHealthSweep`
+      // يُعيدُ دفعَ الإشعاراتِ العالقةِ باستعلامٍ مركَّب — مساواةٌ على
+      // `processed`، ومدًى وترتيبٌ على `createdAt` — ثم صار يَمسحُ الطابورَين.
+      // وكان الفهرسُ موجوداً لـ`notification_triggers` وحدَه، فاستعلامُ
+      // `notification_queue` (حيث تَحيا كلُّ إشعاراتِ `queuePush` الآن) يَسقط.
+      expect(has('notification_triggers', ['processed', 'createdAt']), isTrue);
+      expect(has('notification_queue', ['processed', 'createdAt']), isTrue,
+          reason: 'الطابورُ الخادميُّ يَحملُ كلَّ إشعاراتِ queuePush');
+    });
+
+    test('والاستعلامُ ما زال يَمسحُ الطابورَين — وبـtry لكلِّ مجموعة', () {
+      // فهرسٌ يبقى بعد زوالِ استعلامِه = كلفةُ كتابةٍ بلا مقابل؛ والعكسُ
+      // أسوأ. والطرفانِ يَتحرّكانِ معاً أو يَسقطُ الفحص.
+      final String fn = File('functions/index.js').readAsStringSync();
+      final String code = fn
+          .split('\n')
+          .where((l) => !l.trimLeft().startsWith('//'))
+          .join('\n');
+      expect(
+          code.contains(
+              'for (const col of ["notification_queue", "notification_triggers"]) {'),
+          isTrue,
+          reason: 'إن تغيّرت المجموعاتُ الممسوحةُ فالفهارسُ تَتبعها');
+      expect(code.contains('.where("processed", "==", false)'), isTrue);
+      expect(code.contains('.orderBy("createdAt", "asc")'), isTrue);
+
+      // **`try` داخلَ الحلقةِ لا حولَها.** كان واحداً يُحيط بها
+      // و`notification_queue` أوّلَها، فنقصُ فهرسٍ في الأولى يَقطعُ الحلقةَ
+      // قبلَ الثانيةِ: شبكةُ الأمانِ تَموتُ للطابورَين بسببِ واحد.
+      final int loopAt = code.indexOf(
+          'for (const col of ["notification_queue", "notification_triggers"]) {');
+      final int tryAt = code.indexOf('try {', loopAt);
+      final int qAt = code.indexOf('.where("processed", "==", false)', loopAt);
+      expect(tryAt > loopAt && tryAt < qAt, isTrue,
+          reason: '`try` يَلزمُ أن يكونَ داخلَ الحلقةِ قبلَ الاستعلام');
+      expect(code.contains(r'`opsHealthSweep: redrive ${col} failed:`'), isTrue,
+          reason: 'والفشلُ يُسمّي مجموعتَه، وإلّا فلا يُعرَفُ أيُّهما سقط');
+
+      // والتشخيصُ اليدويُّ يَقرأُ الطابورَين كذلك — طابورٌ واحدٌ يَقولُ
+      // «صفرٌ معلَّق» بينما الآخرُ مُتراكم.
+      //
+      // ويُجرَّدُ من التعليقِ أوّلاً: اختبارُ القضمِ أعادَ المجموعةَ الواحدةَ
+      // ومرَّ الفحصُ أخضرَ، لأنّ التعليقَ الشارحَ يُسمّي `notification_queue`.
+      final String diagRaw =
+          File('functions/diagnose_email.js').readAsStringSync();
+      final String diag = diagRaw
+          .split('\n')
+          .where((l) => !l.trimLeft().startsWith('//'))
+          .join('\n');
+      expect(
+          diag.contains(
+              'for (const col of ["notification_queue", "notification_triggers"]) {'),
+          isTrue,
+          reason: 'التشخيصُ يُشغَّلُ حين يَتعطّلُ البريد — فيَلزمُه الطابوران');
+      // وبالمقابل: اللفظُ ما زال في الخامّ، فلا يُجرّدُ الفحصُ نفسَه فراغاً.
+      expect(diagRaw.contains('notification_queue'), isTrue);
+    });
+
     test('لا فهرسَ مكرّر', () {
       final seen = <String>{};
       for (final dynamic raw in indexes) {

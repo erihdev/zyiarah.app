@@ -4544,9 +4544,17 @@ exports.opsHealthSweep = onSchedule(
       //    إلى 3 أيام: الأحدث ما زال قيد المعالجة، والأقدم بريدٌ فات أوانه.
       // الطابوران معاً، وكلُّ مستندٍ يُعاد إلى **طابورِه** — نسخُ مستندِ عميلٍ
       // إلى الطابورِ الخادميِّ يَمنحُه ثقةً لم يَملكها.
-      try {
-        let redriven = 0;
-        for (const col of ["notification_queue", "notification_triggers"]) {
+      //
+      // **`try` لكلِّ مجموعةٍ لا واحدٌ للحلقة.** الاستعلامُ مركَّب (مساواةٌ على
+      // `processed` ومدًى وترتيبٌ على `createdAt`)، فيَلزمُه فهرسٌ لكلِّ مجموعةٍ
+      // على حِدة — والفهارسُ في Firestore **لكلِّ مجموعةٍ لا مُشترَكة**. وكان
+      // `try` واحدٌ يُحيط بالحلقةِ و`notification_queue` أوّلَها، فسقوطُ
+      // الاستعلامِ الأوّلِ يَقطعُ الحلقةَ قبلَ `notification_triggers` أيضاً:
+      // شبكةُ الأمانِ التي كُتبت لانقطاعِ أغسطس تَموتُ للطابورَين معاً، ولا
+      // يَبقى منها إلّا سطرُ `console.error` واحد.
+      let redriven = 0;
+      for (const col of ["notification_queue", "notification_triggers"]) {
+        try {
           const snap = await db.collection(col)
               .where("processed", "==", false)
               .where("createdAt", "<=", new Date(now - 30 * 60 * 1000))
@@ -4562,11 +4570,11 @@ exports.opsHealthSweep = onSchedule(
             await doc.ref.update({processed: true, status: "redriven"});
             redriven++;
           }
+        } catch (e) {
+          console.error(`opsHealthSweep: redrive ${col} failed:`, e.message);
         }
-        console.log(`opsHealthSweep: stalled triggers redriven=${redriven}`);
-      } catch (e) {
-        console.error("opsHealthSweep: trigger redrive failed:", e.message);
       }
+      console.log(`opsHealthSweep: stalled triggers redriven=${redriven}`);
     },
 );
 
