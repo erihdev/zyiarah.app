@@ -10,6 +10,7 @@ import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/driver_activation.dart';
+import 'package:zyiarah/utils/driver_rating.dart';
 
 class AdminDriversScreen extends StatefulWidget {
   const AdminDriversScreen({super.key});
@@ -682,7 +683,11 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                       ),
                       const SizedBox(height: 6),
                       // Performance Badge
-                      if ((driver['rating_avg'] ?? 5.0) >= 4.7 && (driver['rating_count'] ?? 0) > 0)
+                      // القاعدةُ في `driver_rating.dart`: العدّادُ هو الفاصل.
+                      if ((driverRatingOf(driver['rating_avg'],
+                              driver['rating_count']) ??
+                          0) >=
+                          4.7)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(color: Colors.amber.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.amber.withValues(alpha: 0.3))),
@@ -700,16 +705,32 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                 ),
                 Column(
                   children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.star, color: Colors.amber, size: 14),
-                        const SizedBox(width: 4),
-                        Text(
-                          (driver['rating_avg'] ?? 5.0).toStringAsFixed(1),
-                          style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF1E293B)),
-                        ),
-                      ],
-                    ),
+                    // **«★ ٥٫٠» فوقَ «(٠ تقييم)» سطرانِ يُكذّبانِ أحدَهما
+                    // الآخر.** البذرُ `rating: 5.0` يُكتب بلا عدّاد، والخادمُ
+                    // يَستثنيه من المتوسّطِ صراحةً — فالعدّادُ هو الفاصل،
+                    // والنجمةُ لا تُرسَمُ لمن لم يُقيّمه أحد.
+                    Builder(builder: (_) {
+                      final bool rated = driverIsRated(
+                          driver['rating_avg'], driver['rating_count']);
+                      return Row(
+                        children: [
+                          Icon(Icons.star,
+                              color: rated ? Colors.amber : Colors.grey.shade300,
+                              size: 14),
+                          const SizedBox(width: 4),
+                          Text(
+                            driverRatingLabel(
+                                driver['rating_avg'], driver['rating_count']),
+                            style: GoogleFonts.tajawal(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: rated
+                                    ? const Color(0xFF1E293B)
+                                    : Colors.grey),
+                          ),
+                        ],
+                      );
+                    }),
                     Text("(${driver['rating_count'] ?? 0} تقييم)", style: TextStyle(fontSize: 8, color: Colors.grey[400])),
                     const SizedBox(height: 10),
                     Switch(
