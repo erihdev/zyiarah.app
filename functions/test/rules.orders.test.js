@@ -141,6 +141,17 @@ const {setDoc, updateDoc, doc} = require("firebase/firestore");
           {client_id: uid, status: "pending", is_paid: false,
             referral_payout_alerted: true, amount: 200}),
       false);
+  await check("mute: rating_agg_pending at create -> DENIED",
+      setDoc(doc(db, "orders/mute7e"),
+          {client_id: uid, status: "pending", is_paid: false,
+            rating_agg_pending: true, amount: 200}),
+      false);
+  // ومانعُ التكرارِ الجديد: ضبطُه سلفاً يُسقِطُ التقييمَ من متوسّطِ السائق.
+  await check("mute: rating_aggregated at create -> DENIED",
+      setDoc(doc(db, "orders/mute7f"),
+          {client_id: uid, status: "pending", is_paid: false,
+            rating_aggregated: true, amount: 200}),
+      false);
   // وعلمُ فئةِ «تعذّر التحقّق» — عضوٌ خامسٌ في عائلةِ `alertBatch` (أُضيف مع
   // مكنستِها): ضبطُه سلفاً يُسقِطُ المستندَ من نافذةِ التنبيهِ كأخواتِه.
   await check("mute: ops_alerted_unverifiable at create -> DENIED",
