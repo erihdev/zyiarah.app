@@ -14,6 +14,21 @@
 // (`TextField` بلا `inputFormatters`) — فالتطبيعُ لازمٌ هناك وغيرُ ضارٍّ هنا،
 // والقاعدةُ تَبقى واحدةً.
 
+// **نتيجةٌ سالبةٌ تُسجَّلُ كما هي: هذه المرآةُ ناقصةٌ بقصد.**
+//
+// الأصلُ الدارتيُّ يَحملُ كذلك `optionalNum`/`optionalInt`/`firstInvalidNumber`
+// لحقولِ الإدارةِ الاختياريّة (سقفٌ يوميّ، أسعارُ مناطقَ، راتبٌ، نسبةُ ذروة)
+// — ولا نسخةَ لها هنا لأنّ **اللوحةَ لا تَحتاجُها**: حقولُها
+// `<input type="number">` فالأرقامُ العربيّةُ لا تُدخَلُ أصلاً، ومحرِّرُ
+// المناطقِ فيها **يَتحقّقُ صراحةً** من نصفِ القطرِ ورسومِ الوعورةِ والسقفِ
+// اليوميِّ ويَرفُضُ بتوست (ومُعالِجُ `num()` فيه يُعلِنُ قرارَه: «فارغ/غير
+// رقمي = 0 = غير مسعّرة فتُعطَّل الخدمة بدل بيعها بسعر لم يُعتمد»).
+//
+// فنسخُها هنا كان سيَكونُ **تصديراً بلا مُنادٍ** — وهو ما يَرفُضُه
+// `no_dead_code_test` على الجهةِ الأخرى. والعقدُ المشدودُ في
+// `test/catalog_number_test.dart` هو الأسماءُ الستّةُ التي تُنادِيها اللوحةُ
+// فعلاً، لا كلُّ ما في الأصل.
+
 /** تطبيعُ الأرقامِ العربيّةِ-الهنديّةِ والفارسيّةِ وعلاماتِ الاتّجاه. */
 export function normalizeDigits(input: string): string {
     let out = '';
@@ -50,39 +65,6 @@ export function positiveInt(raw: string): number | null {
     const v = positiveNum(raw);
     if (v === null || !Number.isInteger(v) || v > 1e15) return null;
     return v;
-}
-
-/**
- * **حقلٌ اختياريٌّ: الفراغُ قرارٌ، وخطأُ الكتابةِ ليس قراراً.**
- *
- * الفراغُ يُعيدُ `whenEmpty` (قيمةٌ مقصودةٌ تَختلفُ بالحقل: «غيرُ معروضة»
- * في أسعارِ المنطقة، «بلا حدّ» في `maxUses`)، ونصٌّ لا يَنحلُّ إلى رقمٍ
- * يُعيدُ `null` = غيرُ صالح. والسالبُ مرفوض، والصفرُ المكتوبُ مقبول.
- */
-export function optionalNum(raw: string, whenEmpty: number): number | null {
-    const t = normalizeDigits(raw);
-    if (t === '') return whenEmpty;
-    const v = Number(t);
-    if (!Number.isFinite(v) || v < 0) return null;
-    return v;
-}
-
-/** نفسُ القاعدةِ لعددٍ صحيح — مُشتَقّةً من `optionalNum` كما في الدارت. */
-export function optionalInt(raw: string, whenEmpty: number): number | null {
-    const v = optionalNum(raw, whenEmpty);
-    if (v === null || !Number.isInteger(v) || v > 1e15) return null;
-    return v;
-}
-
-/**
- * تسميةُ أوّلِ حقلٍ مكتوبٍ لا يَنحلُّ إلى رقمٍ غيرِ سالب، أو `null`. الفراغُ
- * يَمُرُّ (قرارٌ مقصودٌ)، والمعنى يَبقى عند الكاتب.
- */
-export function firstInvalidNumber(fields: Record<string, string>): string | null {
-    for (const [label, raw] of Object.entries(fields)) {
-        if (optionalNum(raw, 0) === null) return label;
-    }
-    return null;
 }
 
 /**
