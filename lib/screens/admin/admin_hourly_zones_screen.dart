@@ -932,7 +932,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                         // (باقات السكن) أسعار (نوع × كوادر) + تفعيلاتها + مدد الجدولة.
                         'packages': buildPackages(),
                         'rank': rank,
-                        'enabled': data?['enabled'] ?? true,
+                        'enabled': data?['enabled'] == true,
                         // جدول الفتح — يُكتب **فقط** إن لمس الأدمن المحرّر فعلاً.
                         // الشرط القديم (scheduleData != null) كان صحيحاً للمنطقة
                         // الجديدة وخاطئاً للقائمة: القيمة مُهيّأة من المستند فتُعاد
@@ -1102,7 +1102,14 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                 final doc = row as QueryDocumentSnapshot;
                 final data = doc.data() as Map<String, dynamic>;
 
-                final isEnabled = data['enabled'] as bool? ?? true;
+                // **قُطبيّةُ الغيابِ تُطابقُ القارئَ الآمِر.**
+                // `ZyiarahZoneLocator.fetchZones` تَستعلمُ
+                // `.where('enabled', isEqualTo: true)`، ومساواةُ Firestore
+                // تَستلزمُ وجودَ الحقل — فمنطقةٌ بلا الحقلِ **لا يَراها
+                // عميلٌ أبداً** بينما كانت تُعرَضُ هنا «مفعّلة». والآن
+                // تُعرَضُ «معطّلة»، ومفتاحُ التفعيلِ يَكتبُ `true` فتُرى:
+                // الدواءُ ضغطةٌ واحدةٌ بدلَ دعوى بلا علاج.
+                final isEnabled = data['enabled'] == true;
                 final double terrainPct =
                     terrainPercentFrom(data['terrain_surcharge_percent']);
                 final String terrainKind = (data['terrain'] ?? '').toString();
