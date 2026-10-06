@@ -459,6 +459,9 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
                         visits: data['planVisits'] ?? 0,
                         startDate: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
                         signatureData: data['signatureData'], // Passing the actual signature data
+                        // مالكُ العقدِ لا المُنادي: الترشيحُ يَبقى دقيقاً،
+                        // وشرطُ الأدمنِ مُستوفًى بدورِه على أيِّ حال.
+                        ownerUid: data['userId'] as String?,
                       );
                     } catch (e) {
                       // SnackBar الشاشة يُرسم خلف الشيت المفتوحة فيبدو الزر ميتاً —

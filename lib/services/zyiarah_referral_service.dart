@@ -1,7 +1,5 @@
-import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:flutter/foundation.dart';
 import 'package:zyiarah/utils/error_report.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 
@@ -49,20 +47,28 @@ class ZyiarahReferralService {
   static const double refereeDiscountPercent = 10.0;
 
   // ─────────────────────────────────────────────────────────
-  // Code Generation
+  // Code Generation — انتقلَ إلى الخادم
   // ─────────────────────────────────────────────────────────
+  // كان هنا `_chars` و`_generateCode` (وأبجديّتُهما نفسُها في
+  // `REFERRAL_CODE_CHARS` بالخادم، بلا حروفٍ تُشبِهُ أرقاماً). وُلّدَ الكودُ
+  // على الجهازِ ما دامَ فحصُ التصادمِ يَبدو ممكناً هناك — ولم يكن.
 
-  /// Characters used for code generation.
-  /// Excludes visually ambiguous characters (0/O, 1/I/L).
-  static const String _chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-
-  String _generateCode() {
-    final rand = Random.secure();
-    return List.generate(8, (_) => _chars[rand.nextInt(_chars.length)]).join();
-  }
-
-  /// Returns the existing referral code for [userId], or generates and
-  /// persists a collision-free one.
+  /// كودُ الإحالةِ القائمُ، أو واحدٌ جديدٌ **يُولّدُه الخادم**.
+  ///
+  /// **كان التوليدُ على الجهازِ ولا يَعملُ أبداً.** فحصُ التصادمِ كان
+  /// `users.where('referral_code','==',code).limit(1)` — وقاعدةُ `users` هي
+  /// `isOwner(userId) || isAdmin()`، فاستعلامُ **قائمةٍ** على المجموعةِ لا
+  /// يُثبِتُ أيَّهما ويُرفَضُ عند كلِّ عميلة. والاستعلامُ بلا `try`، فالاستثناءُ
+  /// يَخرجُ من الدالّةِ إلى بطاقةِ «كود الإحالة» في «حسابي»: **كلُّ عميلةٍ لا
+  /// تَملكُ كوداً بعدُ لا تَستطيعُ الحصولَ على واحدٍ أبداً**، وبرنامجُ الإحالةِ
+  /// كلُّه يَبدأُ بذلك الكود. (مُثبَتٌ على مُحاكي القواعدِ لا مُستنتَجاً.)
+  ///
+  /// والفحصُ لازمٌ لا وسوسةٌ: `applyReferralCode` يَحُلُّ المُحيلَ بالكودِ، فكودانِ
+  /// متطابقانِ إسنادٌ خاطئٌ لمكافأةٍ ماليّة. فمكانُه الخادمُ وحدَه
+  /// (`exports.ensureReferralCode`).
+  ///
+  /// والقراءةُ الأولى تَبقى محلّيّةً: `users/{uid}` مقروءٌ بالقواعدِ
+  /// (`isOwner`)، فمَن يَملكُ كوداً لا يَدفعُ ثمنَ نداءٍ خادميّ.
   Future<String> getOrCreateReferralCode(String userId) async {
     final userRef = _db.collection('users').doc(userId);
     final doc = await userRef.get().timeout(kNetCallTimeout);
@@ -72,20 +78,16 @@ class ZyiarahReferralService {
     final existing = doc.data()?['referral_code'] as String?;
     if (existing != null && existing.isNotEmpty) return existing;
 
-    // Generate a collision-free code (up to 5 retries)
-    String code = _generateCode();
-    for (int i = 0; i < 5; i++) {
-      final collision = await _db
-          .collection('users')
-          .where('referral_code', isEqualTo: code)
-          .limit(1)
-          .get().timeout(kNetCallTimeout);
-      if (collision.docs.isEmpty) break;
-      code = _generateCode();
+    // النداءُ عديمُ الأثرِ التكراريّ (مَن يَملكُ كوداً يُعادُ له كما هو)،
+    // فمهلةٌ هنا آمنةٌ ولا تَحتاجُ صياغةَ «لا نعرف».
+    final res = await FirebaseFunctions.instance
+        .httpsCallable('ensureReferralCode')
+        .call()
+        .timeout(kNetCallTimeout);
+    final code = (res.data as Map?)?['code'] as String?;
+    if (code == null || code.isEmpty) {
+      throw Exception('ensureReferralCode returned no code');
     }
-
-    await userRef.update({'referral_code': code});
-    debugPrint('[ZyiarahReferralService] Generated code $code for $userId');
     return code;
   }
 

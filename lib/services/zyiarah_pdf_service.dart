@@ -243,6 +243,14 @@ class ZyiarahPdfService {
     required int visits,
     required DateTime startDate,
     String? signatureData,
+    // **مالكُ العقدِ — لازمٌ لأنّ القواعدَ تَفحصُ المستندَ لا الاستعلام.**
+    // جدولُ الزياراتِ أدناه يَستعلمُ `orders` بـ`contract_id` وحدَه، وقاعدةُ
+    // `orders` تَشترطُ `client_id == uid || driver_id == uid || isAdmin()`:
+    // فاستعلامٌ لا يُثبِتُ أحدَها يُرفَضُ عند العميلةِ **دائماً**، والـ`catch`
+    // يَسقطُ على «العقدُ بالتفاصيل الأساسية» — فالجدولُ كان يُطبَعُ للأدمنِ
+    // (`isAdmin()`) ولا يُطبَعُ لها قطّ. والترشيحُ بمالكِ العقدِ يُثبِتُ
+    // القاعدةَ لها ولا يَضُرُّ الأدمنَ (شرطُه مُستوفًى بدورِه).
+    String? ownerUid,
   }) async {
     final pdf = pw.Document();
     final f = await _fonts();
@@ -273,10 +281,13 @@ class ZyiarahPdfService {
     // العقد تاريخ ووقت كل زيارة لا عددها فقط. مرتّبة بترتيب الزيارة.
     final List<List<String>> visitRows = [];
     try {
-      final vs = await FirebaseFirestore.instance
+      Query<Map<String, dynamic>> q = FirebaseFirestore.instance
           .collection('orders')
-          .where('contract_id', isEqualTo: contractId)
-          .get().timeout(kNetCallTimeout);
+          .where('contract_id', isEqualTo: contractId);
+      if (ownerUid != null && ownerUid.isNotEmpty) {
+        q = q.where('client_id', isEqualTo: ownerUid);
+      }
+      final vs = await q.get().timeout(kNetCallTimeout);
       final docs = vs.docs.map((d) => d.data()).toList()
         ..sort((a, b) => ((a['visit_index'] ?? 0) as num)
             .compareTo((b['visit_index'] ?? 0) as num));
