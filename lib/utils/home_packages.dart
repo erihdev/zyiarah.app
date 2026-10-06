@@ -51,6 +51,19 @@ const Map<String, int> kHomeTypeDefaultDuration = {
 String formatSar(double v) =>
     v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
 
+/// نفسُ القاعدةِ لقيمةٍ آتيةٍ من Firestore أو من حسابٍ `double`.
+///
+/// **لماذا:** الرقمُ في Firestore قد يكون `int` أو `double` بحسبِ مَن كتبَه —
+/// ومحرّرا الإدارةِ يَكتبانِ `double.tryParse(...) ?? 0.0` — فسعرُ ٣٥ يُخزَّنُ
+/// `35.0` و`'$v'` تَطبعُه **«35.0 ر.س»** على رفِّ المتجرِ وفي السلّة. ولا
+/// يَظهرُ ذلك في أيِّ فحصٍ: النوعُ صحيحٌ والنصُّ قبيحٌ فحسب. والقاعدةُ هي
+/// قاعدةُ `formatSar` نفسُها (صحيحٌ بلا كسور، وإلّا خانتان) — تُطبَّقُ على
+/// `Object?` كي تُستعمَلَ مباشرةً على خريطةِ المستند.
+String formatSarAny(Object? v) {
+  final n = v is num ? v : num.tryParse('${v ?? ''}');
+  return formatSar((n ?? 0).toDouble());
+}
+
 /// تسمية عدد الكوادر بعربية سليمة.
 String crewLabel(int n) => switch (n) {
       1 => 'كادر واحد',

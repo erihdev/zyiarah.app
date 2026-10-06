@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 
 /// مرجع مختصر آمن (يتجنّب RangeError على معرّفات أقصر من 8).
 String _shortRef(dynamic v) {
@@ -180,7 +181,7 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                     children: [
                       _buildQuickInfo(Icons.calendar_today_outlined, 'الزيارات المتبقية', '${data['planVisits'] ?? 0} زيارة'),
                       const SizedBox(width: 25),
-                      _buildQuickInfo(Icons.payments_outlined, 'قيمة التعاقد', '${data['planPrice'] ?? 0} ر.س'),
+                      _buildQuickInfo(Icons.payments_outlined, 'قيمة التعاقد', '${formatSarAny(data['planPrice'])} ر.س'),
                     ],
                   ),
                   const Divider(height: 35),
@@ -342,7 +343,7 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                       _buildDetailItem('الطرف الثاني (العميل)', data['userName'] ?? data['clientName'] ?? 'غير محدد'),
                       _buildDetailItem('رقم الهاتف', data['userPhone'] ?? 'غير محدد'),
                       _buildDetailItem('الباقة المختارة', data['planName'] ?? 'غير محدد'),
-                      _buildDetailItem('القيمة الإجمالية', '${data['planPrice'] ?? 0} ر.س'),
+                      _buildDetailItem('القيمة الإجمالية', '${formatSarAny(data['planPrice'])} ر.س'),
                       _buildDetailItem('عدد الزيارات', '${data['planVisits'] ?? 0} زيارة'),
                       const SizedBox(height: 20),
                       Text('نص الاتفاقية:', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),

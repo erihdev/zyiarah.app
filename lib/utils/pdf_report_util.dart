@@ -5,6 +5,7 @@ import 'package:printing/printing.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/utils/vat.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 
 class ZyiarahPdfReportUtil {
   // نفس سبب التضمين المحلي في ZyiarahPdfService: PdfGoogleFonts كانت تجلب الخط
@@ -178,7 +179,7 @@ class ZyiarahPdfReportUtil {
                 children: [
                   pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(data['code'] ?? doc.id.substring(0, 6))),
                   pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(data['service_name'] ?? 'عامة')),
-                  pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('${data['amount'] ?? data['total_amount'] ?? data['final_amount'] ?? 0} ر.س')),
+                  pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('${formatSarAny(data['amount'] ?? data['total_amount'] ?? data['final_amount'])} ر.س')),
                   pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(_statusAr('${data['status'] ?? 'pending'}'))),
                 ],
               );

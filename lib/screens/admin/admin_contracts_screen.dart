@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/contract_health.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 
 class AdminContractsScreen extends StatefulWidget {
   const AdminContractsScreen({super.key});
@@ -437,7 +438,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
             const Divider(height: 32),
             _buildDetailRow("اسم العميل", data['userName'] ?? data['clientName'] ?? 'عميل زيارة'),
             _buildDetailRow("الباقة", data['planName'] ?? 'باقة اشتراك'),
-            _buildDetailRow("قيمة التعاقد", "${data['planPrice'] ?? 0} ر.س"),
+            _buildDetailRow("قيمة التعاقد", "${formatSarAny(data['planPrice'])} ر.س"),
             _buildDetailRow("الزيارات المتاحة", "${data['planVisits'] ?? 0} زيارة"),
             _buildDetailRow("رقم الاتصال", data['userPhone'] ?? 'غير مسجل'),
             _contractHealthBanner(data),

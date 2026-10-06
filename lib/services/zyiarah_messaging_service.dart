@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 
 class ZyiarahMessagingService {
   // Singleton Implementation
@@ -193,7 +194,7 @@ class ZyiarahMessagingService {
         "serviceDate": orderData['date_time'] ?? 'غير محدد',
         "workerCount": orderData['worker_count']?.toString() ?? '1',
         "coupon": orderData['coupon'] ?? 'لا يوجد',
-        "amount": "${orderData['amount']} ر.س",
+        "amount": "${formatSarAny(orderData['amount'])} ر.س",
         "adminUrl": "https://admin.zyiarah.com/orders/$orderCode",
       },
       attachmentUrls: invoiceUrl != null ? [invoiceUrl] : null,

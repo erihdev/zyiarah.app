@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 
 class AdminEventWorkerPackagesScreen extends StatefulWidget {
   const AdminEventWorkerPackagesScreen({super.key});
@@ -256,7 +257,7 @@ class _AdminEventWorkerPackagesScreenState extends State<AdminEventWorkerPackage
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text("${data['price']} ر.س", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                            Text("${formatSarAny(data['price'])} ر.س", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
                             Wrap(
                               spacing: 8,
                               children: [

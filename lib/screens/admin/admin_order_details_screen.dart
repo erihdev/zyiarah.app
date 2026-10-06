@@ -18,6 +18,7 @@ import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/phone_format.dart';
 import 'package:zyiarah/utils/price_review.dart';
 import 'package:zyiarah/utils/cancel_refund_notice.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 
 class AdminOrderDetailsScreen extends StatefulWidget {
   final String orderId;
@@ -1256,7 +1257,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                     ),
                     ListTile(
                       title: const Text("المبلغ الإجمالي"), 
-                      subtitle: Text("${data['final_amount'] ?? data['amount'] ?? data['totalAmountPaid'] ?? data['quotePrice'] ?? 0} ر.س"),
+                      subtitle: Text("${formatSarAny(data['final_amount'] ?? data['amount'] ?? data['totalAmountPaid'] ?? data['quotePrice'])} ر.س"),
                     ),
                     // (تسعير القرى والوعورة) سطر الوعورة إن وُجد — كتبته شاشة الدفع
                     // للعرض الإداري؛ الخادم يعيد حسابه من مستند المنطقة عند التحقق.

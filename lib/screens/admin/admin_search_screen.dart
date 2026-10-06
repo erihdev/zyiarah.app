@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/screens/admin/admin_order_details_screen.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 
 class AdminSearchScreen extends StatefulWidget {
   // الدور يصل من AdminDashboardScreen (مطبَّع: admin→super_admin) — قواعد Firestore
@@ -215,13 +216,13 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
     switch (type) {
       case 'order':
         title = data['service_name'] ?? 'خدمة';
-        subtitle = "رقم: #${data['code'] ?? doc.id.substring(0, 5)} - ${data['amount']} ر.س";
+        subtitle = "رقم: #${data['code'] ?? doc.id.substring(0, 5)} - ${formatSarAny(data['amount'])} ر.س";
         icon = Icons.receipt_long_rounded;
         color = Colors.blue;
         break;
       case 'store_order':
         title = "طلب متجر #${data['code'] ?? doc.id.substring(0, 6)}";
-        subtitle = "الإجمالي: ${data['total_amount']} ر.س - الحالة: ${data['status']}";
+        subtitle = "الإجمالي: ${formatSarAny(data['total_amount'])} ر.س - الحالة: ${data['status']}";
         icon = Icons.shopping_basket_rounded;
         color = Colors.teal;
         break;
@@ -239,7 +240,7 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
         break;
       case 'product':
         title = data['name'] ?? 'منتج';
-        subtitle = "السعر: ${data['price']} ر.س";
+        subtitle = "السعر: ${formatSarAny(data['price'])} ر.س";
         icon = Icons.inventory_2_rounded;
         color = Colors.indigo;
         break;

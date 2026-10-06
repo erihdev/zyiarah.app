@@ -11,6 +11,7 @@ import 'package:zyiarah/screens/admin/admin_contracts_screen.dart';
 import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/order_activity.dart';
 import 'package:zyiarah/utils/order_lifecycle.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 
 class AdminInsightsScreen extends StatefulWidget {
   // الدور يصل من AdminDashboardScreen (مطبَّع: admin→super_admin) — نحتاجه لتخطي
@@ -688,7 +689,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       final data = doc.data() as Map<String, dynamic>;
       activities.add({
         'title': data['service_name'] ?? 'خدمة عامة',
-        'subtitle': 'طلب تنظيف جديد - ${data['amount']} ر.س',
+        'subtitle': 'طلب تنظيف جديد - ${formatSarAny(data['amount'])} ر.س',
         'time': data['created_at'],
         'icon': Icons.cleaning_services_rounded,
         'color': const Color(0xFF2563EB),
@@ -698,7 +699,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       final data = doc.data() as Map<String, dynamic>;
       activities.add({
         'title': data['serviceType'] ?? 'صيانة',
-        'subtitle': 'طلب صيانة - ${data['quotePrice'] ?? "قيد التسعير"} ر.س',
+        'subtitle': 'طلب صيانة - ${data['quotePrice'] == null ? "قيد التسعير" : formatSarAny(data['quotePrice'])} ر.س',
         'time': data['createdAt'],
         'icon': Icons.build_circle_rounded,
         'color': const Color(0xFFF59E0B),
