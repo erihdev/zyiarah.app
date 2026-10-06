@@ -62,7 +62,18 @@ export default function StoreProducts() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const prods: Product[] = [];
       snapshot.forEach((doc) => {
-        prods.push({ id: doc.id, ...doc.data() } as Product);
+        // **قُطبيّةُ الغيابِ تُطبَّعُ هنا مرّةً واحدة.**
+        // `store_service.streamProducts` تَستعلمُ
+        // `.where('is_hidden', isEqualTo: false)`، ومساواةُ Firestore
+        // تَستلزمُ وجودَ الحقل — فمنتجٌ قديمٌ بلا الحقلِ لا يَراه عميلٌ
+        // أبداً، وكان يُعرَضُ هنا «ظاهراً» بأيقونةِ عينٍ مفتوحة. فالغيابُ
+        // «مخفيٌّ» الآن، وزرُّ الإظهارِ يَكتبُ `false` فيَظهرُ فعلاً.
+        const raw = doc.data();
+        prods.push({
+          id: doc.id,
+          ...raw,
+          is_hidden: raw.is_hidden !== false,
+        } as Product);
       });
       setProducts(prods);
       setLoading(false);

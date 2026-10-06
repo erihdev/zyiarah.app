@@ -87,7 +87,10 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
     final Map<String, dynamic>? data = doc?.data() as Map<String, dynamic>?;
     final actionUrlCtrl = TextEditingController(text: data?['actionUrl'] ?? '');
     String? imageUrl = data?['imageUrl'];
-    bool isActive = data?['isActive'] ?? true;
+    // القائمةُ أدناه تَقرأُ `== true` (وهو ما يَستعلمُه العميلُ)، وكان
+    // افتراضُ الحوارِ `?? true` فيُقرأُ بانرٌ قديمٌ بلا الحقلِ «نشطاً» هنا
+    // و«مخفيّاً» في الصفِّ نفسِه — تناقضٌ داخلَ شاشةٍ واحدة.
+    bool isActive = data?['isActive'] == true;
     int rank = data?['rank'] ?? 0;
     String selectedRoute = data?['routeType'] ?? 'whatsapp';
     // مكان الظهور: 'main' = البانر الرئيسي على الرئيسية، 'offers' = قسم العروض.
