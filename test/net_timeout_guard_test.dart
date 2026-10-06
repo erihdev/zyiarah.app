@@ -276,15 +276,34 @@ void main() {
     // الكاميرا — … من الإعدادات: $e» والآخرُ «تعذّر الاتصال بالدعم: $e».
     // ومسحُ `widgets`+`utils`+`providers`+`models` وجدَ هذَين وحدَهما، فلا
     // موضعَ إداريّاً هناك يَلزمُ استثناؤه.
+    //
+    // **والنمطُ كان يَرى الاستقراءَ وحدَه (`$e`) لا التعبيرَ (2026-10-06).**
+    // القاعدةُ عامّةٌ — «لا نصَّ استثناءٍ خامّاً» — والنمطُ `\$\{?\s*e\b`
+    // يُطابِقُ `$e` و`${e.toString()}` ولا يُطابِقُ `e.toString()` **تعبيراً
+    // مباشراً**. وكان ذلك موضعاً حيّاً واحداً، على **شاشةِ الدفع**: مُعالِجُ
+    // Google Pay يَعرضُ `e.toString().replaceAll('Exception: ', '')`، فمهلةُ
+    // الثلاثينَ ثانيةً في `processGooglePayToken` تُقرأُ «TimeoutException
+    // after 0:00:30.000000: Future not completed» وانقطاعُ الشبكةِ
+    // «ClientException with SocketException: Failed host lookup» — ولا
+    // تَمَسُّهما `replaceAll` لأنّهما لا يَبدآنِ بـ`Exception: `.
     final offenders = <String>[];
     for (final f in [..._allScreens(), ..._allWidgets()]) {
       final path = f.path.replaceAll('\\', '/');
       if (path.contains('/admin/')) continue;
       if (path.split('/').last.startsWith('driver_')) continue;
       final src = _code(path);
+      // أسماءُ المُلتقَطِ في هذا الملفّ، فـ`f.message` لا يُطابَقُ خطأً.
+      final caught = RegExp(r'catch\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)')
+          .allMatches(src)
+          .map((m) => m.group(1)!)
+          .toSet()
+        ..addAll(['e', 'err', 'error', 'ex']);
+      final toStr = RegExp(
+          '\\b(${caught.map(RegExp.escape).join('|')})\\.toString\\(\\)');
       for (final m in RegExp(r'showSnackBar\(').allMatches(src)) {
         final block = snackBlock(src, m.start);
-        final hit = RegExp(r'\$\{?\s*e\b').firstMatch(block);
+        final hit = RegExp(r'\$\{?\s*e\b').firstMatch(block) ??
+            toStr.firstMatch(block);
         if (hit != null) {
           offenders.add('$path  ←  ...${block.substring(
                   (hit.start - 40).clamp(0, block.length), hit.start + 30)
