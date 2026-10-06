@@ -175,4 +175,56 @@ void main() {
           reason: 'تأكيد الرياض بصمت لمستخدم في جازان = فريق يصل لمدينة أخرى');
     });
   });
+
+  group('قُطبيّةُ غيابِ `enabled` واحدةٌ — المحرّرُ لا يُخالفُ القارئَ الآمِر', () {
+    // **العطل (2026-10-06، كامنٌ لا حيّ):** `fetchZones` تَستعلمُ
+    // `.where('enabled', isEqualTo: true)`، ومساواةُ Firestore تَستلزمُ وجودَ
+    // الحقل — فمنطقةٌ بلا الحقلِ **لا يَراها عميلٌ أبداً**. وكان المحرّرانِ
+    // يَعرضانِها «مفعّلة» (`?? true` و`!== false`): دعوى تغطيةٍ كاذبةٌ بلا
+    // علاجٍ ظاهر. وكامنٌ لأنّ كُتّابَ المنطقةِ الثلاثةَ كلَّهم يَكتبونَ
+    // الحقلَ (الباذرُ، ومحرّرُ التطبيق، ومحرّرُ اللوحة)، فالمكشوفُ مستندٌ
+    // أُنشئ بيدٍ في الكونسول — وهو مسارٌ موثَّقٌ في هذا المشروع.
+    final locator = File('lib/services/zone_locator_service.dart')
+        .readAsStringSync();
+    String code(String p) => File(p)
+        .readAsStringSync()
+        .split('\n')
+        .map((l) => l.trimLeft().startsWith('//') ? '' : l)
+        .join('\n');
+
+    test('(ع) القارئُ الآمِرُ ما زال يَشترطُ وجودَ الحقلِ ومساواتَه', () {
+      expect(locator.contains("where('enabled', isEqualTo: true)"), isTrue,
+          reason: 'تغيّرَ الاستعلامُ — فقُطبيّةُ المحرّرَين تُراجَعُ لا تُسكَت');
+    });
+
+    test('(غ) ولا محرّرَ يَعرضُ الغيابَ «مفعّلة»', () {
+      final dart = code('lib/screens/admin/admin_hourly_zones_screen.dart');
+      final panel = code('admin_panel/src/pages/Settings.tsx');
+      // الشكلانِ المحظوران: `?? true` و`!== false` على هذا الحقلِ بعينِه.
+      expect(RegExp(r"\['enabled'\]\s*(as bool\?\s*)?\?\?\s*true")
+              .hasMatch(dart),
+          isFalse,
+          reason: 'عادَ `enabled ?? true` — منطقةٌ غائبةُ الحقلِ تُعرَضُ مفعّلة');
+      expect(RegExp(r'enabled\s*!==\s*false').hasMatch(panel), isFalse,
+          reason: 'عادَ `enabled !== false` في اللوحة');
+      // وأنّهما يَقرآنِ بالشكلِ الصحيحِ فعلاً — لا أنّ القراءةَ زالت.
+      expect(dart.contains("data['enabled'] == true"), isTrue,
+          reason: 'قائمةُ المناطقِ لا تَقرأُ الحقلَ بالمساواة');
+      expect(panel.contains('enabled: data.enabled === true'), isTrue,
+          reason: 'اللوحةُ لا تَقرأُ الحقلَ بالمساواة');
+    });
+
+    test('(ف) وكُتّابُ المنطقةِ الثلاثةُ ما زالوا يَكتبونَ الحقل', () {
+      // هذا ما يُجعلُ العطلَ كامناً؛ فزوالُ أحدِهم يَجعلُه حيّاً فيُراجَع.
+      expect(code('lib/services/geofence_service.dart')
+              .contains("'enabled': true"),
+          isTrue, reason: 'الباذرُ لم يَعُد يَكتبُ الحقل');
+      expect(code('lib/screens/admin/admin_hourly_zones_screen.dart')
+              .contains("'enabled':"),
+          isTrue, reason: 'محرّرُ التطبيقِ لم يَعُد يَكتبُ الحقل');
+      expect(code('admin_panel/src/pages/Settings.tsx')
+              .contains('enabled: true'),
+          isTrue, reason: 'محرّرُ اللوحةِ لم يَعُد يَكتبُ الحقلَ عند الإنشاء');
+    });
+  });
 }

@@ -226,7 +226,10 @@ export default function Settings({ role }: { role?: string | null }) {
                     latitude: center ? center.latitude : 0.0,
                     longitude: center ? center.longitude : 0.0,
                     radiusKm: data.radiusKm || 15,
-                    enabled: data.enabled !== false,
+                    // قُطبيّةُ الغيابِ تُطابقُ القارئَ الآمِر:
+                    // `fetchZones` تَستعلمُ `enabled == true`، فمنطقةٌ بلا
+                    // الحقلِ لا يَراها عميلٌ أبداً — وكانت تُعرَضُ «مفعّلة».
+                    enabled: data.enabled === true,
                     rank: data.rank || 0,
                     governorate: data.governorate || '',
                     terrain: data.terrain || '',
