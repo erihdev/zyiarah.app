@@ -9,7 +9,7 @@ const {
   assertSucceeds,
 } = require("@firebase/rules-unit-testing");
 const {setDoc, doc, updateDoc, getDoc, getDocs, collection, query, addDoc,
-  where} = require("firebase/firestore");
+  where, limit} = require("firebase/firestore");
 
 (async () => {
   const testEnv = await initializeTestEnvironment({
@@ -310,6 +310,43 @@ const {setDoc, doc, updateDoc, getDoc, getDocs, collection, query, addDoc,
   await check("an active orders_manager still updates an order",
       updateDoc(doc(asUser("ordersMgr"), "orders/o1"), {status: "scheduled"}),
       true);
+
+  // ══════════════════════════════════════════════════════════════════
+  // استعلامُ قائمةٍ لا يُثبِتُ قاعدتَه يُرفَضُ كلُّه (2026-10-06)
+  // ══════════════════════════════════════════════════════════════════
+  // قواعدُ Firestore ليست مُرشِّحات: استعلامُ قائمةٍ يُرفَضُ ما لم تَضمَنْ
+  // قيودُه أنّ كلَّ مستندٍ يُعيدُه يُحقّقُ الشرط. وهذه الفحوصُ هي **البرهانُ**
+  // على ثلاثةِ استعلاماتٍ كانت في العميلِ — لا استنتاجاً من القاعدة:
+  //   • `users` بـ`referral_code`: فحصُ تصادمِ كودِ الإحالة. كان يَرمي بلا
+  //     `try`، فلا عميلةَ تَحصلُ على كودٍ أبداً وبرنامجُ الإحالةِ كلُّه
+  //     يَبدأُ بذلك الكود. انتقلَ إلى `exports.ensureReferralCode`.
+  //   • `orders` بـ`contract_id` وحدَه: جدولُ زياراتِ العقدِ في الـPDF. يَسقطُ
+  //     على `catch` موثَّقٍ فيُطبَعُ العقدُ بلا مواعيد — **للأدمنِ يَعملُ
+  //     ولها لا**. وإضافةُ `client_id` تُثبِتُ القاعدةَ (الفحصُ الثالث).
+  //   • `drivers` بـ`phone`: احتياطُ تحديدِ الدور. يَفشلُ مُغلَقاً إلى شاشةِ
+  //     «الدورُ غيرُ متاح»، وبقي موثَّقاً أنّه غيرُ قابلٍ للنجاح.
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, "users/refOther"),
+        {role: "client", referral_code: "ZZZZ9999"});
+    await setDoc(doc(db, "contracts/kProve"),
+        {userId: "client1", status: "active"});
+    await setDoc(doc(db, "orders/oProve"),
+        {client_id: "client1", contract_id: "kProve", visit_index: 1});
+  });
+  await check("client CANNOT list users by referral_code (collision check)",
+      getDocs(query(collection(asUser("client1"), "users"),
+          where("referral_code", "==", "ZZZZ9999"), limit(1))), false);
+  await check("client CANNOT list orders by contract_id alone (PDF visits)",
+      getDocs(query(collection(asUser("client1"), "orders"),
+          where("contract_id", "==", "kProve"))), false);
+  await check("client CAN list orders by contract_id + own client_id",
+      getDocs(query(collection(asUser("client1"), "orders"),
+          where("contract_id", "==", "kProve"),
+          where("client_id", "==", "client1"))), true);
+  await check("client CANNOT list drivers by phone (role fallback)",
+      getDocs(query(collection(asUser("client1"), "drivers"),
+          where("phone", "==", "500000000"), limit(1))), false);
 
   await testEnv.cleanup();
   console.log(`\nRole test: ${pass} passed, ${fail} failed`);

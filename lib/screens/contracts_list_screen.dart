@@ -228,6 +228,9 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                                   price: double.tryParse('${data['planPrice'] ?? 0}') ?? 0.0,
                                   visits: int.tryParse('${data['planVisits'] ?? 0}') ?? 0,
                                   startDate: createdAt,
+                                  // بلاه يُرفَضُ استعلامُ جدولِ الزياراتِ
+                                  // بالقواعدِ فيُطبَعُ العقدُ بلا مواعيد.
+                                  ownerUid: data['userId'] as String?,
                                 );
                               } catch (e) {
                                 messenger.showSnackBar(

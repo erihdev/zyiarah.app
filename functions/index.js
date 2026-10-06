@@ -5761,6 +5761,75 @@ exports.notifyClientOnDriverDeparture = onDocumentUpdated(
 // نظام الإحالة — ربط الإحالة خادمياً (العميل يرسل الكود فقط، والخادم يتحقّق
 // ويحدّد referrer_id — كي لا يمنح العميل مكافأة إحالة لأي شخص بضبط الحقل يدوياً).
 // ════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════
+// Referral code — generated server-side because the collision check cannot
+// run on the client
+// ════════════════════════════════════════════════════════════════════════
+// `ZyiarahReferralService.getOrCreateReferralCode` كانت تُولّدُ الكودَ على
+// الجهازِ ثمّ تَفحصُ التصادمَ بـ
+// `users.where('referral_code','==',code).limit(1)` — و**قاعدةُ `users` هي
+// `isOwner(userId) || isAdmin()`**، فاستعلامُ قائمةٍ على المجموعةِ لا يُثبِتُ
+// أيَّهما ويُرفَضُ عند كلِّ عميلة. والاستعلامُ بلا `try`، فالاستثناءُ يَخرجُ
+// من الدالّةِ: **كلُّ عميلةٍ لا تَملكُ كوداً بعدُ لا تَستطيعُ الحصولَ على
+// واحدٍ أبداً** — وبرنامجُ الإحالةِ كلُّه (٥٠ ر.س للمُحيل، ١٠٪ للمُحالة)
+// يَبدأُ بذلك الكود. (مُثبَتٌ على المُحاكي لا مُستنتَجاً.)
+//
+// والتصادمُ ليس وسوسةً: `applyReferralCode` يَحُلُّ المُحيلَ بـ
+// `where('referral_code','==',code).limit(1)` — فكودانِ متطابقانِ يَعنيانِ
+// إسناداً خاطئاً لمكافأةٍ ماليّة، وهو بعينُه ما أُضيفت لأجلِه قاعدةُ
+// «الكودُ يُكتَبُ مرّةً» في 2026-10-05. فالفحصُ لازمٌ، ومكانُه الخادمُ وحدَه.
+//
+// والنداءُ **عديمُ الأثرِ التكراريّ**: مَن يَملكُ كوداً يُعادُ له كما هو، فلا
+// ضررَ في إعادةِ المحاولةِ بعدَ مهلة.
+const REFERRAL_CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+/**
+ * كودٌ عشوائيٌّ بطولِ ثمانيةٍ من الأبجديّةِ نفسِها التي كان يَستعملُها العميل
+ * (بلا حروفٍ تُشبِهُ أرقاماً: I/L/O/0/1).
+ * @return {string}
+ */
+function _randomReferralCode() {
+  let out = "";
+  for (let i = 0; i < 8; i++) {
+    out += REFERRAL_CODE_CHARS[
+        Math.floor(Math.random() * REFERRAL_CODE_CHARS.length)];
+  }
+  return out;
+}
+
+exports.ensureReferralCode = onCall({cpu: 0.083}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
+  }
+  const uid = request.auth.uid;
+  const db = getFirestore();
+  const userRef = db.collection("users").doc(uid);
+  const snap = await userRef.get();
+  if (!snap.exists) throw new HttpsError("not-found", "المستخدم غير موجود");
+  const existing = snap.data().referral_code;
+  if (typeof existing === "string" && existing !== "") {
+    return {code: existing};
+  }
+  // خمسُ محاولاتٍ كما كان العميلُ يَفعل — والفحصُ هنا يَعمل.
+  for (let i = 0; i < 5; i++) {
+    const code = _randomReferralCode();
+    const clash = await db.collection("users")
+        .where("referral_code", "==", code).limit(1).get();
+    if (!clash.empty) continue;
+    // كتابةٌ ذرّيّةٌ تَحرُسُ نفسَها: نداءانِ متزامنانِ لا يُنتجانِ كودَين.
+    const won = await db.runTransaction(async (t) => {
+      const fresh = await t.get(userRef);
+      const cur = fresh.exists ? fresh.data().referral_code : null;
+      if (typeof cur === "string" && cur !== "") return cur;
+      t.update(userRef, {referral_code: code});
+      return code;
+    });
+    return {code: won};
+  }
+  throw new HttpsError("resource-exhausted",
+      "تعذّر توليد كود إحالة فريد — حاولي لاحقاً");
+});
+
 exports.applyReferralCode = onCall({cpu: 0.25}, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
