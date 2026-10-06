@@ -1,8 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Search, FileSignature, CheckCircle2, Clock, XCircle, AlertCircle, Calendar, CreditCard, Trash2, Info, Package, Plus, Pencil, Star, Loader2, PartyPopper } from 'lucide-react';
-import { collection, onSnapshot, query, orderBy, limit, Timestamp, doc, updateDoc, deleteDoc, addDoc, serverTimestamp, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, limit, Timestamp, doc, updateDoc, deleteDoc, addDoc, serverTimestamp, runTransaction, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db, auth } from '../services/firebase.ts';
 import { useNotification } from '../components/notificationContext.ts';
+import {
+    contractHealthOf, contractHealthReason, contractNeedsHuman,
+    contractApproveAllowed, contractApproveBlockedReason,
+    CONTRACT_HEALTH_TITLES,
+} from '../utils/contractHealth.ts';
 
 interface ContractRecord {
     id: string;
@@ -14,7 +19,40 @@ interface ContractRecord {
     planVisits?: number;
     status: string;
     createdAt?: Timestamp;
+    // حقولُ صحّةِ التفعيل — كانت الصفحةُ تَعرضُ `status` وحدَه، فعقدٌ مدفوعٌ
+    // فشلَ تفعيلُه يُقرأُ «قيد المراجعة» كأيِّ معلَّقٍ غيرِ مدفوع.
+    is_paid?: boolean;
+    plan_validation_failed?: boolean;
+    plan_validation_error?: string;
+    contract_visits_pending?: boolean;
+    contract_visits_error?: string;
+    contract_activation_failed?: boolean;
+    contract_activation_error?: string;
 }
+
+/** بطاقةُ صحّةِ التفعيل — مرآةُ `_contractHealthBanner` في شاشةِ Flutter. */
+const HealthBanner = ({ c }: { c: ContractRecord }) => {
+    const h = contractHealthOf(c);
+    if (h === 'ok') return null;
+    const human = contractNeedsHuman(h);
+    const reason = contractHealthReason(c);
+    const cls = human
+        ? 'bg-red-50 border-red-200 text-red-700'
+        : 'bg-amber-50 border-amber-200 text-amber-700';
+    return (
+        <div className={`mb-4 px-3 py-2 rounded-xl border text-[11px] font-bold ${cls}`}>
+            <div className="flex items-start gap-2">
+                <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                <span>{CONTRACT_HEALTH_TITLES[h]}</span>
+            </div>
+            {reason && (
+                <div className="mt-1 text-[10px] font-medium text-slate-700">
+                    السبب الذي سجّله الخادم: {reason}
+                </div>
+            )}
+        </div>
+    );
+};
 
 // (تكافؤ مع تطبيق الأدمن — admin_subscriptions_screen.dart) نفس مجموعة
 // subscription_packages ونفس الحقول حرفياً: title/subtitle/price/visits/hours/
@@ -591,9 +629,21 @@ export default function Contracts({ role }: { role?: string | null }) {
     const handleApprove = async (id: string, planName: string, userId?: string) => {
         if (!await confirm(`هل أنت متأكد من رغبتك في اعتماد عقد (${planName})؟`)) return;
         try {
-            await updateDoc(doc(db, 'contracts', id), {
-                status: 'approved_waiting_payment',
-                adminApprovedAt: Timestamp.now()
+            // **القراءةُ طازجةً داخلَ معامَلة، لا `updateDoc` أعمى.** البوّابةُ
+            // في الرسمِ تَحرُسُ العرضَ لا الضغطة: صفحةٌ مفتوحةٌ من قبلِ وصولِ
+            // الدفعةِ تَحملُ لقطةً قديمةً، وهذه الكتابةُ بعينِها تُخرِجُ العقدَ
+            // من نافذةِ الإنقاذ. (والقواعدُ تَمنعُ الانتقالَ كذلك — محجوزةٌ مع
+            // STAGE-C، فهذه هي العاملةُ اليوم.)
+            await runTransaction(db, async (tx) => {
+                const ref = doc(db, 'contracts', id);
+                const snap = await tx.get(ref);
+                if (!snap.exists()) throw new Error('العقد غير موجود');
+                const blocked = contractApproveBlockedReason(snap.data() as ContractRecord);
+                if (blocked) throw new Error(blocked);
+                tx.update(ref, {
+                    status: 'approved_waiting_payment',
+                    adminApprovedAt: Timestamp.now(),
+                });
             });
             // إشعار العميل بإتمام الدفع — مسار تطبيق الأدمن يستدعي notifyContractApproved،
             // أما لوحة الويب فكانت تعتمد العقد بصمت ولا يصل العميل أي تنبيه. نكتب هنا في
@@ -624,7 +674,10 @@ export default function Contracts({ role }: { role?: string | null }) {
             toast.success("تم اعتماد العقد بنجاح وبانتظار دفع العميل");
         } catch (error) {
             console.error(error);
-            toast.error("حدث خطأ أثناء الاعتماد");
+            // **رسالةُ المعامَلةِ هي الخبر.** الرفضُ هنا سببُه مكتوبٌ
+            // («مدفوع سلفاً — …»)، ونصٌّ عامٌّ يَبتلعُه فيُقرأُ عطلَ شبكةٍ
+            // فيُعيدُ الأدمنُ المحاولةَ — نمطُ `Orders.tsx` نفسُه.
+            toast.error(error instanceof Error ? error.message : "حدث خطأ أثناء الاعتماد");
         }
     };
 
@@ -741,6 +794,8 @@ export default function Contracts({ role }: { role?: string | null }) {
                                     </div>
                                 </div>
 
+                                <HealthBanner c={contract} />
+
                                 <div className="flex items-start gap-4 mb-6">
                                     <div className="p-4 bg-slate-50 text-slate-400 rounded-2xl group-hover:bg-[#660033] group-hover:text-white transition-all duration-500">
                                         <FileSignature size={24} />
@@ -765,7 +820,11 @@ export default function Contracts({ role }: { role?: string | null }) {
                                 </div>
 
                                 <div className="flex items-center gap-3">
-                                    {contract.status === 'pending' && (
+                                    {/* **الاعتمادُ لِما لم يُدفَع بعد.** كان الشرطُ
+                                        `status === 'pending'` وحدَها، وعقدٌ فشلَ تفعيلُه
+                                        يَسكنُ تلك الحالةَ — فالضغطةُ تُطالِبُ مَن دفعَ
+                                        بالدفعِ وتُخرِجُه من نافذةِ الإنقاذ. */}
+                                    {contractApproveAllowed(contract) && (
                                         <button 
                                             type="button"
                                             onClick={() => handleApprove(contract.id, contract.planName, contract.userId)}
@@ -773,6 +832,12 @@ export default function Contracts({ role }: { role?: string | null }) {
                                         >
                                             اعتماد الباقة
                                         </button>
+                                    )}
+                                    {/* الإخفاءُ وحدَه يُقرأُ عطلاً، فيُقالُ سببُه مكانَه. */}
+                                    {!contractApproveAllowed(contract) && contractApproveBlockedReason(contract) && (
+                                        <p className="flex-1 text-[11px] font-bold text-amber-700 leading-relaxed">
+                                            {contractApproveBlockedReason(contract)}
+                                        </p>
                                     )}
                                     <button 
                                         type="button" 

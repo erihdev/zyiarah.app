@@ -248,7 +248,11 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Row(
               children: [
-                if (status == 'pending' && _canApproveContracts)
+                // **الاعتمادُ لِما لم يُدفَع بعد.** كان الشرطُ
+                // `status == 'pending'` وحدَها، وعقدٌ فشلَ تفعيلُه يَسكنُ
+                // تلك الحالةَ — فالضغطةُ تُطالِبُ مَن دفعَ بالدفعِ وتُخرِجُه
+                // من نافذةِ الإنقاذ. التفصيلُ في `contract_health.dart`.
+                if (contractApproveAllowed(data) && _canApproveContracts)
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () => _approveContract(doc),
@@ -262,6 +266,17 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
                         elevation: 0,
                       ),
                     ),
+                  ),
+                // الإخفاءُ وحدَه يُقرأُ عطلاً في الشاشة، فيُقالُ سببُه مكانَه.
+                if (!contractApproveAllowed(data) &&
+                    contractApproveBlockedReason(data) != null &&
+                    _canApproveContracts)
+                  Expanded(
+                    child: Text(contractApproveBlockedReason(data)!,
+                        style: GoogleFonts.tajawal(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFFB45309))),
                   ),
                 const SizedBox(width: 8),
                 IconButton.filled(
@@ -351,6 +366,14 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
   void _approveContract(DocumentSnapshot doc) async {
     final messenger = ScaffoldMessenger.of(context);
     final data = doc.data() as Map<String, dynamic>;
+    // شاشةٌ مفتوحةٌ من قبلِ وصولِ الدفعةِ تَحملُ لقطةً قديمةً، والبوّابةُ في
+    // البناءِ وحدَها تَحرُسُ العرضَ لا الضغطة — فتُعادُ هنا بنصِّ السبب.
+    final String? blocked = contractApproveBlockedReason(data);
+    if (blocked != null) {
+      messenger.showSnackBar(SnackBar(
+          content: Text(blocked), backgroundColor: Colors.orange.shade800));
+      return;
+    }
     final confirm = await _showConfirm("اعتماد العقد", "هل أنت متأكد من اعتماد باقة (${data['planName']})؟");
     if (!confirm) return;
     try {
