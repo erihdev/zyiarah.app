@@ -1,12 +1,13 @@
 import { useEffect, useState, lazy, Suspense, type ReactElement } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import type { User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './services/firebase.ts';
 import Layout from './components/Layout.tsx';
 import { NotificationProvider } from './components/Notification.tsx';
 import { canAccess } from './config/access.ts';
+import { staffIsActive, type StaffActivityDoc } from './utils/staffStatus.ts';
 
 // ── تقسيم الحِزمة على المسارات ──────────────────────────────────────────
 //
@@ -61,9 +62,18 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // **سحبُ الصلاحيةِ حيٌّ لا عند الإقلاعِ وحدَه.** تطبيقُ العميلةِ
+    // يُسجّلُ خروجَ المحظورِ لحظةَ الحظرِ (`user_provider`)، وهذه اللوحةُ
+    // كانت تَقرأُ المستندَ مرّةً عند تغيّرِ حالةِ المصادقةِ فحسب — فجلسةٌ
+    // مفتوحةٌ تَبقى عاملةً إلى أن يُحدِّثَ الصفحة. والمُراقَبُ هو مستندُه
+    // وحدَه، فلا كلفةَ تُذكَر.
+    let unsubDoc: (() => void) | null = null;
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      unsubDoc?.();
+      unsubDoc = null;
       setUser(currentUser);
       if (currentUser) {
+        let staffRole = false;
         try {
           const snap = await getDoc(doc(db, 'users', currentUser.uid));
           // EFFECTIVE role: staff store their real sub-role in staff_role while role
@@ -72,18 +82,44 @@ function App() {
           const d = snap.data();
           const r = (d?.staff_role ?? d?.role) as string | undefined;
           setRole(r ?? null);
-          setIsAdmin(!!r && ADMIN_ROLES.includes(r));
+          // **أعلامُ الإيقافِ تُقرأُ من هذا المستندِ بعينِه، وكانت لا تُفحَص.**
+          // فموظّفٌ أوقفَه المالكُ أو حظرَته صفحةُ المستخدمينَ في هذه اللوحةِ
+          // كان يَحتفظُ بالإطارِ وبكلِّ صفحةٍ يُجيزُها دورُه — بينما تطبيقُ
+          // الإدارةِ يَرفضُه وتطبيقُ العميلةِ يُسجّلُ خروجَه. وبوّابةُ
+          // القواعدِ (`staffEnabled()`) محجوزةٌ مع STAGE-C ولم تُنشَر، فهذه
+          // هي العاملةُ اليوم.
+          staffRole = !!r && ADMIN_ROLES.includes(r);
+          setIsAdmin(staffRole &&
+            staffIsActive(d as StaffActivityDoc | undefined));
         } catch {
           setRole(null);
           setIsAdmin(false);
         }
+        // **مقصورٌ على دورِ موظّف**، كـ`staffAccountDisabled` في الدارت:
+        // `is_active` على مستندِ عميلةٍ كُتبَ لسببٍ آخرَ ولا معنى له هنا،
+        // ومَن ليس موظّفاً لا يَبلغُ الإطارَ أصلاً — فلا مُستمِعَ له.
+        if (staffRole) unsubDoc = onSnapshot(
+          doc(db, 'users', currentUser.uid),
+          (snap2) => {
+            const d2 = snap2.data() as StaffActivityDoc | undefined;
+            // مستندٌ زال = حسابٌ أُقصي (`deleteStaffAccount` يَحذفُ Auth
+            // كذلك، فهذا احتياط).
+            if (!snap2.exists() || !staffIsActive(d2)) signOut(auth);
+          },
+          // **صامتٌ عن قصد:** فشلُ قراءةٍ عابرٌ لا يَجوزُ أن يُخرِجَ
+          // المالكَ من لوحتِه — والقرارُ الأوّلُ أُخِذ من `getDoc` أعلاه.
+          () => {},
+        );
       } else {
         setRole(null);
         setIsAdmin(false);
       }
       setLoading(false);
     });
-    return () => unsubscribe();
+    return () => {
+      unsubDoc?.();
+      unsubscribe();
+    };
   }, []);
 
   // Guard a route element: render it only if the role may access that path,

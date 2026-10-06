@@ -173,4 +173,76 @@ void main() {
           reason: 'الوقفُ لم يَعُد يَمنعُ مديرَ الطلبات');
     });
   });
+
+  group('البوّابةُ لا الشارةُ وحدَها — الدخولُ والإطار', () {
+    final loginRaw = File('admin_panel/src/pages/Login.tsx').readAsStringSync();
+    final login = _mask(loginRaw);
+    final appRaw = File('admin_panel/src/App.tsx').readAsStringSync();
+    final app = _mask(appRaw);
+
+    test('(ي) الدخول: البوّابةُ بعدَ فحصِ الدورِ وقبلَ الانتقال', () {
+      // العطلُ أخطرُ من الشارة: الحسابُ **الموقوفُ أو المحظورُ** كان يَدخلُ
+      // اللوحةَ ويَعملُ، بينما تطبيقُ الإدارةِ يَرفضُه (`getUserRole` تُعيدُ
+      // `null`) وتطبيقُ العميلةِ يُسجّلُ خروجَه فوراً — وبوّابةُ القواعدِ
+      // (`staffEnabled()`) محجوزةٌ مع STAGE-C ولم تُنشَر.
+      expect(login.contains("from '../utils/staffStatus.ts'"), isTrue,
+          reason: 'القاعدةُ غيرُ مستورَدةٍ في صفحةِ الدخول');
+      final iRole = login.indexOf('ADMIN_ROLES.includes(effRole)');
+      final iGate = login.indexOf('staffState(ud)');
+      final iNav = login.indexOf("navigate('/')");
+      expect(iRole, greaterThan(0));
+      expect(iGate, greaterThan(iRole),
+          reason: 'البوّابةُ قبلَ معرفةِ الدورِ — فتُطبَّقُ على عميلة');
+      expect(iNav, greaterThan(iGate),
+          reason: 'الانتقالُ قبلَ البوّابةِ لا يَمنعُ شيئاً');
+      expect(login.indexOf('signOut(auth)', iGate), greaterThan(iGate),
+          reason: 'الجلسةُ تَبقى مفتوحةً بعدَ الرفض');
+    });
+
+    test('(ك) ورسالتانِ تُسمّيانِ السبب — لا ارتدادٌ صامت', () {
+      // ارتدادٌ صامتٌ يُقرأُ «كلمةُ مرورٍ خاطئة» فيُعيدُ المحاولةَ
+      // ويُراسِلُ الدعمَ — وهو ما يُحوّلُ إجراءً إداريّاً إلى عطلٍ مُبلَّغ.
+      expect(login.contains('محظور'), isTrue, reason: 'حالةُ الحظرِ بلا نصّ');
+      expect(login.contains('موقوف'), isTrue, reason: 'حالةُ الوقفِ بلا نصّ');
+    });
+
+    test('(ل) الإطار: `isAdmin` مقرونٌ بالقاعدة', () {
+      expect(app.contains("from './utils/staffStatus.ts'"), isTrue);
+      // والاقترانُ **ترتيباً** لا حضوراً: `staffIsActive` في الملفِّ لا
+      // تَكفي، فقد تَكونُ في مُستمِعٍ آخرَ بينما المنحُ بالدورِ وحدَه.
+      final iGrant = app.indexOf('setIsAdmin(staffRole &&');
+      expect(iGrant, greaterThan(0),
+          reason: 'الإطارُ يُمنَحُ بالدورِ وحدَه — فالموقوفُ يَحتفظُ به');
+      final grant = app.substring(iGrant, iGrant + 160);
+      expect(grant.contains('staffIsActive('), isTrue,
+          reason: 'المنحُ غيرُ مقرونٍ بالقاعدة');
+    });
+
+    test('(م) وسحبُ الصلاحيةِ حيٌّ — لا عند الإقلاعِ وحدَه', () {
+      // تطبيقُ العميلةِ يُسجّلُ خروجَ المحظورِ **لحظةَ** الحظر؛ وقراءةٌ
+      // واحدةٌ عند تغيّرِ حالةِ المصادقةِ تَترُكُ جلسةً مفتوحةً عاملةً.
+      final iSub = app.indexOf('unsubDoc = onSnapshot(');
+      expect(iSub, greaterThan(0), reason: 'لا مُراقَبةَ حيّةً لمستندِه');
+      final body = app.substring(iSub, iSub + 700);
+      expect(body.contains('!snap2.exists() || !staffIsActive('), isTrue,
+          reason: 'المُراقَبةُ لا تَقرأُ القاعدةَ (أو تَتجاهلُ مستنداً زال)');
+      expect(body.contains('signOut(auth)'), isTrue,
+          reason: 'المُراقَبةُ تَرى ولا تَفعل');
+      // ومقصورةٌ على دورِ موظّف، كـ`staffAccountDisabled` في الدارت.
+      expect(app.contains('if (staffRole) unsubDoc = onSnapshot('), isTrue,
+          reason: 'المُراقَبةُ تَشملُ غيرَ الموظّفين — `is_active` على مستندِ '
+              'عميلةٍ كُتبَ لسببٍ آخر');
+      // وتُفَكُّ عند تغيّرِ المستخدمِ وعند التفكيك.
+      expect(app.contains('unsubDoc?.();'), isTrue,
+          reason: 'مُستمِعٌ لا يُفَكُّ يَتراكمُ على كلِّ تغيّرِ جلسة');
+    });
+
+    test('(ن) وخطأُ المُراقَبةِ صامتٌ **بسببٍ مكتوب**', () {
+      // فشلُ قراءةٍ عابرٌ لا يَجوزُ أن يُخرِجَ المالكَ من لوحتِه؛ والقرارُ
+      // الأوّلُ أُخِذ من `getDoc`. وهذا هو الاستثناءُ الوحيدُ المسموحُ هنا،
+      // فيَلزمُ أن يَبقى سببُه في الخامّ.
+      expect(appRaw.contains('صامتٌ عن قصد'), isTrue,
+          reason: 'سببُ الصمتِ زال — فيُقرأُ سهواً');
+    });
+  });
 }
