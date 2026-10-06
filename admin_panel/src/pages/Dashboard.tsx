@@ -6,6 +6,7 @@ import { collection, onSnapshot, query, where, orderBy, limit, Timestamp, getCou
 import { db } from '../services/firebase.ts';
 import { STORE_NEEDS_ACTION_STATUSES } from '../utils/orderActivity';
 import { driverIsDisabled } from '../utils/driverActivation';
+import { formatSarAny } from '../utils/money';
 
 interface RecentOrder {
     id: string;
@@ -373,7 +374,7 @@ export default function Dashboard() {
                                             <span className="font-semibold text-slate-600">{order.service}</span>
                                         </td>
                                         <td className="px-8 py-5">
-                                            <span className="font-extrabold text-slate-800 bg-slate-100 px-3 py-1.5 rounded-lg">{order.amount} ر.س</span>
+                                            <span className="font-extrabold text-slate-800 bg-slate-100 px-3 py-1.5 rounded-lg">{formatSarAny(order.amount)} ر.س</span>
                                         </td>
                                         <td className="px-8 py-5">{getStatusBadge(order.status)}</td>
                                     </tr>

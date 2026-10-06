@@ -9,6 +9,7 @@ import app, { db, storage, functions } from '../services/firebase.ts';
 import { logAudit, AUDIT } from '../services/audit.ts';
 import { useNotification } from '../components/notificationContext.ts';
 import { driverActivationFields, driverIsDisabled } from '../utils/driverActivation';
+import { formatSarAny } from '../utils/money';
 
 interface DriverData {
     id: string;
@@ -406,7 +407,7 @@ export default function Drivers() {
                                         : <span className="text-slate-400">—</span>
                                 }</div></div>
                                 <div className="text-center border-r border-slate-100"><span className="block text-xs font-bold text-slate-400 mb-1">الخدمات</span><span className="font-bold text-slate-700">{driver.rides}</span></div>
-                                <div className="text-center border-r border-slate-100"><span className="block text-xs font-bold text-slate-400 mb-1">الراتب</span><span className="font-bold text-emerald-600">{driver.monthly_salary} ر.س</span></div>
+                                <div className="text-center border-r border-slate-100"><span className="block text-xs font-bold text-slate-400 mb-1">الراتب</span><span className="font-bold text-emerald-600">{formatSarAny(driver.monthly_salary)} ر.س</span></div>
                             </div>
 
                             {/* Action buttons */}

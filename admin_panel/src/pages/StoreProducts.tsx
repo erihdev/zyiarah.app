@@ -23,6 +23,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { useNotification } from '../components/notificationContext.ts';
+import { formatSarAny } from '../utils/money';
 
 interface Product {
   id: string;
@@ -220,7 +221,7 @@ export default function StoreProducts() {
               
               <div className="p-5 flex-1 flex flex-col">
                 <h3 className="font-bold text-slate-800 line-clamp-2 min-h-[3rem] mb-2">{product.name}</h3>
-                <p className="text-2xl font-black text-[#660033] mb-1">{product.price} <span className="text-xs font-bold text-slate-400">ر.س</span></p>
+                <p className="text-2xl font-black text-[#660033] mb-1">{formatSarAny(product.price)} <span className="text-xs font-bold text-slate-400">ر.س</span></p>
                 {/* شارةُ الجمهور — مرآةُ admin_store_screen: بلا هذه الشارةِ
                     لا يَعرفُ الأدمنُ من اللوحةِ إلى أيِّ متجرٍ ينتمي المنتج. */}
                 {product.store_audience === 'companies' && (

@@ -124,29 +124,46 @@ void main() {
         if (!_speaks(handler)) silent.add('$file#$ordinal');
       }
       expect(silent.toSet(), allowed.keys.toSet(),
-          reason: 'مستمعٌ صامتٌ جديدٌ يُراجَعُ ويُعلَّلُ، لا يُضَمُّ بسماحٍ عامّ');
+          reason:
+              'مستمعٌ صامتٌ جديدٌ يُراجَعُ ويُعلَّلُ، لا يُضَمُّ بسماحٍ عامّ');
     });
 
     test('(ج) الأربعةُ المُصلَحةُ تَقولُ ما حدثَ في الشاشةِ لا في console', () {
       // لكلٍّ: العَلَمُ يُضبَطُ في المُعالِجِ **ويُقرأُ** في الرسم.
       final cases = <String, (String, List<String>)>{
-        'src/pages/Drivers.tsx': ('setLoadError(true)', [
-          "loadError ? '—' : isAvailableCount",
-          'تعذّر تحميل قائمة السائقين',
-          'إعادة المحاولة',
-        ]),
-        'src/pages/Orders.tsx': ('setDriversError(true)', [
-          'driversError ?',
-          'تعذّر تحميل قائمة السائقين',
-        ]),
-        'src/pages/Accountants.tsx': ('setDriversError(true)', [
-          "driversError ? '—' : formatCurrency(totalPayroll)",
-          "driversError ? '—' : formatCurrency(netProfit)",
-        ]),
-        'src/pages/Support.tsx': ('setMsgError(true)', [
-          'msgError ?',
-          'تعذّر تحميل رسائل التذكرة',
-        ]),
+        'src/pages/Drivers.tsx': (
+          'setLoadError(true)',
+          [
+            "loadError ? '—' : isAvailableCount",
+            'تعذّر تحميل قائمة السائقين',
+            'إعادة المحاولة',
+          ]
+        ),
+        'src/pages/Orders.tsx': (
+          'setDriversError(true)',
+          [
+            'driversError ?',
+            'تعذّر تحميل قائمة السائقين',
+          ]
+        ),
+        // **مشدودٌ إلى القرارِ لا إلى اسمِ المُنسِّق.** كان يُثبّتُ
+        // `formatCurrency(...)` بالاسم، فسقطَ حين انتقلَ المالُ إلى قاعدةِ
+        // `utils/money` المشترَكة — وهو تغييرٌ كان يَجبُ أن يَرحّبَ به. والقرارُ
+        // المحروسُ هو «عند الجهلِ نُخبِرُ بلا رقم»: `driversError ? '—'` قبلَ
+        // كلِّ رقمٍ مشتقٍّ من قائمةِ السائقين.
+        'src/pages/Accountants.tsx': (
+          'setDriversError(true)',
+          [
+            "driversError ? '—' : ",
+          ]
+        ),
+        'src/pages/Support.tsx': (
+          'setMsgError(true)',
+          [
+            'msgError ?',
+            'تعذّر تحميل رسائل التذكرة',
+          ]
+        ),
       };
       cases.forEach((f, v) {
         final src = _read('admin_panel/$f');
@@ -155,6 +172,27 @@ void main() {
           expect(src, contains(needle), reason: '$f → $needle');
         }
       });
+
+      // **والرقمانِ المشتقّانِ من قائمةِ السائقينَ كلاهما محروس.** كان الفحصُ
+      // يُثبّتُ `formatCurrency(totalPayroll)`/`(netProfit)` **بالاسم**، فسقطَ
+      // حين انتقلَ المالُ إلى `utils/money` — تغييرٌ كان يَجبُ أن يَرحّبَ به.
+      // وأوّلُ إصلاحٍ كتبتُه (`contains("driversError ? '—' : ")`) **كان
+      // أرخى من اللازم**: العبارةُ ترِدُ مرّةً، فمرَّ اختبارُ قضمٍ أزالَ حارسَ
+      // `netProfit` أخضرَ. فالمشدودُ الآن **مجموعةُ التعبيراتِ** التي
+      // يَحرُسُها الشرطُ، مهما كان اسمُ المُنسِّق.
+      final acc = _read('admin_panel/src/pages/Accountants.tsx');
+      final guarded = RegExp(r"driversError \? '—' : ([^}]*)\}")
+          .allMatches(acc)
+          .map((m) => m.group(1)!)
+          .toList();
+      expect(guarded.length, greaterThanOrEqualTo(2),
+          reason: 'عددُ الأرقامِ المحروسةِ ${guarded.length} — رقمٌ مشتقٌّ من '
+              'قائمةٍ فشلَ تحميلُها يُعرَضُ بلا «—»');
+      for (final name in ['totalPayroll', 'netProfit']) {
+        expect(guarded.any((g) => g.contains(name)), isTrue,
+            reason: '$name يُعرَضُ بلا حارسِ «—» — صافي الأرباحِ بلا رواتبَ '
+                'رقمٌ خاطئٌ في الاتجاهِ المتفائلِ بلا أيِّ علامة');
+      }
     });
 
     test('(د) الدعوى القديمةُ لا تُقالُ قبلَ استبعادِ الفشل', () {
@@ -166,9 +204,15 @@ void main() {
       // وهو فخُّ «الحارسُ يَسقطُ على توثيقِه» في ثوبِ فحصِ ترتيبٍ لا مسحِ
       // مصطلح. ثمّ يُقابَلُ الخامُّ كي لا يُجوّفَ الحجبُ الفحصَ.
       final cases = <String, (String, String)>{
-        'src/pages/Orders.tsx': ('driversError ?', 'لا يوجد سائقون متاحون حالياً'),
+        'src/pages/Orders.tsx': (
+          'driversError ?',
+          'لا يوجد سائقون متاحون حالياً'
+        ),
         'src/pages/Support.tsx': ('msgError ?', 'لا توجد رسائل بعد'),
-        'src/pages/Drivers.tsx': ('loadError ? (', 'لا يوجد سائقين مطابقين للبحث'),
+        'src/pages/Drivers.tsx': (
+          'loadError ? (',
+          'لا يوجد سائقين مطابقين للبحث'
+        ),
       };
       cases.forEach((f, v) {
         final raw = _read('admin_panel/$f');
@@ -194,9 +238,11 @@ void main() {
       };
       flags.forEach((f, flag) {
         final mine = _listeners()
-            .where((l) => l.$1 == f && l.$3.contains(flag.replaceAll('false', 'true')))
+            .where((l) =>
+                l.$1 == f && l.$3.contains(flag.replaceAll('false', 'true')))
             .toList();
-        expect(mine, isNotEmpty, reason: '$f — لم يُعثَر على المستمعِ المُصلَح');
+        expect(mine, isNotEmpty,
+            reason: '$f — لم يُعثَر على المستمعِ المُصلَح');
         expect(mine.any((l) => l.$4.contains(flag)), isTrue,
             reason: '$f — $flag غائبٌ عن مُعالِجِ النجاح');
       });
@@ -206,7 +252,11 @@ void main() {
       // الرقمُ الذي يُخفى عند الجهلِ هو هذا بعينِه؛ لو تغيّرَ مصدرُه
       // فالإخفاءُ يُراجَعُ لا يُسكَت.
       final a = _read('admin_panel/src/pages/Accountants.tsx');
-      expect(a, contains('const activeDrivers = drivers.filter((d) => !driverIsDisabled(d));'.replaceAll('(d) =>', 'd =>')));
+      expect(
+          a,
+          contains(
+              'const activeDrivers = drivers.filter((d) => !driverIsDisabled(d));'
+                  .replaceAll('(d) =>', 'd =>')));
       expect(a, contains('const netProfit = netRevenue - totalPayroll;'));
     });
   });

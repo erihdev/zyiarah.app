@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { formatSar } from '../utils/money';
 import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { DollarSign, ArrowUpRight, TrendingUp, Users, Banknote, ShoppingBag, CreditCard, Wallet } from 'lucide-react';
@@ -47,9 +48,12 @@ const PAYMENT_COLORS: Record<string, string> = {
     wallet: 'bg-amber-50 text-amber-700',
 };
 
-function formatCurrency(value: number) {
-    return value.toLocaleString('ar-SA', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-}
+// `formatCurrency` المحلّيّةُ أُزيلت: كانت
+// `toLocaleString('ar-SA', {maximumFractionDigits: 0})` — **تُسقِطُ الهللاتَ**
+// من الإيرادِ وصافي الأرباحِ والرواتب، فالرقمُ المعروضُ ليس الرقمَ المحسوب؛
+// وهو القرارُ الذي سُمّي عطلاً في هذا المستودعِ من قبل («كان تقريبُ الرقاقةِ
+// لصفرِ كسورٍ يُظهرُ سعراً يُخالِفُ الفاتورة»). وكانت كذلك تَكتبُ أرقاماً
+// عربيّةً-هنديّةً وحدَها في لوحةٍ أرقامُها كلُّها لاتينيّة.
 
 function getMonthRange() {
     const now = new Date();
@@ -166,7 +170,7 @@ export default function Accountants() {
                         {loading ? (
                             <div className="h-8 w-32 bg-white/20 rounded-lg animate-pulse"></div>
                         ) : (
-                            <h3 className="text-3xl font-extrabold">{formatCurrency(totalRevenue)} <span className="text-base font-bold text-emerald-200">ر.س</span></h3>
+                            <h3 className="text-3xl font-extrabold">{formatSar(totalRevenue)} <span className="text-base font-bold text-emerald-200">ر.س</span></h3>
                         )}
                     </div>
                 </div>
@@ -183,7 +187,7 @@ export default function Accountants() {
                         <div className="h-7 w-28 bg-slate-100 rounded-lg animate-pulse"></div>
                     ) : (
                         <h3 className={`text-2xl font-extrabold ${netProfit >= 0 ? 'text-slate-800' : 'text-rose-600'}`}>
-                            {driversError ? '—' : formatCurrency(netProfit)} <span className="text-sm font-bold text-slate-400">ر.س</span>
+                            {driversError ? '—' : formatSar(netProfit)} <span className="text-sm font-bold text-slate-400">ر.س</span>
                         </h3>
                     )}
                 </div>
@@ -199,7 +203,7 @@ export default function Accountants() {
                     {loading ? (
                         <div className="h-7 w-28 bg-slate-100 rounded-lg animate-pulse"></div>
                     ) : (
-                        <h3 className="text-2xl font-extrabold text-slate-800">{driversError ? '—' : formatCurrency(totalPayroll)} <span className="text-sm font-bold text-slate-400">ر.س</span></h3>
+                        <h3 className="text-2xl font-extrabold text-slate-800">{driversError ? '—' : formatSar(totalPayroll)} <span className="text-sm font-bold text-slate-400">ر.س</span></h3>
                     )}
                     {driversError ? (
                         <p className="text-xs text-rose-600 font-bold mt-1">تعذّر تحميل الكوادر — الرواتب وصافي الأرباح غير محسوبين.</p>
@@ -222,7 +226,7 @@ export default function Accountants() {
                         <h3 className="text-2xl font-extrabold text-slate-800">{orders.length} <span className="text-sm font-bold text-slate-400">طلب</span></h3>
                     )}
                     <p className="text-xs text-slate-400 mt-1">
-                        متوسط {orders.length > 0 ? formatCurrency(totalRevenue / orders.length) : 0} ر.س / طلب
+                        متوسط {orders.length > 0 ? formatSar(totalRevenue / orders.length) : '—'} ر.س / طلب
                     </p>
                 </div>
             </div>
@@ -256,7 +260,7 @@ export default function Accountants() {
                                                 {/* dynamic width requires inline style — Tailwind cannot purge arbitrary runtime values */}
                                                 <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }}></div>
                                             </div>
-                                            <p className="text-xs text-slate-400 mt-0.5 text-left">{formatCurrency(amount)} ر.س</p>
+                                            <p className="text-xs text-slate-400 mt-0.5 text-left">{formatSar(amount)} ر.س</p>
                                         </div>
                                     </div>
                                 );
@@ -276,7 +280,7 @@ export default function Accountants() {
                         <div className="flex items-center justify-between mt-1">
                             <span className="text-sm text-slate-500">متوسط الراتب</span>
                             <span className="font-bold text-slate-700">
-                                {activeDrivers.length > 0 ? formatCurrency(totalPayroll / activeDrivers.length) : 0} ر.س
+                                {activeDrivers.length > 0 ? formatSar(totalPayroll / activeDrivers.length) : '—'} ر.س
                             </span>
                         </div>
                     </div>
@@ -322,7 +326,7 @@ export default function Accountants() {
                                                     {PAYMENT_LABELS[tx.payment_method] || tx.payment_method}
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-3.5 font-extrabold text-emerald-600">{formatCurrency(tx.amount)} ر.س</td>
+                                            <td className="px-4 py-3.5 font-extrabold text-emerald-600">{formatSar(tx.amount)} ر.س</td>
                                             <td className="px-6 py-3.5 text-slate-400 text-xs">
                                                 {tx.date.toLocaleDateString('ar-SA', { day: 'numeric', month: 'short' })}
                                             </td>

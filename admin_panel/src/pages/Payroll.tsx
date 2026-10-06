@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { formatSar } from '../utils/money';
 import { Banknote, CheckCircle2, Clock, Users, ChevronRight, ChevronLeft, Loader2, BadgeCheck, Wallet } from 'lucide-react';
 import { collection, onSnapshot, query, doc, setDoc, serverTimestamp, where } from 'firebase/firestore';
 import { db, auth } from '../services/firebase.ts';
@@ -244,11 +245,11 @@ export default function Payroll() {
                     <div className="absolute -left-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl"></div>
                     <div className="p-3 bg-white/20 rounded-2xl w-fit mb-4"><Wallet size={22} /></div>
                     <p className="text-emerald-100 text-xs font-bold mb-1">ميزانية رواتب الكوادر النشطة</p>
-                    <h3 className="text-3xl font-black">{totalBudget.toLocaleString()} <span className="text-lg font-bold text-emerald-200">ر.س</span></h3>
+                    <h3 className="text-3xl font-black">{formatSar(totalBudget)} <span className="text-lg font-bold text-emerald-200">ر.س</span></h3>
                     <p className="text-emerald-200 text-xs mt-2 font-medium">{activeRows.length} موظف نشط من {drivers.length} مسجل</p>
                     {stopped.length > 0 && (
                         <p className="text-emerald-200/90 text-xs mt-1 font-medium">
-                            + {stoppedTotal.toLocaleString()} ر.س لـ{stopped.length} موقوفاً (غير محتسَب)
+                            + {formatSar(stoppedTotal)} ر.س لـ{stopped.length} موقوفاً (غير محتسَب)
                         </p>
                     )}
                 </div>
@@ -259,7 +260,7 @@ export default function Payroll() {
                         <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-2 py-1 rounded-lg">{paidCount} موظف</span>
                     </div>
                     <p className="text-slate-500 text-xs font-bold mb-1">تم الصرف</p>
-                    <h3 className="text-2xl font-extrabold text-slate-800">{paidTotal.toLocaleString()} <span className="text-sm font-bold text-slate-400">ر.س</span></h3>
+                    <h3 className="text-2xl font-extrabold text-slate-800">{formatSar(paidTotal)} <span className="text-sm font-bold text-slate-400">ر.س</span></h3>
                 </div>
 
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group hover:border-amber-200 transition-colors">
@@ -268,7 +269,7 @@ export default function Payroll() {
                         <span className="text-xs font-bold bg-amber-50 text-amber-700 px-2 py-1 rounded-lg">{unpaidCount} موظف</span>
                     </div>
                     <p className="text-slate-500 text-xs font-bold mb-1">لم يُصرف بعد</p>
-                    <h3 className="text-2xl font-extrabold text-slate-800">{unpaidTotal.toLocaleString()} <span className="text-sm font-bold text-slate-400">ر.س</span></h3>
+                    <h3 className="text-2xl font-extrabold text-slate-800">{formatSar(unpaidTotal)} <span className="text-sm font-bold text-slate-400">ر.س</span></h3>
                 </div>
 
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group hover:border-[#E5C3D5] transition-colors">
@@ -376,7 +377,7 @@ export default function Payroll() {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className="font-extrabold text-slate-800 text-base">{row.monthly_salary.toLocaleString()}</span>
+                                            <span className="font-extrabold text-slate-800 text-base">{formatSar(row.monthly_salary)}</span>
                                             <span className="text-slate-400 text-xs font-bold mr-1">ر.س</span>
                                         </td>
                                         <td className="px-6 py-4">
@@ -409,9 +410,9 @@ export default function Payroll() {
                             <tfoot>
                                 <tr className="bg-slate-50 border-t-2 border-slate-200">
                                     <td colSpan={2} className="px-6 py-4 font-extrabold text-slate-700">الإجمالي</td>
-                                    <td className="px-6 py-4 font-extrabold text-slate-800 text-base">{totalBudget.toLocaleString()} ر.س</td>
+                                    <td className="px-6 py-4 font-extrabold text-slate-800 text-base">{formatSar(totalBudget)} ر.س</td>
                                     <td className="px-6 py-4">
-                                        <span className="text-xs font-bold text-emerald-600">{paidTotal.toLocaleString()} ر.س مصروفة</span>
+                                        <span className="text-xs font-bold text-emerald-600">{formatSar(paidTotal)} ر.س مصروفة</span>
                                     </td>
                                     <td colSpan={2}></td>
                                 </tr>

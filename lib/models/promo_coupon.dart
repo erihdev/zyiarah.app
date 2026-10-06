@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 
 /// كوبون خصم من مجموعة `promo_codes` كما يراه العميل في قسم «العروض».
 ///
@@ -81,16 +82,23 @@ class PromoCoupon {
 
   bool get isPercentage => type == 'percentage';
 
-  /// «خصم 25%» أو «خصم 40 ر.س» — بلا كسور عشرية زائدة.
+  /// «خصم 25%» أو «خصم 40 ر.س».
+  ///
+  /// **والمالُ عبرَ `formatSar` لا بتنسيقٍ محلّيّ:** كان هنا نسخةٌ ثالثةٌ من
+  /// قاعدةِ العرضِ (`value.toString()` للكسر، بلا سقفٍ لعددِ الخانات) —
+  /// فخصمُ `12.3456` كان يُقرأُ «خصم 12.3456 ر.س». والنسبةُ تَبقى بقاعدتِها
+  /// (لا «%25.00»).
   String get headline {
-    final v = value == value.truncate() ? value.toInt().toString() : value.toString();
-    return isPercentage ? 'خصم $v%' : 'خصم $v ر.س';
+    final pct =
+        value == value.truncate() ? value.toInt().toString() : value.toString();
+    return isPercentage ? 'خصم $pct%' : 'خصم ${formatSarAny(value)} ر.س';
   }
 
   bool get isActive => status == 'active';
   bool get isExhausted => maxUses > 0 && uses >= maxUses;
   bool isExpiredAt(DateTime now) => expiry != null && expiry!.isBefore(now);
-  bool isPersonalFor(String? uid) => targetUserId != null && targetUserId == uid;
+  bool isPersonalFor(String? uid) =>
+      targetUserId != null && targetUserId == uid;
 
   /// هل يُعرض لهذا المستخدم في قسم العروض؟
   bool isListableFor(String? uid, DateTime now) {
@@ -109,7 +117,9 @@ class PromoCoupon {
         final pa = a.isPersonalFor(uid) ? 0 : 1;
         final pb = b.isPersonalFor(uid) ? 0 : 1;
         if (pa != pb) return pa.compareTo(pb);
-        if (a.expiry == null && b.expiry == null) return a.code.compareTo(b.code);
+        if (a.expiry == null && b.expiry == null) {
+          return a.code.compareTo(b.code);
+        }
         if (a.expiry == null) return 1;
         if (b.expiry == null) return -1;
         return a.expiry!.compareTo(b.expiry!);

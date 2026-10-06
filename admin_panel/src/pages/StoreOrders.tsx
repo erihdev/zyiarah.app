@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { formatSarAny } from '../utils/money';
 import {
   collection,
   query,
@@ -252,12 +253,12 @@ export default function StoreOrders() {
                             <span className="text-slate-600 font-medium">
                               {item.name} <span className="text-slate-400">x{item.quantity}</span>
                             </span>
-                            <span className="font-bold text-slate-800">{item.price * item.quantity} ر.س</span>
+                            <span className="font-bold text-slate-800">{formatSarAny(item.price * item.quantity)} ر.س</span>
                           </div>
                         ))}
                         <div className="pt-3 border-t border-slate-100 flex items-center justify-between font-black">
                           <span className="text-slate-800">الإجمالي الأساسي</span>
-                          <span className="text-[#660033] text-lg">{order.total_amount} ر.س</span>
+                          <span className="text-[#660033] text-lg">{formatSarAny(order.total_amount)} ر.س</span>
                         </div>
                       </div>
                     </div>

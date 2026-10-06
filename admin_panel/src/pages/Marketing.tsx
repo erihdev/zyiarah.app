@@ -6,6 +6,7 @@ import { useNotification } from '../components/notificationContext.ts';
 import { endOfLocalDay } from '../utils/couponExpiry';
 import { COUPON_ACTIVE, COUPON_DISABLED, couponIsActive } from '../utils/couponStatus';
 import { couponIsUnlimited, couponMaxUsesLabel, couponUsesProgress } from '../utils/couponUses.ts';
+import { formatSarAny } from '../utils/money';
 
 interface PromoCode {
     id: string;
@@ -273,7 +274,7 @@ export default function Marketing() {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 font-extrabold text-rose-600">
-                                        {coupon.type === 'percentage' ? `${coupon.value}%` : `${coupon.value} ر.س`}
+                                        {coupon.type === 'percentage' ? `${coupon.value}%` : `${formatSarAny(coupon.value)} ر.س`}
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="w-full max-w-[150px]">
