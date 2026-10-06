@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { KeyRound, Mail, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import { staffState } from '../utils/staffStatus.ts';
 import { auth, db } from '../services/firebase.ts';
 
 // نفس مجموعة App.tsx — الأدوار المسموح لها دخول اللوحة (بالدور الفعلي staff_role??role).
@@ -33,6 +34,23 @@ export default function Login() {
             if (!effRole || !ADMIN_ROLES.includes(effRole)) {
                 await signOut(auth);
                 setError('ليس لديك صلاحية الوصول للوحة التحكم.');
+                return;
+            }
+            // **أعلامُ الإيقافِ كانت تُقرأُ من هذا المستندِ بعينِه ولا
+            // تُفحَص.** فموظّفٌ أوقفَه المالكُ من تطبيقِ الإدارة (`is_active`)
+            // أو حظرَته هذه اللوحةُ نفسُها من صفحةِ المستخدمين (`status`) كان
+            // يَدخلُ هنا ويَعملُ كأنّ شيئاً لم يَكن — بينما تطبيقُ الإدارةِ
+            // يَرفضُه (`getUserRole` تُعيدُ `null`) وتطبيقُ العميلةِ
+            // يُسجّلُ خروجَه فوراً. وبوّابةُ القواعدِ (`staffEnabled()`)
+            // محجوزةٌ مع STAGE-C ولم تُنشَر، فهذه هي العاملةُ اليوم.
+            const state = staffState(ud);
+            if (state !== 'active') {
+                await signOut(auth);
+                // رسالةٌ تُسمّي السبب: الارتدادُ الصامتُ يُقرأُ «كلمةُ مرورٍ
+                // خاطئة» فيُعيدُ المحاولةَ ويُراسِلُ الدعم.
+                setError(state === 'banned'
+                    ? 'هذا الحساب محظور. راجع المدير العام.'
+                    : 'هذا الحساب موقوف. راجع المدير العام لإعادة تفعيله.');
                 return;
             }
 
