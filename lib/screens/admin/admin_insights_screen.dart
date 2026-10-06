@@ -6,6 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/screens/admin/admin_compliance_screen.dart';
 import 'package:zyiarah/screens/admin/admin_staff_performance_screen.dart';
 import 'package:zyiarah/screens/admin/admin_orders_screen.dart';
+import 'package:zyiarah/screens/admin/admin_order_details_screen.dart';
+import 'package:zyiarah/utils/low_rating.dart';
 import 'package:zyiarah/screens/admin/admin_store_orders_screen.dart';
 import 'package:zyiarah/screens/admin/admin_contracts_screen.dart';
 import 'package:zyiarah/utils/vat.dart';
@@ -921,8 +923,14 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
   Widget _buildReputationSentinel() {
     final lowRatings = _orders.where((doc) {
       final data = doc.data() as Map<String, dynamic>;
-      final rating = double.tryParse('${data['rating'] ?? 5.0}') ?? 5.0;
-      return rating <= 2.0 && data['rating_comment'] != null;
+      // **لا رقمَ قبل أن نعرفه.** كان
+      // `double.tryParse('${data['rating'] ?? 5.0}') ?? 5.0` — تقييمٌ مُلفَّقٌ
+      // لطلبٍ لم يُقيَّم، غيرُ ضارٍّ بالمصادفةِ وحدَها (5.0 > 2 فيَخرُج).
+      // و`orderIsLowRated` تُسمّي الغيابَ غياباً، فالخروجُ بالقاعدةِ لا
+      // بالحساب. وشرطُ التعليقِ باقٍ كما هو (قرارٌ مسجَّلٌ في هذا المستودع)،
+      // وأثرُه مرفوعٌ إلى المالك: تقييمُ نجمةٍ بلا كلماتٍ لا يَظهرُ هنا وإن
+      // وصلَه تنبيهُه.
+      return orderIsLowRated(data) && data['rating_comment'] != null;
     }).toList();
 
     if (lowRatings.isEmpty) return const SizedBox.shrink();
@@ -941,44 +949,190 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
             border: Border.all(color: Colors.red.shade100),
           ),
           child: Column(
-            children: lowRatings.take(3).map((doc) {
-              final data = doc.data() as Map<String, dynamic>;
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 5)],
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ...lowRatings.take(3).map(_buildLowRatingTile),
+              if (lowRatings.length > 3)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, right: 4),
+                  child: Text(
+                    "و${lowRatings.length - 3} تقييماً منخفضاً آخر — افتح سجلّ "
+                    "الطلبات للبقية",
+                    style: GoogleFonts.tajawal(
+                        color: Colors.red[700],
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold),
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                      child: Text("${data['rating']}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    ),
-                    const SizedBox(width: 15),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text("العميل: ${data['client_name']}", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13)),
-                          Text("السبب: ${data['rating_reason'] ?? 'غير محدد'}", style: GoogleFonts.tajawal(color: Colors.red[700], fontSize: 11, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey, size: 14),
-                  ],
-                ),
-              );
-            }).toList(),
+            ],
           ),
         ),
       ],
     );
   }
-  
+
+  /// بطاقةُ تقييمٍ منخفضٍ واحد — **كلماتُها وصورتُها، لا السببُ وحدَه.**
+  ///
+  /// والسهمُ كان أيقونةً عارية: `Icon(arrow_forward_ios)` بلا `InkWell` ولا
+  /// `onTap` في أيِّ مكان، فالبطاقةُ تَبدو قابلةً للنقرِ ولا تَفعلُ شيئاً —
+  /// عائلةُ «زرٌّ يُضغط فلا يحدث شيء»، إلّا أنّ هذا لم يَكن زرّاً أصلاً.
+  Widget _buildLowRatingTile(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final rating = orderRatingOf(data);
+    final comment = ratingCommentOf(data);
+    final reason = ratingReasonOf(data);
+    final evidence = ratingEvidenceUrlOf(data);
+    final client = '${data['client_name'] ?? ''}'.trim();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 5)
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => AdminOrderDetailsScreen(orderId: doc.id)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: const BoxDecoration(
+                        color: Colors.red, shape: BoxShape.circle),
+                    child: Text(rating == null ? "—" : ratingLabel(rating),
+                        style: const TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                            "العميل: ${client.isEmpty ? 'غير محدد' : client}",
+                            style: GoogleFonts.tajawal(
+                                fontWeight: FontWeight.bold, fontSize: 13)),
+                        Text("السبب: ${reason ?? 'غير محدد'}",
+                            style: GoogleFonts.tajawal(
+                                color: Colors.red[700],
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.arrow_forward_ios_rounded,
+                      color: Colors.grey, size: 14),
+                ],
+              ),
+              // **كلماتُها** — كانت تُستعمَلُ مُرشِّحاً لهذه القائمةِ ثمّ
+              // تُطرَح، فالمالكُ يَرى أنّ ثمّة شكوى ولا يَرى نصَّها.
+              if (comment != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(comment,
+                        style: GoogleFonts.tajawal(
+                            fontSize: 12, color: Colors.black87)),
+                  ),
+                ),
+              // **وصورتُها** — `rating_evidence_url` كان كتابةً واحدةً وصفرَ
+              // قراءةٍ في المستودعِ كلِّه: تَفتحُ الكاميرا وتُصوّرُ المشكلةَ
+              // ولا يَراها أحد.
+              if (evidence != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: GestureDetector(
+                    onTap: () => _openEvidence(evidence),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        evidence,
+                        height: 110,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        // صورةٌ لا تُحمَّلُ تُقالُ، فلا تُقرَأُ «لا صورة».
+                        errorBuilder: (_, __, ___) => Container(
+                          height: 110,
+                          alignment: Alignment.center,
+                          color: Colors.grey.shade100,
+                          child: Text("تعذّر تحميل صورة الإثبات",
+                              style: GoogleFonts.tajawal(
+                                  fontSize: 11, color: Colors.grey[700])),
+                        ),
+                        loadingBuilder: (_, child, progress) =>
+                            progress == null
+                                ? child
+                                : Container(
+                                    height: 110,
+                                    alignment: Alignment.center,
+                                    color: Colors.grey.shade100,
+                                    child: const SizedBox(
+                                        height: 18,
+                                        width: 18,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2)),
+                                  ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openEvidence(String url) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        backgroundColor: Colors.black,
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              child: Image.network(url,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => Padding(
+                        padding: const EdgeInsets.all(40),
+                        child: Text("تعذّر تحميل صورة الإثبات",
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.tajawal(color: Colors.white)),
+                      )),
+            ),
+            Positioned(
+              top: 4,
+              left: 4,
+              child: IconButton(
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSystemHealthSection(List<DocumentSnapshot> drivers) {
     int expiringSoon = 0;
     final now = DateTime.now();
