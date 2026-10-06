@@ -234,4 +234,46 @@ t("قراءة users للسائقين دفعةً واحدة لا نداءً لك�
       "التقسيم لازم: getAll نداءٌ واحد لكن حجم الطلب محدود");
 });
 
+t("علَمانِ يُعطّلانِ — والأهليّةُ تَقرأُ ما يَقرؤه فكُّ الإسناد", () => {
+  // العطل: حالةُ التعطيلِ حقلانِ (`is_active` و`is_suspended`)، وتطبيقُ
+  // الإدارةِ كان يَكتبُ الأوّلَ ولوحةُ الويبِ الثاني — فمستنداتُ الإنتاجِ
+  // تَحملُ هذا أو ذاك. و`unassignJobsOnDriverDisable` يَقرأُ أيَّهما كفى،
+  // بينما `isActiveDriverDoc` كان `is_active` وحدَه: فسائقٌ موقوفٌ بالعلَمِ
+  // الثاني تُلغى مهامُّه ثمّ **تُعادُ إليه** بالمكنسةِ كلَّ خمسِ دقائق.
+  const d = require("../drivers.js");
+  const user = {role: "driver"};
+  assert.strictEqual(d.isAssignableDriver({}, user), true, "الغيابُ = مُفعَّل");
+  assert.strictEqual(d.isAssignableDriver({is_active: false}, user), false);
+  assert.strictEqual(d.isAssignableDriver({is_suspended: true}, user), false,
+      "موقوفٌ بالعلَمِ الثاني ما زال قابلاً للإسناد");
+  assert.strictEqual(
+      d.isAssignableDriver({is_active: true, is_suspended: true}, user), false,
+      "العلَمُ الأوّلُ لا يَرفعُ الوقفَ");
+  assert.strictEqual(d.isAssignableDriver({is_suspended: false}, user), true);
+});
+
+t("مجموعةُ أعلامِ التعطيلِ واحدةٌ بين القارئَين — مُشتَقّةٌ لا مكتوبة", () => {
+  // القارئُ المرجعُ هو مُشغّلُ فكِّ الإسنادِ في index.js: شرطُه هو تعريفُ
+  // «معطَّل» في هذا المشروع. فعلَمٌ ثالثٌ يُضافُ هناك يَسقطُ هذا الفحصَ بدلَ
+  // أن يَبقى القارئُ الآخرُ أضيقَ سنةً.
+  const idx = require("fs").readFileSync(
+      require("path").resolve(__dirname, "../index.js"), "utf8")
+      .split("\n").filter((l) => !l.trimStart().startsWith("//")).join("\n");
+  const m = /const nowDisabled = ([^;]+);/.exec(idx);
+  assert.ok(m, "شرطُ فكِّ الإسنادِ اختفى — القارئُ المرجعُ غائب");
+  const refFlags = new Set(
+      [...m[1].matchAll(/after\.([a-z_]+)/g)].map((x) => x[1]));
+  assert.ok(refFlags.size >= 2, `الاشتقاقُ انحلَّ إلى ${[...refFlags]}`);
+
+  const src = require("fs").readFileSync(
+      require("path").resolve(__dirname, "../drivers.js"), "utf8");
+  const body = /function isActiveDriverDoc\(driverData\) \{([\s\S]*?)\n\}/
+      .exec(src);
+  assert.ok(body, "isActiveDriverDoc اختفت");
+  const gotFlags = new Set(
+      [...body[1].matchAll(/driverData\.([a-z_]+)/g)].map((x) => x[1]));
+  assert.deepStrictEqual([...gotFlags].sort(), [...refFlags].sort(),
+      "الأهليّةُ تَقرأُ أعلاماً غيرَ ما يَقرؤه فكُّ الإسناد");
+});
+
 console.log(`\ndrivers tests: ${passed} passed`);

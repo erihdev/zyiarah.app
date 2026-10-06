@@ -240,4 +240,48 @@ void main() {
           reason: 'تعدادُ صفحاتِ اللوحةِ انهار ($pages) — الفحوصُ أعلاه فارغة');
     });
   });
+
+  group('بوّابةُ تطبيقِ السائقِ تَقرأُ القاعدةَ لا حقلاً واحداً', () {
+    final dash = File('lib/screens/driver_dashboard.dart').readAsStringSync();
+    final code = dash
+        .split('\n')
+        .map((l) => l.trimLeft().startsWith('//') ? '' : l)
+        .join('\n');
+
+    test('(ك) البوّابةُ تُنادي `driverIsDisabled` ولا تَقرأُ `is_active` وحدَه', () {
+      // سائقٌ أوقفَته لوحةُ الويبِ بـ`is_suspended` وحدَه (ومستنداتُ
+      // الإنتاجِ تَحملُ هذا أو ذاك) كان يَبقى داخلَ التطبيق.
+      expect(code.contains('!driverIsDisabled(data!)'), isTrue,
+          reason: 'البوّابةُ لا تُنادي القاعدة');
+      expect(code.contains("data!['is_active']"), isFalse,
+          reason: 'عادت القراءةُ بحقلٍ واحد — وهو العطلُ بعينِه');
+      expect(code.contains("package:zyiarah/utils/driver_activation.dart"),
+          isTrue, reason: 'القاعدةُ غيرُ مستورَدة');
+    });
+
+    test('(ل) وتَفشلُ مُغلَقةً على مستندٍ زال — قرارٌ قائمٌ لا يُنقَض', () {
+      // `driverIsDisabled({})` تُعيدُ `false` (الغيابُ = مُفعَّل)، فشرطُ
+      // `exists` منفصلٌ ولازم: مستندٌ محذوفٌ = لم يَعُد سائقاً.
+      expect(RegExp(r'final isActive = exists && !driverIsDisabled\(')
+              .hasMatch(code),
+          isTrue,
+          reason: 'شرطُ الوجودِ زال — فسائقٌ حُذِفَ مستندُه يَبقى داخلاً');
+      expect(code.contains('لم يعد حسابك مسجّلاً كسائق'), isTrue);
+    });
+
+    test('(م) والخادمُ يَقرأُ العلَمَين كذلك — فالثلاثةُ قاعدةٌ واحدة', () {
+      final drv = File('functions/drivers.js').readAsStringSync();
+      final body = RegExp(
+              r'function isActiveDriverDoc\(driverData\) \{([\s\S]*?)\n\}')
+          .firstMatch(drv);
+      expect(body, isNotNull, reason: 'isActiveDriverDoc اختفت');
+      final flags = RegExp(r'driverData\.([a-z_]+)')
+          .allMatches(body!.group(1)!)
+          .map((m) => m.group(1)!)
+          .toSet();
+      expect(flags, {'is_active', 'is_suspended'},
+          reason: 'أهليّةُ الإسنادِ الخادميّةُ تَقرأُ أعلاماً أضيقَ — '
+              'فسائقٌ موقوفٌ تُعادُ إليه المهامُّ بالمكنسة');
+    });
+  });
 }

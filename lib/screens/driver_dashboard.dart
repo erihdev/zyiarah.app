@@ -24,6 +24,7 @@ import 'package:zyiarah/screens/driver_notifications_screen.dart';
 import 'package:zyiarah/screens/driver_profile_screen.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/phone_format.dart';
+import 'package:zyiarah/utils/driver_activation.dart';
 
 class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
@@ -242,7 +243,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
           // يتخطّى بوّابة الطرد كلياً ويبقى داخل اللوحة. المستند المفقود = لم يعد سائقاً.
           final exists = snapshot.data!.exists;
           final data = exists ? snapshot.data!.data() as Map<String, dynamic> : null;
-          final isActive = exists && (data!['is_active'] ?? true);
+          // **علَمانِ يُعطّلانِ، وهذه البوّابةُ كانت تَقرأُ واحداً.**
+          // `is_active` يَكتبُه تطبيقُ الإدارةِ و`is_suspended` لوحةُ الويب،
+          // ومستنداتُ الإنتاجِ تَحملُ هذا أو ذاك — فسائقٌ أوقفَته اللوحةُ
+          // بالعلَمِ الثاني وحدَه كان يَبقى داخلَ التطبيق. والقاعدةُ واحدةٌ
+          // في `driverIsDisabled`، وهي ما تَقرؤه شارةُ اللوحةِ ومُشغّلُ فكِّ
+          // الإسنادِ وأهليّةُ الإسنادِ الخادميّة.
+          final isActive = exists && !driverIsDisabled(data!);
 
           if (!isActive) {
             WidgetsBinding.instance.addPostFrameCallback((_) async {
