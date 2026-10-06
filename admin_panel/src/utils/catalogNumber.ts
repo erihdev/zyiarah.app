@@ -53,6 +53,28 @@ export function positiveInt(raw: string): number | null {
 }
 
 /**
+ * **حقلٌ اختياريٌّ: الفراغُ قرارٌ، وخطأُ الكتابةِ ليس قراراً.**
+ *
+ * الفراغُ يُعيدُ `whenEmpty` (قيمةٌ مقصودةٌ تَختلفُ بالحقل: «غيرُ معروضة»
+ * في أسعارِ المنطقة، «بلا حدّ» في `maxUses`)، ونصٌّ لا يَنحلُّ إلى رقمٍ
+ * يُعيدُ `null` = غيرُ صالح. والسالبُ مرفوض، والصفرُ المكتوبُ مقبول.
+ */
+export function optionalNum(raw: string, whenEmpty: number): number | null {
+    const t = normalizeDigits(raw);
+    if (t === '') return whenEmpty;
+    const v = Number(t);
+    if (!Number.isFinite(v) || v < 0) return null;
+    return v;
+}
+
+/** نفسُ القاعدةِ لعددٍ صحيح — مُشتَقّةً من `optionalNum` كما في الدارت. */
+export function optionalInt(raw: string, whenEmpty: number): number | null {
+    const v = optionalNum(raw, whenEmpty);
+    if (v === null || !Number.isInteger(v) || v > 1e15) return null;
+    return v;
+}
+
+/**
  * العددُ المجاورُ لكلمةِ «زيار» — **نفسُ** احتياطيِّ العميلِ والخادم، فالمحرِّرُ
  * يَرفُضُ ما لا يَستطيعُ أحدُهما حلَّه بعينِه.
  */

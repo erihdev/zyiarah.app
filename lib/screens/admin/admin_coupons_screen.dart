@@ -6,6 +6,8 @@ import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/coupon_expiry.dart';
 import 'package:zyiarah/utils/home_packages.dart';
+import 'package:zyiarah/utils/catalog_number.dart';
+import 'package:zyiarah/utils/coupon_uses.dart';
 
 class AdminCouponsScreen extends StatefulWidget {
   const AdminCouponsScreen({super.key});
@@ -229,7 +231,10 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                       TextField(
                         controller: maxUsesCtrl,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'الحد الأقصى للاستخدام'),
+                        decoration: const InputDecoration(
+                          labelText: 'الحد الأقصى للاستخدام',
+                          helperText: '0 أو فارغ = بلا حدّ',
+                        ),
                       ),
                       const SizedBox(height: 15),
                       InkWell(
@@ -390,9 +395,27 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                       }
                       // تحقّق من المدى: النسبة 1-100، والمبلغ الثابت موجب — كان يُقبل
                       // كوبون 500% أو سالب.
-                      final couponVal = num.tryParse(valueCtrl.text) ?? 0;
-                      if (couponVal <= 0 || (type == 'percentage' && couponVal > 100)) {
+                      // `positiveNum` يُطبِّعُ الأرقامَ العربيّةَ أوّلاً: الحقلُ
+                      // `TextField` بلا `inputFormatters`، فـ«٣٥» كانت تُرفَضُ
+                      // رفضاً صامتاً (حقلٌ أحمرُ بلا سبب) لا تُقبَل.
+                      final double? couponVal = positiveNum(valueCtrl.text);
+                      if (couponVal == null ||
+                          (type == 'percentage' && couponVal > 100)) {
                         setDialogState(() => valueEmpty = true);
+                        return;
+                      }
+                      // الحدُّ الأقصى: **صفرٌ يَعني «بلا حدّ» عند الخادمِ**، وكان
+                      // `int.tryParse(...) ?? 0` يَبتلعُ «١٠» إلى صفرٍ — فالحدُّ
+                      // الذي ضبطَه المالكُ يُلغى والكوبونُ يُفتَحُ للجميع، مع
+                      // «تم الحفظ بنجاح». فالفراغُ قرارٌ (بلا حدّ) والخطأُ يُرفَض.
+                      final int? maxUsesVal =
+                          optionalInt(maxUsesCtrl.text, whenEmpty: 0);
+                      if (maxUsesVal == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('الحد الأقصى للاستخدام: رقمٌ صحيحٌ، أو '
+                              'أو 0 أو فارغ لكوبون بلا حدّ'),
+                          backgroundColor: Colors.red,
+                        ));
                         return;
                       }
 
@@ -403,7 +426,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                           'code': codeCtrl.text.trim().toUpperCase(),
                           'type': type,
                           'value': couponVal,
-                          'maxUses': int.tryParse(maxUsesCtrl.text) ?? 0,
+                          'maxUses': maxUsesVal,
                           'uses': data?['uses'] ?? 0,
                           // آخر لحظة من اليوم المختار لا أوّله: showDatePicker
                           // يُعيد منتصف الليل، و`expiry < now` تُميت الكوبون في
@@ -658,17 +681,23 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 10),
-                          LinearProgressIndicator(
-                            value: (data['maxUses'] ?? 1) > 0 ? (data['uses'] ?? 0) / (data['maxUses'] ?? 1) : 0,
-                            backgroundColor: Colors.grey[200],
-                            color: const Color(0xFFE11D48),
-                          ),
+                          // صفرُ `maxUses` = «بلا حدّ» عند الخادم، فشريطٌ بقيمةِ
+                          // 0 يُقرأُ «لم يُستعمَل» وبقيمةِ 1 يُقرأُ «نَفِد» —
+                          // وكلاهما دعوى. فلا شريطَ أصلاً حين لا سقف.
+                          if (couponUsesProgress(data['uses'], data['maxUses'])
+                              case final double p) ...[
+                            const SizedBox(height: 10),
+                            LinearProgressIndicator(
+                              value: p,
+                              backgroundColor: Colors.grey[200],
+                              color: const Color(0xFFE11D48),
+                            ),
+                          ],
                           const SizedBox(height: 5),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('الاستخدام: ${data['uses'] ?? 0} من ${data['maxUses'] ?? 0}', style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey[700])),
+                              Text(couponUsesLabel(data['uses'], data['maxUses']), style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey[700])),
                               Text('ينتهي في: ${intl.DateFormat('yyyy-MM-dd').format(expiry)}', style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey[700])),
                             ],
                           ),
