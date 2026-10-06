@@ -26,8 +26,6 @@ import 'package:moyasar/moyasar.dart';
 import 'package:zyiarah/services/zyiarah_wallet_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-import 'package:zyiarah/providers/config_provider.dart';
-import 'package:provider/provider.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
 import 'package:zyiarah/services/counter_service.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -2011,8 +2009,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   Widget _buildBottomButton() {
-    final config = Provider.of<ZyiarahConfigProvider>(context);
-
     return Positioned(
       bottom: 0,
       left: 0,
@@ -2026,7 +2022,17 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         child: ElevatedButton(
           onPressed: _isLoading ? null : _handlePayment,
           style: ElevatedButton.styleFrom(
-            backgroundColor: _agreeToTerms ? config.checkoutButtonColor : Colors.grey.shade300,
+                        // **لونُ العلامةِ لا لونَ تجربةٍ لا يَكتبُها أحد.** كان
+            // `config.checkoutButtonColor`، وهو يُقرأُ من
+            // `config/ux_experiments.checkout_button_color` — حقلٌ **لا كاتبَ
+            // له في المستودعِ كلِّه**، في مجموعةٍ قاعدتُها `isSuperAdmin()`
+            // فلا تَقرؤها عميلةٌ أصلاً. فالقيمةُ كانت دائماً افتراضَ المُزوِّدِ
+            // `0xFF2563EB` — أزرقُ لوحةِ الإدارة — على أهمِّ زرٍّ في التطبيق،
+            // بينما `0xFF660033` لونُ العلامةِ في شاشاتِ العميلة. وفي الخدمةِ
+            // المحذوفةِ نفسِها كان احتياطُ تحليلِ الـhex هو `0xFF660033`،
+            // فالمقصودُ كان لونَ العلامةِ من البداية.
+            backgroundColor:
+                _agreeToTerms ? const Color(0xFF660033) : Colors.grey.shade300,
             foregroundColor: Colors.white,
             disabledBackgroundColor: Colors.grey.shade300,
             padding: const EdgeInsets.symmetric(vertical: 16),
