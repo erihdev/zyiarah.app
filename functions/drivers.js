@@ -59,9 +59,27 @@ function hasDriverRole(userData) {
  * @param {object|null|undefined} driverData بيانات `drivers/{id}`
  * @return {boolean}
  */
+// ═══ وعلَمانِ يُعطّلانِ، وهذا القارئُ كان يَعرفُ واحداً (2026-10-06) ═══
+//
+// حالةُ تعطيلِ السائقِ يَحملُها حقلانِ: `is_active` و`is_suspended` —
+// تطبيقُ الإدارةِ كان يَكتبُ الأوّلَ ولوحةُ الويبِ الثاني، **فمستنداتُ
+// الإنتاجِ تَحملُ هذا أو ذاك** (أُصلِحَ الكاتبانِ فصارا يَكتبانِ كليهما،
+// والقديمُ باقٍ). و`unassignJobsOnDriverDisable` يَقرأُ **أيَّهما كفى**
+// (`is_active === false || is_suspended === true`)، وهذا القارئُ كان
+// `is_active` وحدَه.
+//
+// فسائقٌ حالتُه `{is_suspended: true, is_active: true}`:
+//   ١. أُطلِقَ عند وَسمِه فأُلغيَ إسنادُ مهامِّه (عادت `pending`)؛
+//   ٢. **وهو «قابلٌ للإسناد» عند هذا القارئ** — فمكنسةُ
+//      `sweepUnassignedPaidOrders` (كلَّ خمسِ دقائق) أو `approveAndAssignOrder`
+//      تُعيدُ العملَ إليه.
+// أي أنّ إجراءَ المالكِ يُنقَضُ بصمت: اللوحةُ تَعرضُه «موقوفاً» ويَستمرُّ
+// يَستقبلُ المهامّ. والقراءةُ هنا **تَضييقٌ بحتٌ** (تُعطّلُ أكثرَ ولا
+// تُجيزُ أقلَّ)، و`is_suspended` لا يَكتبُه في المستودعِ كلِّه إلّا إجراءُ
+// الإيقافِ الإداريُّ — فلا طريقَ لتعطيلٍ غيرِ مقصود.
 function isActiveDriverDoc(driverData) {
   if (!driverData) return false;
-  return driverData.is_active !== false;
+  return driverData.is_active !== false && driverData.is_suspended !== true;
 }
 
 /**
