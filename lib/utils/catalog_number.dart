@@ -70,6 +70,29 @@ int? positiveInt(String raw) {
   return v.toInt();
 }
 
+/// **حقلٌ اختياريٌّ: الفراغُ قرارٌ، وخطأُ الكتابةِ ليس قراراً.**
+///
+/// الفراغُ يُعيدُ `whenEmpty` — وهي قيمةٌ **مقصودةٌ** تَختلفُ بالحقل: صفرٌ
+/// يَعني «غيرُ معروضة» في أسعارِ المنطقة، و«بلا حدّ» في `maxUses` وفي
+/// `max_orders_per_day`. أمّا نصٌّ لا يَنحلُّ إلى رقمٍ فيُعيدُ `null` =
+/// **غيرُ صالح**، فلا يُبتلَعُ إلى تلك القيمةِ المقصودةِ بصمت. والسالبُ
+/// مرفوضٌ (لا معنى له في أيٍّ من هذه الحقول) والصفرُ المكتوبُ صريحاً مقبول.
+double? optionalNum(String raw, {required double whenEmpty}) {
+  final t = normalizeDigits(raw);
+  if (t.isEmpty) return whenEmpty;
+  final v = double.tryParse(t);
+  if (v == null || !v.isFinite || v < 0) return null;
+  return v;
+}
+
+/// نفسُ القاعدةِ لعددٍ صحيحٍ — مُشتَقّةً من `optionalNum` كي لا تَنحرِفَ عن
+/// المرآةِ على «3e2» و«4.0» (نفسُ سببِ `positiveInt`).
+int? optionalInt(String raw, {required int whenEmpty}) {
+  final v = optionalNum(raw, whenEmpty: whenEmpty.toDouble());
+  if (v == null || v != v.roundToDouble() || v > 1e15) return null;
+  return v.toInt();
+}
+
 /// العددُ المجاورُ لكلمةِ «زيار» في نصِّ الباقةِ — **نفسُ** احتياطيِّ العميلِ
 /// (`subscription_plans_screen`) والخادمِ (`_validateContractPlan`)، فالمحرِّرُ
 /// يَرفُضُ ما لا يَستطيعُ أحدُهما حلَّه بعينِه.

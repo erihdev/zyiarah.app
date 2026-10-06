@@ -5,6 +5,7 @@ import { db } from '../services/firebase';
 import { useNotification } from '../components/notificationContext.ts';
 import { endOfLocalDay } from '../utils/couponExpiry';
 import { COUPON_ACTIVE, COUPON_DISABLED, couponIsActive } from '../utils/couponStatus';
+import { couponIsUnlimited, couponMaxUsesLabel, couponUsesProgress } from '../utils/couponUses.ts';
 
 interface PromoCode {
     id: string;
@@ -276,16 +277,23 @@ export default function Marketing() {
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="w-full max-w-[150px]">
+                                            {/* صفرُ maxUses = «بلا حدّ» عند الخادم. وكان العُرفُ
+                                                هنا أنّ «بلا حدّ» رقمٌ كبيرٌ (> 9999) فيُطبَعُ `0`
+                                                ويُحسَبُ uses/0 = Infinity ⇒ شريطٌ **ممتلئٌ أحمرُ**
+                                                عن كوبونٍ مفتوح؛ وسقفُ 10000 يُرسَمُ «∞» والخادمُ
+                                                يُنفِّذُه. القاعدةُ تَتبعُ الخادمَ حرفاً. */}
                                             <div className="flex justify-between text-xs font-bold text-slate-500 mb-1 pb-1">
                                                 <span>{coupon.uses}</span>
-                                                <span>{coupon.maxUses > 9999 ? '∞' : coupon.maxUses}</span>
+                                                <span>{couponMaxUsesLabel(coupon.maxUses)}</span>
                                             </div>
-                                            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                                <div
-                                                    className={`h-full rounded-full transition-all duration-500 ${coupon.uses >= coupon.maxUses ? 'bg-rose-500' : 'bg-rose-500'}`}
-                                                    style={{ width: `${Math.min((coupon.uses / coupon.maxUses) * 100, 100)}%` }}
-                                                ></div>
-                                            </div>
+                                            {!couponIsUnlimited(coupon.maxUses) && (
+                                                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full rounded-full transition-all duration-500 bg-rose-500"
+                                                        style={{ width: `${(couponUsesProgress(coupon.uses, coupon.maxUses) ?? 0) * 100}%` }}
+                                                    ></div>
+                                                </div>
+                                            )}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
@@ -394,11 +402,10 @@ export default function Marketing() {
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="block text-sm font-bold text-slate-700">الحد الأقصى للاستخدام</label>
+                                    <label className="block text-sm font-bold text-slate-700">الحد الأقصى للاستخدام <span className="font-normal text-slate-400">(0 أو فارغ = بلا حدّ)</span></label>
                                     <input
                                         type="number"
-                                        required
-                                        min="1"
+                                        min="0"
                                         value={newMaxUses}
                                         onChange={(e) => setNewMaxUses(Number(e.target.value))}
                                         className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-xl px-4 py-3 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 transition-all text-left"
