@@ -119,6 +119,53 @@ void main() {
           reason: 'لا إحالةَ إلى المصدرِ الذي لا يَبيت');
     });
 
+    test('(ز) README ليس قالبَ Flutter، ودعاواهُ مُشتَقّة', () {
+      final readme = File('README.md').readAsStringSync();
+      // كان القالبَ العاريَ («A new Flutter project») لتطبيقٍ تجاريٍّ بثلاثةِ
+      // أسطحٍ وأربعةِ أهدافِ نشر — أكثرُ ملفٍّ يُقرأُ ولا يَقولُ شيئاً صحيحاً.
+      for (final boilerplate in [
+        'A new Flutter project',
+        'This project is a starting point for a Flutter application',
+      ]) {
+        expect(readme.contains(boilerplate), isFalse,
+            reason: 'README عادَ إلى قالبِ Flutter: «$boilerplate»');
+      }
+      // الأسطحُ الأربعةُ التي يَسمّيها موجودةٌ فعلاً
+      for (final dir in ['lib', 'admin_panel', 'functions', 'landing_page']) {
+        expect(readme, contains('`$dir/`'),
+            reason: 'README لا يُسمّي $dir/');
+        expect(Directory(dir).existsSync(), isTrue,
+            reason: '$dir/ غيرُ موجودٍ — فالجدولُ يَكذِب');
+      }
+      // عددُ أهدافِ النشرِ **مُشتَقٌّ** لا مكتوب
+      final targets = Directory('.github/workflows')
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('_deploy.yml'))
+          .length;
+      expect(targets, greaterThanOrEqualTo(3));
+      expect(readme, contains(_arWord(targets)),
+          reason: 'README يَذكرُ عدداً غيرَ $targets لأهدافِ النشر');
+      // **كلُّ مسارٍ يُسمّيه README موجودٌ فعلاً** — والفحصُ يَستخرجُ المساراتِ
+      // من النصِّ لا يُثبّتُها بيدِه: قضمةٌ غيّرت اسمَ المُولِّدِ في README
+      // ومرَّت أخضرَ لأنّ الفحصَ كان يَسألُ عن ملفٍّ **كتبتُه أنا** لا عن
+      // المسارِ المُدَّعى. «الدعوى تُتحقَّق» لا «ملفٌّ ما موجود».
+      final claimed = RegExp(r'`([A-Za-z0-9_./-]+\.(?:mjs|yml|ts|dart|md))`')
+          .allMatches(readme)
+          .map((m) => m.group(1)!)
+          .where((p) => p.contains('/') || p.endsWith('.md'))
+          .toSet();
+      expect(claimed.length, greaterThanOrEqualTo(4),
+          reason: 'استخراجُ المساراتِ من README انهارَ — فحصٌ أجوف');
+      for (final path in claimed) {
+        expect(File(path).existsSync(), isTrue,
+            reason: 'README يُحيلُ إلى مسارٍ لا وجودَ له: $path');
+      }
+      expect(File('.gitignore').readAsStringSync(),
+          contains('admin_panel/src/services/firebase.ts'),
+          reason: 'README يَقولُ إنّه مُستثنى من git وهو ليس كذلك');
+    });
+
     test('(هـ) لا عددَ محجوزاتِ STAGE-C مكتوبٌ في الدليل — نسخةٌ تَنحرِف', () {
       final i = guide.indexOf('## 1-و.');
       final j = guide.indexOf('## 2.', i);
@@ -135,6 +182,15 @@ void main() {
     });
   });
 }
+
+/// العددُ بالكلماتِ العربيّةِ كما يُكتَبُ في النصِّ الجاري (لا بالأرقام).
+String _arWord(int n) => const {
+      3: 'ثلاثةُ',
+      4: 'أربعةُ',
+      5: 'خمسةُ',
+      6: 'ستّةُ',
+    }[n] ??
+    (throw StateError('لا كلمةَ لعددِ $n — أضِفها'));
 
 /// الرقمُ بالأرقامِ العربيّةِ-الهنديّةِ كما تُكتَبُ في الوثيقة.
 String _ar(int n) => n
