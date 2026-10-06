@@ -253,6 +253,44 @@ const {setDoc, doc, updateDoc, getDoc, getDocs, collection, query, addDoc,
   // كلِّه، فمفتاحُ «الإيقاف» زينةٌ — ومَن أوقفَه المالكُ يُحدِّثُ الطلباتَ
   // ويَحذفُ المناطقَ ويَبثُّ كأنّه نشط. واختبارُ قضمٍ يُثبِتُ ذلك: بإزالةِ
   // `staffEnabled()` تَنجحُ الأربعةُ التاليةُ كلُّها.
+  // ─── عقود: «الاعتمادُ لِما لم يُدفَع بعد» ────────────────────────────
+  // زرُّ «اعتماد العقد» كان مشروطاً بـ`status == 'pending'` وحدَها، وعقدٌ
+  // فشلَ تفعيلُه يَسكنُ تلك الحالةَ — فالكتابةُ تُطالِبُ مَن دفعَ بالدفعِ
+  // و**تُخرِجُه من نافذةِ الإنقاذ** (`is_paid == true && status == pending`).
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, "contracts/cPaid"),
+        {userId: "client1", status: "pending", is_paid: true, planPrice: 500,
+          planVisits: 4});
+    await setDoc(doc(db, "contracts/cUnpaid"),
+        {userId: "client1", status: "pending", is_paid: false, planPrice: 500,
+          planVisits: 4});
+    await setDoc(doc(db, "contracts/cPaidApproved"),
+        {userId: "client1", status: "approved_waiting_payment", is_paid: true,
+          planPrice: 500, planVisits: 4});
+    await setDoc(doc(db, "contracts/cOld"),
+        {userId: "client1", status: "pending", planPrice: 500, planVisits: 4});
+  });
+
+  await check("contract: approving a PAID pending contract -> DENIED",
+      updateDoc(doc(asUser("ordersMgr"), "contracts/cPaid"),
+          {status: "approved_waiting_payment"}), false);
+  // غيرُ المدفوعِ هو موضعُ الاعتمادِ الشرعيُّ — وهذا ما يَمنعُ أن يكونَ
+  // التضييقُ إقفالاً لخطوةِ الاعتمادِ كلِّها.
+  await check("contract: approving an UNPAID pending contract -> ALLOWED",
+      updateDoc(doc(asUser("ordersMgr"), "contracts/cUnpaid"),
+          {status: "approved_waiting_payment"}), true);
+  // والمنعُ على **الانتقالِ** لا على الحالةِ الناتجة: تعديلٌ آخرُ على عقدٍ
+  // مدفوعٍ يَحملُها سلفاً يَبقى مسموحاً، وإلّا حُجِبَ كلُّ عملٍ إداريٍّ عليه.
+  await check("contract: another field on a paid approved contract -> ALLOWED",
+      updateDoc(doc(asUser("ordersMgr"), "contracts/cPaidApproved"),
+          {adminNote: "x"}), true);
+  // ومستندٌ قديمٌ بلا `is_paid` لا يُحجَبُ: قراءةُ غائبٍ في القواعدِ تَرفضُ
+  // الكتابةَ، فـ`.get('is_paid', false)` لا القوسُ المباشر.
+  await check("contract: approving a legacy contract with no is_paid -> ALLOWED",
+      updateDoc(doc(asUser("ordersMgr"), "contracts/cOld"),
+          {status: "approved_waiting_payment"}), true);
+
   await check("staff off: orders_manager CANNOT update an order",
       updateDoc(doc(asUser("offMgr"), "orders/o1"), {status: "assigned"}),
       false);
