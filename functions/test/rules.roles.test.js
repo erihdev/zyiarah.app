@@ -348,6 +348,26 @@ const {setDoc, doc, updateDoc, getDoc, getDocs, collection, query, addDoc,
       getDocs(query(collection(asUser("client1"), "drivers"),
           where("phone", "==", "500000000"), limit(1))), false);
 
+  // ══════════════════════════════════════════════════════════════════
+  // تجربةُ الواجهةِ: مستمعٌ مرفوضٌ في كلِّ جلسة (2026-10-06)
+  // ══════════════════════════════════════════════════════════════════
+  // `ZyiarahConfigProvider` كان يُنشَأُ في `main.dart` لكلِّ جلسةٍ ويَفتحُ
+  // مستمعاً على `config/ux_experiments` ليَقرأَ لونَ زرِّ الدفع. وقاعدةُ
+  // `config/{configId}` هي `isSuperAdmin()` وحدَه — فالقراءةُ مرفوضةٌ لكلِّ
+  // عميلةٍ وسائق، و`onError` كان `debugPrint`اً وحدَه (لا يُجمَع). وهذا هو
+  // **البرهانُ** على الرفضِ لا استنتاجاً من نصِّ القاعدة، وهو ما يُفسِّرُ
+  // حذفَ المُزوِّدِ في `test/checkout_button_color_test.dart`.
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "config/ux_experiments"),
+        {checkout_button_color: "#2563EB"});
+  });
+  await check("client CANNOT read config/ux_experiments (UX experiment)",
+      getDoc(doc(asUser("client1"), "config/ux_experiments")), false);
+  await check("orders_manager CANNOT read it either (super_admin only)",
+      getDoc(doc(asUser("ordersMgr"), "config/ux_experiments")), false);
+  await check("super_admin CAN read it — القاعدةُ ليست إقفالاً تامّاً",
+      getDoc(doc(asUser("superA"), "config/ux_experiments")), true);
+
   await testEnv.cleanup();
   console.log(`\nRole test: ${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);

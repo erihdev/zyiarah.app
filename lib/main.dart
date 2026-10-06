@@ -27,7 +27,6 @@ import 'package:zyiarah/router.dart';
 
 import 'package:provider/provider.dart';
 import 'package:zyiarah/providers/user_provider.dart';
-import 'package:zyiarah/providers/config_provider.dart';
 import 'package:zyiarah/providers/order_provider.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/services/zatca_service.dart';
@@ -142,7 +141,11 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ZyiarahUserProvider()),
-        ChangeNotifierProvider(create: (_) => ZyiarahConfigProvider()),
+        // `ZyiarahConfigProvider` أُزيل: كان يَفتحُ مستمعاً على
+        // `config/ux_experiments` في **كلِّ** جلسة — وقاعدةُ تلك المجموعةِ
+        // `isSuperAdmin()` وحدَه، فالقراءةُ مرفوضةٌ لكلِّ عميلةٍ وسائق،
+        // و`onError` كان `debugPrint`اً وحدَه (لا يُجمَع). ولم يَكتبْ حقلَه
+        // أيُّ مُحرِّرٍ قطّ، فلونُ زرِّ الدفعِ كان الافتراضَ الأزرقَ دائماً.
         ChangeNotifierProvider(create: (_) => ZyiarahOrderProvider()),
       ],
       child: const ZyiarahApp(),
