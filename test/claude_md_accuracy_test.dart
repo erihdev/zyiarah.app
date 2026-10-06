@@ -60,7 +60,14 @@ void main() {
       );
     });
 
-    test('arabic_reshaper محصور في خدمة PDF — والوثيقة تقول ذلك', () {
+    test('arabic_reshaper محصور في بوّابة الـPDF — والوثيقة تقول ذلك', () {
+      // **انتقلَ الحصرُ من ملفٍّ إلى بوّابةٍ (2026-10-06).** كان المُشكِّلُ
+      // في `zyiarah_pdf_service` وحدَه، والتشكيلُ **لا يَكفي**: الخطُّ
+      // المُضمَّنُ لا يَملكُ أشكالَ الانفصالِ فتَسقطُ حروفٌ من الفاتورة،
+      // و`pdf_report_util` لم يُشكّلْ أصلاً. فصارَ في
+      // `lib/utils/arabic_pdf_text.dart` بوّابةً واحدةً يُنادِيها المسارانِ
+      // (`test/arabic_pdf_text_test.dart`). والحصرُ ما زال حصراً: ملفٌّ
+      // ثالثٌ يَستوردُ المُشكِّلَ يُسقطُ الفحص.
       final importers = Directory('lib')
           .listSync(recursive: true)
           .whereType<File>()
@@ -72,12 +79,14 @@ void main() {
 
       expect(
         importers,
-        ['lib/services/zyiarah_pdf_service.dart'],
-        reason: 'reshaper يلزم لمخرجات PDF وحدها. إن ظهر في ملف واجهة فهو '
-            'تشكيل مزدوج يُفسد النص — أو قرار جديد يستوجب تحديث الوثيقة.',
+        ['lib/utils/arabic_pdf_text.dart'],
+        reason: 'reshaper يلزم لمخرجات PDF وحدها، ومن بوّابةٍ واحدة. إن ظهر '
+            'في ملف واجهة فهو تشكيل مزدوج يُفسد النص؛ وإن ظهر في ملفِّ PDF '
+            'آخر فهو تخطٍّ لردِّ أشكالِ الانفصال — أو قرار جديد يستوجب '
+            'تحديث الوثيقة.',
       );
 
-      expect(_read(_doc), contains('zyiarah_pdf_service.dart'));
+      expect(_read(_doc), contains('arabic_pdf_text.dart'));
     });
 
     test('عدد الدوال الخادمية في الوثيقة يطابق index.js', () {
