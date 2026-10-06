@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:ui';
 import 'package:zyiarah/utils/build_gate.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/catalog_number.dart';
 
 class AdminSettingsScreen extends StatefulWidget {
   const AdminSettingsScreen({super.key});
@@ -188,6 +189,22 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
     // و`currentBuild >= 0` صحيحٌ أبداً — فصندوقٌ فارغٌ واحدٌ يُطفئُ مطالبةَ
     // التحديثِ لتلك المنصّةِ **بصمت**، والمفتاحُ والمفتاحُ الإجباريُّ
     // يَبدوانِ عاملَين. وهي بوّابةُ نشرِ قواعدِ الأمانِ المحجوزة.
+    // نسبةُ الذروة: كانت `(double.tryParse(...) ?? 0).clamp(0, 100)` — فقيمةٌ
+    // لا تَنحلُّ إلى رقمٍ («١٠» على لوحةٍ عربيّة) تَصيرُ **صفراً** أي «لا
+    // ذروة»، و«150» تُقَصُّ إلى 100 بصمت. وهو نفسُ ما رُفِضَ في حدِّ الطلباتِ
+    // أعلاه وفي رسومِ الوعورةِ في محرِّرِ المناطق («لا قصّ صامت لخطأ كتابة»).
+    final double? surgeVal = optionalNum(_surgePercentCtrl.text, whenEmpty: 0);
+    if (surgeVal == null || surgeVal > 100) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('نسبة سعر الذروة يجب أن تكون بين 0 و100% '
+              '(اتركيها فارغة = بلا ذروة)'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
+
     final int? iosBuild = publishedBuild(_latestBuildIosCtrl.text);
     final int? androidBuild = publishedBuild(_latestBuildAndroidCtrl.text);
     if (iosBuild == null || androidBuild == null) {
@@ -211,8 +228,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         'support_whatsapp': _whatsappSupportCtrl.text.trim(),
         'support_phone': _phoneSupportCtrl.text.trim(),
         'admin_email': _adminEmailCtrl.text.trim(),
-        'surge_percent':
-            (double.tryParse(_surgePercentCtrl.text.trim()) ?? 0).clamp(0, 100),
+        'surge_percent': surgeVal,
         'contract_terms': _contractTermsCtrl.text.trim(),
         'privacy_policy': _privacyPolicyCtrl.text.trim(),
         'maintenance_mode': _maintenanceMode,

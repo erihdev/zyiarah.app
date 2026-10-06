@@ -11,6 +11,7 @@ import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/driver_activation.dart';
 import 'package:zyiarah/utils/driver_rating.dart';
+import 'package:zyiarah/utils/catalog_number.dart';
 
 class AdminDriversScreen extends StatefulWidget {
   const AdminDriversScreen({super.key});
@@ -335,6 +336,22 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                   final email = emailCtrl.text.trim().toLowerCase();
                                   final name = nameCtrl.text.trim();
                                   
+                                  // الراتبُ كان `double.tryParse(...) ?? 0`
+                                  // بلا تحقّق، والحقلُ بلا `inputFormatters`
+                                  // — فـ«٣٠٠٠» بأرقامٍ عربيّةٍ تُخزَّنُ صفراً:
+                                  // صفحةُ الرواتبِ تَعُدُّه بلا راتبٍ وزرُّ
+                                  // «صرف» يَصرفُ له صفراً، و«صافي الأرباح» في
+                                  // شاشةِ المحاسبِ يَرتفعُ بمقدارِ راتبِه.
+                                  // الفراغُ قرارٌ (لا راتبَ مُسجَّل) والخطأُ يُرفَض.
+                                  final double? salaryVal =
+                                      optionalNum(salaryCtrl.text, whenEmpty: 0);
+                                  if (salaryVal == null) {
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                      content: Text('الراتب الشهري: رقمٌ غيرُ سالب، أو اتركيه فارغاً'),
+                                      backgroundColor: Colors.red,
+                                    ));
+                                    return;
+                                  }
                                   if (name.isEmpty || email.isEmpty) {
                                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الاسم والبريد الإلكتروني متطلبات أساسية')));
                                     return;
@@ -369,7 +386,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                         'id_number': idNumberCtrl.text.trim(),
                                         'id_expiry': idExpiryCtrl.text.trim(),
                                         'photo_url': photoUrl,
-                                        'monthly_salary': double.tryParse(salaryCtrl.text.trim()) ?? 0,
+                                        'monthly_salary': salaryVal,
                                         'updated_at': FieldValue.serverTimestamp(),
                                       };
                                       await FirebaseFirestore.instance.collection('drivers').doc(docId).update(data);
@@ -395,7 +412,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                         idNumber: idNumberCtrl.text.trim(),
                                         idExpiry: idExpiryCtrl.text.trim(),
                                         photoUrl: photoUrl,
-                                        monthlySalary: double.tryParse(salaryCtrl.text.trim()) ?? 0,
+                                        monthlySalary: salaryVal,
                                       );
 
                                       await _audit.logAction(

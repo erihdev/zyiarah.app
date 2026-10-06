@@ -65,8 +65,17 @@ void main() {
         reason: 'تعريف + استدعاء بعد التحديد التلقائي + بعد اختيار الخريطة');
 
     final admin = File('lib/screens/admin/admin_hourly_zones_screen.dart').readAsStringSync();
-    expect(admin.contains("'max_orders_per_day': int.tryParse(maxPerDayCtrl.text.trim()) ?? 0,"),
-        isTrue);
+    // كان يشدّ `int.tryParse(maxPerDayCtrl.text.trim()) ?? 0` حرفياً — وهو
+    // **الشكل الذي يبتلع** «٥٠» العربية إلى صفر، وصفرٌ هنا يعني «بلا سقف»
+    // (`zoneDailyCap`): أي أن الحارس كان يشدّ انقلاب قرار المالك. أُعيد
+    // توجيهه إلى الحقيقة المقصودة (الأدمن يكتب الحقل من هذا الحقل) وشُدّد
+    // برفض غير الصالح — وهو الشكل الذي كان `admin_settings_screen` يحمله
+    // أصلاً لحدّ الطلبات العام.
+    expect(RegExp(r"'max_orders_per_day':\s*\n?\s*optionalInt\(maxPerDayCtrl\.text")
+        .hasMatch(admin), isTrue,
+        reason: 'الأدمن لا يكتب سقف المنطقة من حقله، أو يبتلع غير الصالح');
+    expect(admin.contains('numericFieldsError()'), isTrue,
+        reason: 'بوّابة رفض الأرقام غير الصالحة زالت — فالسقف يُلغى بصمت');
     expect(admin.contains('الحدّ اليومي للطلبات في هذه المنطقة'), isTrue);
     // لوحة الويب تكتب المفتاح نفسه (تكافؤ) — وإلا بقي السقف الخاص حكراً على التطبيق.
     final web = File('admin_panel/src/pages/Settings.tsx').readAsStringSync();

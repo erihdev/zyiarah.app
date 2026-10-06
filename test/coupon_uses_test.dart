@@ -4,40 +4,15 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zyiarah/utils/coupon_uses.dart';
 
+import 'helpers/strip_comments.dart';
+
 /// **صفرُ `maxUses` يَعني «بلا حدّ» — وثلاثةُ أسطحٍ قالت ثلاثةَ أشياءَ.**
 ///
 /// الخادمُ: `if (maxUses > 0 && uses >= maxUses) return "exhausted";` فصفرٌ
 /// = لا سقفَ إطلاقاً. ومحرِّرُ التطبيقِ كان يَبتلعُ «١٠» إلى صفرٍ (فيَفتحُ
 /// الكوبونَ)، وبطاقتُه تَطبعُ «من 0» (فيُقرأُ «نَفِد»)، وجدولُ اللوحةِ عُرفُه
 /// أنّ «بلا حدّ» رقمٌ كبيرٌ فيَرسمُ شريطاً **ممتلئاً** لكوبونٍ مفتوح.
-/// **الحجبُ بالحالةِ لا بالبادئة.** تعليقُ `{/* … */}` في JSX يَمتدُّ أسطُراً
-/// و**أسطُرُه التاليةُ نصٌّ عارٍ بلا علامة** — فمُرشِّحُ «السطرُ يَبدأُ بـ»
-/// عاجزٌ عنه، وقد سقطَ هذا الفحصُ على تعليقٍ كتبتُه يُسمّي `> 9999` (نفسُ درسِ
-/// تعليقاتِ XML في `permissions_guard_test`). فتُمسَحُ كتلُ `/* … */` حالةً
-/// أوّلاً، ثمّ أسطرُ `//`.
-String _code(String path) {
-  final raw = File(path).readAsStringSync();
-  final out = StringBuffer();
-  var i = 0;
-  while (i < raw.length) {
-    if (raw.startsWith('/*', i)) {
-      final end = raw.indexOf('*/', i + 2);
-      final span = end < 0 ? raw.substring(i) : raw.substring(i, end + 2);
-      // نُبقي الأسطرَ الجديدةَ كي لا تَنزاحَ المواضع
-      out.write(span.replaceAll(RegExp(r'[^\n]'), ' '));
-      if (end < 0) break;
-      i = end + 2;
-      continue;
-    }
-    out.write(raw[i]);
-    i++;
-  }
-  return out
-      .toString()
-      .split('\n')
-      .map((l) => l.trimLeft().startsWith('//') ? '' : l)
-      .join('\n');
-}
+String _code(String path) => stripComments(File(path).readAsStringSync());
 
 /// اقتطاعُ كتلةِ الحالاتِ: من آخرِ `]` إلى الوراءِ بموازنةِ الأقواس —
 /// `indexOf('[')` يَلتقطُ قوسَ **تعليقِ النوعِ** لا بدايةَ المصفوفة.
