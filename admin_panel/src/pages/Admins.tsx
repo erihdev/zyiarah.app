@@ -1,16 +1,21 @@
 import { useState, useEffect } from 'react';
-import { Shield, Key, Search, UserPlus, Trash2, Edit, UserCheck, Loader2 } from 'lucide-react';
+import { Shield, Key, Search, UserPlus, Trash2, Edit, UserCheck, UserX, UserMinus, Loader2 } from 'lucide-react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db, functions } from '../services/firebase.ts';
 import { httpsCallable } from 'firebase/functions';
 import { useNotification } from '../components/notificationContext.ts';
+import { staffState } from '../utils/staffStatus.ts';
 
 interface AdminUser {
     id: string;
     name: string;
     email: string;
     role: string;
+    // أعلامُ التعطيلِ الثلاثةُ — تُقرأُ عبر `staffState` لا واحداً منها:
+    // `status !== 'inactive'` وحدَه كان يَقرأُ قيمةً لا يَكتبُها شيء.
     status?: string;
+    is_active?: boolean;
+    is_blocked?: boolean;
     last_login?: { toDate: () => Date } | null;
 }
 
@@ -169,9 +174,16 @@ export default function Admins() {
                                             <td className="px-6 py-4"><RoleBadge role={effRole} /></td>
                                             <td className="px-6 py-4 text-sm font-medium text-slate-500">{formatLastLogin(admin.last_login)}</td>
                                             <td className="px-6 py-4">
-                                                {admin.status !== 'inactive'
-                                                    ? <span className="inline-flex items-center gap-1 text-emerald-600 font-bold text-xs"><UserCheck size={14} /> نشط</span>
-                                                    : <span className="text-slate-400 font-bold text-xs">غير نشط</span>}
+                                                {(() => {
+                                                    switch (staffState(admin)) {
+                                                        case 'banned':
+                                                            return <span className="inline-flex items-center gap-1 text-rose-600 font-bold text-xs"><UserX size={14} /> محظور</span>;
+                                                        case 'suspended':
+                                                            return <span className="inline-flex items-center gap-1 text-amber-600 font-bold text-xs"><UserMinus size={14} /> موقوف</span>;
+                                                        default:
+                                                            return <span className="inline-flex items-center gap-1 text-emerald-600 font-bold text-xs"><UserCheck size={14} /> نشط</span>;
+                                                    }
+                                                })()}
                                             </td>
                                             <td className="px-6 py-4 text-center">
                                                 <div className="flex items-center justify-center gap-2">

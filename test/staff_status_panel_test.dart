@@ -1,0 +1,176 @@
+// ════════════════════════════════════════════════════════════════════════
+// حالةُ حسابِ الموظّفِ في لوحةِ الويبِ — ثلاثةُ أعلامٍ تُعطّلُ، وصفرٌ كان
+// يُقرَأ (2026-10-05)
+//
+// `Admins.tsx` كان يَرسمُ عمودَ الحالةِ من `admin.status !== 'inactive'`،
+// و**لا شيءَ في المستودعِ كلِّه يَكتبُ `status: 'inactive'` على مستندِ
+// مستخدم** — الكاتبُ الوحيدُ لتلك القيمةِ هو محرِّرُ الكوبونات، على مجموعةٍ
+// أخرى. فالعمودُ كان «نشط» بعلامةٍ خضراءَ **أبداً**، في كلِّ مسارِ تعطيلٍ
+// موجود: `is_active == false` (مفتاحُ تطبيقِ الإدارة، وما تَقرؤه
+// `staffEnabled()` في القواعدِ و`getUserRole`)، و`status == 'banned'`
+// (تَكتبُه **هذه اللوحةُ نفسُها** من صفحةِ المستخدمين — قائمتُها بلا
+// مُرشِّحِ دور)، و`is_blocked == true`. فاللوحةُ تَحظُرُ حساباً في صفحةٍ
+// وتَقولُ عنه «نشط» في أخرى.
+//
+// وهي قصّةُ `driverActivation.ts` بعينِها — شارةٌ تَقرأُ حقلاً والكاتبُ
+// يَكتبُ غيرَه — على المجموعةِ التي لم تَنَلْ ذلك الإصلاح. فنطاقُ هذا
+// الحارسِ **مُشتَقٌّ**: الأعلامُ تُقرأُ من القواعدِ ومن `user_provider`
+// وتُقابَلُ بما تُعلِنُه الوحدةُ، فعلَمُ تعطيلٍ رابعٌ يُضافُ هناك يَسقطُ
+// الفحصَ بدلَ أن يَغيبَ عن الجدولِ سنةً.
+// ════════════════════════════════════════════════════════════════════════
+import 'dart:io';
+import 'package:flutter_test/flutter_test.dart';
+
+/// يَحجبُ أسطرَ التعليقِ بمسافاتٍ بطولِها فتَبقى الإزاحاتُ مطابقةً.
+String _mask(String src) => src
+    .split('\n')
+    .map((l) {
+      final t = l.trimLeft();
+      return (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*'))
+          ? ' ' * l.length
+          : l;
+    })
+    .join('\n');
+
+/// جسمُ دالّةٍ بموازنةِ الأقواس — لا `indexOf('}')`، وهو الفخُّ الذي أوقعَ
+/// حُرّاساً في هذا المستودعِ سبعَ مرّات.
+String _braced(String src, String signature) {
+  final i = src.indexOf(signature);
+  if (i < 0) throw StateError('التوقيعُ اختفى: $signature');
+  final open = src.indexOf('{', i + signature.length - 1);
+  if (open < 0) throw StateError('لا جسمَ لـ$signature');
+  var depth = 0;
+  for (var j = open; j < src.length; j++) {
+    if (src[j] == '{') depth++;
+    if (src[j] == '}') {
+      depth--;
+      if (depth == 0) return src.substring(open, j + 1);
+    }
+  }
+  throw StateError('قوسٌ غيرُ مُغلَقٍ في $signature');
+}
+
+void main() {
+  final rulesRaw = File('firestore.rules').readAsStringSync();
+  final rules = _mask(rulesRaw);
+  final providerRaw = File('lib/providers/user_provider.dart').readAsStringSync();
+  final provider = _mask(providerRaw);
+  final utilRaw = File('admin_panel/src/utils/staffStatus.ts').readAsStringSync();
+  final util = _mask(utilRaw);
+  final adminsRaw = File('admin_panel/src/pages/Admins.tsx').readAsStringSync();
+  final admins = _mask(adminsRaw);
+  final usersRaw = File('admin_panel/src/pages/Users.tsx').readAsStringSync();
+  final users = _mask(usersRaw);
+  final managersRaw =
+      File('lib/screens/admin/admin_managers_screen.dart').readAsStringSync();
+  final managers = _mask(managersRaw);
+
+  /// الأعلامُ **مُشتَقّةٌ** من القارئَين الآمِرَين: القواعدُ (إنفاذُ الكتابة)
+  /// و`user_provider` (الخروجُ القسريّ). قائمةٌ مكتوبةٌ بيدٍ هنا كانت
+  /// ستَتخلّفُ عن علَمٍ رابعٍ بصمت.
+  Set<String> derivedFlags() {
+    final out = <String>{};
+    // (١) القواعد: `getUserData().get('is_active', true) != false`
+    final gate = _braced(rules, 'function staffEnabled()');
+    for (final m in RegExp(r"\.get\('([a-z_]+)'").allMatches(gate)) {
+      out.add(m.group(1)!);
+    }
+    // (٢) `user_provider`: شرطُ الطردِ — `data['is_blocked'] == true ||
+    //     data['status'] == 'banned'`
+    final ban = RegExp(r"if \((data\['[a-z_]+'\][^)]*?)\) \{").firstMatch(provider);
+    if (ban == null) throw StateError('شرطُ الطردِ في user_provider اختفى');
+    for (final m in RegExp(r"data\['([a-z_]+)'\]").allMatches(ban.group(1)!)) {
+      out.add(m.group(1)!);
+    }
+    return out;
+  }
+
+  Set<String> declaredFlags() {
+    final m = RegExp(r'STAFF_DISABLE_FIELDS\s*=\s*\[([^\]]*)\]').firstMatch(util);
+    if (m == null) throw StateError('STAFF_DISABLE_FIELDS اختفت');
+    return RegExp(r"'([a-z_]+)'")
+        .allMatches(m.group(1)!)
+        .map((x) => x.group(1)!)
+        .toSet();
+  }
+
+  group('قاعدةُ حالةِ الموظّفِ مُشتَقّةٌ لا مكتوبةً بيد', () {
+    test('(أ) الاشتقاقُ أصابَ القارئَين — فلا فحصَ على فراغ', () {
+      final d = derivedFlags();
+      expect(d.length, greaterThanOrEqualTo(3),
+          reason: 'الاشتقاقُ انحلَّ إلى $d — حارسٌ أجوفُ أسوأُ من لا حارس');
+      expect(d.contains('is_active'), isTrue, reason: 'القواعدُ لم تُقرَأ');
+      expect(d.contains('status'), isTrue,
+          reason: 'شرطُ الطردِ في user_provider لم يُقرَأ');
+    });
+
+    test('(ب) ما تُعلِنُه الوحدةُ = ما يَقرؤه الخادمُ والتطبيقُ، مجموعةً', () {
+      expect(declaredFlags(), derivedFlags(),
+          reason: 'علَمُ تعطيلٍ يَعرفُه الإنفاذُ ولا تَقرؤه اللوحةُ — أو عكسُه');
+    });
+
+    test('(ج) الوحدةُ تَقرأُ كلَّ علَمٍ فعلاً، لا تُعلِنُه فحسب', () {
+      final body = _braced(util, 'export function staffState(');
+      for (final f in derivedFlags()) {
+        expect(body.contains(f), isTrue,
+            reason: '`$f` مُعلَنٌ ولا يُقرَأُ في القاعدة — اسمٌ لا قدرة');
+      }
+      expect(body.contains("'banned'"), isTrue,
+          reason: 'قيمةُ الحظرِ لا تُقارَن');
+    });
+  });
+
+  group('الجدولُ يَقرأُ القاعدةَ ولا يُعيدُ تعدادَها', () {
+    test('(د) الشارةُ تُنادي `staffState` وتُستورَد', () {
+      expect(admins.contains("from '../utils/staffStatus.ts'"), isTrue,
+          reason: 'الوحدةُ غيرُ مستورَدة');
+      expect(RegExp(r'staffState\(admin\)').hasMatch(admins), isTrue,
+          reason: 'الشارةُ لا تُنادي القاعدة');
+      expect(admins.contains('موقوف'), isTrue, reason: 'حالةُ الوقفِ لا تُعرَض');
+      expect(admins.contains('محظور'), isTrue, reason: 'حالةُ الحظرِ لا تُعرَض');
+    });
+
+    test("(هـ) `'inactive'` لم تَعُد قراراً في الجدول", () {
+      // القيمةُ لا كاتبَ لها، فقراءتُها **هي** العطل.
+      expect(admins.contains('inactive'), isFalse,
+          reason: 'عادَ قرارٌ على قيمةٍ لا يَكتبُها شيءٌ — «نشط» أبداً');
+    });
+
+    test('(و) المضادّة: سببُ المنعِ ما زال موثَّقاً في الخامّ', () {
+      // حجبُ التعليقاتِ هو ما يُجعلُ (هـ) ممكناً، فيَلزمُ إثباتُ أنّ
+      // المحجوبَ شرحٌ لا شفرةٌ أُزيلت — الفخُّ الذي أوقعَ حُرّاساً هنا
+      // اثنتَي عشرةَ مرّة.
+      expect(utilRaw.contains("status: 'inactive'"), isTrue,
+          reason: 'شرحُ العطلِ زال — فلا يَعرفُ قارئٌ ما يَحرُسُه هذا');
+    });
+  });
+
+  group('الكُتّابُ الذين تَقرأُ القاعدةُ لهم ما زالوا قائمِين', () {
+    test('(ز) صفحةُ المستخدمينَ ما زالت تَكتبُ `status: banned` — وبلا مُرشِّحِ دور', () {
+      expect(RegExp(r"status:\s*banning \? 'banned'").hasMatch(users), isTrue,
+          reason: 'كاتبُ الحظرِ تغيّرَ — فتعليلُ قراءةِ `status` يُراجَع');
+      // لا `where('role', ...)` على قائمةِ المستخدمين: صفوفُ الموظّفينَ فيها،
+      // وهو سببُ أنّ حظرَ موظّفٍ من هذه اللوحةِ مسارٌ قائمٌ لا نظريّ.
+      expect(RegExp(r"collection\(db, 'users'\)\), where\(").hasMatch(users), isFalse,
+          reason: 'صارت القائمةُ مُرشَّحةً بدورٍ — فيُراجَعُ التعليلُ لا يُسكَت');
+    });
+
+    test('(ح) مفتاحُ تطبيقِ الإدارةِ ما زال يَكتبُ `is_active` في المستندَين دفعةً', () {
+      expect(managers.contains("'is_active': val"), isTrue,
+          reason: 'كاتبُ الوقفِ تغيّرَ');
+      expect(RegExp(r"tb\.update\(\s*_db\.collection\('admins'\)").hasMatch(managers),
+          isTrue);
+      expect(RegExp(r"tb\.set\(\s*_db\.collection\('users'\)").hasMatch(managers),
+          isTrue,
+          reason: 'الوقفُ لم يَعُد يَبلغُ `users` — وهو ما تَقرؤه القواعد');
+    });
+
+    test('(ط) القواعدُ ما زالت تُنفِّذُ الوقفَ — فالشارةُ مرآةٌ لا تخمين', () {
+      expect(rules.contains('staffEnabled()'), isTrue);
+      expect(RegExp(r'isOrdersManager\(\) \{\s*return isLoggedIn\(\) && staffEnabled\(\)')
+              .hasMatch(rules),
+          isTrue,
+          reason: 'الوقفُ لم يَعُد يَمنعُ مديرَ الطلبات');
+    });
+  });
+}
