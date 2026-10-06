@@ -39,6 +39,35 @@ t("default duration is 4 hours; a bad slot counts the day but no hours", () => {
   assert.strictEqual(r.slotCounts["2026-09-20_13:00"], undefined);
 });
 
+// ═══ المدّةُ التالفةُ كانت تُصفّرُ عدَّ الساعات ═══
+//
+// كان العدُّ يكتب `Number(d.hours_contracted || 4)`: نصٌّ تالفٌ (أو سالبٌ)
+// يُعطي `NaN`/قيمةً سالبة، فشرطُ الحلقة `h < startH + hrs` **كاذبٌ من أوّلِ
+// دورة** — فالطلبُ يُعَدُّ في يومِه ولا يَشغلُ أيَّ ساعة، فتُقرأُ ساعاتُ
+// سائقٍ مشغولٍ فارغةً. الآن من `slots.orderHours` فتسقطُ على ٤.
+t("مدّةٌ تالفةٌ أو سالبةٌ تُحسَب ٤ ساعات — لا صفرَ ساعات", () => {
+  for (const bad of ["abc", "4 ساعات", -2, NaN, null, true, {}]) {
+    const r = countBookings([paid({hours_contracted: bad})]);
+    assert.strictEqual(r.dailyCounts["2026-09-20"], 1, `يومُ ${bad}`);
+    for (const h of ["09:00", "10:00", "11:00", "12:00"]) {
+      assert.strictEqual(r.slotCounts[`2026-09-20_${h}`], 1,
+          `الساعة ${h} عند مدّةٍ ${JSON.stringify(bad)} — صفرُ ساعاتٍ يُقرأ «السائق حرّ»`);
+    }
+    assert.strictEqual(r.slotCounts["2026-09-20_13:00"], undefined,
+        "ولا تزيد على الافتراضي");
+  }
+});
+
+t("مدّةٌ رقميّةٌ نصّاً أو كسريّةٌ تبقى كما كانت", () => {
+  const str = countBookings([paid({hours_contracted: "2"})]);
+  assert.strictEqual(str.slotCounts["2026-09-20_10:00"], 1);
+  assert.strictEqual(str.slotCounts["2026-09-20_11:00"], undefined, "نصٌّ رقميّ = عدده");
+  // كسريّة: تُغطّى بالتقريب لأعلى (الاتجاهُ المحافظ) كما كانت تماماً.
+  const frac = countBookings([paid({hours_contracted: 2.5})]);
+  assert.strictEqual(frac.slotCounts["2026-09-20_11:00"], 1);
+  assert.strictEqual(frac.slotCounts["2026-09-20_12:00"], undefined);
+});
+
 t("zoneDailyCounts counts only the named zone; dailyCounts still counts everyone", () => {
   const r = countBookings([paid(), paid({zone_name: "فيفاء"}), paid({zone_name: undefined})],
       {zoneName: "الداير"});

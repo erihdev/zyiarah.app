@@ -99,10 +99,19 @@ function fakeDb({byId = {}, byName = {}} = {}) {
     assert.ok(!isPriceableKind({service_meta: {kind: "store_products"}}));
   });
 
-  t("(٨) بالساعة (بلا service_meta) قابلٌ للتحقّقِ بالمدّة", () => {
+  // كان هذا الفحصُ يُثبّتُ `!isPriceableKind({})` — أي أنّ غيابَ المدّةِ
+  // يُخرِجُ الطلبَ من نطاقِ التحقّق. وتلك هي الثغرةُ نفسُها: الحقلُ يكتبه
+  // العميلُ، فإسقاطُه (أو صفرُه أو تلفُه) كان يُطفئُ إعادةَ التسعيرِ بصمت.
+  // أُعيد توجيهُه بوعي لا أُسكِت — و(٢٨) يَشُدُّ أنّ التوسيعَ لا يُنبّهُ
+  // على شكلٍ شريف.
+  t("(٨) بلا service_meta ⇒ بالساعة ⇒ قابلٌ للتحقّق — أيّاً كانت المدّة", () => {
     assert.ok(isPriceableKind({hours_contracted: 4}));
-    assert.ok(!isPriceableKind({}));
-    assert.ok(!isPriceableKind(null));
+    for (const bad of [0, "0", "abc", -1, null, undefined, "", false]) {
+      assert.ok(isPriceableKind({hours_contracted: bad}),
+          `مدّةٌ ${JSON.stringify(bad)} أطفأت التحقّق`);
+    }
+    assert.ok(isPriceableKind({}), "وإسقاطُ الحقلِ كلِّه كذلك");
+    assert.ok(!isPriceableKind(null), "ولا مستندَ ⇒ لا تحقّق");
   });
 
   t("(٩) نوعٌ مجهولٌ لا يُقرأ قابلاً للتحقّق", () => {
@@ -381,6 +390,91 @@ function fakeDb({byId = {}, byName = {}} = {}) {
     assert.ok(
         /for \(const coll of \["orders", "store_orders"\]\)/.test(code),
         "حلقةُ المجموعتَين في مكنسةِ مراجعةِ السعرِ اختفت");
+  });
+
+  // ─────────── المدّةُ حاضرةٌ في كلِّ مُنشئٍ لطلب ───────────
+  t("(٢٧) كلُّ حِملٍ يُنشئُ مستندَ orders يكتبُ hours_contracted", () => {
+    // هذا ما يُجعلُ توسيعَ (٨) بلا إيجابيّةٍ كاذبة: فرعُ «بلا service_meta»
+    // يُنبّهُ `price_unverifiable` متى تعذّرَ الحساب، فلو وُجد شكلٌ شريفٌ
+    // بلا مدّةٍ لَأَنبّهَ على كلِّ طلبٍ منه. المسحُ **مُشتَقٌّ**: كلُّ حِملٍ
+    // مُوازَنِ الأقواسِ يَحمل `client_id` و`status` معاً.
+    const lits = (src, reClient, reStatus) => {
+      const out = [];
+      for (let i = 0; i < src.length; i++) {
+        if (src[i] !== "{") continue;
+        let d = 0; let k = i;
+        for (; k < src.length; k++) {
+          if (src[k] === "{") d++;
+          else if (src[k] === "}" && --d === 0) break;
+        }
+        if (k >= src.length) continue;
+        const lit = src.slice(i, k + 1);
+        if (lit.length < 6000 && reClient.test(lit) && reStatus.test(lit)) {
+          out.push({at: src.slice(0, i).split("\n").length, lit});
+        }
+      }
+      return out;
+    };
+    const bad = [];
+    let scanned = 0;
+    const idxSrc = fs.readFileSync(
+        path.join(__dirname, "..", "index.js"), "utf8");
+    for (const h of lits(idxSrc, /\bclient_id:/, /\bstatus:\s*"/)) {
+      scanned++;
+      if (!h.lit.includes("hours_contracted")) bad.push(`index.js:${h.at}`);
+    }
+    const libDir = path.join(__dirname, "..", "..", "lib");
+    const walk = (dir) => fs.readdirSync(dir, {withFileTypes: true})
+        .flatMap((e) => e.isDirectory() ? walk(path.join(dir, e.name)) :
+          (e.name.endsWith(".dart") ? [path.join(dir, e.name)] : []));
+    for (const f of walk(libDir)) {
+      const src = fs.readFileSync(f, "utf8");
+      const rel = path.relative(path.join(__dirname, "..", ".."), f);
+      // `store_orders` مجموعةٌ أخرى بشكلٍ آخر ومُحقِّقٍ آخر
+      // (`_verifyStoreOrderPrice`) — استثناءٌ مُسمّى، ويُثبَتُ أنّه عنها فعلاً.
+      if (rel.endsWith("store_service.dart")) {
+        assert.ok(src.includes("store_orders") && !/collection\('orders'\)/.test(src),
+            "استثناءُ store_service صارَ كاذباً — صار يُنشئُ في orders");
+        continue;
+      }
+      for (const h of lits(src, /'client_id':/, /'status':/)) {
+        scanned++;
+        if (!h.lit.includes("hours_contracted")) bad.push(`${rel}:${h.at}`);
+      }
+    }
+    assert.ok(scanned >= 12, `المسحُ وجدَ ${scanned} حِملاً فقط — فحصٌ أجوف`);
+    assert.deepStrictEqual(bad, [],
+        "حِملٌ يُنشئُ طلباً بلا مدّة — فرعُ «بلا service_meta» سيُنبّهُ عليه:\n" +
+        bad.map((x) => "  - " + x).join("\n"));
+  });
+
+  t("(٢٨) والفرعانِ المُنادِيانِ يَسِمانِ ولا يَرفضانِ", () => {
+    // توسيعُ (٨) آمنٌ **لأنّ** مُخرَجَه وسمٌ وتنبيه. فلو صارَ يَرفعُ
+    // `HttpsError` يوماً فالتوسيعُ هو ما يُراجَع.
+    const code = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8")
+        .split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+    let n = 0;
+    for (let i = code.indexOf("priceVerify.isPriceableKind("); i >= 0;
+      i = code.indexOf("priceVerify.isPriceableKind(", i + 1)) {
+      n++;
+      // **بموازنةِ الأقواسِ لا بشريحةٍ ثابتة**: شريحةُ ١٦٠٠ محرفاً تَتجاوزُ
+      // الفرعَ إلى شفرةٍ بعدَه فيها `throw` — فخُّ الحدِّ غيرِ المُوازَن،
+      // وقد عضَّ أوّلَ تشغيلٍ لهذا الفحصِ نفسِه.
+      const open = code.indexOf("{", code.indexOf(")", i));
+      let d = 0; let k = open;
+      for (; k < code.length; k++) {
+        if (code[k] === "{") d++;
+        else if (code[k] === "}" && --d === 0) break;
+      }
+      const body = code.slice(open, k + 1);
+      assert.ok(body.includes("price_unverifiable: true"),
+          `فرعُ isPriceableKind #${n} لا يَسِم`);
+      assert.ok(body.includes("ops_alerted_unverifiable"),
+          `فرعُ isPriceableKind #${n} لا يُنبّه`);
+      assert.ok(!/throw new HttpsError/.test(body),
+          `فرعُ isPriceableKind #${n} صارَ يَرفضُ دفعاً — راجِعْ توسيعَ (٨)`);
+    }
+    assert.strictEqual(n, 2, "المُنادِيانِ (ميسر والمحفظة)");
   });
 
   // ─────────── قاعدةُ الوحدات ───────────

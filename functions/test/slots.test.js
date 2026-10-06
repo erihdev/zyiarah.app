@@ -96,6 +96,12 @@ t("**الفرق الكامن**: نصٌّ تالف أو سالب → ٤ لا NaN"
   assert.strictEqual(Number(corrupt) || 4, 4, "والنمطُ الجديد يسقط على الافتراضي");
 });
 
+t("منطقيٌّ تالفٌ → الافتراضيّ لا ساعةً واحدة (Number(true) === 1)", () => {
+  assert.strictEqual(slots.orderHours({hours_contracted: true}), 4);
+  assert.strictEqual(slots.orderHours({hours_contracted: false}), 4);
+  assert.strictEqual(slots.orderHours(null, true), 4, "وكذلك كمُدّةٍ مُمرَّرة");
+});
+
 t("مدّةٌ مُمرَّرة صراحةً تتقدّم على الحقل (التوجيه المباشر)", () => {
   assert.strictEqual(slots.orderHours({hours_contracted: 4}, 8), 8);
   // وغيابُها لا يحجب الحقل (كان `durationHours || orderData.hours_contracted || 4`).
@@ -190,13 +196,87 @@ t("مجموعةُ التعارض خمسُ حالاتٍ، وpending خارجَه�
 
 const idx = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
 
-t("لا موضعَ يكتب مدّةَ الطلب بيده في index.js", () => {
-  assert.strictEqual((idx.match(/hours_contracted \|\| 4/g) || []).length, 0,
-      "السلسلةُ عادت إنلاين — موضعُها slots.orderHours");
-  // ولا بالصيغة الآمنة أيضاً: الموضعُ واحد.
-  assert.strictEqual((idx.match(/Number\([^)]*hours_contracted/g) || []).length, 0,
-      "حسابُ المدّة من الحقل مباشرةً — استعمل slots.orderHours");
-  assert.ok(idx.includes("slots.orderHours("), "والنداءُ مستعمَل فعلاً");
+// ═══ نطاقُ حارسِ المدّة: **كلُّ** وحدات `functions/` لا `index.js` وحدَه ═══
+//
+// كان هذا الفحصُ يقرأ `index.js` فقط، وقاعدتُه عامّة («المدّةُ في
+// `slots.orderHours`») — فمرَّ أخضرَ على **الموضعِ السابعَ عشَر** القائمِ في
+// `capacity.js` منذ الشريحةِ نفسِها، بالقوسِ الخاطئِ الذي وُجدت الشريحةُ
+// لإصلاحه. وهو نمطُ «حارسٌ ضيّقٌ وقاعدةٌ عامّة» للمرّةِ السابعةِ في هذا
+// المستودع. فالنطاقُ **مُشتَقٌّ** من المجلّد الآن: وحدةٌ جديدةٌ تدخله بنفسها.
+const modules = fs.readdirSync(path.join(__dirname, ".."))
+    .filter((f) => f.endsWith(".js") && f !== "slots.js" &&
+        f !== "eslint.config.js")
+    .map((f) => ({name: f,
+      raw: fs.readFileSync(path.join(__dirname, "..", f), "utf8")}));
+
+/**
+ * حجبُ التعليقات قبل المسح — وإلّا سقطَ الفحصُ على توثيقِه: ترويسةُ
+ * `capacity.js` وتعليقاتُ `index.js` تُسمّي الصيغةَ الممنوعةَ لتشرحَ لمَ
+ * زالت. و`//` لا تُحجَبُ إن سبقَها `:` (فـ`https://` ليست تعليقاً).
+ * @param {string} src المصدرُ الخامّ.
+ * @return {string} المصدرُ بلا تعليقات.
+ */
+function stripComments(src) {
+  return src
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .split("\n")
+      .map((l) => l.trim().startsWith("//") ? "" : l.replace(/(^|[^:])\/\/.*$/, "$1"))
+      .join("\n");
+}
+
+t("لا موضعَ يكتب مدّةَ الطلب بيده في أيِّ وحدةٍ من functions/", () => {
+  assert.ok(modules.length >= 12,
+      `المسحُ قرأ ${modules.length} وحدةً فقط — فحصٌ أخضرُ أجوف`);
+  const hits = [];
+  for (const m of modules) {
+    const code = stripComments(m.raw);
+    // (أ) سلسلةُ الافتراضي على الحقل نفسه.
+    for (const x of code.match(/hours_contracted\s*\|\|/g) || []) {
+      hits.push(`${m.name}: ${x.replace(/\s+/g, " ")} ...`);
+    }
+    // (ب) نفسُها على الحقلِ المُجاورِ في مستندِ العقد/الـmetadata (`c.hours`,
+    //     `md.hours`) — وهو ما كان يكتب NaN في `hours_contracted` نفسِه.
+    for (const x of code.match(/\bhours\s*\|\|\s*\d/g) || []) {
+      hits.push(`${m.name}: ${x.replace(/\s+/g, " ")}`);
+    }
+    // (ج) الحسابُ من الحقل مباشرةً داخل Number(...).
+    for (const x of code.match(/Number\([^)]*hours_contracted/g) || []) {
+      hits.push(`${m.name}: ${x.replace(/\s+/g, " ")}`);
+    }
+  }
+  // مقارنةٌ **بالمجموعة الكاملة** لا بالعدد: الموضعُ المسموحُ واحدٌ وسببُه
+  // مكتوب، فموضعٌ ثانٍ يُراجَع بوعي بدل أن يُمرَّر تحت سماحٍ عامّ.
+  assert.deepStrictEqual(hits.sort(), [
+    // `pricing.js` تقرأ سعرَ المدّة من خريطةِ المنطقة بمفتاحِ المدّة —
+    // بحثٌ في خريطةٍ لا سلسلةُ افتراضي، ومحروسٌ بـ`if (!hp || isNaN(hp))`.
+    "pricing.js: Number(prices[String(order.hours_contracted",
+  ].sort(), "سلسلةُ المدّة عادت إنلاين — موضعُها slots.orderHours:\n" +
+      hits.map((x) => "  - " + x).join("\n"));
+  // ومضادّةٌ: الحجبُ لم يُفرِغ المصدرَ — الصيغةُ الممنوعةُ ما زالت في الخامّ
+  // داخل التعليقات التي تشرح زوالَها.
+  assert.ok(modules.some((m) => m.raw.includes("hours_contracted || 4")),
+      "التعليقُ الحاملُ للقرار حُذف — أو الحجبُ يَبتلعُ شفرةً");
+});
+
+t("المُستهلكونَ يُنادونَ القاعدةَ فعلاً", () => {
+  assert.ok(idx.includes("slots.orderHours("), "index.js لا يُناديها");
+  const cap = fs.readFileSync(path.join(__dirname, "..", "capacity.js"), "utf8");
+  assert.ok(/slots\.orderHours\(/.test(cap),
+      "capacity.js لا تُنادي القاعدة — وعدُّ الساعات هو ما يُقرّرُ الإتاحة");
+  assert.ok(cap.includes("require(\"./slots\")"), "ولا تستوردها");
+  // ومولِّدا زياراتِ العقد: `Invalid Date` هناك تُقرأ «السائق حرّ» دائماً.
+  assert.strictEqual(
+      (idx.match(/slots\.orderHours\(\{hours_contracted: c\.hours\}\)/g) || []).length,
+      2, "مولِّدا الزيارات — أحدهما عاد يحسب المدّة بيده");
+});
+
+t("capacity.js تبقى قابلةً للاختبار بلا مُحاكٍ", () => {
+  // عبارةُ «بلا تبعيات» في ترويستها كانت تحرُسُ هذا، لا النقاءَ لذاته:
+  // وحدةٌ نقيّةٌ تستوردُ وحدةً نقيّةً لا تَنقضُه (قاعدةُ refund_engine.js).
+  const cap = fs.readFileSync(path.join(__dirname, "..", "capacity.js"), "utf8");
+  for (const bad of ["getFirestore", "getApp", "initializeApp"]) {
+    assert.ok(!stripComments(cap).includes(bad), `capacity.js تلمس ${bad}`);
+  }
 });
 
 t("لا موضعَ يكتب نافذةَ المسح أو مقارنةَ التداخل بيده", () => {
