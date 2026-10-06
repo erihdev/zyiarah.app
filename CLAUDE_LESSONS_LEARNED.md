@@ -98,16 +98,23 @@ Singleton يُنشأ مرة واحدة. أي خطأ في:
 
 ---
 
-### CP-5: EDFAPAY — بيانات الدفع ⚡ خطر أمني
-**الملف:** `lib/services/edfapay_service.dart`
+### CP-5: بيانات بوّابة الدفع ⚡ خطر أمني
+**الملف الأصلي:** `lib/services/edfapay_service.dart` — **أُزيل**: البوّابةُ
+اليومَ **ميسر** (`lib/services/moyasar_service.dart`) ومعها تمارا والمحفظة،
+ولا وجودَ لـEDFAPAY في المستودع.
 
 **المشكلة الأصلية:** credentials مكتوبة كـ hardcoded constants داخل الكود.
 
-**الإصلاح المطبّق (2026-05-19):**
-- الآن تُقرأ من `.env` عبر `flutter_dotenv`
-- مفاتيح `.env` المطلوبة: `EDFAPAY_MERCHANT_ID`, `EDFAPAY_TERMINAL_ID`, `EDFAPAY_PASSWORD_KEY`
+**الإصلاح المطبّق (2026-05-19):** تُقرأ من `.env` عبر `flutter_dotenv`.
 
-**قاعدة:** لا تضع أي credentials في الكود مباشرةً. استخدم دائماً `.env` + `dotenv.env['KEY']`.
+**ومفاتيحُ `.env` اليومَ ثلاثةٌ لا غير** (صُحِّح 2026-10-06 — كان هذا السطرُ
+يَسردُ `EDFAPAY_*` التي لا يَقرؤها شيء): `MOYASAR_PUBLISHABLE_KEY`,
+`MAPBOX_TOKEN`, `SAMSUNG_PAY_SERVICE_ID` — و**كلُّها مفاتيحُ نشرٍ لا أسرار**.
+والأسرارُ الحقيقيّةُ (مفتاحُ ميسر السرّيّ، توكنُ تمارا، مفتاحُ Resend) في
+Secret Manager عبر `defineSecret` ولا تَمُرُّ بـ`.env` إطلاقاً.
+
+**قاعدة:** لا تضع أي credentials في الكود مباشرةً — ولا في `.env` إن كانت سرّاً:
+`.env` يُحزَم **داخلَ التطبيق** كأصلٍ فأيُّ قارئٍ يَستخرجُه.
 
 ---
 
