@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zyiarah/utils/coupon_expiry.dart';
@@ -40,6 +41,70 @@ void main() {
         return !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*');
       })
       .join('\n');
+
+  // **الجدولُ المشترَكُ مع `endOfLocalDay` في اللوحة.**
+  //
+  // الملفّانِ يُعلنانِ أنّهما مرآةٌ وكان لكلٍّ فحوصُه الخاصّة، فلا شيءَ يُقابِلُ
+  // **الخَرْجَين**. وتعليقُ `lib/utils/coupon_expiry.dart` كان يَقولُ إنّ هذا
+  // الفحصَ «يُثبّتُ أنّ المحرّرَين لا يَفترقان» — وهو يُثبّتُ **مواضعَ
+  // النداءِ** لا أنّ الدالّتَين تَتّفقان: دعوى أوسعُ من حارسِها، وهو شكلُ ما
+  // انحرفت به مرايا هذا المستودعِ من قبل.
+  //
+  // والمقارنةُ على **مكوّناتِ التاريخِ** لا على الزمنِ المطلق: الجهتانِ تَبنيانِ
+  // من مكوّناتٍ محلّيّةٍ فالقيمةُ المطلقةُ تَتبعُ منطقةَ المُشغِّل (وتَختلفُ بين
+  // مَهمّةِ Flutter ومَهمّةِ اللوحةِ في CI) بينما المكوّناتُ لا تَتبعُها.
+  group('الجدولُ المشترَكُ مع اللوحة', () {
+    test('كلُّ صفٍّ: المكوّناتُ المتوقَّعةُ والوقتُ 23:59:59.999', () {
+      final src =
+          File('admin_panel/src/utils/couponExpiry.test.ts').readAsStringSync();
+      final a = src.indexOf('// ⟦CASES⟧');
+      final b = src.indexOf('// ⟦/CASES⟧');
+      expect(a, greaterThan(0),
+          reason: 'علامةُ كتلةِ الحالاتِ مفقودةٌ من فحصِ اللوحة');
+      expect(b, greaterThan(a));
+      final block = src.substring(a, b);
+      final end = block.lastIndexOf(']');
+      var depth = 0;
+      var start = -1;
+      for (var i = end; i >= 0; i--) {
+        if (block[i] == ']') depth++;
+        if (block[i] == '[') {
+          depth--;
+          if (depth == 0) {
+            start = i;
+            break;
+          }
+        }
+      }
+      expect(start, greaterThan(-1), reason: 'تعذّرَ اقتطاعُ كتلةِ الحالات');
+      var json = block.substring(start, end + 1);
+      json = json.replaceAllMapped(RegExp(r',(\s*[\]\}])'), (m) => m.group(1)!);
+      final rows = (jsonDecode(json) as List<dynamic>)
+          .map((r) => (r as List<dynamic>).cast<num>())
+          .toList();
+      expect(rows.length, greaterThanOrEqualTo(6),
+          reason: 'الجدولُ انهارَ — اقتطاعٌ فاشلٌ لا جدولٌ قصير');
+      // أصنافٌ لا عدد: كبيسةٌ، وتدحرُجُ شهرٍ، وتدحرُجُ يوم.
+      expect(rows.any((r) => r[1] == 2 && r[2] == 29), isTrue,
+          reason: 'لا حالةَ يومٍ كبيس');
+      expect(rows.any((r) => r[1] > 12), isTrue,
+          reason: 'لا حالةَ تدحرُجِ شهر');
+      expect(rows.any((r) => r[1] == 2 && r[2] > 28 && r[3] == r[0]), isTrue,
+          reason: 'لا حالةَ تدحرُجِ يوم');
+      for (final r in rows) {
+        final got = endOfDayLocal(
+            DateTime(r[0].toInt(), r[1].toInt(), r[2].toInt()));
+        final label = '${r[0]}-${r[1]}-${r[2]}';
+        expect(got.year, r[3], reason: label);
+        expect(got.month, r[4], reason: label);
+        expect(got.day, r[5], reason: label);
+        expect(got.hour, 23, reason: label);
+        expect(got.minute, 59, reason: label);
+        expect(got.second, 59, reason: label);
+        expect(got.millisecond, 999, reason: label);
+      }
+    });
+  });
 
   group('endOfDayLocal', () {
     test('آخرُ لحظةٍ من اليومِ لا أوّلُها', () {
