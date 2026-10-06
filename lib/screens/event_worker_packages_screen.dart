@@ -14,6 +14,7 @@ import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/date_strip.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 
 /// باقات عاملات المناسبات — جاهزة ومسعّرة مسبقاً (بدل الإدخال الحر السابق):
 /// العميل يختار باقة بعدد عاملات وساعات وزيارات ثابتة، ثم يحدّد مواعيد الزيارات
@@ -1200,7 +1201,7 @@ class _EventWorkerPackageCardState extends State<EventWorkerPackageCard>
     final data = widget.data;
     final title = data['title'] ?? 'باقة عاملات';
     final subtitle = data['subtitle'] ?? '';
-    final price = '${data['price']} ر.س';
+    final price = '${formatSarAny(data['price'])} ر.س';
     final int hours = int.tryParse('${data['hours'] ?? 4}') ?? 4;
     final int workers = int.tryParse('${data['workers'] ?? 0}') ?? 0;
     final bool isPremium = data['isPremium'] == true;

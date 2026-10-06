@@ -8,6 +8,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:zyiarah/screens/store_payment_screen.dart';
 import 'package:zyiarah/screens/store_schedule_screen.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 
 
 class ZyiarahStoreScreen extends StatefulWidget {
@@ -346,7 +347,7 @@ class _ProductCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('${product.price} ر.س', style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF660033))),
+                    Text('${formatSarAny(product.price)} ر.س', style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF660033))),
                     InkWell(
                       onTap: onAdd,
                       child: Container(
@@ -531,8 +532,8 @@ class _CartSheetState extends State<_CartSheet> {
                       final p = cartProducts[index];
                       return ListTile(
                         title: Text(p.name, style: const TextStyle(fontSize: 14)),
-                        subtitle: Text('${p.price} ر.س x ${widget.cart[p.id]}'),
-                        trailing: Text('${p.price * widget.cart[p.id]!} ر.س', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text('${formatSarAny(p.price)} ر.س x ${widget.cart[p.id]}'),
+                        trailing: Text('${formatSarAny(p.price * widget.cart[p.id]!)} ر.س', style: const TextStyle(fontWeight: FontWeight.bold)),
                       );
                     },
                   ),
@@ -549,7 +550,7 @@ class _CartSheetState extends State<_CartSheet> {
                       // نفسُ شكل «الأسعار شاملة الضريبة» في شاشة التنظيف
                       // المنزليّ. وبقيّةُ الشاشات تقول «الإجمالي قبل الضريبة».
                       const Text('المجموع قبل الضريبة', style: TextStyle(fontWeight: FontWeight.bold)),
-                      Text('$total ر.س', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.w900, fontSize: 18)),
+                      Text('${formatSarAny(total)} ر.س', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.w900, fontSize: 18)),
                     ],
                   ),
                 ),

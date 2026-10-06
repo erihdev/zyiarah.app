@@ -5,6 +5,7 @@ import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/coupon_expiry.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 
 class AdminCouponsScreen extends StatefulWidget {
   const AdminCouponsScreen({super.key});
@@ -633,7 +634,7 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('الخصم: ${data['value']} ${data['type'] == 'percentage' ? '%' : 'ر.س'}', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                              Text('الخصم: ${formatSarAny(data['value'])} ${data['type'] == 'percentage' ? '%' : 'ر.س'}', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
                               if (data['show_in_offers'] == true)
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

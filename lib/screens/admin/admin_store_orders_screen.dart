@@ -6,6 +6,7 @@ import 'package:zyiarah/services/audit_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/price_review.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 
 class AdminStoreOrdersScreen extends StatefulWidget {
   const AdminStoreOrdersScreen({super.key});
@@ -194,7 +195,7 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
                       child: const Icon(Icons.inventory_2, color: Colors.blue),
                     ),
                     title: Text(item['name'] ?? 'منتج غير معروف', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    subtitle: Text('الكمية: ${item['quantity']} × السعر: ${item['price']} ر.س'),
+                    subtitle: Text('الكمية: ${item['quantity']} × السعر: ${formatSarAny(item['price'])} ر.س'),
                     trailing: Text('${(double.tryParse('${item['quantity'] ?? 0}') ?? 0) * (double.tryParse('${item['price'] ?? 0}') ?? 0)} ر.س', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.green)),
                   );
                 },
@@ -204,7 +205,7 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('الإجمالي المطلوب:', style: TextStyle(fontWeight: FontWeight.bold)),
-                  Text('${order['total_amount'] ?? 0} ر.س', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.red)),
+                  Text('${formatSarAny(order['total_amount'])} ر.س', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.red)),
                 ],
               ),
               const SizedBox(height: 20),
@@ -399,8 +400,8 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
                             const SizedBox(width: 8),
                             Text(
                               order['final_amount'] != null
-                                  ? "المعتمد: ${order['final_amount']} ر.س (السلة: ${order['total_amount'] ?? 0})"
-                                  : "الإجمالي: ${order['total_amount'] ?? 0} ر.س",
+                                  ? "المعتمد: ${formatSarAny(order['final_amount'])} ر.س (السلة: ${formatSarAny(order['total_amount'])})"
+                                  : "الإجمالي: ${formatSarAny(order['total_amount'])} ر.س",
                               style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                           ],
                         ),

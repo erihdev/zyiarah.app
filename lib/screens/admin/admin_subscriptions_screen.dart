@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 
 class AdminSubscriptionsScreen extends StatefulWidget {
   const AdminSubscriptionsScreen({super.key});
@@ -251,7 +252,7 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text("${data['price']} ر.س", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                            Text("${formatSarAny(data['price'])} ر.س", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(

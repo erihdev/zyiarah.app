@@ -14,6 +14,7 @@ import 'package:zyiarah/widgets/zone_location_card.dart';
 import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/date_strip.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 
 class ZyiarahSubscriptionPlansScreen extends StatefulWidget {
   const ZyiarahSubscriptionPlansScreen({super.key});
@@ -1177,7 +1178,7 @@ class _SubscriptionPlanCardState extends State<SubscriptionPlanCard>
     final data = widget.data;
     final title = data['title'] ?? 'باقة اشتراك';
     final subtitle = data['subtitle'] ?? '';
-    final price = '${data['price']} ر.س';
+    final price = '${formatSarAny(data['price'])} ر.س';
     final int hours = int.tryParse('${data['hours'] ?? 4}') ?? 4;
     final List<String> features = (data['features'] as List<dynamic>?)
             ?.map((e) => e.toString())

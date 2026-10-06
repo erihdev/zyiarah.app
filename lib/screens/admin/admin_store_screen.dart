@@ -10,6 +10,7 @@ import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:zyiarah/utils/upload_content_type.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 
 class AdminStoreScreen extends StatefulWidget {
   // قاعدة /products في firestore.rules تحصر الكتابة بـ isMarketingAdmin
@@ -457,7 +458,7 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                "${data['price']} ر.س",
+                                "${formatSarAny(data['price'])} ر.س",
                                 style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
                               ),
                               if ((data['store_audience'] ?? 'client') == 'companies')

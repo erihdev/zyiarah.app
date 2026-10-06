@@ -11,6 +11,7 @@ import 'package:zyiarah/widgets/rating_dialog.dart';
 import 'package:zyiarah/models/tracking_steps.dart';
 import 'package:zyiarah/utils/phone_format.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/home_packages.dart';
 
 
 class OrderTrackingScreen extends StatefulWidget {
@@ -425,7 +426,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text("المبلغ", style: TextStyle(color: Colors.grey)),
-            Text("${data['amount'] ?? 0} ر.س", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+            Text("${formatSarAny(data['amount'])} ر.س", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
           ],
         ),
       ],
