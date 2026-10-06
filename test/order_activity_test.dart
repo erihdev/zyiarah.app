@@ -278,4 +278,101 @@ void main() {
               'وإلّا عُدَّ الطلبُ المُسلَّمُ نشطاً');
     });
   });
+
+  group('قارئُ النسخِ اليدويّةِ وُسِّعَ ليَرى اللوحةَ والمجموعاتِ الحرفيّة', () {
+    // **نتيجةٌ سالبةٌ تُسجَّلُ كما هي (2026-10-06).** مسحُ «قاعدةٌ لها موضعٌ
+    // واحدٌ ونسخٌ بيَدٍ» وجدَ **ثلاثاً** لم يَرَها الفحصُ أعلاه: `isFinalStatus`
+    // في صفحةِ طلباتِ اللوحة، و`DEAD` في لوحِ المواعيدِ الويبيّ،
+    // و`_deadStatuses` في نظيرِه الدارتيّ — غابت عنه لأنّه يُطابِقُ
+    // `!= 'completed'` **في سطرٍ واحد**، فمجموعةٌ حرفيّةٌ أو `===` تَمرّ.
+    //
+    // **وقد وُحِّدت ثمّ أُعيدت.** الحكمُ أعلاه صريحٌ ومُعلَّل: «كلُّها صحيحةٌ
+    // في موضعِها لأنّها تَقرأ `orders` وحدَها، و`delivered`/`rejected` لا
+    // يُكتبانِ عليها أبداً… فلا تُلمَس: لمسُ شفرةٍ سليمةٍ بلا خللٍ خلفَها
+    // مخاطرةٌ بلا مقابل». والمسحُ لم يَأتِ بدليلٍ جديد — صفرُ كاتبٍ
+    // لـ`delivered`/`rejected` على `orders` — فالحكمُ قائمٌ والتغييرُ رُدّ.
+    //
+    // والباقي هو ما يَستحقُّ البقاء: **القارئُ** يَرى الآن اللوحةَ كذلك
+    // والمجموعاتِ الحرفيّة، فنسخةٌ **جديدةٌ** تُراجَعُ بدلَ أن تُكتَبَ بصمت.
+    String code(String p) => File(p)
+        .readAsStringSync()
+        .split('\n')
+        .map((l) {
+          final t = l.trimLeft();
+          return (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*') ||
+                  t.startsWith('{/*'))
+              ? ''
+              : l;
+        })
+        .join('\n');
+
+    /// موضعُ القاعدةِ ومرآتُها.
+    const homes = <String>[
+      'lib/utils/order_activity.dart',
+      'admin_panel/src/utils/orderActivity.ts',
+    ];
+
+    /// النسخُ القائمةُ **المعروفةُ وصحيحةُ الموضع** — ولكلٍّ سببُه. الحكمُ
+    /// أعلاه: تَقرأُ `orders` وحدَها، ولا كاتبَ لـ`delivered`/`rejected`
+    /// عليها. ورابعةٌ جديدةٌ تَسقطُ هذا الفحصَ فتُراجَع.
+    const knownCopies = <String, String>{
+      'lib/providers/order_provider.dart': 'activeOrders على orders',
+      'lib/screens/admin/admin_more_screen.dart': 'عدّادُ «نشط» على orders',
+      'lib/screens/driver_dashboard.dart': 'فلترٌ دفاعيٌّ بعد whereIn خادميّ',
+      'lib/screens/admin/admin_schedule_board_screen.dart':
+          'لوحُ المواعيدِ — مجموعةٌ حرفيّةٌ على orders',
+      'admin_panel/src/pages/Orders.tsx': 'isFinalStatus + شرطا الإلغاء',
+      'admin_panel/src/pages/ScheduleBoard.tsx': 'DEAD — لوحُ المواعيدِ الويبيّ',
+      'lib/services/order_service.dart': 'شرطُ «هل يَجوزُ الإلغاء» لا «هل مفتوح»',
+      'lib/screens/admin/admin_order_details_screen.dart':
+          'تعدادٌ موجَبٌ لِما يَجوزُ للأدمنِ ضبطُه',
+    };
+
+    test('(س) مجموعةُ النسخِ اليدويّةِ كاملةً = المعروفةُ بأسبابِها', () {
+      final files = <String>[
+        ...Directory('lib')
+            .listSync(recursive: true)
+            .whereType<File>()
+            .map((f) => f.path)
+            .where((p) => p.endsWith('.dart')),
+        ...Directory('admin_panel/src')
+            .listSync(recursive: true)
+            .whereType<File>()
+            .map((f) => f.path)
+            .where((p) =>
+                (p.endsWith('.ts') || p.endsWith('.tsx')) &&
+                !p.contains('.test.')),
+      ]..sort();
+      expect(files.length, greaterThanOrEqualTo(150),
+          reason: 'المسحُ لم يَقرأ شيئاً — حارسٌ أجوف');
+      final found = <String>{};
+      for (final f in files) {
+        final path = f.replaceAll('\\', '/');
+        if (homes.contains(path)) continue;
+        for (final l in code(f).split('\n')) {
+          if (!l.contains("'completed'") || !l.contains("'cancelled'")) continue;
+          // استعلامُ Firestore بـ`whereIn`/`in` يُعدِّدُ بالضرورة: لا سبيلَ
+          // لاستعلامِ «ليس في هذه المجموعة» (قرارٌ مسجَّلٌ في
+          // `driver_schedule.dart`).
+          if (l.contains('whereIn') || l.contains('"in"') || l.contains("'in'")) {
+            continue;
+          }
+          found.add(path);
+        }
+      }
+      expect(found, knownCopies.keys.toSet(),
+          reason: 'نسخةٌ يدويّةٌ جديدةٌ للمجموعةِ المنتهية: إن كانت على '
+              '`orders` فأضِفها هنا بسببِها، وإن كانت على `store_orders` '
+              'فاستخدم `orderIsOpen` — وإلّا عُدَّ الطلبُ المُسلَّمُ نشطاً');
+    });
+
+    test('(ش) والموضعانِ ما زالا يَحملانِ القاعدةَ ذاتَها', () {
+      for (final h in homes) {
+        final src = code(h);
+        expect(src.contains("'delivered'"), isTrue, reason: h);
+        expect(src.contains("'rejected'"), isTrue, reason: h);
+        expect(src.contains('orderIsOpen'), isTrue, reason: h);
+      }
+    });
+  });
 }
