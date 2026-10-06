@@ -2761,8 +2761,11 @@ exports.verifyMoyasarPayment = onCall(
             is_paid: false, // يُقلب أدناه ذرّياً
             status: "pending",
             payment_method: (paymentData.source && paymentData.source.type) || "native_pay",
-            hours_contracted: Number(md.hours || 4),
-            worker_count: Number(md.worker_count || 1),
+            // `Number(x || DEFAULT)` تكتب `NaN` لقيمةٍ غير رقميّة في الـmetadata
+            // (وهي قيمةٌ تمرّ عبر ميسر ويضبطها الجهاز) — والمكتوبُ يُقرأ بعد ذلك
+            // في العدّ والعرض. `Number(x) || DEFAULT` تسقط على الافتراضي.
+            hours_contracted: slots.orderHours({hours_contracted: md.hours}),
+            worker_count: Number(md.worker_count) || 1,
             zone_name: md.zone_name || null,
             // بلا إحداثيات في الـmetadata ⇒ بلا حقل location إطلاقاً (كان يُختم
             // مركز الرياض زوراً) — الواجهات تُخفي الخرائط بأمان عند غيابه.
@@ -3662,7 +3665,13 @@ exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
   // (location_captured) — الموقع الموروث/القديم قد يكون مركز منطقة لا عنوان العميل.
   const location = c.location || null;
   const locationInherited = !(location && c.location_captured === true);
-  const hours = Number(c.hours || 4);
+  // مدّةُ الزيارةِ من `slots.orderHours` لا بيدٍ: `Number(c.hours || 4)`
+  // تُعطي `NaN` لحقلٍ تالف، فـ`endDateTime` تصير `Invalid Date`، وكلُّ
+  // مقارنةٍ معها **كاذبة** في `overlapsSlot` — أي «السائق حرّ» دائماً،
+  // فيُسنَدُ سائقٌ واحدٌ لكلِّ زيارات العقد وفوقَ ما لديه. و`c.hours`
+  // يكتبه العميل ولا يفحصه `_validateContractPlan` (السعر والزيارات
+  // والعاملات وحدها).
+  const hours = slots.orderHours({hours_contracted: c.hours});
   const planName = c.planName || "باقة اشتراك";
   const results = [];
   if (!location) {
@@ -3775,7 +3784,13 @@ async function _generateContractVisits(db, contractRef, c) {
   // زياراته بلا حقل location بدل ختم مركز الرياض، مع تنبيه إداري واحد لكل عقد.
   const location = c.location || null;
   const locationInherited = !(location && c.location_captured === true);
-  const hours = Number(c.hours || 4);
+  // مدّةُ الزيارةِ من `slots.orderHours` لا بيدٍ: `Number(c.hours || 4)`
+  // تُعطي `NaN` لحقلٍ تالف، فـ`endDateTime` تصير `Invalid Date`، وكلُّ
+  // مقارنةٍ معها **كاذبة** في `overlapsSlot` — أي «السائق حرّ» دائماً،
+  // فيُسنَدُ سائقٌ واحدٌ لكلِّ زيارات العقد وفوقَ ما لديه. و`c.hours`
+  // يكتبه العميل ولا يفحصه `_validateContractPlan` (السعر والزيارات
+  // والعاملات وحدها).
+  const hours = slots.orderHours({hours_contracted: c.hours});
   const planName = c.planName || "باقة اشتراك";
   const results = [];
   if (!location) {
@@ -5537,7 +5552,9 @@ exports.reconcileOrphanPayments = onSchedule(
             moyasar_payment_id: p.id, moyasar_status: "paid",
             status: "pending",
             payment_method: (p.source && p.source.type) || "applepay",
-            hours_contracted: Number(md.hours || 4), worker_count: Number(md.worker_count || 1),
+            // كأعلاه: لا `NaN` في مستندٍ يُعَدّ ويُعرَض (انظر verifyMoyasarPayment).
+            hours_contracted: slots.orderHours({hours_contracted: md.hours}),
+            worker_count: Number(md.worker_count) || 1,
             zone_name: md.zone_name || null,
             // بلا إحداثيات في الـmetadata ⇒ بلا حقل location إطلاقاً (كان يُختم
             // مركز الرياض زوراً) — الواجهات تُخفي الخرائط بأمان عند غيابه.

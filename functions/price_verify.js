@@ -64,8 +64,21 @@ function isPriceableKind(od) {
   if (!od) return false;
   const kind = od.service_meta && od.service_meta.kind;
   if (kind) return PRICEABLE_KINDS.includes(kind);
-  // بالساعة (النظامُ القديم): لا `service_meta`، والمدّةُ هي ما يُسعَّرُ به.
-  return !!od.hours_contracted;
+  // بلا `service_meta.kind` ⇒ **بالساعة**، وهو فرعُ `pricing.js` الجامع
+  // (`prices[String(hours_contracted)] × worker_count`). وكان هذا السطرُ
+  // `!!od.hours_contracted` — أي أنّ **صِدقَ الحقلِ الذي يكتبه العميلُ** هو
+  // ما يُقرّرُ هل يَسري التحقّقُ أصلاً: `hours_contracted: 0` أو نصٌّ تالفٌ
+  // أو إسقاطُ الحقلِ كلِّه يُحوّلُ «تعذّرَ التحقّقُ فننبّه» إلى «ليس من
+  // نوعِنا فنصمت» — وهي ثغرةُ إسقاطِ `zone_name` بعينِها التي وُجد هذا
+  // المُعيِّنُ لسدِّها، ونظيرُ إغفالِ `event_workers` عن `PRICEABLE_KINDS`.
+  //
+  // ولا إيجابيّةَ كاذبةً في المقابل: **كلُّ** مُنشئٍ لمستندِ `orders` في
+  // المستودع يكتبُ `hours_contracted` (الشاشتان، ومسارا الدفعِ الأصليِّ
+  // والتسوية، ومولِّدا زياراتِ العقد) — يَشُدُّه فحصٌ في
+  // `price_verify.test.js` — فغيابُه لا يُنتجُه مسارٌ شريف. والفرعانِ
+  // المُنادِيانِ يَسِمانِ ويُنبّهانِ ولا يَرفضانِ دفعاً، فالتوسيعُ لا يَصِلُ
+  // جيبَ عميلة.
+  return true;
 }
 
 module.exports = {resolveZone, isPriceableKind};

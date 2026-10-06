@@ -65,7 +65,12 @@ function orderHours(data, override) {
   const raw = override || (data ? data.hours_contracted : undefined);
   // `Number(x) || DEFAULT` لا `Number(x || DEFAULT)`: انظر ترويسة الملفّ —
   // الثانيةُ تُعطي NaN لنصٍّ تالف، وNaN يُقرأ «السائق حرّ».
-  const n = Number(raw);
+  //
+  // والمنطقيُّ مستثنىً صراحةً: `Number(true)` هو **1** في JS، فحقلٌ تالفٌ
+  // قيمتُه `true` كان يُقرأ «مهمّةُ ساعةٍ واحدة» — أي ثلاثُ ساعاتٍ من انشغالِ
+  // السائقِ تُقرأ فراغاً، وهو الاتجاهُ الخاطئُ نفسُه بوجهٍ آخر. وُجد بفحصِ
+  // `capacity.js` على القيمِ التالفة.
+  const n = typeof raw === "boolean" ? NaN : Number(raw);
   return n > 0 ? n : ORDER_HOURS_DEFAULT;
 }
 
