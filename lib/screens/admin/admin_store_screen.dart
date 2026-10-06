@@ -11,6 +11,7 @@ import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:zyiarah/utils/upload_content_type.dart';
 import 'package:zyiarah/utils/home_packages.dart';
+import 'package:zyiarah/utils/catalog_number.dart';
 
 class AdminStoreScreen extends StatefulWidget {
   // قاعدة /products في firestore.rules تحصر الكتابة بـ isMarketingAdmin
@@ -297,8 +298,23 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                 ),
                 ElevatedButton(
                   onPressed: isSaving || isUploading ? null : () async {
-                    if (nameCtrl.text.isEmpty || priceCtrl.text.isEmpty || imageUrl == null) {
+                    if (nameCtrl.text.isEmpty || imageUrl == null) {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى إكمال البيانات واختيار صورة")));
+                      return;
+                    }
+                    // السعرُ كان `double.tryParse(...) ?? 0.0` مع فحصِ «غيرُ
+                    // فارغٍ» وحدَه، والحقلُ `TextField` بلا `inputFormatters`
+                    // — فـ«٣٥» بأرقامٍ عربيّةٍ تُخزَّنُ **صفراً**: المنتجُ
+                    // يُعرَضُ «0 ر.س» (مجّاناً) ثمّ `resolveStoreCartBase`
+                    // تَعُدُّ السلّةَ **غيرَ قابلةٍ للتسعير** (`price <= 0`)
+                    // فيُوسَمُ الطلبُ `price_unverifiable` وتُنبَّهُ الإدارةُ،
+                    // والدفعُ بمبلغٍ صفريٍّ لا يَمُرُّ أصلاً.
+                    final double? priceVal = positiveNum(priceCtrl.text);
+                    if (priceVal == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('السعر يجب أن يكون رقماً أكبر من صفر'),
+                        backgroundColor: Colors.red,
+                      ));
                       return;
                     }
 
@@ -306,7 +322,7 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                     try {
                       final data = {
                         'name': nameCtrl.text.trim(),
-                        'price': double.tryParse(priceCtrl.text) ?? 0.0,
+                        'price': priceVal,
                         'description': descCtrl.text.trim(),
                         'image_url': imageUrl,
                         // الحفظُ يُبقي **ما يُعرَض**: الغيابُ «مخفيٌّ»

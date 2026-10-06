@@ -31,9 +31,13 @@ void main() {
 
     test('الحقول الثلاثة في كلا الحفظَين والنسخ والبذر', () {
       for (final f in ['carSmallPrice', 'carMediumPrice', 'carLargePrice']) {
-        // حفظ الحوار + تطبيق على مناطق = مرتان على الأقل.
-        expect(RegExp("'$f': double.tryParse").allMatches(zonesScreen).length,
-            2,
+        // حفظ الحوار + تطبيق على مناطق = مرتان على الأقل. وكان الفحص يشدّ
+        // `'$f': double.tryParse` حرفياً — أي **شكل القراءة** بدل الحقيقة
+        // المقصودة (أن الحقل يُكتب في المسارين)، فسقط حين مرّت الحقول بقاعدة
+        // `optionalNum` التي ترفض غير الصالح بدل ابتلاعه صفراً. أُعيد توجيهه
+        // إلى الحقل نفسه — وقاعدة «لا ابتلاع» يملكها
+        // `test/admin_number_field_test.dart` وحده.
+        expect(RegExp("'$f':").allMatches(zonesScreen).length, 2,
             reason: '$f يجب أن يُكتب في حفظ المنطقة وفي «تطبيق على مناطق»');
         expect(zonesScreen.contains("n(src['$f'])"), isTrue,
             reason: '$f غائب عن تعبئة «نسخ الأسعار من منطقة سابقة»');

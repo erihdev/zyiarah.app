@@ -17,6 +17,7 @@ import 'package:zyiarah/utils/jazan_boundary.dart';
 import 'package:zyiarah/utils/crew_price_check.dart';
 import 'package:zyiarah/utils/home_packages.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/catalog_number.dart';
 
 /// حقل سعر ساعة العاملة الواحدة في وثيقة المنطقة — **قبل الضريبة**.
 /// (منقول هنا بعد حذف lib/screens/event_workers_details_screen.dart —
@@ -291,13 +292,51 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
       }
     }
 
+    // **الحقولُ الرقميّةُ كلُّها: الفراغُ قرارٌ والخطأُ ليس قراراً.**
+    //
+    // كلُّها كانت `tryParse(...) ?? 0` — والحقولُ `TextField` بلا
+    // `inputFormatters`، فـ«٣٥٠» على لوحةٍ عربيّةٍ تُخزَّنُ **صفراً**، ومعنى
+    // الصفرِ يَختلفُ بالحقلِ فالضررُ يَختلف:
+    //   • `max_orders_per_day` صفرٌ = **بلا سقف** (`zoneDailyCap` صريحةٌ في
+    //     ذلك) — فالسقفُ الذي ضبطَه المالكُ يُلغى، وهو انقلابٌ لا نقص.
+    //   • أسعارُ القطعِ والكوادرِ صفرٌ = **غيرُ معروضة** للعميلة، فالخدمةُ
+    //     تَختفي من شاشتِها بلا كلمة.
+    //   • مدّةُ الباقةِ تَسقطُ إلى الافتراضيِّ فتُحجَزُ ساعاتٌ غيرُ المقصودة.
+    // ونصفُ القطرِ ورسومُ الوعورةِ مرفوضانِ سلفاً في هذا الملفِّ («لا قصّ صامت
+    // لخطأ كتابة») — فهذا إكمالٌ لقرارٍ قائمٍ هنا، لا قرارٌ جديد.
+    String? numericFieldsError() {
+      final fields = <String, String>{
+        'سعر متر الكنب': pSofaSqmCtrl.text,
+        'سعر متر السجاد': pRugSqmCtrl.text,
+        'صيانة مكيف شبّاك': pAcMaintWinCtrl.text,
+        'صيانة مكيف سبليت': pAcMaintSplitCtrl.text,
+        'غسيل مكيف شبّاك': pAcWashWinCtrl.text,
+        'غسيل مكيف سبليت': pAcWashSplitCtrl.text,
+        'سيارة صغيرة': pCarSmallCtrl.text,
+        'سيارة متوسطة': pCarMediumCtrl.text,
+        'سيارة كبيرة': pCarLargeCtrl.text,
+        'ساعة عاملة المناسبات': pEventWorkerCtrl.text,
+        'سقف الطلبات اليومي': maxPerDayCtrl.text,
+      };
+      for (final type in kHomeTypes) {
+        fields['مدة باقة ${kHomeTypeLabels[type] ?? type}'] =
+            pkgDurCtrls[type]!.text;
+        for (int n = 1; n <= kMaxCrews; n++) {
+          fields['سعر ${kHomeTypeLabels[type] ?? type} — $n كادر'] =
+              pkgPriceCtrls[type]![n]!.text;
+        }
+      }
+      return firstInvalidNumber(fields);
+    }
+
     // خريطة packages من قيم النموذج الحالية — تُستعمل في الحفظ والنسخ للمناطق.
     Map<String, dynamic> buildPackages() => {
           for (final type in kHomeTypes)
             type: {
               'desc': pkgDescCtrls[type]!.text.trim(),
               // تثبيت 1..12 — صفر/سالب من خطأ إدخال كان يعطّل فحص السعة للمنطقة.
-              'durationHours': (int.tryParse(pkgDurCtrls[type]!.text) ??
+              'durationHours': (optionalInt(pkgDurCtrls[type]!.text,
+                          whenEmpty: kHomeTypeDefaultDuration[type] ?? 4) ??
                       kHomeTypeDefaultDuration[type] ??
                       4)
                   .clamp(1, 12),
@@ -305,7 +344,8 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                 for (int n = 1; n <= kMaxCrews; n++)
                   '$n': {
                     'price':
-                        double.tryParse(pkgPriceCtrls[type]![n]!.text) ?? 0,
+                        optionalNum(pkgPriceCtrls[type]![n]!.text,
+                            whenEmpty: 0)!,
                     'enabled': pkgEnabled[type]![n] == true,
                   },
               },
@@ -835,22 +875,31 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                   onPressed: isSaving
                       ? null
                       : () async {
+                          final numErr = numericFieldsError();
+                          if (numErr != null) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: Text('«$numErr»: رقمٌ غيرُ صالح — '
+                                  'صحّحيه أو اتركيه فارغاً'),
+                              backgroundColor: Colors.red,
+                            ));
+                            return;
+                          }
                           final targets = await _pickTargetZones(ctx);
                           if (targets == null || targets.isEmpty) return;
                           setDialogState(() => isSaving = true);
                           try {
                             final n = await _applyPricesToZones(targets, {
-                              'sofaSqmPrice': double.tryParse(pSofaSqmCtrl.text) ?? 0,
-                              'rugSqmPrice': double.tryParse(pRugSqmCtrl.text) ?? 0,
-                              'acMaintWindowPrice': double.tryParse(pAcMaintWinCtrl.text) ?? 0,
-                              'acMaintSplitPrice': double.tryParse(pAcMaintSplitCtrl.text) ?? 0,
-                              'acWashWindowPrice': double.tryParse(pAcWashWinCtrl.text) ?? 0,
-                              'acWashSplitPrice': double.tryParse(pAcWashSplitCtrl.text) ?? 0,
-                              'carSmallPrice': double.tryParse(pCarSmallCtrl.text) ?? 0,
-                              'carMediumPrice': double.tryParse(pCarMediumCtrl.text) ?? 0,
-                              'carLargePrice': double.tryParse(pCarLargeCtrl.text) ?? 0,
+                              'sofaSqmPrice': optionalNum(pSofaSqmCtrl.text, whenEmpty: 0)!,
+                              'rugSqmPrice': optionalNum(pRugSqmCtrl.text, whenEmpty: 0)!,
+                              'acMaintWindowPrice': optionalNum(pAcMaintWinCtrl.text, whenEmpty: 0)!,
+                              'acMaintSplitPrice': optionalNum(pAcMaintSplitCtrl.text, whenEmpty: 0)!,
+                              'acWashWindowPrice': optionalNum(pAcWashWinCtrl.text, whenEmpty: 0)!,
+                              'acWashSplitPrice': optionalNum(pAcWashSplitCtrl.text, whenEmpty: 0)!,
+                              'carSmallPrice': optionalNum(pCarSmallCtrl.text, whenEmpty: 0)!,
+                              'carMediumPrice': optionalNum(pCarMediumCtrl.text, whenEmpty: 0)!,
+                              'carLargePrice': optionalNum(pCarLargeCtrl.text, whenEmpty: 0)!,
                               kEventWorkerHourPriceField:
-                                  double.tryParse(pEventWorkerCtrl.text) ?? 0,
+                                  optionalNum(pEventWorkerCtrl.text, whenEmpty: 0)!,
                               // (باقات السكن) تُنسخ مع الأسعار — تفعيلاتها وأسعارها ومددها.
                               'packages': buildPackages(),
                             });
@@ -903,13 +952,26 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                           backgroundColor: Colors.red));
                       return;
                     }
+                    // بقيّةُ الحقولِ الرقميّة (أسعارٌ ومدَدٌ وسقفٌ يوميّ): نفسُ
+                    // القرارِ، بوّابةٌ واحدةٌ تُسمّي الحقلَ المُخطِئ.
+                    final numErr = numericFieldsError();
+                    if (numErr != null) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text('«$numErr»: رقمٌ غيرُ صالح — '
+                            'صحّحيه أو اتركيه فارغاً'),
+                        backgroundColor: Colors.red,
+                      ));
+                      return;
+                    }
                     setDialogState(() => isSaving = true);
                     try {
                       final newData = {
                         'name': nameCtrl.text.trim(),
                         'centerLoc': selectedGeo,
                         'radiusKm': radiusVal,
-                        'max_orders_per_day': int.tryParse(maxPerDayCtrl.text.trim()) ?? 0,
+                        // صفرٌ = بلا سقفٍ خاصّ (`zoneDailyCap`)، والفراغُ يَعني ذلك قصداً.
+                        'max_orders_per_day':
+                            optionalInt(maxPerDayCtrl.text, whenEmpty: 0)!,
                         // (تسعير القرى والوعورة) يقرؤها الخادم (pricing.js) وشاشة الدفع.
                         'governorate': governorateCtrl.text.trim(),
                         'terrain': terrain,
@@ -918,17 +980,17 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                         // (sofaPrice/rugPrice الطوليان لم يعودا يُكتبان — النظام أُلغي.
                         //  نتركهما في المستندات القائمة بلا مساس: لا قارئ لهما، وحذفهما
                         //  يكسر أي نسخة قديمة ما زالت مثبَّتة قبل التحديث الإجباري.)
-                        'sofaSqmPrice': double.tryParse(pSofaSqmCtrl.text) ?? 0,
-                        'rugSqmPrice': double.tryParse(pRugSqmCtrl.text) ?? 0,
-                        'acMaintWindowPrice': double.tryParse(pAcMaintWinCtrl.text) ?? 0,
-                        'acMaintSplitPrice': double.tryParse(pAcMaintSplitCtrl.text) ?? 0,
-                        'acWashWindowPrice': double.tryParse(pAcWashWinCtrl.text) ?? 0,
-                        'acWashSplitPrice': double.tryParse(pAcWashSplitCtrl.text) ?? 0,
-                        'carSmallPrice': double.tryParse(pCarSmallCtrl.text) ?? 0,
-                        'carMediumPrice': double.tryParse(pCarMediumCtrl.text) ?? 0,
-                        'carLargePrice': double.tryParse(pCarLargeCtrl.text) ?? 0,
+                        'sofaSqmPrice': optionalNum(pSofaSqmCtrl.text, whenEmpty: 0)!,
+                        'rugSqmPrice': optionalNum(pRugSqmCtrl.text, whenEmpty: 0)!,
+                        'acMaintWindowPrice': optionalNum(pAcMaintWinCtrl.text, whenEmpty: 0)!,
+                        'acMaintSplitPrice': optionalNum(pAcMaintSplitCtrl.text, whenEmpty: 0)!,
+                        'acWashWindowPrice': optionalNum(pAcWashWinCtrl.text, whenEmpty: 0)!,
+                        'acWashSplitPrice': optionalNum(pAcWashSplitCtrl.text, whenEmpty: 0)!,
+                        'carSmallPrice': optionalNum(pCarSmallCtrl.text, whenEmpty: 0)!,
+                        'carMediumPrice': optionalNum(pCarMediumCtrl.text, whenEmpty: 0)!,
+                        'carLargePrice': optionalNum(pCarLargeCtrl.text, whenEmpty: 0)!,
                         kEventWorkerHourPriceField:
-                            double.tryParse(pEventWorkerCtrl.text) ?? 0,
+                            optionalNum(pEventWorkerCtrl.text, whenEmpty: 0)!,
                         // (باقات السكن) أسعار (نوع × كوادر) + تفعيلاتها + مدد الجدولة.
                         'packages': buildPackages(),
                         'rank': rank,

@@ -75,6 +75,17 @@ export function optionalInt(raw: string, whenEmpty: number): number | null {
 }
 
 /**
+ * تسميةُ أوّلِ حقلٍ مكتوبٍ لا يَنحلُّ إلى رقمٍ غيرِ سالب، أو `null`. الفراغُ
+ * يَمُرُّ (قرارٌ مقصودٌ)، والمعنى يَبقى عند الكاتب.
+ */
+export function firstInvalidNumber(fields: Record<string, string>): string | null {
+    for (const [label, raw] of Object.entries(fields)) {
+        if (optionalNum(raw, 0) === null) return label;
+    }
+    return null;
+}
+
+/**
  * العددُ المجاورُ لكلمةِ «زيار» — **نفسُ** احتياطيِّ العميلِ والخادم، فالمحرِّرُ
  * يَرفُضُ ما لا يَستطيعُ أحدُهما حلَّه بعينِه.
  */

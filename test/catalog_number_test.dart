@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zyiarah/utils/catalog_number.dart';
 
+import 'helpers/strip_comments.dart';
+
 /// **باقةٌ تُحفَظُ بنجاحٍ ولا تُباع — `lib/utils/catalog_number.dart`.**
 ///
 /// المحرِّرانِ الدارتيّانِ ولوحةُ الويبِ كانت تَكتبُ `?? 0.0` / `|| 0` على
@@ -11,12 +13,7 @@ import 'package:zyiarah/utils/catalog_number.dart';
 /// صفراً مع «تمّ الحفظُ بنجاح». والفحصُ يَشدُّ القاعدةَ، ومرآتَها، ومُنادِيها
 /// الثلاثةَ (مُشتَقّينَ لا مكتوبينَ بيد)، والشواهدَ الخادميّةَ والعميليّةَ
 /// التي تُعلِّلُ كلَّ شرطٍ فيها.
-String _code(String path) => File(path).readAsLinesSync().map((l) {
-      final t = l.trimLeft();
-      return (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*'))
-          ? ''
-          : l;
-    }).join('\n');
+String _code(String path) => stripComments(File(path).readAsStringSync());
 
 /// اقتطاعُ كتلةِ الحالاتِ المشترَكةِ من فحصِ الـTypeScript: من آخرِ `]` إلى
 /// الوراءِ بموازنةِ الأقواس — `indexOf('[')` يَلتقطُ قوسَ **تعليقِ النوعِ**
