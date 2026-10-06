@@ -7,6 +7,7 @@ import {
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../services/firebase.ts';
 import { useNotification } from '../components/notificationContext.ts';
+import { cancelRefundNotice, cancelRefundAdminText } from '../utils/cancelRefundNotice.ts';
 import ServiceMetaTable from '../components/ServiceMetaTable.tsx';
 // الملخّصُ انتقلَ إلى `utils/serviceMeta.ts` بجوارِ `metaRows`/`metaHeadline`:
 // هو مرآةُ الدالّةِ نفسِها في `service_meta_view.dart`، فمَوضعُه حيثُ تُختبَرُ
@@ -42,6 +43,10 @@ interface OrderRecord {
     code?: string;
     payment_method?: string;
     is_paid?: boolean;
+    // **المبلغُ الخامُّ**: `amount` أعلاه نصٌّ منسَّقٌ للعرضِ («120 ر.س»)،
+    // وجملةُ «ماذا يَحدثُ لمالِها إن أُلغي» تَحتاجُ الرقم. غيابُه (أو مستندٌ
+    // قديمٌ بنصّ) يُنتجُ جملةً شرطيّةً بلا رقمٍ مُلفَّق.
+    amount_raw?: number;
     // استرداد التقسيط: refunded يكتبها الخادم بعد استرداد البوابة، و
     // refund_credited تعني أن المبلغ رُدّ لمحفظة العميل داخل التطبيق —
     // كلتاهما تُخفيان زر الاسترداد (الخادم يرفضه بعدها منعاً للردّ المزدوج).
@@ -137,6 +142,9 @@ export default function Orders() {
                     driver: d.assigned_driver || (d.status === 'pending' ? 'بانتظار سائق' : '-'),
                     status: d.status || 'pending',
                     amount: `${d.amount || 0} ر.س`,
+                    amount_raw: typeof (doc.data() as DocumentData).amount === 'number'
+                        ? ((doc.data() as DocumentData).amount as number)
+                        : undefined,
                     date: d.created_at instanceof Timestamp ? d.created_at.toDate().toLocaleDateString('ar-EG') : 'غير متاح',
                     type: d.service_type || 'خدمة عامة',
                 } as OrderRecord;
@@ -313,7 +321,20 @@ export default function Orders() {
     };
 
     const handleCancelOrder = async (order: OrderRecord) => {
-        if (!await confirm(`هل أنت متأكد من إلغاء الطلب #${order.code || order.id.substring(0, 6).toUpperCase()}؟`)) return;
+        // **الحوارُ كان سطراً واحداً بلا كلمةٍ عن المال.** والنتيجةُ الخادميّةُ
+        // ثلاثٌ، وأخطرُها أنّ المدفوعَ بالبطاقةِ يُودَعُ **في محفظةِ زيارة لا
+        // إلى البطاقة** (`creditCancelledRefund`)، ولا مسارَ سحبٍ نقديٍّ
+        // للمحفظةِ في المستودعِ كلِّه. القاعدةُ واحدةٌ مع حوارِ العميلةِ
+        // وحوارِ تطبيقِ الإدارة: `cancelRefundNotice`.
+        const notice = cancelRefundNotice({
+            isPaid: order.is_paid === true,
+            paymentMethod: order.payment_method,
+            amount: order.amount_raw,
+        });
+        const line = cancelRefundAdminText(notice,
+            {bnplRefundHere: canBnplRefund(order)});
+        const head = `هل أنت متأكد من إلغاء الطلب #${order.code || order.id.substring(0, 6).toUpperCase()}؟`;
+        if (!await confirm(line ? `${head}\n\n${line}` : head)) return;
         setIsCancelling(true);
         try {
             // معاملة بقراءة حديثة لا كتابة عمياء: أثناء نافذة التأكيد قد يُكمل السائق

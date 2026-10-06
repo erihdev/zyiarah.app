@@ -103,7 +103,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
                             <AlertTriangle size={26} className="text-amber-600" />
                         </div>
                         <h3 className="text-center font-black text-slate-800 text-lg mb-2">تأكيد العملية</h3>
-                        <p className="text-center text-slate-500 font-medium mb-8 leading-relaxed text-sm">
+                        {/* `whitespace-pre-line`: حوارُ إلغاءِ الطلبِ يُلحِقُ
+                            جملةَ «ماذا يَحدثُ لمالِ العميلة» بسطرٍ فاصل، وبلا
+                            هذا تَنطبِقُ على السؤالِ كتلةً واحدةً فتَفقدُ
+                            بروزَها في اللحظةِ التي تَلزمُ فيها. */}
+                        <p className="text-center text-slate-500 font-medium mb-8 leading-relaxed text-sm whitespace-pre-line">
                             {confirmState.message}
                         </p>
                         <div className="flex gap-3">

@@ -1,7 +1,39 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zyiarah/utils/cancel_refund_notice.dart';
+
+/// جدولُ الحالاتِ **مشتركٌ بين اللغتَين**: نسخةٌ بعينِها في
+/// `admin_panel/src/utils/cancelRefundNotice.test.ts` بين العلامتَين نفسِهما،
+/// وهذا الفحصُ يَقرأُ ذلك الملفَّ ويُقارِنُ الجدولَين `jsonDecode`اً — فحالةٌ
+/// تُضافُ لجهةٍ دون الأخرى تَسقط. (والقراءةُ من هنا لا من TS: `node:fs` بلا
+/// أنواعٍ تحتَ `tsconfig.app.json` فيَسقطُ `npm run build` — نمطُ
+/// `buildGate`/`serviceMeta`.)
+// ── CANCEL_REFUND_CASES_BEGIN ──
+const String _casesJson = '''
+[
+  [{"isPaid": false}, "nothingPaid", null],
+  [{"isPaid": false, "amount": 120}, "nothingPaid", null],
+  [{"isPaid": false, "paymentMethod": "subscription"}, "nothingPaid", null],
+  [{"isPaid": true, "paymentMethod": "subscription"}, "subscriptionVisit", null],
+  [{"isPaid": true, "paymentMethod": "subscription", "amount": 0}, "subscriptionVisit", null],
+  [{"isPaid": true, "paymentMethod": "moyasar", "amount": 120.5}, "walletCredit", 120.5],
+  [{"isPaid": true, "paymentMethod": "tamara", "amount": 300}, "walletCredit", 300],
+  [{"isPaid": true, "paymentMethod": "wallet", "amount": 75}, "walletCredit", 75],
+  [{"isPaid": true, "paymentMethod": "moyasar", "amount": 0}, "walletCredit", null],
+  [{"isPaid": true, "paymentMethod": "moyasar", "amount": -5}, "walletCredit", null],
+  [{"isPaid": true, "paymentMethod": "moyasar"}, "walletCredit", null],
+  [{"isPaid": true}, "walletCredit", null]
+]
+''';
+// ── CANCEL_REFUND_CASES_END ──
+
+const Map<String, CancelRefundKind> _kindByName = <String, CancelRefundKind>{
+  'nothingPaid': CancelRefundKind.nothingPaid,
+  'subscriptionVisit': CancelRefundKind.subscriptionVisit,
+  'walletCredit': CancelRefundKind.walletCredit,
+};
 
 String _read(String p) => File(p).readAsStringSync();
 
@@ -92,11 +124,33 @@ void main() {
       expect(RegExp(r'exports\.\w*[Ww]ithdraw').hasMatch(idx), isFalse);
     });
 
-    test('(ط) الشاشتانِ تُناديانِ القاعدةَ ولا تُعيدانِ كتابتَها', () {
-      for (final f in [
-        'lib/screens/orders_list_screen.dart',
-        'lib/screens/admin/admin_order_details_screen.dart',
-      ]) {
+    test('(ط) كلُّ سطحٍ يَبدأُ إلغاءً يُنادي القاعدةَ — والنطاقُ مُشتَقّ', () {
+      // **مُشتَقٌّ لا مكتوبٌ بيد.** القائمةُ اليدويّةُ هي بعينِها ما جعلَ
+      // لوحةَ الويبِ تَكتبُ الإلغاءَ نفسَه بلا جملةٍ عن المالِ: سطحانِ من
+      // ثلاثة. فالنطاقُ الآن: كلُّ ملفٍّ دارتيٍّ يُنادي `cancelOrder(`
+      // (عدا الخدمةِ التي تُعرّفُها)، وكلُّ ملفٍّ في اللوحةِ يَكتبُ
+      // `cancelled_by`.
+      final dartSurfaces = Directory('lib')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.dart'))
+          .map((f) => f.path)
+          .where((p) => p != 'lib/services/order_service.dart')
+          .where((p) => _code(_read(p)).contains('cancelOrder('))
+          .toList()
+        ..sort();
+      final panelSurfaces = Directory('admin_panel/src/pages')
+          .listSync()
+          .whereType<File>()
+          .map((f) => f.path)
+          .where((p) => _code(_read(p)).contains('cancelled_by'))
+          .toList()
+        ..sort();
+      expect(dartSurfaces.length, 2,
+          reason: 'سطحٌ دارتيٌّ ثالثٌ يَبدأُ إلغاءً — يُراجَع: $dartSurfaces');
+      expect(panelSurfaces.length, 1,
+          reason: 'سطحٌ ثانٍ في اللوحةِ يَكتبُ إلغاءً — يُراجَع: $panelSurfaces');
+      for (final f in [...dartSurfaces, ...panelSurfaces]) {
         final c = _code(_read(f));
         expect(c, contains('cancelRefundNotice('), reason: f);
         // لا تعدادَ محلّيٌّ للاشتراكِ بجوارِ النداء — وهو ما يُنتجُ الانحراف.
@@ -144,6 +198,124 @@ void main() {
       final at = idx.indexOf('payment_method: "subscription"');
       expect(at, greaterThan(-1));
       expect(idx.substring(at, at + 200), contains('status: "pending"'));
+    });
+  });
+
+  group('السطحُ الثالثُ: لوحةُ الويب', () {
+    const String webTest = 'admin_panel/src/utils/cancelRefundNotice.test.ts';
+    const String panel = 'admin_panel/src/pages/Orders.tsx';
+
+    final cases = (jsonDecode(_casesJson) as List).cast<List<dynamic>>();
+
+    test('(ن) القاعدةُ الدارتيّةُ تُطابقُ الجدولَ المشترَك', () {
+      expect(cases.length, greaterThanOrEqualTo(10));
+      expect(cases.map((c) => c[1] as String).toSet(), _kindByName.keys.toSet(),
+          reason: 'حالةٌ من الثلاثِ بلا شاهدٍ في الجدول');
+      for (final c in cases) {
+        final m = Map<String, dynamic>.from(c[0] as Map);
+        final got = cancelRefundNotice(
+          isPaid: m['isPaid'] == true,
+          paymentMethod: m['paymentMethod'] as String?,
+          amount: (m['amount'] as num?)?.toDouble(),
+        );
+        expect(got.kind, _kindByName[c[1] as String], reason: '$m');
+        expect(got.amount, (c[2] as num?)?.toDouble(), reason: '$m');
+      }
+    });
+
+    test('(س) الجدولُ نفسُه في اللوحةِ حرفاً بحرف — مرآةٌ لا دعوى', () {
+      final String web = _read(webTest);
+      final int a = web.indexOf('CANCEL_REFUND_CASES_BEGIN');
+      final int b = web.indexOf('CANCEL_REFUND_CASES_END');
+      expect(a, greaterThan(0), reason: 'علامةُ البدايةِ غابت عن $webTest');
+      expect(b, greaterThan(a), reason: 'علامةُ النهايةِ غابت');
+      final String block = web.substring(a, b);
+      // **من آخرِ `]` إلى الوراءِ بموازنةِ الأقواس** — `indexOf('[')` يَلتقطُ
+      // قوسَ تعليقِ النوعِ (`Row[]`)، وهو الفخُّ المسجَّلُ في `serviceMeta`.
+      final int end = block.lastIndexOf(']');
+      expect(end, greaterThan(0), reason: 'لا مصفوفةَ حالاتٍ بين العلامتَين');
+      int depth = 0;
+      int start = -1;
+      for (int i = end; i >= 0; i--) {
+        if (block[i] == ']') depth++;
+        if (block[i] == '[') {
+          depth--;
+          if (depth == 0) {
+            start = i;
+            break;
+          }
+        }
+      }
+      expect(start, greaterThanOrEqualTo(0), reason: 'قوسٌ غيرُ مُوازَن');
+      final webCases = jsonDecode(block.substring(start, end + 1)) as List;
+      expect(jsonEncode(webCases), jsonEncode(cases),
+          reason: 'جدولُ الحالاتِ انحرفَ بين اللغتَين');
+    });
+
+    test('(ع) الجملةُ تُشتَقُّ قبلَ الحوارِ، والحوارُ قبلَ الكتابة', () {
+      final c = _code(_read(panel));
+      final iNotice = c.indexOf('cancelRefundNotice(');
+      final iText = c.indexOf('cancelRefundAdminText(');
+      final iConfirm = c.indexOf('await confirm(', iNotice);
+      final iWrite = c.indexOf('runTransaction(db', iNotice);
+      expect(iNotice, greaterThan(0), reason: 'اللوحةُ لا تُنادي القاعدة');
+      expect(iText, greaterThan(iNotice), reason: 'النصُّ لا يُشتَقّ');
+      expect(iConfirm, greaterThan(iText),
+          reason: 'الجملةُ مُحتسَبةٌ بعدَ الحوارِ — فلا تُقرَأ');
+      expect(iWrite, greaterThan(iConfirm),
+          reason: 'تأكيدٌ بعدَ الكتابةِ لا يَمنعُ شيئاً — الترتيبُ هو الإصلاح');
+      // والنصُّ مُلحَقٌ بالسؤالِ فعلاً لا مُحتسَبٌ ثمّ مُهمَل.
+      expect(c.contains(r'${head}'), isTrue,
+          reason: 'الجملةُ لا تُلحَقُ بمحتوى الحوار');
+    });
+
+    test('(ف) المقدارُ يُمرَّرُ خامّاً لا نصّاً منسَّقاً', () {
+      // `OrderRecord.amount` نصٌّ للعرضِ («120 ر.س»)، فتمريرُه يُنتجُ
+      // `null` في كلِّ حالةٍ — جملةٌ شرطيّةٌ بلا رقمٍ أبداً، تدهورٌ صامت.
+      final c = _code(_read(panel));
+      expect(c, contains('amount: order.amount_raw'),
+          reason: 'المقدارُ لا يُمرَّرُ خامّاً');
+      expect(RegExp(r'amount_raw\?: number').hasMatch(c), isTrue,
+          reason: 'الحقلُ الخامُّ غيرُ مُعلَنٍ على السجل');
+      expect(c, contains("typeof (doc.data() as DocumentData).amount === 'number'"),
+          reason: 'مستندٌ قديمٌ بنصٍّ يَجبُ أن يُقرأَ «غيرَ معروف» لا صفراً');
+    });
+
+    test('(ص) حوارُ اللوحةِ يَحترِمُ الأسطر — وإلّا انطبقت الجملةُ على السؤال', () {
+      // **الصنفُ على الوَسمِ الذي يَحملُ النصَّ بعينِه، لا في الملفّ.**
+      // أوّلُ صياغةٍ كانت `contains('whitespace-pre-line')` على الملفِّ
+      // المحجوبِ — و`_code` تَحجبُ `//` لا `{/* … */}`، وتعليقي الجديدُ
+      // يَذكرُ الصنفَ بالاسم: فمرَّ قضمٌ **حذفَ الصنفَ من الوَسمِ** أخضرَ.
+      // رابعَ عشَرَ مرّةٍ لهذا الفخِّ في هذا المستودع، ومرّتانِ في هذا الملفّ.
+      final raw = _read('admin_panel/src/components/Notification.tsx');
+      final iMsg = raw.indexOf('{confirmState.message}');
+      expect(iMsg, greaterThan(0), reason: 'نصُّ الحوارِ اختفى');
+      final iTag = raw.lastIndexOf('<p ', iMsg);
+      expect(iTag, greaterThan(0), reason: 'لا وَسمَ يَحملُ نصَّ الحوار');
+      final tag = raw.substring(iTag, raw.indexOf('>', iTag));
+      expect(tag.contains('whitespace-pre-line'), isTrue,
+          reason: 'الجملةُ تَنطبِقُ على السؤالِ كتلةً فتَفقدُ بروزَها');
+      expect(tag.contains('{'), isFalse,
+          reason: 'الاقتطاعُ ابتلعَ ما بعدَ الوَسمِ فالفحصُ يَفقدُ دقّتَه');
+    });
+
+    test('(ق) الإحالةُ تَتبعُ قدرةَ السطحِ — لا بطاقةَ ميسر في اللوحة', () {
+      final c = _code(_read(panel));
+      // نصُّ الدارتِ الإداريُّ يُحيلُ إلى «بطاقةِ عمليّاتِ ميسر أدناه» وهي
+      // ليست هنا؛ فاللوحةُ تُمرّرُ قدرتَها الحقيقيّةَ (زرُّ التقسيط).
+      expect(c, contains('bnplRefundHere: canBnplRefund(order)'),
+          reason: 'الإحالةُ لا تَتبعُ قدرةَ السطح');
+      final webRaw = _read('admin_panel/src/utils/cancelRefundNotice.ts');
+      final web = _code(webRaw);
+      expect(web.contains('بطاقة عمليات ميسر في تطبيق الإدارة'), isTrue,
+          reason: 'إحالةُ البطاقةِ لا تَقولُ أين هي');
+      // **الحجبُ ثمّ المضادّة.** رأسُ الوحدةِ يَقتبسُ نصَّ الدارتِ («بطاقةِ
+      // عمليّاتِ ميسر **أدناه**») لِيُبيّنَ الفرق، فسقطَ هذا الفحصُ على
+      // توثيقِه نفسِه — ثالثَ عشَرَ مرّةٍ في هذا المستودع.
+      expect(web.contains('أدناه'), isFalse,
+          reason: 'نصُّ اللوحةِ يُحيلُ إلى شيءٍ ليس فيها');
+      expect(webRaw.contains('أدناه'), isTrue,
+          reason: 'شرحُ الفرقِ زال — فلا يَعرفُ قارئٌ لِمَ اختلفَ النصّان');
     });
   });
 }
