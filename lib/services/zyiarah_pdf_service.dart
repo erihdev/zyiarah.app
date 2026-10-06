@@ -6,19 +6,22 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart' as intl;
-import 'package:arabic_reshaper/arabic_reshaper.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/arabic_pdf_text.dart';
 
 class ZyiarahPdfService {
   /// أداة مساعدة لمعالجة النصوص العربية وتشكيلها بشكل صحيح داخل الـ PDF
-  static String _ar(String input) {
-    if (input.isEmpty) return "";
-    return ArabicReshaper().reshape(input);
-  }
+  /// **التشكيلُ وحدَه لم يَكفِ.** كان `ArabicReshaper().reshape` مباشرةً،
+  /// وهو يُخرِجُ محارفَ «أشكالِ العرض-ب» (U+FE70–FEFF) — والخطُّ المُضمَّنُ
+  /// في الـPDF (`Tajawal`) **لا يَملكُ أشكالَ الانفصالِ الستّةَ والثلاثين**،
+  /// فكلُّ ألفٍ في أوّلِ كلمةٍ وكلُّ تاءٍ مربوطةٍ في آخرِها كانت تُطبَعُ
+  /// **لا شيئاً** (`.notdef`) على فاتورةٍ ضريبيّةٍ وعلى عقدٍ موقَّع.
+  /// التفصيلُ والبرهانُ في `lib/utils/arabic_pdf_text.dart`.
+  static String _ar(String input) => pdfArabic(input);
 
   // خطوط الـ PDF مضمّنة كأصول محلية ومحفوظة في الذاكرة بعد أول تحميل.
   //
