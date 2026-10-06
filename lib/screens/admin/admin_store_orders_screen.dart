@@ -196,7 +196,7 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
                     ),
                     title: Text(item['name'] ?? 'منتج غير معروف', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     subtitle: Text('الكمية: ${item['quantity']} × السعر: ${formatSarAny(item['price'])} ر.س'),
-                    trailing: Text('${(double.tryParse('${item['quantity'] ?? 0}') ?? 0) * (double.tryParse('${item['price'] ?? 0}') ?? 0)} ر.س', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.green)),
+                    trailing: Text('${formatSar((double.tryParse('${item['quantity'] ?? 0}') ?? 0) * (double.tryParse('${item['price'] ?? 0}') ?? 0))} ر.س', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.green)),
                   );
                 },
               ),

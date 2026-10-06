@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { formatSarAny } from '../utils/money';
 import { Search, FileSignature, CheckCircle2, Clock, XCircle, AlertCircle, Calendar, CreditCard, Trash2, Info, Package, Plus, Pencil, Star, Loader2, PartyPopper } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, limit, Timestamp, doc, updateDoc, deleteDoc, addDoc, serverTimestamp, runTransaction, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db, auth } from '../services/firebase.ts';
@@ -312,7 +313,7 @@ function PackagesSection() {
                                     </div>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                    <span className="text-2xl font-black text-slate-800">{pkg.price} <span className="text-sm">ر.س</span></span>
+                                    <span className="text-2xl font-black text-slate-800">{formatSarAny(pkg.price)} <span className="text-sm">ر.س</span></span>
                                     <div className="flex gap-2">
                                         <span className="px-3 py-1 bg-[#660033]/10 text-[#660033] text-[11px] font-bold rounded-lg">{pkg.visits || 0} زيارة</span>
                                         <span className="px-3 py-1 bg-[#660033]/10 text-[#660033] text-[11px] font-bold rounded-lg">{pkg.hours || 4} ساعات/زيارة</span>
@@ -556,7 +557,7 @@ function EventWorkerPackagesSection() {
                                     </div>
                                 </div>
                                 <div className="flex items-center justify-between flex-wrap gap-2">
-                                    <span className="text-2xl font-black text-slate-800">{pkg.price} <span className="text-sm">ر.س</span></span>
+                                    <span className="text-2xl font-black text-slate-800">{formatSarAny(pkg.price)} <span className="text-sm">ر.س</span></span>
                                     <div className="flex gap-2 flex-wrap justify-end">
                                         <span className="px-3 py-1 bg-[#660033]/10 text-[#660033] text-[11px] font-bold rounded-lg">{pkg.visits || 0} زيارة</span>
                                         <span className="px-3 py-1 bg-[#660033]/10 text-[#660033] text-[11px] font-bold rounded-lg">{pkg.hours || 4} ساعات/زيارة</span>
@@ -828,7 +829,7 @@ export default function Contracts({ role }: { role?: string | null }) {
                                     </div>
                                     <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100/50">
                                         <span className="text-[11px] font-bold text-slate-400">قيمة التعاقد</span>
-                                        <span className="text-sm font-black text-[#660033]">{contract.planPrice || 0} ر.س</span>
+                                        <span className="text-sm font-black text-[#660033]">{formatSarAny(contract.planPrice)} ر.س</span>
                                     </div>
                                 </div>
 

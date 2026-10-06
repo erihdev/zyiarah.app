@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { formatSarAny } from '../utils/money';
 import { Search, Filter, MoreVertical, CheckCircle2, Clock, XCircle, Package, UserCheck, X, Loader2, CalendarClock, Undo2 } from 'lucide-react';
 import {
     collection, onSnapshot, query, orderBy, where, limit, doc, Timestamp, updateDoc, runTransaction,
@@ -141,7 +142,7 @@ export default function Orders() {
                     customer: d.client_name || d.client_id || 'غير متوفر',
                     driver: d.assigned_driver || (d.status === 'pending' ? 'بانتظار سائق' : '-'),
                     status: d.status || 'pending',
-                    amount: `${d.amount || 0} ر.س`,
+                    amount: `${formatSarAny(d.amount)} ر.س`,
                     amount_raw: typeof (doc.data() as DocumentData).amount === 'number'
                         ? ((doc.data() as DocumentData).amount as number)
                         : undefined,
