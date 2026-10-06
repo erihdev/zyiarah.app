@@ -8,6 +8,9 @@ import {
     contractApproveAllowed, contractApproveBlockedReason,
     CONTRACT_HEALTH_TITLES,
 } from '../utils/contractHealth.ts';
+import {
+    packageFormError, positiveNum, positiveInt, resolvedVisits,
+} from '../utils/catalogNumber.ts';
 
 interface ContractRecord {
     id: string;
@@ -135,19 +138,26 @@ function PackagesSection() {
     };
 
     const handleSave = async () => {
-        // نفس شرط التطبيق: الاسم والسعر إلزاميان.
-        if (!form.title.trim() || !form.price.trim()) {
-            toast.error('يرجى إكمال البيانات الأساسية (اسم الباقة والسعر)');
-            return;
-        }
+        // كان الفحصُ «غيرُ فارغٍ» وحدَه والحِملُ يَبتلعُ غيرَ الصالحِ صفراً
+        // (`|| 0`) — فباقةٌ تُحفَظُ بنجاحٍ ولا تُباع: سعرٌ صفرٌ تَرفُضُه قاعدةُ
+        // إنشاءِ العقدِ بعد عرضِه «0 ر.س» للعميلة، وزياراتٌ صفرٌ تُجمِّدُ زرَّ
+        // المتابعةِ بلا رسالة. والقاعدةُ مرآةُ محرِّرِ التطبيق.
+        const err = packageFormError({
+            title: form.title, price: form.price, visits: form.visits,
+            hours: form.hours,
+            text: `${form.title} ${form.subtitle} ${form.features}`,
+        });
+        if (err) { toast.error(err); return; }
         setSaving(true);
         try {
             const payload = {
                 title: form.title.trim(),
                 subtitle: form.subtitle.trim(),
-                price: parseFloat(form.price) || 0,
-                visits: parseInt(form.visits) || 0,
-                hours: parseInt(form.hours) || 4,
+                price: positiveNum(form.price)!,
+                // المُستخرَجُ من النصِّ يُكتَبُ صريحاً بدلَ صفرٍ: فحصُ
+                // الزياراتِ الخادميُّ يُتخطّى كلَّه عند الصفر.
+                visits: resolvedVisits(form.visits, `${form.title} ${form.subtitle} ${form.features}`),
+                hours: positiveInt(form.hours) ?? 4,
                 features: form.features.split('\n').map(s => s.trim()).filter(Boolean),
                 isPremium: form.isPremium,
                 // نُبقي رتبة الباقة عند التعديل؛ الجديدة تُلحق بآخر الترتيب.
@@ -368,21 +378,24 @@ function EventWorkerPackagesSection() {
     };
 
     const handleSave = async () => {
-        // نفس شرط باقات الاشتراك (الاسم والسعر إلزاميان) + عدد العاملات إلزامي
-        // هنا تحديداً — هو الحقل الإضافي المميّز لهذا النوع من الباقات.
-        if (!form.title.trim() || !form.price.trim() || !form.workers.trim()) {
-            toast.error('يرجى إكمال البيانات الأساسية (اسم الباقة والسعر وعدد العاملات)');
-            return;
-        }
+        // نفسُ قاعدةِ باقاتِ الاشتراكِ + عددُ العاملاتِ (الحقلُ المميّزُ
+        // لهذا النوع). وعددٌ صفرٌ يُتخطّى به فحصُ الخادمِ كلُّه
+        // (`pkg.workers > 0`) فيَقبلُ أيَّ عددٍ يُعلِنُه العميل.
+        const err = packageFormError({
+            title: form.title, price: form.price, visits: form.visits,
+            hours: form.hours, workers: form.workers,
+            text: `${form.title} ${form.subtitle} ${form.features}`,
+        });
+        if (err) { toast.error(err); return; }
         setSaving(true);
         try {
             const payload = {
                 title: form.title.trim(),
                 subtitle: form.subtitle.trim(),
-                price: parseFloat(form.price) || 0,
-                visits: parseInt(form.visits) || 0,
-                hours: parseInt(form.hours) || 4,
-                workers: parseInt(form.workers) || 0,
+                price: positiveNum(form.price)!,
+                visits: resolvedVisits(form.visits, `${form.title} ${form.subtitle} ${form.features}`),
+                hours: positiveInt(form.hours) ?? 4,
+                workers: positiveInt(form.workers)!,
                 features: form.features.split('\n').map(s => s.trim()).filter(Boolean),
                 isPremium: form.isPremium,
                 // نُبقي رتبة الباقة عند التعديل؛ الجديدة تُلحق بآخر الترتيب.
