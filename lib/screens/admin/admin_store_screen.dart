@@ -35,7 +35,13 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
     // doc['is_hidden'] عبر عامل [] يرمي StateError حين يغيب الحقل (منتجات قديمة) بدل
     // إرجاع null — نقرأ من الخريطة المفكوكة كي يعمل ?? false ولا ينهار التبديل.
     final data = doc.data() as Map<String, dynamic>?;
-    final isHidden = data?['is_hidden'] ?? false;
+    // **قُطبيّةُ الغيابِ تُطابقُ استعلامَ المتجر.**
+    // `store_service.streamProducts` تَستعلمُ
+    // `.where('is_hidden', isEqualTo: false)`، ومساواةُ Firestore تَستلزمُ
+    // وجودَ الحقل — فمنتجٌ قديمٌ بلا الحقلِ (والتعليقُ أعلاه يُقرُّ بوجودِهم)
+    // **لا يَراه عميلٌ أبداً** بينما كان يُعرَضُ هنا «ظاهراً». فالغيابُ
+    // يُقرأُ «مخفيّاً» الآن، والتبديلُ يَكتبُ `false` فيَظهرُ فعلاً.
+    final isHidden = data?['is_hidden'] != false;
     try {
       await _db.collection('products').doc(doc.id).update({'is_hidden': !isHidden});
     } catch (e) {
@@ -302,7 +308,10 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                         'price': double.tryParse(priceCtrl.text) ?? 0.0,
                         'description': descCtrl.text.trim(),
                         'image_url': imageUrl,
-                        'is_hidden': pData?['is_hidden'] ?? false,
+                        // الحفظُ يُبقي **ما يُعرَض**: الغيابُ «مخفيٌّ»
+                        // كما في القائمةِ والتبديل، فلا يُنشَرُ منتجٌ قديمٌ
+                        // بحفظٍ لم يَقصِدْ نشرَه. والنشرُ بزرِّ العينِ وحدَه.
+                        'is_hidden': pData?['is_hidden'] != false,
                         'store_audience': audience,
                         'updated_at': FieldValue.serverTimestamp(),
                         if (product == null) 'created_at': FieldValue.serverTimestamp(),
@@ -414,7 +423,7 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
               itemBuilder: (context, index) {
                 final doc = docs[index];
                 final data = doc.data() as Map<String, dynamic>;
-                final isHidden = data['is_hidden'] ?? false;
+                final isHidden = data['is_hidden'] != false;
                 
                 return Card(
                   margin: const EdgeInsets.only(bottom: 16),
