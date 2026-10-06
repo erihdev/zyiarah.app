@@ -142,32 +142,13 @@ void main() {
       // محصور — والخادمُ (`functions/coupons.js`) يُنفّذُ الحصرَ فعلاً.
       //
       // وهذا هو النمطُ نفسُه بدرجةٍ أعمق: «حقلُ قرارٍ يَعرفُه مُحرِّرٌ واحد»،
-      // إلّا أنّ مقارنةَ المجموعاتِ — الدواءُ المعتادُ — عمياءُ عنه. فالقاعدةُ
-      // المضافة: **لا مصفوفةً فارغةً حرفيّةً في حِملِ أيِّ محرّر**، لأنّ حقلَ
-      // المصفوفةِ قائمةُ قراراتٍ، وتثبيتُه فارغاً يَعني «هذا المحرّرُ لا
-      // يَستطيعُ التعبيرَ عنه».
-      final dartBlock = dartEditor.substring(
-          dartEditor.indexOf('final newData = {'));
-      final webBlock = webEditor.substring(
-          webEditor.indexOf("addDoc(collection(db, 'promo_codes')"));
-      final dartPayload = dartBlock.substring(0, dartBlock.indexOf('};'));
-      final webPayload = webBlock.substring(0, webBlock.indexOf('});'));
-      for (final pair in <List<String>>[
-        ['Flutter', stripLineComments(dartPayload)],
-        ['الويب', stripLineComments(webPayload)],
-      ]) {
-        final empties = RegExp(r"^\s*'?([a-zA-Z_]+)'?:\s*\[\s*\]\s*,",
-                multiLine: true)
-            .allMatches(pair[1])
-            .map((m) => m.group(1)!)
-            .toList();
-        expect(empties, isEmpty,
-            reason: 'في محرّرِ ${pair[0]}: حقلٌ مصفوفيٌّ مثبَّتٌ فارغاً '
-                '($empties) — المفتاحُ يَمرُّ بمقارنةِ المجموعاتِ والقدرةُ '
-                'غائبة. اجعلْه من الحالةِ أو احذفْه.');
-      }
-
-      // والحصرُ بعينِه: من الحالةِ في الجهتَين.
+      // إلّا أنّ مقارنةَ المجموعاتِ — الدواءُ المعتادُ — عمياءُ عنه.
+      //
+      // **والقاعدةُ عامّةٌ، فانتقلَ تنفيذُها إلى حارسٍ مُشتَقِّ النطاق:**
+      // `test/editor_payload_capability_test.dart` يَمسحُ كلَّ منطقةِ وسائطَ
+      // لكلِّ نداءِ كتابةٍ في اللوحةِ وكلَّ ملفٍّ تحتَ `lib/`. كانت هنا على
+      // محرّرَين وحدَهما — «حارسٌ ضيّقٌ وقاعدةٌ عامّة»، في قاعدةٍ كتبتُها
+      // أنا. ويَبقى هنا الشاهدُ المحدَّد: الحصرُ من الحالةِ في الجهتَين.
       expect(dartEditor, contains("'restricted_zones': restrictedZones"));
       expect(webEditor, contains('restricted_zones: newZones'));
     });
