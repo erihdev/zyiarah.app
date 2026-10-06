@@ -166,6 +166,92 @@ void main() {
           reason: 'README يَقولُ إنّه مُستثنى من git وهو ليس كذلك');
     });
 
+    test('(ح) لا وثيقةَ تَعرِضُ ميزةً أُزيلت من الجذرِ كأنّها قائمة', () {
+      // أربعةُ قراراتٍ أُزيلت من الجذرِ ويَحرُسُها فحصٌ في الشفرة — والوثائقُ
+      // كانت تَقولُ عكسَها: `ZIYARAH_BLUEPRINT.md` يَرسمُ **COD** طريقةَ دفعٍ
+      // و**EDFAPAY** بوّابةً و«قبولَ السائقِ للطلب» خطوةً في دورةِ الحياة،
+      // و`store_listing.md` يُعطي مراجعَ أبل **رمزَ تحقّقٍ ثابتاً** لمسارِ
+      // دخولٍ لا وجودَ له. والوثيقةُ التي يُبنى عليها أخطرُ من شفرةٍ خاطئة:
+      // لا فحصَ يَكشفُها، ومَن يَقرؤها يَبني أو يُراجِعُ على غيرِ الواقع.
+      //
+      // فالقاعدةُ: المصطلحُ يُذكَرُ **في سياقِ الإزالةِ** لا في سياقِ الوصف —
+      // ويُميَّزُ بوجودِ كلمةٍ من «أُزيل/حُذِف/لا … في التطبيق/تصحيح» في
+      // السطرِ نفسِه أو في السطرَين قبلَه.
+      const removed = {
+        'COD': 'الدفعُ عند التسليمِ — test/no_cod_test.dart',
+        'EDFAPAY': 'بوّابةٌ لا وجودَ لها — البوّابةُ ميسر',
+        'يقبل الطلب': 'لا قبول/رفضَ من السائق — قرارُ مالك',
+        'رمز التحقق الثابت': 'لا OTP في التطبيق',
+      };
+      const removalWords = [
+        'أُزيل', 'أُزيلت', 'حُذِف', 'حُذِفَ', 'تصحيح', 'كان يَرسمُ',
+        'كان هذا السطرُ', 'لا وجودَ له', 'لا OTP', 'أُغلِق', 'بتاريخِه',
+      ];
+      final docs = Directory('.')
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.md'))
+          .toList()
+        ..sort((a, b) => a.path.compareTo(b.path));
+      expect(docs.length, greaterThanOrEqualTo(5),
+          reason: 'مسحُ الوثائقِ انهارَ — نطاقٌ أجوف');
+      // **وثيقةٌ تُعلِنُ نفسَها تاريخيّةً لا تَدّعي الحاضر** — فتُستثنى
+      // كاملةً، لكنْ بقائمةٍ مُسمّاةٍ ولكلٍّ سببُه، **ويُتحقَّقُ أنّ الإعلانَ
+      // في رأسِها فعلاً** (وإلّا كان الاستثناءُ بابَ إسكات).
+      const declaredHistorical = {
+        './CLAUDE.md': 'سجلُّ القراراتِ نفسُه — يَذكرُ المُزالَ ليَشرحَ إزالتَه',
+        './ZIYARAH_QA_AUDIT.md': 'تقريرُ تدقيقٍ بتاريخِه — ١٣٠٠ سطرٍ من مقتطفاتِ '
+            'شفرةٍ قديمة، وتعليقُ كلِّ سطرٍ خطأٌ لا تصحيح',
+        './ZIYARAH_BLUEPRINT.md': 'مخطّطٌ قديمٌ صُحِّحَ ما فيه عن الدفعِ '
+            'والسائقِ، وبقيّتُه غيرُ مُراجَعةٍ سطراً سطراً — ورأسُه يَقولُ ذلك',
+      };
+      for (final entry in declaredHistorical.keys) {
+        final f = File(entry);
+        expect(f.existsSync(), isTrue, reason: 'مُستثنًى لا وجودَ له: $entry');
+        if (entry == './CLAUDE.md') continue; // لا رأسَ إعلانٍ له، وهو الأصل
+        final head = f.readAsLinesSync().take(20).join(' ');
+        expect(
+            removalWords.any(head.contains) ||
+                head.contains('بتاريخِه') ||
+                head.contains('تصحيح'),
+            isTrue,
+            reason: '$entry مُستثنًى بلا إعلانٍ في رأسِه — بابُ إسكات');
+      }
+      final offenders = <String>[];
+      for (final f in docs) {
+        if (declaredHistorical.containsKey(f.path)) continue;
+        final lines = f.readAsLinesSync();
+        for (var i = 0; i < lines.length; i++) {
+          for (final term in removed.keys) {
+            if (!lines[i].contains(term)) continue;
+            final window = lines
+                .sublist((i - 2).clamp(0, lines.length), i + 1)
+                .join(' ');
+            if (removalWords.any(window.contains)) continue;
+            offenders.add('${f.path}:${i + 1} «$term» — ${removed[term]}');
+          }
+        }
+      }
+      expect(offenders, isEmpty,
+          reason: 'وثيقةٌ تَعرِضُ ميزةً مُزالةً كأنّها قائمة:\n'
+              '${offenders.join('\n')}');
+
+      // **ونافذةُ «كلمةِ الإزالةِ» لا تَكفي لرمزٍ له قيمة**: قضمةٌ أعادت
+      // التوجيهَ وأبقت شرحي في السطرِ نفسِه فمرَّت أخضرَ. فالقيمةُ نفسُها
+      // مُحرَّمةٌ بصيغتِها — رمزُ تحقّقٍ مقرونٌ بأرقام — أيّاً كان ما حولَه،
+      // لأنّ **شكلَها هو التوجيه**: مَن يَقرؤها يُدخِلُها. «القدرةُ لا الاسم».
+      for (final f in docs) {
+        final text = f.readAsStringSync();
+        // `\s*` وحدَها لا تَكفي: علامةُ التغليظِ `**` تَقعُ بين النقطتَين
+        // والأرقامِ (`:** 123456`) — فأيُّ ستّةِ محارفَ غيرِ رقميّةٍ تَمُرّ.
+        final m = RegExp(r'رمز التحقق[^\n]{0,40}[:：][^0-9٠-٩]{0,6}[0-9٠-٩]{4,}')
+            .firstMatch(text);
+        expect(m, isNull,
+            reason: '${f.path}: رمزُ تحقّقٍ بقيمةٍ مكتوبةٍ «${m?.group(0)}» — '
+                'ولا OTP في التطبيقِ أصلاً، فمَن يُدخِلُه لا يَدخُل');
+      }
+    });
+
     test('(هـ) لا عددَ محجوزاتِ STAGE-C مكتوبٌ في الدليل — نسخةٌ تَنحرِف', () {
       final i = guide.indexOf('## 1-و.');
       final j = guide.indexOf('## 2.', i);

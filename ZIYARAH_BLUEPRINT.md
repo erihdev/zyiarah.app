@@ -1,5 +1,18 @@
 # ZIYARAH BLUEPRINT — العقل المدبر للمشروع
 
+> **تصحيحٌ 2026-10-06 — ما كان في هذا المخطّطِ عن الدفعِ والسائقِ كان كلُّه غيرَ
+> صحيح.** كان يَرسمُ **COD** طريقةَ دفعٍ، و**EDFAPAY** بوّابةً «TODO: SDK غير
+> مفعّل»، و«مجاني (اشتراك)» طريقةً رابعة، و**قبولَ السائقِ للطلب** خطوةً في
+> دورةِ الحياة. والواقعُ: البوّابةُ الأساسُ **ميسر** (بطاقة/STC Pay/Apple Pay)
+> ومعها **تمارا** للأقساطِ و**المحفظة**؛ والدفعُ النقديُّ أُزيل من الجذرِ بقرارِ
+> مالكٍ (`test/no_cod_test.dart`)، وكذلك Tabby من العميل
+> (`test/no_tabby_test.dart`)، و**لا قبول/رفضَ من السائق**. وفرعُ الطلبِ
+> المجّانيِّ حُذِفَ لأنّ أربعةَ مساراتٍ خادميّةٍ تَشترطُ الدفعَ فما كان يُنتجُه
+> لا يُسنَدُ ولا يُحتسَبُ ولا يُذكَّرُ به ويُلغى بعد ثلاثينَ دقيقة. وبقيّةُ
+> المخطّطِ لم تُراجَعْ سطراً سطراً — **فسجلُّ القراراتِ الحاكمُ هو
+> [`CLAUDE.md`](CLAUDE.md)** لا هذا الملفّ.
+
+
 > آخر تحديث: 2026-05-19  
 > الغرض: مرجع معماري شامل لأي جلسة عمل مستقبلية على مشروع Zyiarah
 
@@ -36,7 +49,7 @@ Firebase (Firestore + Auth + Storage + FCM)
 ```
 main.dart
 ├── Firebase.initializeApp()
-├── dotenv.load()  ← .env للـ Mapbox و EDFAPAY
+├── dotenv.load()  ← .env للـ Mapbox ومفاتيحِ ميسر القابلةِ للنشر
 ├── FirebaseFirestore.instance.settings (unlimited cache)
 ├── Crashlytics error handlers
 ├── MultiProvider:
@@ -258,16 +271,17 @@ Firestore
     ↓
 payment_summary_screen.dart
     ↓
-┌─────────────────────────────────────┐
-│  طريقة الدفع؟                        │
-├─────────┬───────────┬───────────────┤
-│  COD    │  Online   │    تمارا      │
-│ (نقدي)  │ (EDFAPAY) │  (أقساط)      │
-└────┬────┴─────┬─────┴───────┬───────┘
-     │          │              │
-     ↓          ↓              ↓
-_processUnified  _processUnified  tamara_service
-Success()       Success()      createCheckout()
+┌──────────────────────────────────────────────────┐
+│  طريقة الدفع؟  (الدفع مقدَّمٌ دائماً)              │
+├──────────────┬──────────────┬────────────────────┤
+│   ميسر        │    تمارا     │      المحفظة       │
+│ بطاقة/STC Pay │  (أقساط)     │ (رصيدُ العميلة)    │
+│ /Apple Pay    │              │                    │
+└──────┬───────┴──────┬───────┴─────────┬──────────┘
+       │              │                  │
+       ↓              ↓                  ↓
+moyasar_service  tamara_service    payWithWallet
+                 createCheckout()  (نداءٌ خادميّ)
                                    ↓
                             TamaraCheckoutScreen
                             (WebView)
@@ -290,7 +304,9 @@ ZyiarahCommService.notifyNewOrder() [بريد إلكتروني]
      ↓
 ZyiarahInvoiceScreen [نجاح]
      ↓
-[سائق] يقبل الطلب → order.status = accepted
+[الخادم/الإدارة] يُسنِد الطلب → order.status = scheduled | assigned
+     ↓   (لا قبول/رفض من السائق — قرارُ مالك)
+[سائق] في الطريق → order.status = on_the_way
      ↓
 [سائق] يبدأ العمل → order.status = in_progress
      ↓
@@ -375,15 +391,15 @@ InvoicePdfService (static)
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│                   4 طرق دفع                            │
-├────────────┬──────────────┬──────────────┬─────────────┤
-│   COD      │  EDFAPAY     │   تمارا      │  مجاني       │
-│ (نقداً)    │ (بطاقة)      │ (أقساط)      │ (اشتراك)    │
-├────────────┼──────────────┼──────────────┼─────────────┤
-│ لا انتظار  │ TODO: SDK    │ Cloud Fn     │ visits--    │
-│ مباشر →   │ غير مفعّل   │ createTamara │             │
-│ Firestore  │ حتى الآن    │ Checkout()   │             │
-│            │              │ → WebView    │             │
+│                   3 طرق دفع                            │
+├──────────────────┬──────────────┬──────────────────────┤
+│      ميسر         │    تمارا     │      المحفظة         │
+│ بطاقة/STC/Apple  │  (أقساط)     │  (رصيدُ العميلة)     │
+├──────────────────┼──────────────┼──────────────────────┤
+│ SDK + webhook    │ Cloud Fn     │ payWithWallet        │
+│ + verify/refund/ │ createTamara │ (كلُّ كتابةٍ على      │
+│ void/capture     │ Checkout()   │  المحفظةِ خادميّة)   │
+│ (البوّابةُ الأساس)│ → WebView    │                      │
 │            │              │ → onSuccess  │             │
 └────────────┴──────────────┴──────────────┴─────────────┘
      ↓              ↓              ↓              ↓
@@ -489,7 +505,7 @@ AuthWrapper:
 
 المرحلة 4 — التحقق:
 □ flutter analyze → صفر errors
-□ اختبر مسار الدفع الكامل (COD على الأقل)
+□ اختبر مسار الدفع الكامل حتى شاشة «الفاتورة الضريبية» (ميسر — البوّابةُ الأساس)
 □ اختبر تسجيل دخول بكل دور: client, driver, admin
 
 المرحلة 5 — النشر:
@@ -560,7 +576,7 @@ await _db.collection('orders').add({...}); // ❌
 - العداد: `metadata/order_counter/last_id` — يُزاد دائماً atomically
 
 ### بيئات العمل
-- `.env` — Mapbox token + EDFAPAY credentials
+- `.env` — Mapbox token + مفاتيحُ الدفعِ القابلةُ للنشرِ (Moyasar pk، Samsung Pay) — **مفاتيحُ نشرٍ فقط، لا أسرار**
 - `functions/` — Cloud Functions (Node.js v22)
 - `admin_panel/` — React 19 + TypeScript (Vite)
 - Firebase Project: `zyiarah-app`
