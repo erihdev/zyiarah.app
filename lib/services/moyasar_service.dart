@@ -9,6 +9,39 @@ import 'package:zyiarah/utils/error_report.dart';
 /// - Credit Card / Apple Pay / STC Pay → handled by Moyasar Flutter SDK (no code here)
 /// - Google Pay → processGooglePayToken() sends token to Moyasar REST API
 /// - Payment verification → verifyPayment() via Firebase Cloud Function
+/// **فشلُ دفعٍ مفهوم: رسالةٌ عربيّةٌ للعميلة، وتشخيصٌ للسجلّ، وبيانُ هل
+/// سجّلت ميسر الدفعةَ أم لا.**
+///
+/// مسارُ Google Pay يَمُرُّ بـ`http.post` مباشرةً لا بحزمةِ ميسر، فلا
+/// `ApiError`/`NetworkError` فيه — وكان يَرمي `Exception(نص)` عارياً،
+/// فالشاشةُ تَطبعُ `e.toString()` **كما هو**: فمهلةُ الثلاثينَ ثانيةً تُقرأُ
+/// «TimeoutException after 0:00:30.000000: Future not completed» وانقطاعُ
+/// الشبكةِ «ClientException with SocketException: Failed host lookup» —
+/// لاتينيّةٌ في شريطٍ عربيٍّ على شاشةِ الدفع. و`replaceAll('Exception: ','')`
+/// لا يَمَسُّ أيّاً منهما (لا يَبدأُ بها).
+///
+/// و[recorded] هو ما يَحتاجُه قرارُ **تجديدِ المعرّف**: دفعةٌ **سجّلتها
+/// ميسر** تَستهلكُ `given_id`، فإعادةُ المحاولةِ به تُعيدُ الفشلَ نفسَه
+/// (نفسُ قرارِ Apple/Samsung Pay المكتوبِ في `payment_summary_screen`). وما
+/// لم تُسجَّلْ — أو ما لا نَعرفُ نتيجتَه — يُبقي المعرّفَ، منعاً للشحنِ
+/// المزدوج.
+class MoyasarPayFailure implements Exception {
+  /// سطرٌ عربيٌّ يُعرَضُ كما هو.
+  final String message;
+
+  /// هل أنشأت ميسر دفعةً فعلاً (فاستُهلك `given_id`)؟
+  final bool recorded;
+
+  /// تشخيصٌ للسجلِّ لا للعميلة (حالةُ ميسر ونصُّها الإنجليزيّ).
+  final String? detail;
+
+  const MoyasarPayFailure(this.message, {this.recorded = false, this.detail});
+
+  @override
+  String toString() => 'MoyasarPayFailure($message, recorded: $recorded, '
+      'detail: $detail)';
+}
+
 class MoyasarService {
   static String get _publishableKey =>
       dotenv.env['MOYASAR_PUBLISHABLE_KEY'] ?? '';
@@ -31,7 +64,8 @@ class MoyasarService {
     Map<String, String>? metadata,
   }) async {
     if (!isConfigured) {
-      throw Exception('خدمة الدفع غير مُهيأة — يرجى التواصل مع الدعم');
+      throw const MoyasarPayFailure(
+          'خدمة الدفع غير مُهيأة — يرجى التواصل مع الدعم');
     }
 
     final amountHalala = (amountSAR * 100).round();
@@ -67,23 +101,34 @@ class MoyasarService {
       if (status == 'paid') {
         return data['id'] as String;
       }
-      throw Exception(
-          'حالة الدفع: $status — ${data['message'] ?? 'خطأ غير متوقع'}');
+      // دفعةٌ **سجّلتها** ميسر ولم تُكتمَل: `given_id` استُهلك. والنصُّ
+      // عربيٌّ وحدَه — كان يَعرضُ حالةَ ميسر ورسالتَها الإنجليزيّةَ للعميلة
+      // («حالة الدفع: failed — Insufficient funds»)، فصارت في [detail].
+      throw MoyasarPayFailure('لم تُكتمل عمليّة الدفع عبر Google Pay',
+          recorded: true,
+          detail: 'status=$status msg=${data['message'] ?? ''}');
     }
 
+    // غيرُ 201: لم تُنشَأْ دفعةٌ، فالمعرّفُ لم يُستهلَك.
     String message = 'فشل معالجة الدفع عبر Google Pay';
+    String? detail;
     try {
       final error = jsonDecode(response.body) as Map<String, dynamic>;
       final type = error['type']?.toString() ?? '';
+      detail = 'http=${response.statusCode} type=$type '
+          'msg=${error['message'] ?? ''}';
       message = switch (type) {
         'account_inactive_error' => 'حساب الدفع قيد التفعيل — يرجى المحاولة لاحقاً',
         'authentication_error' => 'خطأ في مفاتيح بوابة الدفع — تواصلي مع الدعم',
         'rate_limit_error' => 'كثرة الطلبات — يرجى الانتظار قليلاً والمحاولة مجدداً',
-        'invalid_request_error' => error['message']?.toString() ?? 'بيانات الطلب غير صحيحة',
-        _ => error['message']?.toString() ?? message,
+        // رسالةُ ميسر إنجليزيّةٌ، فلا تُعرَض: تَذهبُ إلى [detail].
+        'invalid_request_error' => 'بيانات الطلب غير صحيحة — تواصلي مع الدعم',
+        _ => message,
       };
-    } catch (_) {}
-    throw Exception(message);
+    } catch (_) {
+      detail = 'http=${response.statusCode} body_not_json';
+    }
+    throw MoyasarPayFailure(message, detail: detail);
   }
 
   /// Verifies a payment by ID via secure Cloud Function.

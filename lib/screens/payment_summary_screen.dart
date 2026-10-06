@@ -427,6 +427,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       String msg = 'فشل الدفع عبر Apple Pay';
       if (result is ApiError) msg = result.message;
       if (result is ValidationError) msg = result.message;
+      // **«لا نعرف» ليست «فشل».** هذا الفرعُ كان ناقصاً هنا وموجوداً في
+      // توأمِه (Samsung Pay) حرفيّاً: انقطاعُ الشبكةِ يُقرأُ «فشل الدفع عبر
+      // Apple Pay» — دعوى فشلٍ، بينما التعليقُ أسفلَه يَقولُ إنّ
+      // `NetworkError` **مجهولُ النتيجة** ولذلك يُبقي المعرّفَ منعاً للشحنِ
+      // المزدوج. فالقرارُ الواحدُ كان مكتوباً مرّتَين وسقطت منه حالةٌ في
+      // إحداهما — وApple Pay هي مسارُ الدفعِ الأصليِّ على iOS.
+      if (result is NetworkError) {
+        msg = 'تعذّر الاتصال — إن كان المبلغُ قد خُصم فلا تقلقي، سيُعالَج '
+            'طلبكِ تلقائياً. وإلّا فأعيدي المحاولة.';
+      }
       // فشل نهائي سجّلته ميسر (رفض/PaymentResponse غير مدفوعة أو ApiError)
       // يستهلك given_id الحالي — إعادة المحاولة به تُعيد الدفعة الفاشلة نفسها.
       // نسكّ معرّفاً جديداً للمحاولة التالية. (ValidationError محلي بلا سجل لدى
@@ -459,7 +469,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       String msg = 'فشل الدفع عبر Samsung Pay';
       if (result is ApiError) msg = result.message;
       if (result is ValidationError) msg = result.message;
-      if (result is NetworkError) msg = 'تعذّر الاتصال — يرجى المحاولة مجدداً';
+      // نفسُ نصِّ Apple Pay حرفاً بحرف: القرارُ واحدٌ فلا تَختلفُ الصياغة
+      // («يرجى المحاولة مجدداً» وحدَها تَسكتُ عن احتمالِ الخصم).
+      if (result is NetworkError) {
+        msg = 'تعذّر الاتصال — إن كان المبلغُ قد خُصم فلا تقلقي، سيُعالَج '
+            'طلبكِ تلقائياً. وإلّا فأعيدي المحاولة.';
+      }
       // فشل نهائي سجّلته ميسر يستهلك given_id — معرّف جديد للمحاولة التالية
       // (لا نسكّ على NetworkError: النتيجة مجهولة والثبات يمنع الشحن المزدوج).
       if (result is ApiError || result is PaymentResponse) {
@@ -1715,11 +1730,35 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                     if (mounted) {
                       await _processUnifiedSuccess(_pendingOrderId, 'google_pay', paymentId: gpayPaymentId);
                     }
-                  } catch (e) {
+                  } on MoyasarPayFailure catch (f) {
+                    // فشلٌ مفهومٌ: رسالتُه عربيّةٌ، وتشخيصُه للسجلّ.
+                    // و`recorded` يُقرّرُ تجديدَ المعرّف — دفعةٌ سجّلتها ميسر
+                    // تَستهلكُ `given_id`، فإعادةُ المحاولةِ به تُعيدُ الفشلَ
+                    // نفسَه. وهو القرارُ المكتوبُ في مُعالِجَي Apple/Samsung
+                    // وكان **غائباً** هنا كلَّه.
+                    debugPrint('[gpay] ${f.detail ?? f.message}');
+                    if (mounted) {
+                      setState(() {
+                        _isLoading = false;
+                        if (f.recorded) _mintFreshPendingOrderId();
+                      });
+                    }
+                    messenger.showSnackBar(SnackBar(
+                      content: Text(f.message, style: GoogleFonts.tajawal()),
+                      backgroundColor: Colors.red.shade800,
+                    ));
+                  } catch (e, st) {
+                    // مهلةٌ أو انقطاعُ شبكةٍ أو جسمٌ غيرُ JSON: **النتيجةُ
+                    // مجهولة**، فلا دعوى فشلٍ ولا تجديدَ معرّف. وكان هذا
+                    // المسارُ يَطبعُ `e.toString()` خامّاً، فتُقرأُ
+                    // «TimeoutException after 0:00:30.000000: Future not
+                    // completed» في شريطٍ عربيٍّ على شاشةِ الدفع.
+                    reportSilent(e, st, reason: 'google_pay_unknown_result');
                     if (mounted) setState(() => _isLoading = false);
                     messenger.showSnackBar(SnackBar(
                       content: Text(
-                        e.toString().replaceAll('Exception: ', ''),
+                        'تعذّر الاتصال — إن كان المبلغُ قد خُصم فلا تقلقي، '
+                        'سيُعالَج طلبكِ تلقائياً. وإلّا فأعيدي المحاولة.',
                         style: GoogleFonts.tajawal(),
                       ),
                       backgroundColor: Colors.red.shade800,
