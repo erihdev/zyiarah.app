@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/home_packages.dart';
+import 'package:zyiarah/utils/catalog_number.dart';
 
 class AdminEventWorkerPackagesScreen extends StatefulWidget {
   const AdminEventWorkerPackagesScreen({super.key});
@@ -111,8 +112,19 @@ class _AdminEventWorkerPackagesScreenState extends State<AdminEventWorkerPackage
                 TextButton(onPressed: isSaving ? null : () => Navigator.pop(ctx), child: const Text("إلغاء")),
                 ElevatedButton(
                   onPressed: isSaving ? null : () async {
-                    if (titleCtrl.text.isEmpty || priceCtrl.text.isEmpty || workersCtrl.text.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى إكمال البيانات الأساسية")));
+                    // نفسُ قاعدةِ باقاتِ الاشتراك. وعددُ عاملاتٍ صفرٌ يُتخطّى به
+                    // فحصُ الخادمِ كلُّه (`pkg.workers > 0`) فيَقبلُ أيَّ عددٍ
+                    // يُعلِنُه العميل.
+                    final err = packageFormError(
+                      title: titleCtrl.text,
+                      price: priceCtrl.text,
+                      visits: visitsCtrl.text,
+                      hours: hoursCtrl.text,
+                      workers: workersCtrl.text,
+                      text: '${titleCtrl.text} ${subtitleCtrl.text} ${featuresCtrl.text}',
+                    );
+                    if (err != null) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err), backgroundColor: Colors.red));
                       return;
                     }
                     setDialogState(() => isSaving = true);
@@ -120,10 +132,15 @@ class _AdminEventWorkerPackagesScreenState extends State<AdminEventWorkerPackage
                       final newData = {
                         'title': titleCtrl.text.trim(),
                         'subtitle': subtitleCtrl.text.trim(),
-                        'price': double.tryParse(priceCtrl.text.trim()) ?? 0.0,
-                        'visits': int.tryParse(visitsCtrl.text.trim()) ?? 0,
-                        'hours': int.tryParse(hoursCtrl.text.trim()) ?? 4,
-                        'workers': int.tryParse(workersCtrl.text.trim()) ?? 0,
+                        'price': positiveNum(priceCtrl.text)!,
+                        // المُستخرَجُ من النصِّ يُكتَبُ صريحاً بدلَ صفرٍ: فحصُ
+                        // الزياراتِ الخادميُّ يُتخطّى كلَّه عند الصفر.
+                        'visits': resolvedVisits(
+                          visitsField: visitsCtrl.text,
+                          text: '${titleCtrl.text} ${subtitleCtrl.text} ${featuresCtrl.text}',
+                        ),
+                        'hours': positiveInt(hoursCtrl.text) ?? 4,
+                        'workers': positiveInt(workersCtrl.text)!,
                         'features': featuresCtrl.text.trim().split('\n').where((s) => s.isNotEmpty).toList(),
                         'isPremium': isPremium,
                         'rank': rank,
