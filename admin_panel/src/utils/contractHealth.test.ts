@@ -1,8 +1,12 @@
-// مرآةُ صحّةِ العقدِ وبوّابةِ اعتمادِه — **جدولُ الحالاتِ واحدٌ بين
-// اللغتَين**: يُقرأُ من `test/contract_approve_gate_test.dart` ويُقارَنُ
-// `JSON.parse`اً، فحالةٌ تُضافُ لجهةٍ دون الأخرى تَسقط.
+// مرآةُ صحّةِ العقدِ وبوّابةِ اعتمادِه.
+//
+// جدولُ الحالاتِ **مشتركٌ بين اللغتَين**: نسخةٌ بعينِها في
+// `test/contract_approve_gate_test.dart` بين العلامتَين نفسِهما، وذاك الفحصُ
+// يَقرأُ هذا الملفَّ ويُقارِنُ الجدولَين `jsonDecode`اً — فحالةٌ تُضافُ
+// لجهةٍ دون الأخرى تَسقط. (والقراءةُ من جهةِ الدارتِ لا من هنا: `node:fs`
+// بلا أنواعٍ تحتَ `tsconfig.app.json` فيَسقطُ `npm run build` — فخٌّ مسجَّلٌ
+// في هذا المستودعِ وقعتُ فيه ثالثَ مرّة.)
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
 import {
   contractHealthOf, contractApproveAllowed, contractApproveBlockedReason,
   contractNeedsHuman, CONTRACT_HEALTH_TITLES, type ContractHealth,
@@ -11,36 +15,30 @@ import {
 
 type Row = [ContractDoc, ContractHealth, boolean];
 
-/** الاقتطاعُ **بموازنةِ الأقواس من آخرِ `]` إلى الوراء** — `indexOf('[')`
- *  أوقعَ حُرّاساً في هذا المستودعِ مرّاتٍ (قوسُ تعليقِ نوعٍ، قوسُ معامَلات). */
-function sharedCases(): Row[] {
-  const src = readFileSync(
-    new URL('../../../test/contract_approve_gate_test.dart', import.meta.url),
-    'utf-8',
-  );
-  const a = src.indexOf('CONTRACT_HEALTH_CASES_BEGIN');
-  const b = src.indexOf('CONTRACT_HEALTH_CASES_END');
-  if (a < 0 || b < 0 || b <= a) {
-    throw new Error('علامتا جدولِ الحالاتِ غابتا عن الملفِّ الدارتيّ');
-  }
-  const block = src.slice(a, b);
-  const end = block.lastIndexOf(']');
-  if (end < 0) throw new Error('لا مصفوفةَ حالاتٍ بين العلامتَين');
-  let depth = 0;
-  let start = -1;
-  for (let i = end; i >= 0; i--) {
-    if (block[i] === ']') depth++;
-    if (block[i] === '[') {
-      depth--;
-      if (depth === 0) { start = i; break; }
-    }
-  }
-  if (start < 0) throw new Error('قوسٌ غيرُ مُوازَنٍ في جدولِ الحالات');
-  return JSON.parse(block.slice(start, end + 1)) as Row[];
-}
+// ── CONTRACT_HEALTH_CASES_BEGIN ──
+const CASES: Row[] = [
+  [{}, "ok", true],
+  [{"status": "pending"}, "ok", true],
+  [{"status": "pending", "is_paid": false}, "ok", true],
+  [{"status": "pending", "is_paid": true}, "activationStuck", false],
+  [{"status": "approved_waiting_payment"}, "ok", false],
+  [{"status": "approved_waiting_payment", "is_paid": true}, "ok", false],
+  [{"status": "active", "is_paid": true}, "ok", false],
+  [{"status": "pending", "is_paid": true, "plan_validation_failed": true},
+   "planMismatch", false],
+  [{"status": "pending", "is_paid": true, "contract_activation_failed": true},
+   "activationFailed", false],
+  [{"status": "active", "is_paid": true, "contract_visits_pending": true},
+   "visitsMissing", false],
+  [{"status": "pending", "is_paid": true, "contract_visits_pending": true,
+    "plan_validation_failed": true}, "planMismatch", false],
+  [{"status": "pending", "is_paid": true, "contract_activation_failed": true,
+    "contract_visits_pending": true}, "visitsMissing", false]
+];
+// ── CONTRACT_HEALTH_CASES_END ──
 
 describe('contractHealth — المرآة', () => {
-  const rows = sharedCases();
+  const rows = CASES;
 
   it('الاقتطاعُ أصابَ الجدولَ فعلاً — فلا فحصَ على فراغ', () => {
     expect(rows.length).toBeGreaterThanOrEqual(10);
@@ -82,17 +80,11 @@ describe('contractHealth — المرآة', () => {
     expect(CONTRACT_HEALTH_TITLES.ok).toBe('');
   });
 
-  it('النصوصُ حرفيّاً كما في `kContractHealthTitles` الدارتيّة', () => {
-    const dart = readFileSync(
-      new URL('../../../lib/utils/contract_health.dart', import.meta.url),
-      'utf-8',
-    );
-    // الفواصلُ في الدارتِ نصوصٌ مُلتصقةٌ على أسطُر، فتُطابَقُ كلماتُها
-    // الحاسمةُ لا الجملةُ كاملةً: المقصودُ أن لا تَنحرِفَ الدعوى.
+  it('نصُّ كلِّ حالةٍ يَحملُ دعواها — والمطابقةُ الحرفيّةُ يَشدُّها فحصُ الدارت', () => {
+    const all = Object.values(CONTRACT_HEALTH_TITLES).join(' | ');
     for (const key of ['لا يطابق الباقة', 'لا زيارات ولا بطاقة',
       'وما زال معلَّقاً', 'رصيد بلا مواعيد']) {
-      expect(dart).toContain(key);
-      expect(Object.values(CONTRACT_HEALTH_TITLES).join(' | ')).toContain(key);
+      expect(all).toContain(key);
     }
   });
 });

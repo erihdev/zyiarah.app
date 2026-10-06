@@ -22,7 +22,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zyiarah/utils/contract_health.dart';
 
-// CONTRACT_HEALTH_CASES_BEGIN
+// ── CONTRACT_HEALTH_CASES_BEGIN ──
 const String kCasesJson = '''
 [
   [{}, "ok", true],
@@ -44,7 +44,7 @@ const String kCasesJson = '''
     "contract_visits_pending": true}, "visitsMissing", false]
 ]
 ''';
-// CONTRACT_HEALTH_CASES_END
+// ── CONTRACT_HEALTH_CASES_END ──
 
 const Map<String, ContractHealth> _byName = <String, ContractHealth>{
   'ok': ContractHealth.ok,
@@ -69,6 +69,41 @@ void main() {
   final cases = (jsonDecode(kCasesJson) as List).cast<List<dynamic>>();
 
   group('القاعدةُ سلوكاً', () {
+    test('الجدولُ نفسُه في اللوحةِ حرفاً بحرف — مرآةٌ لا دعوى', () {
+      // القراءةُ من هنا لا من TS: `node:fs` بلا أنواعٍ تحتَ
+      // `tsconfig.app.json` فيَسقطُ `npm run build` — فخٌّ مسجَّلٌ في هذا
+      // المستودعِ وقعتُ فيه ثالثَ مرّة. (نمطُ `buildGate`/`serviceMeta`.)
+      const String webTest = 'admin_panel/src/utils/contractHealth.test.ts';
+      final String web = File(webTest).readAsStringSync();
+      final int a = web.indexOf('CONTRACT_HEALTH_CASES_BEGIN');
+      final int b = web.indexOf('CONTRACT_HEALTH_CASES_END');
+      expect(a, greaterThan(0), reason: 'علامةُ بدايةِ الجدولِ غابت عن $webTest');
+      expect(b, greaterThan(a), reason: 'علامةُ النهايةِ غابت');
+      final String block = web.substring(a, b);
+      // **من آخرِ `]` إلى الوراءِ بموازنةِ الأقواس** — `indexOf('[')` يَلتقطُ
+      // قوسَ تعليقِ النوعِ (`Row[]`)، وهو الفخُّ المسجَّلُ في `serviceMeta`.
+      final int end = block.lastIndexOf(']');
+      expect(end, greaterThan(0), reason: 'لا مصفوفةَ حالاتٍ بين العلامتَين');
+      int depth = 0;
+      int start = -1;
+      for (int i = end; i >= 0; i--) {
+        if (block[i] == ']') depth++;
+        if (block[i] == '[') {
+          depth--;
+          if (depth == 0) {
+            start = i;
+            break;
+          }
+        }
+      }
+      expect(start, greaterThanOrEqualTo(0), reason: 'قوسٌ غيرُ مُوازَن');
+      final webCases = jsonDecode(block.substring(start, end + 1)) as List;
+      expect(webCases.length, cases.length,
+          reason: 'عددُ الحالاتِ يَختلفُ بين اللغتَين');
+      expect(jsonEncode(webCases), jsonEncode(cases),
+          reason: 'جدولُ الحالاتِ انحرفَ — حالةٌ أُضيفت لجهةٍ دون الأخرى');
+    });
+
     test('الجدولُ يَصِفُ الحالاتِ الخمسَ كلَّها — فلا فحصَ على زاويةٍ واحدة', () {
       expect(cases.length, greaterThanOrEqualTo(10));
       final seen = cases.map((c) => c[1] as String).toSet();
