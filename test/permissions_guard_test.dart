@@ -109,22 +109,32 @@ void main() {
     'ACCESS_COARSE_LOCATION': ['Geolocator', 'بديلٌ أخفُّ لنفسِ الميزة'],
     'CAMERA': ['ImageSource.camera', 'صورةُ إثباتِ الإنجازِ وصورةُ العاملة'],
     'POST_NOTIFICATIONS': ['FirebaseMessaging', 'دفعاتُ الطلبِ والدفع'],
-    'WAKE_LOCK': ['FirebaseMessaging', 'يَلزمُه استقبالُ الدفعةِ والجهازُ نائم'],
+    'WAKE_LOCK': [
+      'FirebaseMessaging',
+      'يَلزمُه استقبالُ الدفعةِ والجهازُ نائم'
+    ],
   };
 
   const iosWitness = <String, List<String>>{
     'NSLocationWhenInUseUsageDescription': [
-      'Geolocator', 'تحديدُ المنطقةِ أثناء الاستعمال',
+      'Geolocator',
+      'تحديدُ المنطقةِ أثناء الاستعمال',
     ],
     'NSLocationAlwaysAndWhenInUseUsageDescription': [
-      'getPositionStream', 'بثُّ موقعِ السائقِ ووقتَ تأنيبِ التطبيق',
+      'getPositionStream',
+      'بثُّ موقعِ السائقِ ووقتَ تأنيبِ التطبيق',
     ],
     'NSLocationAlwaysUsageDescription': [
-      'getPositionStream', 'نظيرُها لنسخِ iOS الأقدم',
+      'getPositionStream',
+      'نظيرُها لنسخِ iOS الأقدم',
     ],
-    'NSCameraUsageDescription': ['ImageSource.camera', 'التصويرُ داخلَ التطبيق'],
+    'NSCameraUsageDescription': [
+      'ImageSource.camera',
+      'التصويرُ داخلَ التطبيق'
+    ],
     'NSPhotoLibraryUsageDescription': [
-      'ImageSource.gallery', 'اختيارُ صورةٍ من المكتبة',
+      'ImageSource.gallery',
+      'اختيارُ صورةٍ من المكتبة',
     ],
   };
 
@@ -160,20 +170,85 @@ void main() {
     expect(iosUsageKeys().contains('NSMicrophoneUsageDescription'), isFalse,
         reason: 'عادَ سببُ الميكروفون — ولا طالبَ له');
     // ولا استعمالَ حقيقيّاً يُبرّرُ عودتَهما.
-    for (final needle in const ['Permission.microphone', 'RecorderController',
-      'startRecording', 'AudioRecorder']) {
+    for (final needle in const [
+      'Permission.microphone',
+      'RecorderController',
+      'startRecording',
+      'AudioRecorder'
+    ]) {
       expect(lib.contains(needle), isFalse,
           reason: 'ظهرَ $needle — فالميزةُ وُلدت ويَلزمُها إعلانٌ وشاهدٌ هنا');
     }
     // والمضادّة: شرحُ الحذفِ (ومنه اسمُ تابي) ما زال في الخامِّ، فالفحوصُ
     // أعلاه تَقرأُ المُجرَّدَ من التعليق — ولو أفرطَ التجريدُ لَما بقي شاهد.
     expect(File(_manifest).readAsStringSync().contains('RECORD_AUDIO'), isTrue,
-        reason: 'اختفى شرحُ الحذفِ — فتُعادُ الصلاحيّةُ بلا علمٍ بسببِ زوالِها');
+        reason:
+            'اختفى شرحُ الحذفِ — فتُعادُ الصلاحيّةُ بلا علمٍ بسببِ زوالِها');
     expect(File(_plist).readAsStringSync().contains('تابي'), isTrue,
         reason: 'اختفى ذكرُ السببِ القديم — وهو شاهدُ العطل');
   });
 
-  test('التباينُ المُعلَن: موقعُ الخلفيّةِ على iOS ولا نظيرَ له في أندرويد', () {
+  test('ونصُّ السببِ يُسمّي ما يَحدثُ فعلاً — لا ميزةً لا وجودَ لها', () {
+    // **الشواهدُ أعلاه تَشدُّ وجودَ المفتاح؛ وهذا يَشدُّ نصَّه.** نصُّ السببِ
+    // يُقرأُ في **مراجعةِ أبل** وفي **نافذةِ الإذنِ** معاً، فهو دعوى — وكانت
+    // دعوى كاذبةً في المفتاحَين:
+    //   • الكاميرا: «مسح الـ QR Code الخاص بالفواتير أو تحديث صورة الملف
+    //     الشخصي» — **ولا ماسحَ QR في المستودعِ إطلاقاً** (الـ`Barcode`
+    //     الوحيدُ يُولِّدُ رمزاً في الـPDF لا يَقرؤه)، **ولا مسارَ صورةٍ
+    //     شخصيّةٍ للعميلة**. والاستعمالاتُ الحقيقيّةُ أربعةٌ: إثباتٌ مع
+    //     التقييمِ وثلاثُ شاشاتٍ إداريّة.
+    //   • المكتبة: «حفظ صور الفواتير الضريبية» — **ولا شيءَ يَكتبُ إلى
+    //     مكتبةِ الصور**؛ الفاتورةُ تُشارَكُ PDFاً.
+    // وهو نظيرُ سببِ الميكروفونِ الذي كان يُسمّي «تابي» بعد إزالتِها.
+    //
+    // ولكلِّ دعوى محظورةٍ **شاهدُ غيابٍ** يُفحَصُ هنا، فالحظرُ مُبرهَنٌ لا
+    // مزاجيّ؛ ولكلِّ مفتاحٍ كلمةٌ **مطلوبةٌ** تَربطُ النصَّ بالاستعمالِ القائم.
+    const banned = <String, List<List<String>>>{
+      // المفتاح: [[دعوى محظورة, شاهدُ غيابِها في lib/], …]
+      'NSCameraUsageDescription': [
+        ['QR', 'mobile_scanner'],
+        ['مسح', 'qr_code_scanner'],
+        ['الملف الشخصي', 'uploadProfilePhoto'],
+      ],
+      'NSPhotoLibraryUsageDescription': [
+        ['حفظ', 'image_gallery_saver'],
+        ['الفواتير', 'GallerySaver'],
+        ['ملفك الشخصي', 'uploadProfilePhoto'],
+      ],
+    };
+    const required = <String, List<String>>{
+      'NSCameraUsageDescription': ['تقييم', 'الإدارة'],
+      'NSPhotoLibraryUsageDescription': ['اختيار', 'الإدارة'],
+    };
+    final raw = File(_plist).readAsStringSync();
+    for (final key in banned.keys) {
+      final i = raw.indexOf('<key>$key</key>');
+      expect(i, greaterThan(-1), reason: 'لم يُوجَد $key');
+      final a = raw.indexOf('<string>', i);
+      final b = raw.indexOf('</string>', a);
+      expect(a, greaterThan(i));
+      final text = raw.substring(a + '<string>'.length, b);
+      for (final pair in banned[key]!) {
+        // الحظرُ مُبرهَنٌ: الميزةُ المذكورةُ غائبةٌ عن `lib/` فعلاً.
+        expect(lib.contains(pair[1]), isFalse,
+            reason: 'ظهرَ ${pair[1]} في lib/ — فالميزةُ وُلدت، '
+                'ويُراجَعُ حظرُ «${pair[0]}» لا يُطبَّق');
+        expect(text.contains(pair[0]), isFalse,
+            reason: '$key يَدّعي «${pair[0]}» ولا ميزةَ لها — '
+                'سؤالُ مراجعةٍ، ونصٌّ كاذبٌ في نافذةِ الإذن');
+      }
+      for (final must in required[key]!) {
+        expect(text.contains(must), isTrue,
+            reason: '$key لا يُسمّي الاستعمالَ القائم («$must»)');
+      }
+    }
+    // والمضادّة: شرحُ النصِّ القديمِ ما زال في الخامِّ حيث يُقرأ.
+    expect(raw.contains('QR Code'), isTrue,
+        reason: 'اختفى شرحُ الدعوى القديمةِ — فتُعادُ بلا علمٍ بسببِ زوالِها');
+  });
+
+  test('التباينُ المُعلَن: موقعُ الخلفيّةِ على iOS ولا نظيرَ له في أندرويد',
+      () {
     // ليس حُكماً — تثبيتُ الحالةِ القائمةِ كي يُراجَعَ أيُّ تغيُّرٍ فيها
     // بوعيٍ بنموذجِ إقرارِ Play الذي يَستلزمُه الطرفُ الآخر.
     expect(plist.contains('<string>location</string>'), isTrue,
