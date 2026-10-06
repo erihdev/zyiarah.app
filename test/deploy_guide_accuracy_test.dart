@@ -157,12 +157,29 @@ void main() {
           .toSet();
       expect(claimed.length, greaterThanOrEqualTo(4),
           reason: 'استخراجُ المساراتِ من README انهارَ — فحصٌ أجوف');
+      // **ومسارٌ يُعلِنُ README أنّه مُستثنى من git لا يُطالَبُ بوجوده**: هو
+      // موجودٌ على جهازِ المطوّرِ وغائبٌ في CI بالبناء. فشلَ هذا الفحصُ في CI
+      // وحدَه لذلك (`admin_panel/src/services/firebase.ts`) — ومرَّ محلّيّاً،
+      // وهو الفرقُ الذي يَجعلُ «نجحَ عندي» دعوى لا برهاناً. فالمُستثنى
+      // تُفحَصُ **دعواهُ** (أنّه في `.gitignore` فعلاً) لا وجودُه.
+      final ignored = File('.gitignore').readAsStringSync();
+      var checkedExisting = 0;
+      var checkedIgnored = 0;
       for (final path in claimed) {
+        if (ignored.contains(path)) {
+          checkedIgnored++;
+          continue;
+        }
         expect(File(path).existsSync(), isTrue,
             reason: 'README يُحيلُ إلى مسارٍ لا وجودَ له: $path');
+        checkedExisting++;
       }
-      expect(File('.gitignore').readAsStringSync(),
-          contains('admin_panel/src/services/firebase.ts'),
+      expect(checkedExisting, greaterThanOrEqualTo(3),
+          reason: 'لم يُفحَصْ وجودُ أيِّ مسار — فحصٌ أجوف');
+      expect(checkedIgnored, 1,
+          reason: 'عددُ المساراتِ المُستثناةِ من git التي يُسمّيها README تغيّرَ '
+              '($checkedIgnored) — يُراجَعُ بدلَ أن يَمرّ');
+      expect(ignored, contains('admin_panel/src/services/firebase.ts'),
           reason: 'README يَقولُ إنّه مُستثنى من git وهو ليس كذلك');
     });
 
