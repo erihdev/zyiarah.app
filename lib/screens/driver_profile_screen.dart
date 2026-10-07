@@ -39,11 +39,16 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
         ),
         body: uid == null
             ? const Center(child: Text('يرجى تسجيل الدخول'))
+            // **قراءةٌ لا تُنتظَرُ نصّاً**: وسيطُ `future:` ليس بعدَ `await`،
+            // فالمُستخرِجُ الذي كان يَرتكزُ على `await` لم يَرَها إطلاقاً.
+            // وفرعُ `hasError` أدناه («تعذّر تحميل الملف») لا يُرسَمُ بلا
+            // مهلة: مع ذاكرةٍ باردةٍ وخادمٍ غيرِ مبلوغ لا يَرمي `get()` بل
+            // يَنتظر، فتَبقى الدوّارةُ إلى الأبد.
             : FutureBuilder<DocumentSnapshot>(
                 future: FirebaseFirestore.instance
                     .collection('drivers')
                     .doc(uid)
-                    .get(),
+                    .get().timeout(kNetCallTimeout),
                 builder: (context, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());

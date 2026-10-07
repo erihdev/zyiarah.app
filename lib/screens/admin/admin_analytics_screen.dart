@@ -90,7 +90,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
             isGreaterThanOrEqualTo: Timestamp.fromDate(startOfLastMonth))
         .where('created_at', isLessThan: Timestamp.fromDate(startOfNextMonth))
         .orderBy('created_at', descending: true)
-        .get();
+        .get().timeout(kNetCallTimeout);
 
     double thisMonthRevenue = 0;
     double lastMonthRevenue = 0;

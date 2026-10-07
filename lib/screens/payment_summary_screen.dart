@@ -173,9 +173,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     if (user != null) {
       final List<DocumentSnapshot<Map<String, dynamic>>> results;
       try {
+        // **المهلةُ على عنصرٍ واحدٍ من `Future.wait` لا تَحمي شيئاً.** كانت
+        // قراءةُ `users` مُؤقَّتةً والثانيةُ عاريةً، و`Future.wait` لا تَكتمِلُ
+        // إلّا باكتمالِ **كلِّ** عناصرِها — فالعاريةُ تُبطِلُ مهلةَ أختِها
+        // تماماً: مع `persistenceEnabled` وذاكرةٍ باردة لا تَرمي بل تَنتظر،
+        // فيَبقى `_currentUser` فارغاً ويَبقى كلُّ زرِّ دفعٍ خلفَ «جارٍ تحميل
+        // بيانات حسابك» إلى الأبد — وهو العطلُ بعينِه الذي يَشرحُه `catch`
+        // أدناه، مفتوحاً من داخلِ إصلاحِه.
         results = await Future.wait([
           FirebaseFirestore.instance.collection('users').doc(user.uid).get().timeout(kNetCallTimeout),
-          FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get(),
+          FirebaseFirestore.instance.collection('system_configs').doc('main_settings').get().timeout(kNetCallTimeout),
         ]);
       } catch (e) {
         // فشل جلب المستخدم/الإعدادات (شبكة عابرة) كان بلا التقاط: يبقى

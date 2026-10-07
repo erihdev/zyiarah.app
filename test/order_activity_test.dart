@@ -224,10 +224,14 @@ void main() {
     });
 
     test('عدُّ العقودِ `count()` بلا حقلٍ مُجمَّع فلا فهرسَ مركّباً', () {
-      // الجملةُ وحدَها حتّى `.get());` — نافذةٌ بعدِّ الأحرفِ كانت تَبتلعُ
-      // الاستعلامَ التالي (وفيه `orderBy`) فتَسقطُ بلا سبب.
+      // الجملةُ وحدَها، حتّى فاصلتِها المنقوطة. وقعَ فخُّ الحدِّ هنا
+      // **مرّتَين**: نافذةُ عدِّ أحرفٍ أوّلاً — كانت تَبتلعُ الاستعلامَ التالي
+      // (وفيه `orderBy`) فتَسقطُ بلا سبب — ثمّ حدٌّ بنصٍّ حرفيٍّ هو `.get());`،
+      // وأبطلَه إلحاقُ `.timeout(kNetCallTimeout)` بالقراءةِ نفسِها فعادت
+      // الشريحةُ تَتجاوزُ الجملةَ إلى تاليتِها. والحدُّ الآن **بنيويّ**: نهايةُ
+      // الجملةِ لا شكلُ آخرِ نداءٍ فيها.
       final i = insights.indexOf("collection('contracts')");
-      final block = insights.substring(i, insights.indexOf('.get());', i) + 8);
+      final block = insights.substring(i, insights.indexOf(';', i) + 1);
       expect(block.contains('.count()'), isTrue);
       expect(block.contains('orderBy'), isFalse,
           reason: 'ترتيبٌ فوقَ مساواةٍ يَطلبُ فهرساً مركّباً');

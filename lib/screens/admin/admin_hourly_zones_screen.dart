@@ -355,7 +355,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
     // rank عبر num: لو خُزّن double يوماً (لوحة الويب) لا ينفجر الحوار.
     // مصدر القائمة المنسدلة «نسخ الأسعار من»: يُجلب مرة عند فتح الحوار.
     final Future<QuerySnapshot<Map<String, dynamic>>> zonesFuture =
-        _db.collection('service_zones').get();
+        _db.collection('service_zones').get().timeout(kNetCallTimeout);
     String? copiedFromId;
     // ترميز الاسم المكتوب إلى موقع — مؤجَّل كي لا نستعلم عند كل حرف.
     Timer? nameDebounce;

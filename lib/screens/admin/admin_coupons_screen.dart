@@ -443,11 +443,18 @@ class _AdminCouponsScreenState extends State<AdminCouponsScreen> {
                         if (doc == null) {
                           // (تحسين من الويب) منع تكرار الكود: كوبونان بنفس الكود
                           // يكسران تحقّق العميل من الكود. نرفض الإضافة إن وُجد مطابق.
+                          //
+                          // والمهلةُ هنا **ليست قراراً جديداً**: توأمُ هذا
+                          // الفحصِ في مسارِ التعديلِ أدناه — على بُعدِ واحدٍ
+                          // وعشرينَ سطراً، بالسؤالِ نفسِه على المجموعةِ
+                          // نفسِها — يَحملُها منذ البداية. فالفارقُ كان سهواً
+                          // لا تمييزاً، وهو ما يُثبِتُ أنّ الخللَ في كاشفِ
+                          // الحارسِ لا في حكمٍ اتُّخذ.
                           final dup = await _db
                               .collection('promo_codes')
                               .where('code', isEqualTo: newData['code'] as String)
                               .limit(1)
-                              .get();
+                              .get().timeout(kNetCallTimeout);
                           if (dup.docs.isNotEmpty) {
                             setDialogState(() {
                               isSaving = false;

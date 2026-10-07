@@ -14,6 +14,7 @@ import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/order_activity.dart';
 import 'package:zyiarah/utils/order_lifecycle.dart';
 import 'package:zyiarah/utils/home_packages.dart';
+import '../../utils/net_timeout.dart';
 
 class AdminInsightsScreen extends StatefulWidget {
   // الدور يصل من AdminDashboardScreen (مطبَّع: admin→super_admin) — نحتاجه لتخطي
@@ -68,18 +69,18 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       // (خدمة الصيانة حُذفت من الجذور — لم نعد نجلب maintenance_requests: بقاياها
       // اليتيمتان under_review كانتا تُضخّمان «طلبات نشطة» وترسمان شريحة «صيانة»
       // وهمية للأبد. القائمة تبقى فارغة فتصفر كل مشتقاتها تلقائياً.)
-      final ordersF     = guarded(db.collection('orders').orderBy('created_at', descending: true).limit(500).get());
+      final ordersF     = guarded(db.collection('orders').orderBy('created_at', descending: true).limit(500).get().timeout(kNetCallTimeout));
       // عملاء فقط: مجموعة users تضمّ سائقين وإداريين (يُكتبون فيها أيضاً)، فعدّها كاملةً
       // كان يضخّم «إجمالي العملاء». (حسابات العملاء تُكتب بـ role='client'.)
-      final usersF      = guarded(db.collection('users').where('role', isEqualTo: 'client').count().get());
-      final driversF    = guarded(db.collection('drivers').limit(200).get());
+      final usersF      = guarded(db.collection('users').where('role', isEqualTo: 'client').count().get().timeout(kNetCallTimeout));
+      final driversF    = guarded(db.collection('drivers').limit(200).get().timeout(kNetCallTimeout));
       // عدٌّ خادميٌّ (لا جلبُ مستندات): القواعدُ تُجيزُ قراءةَ العقودِ لكلِّ
       // الأدوارِ الإداريّة (`isAdmin`)، ومساواةٌ واحدةٌ بلا ترتيبٍ فلا فهرسَ
       // مركّباً تَحتاجُه (`count()` بلا حقلٍ مُجمَّع — راجع بطاقةَ الإيرادات).
       final contractsF  = guarded(db.collection('contracts')
-          .where('status', isEqualTo: 'pending').count().get());
+          .where('status', isEqualTo: 'pending').count().get().timeout(kNetCallTimeout));
       final storeF      = canReadStore
-          ? guarded(db.collection('store_orders').orderBy('created_at', descending: true).limit(500).get())
+          ? guarded(db.collection('store_orders').orderBy('created_at', descending: true).limit(500).get().timeout(kNetCallTimeout))
           : Future<QuerySnapshot<Map<String, dynamic>>?>.value(null);
 
       final ordersSnap      = await ordersF;

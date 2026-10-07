@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/screens/admin/admin_order_details_screen.dart';
 import 'package:zyiarah/utils/home_packages.dart';
+import '../../utils/net_timeout.dart';
 
 class AdminSearchScreen extends StatefulWidget {
   // الدور يصل من AdminDashboardScreen (مطبَّع: admin→super_admin) — قواعد Firestore
@@ -75,20 +76,20 @@ class _AdminSearchScreenState extends State<AdminSearchScreen> with SingleTicker
       // Parallel searches
       final results = await Future.wait([
         // 1. Regular Orders (Cleaning/Services) - Search by Code
-        guarded(db.collection('orders').where('code', isGreaterThanOrEqualTo: qUpper).where('code', isLessThanOrEqualTo: '$qUpper\uf8ff').limit(15).get()),
+        guarded(db.collection('orders').where('code', isGreaterThanOrEqualTo: qUpper).where('code', isLessThanOrEqualTo: '$qUpper\uf8ff').limit(15).get().timeout(kNetCallTimeout)),
         // 2. Store Orders - Search by Code (\u0642\u0631\u0627\u0621\u062a\u0647\u0627 \u0645\u062d\u0635\u0648\u0631\u0629 \u0628\u0627\u0644\u0642\u0648\u0627\u0639\u062f \u0641\u064a \u0645\u062f\u064a\u0631\u064a \u0627\u0644\u0637\u0644\u0628\u0627\u062a \u2014
         // \u0646\u062a\u062e\u0637\u0627\u0647\u0627 \u0644\u0644\u0623\u062f\u0648\u0627\u0631 \u0627\u0644\u0623\u062e\u0631\u0649 \u0628\u062f\u0644 \u0627\u0633\u062a\u0639\u0644\u0627\u0645\u064d \u0645\u062d\u0643\u0648\u0645\u064d \u0639\u0644\u064a\u0647 \u0628\u0640 permission-denied)
         _canReadStore
-            ? guarded(db.collection('store_orders').where('code', isGreaterThanOrEqualTo: qUpper).where('code', isLessThanOrEqualTo: '$qUpper\uf8ff').limit(15).get())
+            ? guarded(db.collection('store_orders').where('code', isGreaterThanOrEqualTo: qUpper).where('code', isLessThanOrEqualTo: '$qUpper\uf8ff').limit(15).get().timeout(kNetCallTimeout))
             : Future<QuerySnapshot<Map<String, dynamic>>?>.value(null),
         // 3. Maintenance Requests - Search by Code
-        guarded(db.collection('maintenance_requests').where('code', isGreaterThanOrEqualTo: qUpper).where('code', isLessThanOrEqualTo: '$qUpper\uf8ff').limit(15).get()),
+        guarded(db.collection('maintenance_requests').where('code', isGreaterThanOrEqualTo: qUpper).where('code', isLessThanOrEqualTo: '$qUpper\uf8ff').limit(15).get().timeout(kNetCallTimeout)),
         // 4. Users - Search by Name
-        guarded(db.collection('users').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(15).get()),
+        guarded(db.collection('users').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(15).get().timeout(kNetCallTimeout)),
         // 5. Products - Search by Name
-        guarded(db.collection('products').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(15).get()),
+        guarded(db.collection('products').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(15).get().timeout(kNetCallTimeout)),
         // 6. Drivers - Search by Name
-        guarded(db.collection('drivers').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(15).get()),
+        guarded(db.collection('drivers').where('name', isGreaterThanOrEqualTo: q).where('name', isLessThanOrEqualTo: '$q\uf8ff').limit(15).get().timeout(kNetCallTimeout)),
       ]);
 
       if (mounted) {
