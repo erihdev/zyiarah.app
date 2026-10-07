@@ -102,6 +102,51 @@ void main() {
       );
     });
 
+    test('ما تَدّعيه الوثيقةُ عن CI يُقرَأُ من ci.yml', () {
+      // كُتبَ هنا يوماً أنّ «المجموعةَ ليست في CI أصلاً (وظيفةُ Cloud
+      // Functions Tests تُشغّلُ npm test لا test:emulator)» — **وهو خطأٌ
+      // يومَ كُتب**: الخطوةُ أُضيفت قبلَ الدعوى بسبعِ ساعات. ودعوى كهذه
+      // يَتصرّفُ عليها القارئُ (وظيفةٌ مكرَّرة، أو ظنُّ أنّ القواعدَ غيرُ
+      // مَحروسةٍ على الدمج)، فصارت تُقرَأُ من مصدرِها.
+      final doc = _read(_doc);
+      final ci = _read('.github/workflows/ci.yml');
+      // (أ) ما تَدّعيه الوثيقةُ عن تشغيلِ المُحاكي يَجبُ أن يُطابقَ الواقع.
+      final runsEmulator = ci.contains('test:emulator');
+      expect(runsEmulator, isTrue,
+          reason: 'لم تَعُدْ CI تُشغّلُ فحوصَ المُحاكي — فالقواعدُ بلا حارسٍ '
+              'على الدمج، ويَجبُ أن تَقولَ الوثيقةُ ذلك صراحة');
+      // الدعوى مسموحةٌ **مُقتَبَسةً** (في سياقِ تصحيحِها) لا مُدَّعاة.
+      // والاختبارُ **احتواءٌ لا بادئة**: أوّلُ صياغةٍ نظرت حرفَين إلى الوراء
+      // فلم تَرَ `«` لأنّها قبلَ كلمةٍ أخرى من الاقتباس — وهو درسُ «الحجبُ
+      // بالحالةِ لا بالبادئة» المسجَّلُ هنا في تعليقاتِ XML وJSX.
+      bool insideQuote(String text, int at) {
+        final o = text.lastIndexOf('«', at);
+        final c = text.lastIndexOf('»', at);
+        return o > c;
+      }
+      for (final lie in ['المجموعةُ ليست في CI', 'ليست في CI أصلاً']) {
+        for (final m in RegExp(RegExp.escape(lie)).allMatches(doc)) {
+          expect(insideQuote(doc, m.start), isTrue,
+              reason: 'الوثيقةُ تَقولُ «$lie» دعوى، وCI تُشغّلُها فعلاً');
+        }
+      }
+      // (ب) وكلُّ ملفٍّ في `test:emulator` موجودٌ فعلاً — فقائمةٌ تَذكرُ
+      //     ملفّاً زائلاً تَجعلُ الوظيفةَ تَفشلُ على كلِّ دمج.
+      final pkg = File('functions/package.json').readAsStringSync();
+      final line = RegExp(r'"test:emulator"\s*:\s*"([^"]+)"').firstMatch(pkg);
+      expect(line, isNotNull, reason: 'سكربتُ المُحاكي اختفى');
+      final files = RegExp(r'node (test/[\w.]+\.js)')
+          .allMatches(line!.group(1)!)
+          .map((m) => m.group(1)!)
+          .toList();
+      expect(files.length, greaterThanOrEqualTo(4),
+          reason: 'انهارَ استخراجُ ملفّاتِ المُحاكي');
+      for (final f in files) {
+        expect(File('functions/$f').existsSync(), isTrue,
+            reason: 'functions/$f مذكورٌ في test:emulator ولا وجودَ له');
+      }
+    });
+
     test('لا تُدرَج خدمة السعة الميتة كخدمة عاملة', () {
       final doc = _read(_doc);
 
