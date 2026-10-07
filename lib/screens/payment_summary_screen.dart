@@ -1073,7 +1073,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           'orderId': widget.contractId ?? id,
         }).timeout(kNetCallTimeout);
         // (#1) الخادم حجب الطلب لدفعٍ ناقص صارخ (Tier B) وأعاد المبلغ — لا نتابع للنجاح.
-        // مطفأ فعليّاً ما دام ENFORCE_PRICE_TIER_B=false خادميّاً، لكنه العقد الجاهز للتفعيل.
+        //
+        // **وكان هنا «مطفأ فعليّاً ما دام ENFORCE_PRICE_TIER_B=false خادميّاً،
+        // لكنه العقد الجاهز للتفعيل» — والعلَمُ `true` بقرارِ المالك
+        // 2026-07-31 (`functions/index.js`).** فالفرعُ **حيٌّ**، ومَن يَقرأُ
+        // الزعمَ يَحسبُه ميّتاً فيَحذفُه — وهو الشيءُ الوحيدُ في العميلِ
+        // الذي يَمنعُ شاشةَ «تم استلام طلبك بنجاح» فوقَ دفعةٍ أُلغيت أو
+        // أُعيدت. والزعمُ نفسُه كان خادميّاً كذلك فصُحِّحَ هناك وبقيَ هنا:
+        // «قاعدةٌ عامّةٌ مُنفَّذةٌ في سطحٍ واحد» واقعةً على التوثيق، وحارسُه
+        // `price_verify.test.js (٢٣)` كان يَقرأُ `index.js` وحدَه — ويَمسحُ
+        // المستودعَ كلَّه الآن.
         final vdata = vres.data;
         if (vdata is Map && vdata['blocked'] == true) {
           if (mounted) {

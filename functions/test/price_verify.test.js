@@ -331,6 +331,56 @@ function fakeDb({byId = {}, byName = {}} = {}) {
         "فلو أُطفئت فعلاً فهذا الفحصُ هو ما يُراجَع");
     assert.ok(idx.includes("فُعّلت بقرار المالك (2026-07-31)"),
         "سندُ القرارِ في رأسِ الملفّ ما زال");
+
+    // **والنطاقُ المستودعُ كلُّه، لا هذا الملفَّ (2026-10-07).** الزعمُ
+    // صُحِّحَ هنا وبقيَ **نسخةٌ ثانيةٌ** في العميل: تعليقٌ في
+    // `payment_summary_screen` يَقولُ «مطفأ فعليّاً ما دام
+    // ENFORCE_PRICE_TIER_B=false خادميّاً» فوقَ الفرعِ الذي يَقرأُ
+    // `blocked` — وهو الشيءُ الوحيدُ في العميلِ الذي يَمنعُ شاشةَ النجاحِ
+    // فوقَ دفعةٍ أُلغيت. فمَن يَقرأُ الزعمَ يَحسبُ الفرعَ ميّتاً فيَحذفُه.
+    // «حارسٌ ضيّقٌ وقاعدةٌ عامّة» للمرّةِ الثامنةِ هنا — فالقيمةُ **تُشتَقُّ**
+    // من `index.js` وكلُّ ذاكرٍ للعلَمِ في أيِّ لغةٍ يَجبُ أن يُوافقَها.
+    const flag = /const ENFORCE_PRICE_TIER_B = (true|false);/.exec(code);
+    assert.ok(flag, "تعريفُ العلَمِ اختفى — لا قيمةَ تُشتَقّ");
+    const stale = flag[1] === "true" ?
+      /ENFORCE_PRICE_TIER_B\s*=?=?\s*false/ :
+      /ENFORCE_PRICE_TIER_B\s*=?=?\s*true/;
+    const scanned = [];
+    const walk = (dir) => {
+      for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
+        const fp = path.join(dir, e.name);
+        if (e.isDirectory()) {
+          if (["node_modules", "build", ".git", ".dart_tool"].includes(e.name)) continue;
+          walk(fp);
+        } else if (/\.(dart|js|ts|tsx)$/.test(e.name) && !/\.test\./.test(e.name) &&
+                   !/_test\.dart$/.test(e.name)) {
+          const src = fs.readFileSync(fp, "utf8");
+          if (!src.includes("ENFORCE_PRICE_TIER_B")) continue;
+          scanned.push(fp);
+          // الزعمُ المعاكسُ مسموحٌ **مُقتَبَساً** في سياقِ تصحيحِه (بين «…»)
+          // ومنفيّاً. فالمقياسُ: كلُّ وِرْدٍ للصيغةِ المعاكسةِ يَجبُ أن
+          // يَسبقَه `«` أقربُ من `»` — حجبٌ بالحالةِ لا بالبادئة، كما في
+          // تعليقاتِ XML وJSX المسجَّلةِ هنا.
+          for (const m of src.matchAll(new RegExp(stale.source, "g"))) {
+            const o = src.lastIndexOf("«", m.index);
+            const c = src.lastIndexOf("»", m.index);
+            assert.ok(o > c,
+                `${fp}: يَزعمُ أنّ العلَمَ ${flag[1] === "true" ? "مطفأ" : "مُفعَّل"} ` +
+                "وقيمتُه في index.js تَقولُ خلافَ ذلك");
+          }
+        }
+      }
+    };
+    walk(path.join(__dirname, "..", ".."));
+    assert.ok(scanned.length >= 3,
+        `انهارَ المسحُ: ${scanned.length} ملفّاً يَذكرُ العلَم`);
+    // ومَن يَقرأُ `blocked` في العميلِ ما زال قائماً — فالزعمُ المُصحَّحُ
+    // يَحرُسُ فرعاً حقيقيّاً لا تعليقاً معلّقاً في الهواء.
+    const pay = fs.readFileSync(path.join(__dirname, "..", "..",
+        "lib", "screens", "payment_summary_screen.dart"), "utf8");
+    assert.ok(/\['blocked'\]\s*==\s*true/.test(pay),
+        "فرعُ الحجبِ في العميلِ زالَ — فلا شيءَ يَمنعُ شاشةَ النجاحِ فوقَ " +
+        "دفعةٍ أُلغيت، ويُراجَعُ هذا الفحصُ لا يُسكَت");
   });
 
   // ─────── وطلبُ المتجرِ كان بلا تحقّقٍ من أيِّ نوع ───────
