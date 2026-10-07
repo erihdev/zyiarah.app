@@ -224,4 +224,105 @@ void main() {
               '${written.difference(allowed)}');
     });
   });
+  // ── وثيقةُ التذكرةِ نفسُها: حقلانِ لا غير (2026-10-07) ──
+  //
+  // الرسالةُ أُحكِمت أعلاه، **والوثيقةُ الأمُّ بَقيت مفتوحةَ الحقولِ
+  // لصاحبتِها**: شرطُ `request.auth.uid == resource.data.userId` يَقرأُ
+  // المستندَ القائمَ فمِلكيّتُها اليومَ ثابتةٌ، و`request.resource` (الجديدُ)
+  // بلا قيدٍ إطلاقاً. وما تَكتبُه الشاشةُ حقلانِ: `status: 'open'`
+  // و`updatedAt` عند إرسالِ ردِّها.
+  //
+  // فالمفتوحُ بالفارقِ كان `userEmail` — وهو ما يَقرؤه الأدمنُ **هُويّةَ
+  // المشتكية** («من: …») ويَبحثُ به في السطحَين — و`userId` (نقلُ التذكرةِ
+  // إلى uid آخرَ بعد إنشائها) و`status` (ضبطُه `resolved` يُخرِجُ الشكوى من
+  // تبويبِ «النشطة» `['open','replied']`) و`subject`/`lastMessage`.
+  // (ولا ترحيلَ بريدٍ خلفَه: صفرُ قراءةٍ لـ`userEmail` في `functions/`
+  // — فالأثرُ تضليلُ الدعمِ لا إرسالٌ من نطاقِنا؛ وفحصٌ أدناه يُبقي ذلك
+  // التعليلَ مقروءاً.)
+  group('firestore.rules — وثيقةُ التذكرة', () {
+    final rules = File('firestore.rules').readAsStringSync();
+    final int i = rules.indexOf('match /support_tickets/{ticketId}');
+    final int j = rules.indexOf('match /messages/{messageId}', i);
+    final String block = (i < 0 || j < 0) ? '' : rules.substring(i, j);
+
+    test('تحديثُ العميلةِ مقيَّدٌ بمجموعةِ الحقولِ وبقيمةِ الحالة', () {
+      expect(block.isNotEmpty, isTrue,
+          reason: 'كتلةُ support_tickets اختفت أو انقلبَ ترتيبُها');
+      expect(block.contains('allow update: if isAdmin() ||'), isTrue,
+          reason: 'الإداريُّ يَجبُ أن يَبقى بلا قيد');
+      expect(block.contains('affectedKeys()'), isTrue,
+          reason: 'التحديثُ بلا تقييدِ حقول — `userEmail` و`userId` مفتوحان');
+      expect(block.contains("request.resource.data.status == 'open'"), isTrue,
+          reason: 'العميلةُ تَستطيعُ إخراجَ شكواها من تبويبِ النشطة');
+      // والقراءةُ فُصِلت عن التحديث: `allow read, update` واحدةً كانت تَعني
+      // أنّ تقييدَ الحقولِ يُقيّدُ القراءةَ أيضاً.
+      expect(block.contains('allow read: if isLoggedIn()'), isTrue,
+          reason: 'قراءةُ صاحبةِ التذكرةِ انكسرت مع التقييد');
+    });
+
+    test('ومجموعةُ الحقولِ المسموحةِ = ما تَكتبُه الشاشةُ فعلاً', () {
+      // شكلُ حادثةِ `invoice_pdf_status`: حقلٌ جديدٌ في الشاشةِ بلا تعديلِ
+      // القاعدةِ يُرفَضُ **التحديثُ كلُّه** — فيَسقطُ هنا لا عند العميلة.
+      final m = RegExp(r"hasOnly\(\[([^\]]*)\]\)").firstMatch(block);
+      expect(m, isNotNull, reason: 'لا hasOnly في كتلةِ الوثيقة');
+      final allowed = RegExp(r"'([a-zA-Z_]+)'")
+          .allMatches(m!.group(1)!)
+          .map((x) => x.group(1)!)
+          .toSet();
+
+      final src = File('lib/screens/support_screen.dart').readAsStringSync();
+      final written = <String>{};
+      int scanned = 0;
+      for (final mm in RegExp(
+              r"collection\('support_tickets'\)[\s\S]{0,120}?\.update\(\{")
+          .allMatches(src)) {
+        final open = src.indexOf('{', mm.end - 1);
+        int depth = 0, end = -1;
+        for (int k = open; k < src.length; k++) {
+          if (src[k] == '{') depth++;
+          if (src[k] == '}') {
+            depth--;
+            if (depth == 0) {
+              end = k;
+              break;
+            }
+          }
+        }
+        if (end < 0) continue;
+        scanned++;
+        written.addAll(RegExp(r"'([a-zA-Z_]+)'\s*:")
+            .allMatches(src.substring(open, end))
+            .map((x) => x.group(1)!));
+      }
+      expect(scanned, greaterThan(0),
+          reason: 'لم تُستخرَج أيُّ كتابةٍ على الوثيقة — فحصٌ أجوف');
+      expect(written.difference(allowed), isEmpty,
+          reason: 'الشاشةُ تَكتبُ حقلاً تَرفضُه القاعدةُ فيُرفَضُ التحديثُ '
+              'كلُّه: ${written.difference(allowed)}');
+      expect(allowed.difference(written), isEmpty,
+          reason: 'القاعدةُ تُجيزُ حقلاً لا تَكتبُه الشاشة: '
+              '${allowed.difference(written)}');
+    });
+
+    test('والتعليلُ مأخوذٌ من الشفرة: `userEmail` هُويّةٌ تُقرَأُ ولا تُرسَلُ', () {
+      // (أ) الأدمنُ يَقرؤه هُويّةَ المشتكية في السطحَين.
+      final panel =
+          File('admin_panel/src/pages/Support.tsx').readAsStringSync();
+      final appAdmin =
+          File('lib/screens/admin/admin_support_screen.dart').readAsStringSync();
+      expect(panel.contains('userEmail'), isTrue,
+          reason: 'اللوحةُ لم تَعُدْ تَقرأُ userEmail — يُراجَعُ التعليل');
+      expect(appAdmin.contains("'userEmail'"), isTrue,
+          reason: 'شاشةُ الإدارةِ لم تَعُدْ تَقرأُ userEmail');
+      // (ب) ولا يُرسَلُ إليه بريد — فالأثرُ تضليلٌ لا ترحيل. لو صارَ مُرسَلاً
+      //     إليه فالخطرُ يَرتفعُ ويُراجَعُ هذا المدخلُ لا يُسكَت.
+      final fns = File('functions/index.js').readAsStringSync();
+      expect(fns.contains('userEmail'), isFalse,
+          reason: 'الخادمُ صارَ يَقرأُ userEmail — إن كان وجهةَ بريدٍ '
+              'فالثغرةُ ترحيلُ بريدٍ لا تضليلاً، فيُراجَعُ التعليلُ والقاعدة');
+      // (ج) وتبويبُ «النشطة» ما زال يُقصي `resolved` — وهو سببُ تثبيتِ القيمة.
+      expect(appAdmin.contains("['open', 'replied']"), isTrue,
+          reason: 'تبويبُ النشطةِ تغيّر — يُراجَعُ تثبيتُ `status == open`');
+    });
+  });
 }
