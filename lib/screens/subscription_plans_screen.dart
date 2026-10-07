@@ -551,7 +551,7 @@ class _ZyiarahSubscriptionPlansScreenState
           const SizedBox(width: 14),
           Expanded(
             child: Text(
-              'اختاري الباقة المناسبة لعائلتك. سيتم توجيه طلبك للإدارة للموافقة عليه قبل توقيع العقد الإلكتروني.',
+              'اختاري الباقة المناسبة لعائلتك. توقّعين العقد إلكترونيّاً، ثمّ تعتمده الإدارة، ثمّ تُسدّدين لتفعيل الباقة.',
               style: GoogleFonts.tajawal(fontSize: 13, height: 1.5, color: Colors.blueGrey[700]),
             ),
           ),
