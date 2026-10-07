@@ -16,6 +16,7 @@ import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/invoice_stamp.dart';
 import '../utils/env.dart';
+import 'package:zyiarah/utils/user_facing_error.dart';
 
 /// شاشة دفع طلب المتجر — تُفتح فور إنشاء الطلب (طلب مباشر، لا موافقة مسبقة).
 /// طرق الدفع المعتمدة: ميسر (بطاقة) + تمارا. لا دفع عند الاستلام — أُزيل من الجذور.
@@ -212,11 +213,18 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
             customerName: widget.customerName,
           );
         } catch (e) {
+          // كان يَطبعُ الاحتياطيَّ العامَّ **أيّاً كان** ما قالَه الخادم، فسببٌ
+          // عربيٌّ مكتوبٌ لها («يجب تسجيل الدخول أولاً»، «بيانات الطلب ناقصة»)
+          // يُطرَحُ ويُقال لها «أعيدي المحاولة» — وهي لا تَعرفُ ماذا تُصلِح.
+          // والاحتياطيُّ يَبقى لِما لا سببَ له، وسطرُ الشبكةِ يَسبقُه إن كان
+          // الانقطاعُ هو السبب.
           if (mounted) {
             setState(() => _isLoading = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('تعذّر بدء الدفع بالتقسيط — أعيدي المحاولة أو اختاري طريقةً أخرى')),
-            );
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(userFacingError(e,
+                  fallback: 'تعذّر بدء الدفع بالتقسيط — أعيدي المحاولة '
+                      'أو اختاري طريقةً أخرى')),
+            ));
           }
           return;
         }

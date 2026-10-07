@@ -877,7 +877,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             ),
           );
         } else {
-          throw Exception('خطأ في بدء جلسة تمارا');
+          // موسومٌ (`UserFacingFailure`) كي يَصِلَها السطرُ عبرَ
+          // `GlobalErrorHandler` بدلَ «حدث خطأ غير متوقع».
+          throw const TamaraCheckoutFailure(
+              'تعذّر بدء الدفع بالتقسيط — أعيدي المحاولة أو اختاري '
+              'طريقةً أخرى');
         }
 
       } else if (_selectedPaymentMethod == 'card') {

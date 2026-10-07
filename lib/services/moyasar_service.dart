@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:zyiarah/utils/moyasar_util.dart';
 import 'package:zyiarah/utils/error_report.dart';
 import '../utils/env.dart';
+import 'package:zyiarah/utils/user_facing_error.dart';
 
 /// Moyasar payment gateway service.
 /// - Credit Card / Apple Pay / STC Pay → handled by Moyasar Flutter SDK (no code here)
@@ -25,8 +26,9 @@ import '../utils/env.dart';
 /// (نفسُ قرارِ Apple/Samsung Pay المكتوبِ في `payment_summary_screen`). وما
 /// لم تُسجَّلْ — أو ما لا نَعرفُ نتيجتَه — يُبقي المعرّفَ، منعاً للشحنِ
 /// المزدوج.
-class MoyasarPayFailure implements Exception {
+class MoyasarPayFailure implements UserFacingFailure {
   /// سطرٌ عربيٌّ يُعرَضُ كما هو.
+  @override
   final String message;
 
   /// هل أنشأت ميسر دفعةً فعلاً (فاستُهلك `given_id`)؟

@@ -19,6 +19,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/qatrat.dart';
 import 'package:zyiarah/utils/wallet_deletion_notice.dart';
+import 'package:zyiarah/utils/user_facing_error.dart';
 
 class ZyiarahProfileScreen extends StatefulWidget {
   const ZyiarahProfileScreen({super.key});
@@ -226,9 +227,15 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
       // نعرض سبب الخادم كما هو («نقاطك غير كافية»…). كان يُبتلع في الخدمة ويُستبدل
       // بـ«تحتاج 50 نقطة على الأقل» — رسالة خاطئة: الزر لا يعمل أصلاً دون 50 نقطة،
       // فالمستخدمة تملكها ويُقال لها إنها لا تملكها.
+      //
+      // وكان `e.message ??` **بلا فحصِ عربيّة**: رسائلُ المنصّةِ نفسِها
+      // (`internal`، `deadline-exceeded`) إنجليزيّةٌ، فتُطبَعُ خامّةً في شريطٍ
+      // عربيّ — وهو العطلُ الذي يَحرُسُه `net_timeout_guard_test`. القرارُ في
+      // `userFacingError` مرّةً واحدةً، والاحتياطيُّ هو نفسُه.
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e.message ?? 'تعذّر الاستبدال، حاولي مجدداً',
+          content: Text(
+              userFacingError(e, fallback: 'تعذّر الاستبدال، حاولي مجدداً'),
               style: GoogleFonts.tajawal()),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
