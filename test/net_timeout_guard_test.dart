@@ -214,6 +214,19 @@ int _bareCallableCalls(String src) {
   return n;
 }
 
+/// نداءاتُ المصادقةِ التي تَعبُرُ الشبكةَ — مباشرةً أو عبرَ الخدمة.
+///
+/// `signOut` **ليست منها بقصد**: محلّيّةٌ تَمسحُ الرمزَ وتَنتهي بلا شبكة،
+/// فمهلةٌ عليها حلٌّ لمشكلةٍ لا وجودَ لها (ولو تَعلَّقت فمعناها «لا نعرف
+/// أهل خرجتِ» — قرارٌ آخر، كـ`_statefulCalls`).
+const List<String> kAuthNetCalls = [
+  'signInWithRealEmailAndPassword',
+  'signUpWithRealEmailAndPassword',
+  'signInWithEmailAndPassword',
+  'createUserWithEmailAndPassword',
+  'sendPasswordResetEmail',
+];
+
 void main() {
   test('الكاشفُ نفسُه يُختبَرُ كالشفرة — الأشكالُ الثلاثةُ التي أعمَت النمطَ', () {
     // النمطُ القديمُ (`await` + ١٨٠ حرفاً) أفلتَ منه ٭كلُّ٭ موضعٍ من التسعةَ
@@ -365,14 +378,65 @@ void main() {
     expect('_loadReferralCode(uid);'.allMatches(src).length, 1);
   });
 
+
   test('المصادقة لها مهلة ورسالةٌ عند انقضائها', () {
-    for (final p in ['lib/screens/login_screen.dart', 'lib/screens/signup_screen.dart']) {
-      final src = _code(p);
-      expect(src.contains('.timeout(kAuthTimeout)'), isTrue,
-          reason: '$p: نداءُ المصادقة بلا مهلة — الزرُّ يبقى دوّاراً بلا مخرج');
-      expect(src.contains('on TimeoutException'), isTrue,
-          reason: '$p: المهلةُ بلا فرعٍ يُخبر المستخدمَ تساوي رسالةً عامّة مبهمة');
+    // **كان هذا الفحصُ مشدوداً إلى ملفَّين بأسمائهما وقاعدتُه عامّة
+    // (2026-10-07)** — «حارسٌ ضيّقٌ وقاعدةٌ عامّة» للمرّةِ التاسعةِ هنا.
+    // فنجا `forgot_password_screen`: `FirebaseAuth.instance
+    // .sendPasswordResetEmail` **بلا مهلة**، فإن بدا الاتّصالُ قائماً
+    // والحزمُ لا تَنفُذ بَقي الزرُّ دوّاراً إلى الأبدِ بلا رسالةٍ ولا مخرج.
+    // والدليلُ **مسحُ المصدر**: ثمانيةُ نداءاتِ مصادقةٍ في `lib/`،
+    // مُمهَلانِ اثنانِ وستّةٌ بلا مهلة.
+    //
+    // فالنطاقُ **مُشتَقٌّ**: كلُّ ملفٍّ في `lib/screens/**` يُنادي نداءَ
+    // مصادقةٍ يَعبُرُ الشبكةَ يَجبُ أن يُمهِلَه وأن يَكونَ له فرعٌ يُخبرُها.
+    final offenders = <String>[];
+    final scanned = <String>[];
+    for (final f in Directory('lib/screens')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.dart'))) {
+      final src = _code(f.path);
+      final calls = kAuthNetCalls.where((c) => src.contains('$c(')).toList();
+      if (calls.isEmpty) continue;
+      scanned.add(f.path);
+      if (!src.contains('.timeout(kAuthTimeout)')) {
+        offenders.add('${f.path} (${calls.join(", ")}): بلا مهلة');
+      } else if (!src.contains('on TimeoutException')) {
+        offenders.add('${f.path}: مهلةٌ بلا فرعٍ يُخبرُ المستخدم');
+      }
     }
+    expect(scanned.length, greaterThanOrEqualTo(3),
+        reason: 'انهارَ المسح: ${scanned.length} شاشةَ مصادقة');
+    expect(scanned, contains('lib/screens/forgot_password_screen.dart'),
+        reason: 'الشاشةُ التي كشفت العطلَ خرجت من النطاق');
+    expect(offenders, isEmpty,
+        reason: 'نداءُ مصادقةٍ بلا مهلة — الزرُّ يبقى دوّاراً بلا مخرج، '
+            'أو مهلةٌ بلا فرعٍ يُخبرُها فتُساوي رسالةً عامّةً مبهمة');
+  });
+
+  test('ولا نداءَ مصادقةٍ يَتخطّى الخدمةَ إلى الـSDK من شاشة', () {
+    // المصادقةُ نطاقُ `ZyiarahFirebaseService` بقرارِ المشروع، وكان
+    // `forgot_password_screen` وحدَه يَتخطّاها — فبَقيت
+    // `sendPasswordResetEmail` في الخدمةِ **بلا مُنادٍ**، ولم يَرَها
+    // `no_dead_code_test` لأنّ اسمَها اسمُ دالّةِ الحزمة (عمًى موثَّقٌ هناك).
+    for (final f in Directory('lib/screens')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.dart'))) {
+      final src = _code(f.path);
+      for (final c in kAuthNetCalls) {
+        expect(RegExp(r'FirebaseAuth\.instance\s*\.\s*' + c).hasMatch(src),
+            isFalse,
+            reason: '${f.path}: `$c` مباشرةً على الـSDK — '
+                'تُنادى عبر ZyiarahFirebaseService كشقيقتَيها');
+      }
+    }
+    // وشاهدُ التعليل: الخدمةُ ما زالت تَحملُ الدالّةَ، ولها مُنادٍ.
+    expect(_code('lib/services/firebase_service.dart'),
+        contains('Future<void> sendPasswordResetEmail('));
+    expect(_code('lib/screens/forgot_password_screen.dart'),
+        contains('_firebaseService.sendPasswordResetEmail('));
   });
 
   /// كتلةُ `showSnackBar(...)` بحدودِها الحقيقيّةِ — **بموازنةِ الأقواس**.
