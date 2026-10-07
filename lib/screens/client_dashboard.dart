@@ -774,7 +774,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SofaRugCleaningDetailsScreen(serviceName: "تنظيف الكنب والزل"))),
         ),
         _buildWebStyleServiceCard(
-          title: "باقات الإشتراك",
+          title: "باقات الاشتراك",
           subtitle: "زيارات مجدولة",
           price: "باقات شهرية",
           numericPrice: 0.0,

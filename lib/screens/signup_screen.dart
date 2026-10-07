@@ -224,11 +224,11 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
                 _buildTextField(_phoneController, "5XXXXXXXX", keyboardType: TextInputType.phone),
                 
                 const SizedBox(height: 15),
-                _buildFieldLabel("البريد الالكتروني"),
+                _buildFieldLabel("البريد الإلكتروني"),
                 _buildTextField(_emailController, "example@mail.com", keyboardType: TextInputType.emailAddress),
                 
                 const SizedBox(height: 15),
-                _buildFieldLabel("كلمه المرور"),
+                _buildFieldLabel("كلمة المرور"),
                 _buildTextField(
                   _passwordController, 
                   "********", 
@@ -238,7 +238,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
                 ),
                 
                 const SizedBox(height: 15),
-                _buildFieldLabel("تاكيد كلمه المرور"),
+                _buildFieldLabel("تأكيد كلمة المرور"),
                 _buildTextField(
                   _confirmPasswordController, 
                   "********", 
@@ -280,7 +280,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                         ),
                         child: Text(
-                          "انشاء حساب",
+                          "إنشاء حساب",
                           style: GoogleFonts.tajawal(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       ),

@@ -73,7 +73,7 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
             textDirection: TextDirection.rtl,
             child: AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: Text(doc == null ? "إضافة باقة إشتراك" : "تعديل الباقة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+              title: Text(doc == null ? "إضافة باقة اشتراك" : "تعديل الباقة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
