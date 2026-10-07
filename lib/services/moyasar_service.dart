@@ -1,9 +1,9 @@
 import 'dart:convert';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:zyiarah/utils/moyasar_util.dart';
 import 'package:zyiarah/utils/error_report.dart';
+import '../utils/env.dart';
 
 /// Moyasar payment gateway service.
 /// - Credit Card / Apple Pay / STC Pay → handled by Moyasar Flutter SDK (no code here)
@@ -44,7 +44,7 @@ class MoyasarPayFailure implements Exception {
 
 class MoyasarService {
   static String get _publishableKey =>
-      dotenv.env['MOYASAR_PUBLISHABLE_KEY'] ?? '';
+      envOrEmpty('MOYASAR_PUBLISHABLE_KEY');
 
   static const String _baseUrl = 'https://api.moyasar.com/v1';
 

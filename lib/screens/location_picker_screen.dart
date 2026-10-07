@@ -3,12 +3,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'package:zyiarah/services/zone_locator_service.dart';
 import 'package:zyiarah/utils/jazan_boundary.dart';
+import '../utils/env.dart';
 
 class LocationPickerScreen extends StatefulWidget {
   final String serviceName;
@@ -52,7 +52,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   LocateFailure? _locateFailure;
   bool _isLocating = false;
 
-  final String _mapboxToken = dotenv.env['MAPBOX_TOKEN'] ?? '';
+  final String _mapboxToken = envOrEmpty('MAPBOX_TOKEN');
 
   @override
   void initState() {

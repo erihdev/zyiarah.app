@@ -84,7 +84,10 @@ void main() {
       final m = _code(_read('lib/main.dart'));
       final at = m.indexOf('ZatcaService.ensureConfigLoaded()');
       expect(at, greaterThan(-1));
-      expect(at, lessThan(m.indexOf('runApp(')),
+      // **آخرُ** `runApp` لا أوّلُها: منذ 2026-10-07 في `main` مَخرجٌ مبكّرٌ
+      // يَرسمُ شاشةَ تعذّرِ الإقلاع عند فشلِ Firebase، فأوّلُ `runApp` صارَ
+      // ذاك — وهو قبلَ هذا التحميلِ بحقّ (بلا Firebase لا فاتورةَ أصلاً).
+      expect(at, lessThan(m.lastIndexOf('runApp(')),
           reason: 'بعد runApp لا يَسبقُ بناءَ أيِّ فاتورة');
       // بلا انتظارٍ: قراءةٌ واحدةٌ لا تُؤخّرُ الإقلاع.
       expect(m.contains('await ZatcaService.ensureConfigLoaded()'), isFalse);
