@@ -23,6 +23,9 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
   final Map<String, TextEditingController> _replyControllers = {};
   bool _isSending = false;
 
+  /// يُبدَّلُ فيُعادُ الاشتراكُ ببثٍّ جديد — زرُّ «إعادة المحاولة».
+  int _reloadKey = 0;
+
   TextEditingController _replyCtrlFor(String ticketId) =>
       _replyControllers.putIfAbsent(ticketId, () => TextEditingController());
 
@@ -83,6 +86,11 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
 
   Widget _buildTicketList(User? user, List<String> statuses) {
     return StreamBuilder<QuerySnapshot>(
+      // `_reloadKey` يُعيدُ بناءَ هذا `StreamBuilder` بمفتاحٍ جديدٍ فيُعادُ
+      // الاشتراكُ — فزرُّ «إعادة المحاولة» يُحاولُ فعلاً. و`firstEventTimeout`
+      // لا تُغلِقُ البثَّ عند الخطأ، فبياناتٌ متأخّرةٌ تَشفي الشاشةَ بنفسِها
+      // كذلك؛ الزرُّ لِمن لا تَنتظر.
+      key: ValueKey('tickets-${statuses.join(',')}-$_reloadKey'),
       stream: FirebaseFirestore.instance
           .collection('support_tickets')
           .where('userId', isEqualTo: user?.uid)
@@ -91,7 +99,19 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
             .firstEventTimeout(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(child: Text("خطأ: ${snapshot.error}"));
+          // **كان «خطأ: ${snapshot.error}» (2026-10-07).** نصُّ الاستثناءِ
+          // خامّاً في وجهِ العميلةِ — «[cloud_firestore/permission-denied]
+          // Missing or insufficient permissions.» أو «TimeoutException after
+          // 0:00:20.000000: Future not completed» — بحرفٍ لاتينيٍّ في واجهةٍ
+          // عربيّةٍ، على الشاشةِ التي فتحَتها لأنّ شيئاً أعطبَها أصلاً. ولا
+          // زرَّ إعادةٍ معه، فالقائمةُ تَبقى نصَّ خطأٍ لا مَخرجَ منه.
+          //
+          // وحارسُ «لا نصَّ استثناءٍ خامّاً» لم يَرَهُ: نطاقُه كتلةُ
+          // `showSnackBar(...)`، والحاملُ هنا `Text` مرسومٌ في الصفحة —
+          // فالقاعدةُ عامّةٌ والكاشفُ كان على حاملٍ واحد. وُسِّعَ في
+          // `net_timeout_guard_test`.
+          debugPrint('support tickets stream error: ${snapshot.error}');
+          return _buildLoadError();
         }
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -123,6 +143,42 @@ class _ZyiarahSupportScreenState extends State<ZyiarahSupportScreen> {
           },
         );
       },
+    );
+  }
+
+  /// فشلُ تحميلِ القائمةِ: جملةٌ عربيّةٌ وزرٌّ يُعيدُ المحاولة — لا نصُّ
+  /// استثناءٍ خامّ. والصياغةُ هي صياغةُ `offers_screen._inlineError` نفسُها
+  /// («تعذّر تحميل …، تحقّقي من الاتصال») فلا جملةَ رابعةً لنفسِ الحالة.
+  Widget _buildLoadError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.cloud_off_rounded, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'تعذّر تحميل التذاكر، تحقّقي من الاتصال',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.tajawal(
+                  fontSize: 16, color: Colors.grey[700], fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () => setState(() => _reloadKey++),
+              icon: const Icon(Icons.refresh_rounded),
+              label: Text('إعادة المحاولة', style: GoogleFonts.tajawal()),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF660033),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

@@ -21,6 +21,7 @@ import 'package:zyiarah/utils/order_activity.dart';
 import 'package:zyiarah/utils/crew_delay_notice.dart';
 import 'package:zyiarah/utils/time_format.dart';
 import 'package:zyiarah/utils/cancel_refund_notice.dart';
+import 'package:zyiarah/utils/user_facing_error.dart';
 
 // تحويل رقمي دفاعي — حقول Firestore (amount/total_amount/quotePrice) قد تصل نصّاً
 // أو null، و.toDouble()/as num المباشر كان يعطّل بطاقة الطلب داخل القائمة.
@@ -470,12 +471,29 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
         ),
       );
     } catch (e) {
-      // permission-denied يعني أن القواعد منعت الإلغاء (مثلاً أُسند الطلب لسائق
-      // بعد فتح الشاشة) — رسالة ودّية بدل نص الاستثناء الخام للعميل.
-      final raw = e.toString().replaceAll("Exception: ", "");
-      final msg = raw.contains('permission-denied')
+      // **فرعُ القواعدِ أوّلاً، فهو أنفعُ من الجملةِ العامّة.** permission-denied
+      // يعني أن القواعد منعت الإلغاء (مثلاً أُسند الطلب لسائق بعد فتح الشاشة)،
+      // و«ليس لديك الصلاحية» في `userFacingError` صحيحةٌ وأقلُّ نفعاً من
+      // تسميةِ الحالةِ ووِجهةِ العميلة.
+      //
+      // **وما عداه كان يُسرَّبُ خامّاً، والقاعدةُ مكتوبةٌ في التعليقِ نفسِه
+      // (2026-10-07).** كان `e.toString().replaceAll("Exception: ", "")` ثمّ
+      // «خطأ: $raw» — وذاك يَنجحُ للجملِ الثلاثِ التي يَرميها
+      // `cancelOrder` **ويُسرِّبُ كلَّ ما عداها**: انقطاعُ شبكةٍ يُقرأُ
+      // «خطأ: [cloud_firestore/unavailable] Failed to get document because
+      // the client is offline.» بحرفٍ لاتينيٍّ في شريطٍ عربيّ. والثلاثُ
+      // تَصِلُ الآن عبرَ حاملٍ يُعلِنُ نفسَه (`OrderCancelRefused`)، فلا
+      // استخراجَ نصّيّاً ولا تسريب.
+      //
+      // ولمَ لم يَرَهُ حارسُ «لا نصَّ استثناءٍ خامّاً»: نطاقُه كتلةُ
+      // `showSnackBar(...)`، و`$raw` فيها اسمٌ وسيطٌ لا مُلتقَطٌ — فغسلُ
+      // الاسمِ وحدَه كان يُعميه. وُسِّعَ في `net_timeout_guard_test`.
+      // والفحصُ **بالنوعِ لا بالنصّ**: `e.toString().contains('permission-denied')`
+      // كان يَعملُ بالمصادفةِ على صياغةِ `FirebaseException.toString()` الحاليّة،
+      // ويَلتقطُ كذلك أيَّ استثناءٍ يَذكرُ الكلمةَ في رسالته.
+      final msg = (e is FirebaseException && e.code == 'permission-denied')
           ? 'لا يمكن إلغاء الطلب في حالته الحالية — تواصلي مع الدعم'
-          : 'خطأ: $raw';
+          : userFacingError(e, fallback: 'تعذّر إلغاء الطلب، أعيدي المحاولة');
       messenger.showSnackBar(
         SnackBar(
           content: Text(msg, style: GoogleFonts.tajawal()),
