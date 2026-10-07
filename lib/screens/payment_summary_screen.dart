@@ -24,7 +24,6 @@ import 'package:zyiarah/screens/moyasar_card_screen.dart';
 import 'package:zyiarah/screens/moyasar_stc_screen.dart';
 import 'package:moyasar/moyasar.dart';
 import 'package:zyiarah/services/zyiarah_wallet_service.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'package:zyiarah/utils/global_error_handler.dart';
 import 'package:zyiarah/services/counter_service.dart';
@@ -36,6 +35,7 @@ import 'package:zyiarah/utils/error_report.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/invoice_stamp.dart';
 import 'package:zyiarah/utils/price_review.dart';
+import '../utils/env.dart';
 
 
 
@@ -1639,7 +1639,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
   Widget _buildPaymentMethods() {
     final String publishableKey =
-        dotenv.env['MOYASAR_PUBLISHABLE_KEY'] ?? '';
+        envOrEmpty('MOYASAR_PUBLISHABLE_KEY');
     final bool moyasarReady = publishableKey.isNotEmpty;
 
     return Column(
@@ -1784,7 +1784,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         if (_isNativeAndroid) ...[
           Builder(builder: (context) {
             final samsungServiceId =
-                dotenv.env['SAMSUNG_PAY_SERVICE_ID'] ?? '';
+                envOrEmpty('SAMSUNG_PAY_SERVICE_ID');
             if (samsungServiceId.isEmpty ||
                 samsungServiceId.startsWith('REPLACE')) {
               return const SizedBox.shrink();

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:moyasar/moyasar.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:zyiarah/utils/moyasar_util.dart';
+import '../utils/env.dart';
 
 /// شاشة دفع البطاقة عبر Moyasar SDK.
 /// تستدعي [onSuccess] مع payment ID عند نجاح الدفع.
@@ -24,7 +24,7 @@ class MoyasarCardScreen extends StatelessWidget {
   });
 
   PaymentConfig get _config => PaymentConfig(
-        publishableApiKey: dotenv.env['MOYASAR_PUBLISHABLE_KEY'] ?? '',
+        publishableApiKey: envOrEmpty('MOYASAR_PUBLISHABLE_KEY'),
         amount: (amountSAR * 100).round(), // Halala
         description: description,
         givenID: MoyasarUtil.givenIdFromOrder(orderId), // UUID صالح لـ Moyasar (منع الشحن المزدوج)

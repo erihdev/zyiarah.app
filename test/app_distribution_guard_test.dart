@@ -125,7 +125,11 @@ void main() {
         .listSync(recursive: true)
         .whereType<File>()
         .where((f) => f.path.endsWith('.dart'))) {
-      for (final m in RegExp(r"""dotenv\.env\[['"]([A-Z0-9_]+)['"]\]""")
+      // القراءةُ تَمُرُّ بـ`envOrEmpty` منذ 2026-10-07: `dotenv.env` **يَرمي**
+      // حين لا يَنجحُ `load()` فلا تَبلغُه `?? ''` أصلاً. والقاعدةُ المَحروسةُ
+      // هنا لم تَتغيّر (كلُّ مَن يَبني يَكتبُ كلَّ مفتاحٍ يَقرؤه `lib/`)،
+      // وإنّما شكلُ القراءة — وأرضيّةُ «٣ مفاتيحَ» أدناه هي ما أمسكَ ذلك.
+      for (final m in RegExp(r"""(?:envOrEmpty\(|dotenv\.env\[)['"]([A-Z0-9_]+)['"]""")
           .allMatches(f.readAsStringSync())) {
         read.add(m.group(1)!);
       }

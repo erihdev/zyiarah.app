@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'location_picker_screen.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'package:zyiarah/services/tamara_service.dart';
@@ -16,6 +15,7 @@ import 'package:zyiarah/utils/global_error_handler.dart';
 import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/invoice_stamp.dart';
+import '../utils/env.dart';
 
 /// شاشة دفع طلب المتجر — تُفتح فور إنشاء الطلب (طلب مباشر، لا موافقة مسبقة).
 /// طرق الدفع المعتمدة: ميسر (بطاقة) + تمارا. لا دفع عند الاستلام — أُزيل من الجذور.
@@ -140,7 +140,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
   // هل تتوفّر أي طريقة دفع؟ (بطاقة عبر مفتاح Moyasar أو تمارا) — لتعطيل زر الدفع
   // حين لا تُعرَض أي طريقة، بدل زرّ ميّت يفتح شاشة بمفتاح فارغ.
   bool get _hasPaymentMethod =>
-      _tamaraAvailable || (dotenv.env['MOYASAR_PUBLISHABLE_KEY'] ?? '').isNotEmpty;
+      _tamaraAvailable || (envOrEmpty('MOYASAR_PUBLISHABLE_KEY')).isNotEmpty;
 
   Future<void> _handlePay() async {
     if (_isLoading) return;
@@ -162,7 +162,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
       // البطاقة (Moyasar) هي الطريقة الافتراضية، لكنها لا تُعرَض حين يغيب المفتاح.
       // لو بقيت الطريقة 'card' بلا مفتاح لفُتحت شاشة بطاقة بمفتاح فارغ (طريق مسدود).
       // نحوّل لتمارا إن توفّرت، وإلا نُبلغ المستخدم بدل المتابعة.
-      final moyasarReady = (dotenv.env['MOYASAR_PUBLISHABLE_KEY'] ?? '').isNotEmpty;
+      final moyasarReady = (envOrEmpty('MOYASAR_PUBLISHABLE_KEY')).isNotEmpty;
       if (_selectedMethod == 'card' && !moyasarReady) {
         if (_tamaraAvailable) {
           _selectedMethod = 'tamara';
@@ -365,7 +365,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
   @override
   Widget build(BuildContext context) {
     final bool moyasarReady =
-        (dotenv.env['MOYASAR_PUBLISHABLE_KEY'] ?? '').isNotEmpty;
+        (envOrEmpty('MOYASAR_PUBLISHABLE_KEY')).isNotEmpty;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,

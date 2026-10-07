@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
@@ -18,6 +17,7 @@ import 'package:zyiarah/utils/crew_price_check.dart';
 import 'package:zyiarah/utils/home_packages.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/catalog_number.dart';
+import '../../utils/env.dart';
 
 /// حقل سعر ساعة العاملة الواحدة في وثيقة المنطقة — **قبل الضريبة**.
 /// (منقول هنا بعد حذف lib/screens/event_workers_details_screen.dart —
@@ -199,7 +199,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
   /// ومنحاز لمنطقة جازان (proximity) كي تتقدّم «صبيا جازان» على أي تشابه أبعد.
   /// بمهلة، والفشل يُسجَّل ولا يُزعج — هذه مساعدة، والنقر على الخريطة يبقى سيّداً.
   Future<GeoPoint?> _geocodeZoneName(String query) async {
-    final token = dotenv.env['MAPBOX_TOKEN'] ?? '';
+    final token = envOrEmpty('MAPBOX_TOKEN');
     if (token.isEmpty || query.trim().length < 2) return null;
     try {
       final url = Uri.parse(

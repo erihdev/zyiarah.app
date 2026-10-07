@@ -24,12 +24,17 @@ import 'package:zyiarah/screens/admin/admin_dashboard_screen.dart';
 import 'package:zyiarah/services/deep_link_service.dart';
 import 'package:zyiarah/services/geofence_service.dart';
 import 'package:zyiarah/router.dart';
+import 'package:zyiarah/widgets/boot_failure_app.dart';
 
 import 'package:provider/provider.dart';
 import 'package:zyiarah/providers/user_provider.dart';
 import 'package:zyiarah/providers/order_provider.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/services/zatca_service.dart';
+
+/// إعادةُ المحاولةِ تُعيدُ تشغيلَ `main()`، فتُسجَّلُ الرخصةُ مرّةً واحدةً
+/// لا مرّةً لكلِّ محاولة.
+bool _licenseRegistered = false;
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -42,13 +47,41 @@ void main() async {
   // خطاً بديلاً مشوّهاً في كل الواجهة إلى أن ينجح التنزيل.
   GoogleFonts.config.allowRuntimeFetching = false;
   // شرط رخصة OFL عند تضمين الخط داخل التطبيق: تسجيلها في سجلّ تراخيص Flutter.
-  LicenseRegistry.addLicense(() async* {
+  if (!_licenseRegistered) {
+    _licenseRegistered = true;
+    LicenseRegistry.addLicense(() async* {
     final license = await rootBundle.loadString('assets/fonts/OFL.txt');
-    yield LicenseEntryWithLineBreaks(const ['google_fonts'], license);
-  });
+      yield LicenseEntryWithLineBreaks(const ['google_fonts'], license);
+    });
+  }
 
-  await dotenv.load(fileName: ".env");
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // **ما قبلَ `runApp` كان أربعةَ نداءاتٍ عاريةٍ، ورميُ أيٍّ منها شاشةٌ
+  // بيضاءُ أبديّة.** والقاعدةُ مكتوبةٌ في هذا الملفِّ نفسِه على بُعدِ أسطر
+  // («كل تهيئة محميّة داخلياً بـ try/catch فلن تُسقط الإقلاع»)، وتُغطّي
+  // الثلاثةَ التي تَليها وحدَها — وقد تَحقَّقَ أنّها صادقةٌ عليها (كلُّ
+  // `await` فيهما داخلَ `try`). وهذا الشكلُ بعينُه عضَّ هنا مرّةً: تعليقُ
+  // Crashlytics أدناه يَقولُ إنّ نداءَه على الويبِ «يرمي Assertion قبل رسم
+  // الواجهة فتظهر شاشة بيضاء» — فعُولجَ في موضعِه وحدَه.
+  //
+  // والتمييزُ هنا قرارٌ لا تعميم: **مفاتيحُ النشرِ تعطّلٌ، وFirebase موت.**
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    // `.env` فارغٌ أو تعذّر تحميلُه ⇒ `envOrEmpty` تُعيدُ فراغاً، فيَنطفئُ
+    // خيارُ البطاقةِ وApple Pay وتَعجزُ الخريطةُ — وهو ما تَقصدُه مواضعُ
+    // القراءةِ العشرةُ بـ`?? ''` أصلاً. التطبيقُ يَعمل.
+    debugPrint('[boot] dotenv: $e');
+  }
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  } catch (e, st) {
+    // بلا Firebase لا مصادقةَ ولا بيانات: التطبيقُ لا يَعمل. فيُعرَضُ ذلك
+    // **مكتوباً** مع إعادةِ محاولة، بدلَ بياضٍ لا يُفسَّرُ ولا يُبلَّغُ عنه
+    // (Crashlytics نفسُه لم يُفعَّلْ بعد، فلا أثرَ في أيِّ مكان).
+    debugPrint('[boot] Firebase.initializeApp failed: $e\n$st');
+    runApp(ZyiarahBootFailureApp(onRetry: () => main()));
+    return;
+  }
 
   // (A0) App Check — **إرسال الرموز فقط، بلا إلزام.** مفاتيح Firebase في
   // firebase_options.dart عامّة بالتصميم (تُعرِّف المشروع ولا تُصرِّح)، فالحارس
@@ -104,7 +137,13 @@ void main() async {
   // Crashlytics بلا تنفيذ على الويب: استدعاؤه هناك يرمي Assertion قبل رسم الواجهة فتظهر
   // شاشة بيضاء. نحصره في المنصّات التي تدعمه (iOS/Android) — سلوك الإنتاج بلا تغيير.
   if (!kIsWeb) {
-    await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
+    // تفعيلُ الجمعِ نداءُ قناةٍ منصّيّة: فشلُه لا يَمنعُ التطبيقَ من العمل،
+    // فلا يَجوزُ أن يَمنعَه من الإقلاع (وهو آخرُ ما بقي عارياً قبل `runApp`).
+    try {
+      await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
+    } catch (e) {
+      debugPrint('[boot] crashlytics enable: $e');
+    }
 
     // System-wide crash reporting (silent — no user-facing snackbar)
     FlutterError.onError = (details) {
