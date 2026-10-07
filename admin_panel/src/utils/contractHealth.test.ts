@@ -8,10 +8,15 @@
 // في هذا المستودعِ وقعتُ فيه ثالثَ مرّة.)
 import { describe, it, expect } from 'vitest';
 import {
-  contractHealthOf, contractApproveAllowed, contractApproveBlockedReason,
-  contractNeedsHuman, CONTRACT_HEALTH_TITLES, type ContractHealth,
+  contractHealthOf,
+  contractApproveAllowed,
+  contractApproveBlockedReason,
+  contractNeedsHuman,
+  CONTRACT_HEALTH_TITLES,
+  type ContractHealth,
   type ContractDoc,
-} from './contractHealth.ts';
+  contractHealthReason,
+} from './contractHealth';
 
 type Row = [ContractDoc, ContractHealth, boolean];
 
@@ -87,5 +92,50 @@ describe('contractHealth — المرآة', () => {
       'وما زال معلَّقاً', 'رصيد بلا مواعيد']) {
       expect(all).toContain(key);
     }
+  });
+});
+
+// ⟦REASONS⟧
+// [doc, expected] — السببُ الذي كتبَه الخادمُ، إن وُجد.
+//
+// **أُضيفَ لأنّ اللوحةَ تَستورِدُ `contractHealthReason` ولم يُشغّلْه فحصٌ
+// على جهتِها (2026-10-07).** وجدَه `panel_mirror_coverage_test` حين وُسِّعَ
+// إلى «كلُّ اسمٍ تَستورِدُه اللوحةُ يَجبُ أن يُشغَّل». والقاعدتانِ متّفقتانِ
+// اليومَ — فهذه **سدُّ ثغرةٍ في الحارسِ لا إصلاحُ عطل** — لكنّ انحرافَ
+// الترتيبِ أو التهذيبِ كان سيَمُرُّ صامتاً، وهو ما يُعرَضُ على بطاقةِ العقدِ
+// سبباً لفشلِ تفعيلِه.
+const REASONS: [Record<string, unknown>, string | null][] = [
+  [{}, null],
+  // الأولويّةُ: خطأُ الخطّةِ أوّلاً (قرارٌ لا عطلٌ عابر).
+  [{ plan_validation_error: 'السعر لا يطابق الباقة' }, 'السعر لا يطابق الباقة'],
+  [
+    {
+      plan_validation_error: 'أ',
+      contract_visits_error: 'ب',
+      contract_activation_error: 'ج',
+    },
+    'أ',
+  ],
+  [{ contract_visits_error: 'ب', contract_activation_error: 'ج' }, 'ب'],
+  [{ contract_activation_error: 'ج' }, 'ج'],
+  // نصٌّ فارغٌ أو فراغاتٌ ليس سبباً — فلا تُعرَضُ بطاقةٌ بلا نصّ.
+  [{ plan_validation_error: '' }, null],
+  [{ plan_validation_error: '   ' }, null],
+  [{ plan_validation_error: '  مهذَّب  ' }, 'مهذَّب'],
+  // وغيرُ النصِّ يُتخطّى إلى التالي.
+  [{ plan_validation_error: 5, contract_visits_error: 'ب' }, 'ب'],
+];
+// ⟦/REASONS⟧
+
+describe('contractHealthReason', () => {
+  it('الأولويّةُ والتهذيبُ ورفضُ الفراغ', () => {
+    for (const [doc, expected] of REASONS) {
+      expect(contractHealthReason(doc)).toBe(expected);
+    }
+  });
+
+  it('ولا سببَ لمستندٍ غائب', () => {
+    expect(contractHealthReason(null)).toBe(null);
+    expect(contractHealthReason(undefined)).toBe(null);
   });
 });
