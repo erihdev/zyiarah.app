@@ -20,7 +20,7 @@ class ZyiarahPopupService {
         .where('type', isEqualTo: 'popup')
         .orderBy('sent_at', descending: true)
         .limit(1)
-        .get()
+        .get().timeout(kNetCallTimeout)
         .then((snapshot) async {
       if (snapshot.docs.isEmpty) return;
       final data = snapshot.docs.first.data();

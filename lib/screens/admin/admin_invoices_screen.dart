@@ -6,6 +6,7 @@ import 'package:zyiarah/models/invoice_log_entry.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:zyiarah/theme/app_theme.dart';
 import 'package:zyiarah/utils/invoice_stamp.dart';
+import '../../utils/net_timeout.dart';
 
 /// سجل الفواتير الإلكترونية (ZATCA) للإدارة والمحاسب — تصميم Stitch `_61`.
 ///
@@ -67,7 +68,7 @@ class _AdminInvoicesScreenState extends State<AdminInvoicesScreen> {
           .where('created_at', isLessThan: Timestamp.fromDate(nextMonth))
           .orderBy('created_at', descending: true)
           .limit(1000)
-          .get();
+          .get().timeout(kNetCallTimeout);
       return [
         for (final d in snap.docs) InvoiceLogEntry.fromMap(source, d.id, d.data()),
       ];

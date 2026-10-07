@@ -104,6 +104,91 @@ const Map<String, String> _statefulCallFiles = {
   'lib/screens/admin/admin_managers_screen.dart': 'حذفُ حساب موظّف (Auth أوّلاً)',
 };
 
+/// **كاشفُ قراءاتِ Firestore: بنيويٌّ لا نافذةُ أحرف.**
+///
+/// كان `RegExp(r'await\s+[\s\S]{0,180}?\.get\(\)…')` — ومئةٌ وثمانونَ حرفاً
+/// أقصرُ بكثيرٍ من سلسلةِ استعلامٍ حقيقيّة، فسلسلةٌ فيها `where` و`orderBy`
+/// و`limit` لا يَبلغُها المُطابِقُ من `await` أصلاً. ومرساةُ `await` نفسُها
+/// تُسقِطُ ما لا يُنتظَرُ نصّاً: وسيطَ `future:` في `FutureBuilder`، وعنصراً
+/// داخلَ `Future.wait([...])` حيث `await` قبلَ القائمةِ لا قبلَ العنصر.
+/// فكانت **تسعَ عشرةَ قراءةً عاريةً غيرَ مرئيّةٍ له** من خمسٍ وسبعين.
+///
+/// الكاشفُ الآن يَمشي من `.get()` **إلى الوراءِ بموازنةِ الأقواسِ** حتى بدايةِ
+/// التعبير، فيَرى السلسلةَ كاملةً أيّاً كان طولُها وسواءٌ أُنتظِرت نصّاً أم
+/// سُلِّمت وسيطاً — وهو فخُّ الحدِّ غيرِ المُوازَنِ المسجَّلُ في هذا المستودعِ
+/// مرّاتٍ، واقعاً على هذا الحارسِ نفسِه.
+class _GetHit {
+  _GetHit(this.line, this.expr, this.timed);
+  final int line;
+  final String expr;
+  final bool timed;
+}
+
+/// بدايةُ التعبيرِ المنتهي بـ`.get()` عند `i` — مشياً إلى الوراء.
+int _chainStart(String s, int i) {
+  final ident = RegExp(r'[A-Za-z0-9_$]');
+  while (i > 0) {
+    final c = s[i - 1];
+    // كلُّ مقطعٍ في سلسلةِ Firestore نداءٌ (`collection(…)`، `where(…)`،
+    // `limit(…)`)، فموازنةُ القوسِ الدائريِّ وحدَها تَكفي — جُرِّبت إضافةُ
+    // `[` فأعطت العددَ نفسَه (٧٥) لأنّ الاختصارَ لا يَزيدُ مطابقةً أبداً،
+    // فأُسقِطت: فرعٌ لا يَعضُّ أسوأُ من لا فرع.
+    if (c == ')') {
+      var depth = 0, j = i - 1;
+      while (j >= 0) {
+        if (s[j] == ')') {
+          depth++;
+        } else if (s[j] == '(') {
+          depth--;
+          if (depth == 0) break;
+        }
+        j--;
+      }
+      if (j < 0) return i;
+      i = j;
+      continue;
+    }
+    if (ident.hasMatch(c) || c == '.' || c == '!' || c == '?') {
+      i--;
+      continue;
+    }
+    if (c == ' ' || c == '\t' || c == '\n') {
+      // فراغٌ جزءٌ من سلسلةٍ متعدّدةِ الأسطرِ فقط إن سبقَه طرفُ تعبير.
+      var k = i - 1;
+      while (k > 0 && (s[k - 1] == ' ' || s[k - 1] == '\t' || s[k - 1] == '\n')) {
+        k--;
+      }
+      if (k > 0 &&
+          (s[k - 1] == '.' ||
+              s[k - 1] == ')' ||
+              s[k - 1] == ']' ||
+              ident.hasMatch(s[k - 1]))) {
+        i = k;
+        continue;
+      }
+      return i;
+    }
+    return i;
+  }
+  return i;
+}
+
+final RegExp _fsExpr =
+    RegExp(r"FirebaseFirestore|collection\(|\.doc\(|_db|_firestore|firestore\.");
+
+List<_GetHit> _firestoreGets(String src) {
+  final hits = <_GetHit>[];
+  for (final m in RegExp(r'\.get\(\)').allMatches(src)) {
+    final expr = src.substring(_chainStart(src, m.start), m.end);
+    if (!_fsExpr.hasMatch(expr)) continue;
+    final tail =
+        src.substring(m.end, (m.end + 40).clamp(0, src.length)).trimLeft();
+    hits.add(_GetHit(src.substring(0, m.start).split('\n').length,
+        expr.replaceAll(RegExp(r'\s+'), ' ').trim(), tail.startsWith('.timeout(')));
+  }
+  return hits;
+}
+
 /// مواضعُ نداءِ دالّةٍ سحابيّة بلا مهلة في مصدرٍ مُقنَّع.
 ///
 /// الارتكازُ على `httpsCallable` إلزاميّ: مطابقةُ `.call(` وحدَها تلتقط
@@ -130,6 +215,38 @@ int _bareCallableCalls(String src) {
 }
 
 void main() {
+  test('الكاشفُ نفسُه يُختبَرُ كالشفرة — الأشكالُ الثلاثةُ التي أعمَت النمطَ', () {
+    // النمطُ القديمُ (`await` + ١٨٠ حرفاً) أفلتَ منه ٭كلُّ٭ موضعٍ من التسعةَ
+    // عشرَ. فالكاشفُ البديلُ يُثبَّتُ على الأشكالِ التي أعمَته بعينِها، لا
+    // على مصدرِ المشروعِ وحدَه: مصدرُ المشروعِ نظيفٌ اليومَ فلا يُبرهِنُ أنّ
+    // الكاشفَ يَرى شيئاً.
+    //
+    // (١) وسيطٌ لا يُنتظَرُ نصّاً — `future:` في `FutureBuilder`.
+    var h = _firestoreGets(
+        "FutureBuilder(future: FirebaseFirestore.instance.collection('d').doc(u).get(),)");
+    expect(h.length, 1, reason: 'قراءةٌ غيرُ مُنتظَرةٍ نصّاً لم تُرَ');
+    expect(h.single.timed, isFalse);
+
+    // (٢) عنصرٌ داخلَ `Future.wait` — `await` قبلَ القائمةِ لا قبلَ العنصر،
+    //     وعاريةٌ واحدةٌ تُبطِلُ مهلةَ أختِها لأنّ الانتظارَ للكلّ.
+    h = _firestoreGets("await Future.wait([a.collection('x').get().timeout(k), "
+        "b.collection('y').get(),]);");
+    expect(h.length, 2);
+    expect(h.map((e) => e.timed).toList(), [true, false]);
+
+    // (٣) سلسلةٌ أطولُ من مئةٍ وثمانينَ حرفاً — الطولُ وحدَه كان يُخفيها.
+    final long = "await db.collection('orders')"
+        "${".where('a', isEqualTo: 1)" * 9}.orderBy('created_at').limit(500).get();";
+    expect(long.length, greaterThan(180), reason: 'السلسلةُ أقصرُ من أن تُبرهِن');
+    h = _firestoreGets(long);
+    expect(h.length, 1, reason: 'سلسلةٌ طويلةٌ أفلتت — عادت نافذةُ عدِّ الأحرف');
+    expect(h.single.timed, isFalse);
+
+    // ولا إيجابيّةَ كاذبة: `.get()` على ما ليس Firestore لا يُحسَب.
+    expect(_firestoreGets('final v = await prefs.get();'), isEmpty);
+    expect(_firestoreGets('final v = map.get();'), isEmpty);
+  });
+
   test('كلُّ نداءِ دالّةٍ سحابيّة له مهلة، إلّا المُغيِّرةَ للحالة صراحةً', () {
     final offenders = <String>[];
     for (final f in _allScreens()) {
@@ -155,19 +272,43 @@ void main() {
 
   test('كلُّ قراءةِ Firestore في كلّ شاشة وكلّ خدمة لها مهلة', () {
     final offenders = <String>[];
+    var scanned = 0;
+    for (final f in [..._allScreens(), ..._allServices()]) {
+      final p = f.path.replaceAll(r'\', '/');
+      for (final h in _firestoreGets(_code(p))) {
+        scanned++;
+        if (!h.timed) {
+          offenders.add('$p:${h.line}  ←  '
+              '${h.expr.substring((h.expr.length - 110).clamp(0, h.expr.length))}');
+        }
+      }
+    }
+    // أرضيّةٌ: كاشفٌ يَنحلُّ إلى صفرٍ يَمرُّ أخضرَ أجوفَ. (٧٥ اليوم.)
+    expect(scanned, greaterThanOrEqualTo(60),
+        reason: 'انهارَ كاشفُ القراءات — فحصٌ لا يَرى شيئاً ليس فحصاً');
+    expect(offenders, isEmpty,
+        reason: '\n\nقراءةُ Firestore بلا مهلة. مع persistenceEnabled لا ترمي\n'
+            'حين يتعذّر بلوغُ الخادم — تنتظر، فيبقى shimmer إلى الأبد:\n'
+            '  • ${offenders.join('\n  • ')}\n');
+  });
+
+  test('والمهلةُ هي الثابتُ المشترَك لا مُدّةٌ مكتوبةٌ في موضعِها', () {
+    // القاعدةُ أدناه («المهلتان معرَّفتان مرّةً واحدة») تَفحصُ الخمسَ الأُولى
+    // وحدَها، وهذه تَشدُّها على **كلِّ** قراءةٍ في النطاقِ المُشتَقّ: مُدّةٌ
+    // محلّيّةٌ تَعني أنّ تغييرَ المهلةِ لا يَبلغُها.
+    final offenders = <String>[];
     for (final f in [..._allScreens(), ..._allServices()]) {
       final p = f.path.replaceAll(r'\', '/');
       final src = _code(p);
-      for (final m in RegExp(r'await\s+[\s\S]{0,180}?\.get\(\)(\s*\.timeout\()?')
-          .allMatches(src)) {
-        if (m.group(1) == null) {
-          offenders.add('$p  ←  ${m.group(0)!.replaceAll(RegExp(r'\s+'), ' ').trim()}');
+      for (final m in RegExp(r'\.get\(\)\s*\.timeout\(([^)]*)').allMatches(src)) {
+        final arg = m.group(1)!.trim();
+        if (arg != 'kNetCallTimeout') {
+          offenders.add('$p  ←  .timeout($arg)');
         }
       }
     }
     expect(offenders, isEmpty,
-        reason: '\n\nقراءةُ Firestore بلا مهلة. مع persistenceEnabled لا ترمي\n'
-            'حين يتعذّر بلوغُ الخادم — تنتظر، فيبقى shimmer إلى الأبد:\n'
+        reason: '\n\nمهلةُ قراءةٍ ليست kNetCallTimeout — فلا تَتغيّرُ من مكانٍ واحد:\n'
             '  • ${offenders.join('\n  • ')}\n');
   });
 

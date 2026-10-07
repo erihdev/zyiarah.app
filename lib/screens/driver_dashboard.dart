@@ -476,6 +476,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
     final monthStart = DateTime(now.year, now.month, 1);
     final windowStart = monthStart.subtract(const Duration(days: 45));
 
+    // بطاقةُ الإحصاءاتِ تَحملُ فرعَ خطأٍ كاملاً («تعذّر تحميل الإحصاءات»
+    // + «إعادة المحاولة» موصولاً بهذه الدالّةِ نفسِها) — والمهلةُ هي ما
+    // يَجعلُه قابلَ الوصول: بلاها يَبقى `ConnectionState.waiting` أبداً
+    // فيَرى السائقُ هيكلَ تحميلٍ لا ينتهي وزرُّ الإعادةِ مكتوبٌ لم يُرسَم.
     final snap = await FirebaseFirestore.instance
         .collection('orders')
         .where('driver_id', isEqualTo: _currentDriverId)
@@ -483,7 +487,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
             isGreaterThanOrEqualTo: Timestamp.fromDate(windowStart))
         .orderBy('created_at', descending: true)
         .limit(500)
-        .get();
+        .get().timeout(kNetCallTimeout);
 
     int todayTasks = 0, weeklyTasks = 0, monthlyTasks = 0;
     for (final doc in snap.docs) {
