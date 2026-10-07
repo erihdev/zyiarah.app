@@ -30,7 +30,8 @@ const String kCasesJson = '''
   [{"status": "pending", "is_paid": false}, "ok", true],
   [{"status": "pending", "is_paid": true}, "activationStuck", false],
   [{"status": "approved_waiting_payment"}, "ok", false],
-  [{"status": "approved_waiting_payment", "is_paid": true}, "ok", false],
+  [{"status": "approved_waiting_payment", "is_paid": true},
+   "activationStuck", false],
   [{"status": "active", "is_paid": true}, "ok", false],
   [{"status": "pending", "is_paid": true, "plan_validation_failed": true},
    "planMismatch", false],
@@ -219,13 +220,32 @@ void main() {
         .map((l) => l.trimLeft().startsWith('//') ? ' ' * l.length : l)
         .join('\n');
 
-    test('(ز) نافذةُ الإنقاذِ ما زالت `is_paid == true && status == pending`', () {
-      // هذا بعينُه سببُ خطورةِ الضغطة: الكتابةُ تُخرِجُ العقدَ منها.
+    test('(ز) نافذةُ الإنقاذِ تَشملُ حالتَي ما قبلَ التفعيلِ معاً', () {
+      // **تغيّرت هذه النافذةُ في 2026-10-07، فيُراجَعُ التعليلُ لا يُسكَت**
+      // — وهو ما كان مكتوباً في سببِ هذا الفحصِ نفسِه.
+      //
+      // كانت `status == "pending"` وحدَها، وكان أحدُ أسبابِ خطورةِ ضغطةِ
+      // الاعتمادِ أنّها تَكتبُ `approved_waiting_payment` **فتُخرِجُ العقدَ
+      // من النافذة**. وقد تبيّنَ أنّ تلك الحالةَ هي ما يَترُكُه المسارُ
+      // الطبيعيُّ أصلاً عند فشلِ التفعيل (الدفعُ يَقعُ منها، وكاتبُه لا
+      // يَمَسُّ `status`) — فالنافذةُ كانت تُفلِتُ الشكلَ الغالبَ لا الضغطةَ
+      // وحدَها. ووُسِّعت لتَشملَ الاثنتَين.
+      //
+      // فذلك السببُ بعينُه **سقط**: الاعتمادُ لم يَعُدْ يُخرِجُ العقدَ من
+      // النافذة. والبوّابةُ باقيةٌ لسببَيها الآخرَين، وهما كافيان: الضغطةُ
+      // تَدفعُ «يرجى إتمام الدفع» لمن دَفعت، و`activateContractOnPaid` لا
+      // يُعادُ إطلاقُه (شرطُه `before.is_paid !== true`) — يُثبِتُهما (ح)
+      // و(ج) أدناه.
       expect(
-          RegExp(r'\.where\("is_paid", "==", true\)\s*\n\s*\.where\("status", "==", "pending"\)')
-              .hasMatch(idxMasked),
-          isTrue,
-          reason: 'تغيّرت نافذةُ الإنقاذ — فيُراجَعُ التعليلُ لا يُسكَت');
+          RegExp(r'\.where\("is_paid", "==", true\)\s*\n\s*'
+                  r'\.where\("status", "in", \[([^\]]*)\]\)')
+              .firstMatch(idxMasked),
+          isNotNull,
+          reason: 'ضاقت نافذةُ الإنقاذ — فعقدٌ مدفوعٌ فشلَ تفعيلُه يُفلِتُها');
+      // والمجموعةُ هي مجموعةُ القاعدةِ المشترَكةِ بعينِها — يَشدُّها
+      // `contract_stuck_scope_test` في الجهتَين.
+      expect(idxMasked.contains('"pending", "approved_waiting_payment"'), isTrue,
+          reason: 'افترقت نافذةُ الإنقاذِ عن kContractPreActiveStatuses');
     });
 
     test('(ح) المُشغّلُ لا يُعادُ إطلاقُه على عقدٍ مدفوعٍ سلفاً', () {

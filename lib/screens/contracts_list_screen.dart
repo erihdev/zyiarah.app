@@ -105,9 +105,15 @@ class ZyiarahContractsListScreen extends StatelessWidget {
       statusText = "منتهي";
       statusIcon = Icons.history_rounded;
     } else if (status == 'approved_waiting_payment') {
-      statusColor = const Color(0xFF2563EB);
-      statusText = "بانتظار الدفع";
-      statusIcon = Icons.payments_outlined;
+      // **مدفوعٌ ولم يُفعَّلْ بعد ≠ بانتظارِ الدفع.** كاتبُ الدفعِ لا يَمَسُّ
+      // `status`، والتفعيلُ لا يَكتبُ `active` إلّا عند النجاح — فعقدٌ فشلَ
+      // تفعيلُه يَبقى هنا و`is_paid: true`. وقولُ «بانتظار الدفع» لمن دفعت
+      // يَدعوها إلى الدفعِ مرّةً أخرى.
+      final bool paid = data['is_paid'] == true;
+      statusColor = paid ? Colors.orange : const Color(0xFF2563EB);
+      statusText = paid ? "مدفوع — جارٍ التفعيل" : "بانتظار الدفع";
+      statusIcon = paid ? Icons.hourglass_bottom_rounded
+          : Icons.payments_outlined;
     } else if (status == 'rejected') {
       statusColor = Colors.red;
       statusText = "مرفوض";
@@ -187,7 +193,13 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                   const Divider(height: 35),
                   Row(
                     children: [
-                      if (status == 'approved_waiting_payment')
+                      // **ومشروطٌ بأنّها لم تَدفعْ بعد.** المحفظةُ تَرُدُّ
+                      // `alreadyPaid` فلا تَخصِمُ مرّتَين، لكنّ الزرَّ يَقودُ
+                      // إلى شاشةِ الدفعِ حيث **البطاقةُ تُخصَمُ عند البوّابةِ
+                      // قبلَ أيِّ فحصٍ خادميّ** — فعقدٌ فشلَ تفعيلُه كان
+                      // يَعرضُ «دفع وتفعيل العقد» لمن دفعت.
+                      if (status == 'approved_waiting_payment' &&
+                          data['is_paid'] != true)
                         Expanded(
                           child: ElevatedButton.icon(
                             onPressed: () {

@@ -11,9 +11,26 @@
 // والأسوأُ أنّ الصفحةَ تَحملُ **فعلاً** على تلك الحالةِ بعينِها: زرُّ «اعتماد
 // الباقة» مشروطٌ بـ`status === 'pending'` وحدَها، فضغطُه على عقدٍ مدفوعٍ
 // يَكتبُ `approved_waiting_payment` ويَدفعُ للعميلةِ «يرجى إتمام الدفع» —
-// وقد دفعت — **ويُخرِجُه من نافذةِ الإنقاذ** التي تَستعلمُ
-// `is_paid == true && status == "pending"`، فلا مكنسةَ تَبلغُه ولا مُشغّلَ
-// يُعادُ إطلاقُه. التفصيلُ في رأسِ الملفِّ الدارتيّ.
+// وقد دفعت — ولا مُشغّلَ يُعادُ إطلاقُه. التفصيلُ في رأسِ الملفِّ الدارتيّ.
+//
+// **وتصحيحٌ لِما كُتبَ هنا (2026-10-07):** قيل إنّ الضغطةَ «تُخرِجُه من
+// نافذةِ الإنقاذ» التي تَستعلمُ `is_paid == true && status == "pending"`.
+// وقد تبيّنَ أنّ `approved_waiting_payment` + `is_paid: true` هي الحالةُ
+// التي يَترُكُها **المسارُ الطبيعيُّ** عند فشلِ التفعيل (الدفعُ يَقعُ منها،
+// وكاتبُه لا يَمَسُّ `status`) — أي أنّ النافذةَ كانت تُفلِتُ الشكلَ
+// الغالبَ لا الضغطةَ وحدَها. فوُسِّعت إلى الحالتَين معاً، وسقطَ ذلك السببُ
+// بعينُه: الاعتمادُ لم يَعُدْ يُخرِجُ العقدَ منها. والبوّابةُ باقيةٌ
+// لسببَيها الآخرَين (الدفعةُ المُضلِّلة، والمُشغّلُ الذي لا يُعادُ).
+
+/** حالاتُ العقدِ **قبلَ التفعيل** — مرآةُ `kContractPreActiveStatuses`
+ *  في `lib/utils/contract_health.dart` ومجموعةِ مكنسةِ الإنقاذِ في
+ *  `functions/index.js`. كانت `pending` وحدَها، وهي **ليست** الحالةَ التي
+ *  يَترُكُها المسارُ الطبيعيّ: الدفعُ يَقعُ من `approved_waiting_payment`
+ *  وكاتبُه لا يَمَسُّ `status`. */
+export const CONTRACT_PRE_ACTIVE_STATUSES: string[] = [
+  'pending',
+  'approved_waiting_payment',
+];
 
 export type ContractHealth =
   | 'ok'
@@ -61,9 +78,11 @@ export function contractHealthOf(c: ContractDoc | null | undefined): ContractHea
   if (c.plan_validation_failed === true) return 'planMismatch';
   if (c.contract_visits_pending === true) return 'visitsMissing';
   if (c.contract_activation_failed === true) return 'activationFailed';
-  // المتناقضةُ: مدفوعٌ وما زال `pending`. لا تُقاسُ بـ`visits_generated`
+  // المتناقضةُ: **مدفوعٌ ولم يُفعَّلْ بعد**. لا تُقاسُ بـ`visits_generated`
   // لأنّ عقداً قديماً سابقاً للراية لا يَحملُها فيُقرأُ عاطلاً وهو سليم.
-  if (paid && status === 'pending') return 'activationStuck';
+  if (paid && CONTRACT_PRE_ACTIVE_STATUSES.includes(status)) {
+    return 'activationStuck';
+  }
   return 'ok';
 }
 

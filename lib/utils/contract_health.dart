@@ -34,6 +34,18 @@ enum ContractHealth {
   visitsMissing,
 }
 
+/// حالاتُ العقدِ **قبلَ التفعيل** — أي ما يَعني وجودُها مع `is_paid: true`
+/// أنّ المالَ قُبِضَ والعقدُ لم يُفعَّلْ بعد.
+///
+/// مرآةٌ لِما تَستعلمُه مكنسةُ الإنقاذِ في `functions/index.js`
+/// (`status in [...]` مع `is_paid == true`)، ويَشدُّ التطابقَ
+/// `test/contract_stuck_scope_test.dart`: مجموعتانِ تَفترقانِ تَعنيان عقداً
+/// مدفوعاً لا تَراه البطاقةُ ولا تُعيدُ المكنسةُ محاولتَه.
+const Set<String> kContractPreActiveStatuses = {
+  'pending',
+  'approved_waiting_payment',
+};
+
 /// نصُّ البطاقةِ لكلِّ حالة — موجَّهٌ للأدمنِ (المالكُ يَقرأُ هذه الشاشة).
 const Map<ContractHealth, String> kContractHealthTitles =
     <ContractHealth, String>{
@@ -62,9 +74,21 @@ ContractHealth contractHealthOf(Map<String, dynamic> c) {
   if (c['contract_activation_failed'] == true) {
     return ContractHealth.activationFailed;
   }
-  // المتناقضةُ: مدفوعٌ وما زال `pending`. **لا تُقاسُ بـ`visits_generated`**
+  // المتناقضةُ: **مدفوعٌ ولم يُفعَّلْ بعد**. لا تُقاسُ بـ`visits_generated`
   // لأنّ عقداً قديماً سابقاً للراية لا يَحملُها، فيُقرأُ عاطلاً وهو سليم.
-  if (paid && status == 'pending') return ContractHealth.activationStuck;
+  //
+  // **وكانت `status == 'pending'` وحدَها، وهي ليست الحالةَ التي يَترُكُها
+  // المسارُ الطبيعيّ.** الدفعُ يَقعُ من `approved_waiting_payment` (زرُّ
+  // «دفع وتفعيل العقد» مشروطٌ بها)، وكاتبُ الدفعِ لا يَمَسُّ `status`
+  // إطلاقاً، و`_activateContractNow` لا يَكتبُ `active` إلّا عند النجاح —
+  // فعقدٌ فشلَ تفعيلُه يَستقرُّ على **`approved_waiting_payment` +
+  // `is_paid: true`**، وهي الحالةُ التي كانت تُفلِتُ من البطاقةِ ومن
+  // مكنسةِ الإنقاذِ معاً. أمّا `pending` + مدفوع فتَقعُ متى دُفِعَ قبلَ
+  // الاعتماد (`payContractWithWallet` بلا شرطِ حالة) — فهي الطرَفُ النادر،
+  // وكانت وحدَها المَحروسة.
+  if (paid && kContractPreActiveStatuses.contains(status)) {
+    return ContractHealth.activationStuck;
+  }
   return ContractHealth.ok;
 }
 
@@ -94,13 +118,22 @@ String? contractHealthReason(Map<String, dynamic> c) {
 ///  1. تَكتبُ `status: 'approved_waiting_payment'`؛
 ///  2. وتَدفعُ للعميلةِ «تم اعتماد عقد… **يرجى إتمام الدفع** لتفعيل الباقة»
 ///     — وقد دفعت؛
-///  3. و**تُخرِجُه من نافذةِ الإنقاذ**: مكنسةُ `opsHealthSweep` تَستعلمُ
-///     `is_paid == true && status == "pending"` بعينِها، و
-///     `activateContractOnPaid` لا يُطلَقُ ثانيةً أبداً (شرطُه
+///  3. و`activateContractOnPaid` لا يُطلَقُ ثانيةً أبداً (شرطُه
 ///     `before.is_paid !== true` وهو `true` سلفاً).
 ///
 /// فالعقدُ — وهو أكبرُ مبلغٍ في التطبيق — يَبقى مدفوعاً بلا زياراتٍ ولا
-/// بطاقةٍ ولا إنقاذٍ **إلى الأبد**، والأدمنُ يَحسبُ أنّه اعتمدَه للتوّ.
+/// بطاقةٍ، والأدمنُ يَحسبُ أنّه اعتمدَه للتوّ.
+///
+/// **وتصحيحٌ لِما كُتبَ هنا (2026-10-07):** كان بنداً ثالثاً يَقولُ إنّ
+/// الضغطةَ «تُخرِجُه من نافذةِ الإنقاذ» التي تَستعلمُ
+/// `is_paid == true && status == "pending"`. وقد تبيّنَ أنّ
+/// `approved_waiting_payment` + `is_paid: true` هي الحالةُ التي يَترُكُها
+/// **المسارُ الطبيعيُّ** عند فشلِ التفعيل: الدفعُ يَقعُ من تلك الحالةِ
+/// بعينِها، و`payContractWithWallet` لا يَمَسُّ `status`،
+/// و`_activateContractNow` لا يَكتبُ `active` إلّا عند النجاح. فالنافذةُ
+/// كانت تُفلِتُ **الشكلَ الغالبَ** لا الضغطةَ وحدَها — ووُسِّعت إلى
+/// `kContractPreActiveStatuses` أدناه، فسقطَ ذلك البندُ وبَقيَ البندانِ
+/// الآخرانِ وهما كافيان.
 ///
 /// والإخفاءُ وحدَه لا يَكفي: صفٌّ بلا زرٍّ ولا سببٍ يُقرأُ عطلاً في الشاشة،
 /// فـ`contractApproveBlockedReason` تَقولُ لماذا في موضعِه.
