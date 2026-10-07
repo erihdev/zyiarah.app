@@ -175,7 +175,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
         }
       }
       if (_selectedMethod == 'card') {
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
         if (!mounted) return;
         await Navigator.push(
           context,

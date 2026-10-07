@@ -141,6 +141,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
           }
         }
 
+        if (!mounted) return;
         setState(() {
           _orderData = {
             ...data,
@@ -289,7 +290,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
         // التعارض الذرّي بأكمله — نوقفه ونطلب الموعد أولاً. وكان الشرط مقصوراً
         // على pending، فطلبٌ under_review/awaiting_payment يُسنَد بلا موعدٍ أصلاً.
         if (isInitialAssign && effectiveSchedule == null) {
-          setState(() => _isLoading = false);
+          if (mounted) setState(() => _isLoading = false);
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
               content: Text('حدد موعد الزيارة أولاً قبل إسناد السائق'),
               backgroundColor: Colors.red));
@@ -369,7 +370,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
           // فإن بقي اختيارُ سائقٍ لا يقبله أيٌّ منهما (حالةٌ جديدة مثلاً) نُخبر
           // المدير صراحةً بدل تجاهلٍ صامت أو كتابةٍ غير محروسة.
           if (isNewAssignment && isOrdersDoc) {
-            setState(() => _isLoading = false);
+            if (mounted) setState(() => _isLoading = false);
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                 content: Text(
                     'لا يمكن إسناد سائق لطلب بحالة «$_currentStatus» من هنا — '
