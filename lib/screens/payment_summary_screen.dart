@@ -449,7 +449,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       // نسكّ معرّفاً جديداً للمحاولة التالية. (ValidationError محلي بلا سجل لدى
       // ميسر، وNetworkError مجهول النتيجة — نُبقي المعرّف لمنع الشحن المزدوج.)
       if (result is ApiError || result is PaymentResponse) {
-        setState(_mintFreshPendingOrderId);
+        if (mounted) setState(_mintFreshPendingOrderId);
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -485,7 +485,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       // فشل نهائي سجّلته ميسر يستهلك given_id — معرّف جديد للمحاولة التالية
       // (لا نسكّ على NetworkError: النتيجة مجهولة والثبات يمنع الشحن المزدوج).
       if (result is ApiError || result is PaymentResponse) {
-        setState(_mintFreshPendingOrderId);
+        if (mounted) setState(_mintFreshPendingOrderId);
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -740,7 +740,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       if (isHourly) {
         final capacityError = await _checkHourlyCapacity();
         if (capacityError != null) {
-          setState(() => _isLoading = false);
+          if (mounted) setState(() => _isLoading = false);
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content: Text(capacityError, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -765,7 +765,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       // معرّفاً جديداً للمحاولة — ومعه given_id جديد لميسر، فلا يصطدم بدفعة
       // فاشلة استهلكت القديم، وبمبلغٍ حاضر لا مجمّد من المحاولة الأولى.
       if (_pendingOrderCreated) {
-        setState(_mintFreshPendingOrderId);
+        if (mounted) setState(_mintFreshPendingOrderId);
       }
 
       final String finalOrderId = _pendingOrderId;
@@ -789,7 +789,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         // رصيد غير مجلوب (فشل الجلب) ≠ رصيد صفري: لا نتهم العميل بأن «رصيدك
         // 0.00» من قيمة لم تُجلب أصلاً — نعيد الجلب فعلياً ونطلب المحاولة.
         if (_walletBalance == null) {
-          setState(() => _isLoading = false);
+          if (mounted) setState(() => _isLoading = false);
           _fetchWalletBalance();
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -803,7 +803,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           return;
         }
         if (_walletBalance! < totalWithVat) {
-          setState(() => _isLoading = false);
+          if (mounted) setState(() => _isLoading = false);
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(
@@ -887,7 +887,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         if (widget.contractId == null) {
           await _createUnpaidServiceOrder(finalOrderId, method: 'card');
         }
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
         if (!mounted) return;
         await Navigator.push(
           context,
@@ -921,7 +921,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         if (widget.contractId == null) {
           await _createUnpaidServiceOrder(finalOrderId, method: 'stc_pay');
         }
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
         if (!mounted) return;
         await Navigator.push(
           context,

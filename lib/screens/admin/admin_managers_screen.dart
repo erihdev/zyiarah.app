@@ -440,7 +440,7 @@ class _ManagerFormSheetState extends State<_ManagerFormSheet> {
           .call({'staffId': widget.docId});
       widget.onSuccess();
     } catch (e) {
-       setState(() => isSaving = false);
+       if (mounted) setState(() => isSaving = false);
        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ في الحذف: $e")));
     }
   }
@@ -495,7 +495,7 @@ class _ManagerFormSheetState extends State<_ManagerFormSheet> {
       widget.onSuccess();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم تنفيذ العملية بنجاح ✅")));
     } catch (e) {
-      setState(() => isSaving = false);
+      if (mounted) setState(() => isSaving = false);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("حدث خطأ: $e")));
     }
   }
