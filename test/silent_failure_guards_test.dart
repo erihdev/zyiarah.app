@@ -58,7 +58,18 @@ void main() {
       final body = s.substring(i, s.indexOf('\n  Future<void> _showEditProfileDialog', i));
       expect(body.contains('on FirebaseFunctionsException'), isTrue,
           reason: 'الخادم يرمي سبباً عربياً دقيقاً — يجب عرضه لا ابتلاعه');
-      expect(body.contains('e.message'), isTrue);
+      // **كان هذا الفحصُ يَشدُّ `e.message` هنا — أي الصيغةَ الأضعفَ (2026-10-07).**
+      // `e.message ??` بلا فحصِ عربيّةٍ يَطبعُ رسالةَ المنصّةِ الإنجليزيّةَ
+      // (`internal`، `DEADLINE_EXCEEDED`) خامّةً في شريطٍ عربيّ — وهو عطلٌ
+      // له حارسُه في `net_timeout_guard_test`. فكان الحارسُ **يُقاومُ**
+      // التشديد. والمشدودُ الآن أنّ الفرعَ يَبلغُ القرارَ، وأنّ القرارَ
+      // يَقرأُ الرسالةَ — فالعرضُ قائمٌ والتسريبُ مسدود.
+      expect(RegExp(r'\buserFacingError\s*\(').hasMatch(body), isTrue,
+          reason: 'سببُ الخادمِ يُعرَضُ عبرَ القرارِ الواحد');
+      expect(_code('lib/utils/user_facing_error.dart').contains('error.message'),
+          isTrue);
+      expect(body.contains('e.message'), isFalse,
+          reason: 'قراءةٌ خامّةٌ بلا فحصِ عربيّةٍ تُسرّبُ نصَّ المنصّة');
       expect(body.contains('تحتاج 50 نقطة على الأقل'), isFalse,
           reason: 'رسالة خاطئة: الزر لا يعمل أصلاً دون 50 نقطة، فالمستخدمة تملكها');
     });

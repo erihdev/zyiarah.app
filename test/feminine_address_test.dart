@@ -121,8 +121,47 @@ void main() {
       // `location_picker_screen` يَفتحُه `admin_hourly_zones_screen` أيضاً،
       // ومثالُ ملاحظاتِ المنزلِ موجَّهٌ إلى الفريقِ لا إليها. فالحلُّ صيغةٌ
       // بلا جنسٍ (مصدرٌ أو «يُرجى») لا تأنيث.
-      expect(File('lib/utils/global_error_handler.dart').readAsStringSync(),
-          contains('يُرجى المحاولة مرة أخرى'));
+      // **سقطَ هذا الفحصُ بالنقلِ لا بالانحراف (2026-10-07):** الجملةُ انتقلت
+      // من `global_error_handler` إلى `user_facing_error` حين سَكنَ قرارُ
+      // «ماذا نَعرضُ لها» مرّةً واحدةً — فالنطاقُ **الزوجُ معاً**، ونقلٌ
+      // لاحقٌ بينهما لا يُخلي الفحص. وعضَّ على أوّلِ صياغةٍ لذلك الملفِّ
+      // فعلاً: كانت «تحقّقي من الشبكة» في جملةٍ يَقرؤها كلُّ دور.
+      const roleAgnosticFiles = [
+        'lib/utils/global_error_handler.dart',
+        'lib/utils/user_facing_error.dart',
+      ];
+      final roleAgnostic =
+          roleAgnosticFiles.map((p) => File(p).readAsStringSync()).join('\n');
+      expect(roleAgnostic, contains('يُرجى المحاولة مرة أخرى'));
+      // وكلُّ جملةٍ ثابتةٍ في القاعدةِ **بلا جنس**: `handleError` غيرُ مُقيَّدٍ
+      // بدورٍ، فصيغةُ المؤنَّثِ فيها تُخاطبُ السائقَ والمالكَ بالمؤنّث.
+      //
+      // **و`patterns` أعلاه تَكشفُ المذكَّرَ لا المؤنَّث**، فاستعمالُها هنا
+      // يَمُرُّ على سطرٍ مؤنَّثٍ مَرورَ الكرام — وقد مرَّ: أوّلُ صياغةٍ لهذا
+      // الفحصِ استعملتها، فنجحَ اختبارُ قضمٍ وضعَ «تحقّقي من الشبكة» في
+      // القاعدةِ **أخضرَ**. فالكشفُ بصيغِ المؤنَّثِ نفسِها، ولكلٍّ شاهدُ
+      // استعمالٍ في شاشاتِ العميلةِ — فقائمةٌ مُختَرَعةٌ لا تَحرُسُ شيئاً.
+      const feminine = [
+        'اختاري', 'أدخلي', 'اضغطي', 'حاولي', 'تحقّقي',
+        'تواصلي', 'أعيدي', 'انتظري', 'تقلقي', 'أنتِ',
+      ];
+      final screens = dartIn('lib/screens', recursive: true)
+          .map((f) => f.readAsStringSync())
+          .join('\n');
+      for (final w in feminine) {
+        expect(screens.contains(w), isTrue,
+            reason: '«$w» ليست صيغةً يَستعملُها المشروعُ — فالقائمةُ تَتعفّن');
+      }
+      for (final p in roleAgnosticFiles) {
+        for (final (ln, lit) in arabicLiterals(File(p))) {
+          for (final w in feminine) {
+            expect(lit.contains(w), isFalse,
+                reason: '$p:$ln «$w» → $lit — يَقرؤه كلُّ دور؛ وما يَخُصُّها '
+                    'وحدَها يُمرَّرُ في fallback من موضعِ النداء');
+          }
+        }
+      }
+      expect(roleAgnostic, contains('kGenericErrorMessage'));
       expect(File('lib/screens/location_picker_screen.dart').readAsStringSync(),
           contains('البحث عن شارع'));
       expect(File('lib/screens/profile_screen.dart').readAsStringSync(),

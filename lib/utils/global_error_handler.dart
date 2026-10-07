@@ -1,26 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:zyiarah/main.dart';
+import 'package:zyiarah/utils/user_facing_error.dart';
 
 class GlobalErrorHandler {
 
-  /// Logs the error and displays a unified user-friendly snackbar.
+  /// يُسجّلُ الخطأَ ويُظهِرُ لها **سببَه** إن كان معروفاً.
+  ///
+  /// كان يُطابِقُ ثلاثَ كلماتٍ في `toString()` ويَطرحُ ما كتبَه الخادمُ، فسببٌ
+  /// مثل «الرصيد غير كافٍ» يَصِلُها «حدث خطأ غير متوقع. يُرجى المحاولة مرة
+  /// أخرى» — ونصيحةُ الإعادةِ هناك خاطئةٌ لا ناقصة. القرارُ الآن في
+  /// `userFacingError` مرّةً واحدةً لكلِّ الأسطح (`lib/utils/user_facing_error.dart`).
   static void handleError(dynamic error, [StackTrace? stackTrace]) {
-    String message = "حدث خطأ غير متوقع. يُرجى المحاولة مرة أخرى.";
-    
-    // Customize user message based on standard exceptions
-    if (error.toString().contains("network") || error.toString().contains("offline")) {
-      message = "لا يوجد اتصال بالإنترنت. يرجى التحقق من الشبكة.";
-    } else if (error.toString().contains("unavailable")) {
-      message = "تعذّر الاتصال بالخادم. يرجى المحاولة مرة أخرى.";
-    } else if (error.toString().contains("permission-denied")) {
-      message = "ليس لديك الصلاحية لإتمام هذه العملية.";
-    }
-
     // Send silently to Crashlytics to keep app stable
     FirebaseCrashlytics.instance.recordError(error, stackTrace, fatal: false);
 
-    _showToast(message, isError: true);
+    _showToast(userFacingError(error), isError: true);
   }
 
   static void _showToast(String message, {bool isError = false}) {
