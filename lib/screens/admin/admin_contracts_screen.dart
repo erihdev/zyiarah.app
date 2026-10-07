@@ -252,7 +252,8 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
                 // **الاعتمادُ لِما لم يُدفَع بعد.** كان الشرطُ
                 // `status == 'pending'` وحدَها، وعقدٌ فشلَ تفعيلُه يَسكنُ
                 // تلك الحالةَ — فالضغطةُ تُطالِبُ مَن دفعَ بالدفعِ وتُخرِجُه
-                // من نافذةِ الإنقاذ. التفصيلُ في `contract_health.dart`.
+                // ولا يُعادُ إطلاقُ مُشغّلِ التفعيل. التفصيلُ في
+                // `contract_health.dart` (وفيه تصحيحُ بندِ «نافذةِ الإنقاذ»).
                 if (contractApproveAllowed(data) && _canApproveContracts)
                   Expanded(
                     child: ElevatedButton.icon(

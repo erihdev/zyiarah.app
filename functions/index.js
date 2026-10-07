@@ -5280,13 +5280,26 @@ exports.opsHealthSweep = onSchedule(
       //    أمّا «مدفوعٌ وما زال `pending`» فهي الحالةُ المتناقضةُ نفسُها ولا
       //    تَحتاجُ أن يَنجحَ شيءٌ لتُرى. ومساواتانِ بلا مدًى ⇒ لا فهرسَ
       //    مركَّب (`contracts` ليس له إلّا `userId`+`created_at`).
-      //    **ولا تَغرقُ**: العقدُ غيرُ المدفوعِ `pending` بـ`is_paid == false`
-      //    فيَخرُج، والمُفعَّلُ `active`. ويُتخطّى `plan_validation_failed`:
-      //    ذاك عدمُ تفعيلٍ **مقصودٌ** نُبِّه عنه سلفاً.
+      //    **ولا تَغرقُ**: غيرُ المدفوعِ يَخرُجُ بـ`is_paid == false`،
+      //    والمُفعَّلُ `active` خارجَ المجموعة. ويُتخطّى
+      //    `plan_validation_failed`: ذاك عدمُ تفعيلٍ **مقصودٌ** نُبِّه عنه.
+      //
+      //    ⚠️ **وكانت `status == "pending"` وحدَها — وهي ليست الحالةَ التي
+      //    يَترُكُها المسارُ الطبيعيّ.** الدفعُ يَقعُ من
+      //    `approved_waiting_payment` (زرُّ العميلةِ مشروطٌ بها)،
+      //    و`payContractWithWallet` لا يَمَسُّ `status`، و`_activateContractNow`
+      //    لا يَكتبُ `active` إلّا عند النجاح — فالفاشلُ يَستقرُّ على
+      //    `approved_waiting_payment` + `is_paid: true`، وكان **يُفلِتُ من
+      //    هذه المكنسةِ ومن بطاقةِ الصحّةِ معاً**. و`pending` + مدفوع تَقعُ
+      //    متى دُفِعَ قبلَ الاعتماد، فهي الطرَفُ النادرُ وكانت وحدَها
+      //    المَحروسة. و`in` تَنحلُّ إلى مساواتَين، فلا فهرسَ مركَّباً.
+      //    القائمةُ مرآةٌ لـ`kContractPreActiveStatuses` في
+      //    `lib/utils/contract_health.dart` ويَشدُّ التطابقَ حارسٌ دارتيّ.
       try {
         const kSnap = await db.collection("contracts")
             .where("is_paid", "==", true)
-            .where("status", "==", "pending").limit(100).get();
+            .where("status", "in", ["pending", "approved_waiting_payment"])
+            .limit(100).get();
         let revived = 0; let deliberate = 0;
         for (const doc of kSnap.docs) {
           const d = doc.data();
