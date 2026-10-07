@@ -721,7 +721,7 @@ export default function Contracts({ role }: { role?: string | null }) {
                     </div>
                     <div>
                         <h2 className="text-2xl font-black text-slate-800 tracking-tight">مركز العقود الرقمية</h2>
-                        <p className="text-slate-500 font-medium text-sm">إدارة واعتماد عقود الإشتراكات والخدمات المنزلية — يعرض أحدث 300 عقد</p>
+                        <p className="text-slate-500 font-medium text-sm">إدارة واعتماد عقود الاشتراكات والخدمات المنزلية — يعرض أحدث 300 عقد</p>
                     </div>
                 </div>
             </div>

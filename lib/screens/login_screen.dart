@@ -148,7 +148,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                   keyboardType: TextInputType.emailAddress,
                 ),
                 const SizedBox(height: 20),
-                _buildFieldLabel("كلمه المرور"),
+                _buildFieldLabel("كلمة المرور"),
                 _buildTextField(
                   controller: _passwordController,
                   hint: "********",
@@ -189,7 +189,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text("ليس لديك حساب ؟ ", style: GoogleFonts.tajawal(color: Colors.grey[700])),
+                    Text("ليس لديك حساب؟ ", style: GoogleFonts.tajawal(color: Colors.grey[700])),
                     GestureDetector(
                       onTap: () {
                         // عبر الراوتر: شاشة التسجيل تستدعي context.go('/') عند النجاح، ودفعها
@@ -197,7 +197,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                         context.push('/signup');
                       },
                       child: Text(
-                        "انشاء حساب",
+                        "إنشاء حساب",
                         style: GoogleFonts.tajawal(color: brandColor, fontWeight: FontWeight.bold),
                       ),
                     ),
