@@ -4,9 +4,15 @@ import { describe, it, expect } from 'vitest';
 // فحص «بناء لوحة الإدارة» في CI، لا vitest).
 import editorSrc from '../components/ZoneScheduleEditor.tsx?raw';
 import {
-    HOURS, formatHour12, withStart, withEnd, scheduleFromDoc, scheduleToDoc,
-    type ZoneSchedule,
-} from './zoneSchedule.ts';
+  HOURS,
+  formatHour12,
+  withStart,
+  withEnd,
+  scheduleFromDoc,
+  scheduleToDoc,
+  type ZoneSchedule,
+  DAY_NAMES,
+} from './zoneSchedule';
 
 // جدول فتح المحافظة — **عقدٌ بين ثلاث نسخ**، وهذا الملف يثبّت نصيب اللوحة منه:
 //
@@ -250,4 +256,20 @@ describe('المحرّر يمرّ كل تعديل ساعة على القيد', (
         ].filter(re => re.test(src)).map(String);
         expect(direct, `إسناد مباشر يتجاوز withStart/withEnd:\n${direct.join('\n')}`).toEqual([]);
     });
+});
+
+// **`DAY_NAMES` كان مُستورَداً من اللوحةِ وغيرَ مُشغَّلٍ هنا (2026-10-07).**
+// وجدَه `panel_mirror_coverage_test` حين وُسِّعَ إلى «كلُّ اسمٍ تَستورِدُه
+// اللوحةُ يَجبُ أن يُشغَّل». والقائمةُ هي ما يُسمّي أعمدةَ محرِّرِ جدولِ
+// المنطقةِ، والمفتاحُ `weekday(0-6)` — فانحرافُ **ترتيبٍ** واحدٍ يَجعلُ
+// الأدمنَ يَضبطُ ساعاتَ السبتِ وهو يَحسبُها الأحد، بلا أن يَكسِرَ شيء.
+// والتطابقُ مع `arabicWeekdayNames` في دارت يَشدُّه `test/time_format_test.dart`
+// قيمةً بقيمة.
+describe('DAY_NAMES', () => {
+  it('سبعةُ أيّامٍ تَبدأُ بالأحدِ — مفتاحُ weekday(0-6)', () => {
+    expect(DAY_NAMES).toHaveLength(7);
+    expect(DAY_NAMES[0]).toBe('الأحد');
+    expect(DAY_NAMES[6]).toBe('السبت');
+    expect(new Set(DAY_NAMES).size).toBe(7);
+  });
 });

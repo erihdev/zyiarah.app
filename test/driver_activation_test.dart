@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +15,51 @@ import 'package:zyiarah/utils/driver_activation.dart';
 /// **وقد وُجد هذا وأُصلح مرّةً في موضعٍ واحدٍ من ثلاثة** — تعليقُ
 /// `admin_compliance_screen` يَشرحُه بنفسِه — وبَقي الموضعُ الرئيسيُّ. فصارت
 /// الحقولُ مصدراً واحداً لكلِّ جهة.
+
+/// جدولُ الحالاتِ **المشترَكُ** مع فحصِ اللوحة — يُقرأُ من ملفِّه لا يُنسَخ.
+///
+/// والاقتطاعُ **من آخرِ `]` إلى الوراءِ بموازنةِ الأقواس**: `indexOf('[')`
+/// يَلتقطُ قوسَ **تعليقِ النوعِ** (`[boolean | null, …][]`) لا بدايةَ
+/// المصفوفة — فخٌّ مسجَّلٌ في هذا المستودعِ أكثرَ من مرّة.
+List<List<Object?>> _sharedCases() {
+  final src =
+      File('admin_panel/src/utils/driverActivation.test.ts').readAsStringSync();
+  final a = src.indexOf('// ⟦CASES⟧');
+  final b = src.indexOf('// ⟦/CASES⟧');
+  if (a < 0 || b < 0 || b <= a) {
+    throw StateError('علامتا كتلةِ الحالاتِ مفقودتانِ من فحصِ الـTS');
+  }
+  final block = src.substring(a, b);
+  final end = block.lastIndexOf(']');
+  if (end < 0) throw StateError('لا قوسَ إغلاقٍ في كتلةِ الحالات');
+  var depth = 0;
+  var start = -1;
+  for (var i = end; i >= 0; i--) {
+    if (block[i] == ']') depth++;
+    if (block[i] == '[') {
+      depth--;
+      if (depth == 0) {
+        start = i;
+        break;
+      }
+    }
+  }
+  if (start < 0) throw StateError('تعذّرَ موازنةُ أقواسِ كتلةِ الحالات');
+  var json = block.substring(start, end + 1);
+  // الجدولُ يَحملُ تعليقاتٍ تَشرحُ كلَّ صنف، و`jsonDecode` لا تَقبلُها —
+  // فتُحجَبُ **الأسطرُ الكاملةُ** وحدَها (لا `//` في أيِّ موضع: قيمةٌ نصّيّةٌ
+  // فيها `https://` كانت ستُقطَع، وهو الفخُّ المسجَّلُ في حارسِ تمارا).
+  json = json
+      .split('\n')
+      .where((l) => !l.trimLeft().startsWith('//'))
+      .join('\n');
+  json = json.replaceAll(RegExp(r'\bundefined\b'), 'null');
+  json = json.replaceAllMapped(RegExp(r',(\s*[\]\}])'), (m) => m.group(1)!);
+  return (jsonDecode(json) as List<dynamic>)
+      .map((r) => (r as List<dynamic>).cast<Object?>())
+      .toList();
+}
+
 void main() {
   String read(String p) => File(p).readAsStringSync();
   String code(String p) => read(p)
@@ -74,6 +120,45 @@ void main() {
           ts.contains(
               '{ is_active: false, is_suspended: true, is_available: false }'),
           isTrue);
+    });
+
+    test('والقاعدةُ نفسُها سلوكاً — جدولٌ واحدٌ للغتَين', () {
+      // **كان هذا ناقصاً، واختبارُ قضمٍ أثبتَه (2026-10-07):** تضييقُ قاعدةِ
+      // اللوحةِ إلى `d.is_active === false` مرَّ **أخضرَ** في مجموعةِ دارت
+      // و`tsc` وفحوصِ اللوحةِ جميعاً — لأنّ المرآةَ كانت مشدودةً إلى
+      // **حِمْلَي الكتابةِ** وحدَهما. والمقارنةُ على الحِمْلِ لا على القدرة
+      // هي العمى المسجَّلُ هنا مرّاتٍ.
+      final cases = _sharedCases();
+      expect(cases.length, greaterThanOrEqualTo(8),
+          reason: 'انهارَ قراءةُ الجدولِ المشترَك');
+      // وأصنافٌ مُسمّاةٌ لا حدٌّ عدديٌّ وحدَه: حذفُ صنفٍ لا يُكتشَفُ بالعدّ.
+      expect(cases.any((c) => c[0] == null && c[1] == null && c[2] == false),
+          isTrue, reason: 'غيابُ الحقلَين يُقرأُ مُفعَّلاً — قرارٌ لا سهو');
+      expect(cases.any((c) => c[0] == false && c[1] == null && c[2] == true),
+          isTrue, reason: 'is_active وحدَه يُعطّل');
+      expect(cases.any((c) => c[0] == null && c[1] == true && c[2] == true),
+          isTrue, reason: 'is_suspended وحدَه يُعطّل — وهو ما ضاعَ في القضم');
+      expect(cases.any((c) => c[0] == true && c[1] == true && c[2] == true),
+          isTrue, reason: 'مستندٌ متناقضٌ يُقرأُ معطَّلاً (الأحوط)');
+      for (final c in cases) {
+        final d = <String, Object?>{};
+        if (c[0] != null) d['is_active'] = c[0];
+        if (c[1] != null) d['is_suspended'] = c[1];
+        expect(driverIsDisabled(d), c[2],
+            reason: 'القاعدتانِ افترقتا على $d — المتوقَّع ${c[2]}');
+      }
+    });
+
+    test('ولمرآةِ اللوحةِ فحصٌ على جهتِها', () {
+      // مرآةٌ بلا فحصٍ على جهتِها تُترَكُ لحارسِ دارت وحدَه، وهو يَقرأُ
+      // **نصّاً** لا سلوكاً — فأيُّ تغييرٍ لا يَمَسُّ النصَّ المشدودَ يَمرّ.
+      expect(File('admin_panel/src/utils/driverActivation.test.ts').existsSync(),
+          isTrue);
+      final t =
+          read('admin_panel/src/utils/driverActivation.test.ts');
+      expect(RegExp(r'\bdriverIsDisabled\s*\(').hasMatch(t), isTrue,
+          reason: 'الجدولُ يُقرَأُ ولا يُمرَّرُ على القاعدةِ في TS');
+      expect(t.contains('driverActivationFields('), isTrue);
     });
   });
 

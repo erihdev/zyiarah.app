@@ -329,4 +329,41 @@ void main() {
       });
     }
   });
+
+  group('وقائمةُ الأيّامِ واحدةٌ بين اللغتَين', () {
+    test('DAY_NAMES في اللوحةِ = arabicWeekdayNames قيمةً بقيمة', () {
+      // **مرآةٌ غيرُ مشدودةٍ حتى اليومَ (2026-10-07):** `zoneSchedule.ts`
+      // يُصدِّرُ `DAY_NAMES` وتَستورِدُها اللوحةُ لتُسمّيَ أعمدةَ محرِّرِ
+      // جدولِ المنطقةِ، والمفتاحُ `weekday(0-6)` — فانحرافُ ترتيبٍ واحدٍ
+      // يَجعلُ الأدمنَ يَضبطُ ساعاتَ السبتِ وهو يَحسبُها الأحد، بلا أن
+      // يَكسِرَ شيءٌ ولا يَسقطَ فحص. وجدَه `panel_mirror_coverage_test`.
+      final ts = File('admin_panel/src/utils/zoneSchedule.ts').readAsStringSync();
+      final m = RegExp(r"export const DAY_NAMES = \[([^\]]*)\]").firstMatch(ts);
+      expect(m, isNotNull, reason: 'تعذّرَ اقتطاعُ DAY_NAMES من المرآة');
+      final panel = m!
+          .group(1)!
+          .split(',')
+          .map((e) => e.trim().replaceAll("'", '').replaceAll('"', ''))
+          .where((e) => e.isNotEmpty)
+          .toList();
+      expect(panel, arabicWeekdayNames,
+          reason: 'قائمةُ أيّامِ اللوحةِ انحرفت عن المصدرِ الدارتيّ');
+      // والنسخةُ الثالثةُ في محرِّرِ التطبيقِ تُطابقُهما كذلك — تُركت في
+      // موضعِها بقرارٍ قائم (`admin/` خارجَ نطاقِ حارسِ الوقتِ عمداً)،
+      // فتُشَدُّ قيمتُها هنا بدلَ أن تُنقَل: لمسُ شفرةٍ سليمةٍ بلا خللٍ
+      // خلفَها مخاطرةٌ بلا مقابل.
+      final ed = File('lib/screens/admin/admin_zone_schedule_editor.dart')
+          .readAsStringSync();
+      final em = RegExp(r"_dayNames = \[([^\]]*)\]").firstMatch(ed);
+      expect(em, isNotNull);
+      final editor = em!
+          .group(1)!
+          .split(',')
+          .map((e) => e.trim().replaceAll("'", ''))
+          .where((e) => e.isNotEmpty)
+          .toList();
+      expect(editor, arabicWeekdayNames,
+          reason: 'نسخةُ محرِّرِ المناطقِ انحرفت — والمفتاحُ weekday(0-6)');
+    });
+  });
 }

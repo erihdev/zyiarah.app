@@ -31,6 +31,7 @@
 // `is_paid: true` و`amount: 0` بعددِ `planVisits` الذي يَكتبُه العميل.
 // فشرطُ `is_paid == true` في الاستعلامِ حاملٌ لا زينة — والقواعدُ تَحجبُ
 // العلَمَ أيضاً لكنّها محجوزةٌ خلفَ STAGE-C فلا تُنشَرُ من الأتمتة.
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -40,6 +41,51 @@ String _stripJs(String src) => src
     .split('\n')
     .where((l) => !l.trimLeft().startsWith('//'))
     .join('\n');
+
+
+/// جدولُ أسبابِ العقدِ **المشترَكُ** مع فحصِ اللوحة — يُقرَأُ من ملفِّه.
+///
+/// والاقتطاعُ من آخرِ `]` إلى الوراءِ بموازنةِ الأقواس (`indexOf('[')` يَلتقطُ
+/// قوسَ تعليقِ النوعِ `][]`)، ومع حجبِ أسطرِ التعليقِ الكاملةِ وحدَها.
+List<List<Object?>> _sharedReasons() {
+  final src =
+      File('admin_panel/src/utils/contractHealth.test.ts').readAsStringSync();
+  final a = src.indexOf('// ⟦REASONS⟧');
+  final b = src.indexOf('// ⟦/REASONS⟧');
+  if (a < 0 || b < 0 || b <= a) {
+    throw StateError('علامتا جدولِ الأسبابِ مفقودتانِ من فحصِ الـTS');
+  }
+  final block = src.substring(a, b);
+  final end = block.lastIndexOf(']');
+  if (end < 0) throw StateError('لا قوسَ إغلاقٍ في جدولِ الأسباب');
+  var depth = 0;
+  var start = -1;
+  for (var i = end; i >= 0; i--) {
+    if (block[i] == ']') depth++;
+    if (block[i] == '[') {
+      depth--;
+      if (depth == 0) {
+        start = i;
+        break;
+      }
+    }
+  }
+  if (start < 0) throw StateError('تعذّرَ موازنةُ أقواسِ جدولِ الأسباب');
+  var json = block.substring(start, end + 1);
+  json = json
+      .split('\n')
+      .where((l) => !l.trimLeft().startsWith('//'))
+      .join('\n');
+  json = json.replaceAll("'", '"');
+  json = json.replaceAll(RegExp(r'\bundefined\b'), 'null');
+  // مفاتيحُ الكائناتِ في TS بلا اقتباس — وJSON يَلزمُه.
+  json = json.replaceAllMapped(
+      RegExp(r'([{,]\s*)([A-Za-z_]\w*)(\s*:)'), (m) => '${m[1]}"${m[2]}"${m[3]}');
+  json = json.replaceAllMapped(RegExp(r',(\s*[\]\}])'), (m) => m.group(1)!);
+  return (jsonDecode(json) as List<dynamic>)
+      .map((r) => (r as List<dynamic>).cast<Object?>())
+      .toList();
+}
 
 void main() {
   final js = File('functions/index.js').readAsStringSync();
@@ -258,6 +304,29 @@ void main() {
     test('والسببُ الخادميُّ يُعرَض', () {
       expect(screen.contains('contractHealthReason('), isTrue,
           reason: 'السببُ مكتوبٌ على المستندِ ولا يُقرأ — وهو عينُ العطل');
+    });
+  });
+
+  group('وجدولُ الأسبابِ واحدٌ للغتَين', () {
+    test('contractHealthReason تُوافقُ مرآةَ اللوحةِ حالةً بحالة', () {
+      // **ثغرةٌ في الحارسِ سدَّها الاشتقاقُ (2026-10-07):** اللوحةُ تَستورِدُ
+      // `contractHealthReason` وتَعرضُه سبباً لفشلِ التفعيل، ولم يُشغّلْه فحصٌ
+      // على جهتِها — فانحرافُ الترتيبِ أو التهذيبِ كان يَمُرُّ صامتاً.
+      // والقاعدتانِ متّفقتانِ اليومَ، فهذا سدُّ ثغرةٍ لا إصلاحُ عطل.
+      final cases = _sharedReasons();
+      expect(cases.length, greaterThanOrEqualTo(8),
+          reason: 'انهارَ قراءةُ جدولِ الأسباب');
+      // أصنافٌ مُسمّاةٌ لا حدٌّ عدديٌّ وحدَه.
+      expect(cases.any((c) => (c[0] as Map).isEmpty && c[1] == null), isTrue);
+      expect(cases.any((c) => (c[0] as Map).length >= 3), isTrue,
+          reason: 'الأولويّةُ بين الثلاثةِ غيرُ مُختبَرة');
+      expect(cases.any((c) => c[1] == null && (c[0] as Map).isNotEmpty), isTrue,
+          reason: 'الفراغُ ليس سبباً — غيرُ مُختبَر');
+      for (final c in cases) {
+        final doc = (c[0] as Map).cast<String, dynamic>();
+        expect(contractHealthReason(doc), c[1],
+            reason: 'القاعدتانِ افترقتا على $doc');
+      }
     });
   });
 }
