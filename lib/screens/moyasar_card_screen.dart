@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:moyasar/moyasar.dart';
+import 'package:zyiarah/utils/moyasar_error_text.dart';
 import 'package:zyiarah/utils/moyasar_util.dart';
 import '../utils/env.dart';
 
@@ -32,25 +33,24 @@ class MoyasarCardScreen extends StatelessWidget {
         creditCard: CreditCardConfig(saveCard: false, manual: false),
       );
 
+  /// **كلُّ ما يُعرَضُ يَأتي من القاعدةِ الواحدة** — انظر
+  /// `lib/utils/moyasar_error_text.dart` لِما كان يُسرَّبُ من هنا:
+  /// `ApiError.message` و`ValidationError.message` (إنجليزيّتانِ من ميسر)،
+  /// و`NetworkError.message` (حرفٌ إنجليزيٌّ في الحزمة)، وأغربُها
+  /// `result.description` — **الوصفُ الذي أرسلناه نحن**، فبطاقةٌ مرفوضةٌ
+  /// كانت تُنتجُ شريطاً أحمرَ نصُّه «خدمة زيارة - …»: اسمُ خدمتِها مكانَ
+  /// سببِ الرفض.
   void _handlePaymentResult(BuildContext context, dynamic result) {
-    if (result is PaymentResponse) {
-      if (result.status == PaymentStatus.paid ||
-          result.status == PaymentStatus.authorized) {
-        Navigator.of(context).pop();
-        onSuccess(result.id);
-      } else {
-        final msg = result.description ?? 'فشل الدفع — يرجى المحاولة مجدداً';
-        onFailure(msg);
-      }
-    } else if (result is ApiError) {
-      onFailure(result.message);
-    } else if (result is ValidationError) {
-      onFailure(result.message);
-    } else if (result is NetworkError) {
-      onFailure(result.message);
-    } else {
-      onFailure('فشل الدفع — يرجى المحاولة مجدداً');
+    if (result is PaymentResponse &&
+        (result.status == PaymentStatus.paid ||
+            result.status == PaymentStatus.authorized)) {
+      Navigator.of(context).pop();
+      onSuccess(result.id);
+      return;
     }
+    final e = moyasarErrorText(result);
+    debugPrint('[card] ${e.detail}');
+    onFailure(e.message);
   }
 
   @override

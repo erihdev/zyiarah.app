@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:moyasar/moyasar.dart';
+import 'package:zyiarah/utils/moyasar_error_text.dart';
 import 'helpers/strip_comments.dart';
 
 /// **ثلاثةُ مساراتِ دفعٍ أصليٍّ، وقرارٌ واحدٌ مكتوبٌ ثلاثَ مرّاتٍ فسقطت منه
@@ -211,4 +213,140 @@ void main() {
               'التجديدُ عند الشكِّ يُجيزُ شحناً مزدوجاً');
     });
   });
+  // ───────────────────────────────────────────────────────────────────────
+  // والقاعدةُ نفسُها على شاشتَي SDK — نسختانِ خرجتا على حارسِها
+  //
+  // «كلُّ فرعٍ في مُبدِّلِ رسائلِ ميسر حرفٌ عربيٌّ ثابتٌ» مقرَّرةٌ أعلاه
+  // ومحروسةٌ — في `moyasar_service.dart` وحدَه. وشاشتا SDK كانت لكلٍّ منهما
+  // نسختُها، وكلتاهما تُسرِّبُ نصَّ البوّابة. فالقاعدةُ تَسكنُ الآن مرّةً في
+  // `lib/utils/moyasar_error_text.dart`، نقيّةً فتُختبَرُ سلوكاً.
+  group('خطأُ بوّابةِ ميسر: قاعدةٌ واحدةٌ للشاشتَين', () {
+    final String rule =
+        stripComments(File('lib/utils/moyasar_error_text.dart').readAsStringSync());
+    final String card = stripComments(
+        File('lib/screens/moyasar_card_screen.dart').readAsStringSync());
+    final String stc = stripComments(
+        File('lib/screens/moyasar_stc_screen.dart').readAsStringSync());
+
+    test('سلوكاً: كلُّ رسالةٍ عربيّةٌ ولا نصَّ بوّابةٍ فيها', () {
+      // الحالاتُ التي كانت تُسرِّبُ، بنصِّ الحزمة.
+      final cases = <Object>[
+        ApiError('Invalid API key provided.'),
+        ApiError("FormatException: Unexpected character (at character 1)"),
+        ValidationError('Amount must be greater than 100', {'amount': 'x'}),
+        NetworkError(),
+        TimeoutError(),
+        AuthError('Unauthorized'),
+        PaymentCanceledError(),
+        UnprocessableTokenError(),
+        UnspecifiedError('{"html":"<body>502 Bad Gateway</body>"}'),
+      ];
+      for (final c in cases) {
+        final e = moyasarErrorText(c);
+        expect(e.message.trim(), isNotEmpty);
+        expect(RegExp(r'[ء-ي]').hasMatch(e.message), isTrue,
+            reason: 'رسالةٌ بلا حرفٍ عربيٍّ عن ${c.runtimeType}');
+        expect(RegExp('[A-Za-z]{4,}').hasMatch(e.message), isFalse,
+            reason: 'نصُّ البوّابةِ وصلَ العميلةَ عن ${c.runtimeType}: '
+                '${e.message}');
+        // والتشخيصُ لا يُفقَد.
+        expect(e.detail.trim(), isNotEmpty, reason: '${c.runtimeType} بلا تشخيص');
+      }
+    });
+
+    test('«لا نعرف» للمهلةِ ولـ`ApiError` — ولا دعوةَ إعادةٍ معها', () {
+      // ودجةُ البطاقةِ تُحوّلُ استثناءاتِها إلى `ApiError(e.toString())`،
+      // فقد يَكونُ الخصمُ تمّ وفشلَ تحليلُ الرد — ولا يُفرَّقُ من النوع.
+      for (final c in <Object>[TimeoutError(), ApiError('boom')]) {
+        final e = moyasarErrorText(c);
+        expect(e.resultUnknown, isTrue, reason: '${c.runtimeType} ليست «فشلاً»');
+        expect(e.message.contains('قد خُصم'), isTrue);
+        expect(e.message.contains('لا تُعيدي الدفع'), isTrue,
+            reason: 'دعوةُ الإعادةِ على نتيجةٍ مجهولةٍ تُنتجُ شحناً مزدوجاً');
+      }
+      // وما لم يَصِلِ الطلبُ أصلاً ليس مجهولاً.
+      expect(moyasarErrorText(NetworkError()).resultUnknown, isFalse);
+      // والإلغاءُ ليس فشلاً.
+      expect(moyasarErrorText(PaymentCanceledError()).message.contains('فشل'),
+          isFalse);
+    });
+
+    test('`description` لا يُعرَضُ — فهو الوصفُ الذي أرسلناه', () {
+      expect(rule.contains('result.description'), isTrue,
+          reason: 'يُقرَأُ للتشخيصِ وحدَه');
+      // ولا يُعادُ رسالةً: الوصفُ يَظهرُ في `detail` فقط.
+      final retBodies = RegExp(r'MoyasarErrorText\(\s*([^,)]+)')
+          .allMatches(rule)
+          .map((m) => m.group(1)!.trim())
+          .where((a) => !a.startsWith('this.'))
+          .toList();
+      expect(retBodies.length, greaterThanOrEqualTo(8),
+          reason: 'الاستخراجُ انهارَ — فالفحصُ أجوف');
+      for (final a in retBodies) {
+        final ok = a.startsWith("'") ||
+            a == 'kMoyasarUnknownResult' ||
+            a.startsWith('declined');
+        expect(ok, isTrue, reason: 'رسالةٌ ليست حرفاً ثابتاً: $a');
+      }
+      // والشاشتانِ لا تَحملانِ نسخةً من المُبدِّل.
+      for (final src in [card, stc]) {
+        expect(src.contains('result.description'), isFalse,
+            reason: 'عادَ عرضُ الوصفِ الذي أرسلناه');
+        expect(RegExp(r'onFailure\(\s*result\.message').hasMatch(src), isFalse,
+            reason: 'عادَ تسريبُ رسالةِ البوّابة');
+        expect(src.contains('moyasarErrorText('), isTrue,
+            reason: 'الشاشةُ لا تُنادي القاعدة');
+      }
+    });
+
+    test('نداءا الحزمةِ داخلَ try — وإلّا حُبِست العميلةُ في شاشةِ STC', () {
+      // `Moyasar.pay`/`verifyOTP` يَفعلانِ `jsonDecode(res.body)` بلا حماية
+      // ثمّ `String errorType = jsonBody['type']`، و`onSubmit` في الشاشةِ
+      // `VoidCallback` فالمستقبلُ غيرُ مُنتظَر: الرميُ خطأٌ غيرُ مُعالَجٍ
+      // يُبقي `_isSubmitting` صحيحاً، و`PopScope(canPop: !_isSubmitting)`
+      // يُقفِلُ الرجوع — فلا مخرجَ إلّا قتلُ التطبيق.
+      for (final call in const ['Moyasar.pay(', 'Moyasar.verifyOTP(']) {
+        final at = stc.indexOf(call);
+        expect(at, greaterThan(-1), reason: 'زالَ النداء: $call');
+        final tryAt = stc.lastIndexOf('try {', at);
+        expect(tryAt, greaterThan(-1), reason: '$call بلا try');
+        expect(stc.substring(tryAt, at).contains('}'), isFalse,
+            reason: '`try` أقربُ منه كتلةٌ أخرى — $call ما زال عارياً');
+      }
+      expect(stc.contains('canPop: !_isSubmitting'), isTrue,
+          reason: 'لو زالَ القفلُ فالتعليلُ يُراجَعُ لا يُسكَت');
+      expect(RegExp(r'catch \(e\) \{').allMatches(stc).length,
+          greaterThanOrEqualTo(2));
+      expect(stc.contains("debugPrint('[stc] initiate threw:"), isTrue);
+      expect(stc.contains("debugPrint('[stc] verifyOTP threw:"), isTrue);
+    });
+
+    test('ورميُ طورِ الرمزِ يَقولُ «لا نعرف» لا «فشل»', () {
+      final at = stc.indexOf("debugPrint('[stc] verifyOTP threw:");
+      expect(at, greaterThan(-1));
+      final blk = stc.substring(at, (at + 600).clamp(0, stc.length));
+      expect(blk.contains('قد خُصم'), isTrue,
+          reason: 'لا تَقُلْ «فشل» عن نتيجةٍ مجهولة');
+      expect(blk.contains('لا تُعيدي الدفع'), isTrue,
+          reason: 'دعوةُ الإعادةِ هنا تُنتجُ شحناً مزدوجاً');
+      expect(blk.contains('فشل'), isFalse,
+          reason: 'دعوى فشلٍ عن دفعةٍ قد تَكونُ تمّت');
+    });
+
+    test('طورُ الرمزِ لا يُفتَحُ بلا رابطِ تحقّق', () {
+      // `transactionUrl` في الحزمةِ `String?`، والتحويلُ `as` غيرُ مفحوص.
+      expect(stc.contains('src is StcResponseSource'), isTrue,
+          reason: 'تحويلٌ غيرُ مفحوصٍ يَرمي على شكلٍ آخر');
+      expect(stc.contains('result.source as StcResponseSource'), isFalse,
+          reason: 'عادَ التحويلُ غيرُ المفحوص');
+      final u = stc.indexOf('if (url.isEmpty)');
+      expect(u, greaterThan(-1), reason: 'لا حارسَ لرابطٍ غائب');
+      final ph = stc.indexOf('_phase = _Phase.otp');
+      expect(u, lessThan(ph),
+          reason: 'الحارسُ بعدَ الانتقالِ لا يَمنعُ شيئاً — الترتيبُ هو الإصلاح');
+      expect(stc.contains('لم يُخصم أي مبلغ'), isTrue);
+    });
+  });
+
+
 }

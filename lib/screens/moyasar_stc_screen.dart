@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:moyasar/moyasar.dart';
+import 'package:zyiarah/utils/moyasar_error_text.dart';
 import 'package:zyiarah/utils/moyasar_util.dart';
 import '../utils/env.dart';
 
@@ -161,10 +162,30 @@ class _MoyasarStcScreenState extends State<MoyasarStcScreen> {
         _phoneController.text.replaceAll(RegExp(r'[^\d]'), '');
     final request = PaymentRequest(config, StcRequestSource(mobile: digits));
 
-    final result = await Moyasar.pay(
-      apiKey: _apiKey,
-      paymentRequest: request,
-    );
+    // **نداءُ الحزمةِ يَرمي، والرميُ هنا كان يَحبسُ العميلةَ في الشاشة.**
+    // `Moyasar.pay` يَفعلُ `jsonDecode(res.body)` بلا حماية ثمّ
+    // `String errorType = jsonBody['type']` — فجسمٌ غيرُ JSON (صفحةُ خطأٍ من
+    // وكيلٍ أو بوّابةِ تسجيلٍ أمامَ ميسر، وهي حالةٌ موثَّقةٌ في
+    // `functions/moyasar_api.js`: «جسمٌ غيرُ JSON من وكيلٍ أمامَ ميسر») يَرمي
+    // `FormatException`، و4xx بلا `type` يَرمي `TypeError`. و`onSubmit`
+    // هنا `VoidCallback`، فالمستقبلُ غيرُ مُنتظَرٍ والرميُ يَصيرُ خطأً
+    // غيرَ مُعالَجٍ: `_isSubmitting` يَبقى `true` **إلى الأبد**،
+    // و`PopScope(canPop: !_isSubmitting)` يُقفِلُ زرَّ الرجوع — فلا دفعَ ولا
+    // رسالةَ ولا مخرجَ إلّا قتلُ التطبيق.
+    final dynamic result;
+    try {
+      result = await Moyasar.pay(apiKey: _apiKey, paymentRequest: request);
+    } catch (e) {
+      debugPrint('[stc] initiate threw: $e');
+      if (mounted) setState(() => _isSubmitting = false);
+      // لم يُرسَل رمزٌ ولم تُنشَأْ دفعةٌ مؤكَّدة، فالرسالةُ تَصِفُ ما حدث
+      // ولا تُخيفُ عن خصمٍ: `givenID` مشتقٌّ من معرّفِ الطلبِ فإعادةُ
+      // المحاولةِ تُعيدُ الدفعةَ نفسَها لا تُنشئُ ثانية.
+      widget.onFailure('تعذّر بدء الدفع عبر STC Pay — أعيدي المحاولة '
+          'أو اختاري طريقةً أخرى');
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
 
     // لا نربط مصير النتيجة بحياة الشاشة: `if (!mounted) return` المبكر كان
     // يُسقط رد النداء كلياً إن رجعت المستخدمة أثناء الانتظار. ردود onSuccess/
@@ -175,9 +196,26 @@ class _MoyasarStcScreenState extends State<MoyasarStcScreen> {
     if (result is PaymentResponse &&
         result.status == PaymentStatus.initiated) {
       // لم تكتمل دفعة بعد (مجرد إرسال OTP) — الرجوع هنا إلغاء مقصود بلا خصم.
+      //
+      // **وطورُ الرمزِ بلا رابطِ تحقّقٍ طريقٌ مسدود.** `transactionUrl` في
+      // الحزمةِ `String?` يُقرأُ من `json['transaction_url']` مباشرةً،
+      // و`result.source as StcResponseSource` تحويلٌ غيرُ مفحوص. فكان
+      // الغيابُ يُنتجُ `''` ثمّ يَنتقلُ إلى طورِ الرمز: تَكتبُ العميلةُ
+      // الرمزَ، فيَفشلُ `Uri.parse('')` في الحزمة. والصوابُ أن يُقالَ الآن
+      // لا بعد أن تَكتبَه — ولا خصمَ: دفعةُ STC تَبقى `initiated` ولا
+      // تُحتسَبُ إلّا بتحقّقِ الرمز.
+      final src = result.source;
+      final url = src is StcResponseSource ? (src.transactionUrl ?? '') : '';
+      if (url.isEmpty) {
+        debugPrint('[stc] initiated without transaction_url: '
+            '${src.runtimeType}');
+        widget.onFailure('تعذّر إكمال الدفع عبر STC Pay — لم يُخصم أي مبلغ، '
+            'أعيدي المحاولة أو اختاري طريقةً أخرى');
+        if (mounted) Navigator.of(context).pop();
+        return;
+      }
       if (!mounted) return;
-      final src = result.source as StcResponseSource;
-      _transactionUrl = src.transactionUrl ?? '';
+      _transactionUrl = url;
       setState(() => _phase = _Phase.otp);
     } else {
       final msg = _errorMessage(result);
@@ -194,10 +232,25 @@ class _MoyasarStcScreenState extends State<MoyasarStcScreen> {
 
     final otpRequest = OtpRequestSource(otpValue: _otpController.text.trim());
 
-    final result = await Moyasar.verifyOTP(
-      transactionURL: _transactionUrl,
-      otpRequest: otpRequest,
-    );
+    // **وهنا الرميُ أخطر.** رمزُ التحقّقِ هو ما يُتِمُّ الدفعة، فاستثناءٌ
+    // بعدَ إرسالِه نتيجةٌ **مجهولةٌ** لا فاشلة — وقد تَكونُ ميسر خَصمَت.
+    // فالحبسُ نفسُه (`_isSubmitting` عالقاً و`canPop` مُقفَلاً) يُضافُ إليه
+    // أنّ الرسالةَ لا يَجوزُ أن تَقولَ «فشل»: هذه هي صياغةُ «لا نعرف»
+    // المقرَّرةُ في `payment_summary_screen` لمساراتِ الدفعِ الأصليّة.
+    final dynamic result;
+    try {
+      result = await Moyasar.verifyOTP(
+        transactionURL: _transactionUrl,
+        otpRequest: otpRequest,
+      );
+    } catch (e) {
+      debugPrint('[stc] verifyOTP threw: $e');
+      if (mounted) setState(() => _isSubmitting = false);
+      widget.onFailure('تعذّر تأكيد الدفع — إن كان المبلغُ قد خُصم فلا تقلقي، '
+          'سيُؤكَّد طلبكِ تلقائيّاً أو يُعاد المبلغ. لا تُعيدي الدفع.');
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
 
     // حرج: `if (!mounted) return` كان **قبل** onSuccess — رجوعٌ أثناء نافذة
     // التحقق (1–3ث تبدو تعليقاً) كان يُسقط صامتاً دفعةً خصمتها ميسر فعلاً:
@@ -219,20 +272,15 @@ class _MoyasarStcScreenState extends State<MoyasarStcScreen> {
     }
   }
 
+  /// القاعدةُ تَسكنُ مرّةً للشاشتَين — انظر
+  /// `lib/utils/moyasar_error_text.dart`. وكانت ثلاثةُ فروعٍ هنا تعبيراً
+  /// (`ValidationError.message` و`ApiError.message` الإنجليزيّتَين، واسمُ
+  /// الحالةِ اللاتينيُّ مُستقرَأً في جملةٍ عربيّة)، والمُنادي يَعرضُ الناتجَ
+  /// في شريطٍ أحمرَ على شاشةِ ملخّصِ الدفع.
   String _errorMessage(dynamic result) {
-    if (result is AuthError) return 'خطأ في المصادقة مع بوابة الدفع';
-    if (result is ValidationError) {
-      return result.message.isNotEmpty
-          ? result.message
-          : 'بيانات الدفع غير صحيحة';
-    }
-    if (result is NetworkError) return 'تعذّر الاتصال بالإنترنت';
-    if (result is TimeoutError) return 'انتهت مهلة الاتصال، يرجى المحاولة مجدداً';
-    if (result is ApiError) return result.message;
-    if (result is PaymentResponse) {
-      return 'فشلت عملية الدفع (${result.status.name})';
-    }
-    return 'حدث خطأ غير متوقع';
+    final e = moyasarErrorText(result);
+    debugPrint('[stc] ${e.detail}');
+    return e.message;
   }
 
   void _showSnack(String msg) {
