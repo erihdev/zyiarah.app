@@ -45,6 +45,23 @@ void main() {
   final js = File('functions/index.js').readAsStringSync();
   final jsCode = _stripJs(js);
 
+  /// جسمُ دالّةٍ خادميّةٍ بحدِّه الحقيقيّ — لا بعدِّ أحرف. الشريحتانِ هنا
+  /// (٥٠٠٠ و٦٠٠٠) تَتجاوزانِ `_activateContractNow` (٤٩٠٩) بـ٩١ و١٠٩١
+  /// حرفاً، فتَقرآنِ شفرةَ دالّةٍ أخرى وتَحكمانِ بها. فخُّ الحدِّ مسجَّلٌ
+  /// في هذا المستودعِ مرّاتٍ، وهذه صورتُه بعدِّ الأحرف.
+  String fnBody(String src, String anchor) {
+    final i = src.indexOf(anchor);
+    expect(i, greaterThan(-1), reason: 'المِرساةُ «$anchor» اختفت');
+    final ends = <int>[
+      src.indexOf('\nexports.', i + 10),
+      src.indexOf('\nasync function ', i + 10),
+      src.indexOf('\nfunction ', i + 10),
+    ].where((x) => x > 0);
+    final j = ends.isEmpty ? src.length : ends.reduce((a, b) => a < b ? a : b);
+    expect(j - i, greaterThan(400), reason: 'اقتطاعُ «$anchor» انهار');
+    return src.substring(i, j);
+  }
+
   // ── القاعدةُ نقيّةٌ: تُختبَرُ بلا Firebase ──
   group('حالةُ العقدِ تُشتَقُّ من مستندِه', () {
     test('عقدٌ سليمٌ مُفعَّلٌ لا يُظهِرُ شيئاً', () {
@@ -123,9 +140,7 @@ void main() {
   // ── الخادم: الفشلُ لا يَمضي صامتاً، والمحاولةُ تُعاد ──
   group('الخادم', () {
     test('معامَلةُ التفعيلِ داخلَ try — وفشلُها يُنبّهُ ويُوسَم', () {
-      final i = jsCode.indexOf('async function _activateContractNow');
-      expect(i, greaterThan(0), reason: 'الدالّةُ المشتركةُ اختفت');
-      final seg = jsCode.substring(i, i + 5000);
+      final seg = fnBody(jsCode, 'async function _activateContractNow');
       final iTry = seg.indexOf('try {');
       final iTxn = seg.indexOf('runTransaction');
       expect(iTry, greaterThan(0), reason: 'لا try في الدالّة');
@@ -138,8 +153,7 @@ void main() {
     });
 
     test('ونقصُ الزياراتِ يَكتبُ علَمَه ويُنبّهُ مرّةً واحدة', () {
-      final i = jsCode.indexOf('async function _activateContractNow');
-      final seg = jsCode.substring(i, i + 6000);
+      final seg = fnBody(jsCode, 'async function _activateContractNow');
       expect(seg.contains('contract_visits_pending: true'), isTrue,
           reason: 'الفشلُ لا يَكتبُ علَمَه — فلا تَراه المكنسة');
       expect(seg.contains('contract_visits_alerted'), isTrue,

@@ -64,11 +64,30 @@ check("الوحدةُ لا تُنادي getFirestore/getApp/initializeApp", () =
 });
 
 // ── والمُشغّلُ يُمرّرُ مالكَ التذكرةِ، لا الادّعاءَ وحدَه ──
+/**
+ * جسمُ دالّةٍ بحدِّه الحقيقيّ — لا بعدِّ أحرف. الشريحةُ كانت تَتجاوزُ
+ * `sendNotificationOnTicketReply` بـ١٣٤٦ حرفاً، أي أنّ الفحصَ يَقرأُ دالّةً
+ * أخرى ويَحكمُ بها. فخُّ الحدِّ مسجَّلٌ في هذا المستودعِ مرّاتٍ.
+ * @param {string} src المصدر
+ * @param {string} anchor مِرساةُ الدالّة
+ * @return {string} الجسم
+ */
+function fnBody(src, anchor) {
+  const i = src.indexOf(anchor);
+  assert.ok(i > -1, `المِرساةُ «${anchor}» اختفت`);
+  const ends = [
+    src.indexOf("\nexports.", i + 10),
+    src.indexOf("\nasync function ", i + 10),
+    src.indexOf("\nfunction ", i + 10),
+  ].filter((x) => x > 0);
+  const j = ends.length ? Math.min(...ends) : src.length;
+  assert.ok(j - i > 300, `اقتطاعُ «${anchor}» انهار`);
+  return src.slice(i, j);
+}
+
 check("sendNotificationOnTicketReply يُمرّرُ ticketData.userId", () => {
   const src = fs.readFileSync(path.join(__dirname, "../index.js"), "utf8");
-  const i = src.indexOf("exports.sendNotificationOnTicketReply");
-  assert.ok(i > 0, "المُشغّلُ اختفى");
-  const seg = src.slice(i, i + 2600);
+  const seg = fnBody(src, "exports.sendNotificationOnTicketReply");
   assert.ok(
       /ticketAuthorship\.ticketMessageIsFromTeam\(\s*newMessage,\s*ticketData && ticketData\.userId\)/
           .test(seg),

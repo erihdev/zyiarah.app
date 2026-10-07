@@ -31,13 +31,24 @@ String _code(String src) => src
     .join('\n');
 
 /// جسمُ صادرٍ من `index.js` حتى الصادرِ الذي يَليه.
-String _export(String idx, String name) {
-  final i = idx.indexOf('exports.$name = ');
-  expect(i, greaterThan(-1), reason: 'exports.$name اختفى');
-  final next = RegExp(r'^exports\.\w+ = ', multiLine: true)
+String _export(String idx, String name) =>
+    _decl(idx, 'exports.$name = ');
+
+/// جسمُ إعلانٍ عُلويٍّ بحدِّه الحقيقيّ — أوّلُ إعلانٍ بعدَه.
+///
+/// كان `_assertSuperAdmin` يُقتطَعُ بـ`substring(at, at + 900)` وطولُه ٧٦٢
+/// حرفاً، أي ١٣٨ حرفاً من التاليةِ له داخلَ الشريحة: فحصٌ يَقرأُ دالّةً
+/// أخرى ويَحكمُ بها. والحارسُ هنا يَملكُ الاقتطاعَ البنيويَّ سلفاً
+/// (`_export`) ولم يُستعمَل — فعُمِّمَ ليَشملَ الدوالَّ غيرَ المُصدَّرة.
+String _decl(String idx, String anchor) {
+  final i = idx.indexOf(anchor);
+  expect(i, greaterThan(-1), reason: '«$anchor» اختفى');
+  final next = RegExp(r'^(exports\.\w+ = |async function |function )',
+          multiLine: true)
       .allMatches(idx)
       .map((m) => m.start)
       .firstWhere((p) => p > i, orElse: () => idx.length);
+  expect(next - i, greaterThan(200), reason: 'اقتطاعُ «$anchor» انهار');
   return idx.substring(i, next);
 }
 
@@ -63,10 +74,7 @@ void main() {
           reason: 'القواعدُ تَحصرُ الكتابةَ على `admins` بـisSuperAdmin()، '
               'و_assertAdmin يُجيزُ orders_manager — أوسعَ من القواعد');
       // والمُعيِّنُ يَقرأُ الدورَ كما تَقرؤه القواعدُ: staff_role ثمّ role.
-      final a = _code(idx);
-      final at = a.indexOf('async function _assertSuperAdmin');
-      expect(at, greaterThan(-1));
-      final body = a.substring(at, at + 900);
+      final body = _code(_decl(idx, 'async function _assertSuperAdmin'));
       expect(body, contains('data.staff_role || data.role'));
       expect(body, contains('["admin", "super_admin"]'));
     });

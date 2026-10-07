@@ -20,6 +20,34 @@ void main() {
       })
       .join('\n');
 
+
+  /// **جسمُ دالّةٍ خادميّةٍ بحدِّه الحقيقيّ — لا بعدِّ أحرف.**
+  ///
+  /// كانت الشرائحُ هنا `substring(i, i + 3200)`، و`sweepUnassignedPaidOrders`
+  /// طولُه ٤٧٢١ حرفاً بعد التجريد: **٣٢٪ منه خارجَ نظرِ الحارس**. وذلك ليس
+  /// تفصيلاً شكليّاً لأنّ فحصَين هنا **يَعُدّان** («لكلِّ جمهورٍ دفعةٌ
+  /// واحدة») — وعَدٌّ على ثُلثَي الموضوعِ أجوفُ: دفعةٌ ثانيةٌ في الثُّلثِ
+  /// غيرِ المرئيِّ تَمرُّ خضراء. وقد كان كذلك فعلاً: `ADMIN_BROADCAST` يَرِدُ
+  /// **مرّتَين** في الدالّةِ والفحصُ يُثبّتُ «مرّةً واحدة» ويَمرّ.
+  /// وبالمقابل كانت شريحةُ التذكيرِ (٤٢٠٠) **تَتجاوزُ** دالّتَها (٣٠٢٢)
+  /// فتَشملُ ١١٧٨ حرفاً من التاليةِ لها.
+  ///
+  /// الحدُّ الآن أوّلُ إعلانٍ عُلويٍّ بعدَ المِرساة — فخُّ الحدِّ غيرِ
+  /// المُوازَنِ مسجَّلٌ في هذا المستودعِ مرّاتٍ، وهذه صورتُه بعدِّ الأحرف.
+  String fnBody(String src, String anchor) {
+    final i = src.indexOf(anchor);
+    expect(i, greaterThan(-1), reason: 'المِرساةُ «$anchor» اختفت');
+    final ends = <int>[
+      src.indexOf('\nexports.', i + 10),
+      src.indexOf('\nasync function ', i + 10),
+      src.indexOf('\nfunction ', i + 10),
+    ].where((x) => x > 0);
+    final j = ends.isEmpty ? src.length : ends.reduce((a, b) => a < b ? a : b);
+    // أرضيّة: اقتطاعٌ يَنحلُّ إلى سطرٍ يُفرِغُ كلَّ فحصٍ بعدَه.
+    expect(j - i, greaterThan(400), reason: 'اقتطاعُ «$anchor» انهار');
+    return src.substring(i, j);
+  }
+
   final DateTime appt = DateTime(2026, 10, 5, 10, 0);
 
   group('القاعدة', () {
@@ -128,9 +156,7 @@ void main() {
     final String idx = codeOnly('functions/index.js');
 
     test('نفسُ المهلةِ ونفسُ الحالة', () {
-      final i = idx.indexOf('exports.sweepUnassignedPaidOrders');
-      expect(i, greaterThan(-1));
-      final body = idx.substring(i, i + 3200);
+      final body = fnBody(idx, 'exports.sweepUnassignedPaidOrders');
       expect(body.contains('start.getTime() < now - 60 * 60 * 1000'), isTrue,
           reason: 'عتبةُ الخادمِ تغيّرت — لو افترقَ الرقمان لرأت العميلةُ '
               'سطراً بلا إشعارٍ يُفسّره أو العكس');
@@ -145,8 +171,7 @@ void main() {
       // علمٌ واحدٌ لجمهورَين يَجعلُ أسبقَهما يُسكِتُ الآخر — عطلٌ مسجَّلٌ
       // حرفيّاً في هذا المستودع (الإنذارُ المبكّرُ أسكتَ تنبيهَ الاستردادِ
       // الفاشل لأنّهما تَشاركا `stranded_alerted`).
-      final i = idx.indexOf('exports.sweepUnassignedPaidOrders');
-      final body = idx.substring(i, i + 3200);
+      final body = fnBody(idx, 'exports.sweepUnassignedPaidOrders');
       expect(body.contains('d.client_stranded_notified !== true'), isTrue,
           reason: 'دفعةُ العميلةِ اختفت');
       expect(body.contains('client_stranded_notified: true'), isTrue);
@@ -164,9 +189,7 @@ void main() {
     });
 
     test('ووعدُ «فريقنا في الطريق» صارَ مشروطاً بوجودِ فريق', () {
-      final i = idx.indexOf('exports.remindClientsUpcomingAppointments');
-      expect(i, greaterThan(-1));
-      final body = idx.substring(i, i + 4200);
+      final body = fnBody(idx, 'exports.remindClientsUpcomingAppointments');
       expect(body.contains('const hasCrew = !!d.driver_id;'), isTrue,
           reason: 'السؤالُ «هل يوجدُ فريق» يُجيبُه الحقلُ لا الحالة');
       // والوعدُ لا يُقالُ إلّا في فرعِ وجودِ الفريق.
@@ -178,13 +201,39 @@ void main() {
           reason: 'الوعدُ خارجَ الشرط — يُقالُ لطلبٍ بلا سائق');
     });
 
-    test('وكلٌّ من الجمهورَين له دفعةٌ واحدة', () {
-      final i = idx.indexOf('exports.sweepUnassignedPaidOrders');
-      final body = idx.substring(i, i + 3200);
-      expect('ADMIN_BROADCAST'.allMatches(body).length, 1,
-          reason: 'دفعةُ الإدارةِ تكرّرت أو اختفت');
+    test('وكلٌّ من الجمهورَين له دفعةٌ واحدةٌ **لكلِّ طلب**', () {
+      // الصياغةُ الأولى كانت «`ADMIN_BROADCAST` مرّةً واحدةً في الدالّة» —
+      // وهي **كاذبةٌ عن الدالّةِ الحقيقيّة**: فيها موضعانِ إداريّان، وإنّما
+      // مرَّ الفحصُ لأنّ شريحتَه كانت تَحجبُ ثُلثَها فلا تَرى إلّا الأوّل.
+      //
+      // والموضعانِ صحيحانِ كلاهما وليسا تكراراً: الأوّلُ إنذارٌ مبكّرٌ
+      // والنافذةُ قائمةٌ والمحاولةُ مستمرّة، والثاني بعد انقضائها لِما لا
+      // يُستردُّ آليّاً (اشتراك/تقسيط/مفتاحٌ مفقود). والذي يَمنعُ الدفعتَين
+      // معاً على طلبٍ واحدٍ هو **العلَمُ المشترَك**: الأوّلُ يَرفعُه،
+      // والثاني يَخرجُ عليه صراحةً. فالثابتُ المَحروسُ «دفعةٌ لكلِّ طلب» لا
+      // «دفعةٌ في الملفّ»، ويُشَدُّ بما يُنفّذُه: كلُّ موضعٍ محروسٌ بالعلَمِ،
+      // وكلُّ موضعٍ يَرفعُه.
+      final body = fnBody(idx, 'exports.sweepUnassignedPaidOrders');
+      expect('ADMIN_BROADCAST'.allMatches(body).length, 2,
+          reason: 'عددُ المواضعِ الإداريّةِ تغيّر — ثالثٌ يَعني تنبيهاً '
+              'مكرّراً، وزوالُ أحدِهما يَعني صمتاً في إحدى الحالتَين');
+      // الأوّلُ: لم يُنبَّهْ بعدُ ⇒ أنذِرْ.
+      expect(body.contains("d.stranded_alerted !== true"), isTrue,
+          reason: 'الإنذارُ المبكّرُ بلا حرسِ العلَم — فيُكرَّرُ كلَّ دورة');
+      // والثاني: نُبِّهَ سلفاً ⇒ اخرُجْ. وهذا الشرطُ بعينِه كان **خارجَ**
+      // الشريحةِ القديمةِ، فلا فحصَ في المستودعِ كلِّه يَشدُّه — وهو وحدَه
+      // ما يَمنعُ تنبيهاً ثانياً عن الطلبِ نفسِه.
+      expect(body.contains('if (d.stranded_alerted === true) continue;'), isTrue,
+          reason: 'الموضعُ الثاني بلا خروجٍ على العلَم — فطلبٌ أُنذِرَ عنه '
+              'مبكّراً يُنبَّهُ عنه ثانيةً');
+      // وكلٌّ منهما يَرفعُ العلَم، وإلّا لم يُغلَقْ البابُ أصلاً.
+      expect('stranded_alerted: true'.allMatches(body).length, 2,
+          reason: 'موضعٌ إداريٌّ لا يَرفعُ العلَم — فالدورةُ القادمةُ تُعيدُه');
+      // ودفعةُ العميلةِ واحدةٌ فعلاً، والآن على الدالّةِ كاملةً.
       expect('d.client_id,'.allMatches(body).length, 1,
           reason: 'دفعةُ العميلةِ تكرّرت أو اختفت');
+      expect('client_stranded_notified: true'.allMatches(body).length, 1,
+          reason: 'علَمُ العميلةِ يُرفَعُ في أكثرَ من موضع');
     });
   });
 
