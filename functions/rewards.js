@@ -420,7 +420,11 @@ async function payReferralBonus(db, args, queuePush) {
   if (!payout) return clearAndSkip(orderRef, "nothing_to_pay");
 
   await queuePush(payout.referrerId, "🎁 مكافأة إحالتك وصلت!",
-      `أُضيفت ${REFERRER_REWARD} ر.س لمحفظتك مكافأة لإحالة صديق أتمّ أول طلب.`,
+      // وقائيٌّ: الثابتُ عددٌ صحيحٌ اليومَ فيُطبَعُ «50»، لكنّ اصطلاحَ
+      // الخادمِ في رسائلِ العميلةِ خانتانِ دائماً (أربعةُ مواضعَ أخرى)،
+      // فتغييرُ الثابتِ إلى كسرٍ يَومَاً لا يُنتجُ صيغةً خامسة.
+      `أُضيفت ${REFERRER_REWARD.toFixed(2)} ر.س لمحفظتك مكافأة لإحالة صديق ` +
+      "أتمّ أول طلب.",
       "referral_reward", {orderId: orderId});
   await queuePush(refereeUid, "🎉 كوبون الإحالة جاهز!",
       `حصلت على كوبون خصم 10% على طلبك القادم. الكود: ${payout.couponCode}`,
