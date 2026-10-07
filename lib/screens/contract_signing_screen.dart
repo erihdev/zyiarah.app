@@ -63,8 +63,25 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
 
   final Color brandPurple = const Color(0xFF660033);
   bool _isSubmitting = false;
-  String _userName = "...";
-  String _userPhone = "...";
+
+  // **لا هُويّةً مُلفَّقةً على وثيقةٍ تُوقَّع (2026-10-07).** كانت القيمتانِ
+  // تَبدآنِ `"..."` و`_loadUserData()` يُطلَقُ في `initState` بلا انتظار،
+  // وزرُّ التوقيعِ مشروطٌ بـ`_isSubmitting` **وحدَه** — فكانت تُوقّعُ عقداً
+  // جسمُه يَقول «الطرف الثاني: السيد/ة ...» و«رقم الجوال: ...».
+  //
+  // وثلاثةُ مساراتٍ تُبقيه كذلك **إلى الأبد**: رميُ القراءةِ (وهي بلا `try`،
+  // والدالّةُ غيرُ مُنتظَرةٍ فالرميُ خطأٌ غيرُ مُعالَج)، و`doc.exists == false`
+  // (حسابٌ لم يُجهَّز مستندُه بعد)، وزوالُ الودجةِ في تلك اللحظة. والمخزونُ
+  // في المستند صحيحٌ (قراءةٌ طازجةٌ عند الإرسال) — **فالمعروضُ والمسجَّلُ
+  // يَختلفان** على وثيقةٍ قانونيّة، وسجلُّ التدقيقِ كان يُسجّلُ `'client': "..."`.
+  String? _userName;
+  String? _userPhone;
+  bool _identityFailed = false;
+
+  /// هل نَعرفُ مَن تُوقّع؟ («غير مسجل» قيمةٌ **معروفةٌ** لا نائبةٌ: هاتفٌ
+  /// غيرُ مُسجَّلٍ فعلاً، فتُعرَضُ وتُوقَّع.)
+  bool get _identityKnown =>
+      (_userName?.isNotEmpty ?? false) && (_userPhone?.isNotEmpty ?? false);
   final DateTime _contractDate = DateTime.now();
   String _contractTerms = '1. يتم تفعيل العقد تلقائياً فور سداد القيمة واعتماد الإدارة.\n'
       '2. يحق للعميل طلب الخدمة عبر التطبيق ضمن نطاق الباقة.\n'
@@ -78,14 +95,32 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
 
   Future<void> _loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get().timeout(kNetCallTimeout);
-      if (doc.exists && mounted) {
-        setState(() {
-          _userName = doc.data()?['name'] ?? user.displayName ?? 'عميل زيارة';
-          _userPhone = doc.data()?['phone'] ?? user.phoneNumber ?? 'غير مسجل';
-        });
+    try {
+      Map<String, dynamic>? data;
+      if (user != null) {
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get()
+            .timeout(kNetCallTimeout);
+        data = doc.data();
       }
+      // مستندٌ غائبٌ ليس جهلاً: لـAuth اسمُها وهاتفُها، وهما قيمتانِ معروفتان.
+      final String name =
+          (data?['name'] ?? user?.displayName ?? '').toString().trim();
+      final String phone =
+          (data?['phone'] ?? user?.phoneNumber ?? '').toString().trim();
+      if (!mounted) return;
+      setState(() {
+        _userName = name.isEmpty ? 'عميل زيارة' : name;
+        _userPhone = phone.isEmpty ? 'غير مسجل' : phone;
+        _identityFailed = false;
+      });
+    } catch (e) {
+      // لا نَكتبُ نائباً: تَبقى الهُويّةُ مجهولةً والزرُّ مُقفَلاً ويُقالُ السبب.
+      debugPrint('[contract] identity load failed: $e');
+      if (!mounted) return;
+      setState(() => _identityFailed = true);
     }
 
     try {
@@ -180,7 +215,8 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
         details: {
           'contract_id': contractId,
           'plan': widget.planName,
-          'client': _userName,
+          // اسمُ المستند لا المعروض: المعروضُ قد يَكونُ ما زال محمّلاً.
+          'client': finalName,
         },
         targetId: contractId,
       );
@@ -268,10 +304,23 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
             ),
           ),
           const Divider(height: 40),
-          _buildContractSection('أطراف الاتفاقية:', 
-            'الطرف الأول: مؤسسة زيارة لخدمات التنظيف والصيانة (مقدم الخدمة).\n'
-            'الطرف الثاني: السيد/ة $_userName (العميل).\n'
-            'رقم الجوال: $_userPhone'),
+          _buildContractSection(
+              'أطراف الاتفاقية:',
+              'الطرف الأول: مؤسسة زيارة لخدمات التنظيف والصيانة (مقدم الخدمة).\n'
+              '${_identityKnown ? 'الطرف الثاني: السيد/ة $_userName (العميل).\nرقم الجوال: $_userPhone' : _identityFailed ? 'الطرف الثاني: — تعذّر تحميل بياناتكِ، تحقّقي من الاتصال وأعيدي المحاولة.' : 'الطرف الثاني: جارٍ تحميل بياناتكِ…'}'),
+          if (!_identityKnown && _identityFailed)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: OutlinedButton.icon(
+                  onPressed: _loadUserData,
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: Text('إعادة المحاولة', style: GoogleFonts.tajawal()),
+                  style: OutlinedButton.styleFrom(foregroundColor: brandPurple),
+                ),
+              ),
+            ),
           const SizedBox(height: 20),
           _buildContractSection('موضوع الاتفاقية:', 
             'وافق الطرف الثاني على الاشتراك في "${widget.planName}" المقدمة من الطرف الأول مقابل مبلغ إجمالي قدره (${_grossedPlanPrice.toStringAsFixed(2)} ر.س) تشمل ضريبة القيمة المضافة، وتتضمن الباقة عدد (${widget.planVisits}) زيارة.'),
@@ -350,10 +399,27 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
         color: Colors.white,
         boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
       ),
-      child: SizedBox(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!_identityKnown)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text(
+                _identityFailed
+                    ? 'تعذّر تحميل بياناتكِ — لا يمكن التوثيق قبل ظهور اسمكِ ورقمكِ في العقد.'
+                    : 'جارٍ تحميل بياناتكِ لإدراجها في العقد…',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey[700]),
+              ),
+            ),
+          SizedBox(
         width: double.infinity,
         child: ElevatedButton(
-          onPressed: _isSubmitting ? null : _submitContract,
+          // **ولا تُوقَّعُ وثيقةٌ لا نَعرفُ مَن تُوقّعُها.** زرٌّ مُقفَلٌ بلا
+          // سببٍ مكتوبٍ عطلٌ آخر، فالسببُ معروضٌ فوقَه.
+          onPressed:
+              (_isSubmitting || !_identityKnown) ? null : _submitContract,
           style: ElevatedButton.styleFrom(
             backgroundColor: brandPurple,
             foregroundColor: Colors.white,
@@ -365,6 +431,8 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
             ? const CircularProgressIndicator(color: Colors.white)
             : Text('توثيق وإرسال العقد', style: GoogleFonts.tajawal(fontSize: 16, fontWeight: FontWeight.bold)),
         ),
+          ),
+        ],
       ),
     );
   }
