@@ -46,6 +46,173 @@ String _code(String path) {
   return out.join();
 }
 
+/// **القاعدةُ بالمصرَفِ لا بالحامل، وتَتبعُ غسلَ الاسمِ خُطوةً واحدة.**
+///
+/// كان النطاقُ كتلةَ `showSnackBar(...)` وحدَها، ففاتَهُ موضعانِ حيّانِ
+/// (2026-10-07): `support_screen` يَرسمُ `Text("خطأ: ${snapshot.error}")`
+/// في فرعِ `hasError` — حاملٌ مرسومٌ لا شريط — و`orders_list_screen`
+/// كان يَكتبُ `final raw = e.toString()...` ثمّ «خطأ: $raw» **داخلَ**
+/// الشريطِ، فالنمطُ على المُلتقَطِ لا يَراه. وهذه ثالثُ ثغرةٍ في هذا
+/// الفحصِ بعد النمطِ غيرِ النَهِمِ والتعبيرِ مقابلَ الاستقراء — وثلاثتُها
+/// في **الكاشفِ** لا في القاعدة.
+///
+/// فالفحصُ الآن يَجدُ كلَّ ناقلِ استثناءٍ في الملفّ، ثمّ يَسألُ **إلى أين
+/// يَصُبّ**: ما يَصُبُّ في مُصرَفٍ تشخيصيٍّ (`debugPrint`/`reportSilent`/…)
+/// مسموحٌ، وما عداه في شاشةِ عميلةٍ تسريب. والنواقلُ ثلاثةٌ: استقراءُ
+/// مُلتقَطٍ (`$e`)، و`x.toString()` لمُلتقَطٍ، و`snapshot.error` لمُتغيّرٍ
+/// يُفحَصُ بـ`.hasError` في الملفِّ نفسِه — والقيدُ الأخيرُ يَستثني
+/// `ZyiarahTheme.error` (لونٌ) من غيرِ قائمةِ أسماءٍ تَتعفّن.
+///
+/// ولا تُضافُ `e` تلقائيّاً إلى أسماءِ المُلتقَطِ: `list.map((e) => e.toString())`
+/// سبعُ إيجابيّاتٍ كاذبةٍ في شاشاتِ الحجزِ وحدَها، فالمُلتقَطُ ما صرّحَ به
+/// `catch (…)` في هذا الملفّ.
+List<String> _rawErrorSinks(String path) =>
+    _rawErrorSinksIn(_code(path), path);
+
+/// نفسُ القاعدةِ على نصٍّ مُعطًى — كي يُختبَرَ الكاشفُ على أشكالٍ مُصطنَعةٍ
+/// بعدَ أن يَنظُفَ المصدر: فحصٌ سالبٌ لا يُبرهِنُ أنّه يَرى شيئاً.
+///
+/// **القاعدةُ بالمصرَفِ لا بالحامل.** كان النطاقُ كتلةَ `showSnackBar(...)`
+/// وحدَها، ففاتَهُ موضعانِ حيّانِ (2026-10-07): `support_screen` يَرسمُ
+/// `Text("خطأ: ${snapshot.error}")` في فرعِ `hasError` — حاملٌ مرسومٌ لا
+/// شريط — و`orders_list_screen` كان يَكتبُ `final raw = e.toString()...`
+/// ثمّ «خطأ: $raw» **داخلَ** الشريطِ، فالنمطُ على المُلتقَطِ لا يَراه. وهذه
+/// ثالثُ ثغرةٍ في هذا الفحصِ بعد النمطِ غيرِ النَهِمِ والتعبيرِ مقابلَ
+/// الاستقراء — وثلاثتُها في **الكاشفِ** لا في القاعدة.
+///
+/// فالكاشفُ يَجدُ كلَّ ناقلِ استثناءٍ في الملفّ ثمّ يَسألُ **إلى أين يَصُبّ**:
+/// ما يَصُبُّ في مُصرَفٍ تشخيصيٍّ (`debugPrint`/`reportSilent`/…) مسموحٌ، وما
+/// عداه في شاشةِ عميلةٍ تسريب. والناقلُ **في إسنادٍ تسريبٌ أيضاً** ولا
+/// يُتعقَّبُ الاسمُ الوسيط: ذاك أبسطُ وأشدُّ، ويَسُدُّ الغسلَ من منبعِه —
+/// ومَن أرادَ نصَّ الاستثناءِ للتشخيصِ يَكتبُه في `debugPrint` مباشرةً.
+///
+/// والنواقلُ ثلاثةٌ: استقراءُ مُلتقَطٍ (`$e`)، و`x.toString()` لمُلتقَطٍ،
+/// و`snapshot.error` لمُتغيّرٍ يُفحَصُ بـ`.hasError` في الملفِّ نفسِه —
+/// والقيدُ الأخيرُ يَستثني `ZyiarahTheme.error` (لونٌ) من غيرِ قائمةِ أسماءٍ
+/// تَتعفّن. ولا تُضافُ `e` تلقائيّاً إلى أسماءِ المُلتقَط، **ولا يُحسَبُ
+/// وسيطُ لامدا اسمُه كاسمِ المُلتقَط**: `map((e) => e.toString())` سبعُ
+/// إيجابيّاتٍ كاذبةٍ في شاشاتِ الحجزِ وحدَها.
+List<String> _rawErrorSinksIn(String src, String path) {
+  final caught = RegExp(r'catch\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)')
+      .allMatches(src)
+      .map((m) => m.group(1)!)
+      .toSet();
+  final snaps = RegExp(r'([A-Za-z_][A-Za-z0-9_]*)\.hasError')
+      .allMatches(src)
+      .map((m) => m.group(1)!)
+      .toSet();
+
+  // **الهروبُ طبقةً واحدةً لا طبقتَين.** أوّلُ صياغةٍ كتبت `\\b` في نصٍّ
+  // غيرِ خامٍّ، فصارَ التعبيرُ يَطلبُ شرطةً مائلةً حرفيّةً ثمّ `b` — فلا
+  // يُطابِقُ شيئاً، والفحصُ أخضرُ أجوف. أمسكَه فحصُ الكاشفِ أدناه.
+  final patterns = <RegExp>[
+    if (caught.isNotEmpty)
+      RegExp('\\\$\\{?\\s*(?:${caught.map(RegExp.escape).join('|')})\\b'),
+    if (caught.isNotEmpty)
+      RegExp('\\b(?:${caught.map(RegExp.escape).join('|')})'
+          '\\.toString\\(\\)'),
+    if (snaps.isNotEmpty)
+      RegExp('\\b(?:${snaps.map(RegExp.escape).join('|')})\\.error\\b'),
+  ];
+
+  final out = <String>[];
+  for (final pat in patterns) {
+    for (final m in pat.allMatches(src)) {
+      if (_diagnosticSink(src, m.start)) continue;
+      if (_lambdaBound(src, m.start, m.group(0)!)) continue;
+      final ctx = src
+          .substring((m.start - 55).clamp(0, src.length),
+              (m.start + 35).clamp(0, src.length))
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      out.add('$path  ←  ...$ctx...');
+    }
+  }
+  return out;
+}
+
+/// أسماءُ النداءاتِ المُحيطةِ بالموضعِ [pos] — **بموازنةِ الأقواسِ إلى
+/// الوراء** لا بنافذةِ عدِّ أحرف (فخُّ الحدِّ مسجَّلٌ في هذا المستودعِ تسعَ
+/// مرّات). كلُّ `(` غيرِ مُطابَقٍ يَعني نداءً نحنُ داخلَ وسائطِه.
+bool _diagnosticSink(String src, int pos) {
+  const diag = {
+    'debugPrint', 'print', 'reportSilent', 'log', 'recordError', 'addError',
+  };
+  var depth = 0;
+  var i = pos;
+  while (i > 0) {
+    i--;
+    final c = src[i];
+    if (c == ')') {
+      depth++;
+    } else if (c == '(') {
+      if (depth > 0) {
+        depth--;
+      } else {
+        final head = src.substring((i - 80).clamp(0, i), i);
+        final m = RegExp(r'([A-Za-z_][A-Za-z0-9_.]*)\s*$').firstMatch(head);
+        if (m != null && diag.contains(m.group(1)!.split('.').last)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/// هل الاسمُ في [match] وسيطُ لامدا لا مُلتقَطُ استثناء؟
+///
+/// `list.map((e) => e.toString())` يَحجبُ `catch (e)` في الملفِّ نفسِه. فيُبحَثُ
+/// عن أقربِ `(` غيرِ مُطابَقٍ قبلَ الموضعِ — وهو قوسُ النداءِ المُحيطِ — فإن
+/// جاءَ بعدَه إعلانُ وسيطٍ بالاسمِ نفسِه (`(e) =>` أو `(e) {`) فالاسمُ وسيطٌ.
+bool _lambdaBound(String src, int pos, String match) {
+  final nm = RegExp(r'[A-Za-z_][A-Za-z0-9_]*').firstMatch(match)?.group(0);
+  if (nm == null) return false;
+  var depth = 0;
+  var i = pos;
+  while (i > 0) {
+    i--;
+    final c = src[i];
+    if (c == ')') {
+      depth++;
+    } else if (c == '(') {
+      if (depth > 0) {
+        depth--;
+      } else {
+        final after = src.substring(i + 1, (i + 60).clamp(0, src.length));
+        return RegExp('^\\s*\\(?\\s*${RegExp.escape(nm)}\\s*\\)?\\s*(?:=>|\\{)')
+            .hasMatch(after);
+      }
+    }
+  }
+  return false;
+}
+
+/// جسمُ الدالّةِ من إعلانِها — **بموازنةِ قائمةِ المعامَلاتِ أوّلاً** ثمّ
+/// المعقوفات. أخذُ أوّلِ `{` بعد الاسمِ يَلتقطُ قوسَ المعامَلاتِ المُسمّاةِ
+/// (`{String cancelledBy = 'client'}`) لا الجسمَ — فخُّ الحدِّ، مسجَّلٌ في هذا
+/// المستودعِ مرّاتٍ.
+String _fnBody(String src, int declStart) {
+  var i = src.indexOf('(', declStart);
+  var depth = 1;
+  i++;
+  while (i < src.length && depth > 0) {
+    if (src[i] == '(') depth++;
+    if (src[i] == ')') depth--;
+    i++;
+  }
+  final open = src.indexOf('{', i);
+  depth = 0;
+  for (var j = open; j < src.length; j++) {
+    if (src[j] == '{') depth++;
+    if (src[j] == '}') {
+      depth--;
+      if (depth == 0) return src.substring(open, j + 1);
+    }
+  }
+  return src.substring(open);
+}
+
 /// الشاشاتُ التي بُدئ بها الإصلاح — تبقى مذكورةً لأنّ فحوصاً بعينها تخصّها.
 const List<String> _screens = [
   'lib/screens/hourly_details_screen.dart',
@@ -496,28 +663,88 @@ void main() {
       final path = f.path.replaceAll('\\', '/');
       if (path.contains('/admin/')) continue;
       if (path.split('/').last.startsWith('driver_')) continue;
-      final src = _code(path);
-      // أسماءُ المُلتقَطِ في هذا الملفّ، فـ`f.message` لا يُطابَقُ خطأً.
-      final caught = RegExp(r'catch\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)')
-          .allMatches(src)
-          .map((m) => m.group(1)!)
-          .toSet()
-        ..addAll(['e', 'err', 'error', 'ex']);
-      final toStr = RegExp(
-          '\\b(${caught.map(RegExp.escape).join('|')})\\.toString\\(\\)');
-      for (final m in RegExp(r'showSnackBar\(').allMatches(src)) {
-        final block = snackBlock(src, m.start);
-        final hit = RegExp(r'\$\{?\s*e\b').firstMatch(block) ??
-            toStr.firstMatch(block);
-        if (hit != null) {
-          offenders.add('$path  ←  ...${block.substring(
-                  (hit.start - 40).clamp(0, block.length), hit.start + 30)
-              .replaceAll(RegExp(r'\s+'), ' ').trim()}...');
-        }
-      }
+      offenders.addAll(_rawErrorSinks(path));
     }
     expect(offenders, isEmpty,
         reason: '\n\nنصُّ الاستثناء يصل العميلة كما هو:\n  • ${offenders.join('\n  • ')}\n');
+  });
+
+  test('كاشفُ النصِّ الخامِّ يُختبَرُ كالشفرة — الحاملُ والمصرَفُ والغسل', () {
+    // المصدرُ نظيفٌ بعد الإصلاح، فنجاحُ الفحصِ أعلاه لا يُبرهِنُ أنّ الكاشفَ
+    // يَرى شيئاً. وثغراتُه الثلاثُ التاريخيّةُ كانت كلُّها في **الكاشفِ** لا
+    // في القاعدة، فتُثبَّتُ هنا واحدةً واحدة.
+
+    // (أ) حاملٌ مرسومٌ لا شريط — عطلُ `support_screen` بنصِّه.
+    expect(
+        _rawErrorSinksIn(
+            'builder: (c, snapshot) {\n'
+            '  if (snapshot.hasError) {\n'
+            r'    return Center(child: Text("خطأ: ${snapshot.error}"));'
+            '\n  }\n}\n',
+            'synthetic'),
+        isNotEmpty,
+        reason: 'حاملٌ مرسومٌ (Text) خارجَ الشريطِ يَجبُ أن يُرى');
+
+    // (ب) الناقلُ **في إسنادٍ** تسريبٌ أيضاً — فالغسلُ يُسَدُّ من منبعِه.
+    // كان `orders_list_screen` يَكتبُ `final raw = e.toString()...` ثمّ
+    // «خطأ: $raw»، فلا يُتعقَّبُ الاسمُ الوسيطُ ولا حاجةَ إليه: الإسنادُ
+    // نفسُه يُبلَّغُ عنه.
+    expect(
+        _rawErrorSinksIn(
+            'try { f(); } catch (e) {\n'
+            r'  final raw = e.toString().replaceAll("Exception: ", "");'
+            '\n'
+            r"  messenger.showSnackBar(SnackBar(content: Text('خطأ: $raw')));"
+            '\n}\n',
+            'synthetic'),
+        isNotEmpty,
+        reason: 'ناقلٌ في إسنادٍ يَجبُ أن يُرى — وإلّا كفى غسلُ الاسمِ لتخطّيه');
+
+    // (و) واستثناءُ وسيطِ اللامدا لا يَجوزُ أن يَبتلعَ تسريباً حقيقيّاً
+    // داخلَ لامدا: استثناءٌ ضيّقٌ يَأكلُ القاعدةَ أسوأُ من لا استثناء.
+    expect(
+        _rawErrorSinksIn(
+            'try { f(); } catch (e) {\n'
+            r"  setState(() { _msg = 'خطأ: $e'; });"
+            '\n}\n',
+            'synthetic'),
+        isNotEmpty,
+        reason: 'نصُّ الاستثناءِ داخلَ لامدا بلا وسيطٍ بالاسمِ نفسِه تسريب');
+
+    // (ج) المصرَفُ التشخيصيُّ مسموح — وإلّا صارَ الفحصُ يَمنعُ التشخيصَ نفسَه.
+    expect(
+        _rawErrorSinksIn(
+            'try { f(); } catch (e) {\n'
+            r"  debugPrint('support tickets stream error: $e');"
+            '\n'
+            r"  reportSilent(e, reason: 'x');"
+            '\n}\n',
+            'synthetic'),
+        isEmpty,
+        reason: 'debugPrint و reportSilent تشخيصٌ لا عرض');
+
+    // (د) وسيطُ لامدا اسمُه `e` ليس استثناءً — سبعُ إيجابيّاتٍ كاذبةٍ في
+    // شاشاتِ الحجزِ وحدَها لو أُضيفَ `e` تلقائيّاً إلى أسماءِ المُلتقَط.
+    expect(
+        _rawErrorSinksIn(
+            r"final f = (data['features'] as List?)?.map((e) => e.toString()).toList();"
+            '\n'
+            r"return Text(f?.join(' ') ?? '');"
+            '\n',
+            'synthetic'),
+        isEmpty,
+        reason: 'map((e) => e.toString()) بلا catch ليس ناقلَ استثناء');
+
+    // (هـ) و`X.error` مُقيَّدٌ بما يُفحَصُ بـ`.hasError` في الملفِّ نفسِه —
+    // فلونُ القالبِ (`ZyiarahTheme.error`) لا يُقرأُ استثناءً، بلا قائمةِ
+    // أسماءٍ تَتعفّن.
+    expect(
+        _rawErrorSinksIn(
+            r"return Text('x', style: TextStyle(color: ZyiarahTheme.error));"
+            '\n',
+            'synthetic'),
+        isEmpty,
+        reason: 'Theme.error لونٌ لا استثناء');
   });
 
   test('والنصُّ الخامُّ يَبقى للأدمنِ — تشخيصٌ لا عطل', () {
@@ -535,6 +762,60 @@ void main() {
     }
     expect(hits, greaterThan(20),
         reason: 'أُخفي نصُّ الاستثناء عن شاشاتِ الإدارة — وهو تشخيصُها');
+  });
+
+  test('إلغاءُ الطلبِ: الحاملُ يُعلِنُ نفسَه ولا استخراجَ نصّيّاً', () {
+    final svc = _code('lib/services/order_service.dart');
+    final scr = _code('lib/screens/orders_list_screen.dart');
+
+    // الحاملُ صنفٌ يُصرّحُ بأنّ رسالتَه مكتوبةٌ للعرض — لا `Exception` عامٌّ
+    // تَستخرجُه الشاشةُ من نصِّه.
+    expect(svc.contains('class OrderCancelRefused implements UserFacingFailure'),
+        isTrue,
+        reason: 'الحاملُ المُعلِنُ لنفسِه هو ما يُغني عن الاستخراجِ النصّيّ');
+
+    // والثلاثُ تُرمى به — لا `Exception("…")` عامّاً داخلَ `cancelOrder`.
+    final i = svc.indexOf('Future<void> cancelOrder(');
+    expect(i, greaterThan(0));
+    final body = _fnBody(svc, i);
+    expect(RegExp(r'OrderCancelRefused\(').allMatches(body).length, 3,
+        reason: 'الجملُ الثلاثُ المكتوبةُ للعميلةِ تُرمى بالحاملِ المُعلِن');
+    expect(body.contains('throw Exception('), isFalse,
+        reason: 'جملةٌ رابعةٌ في `Exception` عامٍّ تُستخرَجُ نصّيّاً مرّةً أخرى');
+
+    // والشاشةُ تَمُرُّ بالقاعدةِ، وفحصُ الصلاحيّةِ **بالنوعِ لا بالنصّ**.
+    expect(scr.contains('userFacingError(e'), isTrue);
+    expect(scr.contains("e is FirebaseException && e.code == 'permission-denied'"),
+        isTrue,
+        reason: 'الفحصُ بالنوعِ: مُطابقةُ النصِّ تَلتقطُ أيَّ استثناءٍ يَذكرُ الكلمة');
+    expect(scr.contains("replaceAll(\"Exception: \""), isFalse,
+        reason: 'الاستخراجُ النصّيُّ هو ما كان يُسرِّبُ كلَّ ما عدا الثلاث');
+  });
+
+  test('شاشةُ الدعم: فرعُ الخطأِ جملةٌ عربيّةٌ وزرُّ إعادةٍ يُعيدُ الاشتراك', () {
+    final src = _code('lib/screens/support_screen.dart');
+
+    expect(src.contains('تعذّر تحميل التذاكر، تحقّقي من الاتصال'), isTrue,
+        reason: 'جملةٌ عربيّةٌ مكانَ نصِّ الاستثناء');
+    expect(src.contains('إعادة المحاولة'), isTrue);
+
+    // **والزرُّ يُحاولُ فعلاً**: مفتاحُ البناءِ يَتغيّرُ فيُعادُ الاشتراكُ ببثٍّ
+    // جديد. زرٌّ يُغيّرُ الحالةَ بلا مفتاحٍ يُعيدُ رسمَ `StreamBuilder` نفسِه
+    // بالبثِّ القديمِ الحامِلِ للخطأ — أي زرٌّ لا يَفعلُ شيئاً، وهي عائلةٌ
+    // مسجَّلةٌ في هذا المستودع.
+    expect(src.contains('_reloadKey++'), isTrue,
+        reason: 'الزرُّ يُبدّلُ المفتاح');
+    expect(src.contains(r"key: ValueKey('tickets-"), isTrue,
+        reason: 'والمفتاحُ على `StreamBuilder` نفسِه، وإلّا لم يُعَد الاشتراك');
+    final k = src.indexOf(r"key: ValueKey('tickets-");
+    expect(src.lastIndexOf('StreamBuilder<QuerySnapshot>(', k),
+        greaterThan(src.lastIndexOf('Widget _buildTicketList', k) - 1),
+        reason: 'المفتاحُ داخلَ `StreamBuilder` الذي يَحملُ البثّ');
+    expect(src.contains(r'$_reloadKey'), isTrue);
+
+    // ونصُّ الاستثناءِ يَبقى في السجلِّ لا في الشاشة.
+    expect(src.contains(r"debugPrint('support tickets stream error:"), isTrue,
+        reason: 'التشخيصُ لا يُفقَد — يُنقَلُ إلى المصرَفِ الصحيح');
   });
 
   test('المهلتان معرَّفتان مرّةً واحدة ولا تُكتبان بالأرقام', () {

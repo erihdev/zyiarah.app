@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/user_facing_error.dart';
 import 'package:zyiarah/utils/upload_content_type.dart';
 
 /// نتيجةُ تحقّقِ كودِ الخصم: مؤهَّلٌ بحقولِه، أو سببُ رفضٍ من أسبابِ
@@ -24,6 +25,33 @@ class CouponValidation {
 }
 
 /// خدمة إدارة دورة حياة الطلب - تطبيق زيارة
+/// رفضُ إلغاءِ طلبٍ لسببٍ **مكتوبٍ للعميلة** — فتُعرَضُ [message] كما هي.
+///
+/// **والتصريحُ هو الفرق.** الثلاثُ («الطلب غير موجود»، «لا يمكن إلغاء طلب
+/// مكتمل أو ملغي بالفعل»، «لا يمكن إلغاء طلب قيد التنفيذ — تواصلي مع
+/// الدعم») كانت تُرمى في `Exception` عامٍّ، فكانت الشاشةُ تَستخرجُها بـ
+/// `e.toString().replaceAll("Exception: ", "")` — وذاك يَنجحُ لهذه الثلاثِ
+/// **ويُسرِّبُ كلَّ ما عداها**: `[cloud_firestore/unavailable] Failed to get
+/// document because the client is offline.` تُقرأُ في شريطٍ عربيٍّ بحرفٍ
+/// لاتينيّ. فصارَ الحاملُ يُعلِنُ نفسَه (`UserFacingFailure`) وتَمُرُّ
+/// الشاشةُ بـ`userFacingError`، فالقاعدةُ **بالحاملِ لا باللغة** كما
+/// يَنُصُّ `user_facing_error.dart`.
+///
+/// وثلاثةُ `Exception`اتٍ عربيّةٍ أخرى في `updateOrderStatus` **لم تُلمَس**:
+/// مُنادوها شاشاتُ الإدارةِ والسائقِ، والنصُّ الخامُّ هناك تشخيصٌ مطلوبٌ
+/// بقرارٍ مسجَّل — فتحويلُها لا يُغيّرُ ما يُعرَضُ ويُوسّعُ التغييرَ بلا مقابل.
+class OrderCancelRefused implements UserFacingFailure {
+  @override
+  final String message;
+
+  const OrderCancelRefused(this.message);
+
+  /// يُعيدُ الجملةَ وحدَها: شاشةُ الإدارةِ تَعرضُ `$e` خامّاً عن عمدٍ، فلا
+  /// يَجوزُ أن يُقحِمَ هذا الصنفُ اسمَه في وجهِ المالك.
+  @override
+  String toString() => message;
+}
+
 class ZyiarahOrderService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
@@ -72,6 +100,7 @@ class ZyiarahOrderService {
     }
   }
 
+
   // إلغاء الطلب — يسمح فقط للطلبات في حالة pending أو accepted
   Future<void> cancelOrder(String orderId, {String cancelledBy = 'client'}) async {
     String? orderCode;
@@ -81,17 +110,21 @@ class ZyiarahOrderService {
       final orderRef = _db.collection('orders').doc(orderId);
       final orderSnap = await transaction.get(orderRef);
 
-      if (!orderSnap.exists) throw Exception("الطلب غير موجود");
+      if (!orderSnap.exists) {
+        throw const OrderCancelRefused("الطلب غير موجود");
+      }
 
       final orderData = orderSnap.data() as Map<String, dynamic>;
       final currentStatus = orderData['status'] as String?;
 
       if (currentStatus == 'completed' || currentStatus == 'cancelled') {
-        throw Exception("لا يمكن إلغاء طلب مكتمل أو ملغي بالفعل");
+        throw const OrderCancelRefused(
+            "لا يمكن إلغاء طلب مكتمل أو ملغي بالفعل");
       }
       // العميل لا يلغي طلباً قيد التنفيذ (يتواصل مع الدعم)؛ الإدارة تستطيع.
       if (currentStatus == 'in_progress' && cancelledBy != 'admin') {
-        throw Exception("لا يمكن إلغاء طلب قيد التنفيذ — تواصلي مع الدعم");
+        throw const OrderCancelRefused(
+            "لا يمكن إلغاء طلب قيد التنفيذ — تواصلي مع الدعم");
       }
 
       orderCode = orderData['code'] as String?;
