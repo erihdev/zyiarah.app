@@ -141,7 +141,23 @@ void main() {
 
     test('(ز) نسخةُ الدورِ على الرمزِ هي فعلاً ما يُوجَّهُ عليه البثّ', () {
       // لو تغيّرَ مصدرُ التوجيهِ فالإصلاحُ كلُّه يُراجَعُ لا يُسكَت.
-      expect(code, contains('tokQuery.where("role", "==", "client")'));
+      //
+      // **سقطَ هذا الفحصُ بالنقلِ لا بالانحراف (2026-10-07):** كان يُثبّتُ
+      // `tokQuery.where("role", "==", "client")` — أي **شكلَ** المُرشِّحِ
+      // إنلاين — فلمّا وُحِّدَ مُرشِّحُ الجمهورِ في
+      // `_applyAudienceRoleFilter` (لأنّ نسختَيه في `fcm_tokens` و`users`
+      // كانتا قد افترقتا) سقطَ على شفرةٍ **أصلحَت** ما يَحرُسُه. فالمشدودُ
+      // الآن الحقيقةُ نفسُها: استعلامُ رموزِ البثِّ يَمُرُّ بقاعدةٍ تُرشِّحُ
+      // على `role` — أيّاً كان موضعُها.
+      expect(code, contains('_applyAudienceRoleFilter('),
+          reason: 'قاعدةُ مُرشِّحِ الجمهورِ اختفت');
+      expect(code, contains('collection("fcm_tokens"), target)'),
+          reason: 'رموزُ البثِّ لم تَعُد تَمُرُّ بالقاعدة');
+      final int h = code.indexOf('function _applyAudienceRoleFilter');
+      expect(h, greaterThan(0));
+      final String fn = code.substring(h, code.indexOf('\n}', h));
+      expect(fn, contains('where("role", "==", "client")'),
+          reason: 'التوجيهُ لم يَعُد على نسخةِ الدورِ — فالإصلاحُ يُراجَع');
       expect(code, contains('where("staff_role", "in", targetRoles)'));
     });
 

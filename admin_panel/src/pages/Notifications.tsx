@@ -132,11 +132,15 @@ export default function Notifications() {
         }
     };
 
+    // **ولا رمزاً داخليّاً في واجهةٍ عربيّة.** كان `return t` يَطبعُ
+    // `all_users` حرفيّاً: مستنداتُ البثِّ المجدولِ من تطبيق الإدارةِ كانت
+    // تَحملُ اسمَ موضوعِ FCM لا قيمةَ الحقل (أُصلِحَ الكاتبُ، والقائمُ في
+    // الإنتاجِ باقٍ). والمجهولُ «الجميع» — وهو ما يُسلّمُه الخادمُ فعلاً.
     const targetLabel = (t: string) => {
-        if (t === 'all') return 'الجميع';
         if (t === 'clients') return 'العملاء فقط';
         if (t === 'drivers') return 'السائقين فقط';
-        return t;
+        if (t === 'admins') return 'الإدارة فقط';
+        return 'الجميع';
     };
 
     const formatDate = (ts: Timestamp | null | undefined, fallback?: Date | string | null) => {

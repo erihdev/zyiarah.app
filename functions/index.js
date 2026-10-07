@@ -534,6 +534,37 @@ exports.notifyClientOnMaintenanceRejected = onDocumentUpdated(
     });
 
 /**
+ * مُرشِّحُ الدورِ لجمهورِ البثّ — **قاعدةٌ واحدةٌ لمجموعتَين.**
+ *
+ * كانت مكتوبةً مرّتَين في `_deliverBroadcast` على بُعدِ ثمانيةِ أسطر،
+ * **والنسختانِ افترقتا (2026-10-07):** استعلامُ `fcm_tokens` يَحملُ ثلاثةَ
+ * فروعٍ (`clients`/`drivers`/`admins`) واستعلامُ `users` — الذي يُكتَبُ منه
+ * صندوقُ الإشعاراتِ داخلَ التطبيق — **فرعَين فقط**. فـ`admins` كان يَسقطُ
+ * إلى «بلا مُرشِّح»: الدفعةُ تَصِلُ أجهزةَ الإدارةِ وحدَها (صحيح) وسطرُ
+ * الصندوقِ يُكتَبُ **لكلِّ مستخدمٍ في النظام** — كلِّ عميلةٍ وكلِّ سائق.
+ *
+ * **كامنٌ لا حيٌّ، ويُقالُ بحدِّه:** `admins` قيمةٌ لا يُنتجُها أيُّ مُحرِّرٍ
+ * اليومَ (ثلاثةُ أزرارٍ في تطبيقِ الإدارةِ وثلاثةٌ في اللوحة)، فمَسلكُها
+ * كتابةٌ بيدٍ في الكونسولِ أو زرٌّ رابعٌ يُضاف — وذاك قرارُ منتَجٍ مرفوعٌ
+ * للمالكِ أصلاً. فالوحدةُ تَسدُّها قبلَ أن تُفتَح.
+ *
+ * و«الجميع» وما لا يُعرَفُ: بلا مُرشِّح — والفالُّ مُعلَنٌ ومُسجَّلٌ في
+ * `_deliverBroadcast` نفسِه.
+ *
+ * @param {FirebaseFirestore.Query} query استعلامُ المجموعة.
+ * @param {string} target جمهورُ البثِّ من `notifications_log.target`.
+ * @return {FirebaseFirestore.Query} الاستعلامُ بعدَ المُرشِّح.
+ */
+function _applyAudienceRoleFilter(query, target) {
+  if (target === "clients") return query.where("role", "==", "client");
+  if (target === "drivers") return query.where("role", "==", "driver");
+  if (target === "admins") {
+    return query.where("role", "in", ["admin", "super_admin"]);
+  }
+  return query;
+}
+
+/**
  * Deliver a broadcast: push to the target topic + fan out to the `notifications`
  * collection for in-app viewing. Shared by the create-trigger and the scheduler.
  * @param {FirebaseFirestore.DocumentReference} docRef notifications_log doc ref.
@@ -559,14 +590,21 @@ async function _deliverBroadcast(docRef, data) {
   try {
     // إرسال لرموز الأجهزة مباشرةً بدل topic — أوثق بكثير: لا يعتمد على اشتراك المواضيع
     // ولا على تأخّر انتشارها (كان سبب عدم وصول البثّ لبعض الأجهزة رغم تسجيلها).
-    let tokQuery = getFirestore().collection("fcm_tokens");
-    if (target === "clients") {
-      tokQuery = tokQuery.where("role", "==", "client");
-    } else if (target === "drivers") {
-      tokQuery = tokQuery.where("role", "==", "driver");
-    } else if (target === "admins") {
-      tokQuery = tokQuery.where("role", "in", ["admin", "super_admin"]);
+    // **الفالُّ إلى «الجميع» قرارٌ مُعلَنٌ لا مصادفة (2026-10-07).** كانت
+    // الشاشةُ تُحوّلُ `all_users` (اسمُ موضوعِ FCM) إلى `all` في مسارَيها
+    // الفوريِّ والمنبثقِ **ولا تُحوّلُ في المجدول**، فالحقلُ يَحملُ
+    // التهجئتَين. والسلسلةُ أدناه كانت تَترُكُ ما لا تَعرفُه بلا مُرشِّحٍ —
+    // أي «الجميع»، وهو المقصودُ — لكنْ بالفالِّ لا بالقرار: فرعٌ رابعٌ أو
+    // تحقّقٌ هنا كان سيُحوّلُ كلَّ بثٍّ مجدولٍ «للجميع» إلى جمهورٍ آخرَ
+    // بصمت. الكاتبُ أُصلِحَ (`utils/broadcast_target.dart`)، ومستنداتُ
+    // الإنتاجِ القائمةُ تَحملُ `all_users` فيَبقى القبولُ — **مُسجَّلاً**.
+    const KNOWN_TARGETS = ["all", "clients", "drivers", "admins"];
+    if (!KNOWN_TARGETS.includes(target)) {
+      console.warn(
+          `broadcast: unknown target "${target}" -> delivering to everyone`);
     }
+    const tokQuery = _applyAudienceRoleFilter(
+        getFirestore().collection("fcm_tokens"), target);
     const tokSnap = await tokQuery.get();
     // fcm_tokens معرّفها uid (القواعد: request.auth.uid == tokenId) — فالإسقاط بالمعرّف.
     const uniqTokens = [...new Set(
@@ -611,12 +649,10 @@ async function _deliverBroadcast(docRef, data) {
     // `cleaned` صارَ المحذوفَ فعلاً لا عددَ الرموزِ الميتة — الرقمُ كان دعوى.
     console.log(`broadcast(${target}) tokens: sent=${sent} failed=${failed} invalid=${invalid.length} cleaned=${cleaned} optOut=${optOut.size}`);
 
-    let query = getFirestore().collection("users");
-    if (target === "clients") {
-      query = query.where("role", "==", "client");
-    } else if (target === "drivers") {
-      query = query.where("role", "==", "driver");
-    }
+    // نفسُ القاعدةِ لا نسخةٌ ثانية: هذه هي التي أسقطَت `admins` فكُتبَ
+    // سطرُ الصندوقِ لكلِّ مستخدمٍ في النظام.
+    const query = _applyAudienceRoleFilter(
+        getFirestore().collection("users"), target);
     const usersSnap = await query.get();
     let batch = getFirestore().batch();
     let count = 0;

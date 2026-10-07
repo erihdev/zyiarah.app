@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/home_packages.dart';
+import 'package:zyiarah/utils/broadcast_target.dart';
 
 class ZyiarahMessagingService {
   // Singleton Implementation
@@ -153,7 +154,11 @@ class ZyiarahMessagingService {
       await _db.collection('notifications_log').add({
         'title': title,
         'body': body,
-        'target': target,
+        // **القيمةُ التي يَعرفُها الخادمُ لا اسمُ موضوعِ FCM.** كان يُمرَّرُ
+        // `_target` كما هو، فيُكتَبُ `all_users` في الحقلِ — والتسليمُ يَصِحُّ
+        // بفالِّ `_deliverBroadcast` إلى «بلا مُرشِّح» لا بقرار، وسجلُّ اللوحةِ
+        // يَطبعُ الرمزَ حرفيّاً. القاعدةُ في `utils/broadcast_target.dart`.
+        'target': broadcastTargetOf(target),
         'scheduled_at': Timestamp.fromDate(scheduledAt),
         'created_at': FieldValue.serverTimestamp(),
         'created_by': createdBy ?? 'Admin',

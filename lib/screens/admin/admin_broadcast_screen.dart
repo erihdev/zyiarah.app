@@ -9,6 +9,7 @@ import 'package:zyiarah/providers/user_provider.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/broadcast_target.dart';
 
 class AdminBroadcastScreen extends StatefulWidget {
   const AdminBroadcastScreen({super.key});
@@ -516,7 +517,7 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
           'title': _titleCtrl.text.trim(),
           'body': _bodyCtrl.text.trim(),
           'type': 'popup',
-          'target': _target == 'all_users' ? 'all' : _target,
+          'target': broadcastTargetOf(_target),
           if (_imageCtrl.text.trim().isNotEmpty)
             'popup_image': _imageCtrl.text.trim(),
           'sent_at': FieldValue.serverTimestamp(),
@@ -553,7 +554,7 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
 
         // 2. إطلاق التنبيه الفعلي لنظام الإشعارات (Backend Trigger)
         // التحويل للفئة التي يتوقعها الـ Cloud Function
-        final String mappedTarget = _target == 'all_users' ? 'all' : _target;
+        final String mappedTarget = broadcastTargetOf(_target);
         
         await FirebaseFirestore.instance.collection('notifications_log').add({
           'title': _titleCtrl.text.trim(),

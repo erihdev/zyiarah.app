@@ -15,35 +15,52 @@ class ZyiarahPopupService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   static void checkAndShowPopup(BuildContext context) {
-    // Listen for the latest popup notification
+    // الجمهورُ **هذا السطحِ** هو العميلة: هذه الدالّةُ مُنادةٌ من
+    // `client_dashboard` وحدَه. فإن وُصِلت لوحةُ السائقِ يوماً فالوسيطُ
+    // `kDriverAudience` — وهو مطلوبٌ في البوّابةِ فلا يُنسى بصمت.
     _db.collection('notifications_log')
         .where('type', isEqualTo: 'popup')
         .orderBy('sent_at', descending: true)
-        .limit(1)
+        // خمسةٌ لا واحد: إعلانٌ لجمهورٍ آخرَ كان **يَحجبُ** إعلاناً حيّاً
+        // لهذا الجمهور. الفهرسُ المركَّبُ هو نفسُه `(type, sent_at)`.
+        .limit(kPopupScanLimit)
         .get().timeout(kNetCallTimeout)
         .then((snapshot) async {
       if (snapshot.docs.isEmpty) return;
-      final data = snapshot.docs.first.data();
 
       // تفضيلُ التسويقِ يُقرأ **بعد** أن يُوجَد إعلانٌ حديثٌ غيرُ تشغيليّ، لا
       // على كلِّ فتح: قراءةٌ واحدةٌ وقتَ الحاجةِ فقط. وفشلُها لا يَعرض —
       // المنبثقُ تحسينٌ لا خدمة، والخطأُ في اتجاهِ احترامِ التفضيل.
+      // والنتيجةُ محفوظةٌ لأنّ المسحَ صارَ على عدّةِ مستندات.
+      bool? marketingCache;
       Future<bool> marketingEnabled() async {
-        if (data['operational'] == true) return true;
+        final bool? cached = marketingCache;
+        if (cached != null) return cached;
         final uid = FirebaseAuth.instance.currentUser?.uid;
-        if (uid == null) return false;
+        if (uid == null) return marketingCache = false;
         final u = await _db.collection('users').doc(uid).get()
             .timeout(kNetCallTimeout);
-        return marketingEnabledFrom(u.data());
+        return marketingCache = marketingEnabledFrom(u.data());
       }
 
-      final allowed = await marketingEnabled();
-      if (!shouldShowPopup(data,
-          now: DateTime.now(), marketingEnabled: allowed)) {
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        // الجمهورُ أوّلاً — فلا قراءةَ تفضيلٍ لإعلانٍ ليس لها أصلاً.
+        // (القاعدةُ نفسُها داخلَ `shouldShowPopup`؛ هذه تَسبقُ الـI/O فقط.)
+        if (!popupTargetsAudience(data, audience: kClientAudience)) continue;
+        final bool allowed = data['operational'] == true
+            ? true
+            : await marketingEnabled();
+        if (!shouldShowPopup(data,
+            now: DateTime.now(),
+            marketingEnabled: allowed,
+            audience: kClientAudience)) {
+          continue;
+        }
+        if (!context.mounted) return;
+        _showRahaStylePopup(context, data);
         return;
       }
-      if (!context.mounted) return;
-      _showRahaStylePopup(context, data);
     }).catchError((e) {
       // صامت للمستخدم دائماً (الإعلان تحسين لا خدمة أساسية) — لكن نميّز رفض
       // الصلاحيات بوسمٍ خاص: رفضٌ هنا يعني انحدار قواعد Firestore يُخفي الإعلانات
