@@ -192,13 +192,44 @@ class ZyiarahNotificationService {
       }
 
       // Fetch role + staff_role for backend targeting (ADMIN_BROADCAST sub-role routing).
-      String role = 'client';
+      //
+      // **و«غيرُ موجودٍ» من مخزنٍ بارد ليس «غيرُ موجودٍ في قاعدةِ البيانات»
+      // — وكان الافتراضُ `'client'` يَكتبُ دوراً لم نَقرأْه (2026-10-07).**
+      //
+      // Firestore هنا بـ`persistenceEnabled`: فعلى مخزنٍ **بارد** (تثبيتٌ
+      // جديدٌ أو بعد محوِ البيانات) والخادمُ غيرُ قابلِ الوصول، يُجيبُ
+      // `get()` **من المخزنِ بلا خطأ** بمستندٍ `exists == false` — فلا
+      // المهلةُ تَعضُّ ولا `catch` يَعمل، ويَبقى الافتراضُ
+      // `String role = 'client';` و`staffRole = null`. و`SetOptions(merge: true)` تَكتبُ الحقلَ
+      // فوقَ المحفوظ، فرمزُ **مديرٍ** يُوسَمُ `client`.
+      //
+      // وتوجيهُ تنبيهاتِ الإدارةِ يَستعلمُ `where("role","in",
+      // ["admin","super_admin"])`، فذلك الجهازُ يَخرُجُ من كلِّ تنبيهٍ
+      // تشغيليّ — فشلُ استردادٍ، عدمُ تطابقِ سعرٍ، طلبٌ مدفوعٌ عالق — بصمت.
+      // ولا شيءَ خادميٌّ يُصحّحُه: `syncRoleToPushToken` يُطلَقُ على كتابةِ
+      // `users/{uid}` وحدَها، ونافذةُ المصالحةِ في `opsHealthSweep`
+      // تَستعلمُ الرموزَ الموسومةَ **إداريّةً سلفاً** فلا تَرى الموسومَ
+      // `client`. فيَزولُ عند أوّلِ إقلاعٍ تَنجحُ فيه القراءةُ — أي بعد
+      // جلسةٍ كاملةٍ من الصمت.
+      //
+      // فالقاعدةُ: **لا يُكتَبُ دورٌ لم يُقرَأ.** ومع `merge: true` فإسقاطُ
+      // المفتاحِ يُبقي المحفوظَ — فالصمتُ أصدقُ من افتراض. والتمييزُ
+      // بـ`isFromCache`: مستندٌ غائبٌ **من الخادم** يَعني أنّ سجلَّ
+      // المستخدمِ لم يُكتَبْ بعد (مسارُ التسجيل)، و`'client'` هناك صحيحٌ
+      // وهو ما يُبقي البثَّ التسويقيَّ واصلاً لحسابٍ جديد.
+      String? role;
       String? staffRole;
+      bool roleKnown = false;
       try {
         final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get().timeout(kNetCallTimeout);
         if (userDoc.exists) {
-          role = userDoc.data()?['role'] ?? 'client';
+          role = userDoc.data()?['role'] as String? ?? 'client';
           staffRole = userDoc.data()?['staff_role'] as String?;
+          roleKnown = true;
+        } else if (!userDoc.metadata.isFromCache) {
+          // الخادمُ نفسُه يَقولُ «لا سجلَّ بعد» — حسابٌ جديد.
+          role = 'client';
+          roleKnown = true;
         }
       } catch (e, st) {
         reportSilent(e, st, reason: 'fcm_role_fetch_failed');
@@ -206,10 +237,11 @@ class ZyiarahNotificationService {
 
       await FirebaseFirestore.instance.collection('fcm_tokens').doc(uid).set({
         'fcmToken': token, // Backend expects 'fcmToken', not 'token'
-        'role': role,      // Added role for administrative broadcasts
+        // الدورُ يُكتَبُ متى عُرِفَ فقط — وإلّا أبقى `merge` المحفوظَ.
+        if (roleKnown) 'role': role,
         // staff_role: الدور الفرعي الفعلي — يستخدمه توجيه ADMIN_BROADCAST لإيصال
         // تنبيه (مثل عدم تطابق دفع) للمحاسب فقط بدل كل الموظّفين.
-        'staff_role': staffRole,
+        if (roleKnown) 'staff_role': staffRole,
         'updated_at': FieldValue.serverTimestamp(),
         'platform': defaultTargetPlatform.name,
       }, SetOptions(merge: true));
@@ -219,7 +251,7 @@ class ZyiarahNotificationService {
       // ذلك يتم خادمياً عبر مُشغِّل dedupeFcmToken (لأن قواعد Firestore تمنع
       // العميل من لمس وثيقة رمز حساب آخر).
 
-      debugPrint("✅ FCM Token ($role) saved for user: $uid");
+      debugPrint("✅ FCM Token (${role ?? 'دورٌ لم يُقرأ'}) saved for user: $uid");
     } catch (e, st) {
       // بلا رمز محفوظ لا تصل الإشعارات إطلاقاً — والمستخدم لا يعلم.
       reportSilent(e, st, reason: 'fcm_token_save_failed');
