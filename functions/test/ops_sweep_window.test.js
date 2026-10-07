@@ -53,6 +53,32 @@ const code = src
     .filter((l) => !l.trimStart().startsWith("//"))
     .join("\n");
 
+/**
+ * جسمُ دالّةٍ بحدِّه الحقيقيّ — لا بعدِّ أحرف.
+ *
+ * شرائحُ هذا الملفِّ كانت تَتجاوزُ دوالَّها: `cancelStaleUnpaidOrders` ٥٢٤
+ * حرفاً، و`unassignJobsOnDriverDisable` ١٤١١، و`_unassignPayload` ٣٠٣ — أي
+ * أنّ الفحصَ يَقرأُ شفرةَ دالّةٍ أخرى ويَحكمُ بها. ولم يَبِتْ ذلك عطلاً
+ * بعدُ (قِيسَ: لا مصطلحَ مَحروساً في المُتجاوَز)، لكنّه فخُّ الحدِّ نفسُه
+ * الذي عضَّ هنا مرّاتٍ — `indexOf(']);')` في حارسِ COD، و`indexOf('}')` في
+ * حارسِ المخزَن، وشريحةُ ١٦٠٠ حرفٍ في حارسِ تحقّقِ السعر.
+ * @param {string} src المصدر
+ * @param {string} anchor مِرساةُ الدالّة
+ * @return {string} الجسم
+ */
+function fnBody(src, anchor) {
+  const i = src.indexOf(anchor);
+  assert.ok(i > -1, `المِرساةُ «${anchor}» اختفت`);
+  const ends = [
+    src.indexOf("\nexports.", i + 10),
+    src.indexOf("\nasync function ", i + 10),
+    src.indexOf("\nfunction ", i + 10),
+  ].filter((x) => x > 0);
+  const j = ends.length ? Math.min(...ends) : src.length;
+  assert.ok(j - i > 300, `اقتطاعُ «${anchor}» انهار`);
+  return src.slice(i, j);
+}
+
 test("(أ) النافذةُ تَسألُ عن المساواتَين معاً لا عن الحالةِ وحدَها", () => {
   const i = code.indexOf(".where(\"status\", \"==\", \"awaiting_payment\")");
   assert.ok(i > -1, "استعلامُ الفحصِ الأوّلِ اختفى");
@@ -80,9 +106,7 @@ test("(ج) والمهجورةُ تُعَدُّ بـcount() لا بقراءةِ �
 test("(د) سببُ التراكمِ ما زال قائماً: لا شيءَ يُلغي سلّةً متروكة", () => {
   // لو صارَ شيءٌ يُلغي `store_orders` المتروكةَ فالتعليلُ أعلاه يَحتاجُ مراجعةً
   // (لا إسكاتاً): التضييقُ يَبقى صحيحاً، لكنّ وصفَ السببِ يَصيرُ قديماً.
-  const i = code.indexOf("exports.cancelStaleUnpaidOrders");
-  assert.ok(i > -1, "مكنسةُ غير المدفوعِ اختفت");
-  const body = code.slice(i, i + 1800);
+  const body = fnBody(code, "exports.cancelStaleUnpaidOrders");
   assert.ok(body.includes("db.collection(\"orders\")"),
       "المكنسةُ تَمسحُ orders");
   assert.ok(!body.includes("db.collection(\"store_orders\")"),
@@ -259,9 +283,7 @@ test("(ن٣) وغيابُ المالكِ وحدَه يُبقي العلمَ — 
 // (`.catch` يَطبعُ) **ويَعُدُّه ناجحاً** — فالتنبيهُ يَقولُ «أُعيدت لقائمة
 // الإسناد» عن مهمّةٍ ما زالت مُسنَدةً لمن لا يَعمل، والمُشغّلُ بلا `retry`.
 test("(١٤) العدُّ على النجاحِ وحدَه، والفشلُ يَكتبُ علَمَه", () => {
-  const i = src.indexOf("exports.unassignJobsOnDriverDisable");
-  assert.ok(i > 0, "المُشغّلُ اختفى");
-  const seg = src.slice(i, i + 3400);
+  const seg = fnBody(src, "exports.unassignJobsOnDriverDisable");
   assert.ok(!/\}\)\.catch\(\(e\) =>\s*\n?\s*console\.error\(`unassignJobsOnDriverDisable/
       .test(seg), "الفشلُ ما زال مُبتلَعاً بـ.catch على التحديث");
   assert.ok(/try \{[\s\S]{0,160}?update\(_unassignPayload\([\s\S]{0,40}?\);\s*\n\s*n\+\+;/
@@ -295,8 +317,7 @@ test("(١٥) والمكنسةُ تَستعلمُ العلَمَ لا الحال�
       (src.match(/_unassignPayload\("driver_disabled"\)/g) || []).length, 2,
       "المُنادِيانِ ليسا اثنَين — فنسخةٌ إنلاين عادت");
   // والحِمْلُ نفسُه يَمحو العلَمَين، وإلّا بَقيَ المستندُ في المجموعةِ أبداً.
-  const defI = src.indexOf("function _unassignPayload(");
-  const def = src.slice(defI, defI + 700);
+  const def = fnBody(src, "function _unassignPayload(");
   for (const f of ["unassign_pending", "unassign_driver_id"]) {
     assert.ok(new RegExp(f + ": FieldValue\\.delete\\(\\)").test(def),
         `النجاحُ لا يَمحو ${f} — فالمستندُ يَبقى في مجموعةِ المكنسةِ للأبد`);
