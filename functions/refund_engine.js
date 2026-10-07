@@ -137,7 +137,12 @@ async function notifyAutoRefund(
   if (typeof queuePush !== "function") return;
   if (clientId) {
     await queuePush(clientId, "تعذّر تنفيذ طلبكِ — أُعيد المبلغ 💳",
-        `تعذّر إيجاد فريق لطلبكِ #${code} فأُعيد ${amount} ر.س إلى ${dest}.`,
+        // **خانتانِ دائماً.** كان `${amount}` خامّاً فيُقرأُ «أُعيد 172.5 ر.س»
+        // بجوارِ أختِها في هذا الملفِّ نفسِه التي تَقول «172.50» — و`amount`
+        // من `refundAmount` أي `grossFromBaseRounded` (`Math.round(x*100)/100`)
+        // فالقيمُ بكسرٍ واحدٍ هي الحالةُ المعتادة لا الطرَف.
+        `تعذّر إيجاد فريق لطلبكِ #${code} فأُعيد ${amount.toFixed(2)} ر.س ` +
+        `إلى ${dest}.`,
         "order_refunded", {orderId}).catch(() => {});
   }
   await queuePush("ADMIN_BROADCAST", "استُرد طلب مدفوع تعذّر تنفيذه ↩️",
