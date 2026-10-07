@@ -247,6 +247,48 @@ const {setDoc, doc, updateDoc, getDoc, getDocs, collection, query, addDoc,
           {senderId: "client2", senderRole: "user", text: "x",
             sentAt: new Date()}), false);
 
+  // ─── وثيقةُ التذكرةِ نفسُها: حقلانِ لا غير ──────────────────────────
+  //
+  // شرطُ المِلكيّةِ يَقرأُ المستندَ **القائمَ**، و`request.resource` كان بلا
+  // قيد. وما تَكتبُه الشاشةُ `status: 'open'` و`updatedAt` عند ردِّها.
+  //
+  // **ومستندٌ لكلِّ فحص** عن قصد: تلفيقُ `userId` ينقلُ المِلكيّةَ، فلو
+  // تَشاركت الفحوصُ مستنداً واحداً لَرُفِضَ ما بعدَه بشرطِ المِلكيّةِ لا
+  // بتقييدِ الحقول — أي نتيجةٌ صحيحةٌ **بالمصادفة**.
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    for (const id of ["tkA", "tkB", "tkC", "tkD", "tkE", "tkF"]) {
+      await setDoc(doc(db, `support_tickets/${id}`), {
+        userId: "client1", userEmail: "real@c.com", subject: "س",
+        status: "replied",
+      });
+    }
+  });
+  const tkDoc = (uid, id) => doc(asUser(uid), `support_tickets/${id}`);
+  await check("ticket doc: client CANNOT forge userEmail (هُويّةُ المشتكية)",
+      updateDoc(tkDoc("client1", "tkA"),
+          {userEmail: "victim@example.com"}), false);
+  await check("ticket doc: nor reassign userId to someone else",
+      updateDoc(tkDoc("client1", "tkB"), {userId: "client2"}), false);
+  await check("ticket doc: nor resolve her own ticket out of the queue",
+      updateDoc(tkDoc("client1", "tkC"),
+          {status: "resolved", updatedAt: new Date()}), false);
+  await check("ticket doc: nor rewrite the subject after it was read",
+      updateDoc(tkDoc("client1", "tkD"), {subject: "شيء آخر"}), false);
+  // ولا يُكسَرُ مسارُ التطبيق: إعادةُ الفتحِ عند إرسالِ ردِّها.
+  await check("ticket doc: the app's own reopen -> ALLOWED",
+      updateDoc(tkDoc("client1", "tkE"),
+          {status: "open", updatedAt: new Date()}), true);
+  // والأدمنُ بلا قيدٍ (يَكتبُ `replied`/`resolved` و`lastMessage`).
+  await check("ticket doc: admin CAN resolve",
+      updateDoc(tkDoc("superA", "tkF"),
+          {status: "resolved", lastMessage: "تم", updatedAt: new Date()}),
+      true);
+  // ومَن ليست صاحبةَ التذكرةِ لا تُحدّثُها بحال.
+  await check("ticket doc: a stranger CANNOT update it",
+      updateDoc(tkDoc("client2", "tkE"),
+          {status: "open", updatedAt: new Date()}), false);
+
   // ═══ موظّفٌ موقوفٌ لا يَعملُ (STAGE-C) ═══
   //
   // الحالةُ قبلَ الإصلاح: `admins/{id}.is_active` بلا قارئٍ في المستودعِ

@@ -366,8 +366,35 @@ service cloud.firestore {
     match /support_tickets/{ticketId} {
       allow create: if isLoggedIn() &&
         request.resource.data.get('userId', '') == request.auth.uid;
-      allow read, update: if isLoggedIn() &&
+      allow read: if isLoggedIn() &&
         (request.auth.uid == resource.data.userId || isAdmin());
+
+      // ⚠️ **تذكرةُ العميلةِ كانت مفتوحةَ الحقولِ لها (2026-10-07).** الشرطُ
+      // `request.auth.uid == resource.data.userId` يَقرأُ المستندَ **القائمَ**،
+      // فمِلكيّتُها اليومَ ثابتةٌ — و`request.resource` (الجديدُ) كان بلا قيدٍ
+      // إطلاقاً. وما تَكتبُه الشاشةُ حقلانِ لا غير: `status: 'open'` و
+      // `updatedAt` عند إرسالِ ردِّها (أي إعادةُ فتحِ التذكرة). فالمفتوحُ
+      // بالفارقِ كان:
+      //
+      //   • `userEmail` — وهو ما يَقرؤه الأدمنُ **هُويّةَ المشتكية** («من: …»)
+      //     ويَبحثُ به في الشاشتَين. قيمةٌ مُلفَّقةٌ تُحوّلُ الدعمَ إلى غيرِها.
+      //     (ولا يُرسَلُ إليه بريدٌ: صفرُ قراءةٍ له في `functions/` — فالأثرُ
+      //     تضليلٌ لا ترحيلُ بريد.)
+      //   • `userId` — نقلُ التذكرةِ إلى uid غيرِها بعد إنشائها.
+      //   • `status` — ضبطُه `resolved`/`closed` يُخرِجُ التذكرةَ من تبويبِ
+      //     «النشطة» (`['open','replied']`) في السطحَين، فتَختفي الشكوى.
+      //   • `subject`/`lastMessage`/`createdAt` — إعادةُ كتابةِ ما قُرئ.
+      //
+      // وهي عائلةُ «ردٌّ مُلفَّقٌ باسمِ فريق زيارة» في الوثيقةِ الأمِّ بدلَ
+      // الرسالة. فالعميلةُ تُحدّثُ حقلَيها وحدَهما وبالقيمةِ التي تَكتبُها
+      // شاشتُها، والإداريُّ بلا قيد.
+      allow update: if isAdmin() || (
+        isLoggedIn()
+        && request.auth.uid == resource.data.userId
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['status', 'updatedAt'])
+        && request.resource.data.status == 'open'
+      );
       allow delete: if isSuperAdmin();
 
       match /messages/{messageId} {
