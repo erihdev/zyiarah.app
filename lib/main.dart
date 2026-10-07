@@ -342,6 +342,18 @@ class AuthWrapper extends StatelessWidget {
       }
     }
 
+    // **خروجٌ أنهيناه نحن يُقال، لا يُترَك ارتداداً صامتاً.** حظرُ الحسابِ
+    // كان يُنادي `signOut()` بلا كلمة، فتَرتدُّ المستخدمةُ إلى شاشةِ
+    // الترحيبِ فتَقرأُ الارتدادَ «كلمةُ مرورٍ خاطئة» وتُعيدُ المحاولةَ ثمّ
+    // تُراسِلُ الدعم — وهو تعليلُ بوّابةِ دخولِ لوحةِ الويبِ بعينِه، وكانت
+    // القاعدةُ مُنفَّذةً هناك وحدَها. وهذه الشاشةُ هي السطحُ الذي يَبلغُه
+    // **كلُّ** خارجٍ من الجلسة، فمسارُ الدخولِ ومسارُ الحظرِ أثناءَ الجلسةِ
+    // يُغطّيهما موضعٌ واحد.
+    final String? ended = userProvider.sessionEndedNotice;
+    if (ended != null) {
+      return _SessionEndedScreen(provider: userProvider, notice: ended);
+    }
+
     // إذا لم يكن مسجلاً دخوله، نعرض شاشة الترحيب
     return const OnboardingScreen();
   }
@@ -448,6 +460,65 @@ class _RoleUnavailableScreen extends StatelessWidget {
                 TextButton(
                   onPressed: () => FirebaseAuth.instance.signOut(),
                   child: const Text('تسجيل الخروج', style: TextStyle(color: Color(0xFF94A3B8))),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// أُنهيت الجلسةُ بقرارٍ منّا (حظرُ حساب) — يُقالُ السببُ ثمّ يُفتَحُ الطريقُ
+/// إلى شاشةِ الترحيب. النصُّ محيَّدُ الجنسِ: الأدوارُ الثلاثةُ تَبلغُ هذه
+/// الشاشة (انظر رأس `lib/utils/account_block.dart`).
+class _SessionEndedScreen extends StatelessWidget {
+  final ZyiarahUserProvider provider;
+  final String notice;
+  const _SessionEndedScreen({required this.provider, required this.notice});
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.lock_person_rounded,
+                    size: 56, color: Color(0xFFB45309)),
+                const SizedBox(height: 18),
+                const Text(
+                  'انتهت الجلسة',
+                  style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E293B)),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  notice,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 13, color: Color(0xFF64748B), height: 1.6),
+                ),
+                const SizedBox(height: 26),
+                ElevatedButton(
+                  onPressed: provider.clearSessionEndedNotice,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF660033),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 34, vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('حسناً'),
                 ),
               ],
             ),

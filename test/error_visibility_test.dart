@@ -60,6 +60,13 @@ const _mustReport = <String, List<String>>{
   'lib/services/zyiarah_wallet_service.dart': [
     'wallet_audit_log_failed',
   ],
+  'lib/screens/offers_screen.dart': [
+    // الكودُ هو **بدايةُ** برنامجِ الإحالة. وكان الجلبُ
+    // `Future<String?>` بـ`.catchError((_) => null)` فيُبتلَعُ الفشلُ بلا
+    // `debugPrint` حتى — والبطاقةُ تَرسمُ «…» كحالةِ التحميلِ تماماً، فلا
+    // العميلةُ تَعرفُ ولا نَحنُ.
+    'referral_code_fetch_failed',
+  ],
   'lib/providers/user_provider.dart': [
     'get_user_role_failed',
     'user_profile_parse_failed',

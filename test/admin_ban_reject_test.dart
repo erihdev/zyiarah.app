@@ -15,8 +15,13 @@ void main() {
     expect(users.contains("'status': isBanned ? 'active' : 'banned'"), isTrue,
         reason: 'الحظر بلا حذف — يفرضه التطبيق عبر status==banned');
     expect(users.contains('BAN_USER'), isTrue, reason: 'سجل تدقيق');
-    // الشارة تعرض الحالة الحقيقية لا «عميل نشط» ثابتاً.
-    expect(users.contains("user['status'] == 'banned'"), isTrue);
+    // الشارة تعرض الحالة الحقيقية لا «عميل نشط» ثابتاً — **والمقصودُ هو
+    // ذلك، لا شكلُ القراءة**: كان الفحصُ يُثبّتُ النسخةَ الإنلاين
+    // `user['status'] == 'banned' || user['is_blocked'] == true`، وقد انتقلت
+    // القاعدةُ إلى `utils/account_block.dart` (موضعٌ واحدٌ للمُنفِّذِ
+    // `user_provider` وللشارةِ هنا) فأُعيد توجيهُ الفحصِ إلى **النداء**.
+    expect(users.contains('accountIsBlocked(user)'), isTrue,
+        reason: 'الشارة لا تسأل قاعدة الحظر');
     expect(users.contains('محظور'), isTrue);
   });
 

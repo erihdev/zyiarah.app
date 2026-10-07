@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/firebase_service.dart';
+import 'package:zyiarah/utils/account_block.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminUsersScreen extends StatefulWidget {
@@ -385,8 +386,11 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                       final user = doc.data() as Map<String, dynamic>;
                       final String name = user['name'] ?? 'مستخدم';
                       final String contact = user['phone'] ?? user['email'] ?? 'لا يوجد رقم';
-                      final bool isBanned =
-                          user['status'] == 'banned' || user['is_blocked'] == true;
+                      // القاعدةُ في `utils/account_block.dart` — نسخةٌ هنا
+                      // ونسخةٌ في `user_provider` كانتا تَقرآنِ العلمَين
+                      // بأنفسِهما، والمُنفِّذُ هو المزوّد: فاختلافُهما يَعني
+                      // شارةً تَقولُ غيرَ ما يَفعلُه الخروج.
+                      final bool isBanned = accountIsBlocked(user);
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),

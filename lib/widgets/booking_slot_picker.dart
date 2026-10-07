@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:zyiarah/utils/date_strip.dart';
 import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/time_format.dart';
 
@@ -62,12 +63,19 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
 
   late DateTime _selectedDate;
   int? _selectedHour;
+  final ScrollController _dateStripCtrl = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _selectedDate = DateTime.now().add(const Duration(days: 1));
     _load();
+  }
+
+  @override
+  void dispose() {
+    _dateStripCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -139,12 +147,14 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
             .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
         _maxTeamsPerSlot = (data['maxTeamsPerSlot'] as num?)?.toInt() ?? 0;
         _loading = false;
-        // لو صار التاريخ المختار ممتلئاً أو مغلقاً، انتقل لأول يوم صالح.
+        // لو صار التاريخ المختار ممتلئاً أو مغلقاً، انتقل لأول يوم صالح —
+        // **ثمّ أظهِره**: الانتقال بلا تمرير يترك الاختيار خارج الشاشة.
         if (_isDayUnavailable(_selectedDate)) {
           for (int i = 1; i <= _horizonDays; i++) {
             final c = now.add(Duration(days: i));
             if (!_isDayUnavailable(c)) {
               _selectedDate = c;
+              _revealSelectedDate();
               break;
             }
           }
@@ -295,11 +305,32 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
     );
   }
 
+  /// أظهِر البطاقة المختارة في الشريط بعد انتقال الاختيار تلقائياً.
+  /// بدونها يبقى الشريط عند أوّل العناصر والاختيارُ خارج الشاشة أو مقتطعاً عند
+  /// حرفها — انظر رأس `lib/utils/date_strip.dart`.
+  void _revealSelectedDate() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_dateStripCtrl.hasClients) return;
+      final int i = dateStripIndexOf(_selectedDate, DateTime.now());
+      if (i <= 0) return; // الفهرس ٠ عند الحرف أصلاً، و‎-١‎ خارج الشريط
+      _dateStripCtrl.animateTo(
+        dateStripOffsetFor(
+          index: i,
+          viewportWidth: _dateStripCtrl.position.viewportDimension,
+          maxOffset: _dateStripCtrl.position.maxScrollExtent,
+        ),
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
   Widget _dateStrip() {
     final now = DateTime.now();
     return SizedBox(
       height: 82,
       child: ListView.builder(
+        controller: _dateStripCtrl,
         scrollDirection: Axis.horizontal,
         itemCount: _horizonDays,
         itemBuilder: (context, i) {
