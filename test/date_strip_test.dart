@@ -192,17 +192,106 @@ void main() {
     });
   });
 
-  // ─────────────────────────── وصلُ الحساب بالشاشات ───────────────────────────
-  // حسابٌ صحيحٌ لا يُستدعى يترك اختباراتَه خضراء والعيبَ قائماً: الشاشاتُ
-  // الثلاث هي التي كانت تفتقد `ScrollController` أصلاً.
-  group('الوصل — الشاشات الثلاث', () {
-    const screens = <String>[
-      'lib/screens/hourly_details_screen.dart',
-      'lib/screens/subscription_plans_screen.dart',
-      'lib/screens/event_worker_packages_screen.dart',
-    ];
+  // ─────────────────────────── وصلُ الحساب بالسطوح ───────────────────────────
+  // حسابٌ صحيحٌ لا يُستدعى يترك اختباراتَه خضراء والعيبَ قائماً.
+  //
+  // **والنطاقُ مُشتَقٌّ لا مكتوبٌ بيد (2026-10-07).** كان ثلاثةَ مساراتٍ
+  // مكتوبةً بأسمائها والقاعدةُ عامّة، فسقطَ منها سطحٌ رابع:
+  // `lib/widgets/booking_slot_picker.dart` — الشريطُ المشترَكُ لأربعِ شاشاتٍ
+  // (الكنب والسجاد، المكيفات، فرش السيارة، جدولةُ المتجر) بالهندسةِ نفسِها
+  // (٥٨ + هامش ٥) وبالانتقالِ التلقائيِّ نفسِه (`_isDayUnavailable` ⇒ أوّلُ
+  // يومٍ صالح) و**بلا `ScrollController`**: أي العيبُ المُصوَّرُ بعينِه على
+  // سطحٍ يَخدمُ شاشاتٍ أكثرَ من الثلاثِ المحروسة.
+  //
+  // البصمةُ هي `Duration(days: i + 1)` — «أوّلُ بطاقةٍ هي الغد» — وهي في
+  // الأربعةِ وحدَها في `lib/` كلِّها (فُحِصَ: لا سطحَ خامساً يُطابقُها، ولا
+  // شريطَ أفقيّاً آخرَ يَحملُها).
+  group('الوصل — كلُّ سطحٍ يَحملُ الشريط', () {
+    /// كلُّ `.dart` تحت `lib/` يَحملُ بصمةَ شريطِ الثلاثين يوماً.
+    List<String> stripSurfaces() {
+      final out = <String>[];
+      for (final e in Directory('lib').listSync(recursive: true)) {
+        if (e is! File || !e.path.endsWith('.dart')) continue;
+        final src = e.readAsStringSync();
+        if (src.contains('Duration(days: i + 1)') &&
+            src.contains('scrollDirection: Axis.horizontal')) {
+          out.add(e.path);
+        }
+      }
+      out.sort();
+      return out;
+    }
 
-    for (final path in screens) {
+    /// جسمُ `ListView.builder(` الذي يَبني الشريط: الأفقيُّ الذي يَنحلُّ
+    /// `itemCount` فيه إلى [kDateStripDays]. الحدُّ بموازنةِ الأقواسِ لا
+    /// بعدِّ أحرف، والتحديدُ بالخاصيّةِ لا بموضعِ البصمة — البصمةُ تَقعُ في
+    /// حلقةِ الانتقالِ في الشاشاتِ الثلاث وفي بانيِ البطاقةِ في الشريطِ
+    /// المشترَك، فلا تَصلحُ مِرساةً.
+    ({String head, String body}) strip(String src, String path) {
+      int? resolveCount(String head) {
+        final m = RegExp(r'itemCount:\s*([A-Za-z0-9_]+)').firstMatch(head);
+        if (m == null) return null;
+        final String raw = m.group(1)!;
+        return int.tryParse(raw) ??
+            int.tryParse(
+                RegExp('int $raw = ([0-9]+);').firstMatch(src)?.group(1) ?? '');
+      }
+
+      String? head, body;
+      int from = 0;
+      while (true) {
+        final int open = src.indexOf('ListView.builder(', from);
+        if (open < 0) break;
+        from = open + 1;
+        final int pOpen = src.indexOf('(', open);
+        int d = 0, i = pOpen;
+        while (i < src.length) {
+          if (src[i] == '(') d++;
+          if (src[i] == ')') {
+            d--;
+            if (d == 0) break;
+          }
+          i++;
+        }
+        if (i >= src.length) continue; // أقواسٌ غيرُ متوازنة — ليس مُرشَّحاً
+        final String b = src.substring(pOpen, i + 1);
+        final int ib = b.indexOf('itemBuilder:');
+        final String h = ib > 0 ? b.substring(0, ib) : b;
+        if (!h.contains('scrollDirection: Axis.horizontal')) continue;
+        if (resolveCount(h) != kDateStripDays) continue;
+        expect(head, isNull,
+            reason: '$path: شريطانِ أفقيّانِ بـ$kDateStripDays عنصراً — '
+                'الفحصُ لا يَعرفُ أيَّهما شريطُ التواريخ');
+        head = h;
+        body = b;
+      }
+      expect(head, isNotNull,
+          reason: '$path: لم يُعثر على شريطٍ أفقيٍّ بـ$kDateStripDays عنصراً — '
+              'طولُ الشريط تغيّر أو لم يَعُد ListView.builder');
+      return (head: head!, body: body!);
+    }
+
+    final surfaces = stripSurfaces();
+
+    test('النطاقُ انحلَّ إلى السطوحِ الأربعةِ على الأقلّ', () {
+      // أرضيّةٌ: اشتقاقٌ ينحلُّ إلى لا شيءٍ يَمرُّ أخضرَ أجوفَ.
+      expect(surfaces.length, greaterThanOrEqualTo(4),
+          reason: 'بصمةُ الشريط لم تُطابِقْ إلّا ${surfaces.length} — '
+              'تغيّرت البصمةُ أو انهارَ المسح');
+      expect(surfaces, contains('lib/widgets/booking_slot_picker.dart'),
+          reason: 'الشريطُ المشترَكُ خارجَ النطاق — وهو السطحُ الذي سقطَ');
+      // الشريطُ المشترَكُ يَكتبُ `itemCount` ثابتاً مُسمّىً لا رقماً حرفيّاً،
+      // فحلُّ الثوابتِ في `strip` **حاملٌ** لا زينة: أوّلُ صياغةٍ كتبَته
+      // `RegExp('int \$raw = …')` — دولارٌ مهروبٌ لا استقراء — فمرَّت
+      // الشاشاتُ الثلاثُ (رقمُها حرفيٌّ) وسقطَ الشريطُ المشترَكُ وحدَه.
+      final String picker =
+          File('lib/widgets/booking_slot_picker.dart').readAsStringSync();
+      expect(picker, contains('itemCount: _horizonDays'),
+          reason: 'الشريطُ المشترَكُ لم يَعُدْ يَستعملُ ثابتاً مُسمّىً — '
+              'حلُّ الثوابتِ في strip لم يَبقَ مُجرَّباً بأيِّ سطح');
+    });
+
+    for (final path in surfaces) {
       final String src = File(path).readAsStringSync();
       final String name = path.split('/').last;
 
@@ -216,14 +305,9 @@ void main() {
       });
 
       test('$name — المتحكّم موصولٌ بشريط الـ ٣٠ يوماً نفسه', () {
-        // `controller:` يسبق `itemCount: 30` في الـ ListView نفسه — لا في قائمةٍ أخرى.
-        final int listIdx = src.indexOf('itemCount: 30');
-        expect(listIdx, greaterThan(0), reason: '$name: لم يُعثر على شريط ٣٠ يوماً');
-        final int builderIdx = src.lastIndexOf('ListView.builder(', listIdx);
-        expect(builderIdx, greaterThan(0),
-            reason: '$name: الشريط ليس ListView.builder');
-        final String head = src.substring(builderIdx, listIdx);
-        expect(head, contains('controller: _dateStripCtrl'),
+        // `strip` نفسُها تَفرضُ الأفقيّةَ وطولَ الشريط، وتَرفضُ الغموضَ.
+        final s = strip(src, path);
+        expect(s.head, contains('controller: _dateStripCtrl'),
             reason: '$name: شريط الـ ٣٠ يوماً بلا متحكّم — الاختيار يبقى خارج الشاشة');
       });
 
@@ -252,16 +336,15 @@ void main() {
       });
     }
 
-    test('عرضُ البطاقة في الوحدة يطابق الشاشات الثلاث', () {
-      // 58 عرضاً + 5 هامشاً على كلّ جانب = 68. لو غُيّر العرض في شاشةٍ
-      // وحدها لصار التوسيط كاذباً بصمت.
-      for (final path in screens) {
+    test('عرضُ البطاقة في الوحدة يطابق كلَّ سطح', () {
+      // 58 عرضاً + 5 هامشاً على كلّ جانب = 68. لو غُيّر العرض في سطحٍ
+      // وحده لصار التوسيط كاذباً بصمت.
+      for (final path in surfaces) {
         final String src = File(path).readAsStringSync();
-        final int listIdx = src.indexOf('itemCount: 30');
-        final String body = src.substring(listIdx, listIdx + 4000);
-        expect(body, contains('margin: const EdgeInsets.symmetric(horizontal: 5)'),
+        final s = strip(src, path);
+        expect(s.body, contains('margin: const EdgeInsets.symmetric(horizontal: 5)'),
             reason: '$path: هامشُ البطاقة تغيّر — راجع kDateStripItemExtent');
-        expect(body, contains('width: 58'),
+        expect(s.body, contains('width: 58'),
             reason: '$path: عرضُ البطاقة تغيّر — راجع kDateStripItemExtent');
       }
       expect(kDateStripItemExtent, 58.0 + 5.0 + 5.0);

@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -116,15 +118,79 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
-  testWidgets('فشل جلب كود الإحالة → البطاقة تبقى بلا كود وزر النسخ معطّل',
-      (t) async {
+  // **«جارٍ» و«تعذّر» حالتان لا واحدة (2026-10-07).** كانت البطاقةُ
+  // `FutureBuilder` على وعدٍ يَبتلعُ الفشلَ إلى `null`
+  // (`.catchError((_) => null)`)، فتَرسمُ «…» في الحالتَين وزرُّ النسخِ
+  // معطَّلٌ **إلى الأبدِ** بلا كلمةٍ ولا إعادةِ محاولة — على السطحِ الذي
+  // يَبدأُ به برنامجُ الإحالة. وكان هذا الفحصُ يُثبّتُ ذلك السلوكَ بعينِه.
+  testWidgets('كودُ الإحالة: جارٍ ⇒ «…» وزرُّ النسخِ معطَّل', (t) async {
+    // وعدٌ لا يَكتمِل — حالةُ التحميل.
     await pumpOffers(t,
-        coupons: Stream.value(const []), referral: Future.value(null));
+        coupons: Stream.value(const []),
+        referral: Completer<String?>().future);
     expect(find.text('برنامج سفراء زيارة'), findsOneWidget);
     expect(find.text('…'), findsOneWidget);
-    // لا كوبونات في هذا الفحص، فأيقونة النسخ الوحيدة هي أيقونة الإحالة.
+    expect(find.text('تعذّر التحميل'), findsNothing,
+        reason: 'التحميلُ يُقرأُ فشلاً');
     final btn = t.widget<IconButton>(
         find.widgetWithIcon(IconButton, Icons.content_copy_rounded));
     expect(btn.onPressed, isNull);
+  });
+
+  testWidgets('كودُ الإحالة: فشلٌ ⇒ «تعذّر التحميل» وإعادةٌ لا نسخٌ ميّت',
+      (t) async {
+    // الخطأُ يُكمَلُ **بعد** تركيبِ الشاشة: `Future.error` يُنشَأُ قبلَها
+    // فيَبقى بلا مُعالِجٍ دورةَ microtask، فيُسقِطُ مِرفَقُ الاختبارِ الفحصَ
+    // بخطأٍ غيرِ ملتقَطٍ وإن كانت الشفرةُ تُعالِجُه فعلاً.
+    final c = Completer<String?>();
+    await pumpOffers(t, coupons: Stream.value(const []), referral: c.future);
+    c.completeError(Exception('boom'));
+    await t.pump();
+    await t.pump();
+    expect(find.text('تعذّر التحميل'), findsOneWidget,
+        reason: 'الفشلُ يُرسَمُ «…» كالتحميل — لا تَعرفُ أنّ شيئاً تعذّر');
+    expect(find.text('…'), findsNothing);
+    // زرُّ النسخِ المعطَّلُ يُستبدَلُ بإعادةٍ فعّالة.
+    expect(find.widgetWithIcon(IconButton, Icons.content_copy_rounded),
+        findsNothing);
+    final retry = t.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.refresh_rounded));
+    expect(retry.onPressed, isNotNull, reason: 'إعادةٌ بلا أثر');
+  });
+
+  testWidgets('كودُ الإحالة: وعدٌ بـ null يُقرأُ فشلاً لا كوداً فارغاً',
+      (t) async {
+    // الخدمةُ تَرمي عند غيابِ الكود، لكنّ `null` من أيِّ مصدرٍ يَعني
+    // «لا كودَ» — وهو فشلٌ من منظورِ العميلة لا حالةٌ سليمة.
+    await pumpOffers(t,
+        coupons: Stream.value(const []), referral: Future<String?>.value(null));
+    expect(find.text('تعذّر التحميل'), findsOneWidget);
+  });
+
+  test('ولا يُبتلَعُ خطأُ الخدمةِ قبلَ أن يُبلَّغَ عنه', () {
+    // `code == null` و«فشلٌ» يَنتهيانِ إلى الشاشةِ نفسِها — وهو حسنٌ —
+    // لكنّ `.catchError` على مسارِ الخدمةِ يَضيعُ معه **الإبلاغ**: لا
+    // Crashlytics ولا `debugPrint`. فلا اختبارُ واجهةٍ يَكشفُه، ويَكشفُه
+    // هذا الفحصُ ومعه `error_visibility_test` (سببُ البلاغ).
+    final src = File('lib/screens/offers_screen.dart').readAsStringSync();
+    final int i = src.indexOf('Future<void> _loadReferral(');
+    expect(i, greaterThan(0));
+    final String body = src.substring(i, src.indexOf('\n  }', i));
+    expect(body.contains('catchError'), isFalse,
+        reason: 'عادَ ابتلاعُ الفشلِ في مسارِ جلبِ الكود — يَضيعُ البلاغ');
+    expect(body.contains("reason: 'referral_code_fetch_failed'"), isTrue,
+        reason: 'الفشلُ بلا إبلاغ');
+  });
+
+  testWidgets('كودُ الإحالة: نجاحٌ ⇒ الكودُ ونسخٌ فعّال', (t) async {
+    await pumpOffers(t,
+        coupons: Stream.value(const []),
+        referral: Future<String?>.value('ZYXYZ99'));
+    expect(find.text('ZYXYZ99'), findsOneWidget);
+    expect(find.text('تعذّر التحميل'), findsNothing);
+    expect(find.widgetWithIcon(IconButton, Icons.refresh_rounded), findsNothing);
+    final btn = t.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.content_copy_rounded));
+    expect(btn.onPressed, isNotNull);
   });
 }

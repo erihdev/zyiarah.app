@@ -54,6 +54,9 @@ void main() {
   final rulesRaw = File('firestore.rules').readAsStringSync();
   final rules = _mask(rulesRaw);
   final providerRaw = File('lib/providers/user_provider.dart').readAsStringSync();
+  final blockRaw =
+      File('lib/utils/account_block.dart').readAsStringSync();
+  final block = _mask(blockRaw);
   final provider = _mask(providerRaw);
   final utilRaw = File('admin_panel/src/utils/staffStatus.ts').readAsStringSync();
   final util = _mask(utilRaw);
@@ -75,11 +78,13 @@ void main() {
     for (final m in RegExp(r"\.get\('([a-z_]+)'").allMatches(gate)) {
       out.add(m.group(1)!);
     }
-    // (٢) `user_provider`: شرطُ الطردِ — `data['is_blocked'] == true ||
-    //     data['status'] == 'banned'`
-    final ban = RegExp(r"if \((data\['[a-z_]+'\][^)]*?)\) \{").firstMatch(provider);
-    if (ban == null) throw StateError('شرطُ الطردِ في user_provider اختفى');
-    for (final m in RegExp(r"data\['([a-z_]+)'\]").allMatches(ban.group(1)!)) {
+    // (٢) قاعدةُ الحظر — **من موضعِها** لا من نسخةٍ: كانت مكتوبةً إنلاين في
+    //     `user_provider` فكان الاشتقاقُ يَقرؤها هناك؛ وانتقلت إلى
+    //     `utils/account_block.dart` (موضعٌ واحدٌ لمُنفِّذٍ وشارةٍ)، فالاشتقاقُ
+    //     يَقرأُ الأصلَ الآن — وفحصٌ أدناه يُثبِتُ أنّ المُنفِّذَ ما زال
+    //     يُنادِيه، وإلّا كان الاشتقاقُ عن قاعدةٍ لا تُطبَّق.
+    final ban = _braced(block, 'bool accountIsBlocked(');
+    for (final m in RegExp(r"data\['([a-z_]+)'\]").allMatches(ban)) {
       out.add(m.group(1)!);
     }
     return out;
@@ -101,7 +106,11 @@ void main() {
           reason: 'الاشتقاقُ انحلَّ إلى $d — حارسٌ أجوفُ أسوأُ من لا حارس');
       expect(d.contains('is_active'), isTrue, reason: 'القواعدُ لم تُقرَأ');
       expect(d.contains('status'), isTrue,
-          reason: 'شرطُ الطردِ في user_provider لم يُقرَأ');
+          reason: 'قاعدةُ الحظرِ في account_block.dart لم تُقرَأ');
+      // والقاعدةُ المُشتَقّةُ هي المُطبَّقةُ فعلاً: المزوّدُ هو مَن يَطردُ.
+      expect(provider.contains('accountIsBlocked('), isTrue,
+          reason: 'user_provider لم يَعُدْ يُنادي قاعدةَ الحظر — '
+              'فالاشتقاقُ عن قاعدةٍ لا تُطبَّق');
     });
 
     test('(ب) ما تُعلِنُه الوحدةُ = ما يَقرؤه الخادمُ والتطبيقُ، مجموعةً', () {

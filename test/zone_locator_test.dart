@@ -89,6 +89,56 @@ void main() {
         expect(f.canRetry, isTrue, reason: '$f يجب أن يقبل إعادة المحاولة');
       }
     });
+
+    test('«الإعدادات» لا يَترُكُ طريقاً مسدوداً — إعادةٌ بجوارِه', () {
+      // زرُّ «الإعدادات» يَحلُّ **محلَّ** «حدّد موقعي تلقائياً» (شرطُ
+      // `needsSettings` في الـRow)، فمن سمحت ثمّ عادت كانت تَفقدُ وسيلةَ
+      // استعمالِ ما سمحت به: السطحُ الذي أرسلَها إلى الإعداداتِ يَنزعُ
+      // الإعادة. وإعادةُ التحديدِ عند الرجوعِ مُنفَّذةٌ في **شاشةٍ واحدةٍ
+      // من سبع** فالستُّ الأخرى لا تَتعافى وحدَها.
+      final String card =
+          File('lib/widgets/zone_location_card.dart').readAsStringSync();
+      // الشرطُ الذي يَنزعُ الزرَّ الأساسيَّ ما زال قائماً — فالتعليلُ حيّ.
+      expect(card.contains("failure?.needsSettings == true"), isTrue,
+          reason: 'شرطُ «الإعدادات» تغيّر — يُراجَعُ التعليلُ لا يُسكَت');
+      // والإعادةُ معروضةٌ في الحالةِ نفسِها، موصولةً بـ`onLocateMe`.
+      final int i = card.indexOf("if (!located && !isLocating && "
+          "failure?.needsSettings == true)");
+      expect(i, greaterThan(0),
+          reason: 'لا إعادةَ محاولةٍ عند «الإذنُ مرفوضٌ نهائيّاً» — طريقٌ مسدود');
+      final int j = card.indexOf('const SizedBox(height: 14)', i);
+      expect(j, greaterThan(i), reason: 'تعذّرَ اقتطاعُ كتلةِ الإعادة');
+      final String block = card.substring(i, j);
+      expect(block.contains('onPressed: onLocateMe'), isTrue,
+          reason: 'زرُّ الإعادةِ غيرُ موصولٍ بإعادةِ التحديد');
+      expect(block.contains('إعادة المحاولة'), isTrue,
+          reason: 'زرُّ الإعادةِ بلا نصٍّ يَدلُّ عليه');
+      // وهي **قبلَ** صفِّ الأزرار، فلا تُزاحِمُ ثلاثةَ أزرارٍ في سطرٍ واحد.
+      expect(card.indexOf('Row(\n            children: ['), greaterThan(i),
+          reason: 'الإعادةُ داخلَ صفِّ الأزرارِ — ثلاثةُ أزرارٍ على ٣٦٠px');
+    });
+
+    test('إعادةُ التحديدِ عند الرجوعِ ما زالت في شاشةٍ واحدة — مرفوعةٌ لا منسوخة',
+        () {
+      // **نتيجةٌ مُسجَّلةٌ لا مُصلَحة:** `hourly_details_screen` وحدَها
+      // تُعيدُ التحديدَ صامتاً عند `AppLifecycleState.resumed`، ونسخُها إلى
+      // الستِّ الأخرى — أو نقلُها إلى البطاقةِ المشترَكة — يَلزمُه حُرّاسُها
+      // التي تَسكنُ تلك الشاشةَ (`_manualLocationOverride` و«لا نزاحم
+      // محاولةً جارية»)، وبلاها يَستنسِخُ التحديدُ التلقائيُّ فوقَ اختيارٍ
+      // يدويّ. فزرُّ الإعادةِ أعلاه يَسدُّ الطريقَ المسدودَ بلا ذلك الخطر،
+      // والتعميمُ قرارُ المالك. وهذا الفحصُ يُبقي الحقيقةَ مقروءةً: لو
+      // صارت أكثرَ من واحدةٍ فالتعليلُ يُراجَع.
+      final observers = <String>[];
+      for (final e in Directory('lib/screens').listSync()) {
+        if (e is! File || !e.path.endsWith('.dart')) continue;
+        final src = e.readAsStringSync();
+        if (!src.contains('ZyiarahZoneLocationCard')) continue;
+        if (src.contains('didChangeAppLifecycleState')) observers.add(e.path);
+      }
+      expect(observers, ['lib/screens/hourly_details_screen.dart'],
+          reason: 'تغيّرَ عددُ الشاشاتِ التي تُعيدُ التحديدَ عند الرجوع: '
+              '$observers');
+    });
   });
 
   group('المصدر: لا صمت ولا تكرار', () {

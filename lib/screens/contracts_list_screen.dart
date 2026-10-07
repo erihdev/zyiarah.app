@@ -8,6 +8,7 @@ import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/home_packages.dart';
+import 'package:zyiarah/utils/contract_health.dart';
 
 /// مرجع مختصر آمن (يتجنّب RangeError على معرّفات أقصر من 8).
 String _shortRef(dynamic v) {
@@ -105,19 +106,30 @@ class ZyiarahContractsListScreen extends StatelessWidget {
       statusText = "منتهي";
       statusIcon = Icons.history_rounded;
     } else if (status == 'approved_waiting_payment') {
-      // **مدفوعٌ ولم يُفعَّلْ بعد ≠ بانتظارِ الدفع.** كاتبُ الدفعِ لا يَمَسُّ
-      // `status`، والتفعيلُ لا يَكتبُ `active` إلّا عند النجاح — فعقدٌ فشلَ
-      // تفعيلُه يَبقى هنا و`is_paid: true`. وقولُ «بانتظار الدفع» لمن دفعت
-      // يَدعوها إلى الدفعِ مرّةً أخرى.
-      final bool paid = data['is_paid'] == true;
-      statusColor = paid ? Colors.orange : const Color(0xFF2563EB);
-      statusText = paid ? "مدفوع — جارٍ التفعيل" : "بانتظار الدفع";
-      statusIcon = paid ? Icons.hourglass_bottom_rounded
-          : Icons.payments_outlined;
+      statusColor = const Color(0xFF2563EB);
+      statusText = "بانتظار الدفع";
+      statusIcon = Icons.payments_outlined;
     } else if (status == 'rejected') {
       statusColor = Colors.red;
       statusText = "مرفوض";
       statusIcon = Icons.cancel_outlined;
+    }
+
+    // **«مدفوعٌ ولم يُفعَّلْ بعد» قاعدةٌ لا حالةٌ واحدة.** كان هذا الفرعُ
+    // مشروطاً بـ`approved_waiting_payment` وحدَها، و`contractHealthOf`
+    // تَعرفُ ثلاثَ صِيَغٍ للحالةِ نفسِها — فعقدٌ دُفِعَ وهو `pending`
+    // (`payContractWithWallet` بلا شرطِ حالة) كان يُقرأُ «بانتظار الاعتماد»
+    // فلا تَعرفُ أنّ مالَها وصلَ، وعقدٌ وُسِمَ `plan_validation_failed` أو
+    // `contract_activation_failed` كذلك. والقاعدةُ تَسكنُ موضعاً واحداً
+    // تَقرؤه بطاقةُ الأدمنِ أيضاً — بصياغتِها هي.
+    //
+    // ومحصورةٌ بحالاتِ ما قبلَ التفعيل: عقدٌ `active` يَحملُ وسماً قديماً
+    // لا تُقلَبُ تسميتُه.
+    if (kContractPreActiveStatuses.contains(status) &&
+        kContractPaidNotActive.contains(contractHealthOf(data))) {
+      statusColor = Colors.orange;
+      statusText = kContractPaidNotActiveClientText;
+      statusIcon = Icons.hourglass_bottom_rounded;
     }
 
     return Container(

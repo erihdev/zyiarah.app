@@ -100,6 +100,30 @@ class ZyiarahZoneLocationCard extends StatelessWidget {
             Text('لم يُحدَّد موقعك بعد',
                 style: GoogleFonts.tajawal(
                     fontSize: 13, color: const Color(0xFF64748B))),
+          // **لا طريقَ مسدود.** متى كان السببُ إذناً مرفوضاً حَلَّ زرُّ
+          // «الإعدادات» **محلَّ** «حدّد موقعي تلقائياً» أدناه — فمن فتحت
+          // الإعداداتَ وسمحت ثمّ عادت لا تَجدُ ما تُعيدُ به المحاولةَ
+          // إطلاقاً: السطحُ الذي أرسلَها إلى الإعداداتِ يَنزعُ وسيلةَ
+          // استعمالِ ما سمحت به. وإعادةُ التحديدِ عند الرجوعِ مُنفَّذةٌ في
+          // **شاشةٍ واحدةٍ من سبع** (`hourly_details_screen` عبر
+          // `didChangeAppLifecycleState`)، فالستُّ الأخرى لا تَتعافى وحدَها.
+          if (!located && !isLocating && failure?.needsSettings == true)
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton.icon(
+                onPressed: onLocateMe,
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: Text('إعادة المحاولة',
+                    style: GoogleFonts.tajawal(
+                        fontSize: 12, fontWeight: FontWeight.bold)),
+                style: TextButton.styleFrom(
+                  foregroundColor: _brand,
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 30),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ),
           const SizedBox(height: 14),
           Row(
             children: [

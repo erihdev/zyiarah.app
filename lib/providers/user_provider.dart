@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/models/user_model.dart';
+import 'package:zyiarah/utils/account_block.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/utils/error_report.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
@@ -22,10 +23,23 @@ class ZyiarahUserProvider extends ChangeNotifier {
   /// آخر خطأ في تحميل الملف الشخصي — تعرضه الواجهة بدل إسقاط الجلسة صامتاً.
   Object? _profileError;
 
+  /// سببُ إنهاءِ الجلسةِ من قِبَلِنا (لا من المستخدم) — **تَعرضُه الواجهةُ**
+  /// بدلَ ارتدادٍ صامتٍ يُقرأُ «كلمةُ مرورٍ خاطئة». انظر رأسَ
+  /// `lib/utils/account_block.dart`.
+  String? _sessionEndedNotice;
+
   ZyiarahUser? get user => _user;
   String? get role => _role;
   bool get isLoading => _isLoading;
   Object? get profileError => _profileError;
+  String? get sessionEndedNotice => _sessionEndedNotice;
+
+  /// يُستدعى بعد عرضِ السببِ — فلا يَلتصقُ بجلسةٍ تالية.
+  void clearSessionEndedNotice() {
+    if (_sessionEndedNotice == null) return;
+    _sessionEndedNotice = null;
+    notifyListeners();
+  }
 
   /// **تتبع Firebase Auth وحده — لا مستند Firestore.**
   ///
@@ -66,6 +80,8 @@ class ZyiarahUserProvider extends ChangeNotifier {
   Future<void> refreshUser(String uid) async {
     _isLoading = true;
     _profileError = null;
+    // جلسةٌ حيّةٌ تُحمَّل: سببُ إنهاءِ جلسةٍ سابقةٍ لم يَعُدْ صحيحاً.
+    _sessionEndedNotice = null;
     notifyListeners();
 
     try {
@@ -91,8 +107,15 @@ class ZyiarahUserProvider extends ChangeNotifier {
         if (doc.exists && doc.data() != null) {
           final data = doc.data()!;
           // فرض الحظر: مستخدم محظور يُسجَّل خروجه فوراً (كان الحظر شكلياً لا يُفحص).
-          // يغطي كلا العلمين: is_blocked (القاعدة) و status:'banned' (لوحة React).
-          if (data['is_blocked'] == true || data['status'] == 'banned') {
+          // القاعدةُ في `utils/account_block.dart` — كانت مكتوبةً هنا
+          // `data['is_blocked'] == true || data['status'] == 'banned'`
+          // وفي شاشةِ المستخدمينَ الإداريّةِ مرّةً أخرى، والمُنفِّذُ هو هذا
+          // الموضعُ: فاختلافُ النسختَين يَعني شارةً تَقولُ غيرَ ما يَفعلُه
+          // الخروج.
+          if (accountIsBlocked(data)) {
+            // **ولا خروجَ صامتاً**: السببُ يُحفَظُ لتَعرضَه الواجهةُ، وإلّا
+            // قُرئ الارتدادُ «كلمةُ مرورٍ خاطئة» فأُعيدت المحاولةُ ورُوسِلَ الدعم.
+            _sessionEndedNotice = kAccountBlockedNotice;
             debugPrint('User $uid is blocked — signing out');
             // خروج مركزي: يحذف رمز FCM ويلغي اشتراكات topics قبل إنهاء الجلسة — كان
             // signOut المباشر يترك الجهاز مشتركاً فيستقبل إشعارات/بثوث الدور بعد الحظر.

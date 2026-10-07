@@ -59,6 +59,22 @@ const Map<ContractHealth, String> kContractHealthTitles =
       'لم تُولَّد — رصيد بلا مواعيد',
 };
 
+/// الحالاتُ التي تَعني **قُبِضَ المالُ والعقدُ لم يُفعَّلْ بعد** — أي ما
+/// يَجبُ أن تَقرأَه العميلةُ «مدفوع» لا «بانتظار الدفع» ولا «بانتظار
+/// الاعتماد». `visitsMissing` خارجَها بقصد: العقدُ **مُفعَّلٌ** هناك
+/// والرصيدُ عندها، والناقصُ مواعيدُ الزياراتِ — وبطاقتُها صادقةٌ في ذلك.
+const Set<ContractHealth> kContractPaidNotActive = <ContractHealth>{
+  ContractHealth.planMismatch,
+  ContractHealth.activationFailed,
+  ContractHealth.activationStuck,
+};
+
+/// ما تَراه **العميلةُ** في تلك الحالات — صياغةٌ تَتبعُ الجمهورَ، والقرارُ
+/// واحدٌ (كـ`cancel_refund_notice.dart`): `kContractHealthTitles` أعلاه
+/// موجَّهةٌ للأدمنِ وتَذكرُ سببَ عدمِ التفعيل، وهذه تُخبرُها أنّ مالَها
+/// وصلَ ولا تَدعوها إلى الدفعِ مرّةً أخرى.
+const String kContractPaidNotActiveClientText = 'مدفوع — جارٍ التفعيل';
+
 /// هل تَحتاجُ الحالةُ قراراً بشريّاً (لا تُصلِحُها المكنسة).
 bool contractNeedsHuman(ContractHealth h) => h == ContractHealth.planMismatch;
 

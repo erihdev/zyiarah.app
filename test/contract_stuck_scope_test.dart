@@ -92,8 +92,28 @@ void main() {
 
   test('وبطاقةُ العميلةِ لا تَقولُ «بانتظار الدفع» لمن دَفعت', () {
     final s = _read('lib/screens/contracts_list_screen.dart');
-    expect(s.contains('مدفوع — جارٍ التفعيل'), isTrue,
-        reason: 'عادت البطاقةُ تَقولُ «بانتظار الدفع» على عقدٍ مدفوع');
+    // **والشرطُ هو القاعدةُ لا حالةٌ واحدة (2026-10-07).** كان الفرعُ
+    // مشروطاً بـ`approved_waiting_payment` وحدَها، فعقدٌ دُفِعَ وهو
+    // `pending` — أو وُسِمَ `plan_validation_failed` / `contract_activation_failed`
+    // — كان يُقرأُ «بانتظار الاعتماد» فلا تَعرفُ أنّ مالَها وصل. والنصُّ
+    // في الوحدةِ لا في الشاشة: نسخةٌ ثانيةٌ تَنحرِفُ عن بطاقةِ الأدمن.
+    expect(s.contains('kContractPaidNotActiveClientText'), isTrue,
+        reason: 'البطاقةُ تَكتبُ النصَّ بنفسِها — أو عادَ الفرعُ القديم');
+    expect(s.contains('kContractPaidNotActive.contains(contractHealthOf(data))'),
+        isTrue,
+        reason: 'البطاقةُ لا تَسألُ القاعدةَ — فحالةٌ من الثلاثِ تُفلِت');
+    expect(kContractPaidNotActiveClientText, contains('مدفوع'),
+        reason: 'نصُّ العميلةِ لا يَقولُ إنّ المالَ قُبِض');
+    // المجموعةُ ثلاثٌ بعينِها، و`visitsMissing` خارجَها بقصد: العقدُ
+    // مُفعَّلٌ هناك والرصيدُ عندها.
+    expect(kContractPaidNotActive, {
+      ContractHealth.planMismatch,
+      ContractHealth.activationFailed,
+      ContractHealth.activationStuck,
+    });
+    expect(kContractPaidNotActive.contains(ContractHealth.visitsMissing),
+        isFalse,
+        reason: 'عقدٌ مُفعَّلٌ يُقرأُ «جارٍ التفعيل» — دعوى معاكسة');
     // والزرُّ مشروطٌ بأنّها لم تَدفعْ — وإلّا قادَها إلى خصمٍ ثانٍ بالبطاقة.
     expect(
         s.contains("status == 'approved_waiting_payment' &&\n"

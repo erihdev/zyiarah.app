@@ -17,6 +17,7 @@ import 'package:zyiarah/services/zyiarah_referral_service.dart';
 import 'package:zyiarah/theme/app_theme.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/stream_combine.dart';
+import 'package:zyiarah/utils/error_report.dart';
 
 /// قسم «العروض».
 ///
@@ -52,7 +53,11 @@ class _ZyiarahOffersScreenState extends State<ZyiarahOffersScreen> {
 
   late final Stream<List<Map<String, dynamic>>> _banners;
   Stream<List<PromoCoupon>>? _coupons;
-  Future<String?>? _referral;
+  /// **كان `Future<String?>` بـ`.catchError((_) => null)` — فشلٌ يُبتلَع
+  /// بلا أثرٍ في أيِّ مكان (2026-10-07).** انظر التعليقَ في
+  /// `_referralCard` أدناه.
+  String? _referralCode;
+  bool _referralLoaded = false;
   String? _uid;
 
   @override
@@ -76,11 +81,30 @@ class _ZyiarahOffersScreenState extends State<ZyiarahOffersScreen> {
     final uid = _uid;
     if (uid != null) {
       _coupons = widget.coupons ?? _listableCoupons(uid);
-      _referral = widget.referralCode ??
-          ZyiarahReferralService()
-              .getOrCreateReferralCode(uid)
-              .then<String?>((c) => c)
-              .catchError((Object _) => null);
+      _loadReferral(uid);
+    }
+  }
+
+  /// يَجلبُ كودَ الإحالةِ إلى الحالةِ — **ويَقولُ الفشلَ ويُبلِّغُ عنه.**
+  /// (مرآةُ `_loadReferralCode` في `profile_screen`، ومنها إعادةُ حالةِ
+  /// التحميلِ عند الإعادةِ وإلّا بَدت الإعادةُ بلا أثر.)
+  Future<void> _loadReferral(String uid) async {
+    if (mounted && _referralLoaded && _referralCode == null) {
+      setState(() => _referralLoaded = false);
+    }
+    try {
+      final String? code = widget.referralCode != null
+          ? await widget.referralCode!
+          : await ZyiarahReferralService().getOrCreateReferralCode(uid);
+      if (!mounted) return;
+      setState(() {
+        _referralCode = (code != null && code.isNotEmpty) ? code : null;
+        _referralLoaded = true;
+      });
+    } catch (e, st) {
+      // مالٌ واستمرارُ خدمة: الصمتُ عنها خطأٌ، والصمتُ عنّا كذلك.
+      reportSilent(e, st, reason: 'referral_code_fetch_failed');
+      if (mounted) setState(() => _referralLoaded = true);
     }
   }
 
@@ -245,7 +269,7 @@ class _ZyiarahOffersScreenState extends State<ZyiarahOffersScreen> {
           _hintCard(Icons.local_offer_outlined, 'لا توجد كوبونات متاحة حالياً')
         else
           for (final c in coupons) _couponCard(c),
-        if (_referral != null) _referralCard(),
+        if (_uid != null) _referralCard(),
         const SizedBox(height: 24),
       ],
     );
@@ -461,77 +485,90 @@ class _ZyiarahOffersScreenState extends State<ZyiarahOffersScreen> {
   Widget _referralCard() {
     final reward = ZyiarahReferralService.referrerRewardSar.toInt();
     final discount = ZyiarahReferralService.refereeDiscountPercent.toInt();
-    return FutureBuilder<String?>(
-      future: _referral,
-      builder: (context, s) {
-        final code = s.data;
-        return Container(
-          margin: const EdgeInsets.only(top: 8),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [ZyiarahTheme.brandDark, _brand],
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-            ),
-            borderRadius: BorderRadius.circular(20),
+    final String? code = _referralCode;
+    final bool failed = _referralLoaded && code == null;
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [ZyiarahTheme.brandDark, _brand],
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+        ),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.redeem_rounded, color: Colors.white),
+            const SizedBox(width: 8),
+            Text('برنامج سفراء زيارة',
+                style: GoogleFonts.tajawal(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold)),
+          ]),
+          const SizedBox(height: 8),
+          Text(
+            'شاركي كودك مع أهلك وأصدقائك: تحصلين على $reward ر.س في محفظتك عند '
+            'اكتمال أول طلب لصديقك، ويحصل صديقك على خصم $discount% على أول طلب.',
+            style: GoogleFonts.tajawal(
+                color: Colors.white.withValues(alpha: 0.92),
+                fontSize: 12.5,
+                height: 1.6),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                const Icon(Icons.redeem_rounded, color: Colors.white),
-                const SizedBox(width: 8),
-                Text('برنامج سفراء زيارة',
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(children: [
+              Text('كود الإحالة الخاص بك:',
+                  style: GoogleFonts.tajawal(
+                      color: Colors.white70, fontSize: 11.5)),
+              const SizedBox(width: 8),
+              // **ثلاثُ حالاتٍ لا حالتان**: جارٍ (نقاط) ≠ تعذّر (نصٌّ وإعادة)
+              // ≠ كودٌ (يُنسَخ). كان الفشلُ يُبتلَعُ إلى `null` فيُرسَمُ «…»
+              // كالتحميلِ تماماً، وزرُّ النسخِ معطَّلٌ بلا كلمةٍ ولا سبيلَ
+              // إلى إعادةِ المحاولة — على السطحِ الذي يَبدأُ به برنامجُ
+              // الإحالة. والشكلُ الصحيحُ في `profile_screen` على بُعدِ ملفّ.
+              Expanded(
+                child: Text(failed ? 'تعذّر التحميل' : (code ?? '…'),
+                    textDirection:
+                        failed ? TextDirection.rtl : TextDirection.ltr,
                     style: GoogleFonts.tajawal(
                         color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold)),
-              ]),
-              const SizedBox(height: 8),
-              Text(
-                'شاركي كودك مع أهلك وأصدقائك: تحصلين على $reward ر.س في محفظتك عند '
-                'اكتمال أول طلب لصديقك، ويحصل صديقك على خصم $discount% على أول طلب.',
-                style: GoogleFonts.tajawal(
-                    color: Colors.white.withValues(alpha: 0.92),
-                    fontSize: 12.5,
-                    height: 1.6),
+                        fontSize: failed ? 12.5 : 16,
+                        fontWeight: failed ? FontWeight.bold : FontWeight.w900,
+                        letterSpacing: failed ? 0 : 2)),
               ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
+              if (failed)
+                IconButton(
+                  tooltip: 'إعادة المحاولة',
+                  onPressed: () {
+                    final uid = _uid;
+                    if (uid != null) _loadReferral(uid);
+                  },
+                  icon: const Icon(Icons.refresh_rounded,
+                      color: Colors.white, size: 18),
+                )
+              else
+                IconButton(
+                  tooltip: 'نسخ كود الإحالة',
+                  onPressed: code == null
+                      ? null
+                      : () => _copy(code, 'تم نسخ كود الإحالة $code'),
+                  icon: const Icon(Icons.content_copy_rounded,
+                      color: Colors.white, size: 18),
                 ),
-                child: Row(children: [
-                  Text('كود الإحالة الخاص بك:',
-                      style: GoogleFonts.tajawal(
-                          color: Colors.white70, fontSize: 11.5)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(code ?? '…',
-                        textDirection: TextDirection.ltr,
-                        style: GoogleFonts.tajawal(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 2)),
-                  ),
-                  IconButton(
-                    tooltip: 'نسخ كود الإحالة',
-                    onPressed: code == null
-                        ? null
-                        : () => _copy(code, 'تم نسخ كود الإحالة $code'),
-                    icon: const Icon(Icons.content_copy_rounded,
-                        color: Colors.white, size: 18),
-                  ),
-                ]),
-              ),
-            ],
+            ]),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 }
