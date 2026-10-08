@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zyiarah/utils/broadcast_target.dart';
 
+import 'helpers/notifications_log_writers.dart';
 import 'helpers/strip_comments.dart';
 
 /// **جمهورُ البثِّ: قيمةُ الحقلِ شيءٌ واسمُ موضوعِ FCM شيءٌ آخر (2026-10-07).**
@@ -52,47 +53,17 @@ void main() {
   });
 
   group('الوصل — كلُّ كاتبٍ يَمُرُّ بالقاعدة', () {
-    /// كلُّ موضعٍ يَكتبُ `'target':` **داخلَ حِملِ** كتابةٍ على
-    /// `notifications_log`.
-    ///
-    /// الاقتطاعُ بموازنةِ المعقوفةِ من `{` الحِملِ نفسِه — لا «أقربُ ذكرٍ
-    /// للمجموعةِ قبلَ الموضع»: أوّلُ صياغةٍ فعلت ذلك فنسبَت `'target': _target`
-    /// في **سجلِّ التدقيقِ** (`logAction(details: {...})`) إلى الكتابةِ
-    /// الخادميّةِ التي تَسبقُه، وهي قيمةُ الواجهةِ التي اختارَها الأدمنُ
-    /// ويَصِحُّ تسجيلُها كما هي — إبلاغٌ خاطئٌ لا ثغرة.
-    List<({String file, String expr})> writers() {
-      final out = <({String file, String expr})>[];
-      for (final e in Directory('lib').listSync(recursive: true)) {
-        if (e is! File || !e.path.endsWith('.dart')) continue;
-        final src = stripComments(e.readAsStringSync());
-        int from = 0;
-        while (true) {
-          final int c = src.indexOf("collection('notifications_log')", from);
-          if (c < 0) break;
-          from = c + 1;
-          // أوّلُ `({` بعدَ النداء — حِملُ `add`/`set`/`update`.
-          final int brace = src.indexOf('({', c);
-          if (brace < 0 || brace - c > 90) continue; // قراءةٌ لا كتابة
-          int depth = 0, end = -1;
-          for (int k = brace + 1; k < src.length; k++) {
-            if (src[k] == '{') depth++;
-            if (src[k] == '}') {
-              depth--;
-              if (depth == 0) {
-                end = k;
-                break;
-              }
-            }
-          }
-          if (end < 0) continue;
-          for (final m in RegExp(r"'target':\s*([^,\n]+)")
-              .allMatches(src.substring(brace, end))) {
-            out.add((file: e.path, expr: m.group(1)!.trim()));
-          }
-        }
-      }
-      return out;
-    }
+    /// كُتّابُ الحقلِ — نطاقٌ مُشتَقٌّ يَسكنُ
+    /// `test/helpers/notifications_log_writers.dart`، لأنّ حارسَ حضورِ
+    /// `sent_at` يَسألُ السؤالَ نفسَه («مَن يَكتبُ هذه المجموعة؟») ونسختانِ
+    /// من الاستخراجِ تَنحرِفان. وفيه مزلقانِ مسجَّلانِ: الاقتطاعُ من `({`
+    /// الحِملِ نفسِه لا «أقربُ ذكرٍ للمجموعة» (أوّلُ صياغةٍ نسبَت
+    /// `'target': _target` في سجلِّ التدقيقِ إلى الكتابةِ التي تَسبقُه)،
+    /// وبدايةُ الحِملِ `brace + 2` لا `+ 1` (وإلّا قُرئَت صفرُ حقول).
+    List<({String file, String expr})> writers() => notificationsLogWrites()
+        .where((w) => w.fields.containsKey('target'))
+        .map((w) => (file: w.file, expr: w.fields['target']!))
+        .toList();
 
     test('النطاقُ انحلَّ إلى كاتبَين على الأقلّ', () {
       final w = writers();

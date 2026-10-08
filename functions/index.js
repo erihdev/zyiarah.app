@@ -675,6 +675,10 @@ async function _deliverBroadcast(docRef, data) {
     await docRef.update({
       processed: true, status: "sent",
       processed_at: FieldValue.serverTimestamp(),
+      // المجدولُ يُكتَبُ بـ`sent_at: null` (الغيابُ يُخرِجُه من `orderBy`
+      // كلِّه) فيُملأُ هنا بلحظةِ الإرسالِ الفعليّ. وما يَحملُ طابعاً سلفاً
+      // لا يُلمَس: الفوريُّ أُرسِلَ لحظةَ كتابتِه.
+      ...(data.sent_at ? {} : {sent_at: FieldValue.serverTimestamp()}),
     });
     console.log(`Notification delivered for target: ${target}`);
   } catch (error) {
