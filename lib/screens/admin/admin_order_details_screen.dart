@@ -1285,6 +1285,37 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
             // تفصيل الخدمة (قطع الكنب بمقاساتها / المكيفات بأنواعها) — كان الطلب يصل
             // بمبلغ مجرّد فلا تملك الإدارة ما تدقّق به المبلغ إن اعترضت العميلة.
             ZyiarahServiceMetaView(meta: data['service_meta']),
+            // **رمزٌ خارجَ السلسلة.** حين تَفشلُ معامَلةُ عدّادِ الطلباتِ
+            // (تَقرأُ عدّاداً مشترَكاً، فتَفشلُ بالتنازُعِ عند الذروة) يَأخذُ
+            // الطلبُ رمزاً زمنيّاً `ZY-<millis>` ويُوسَمُ `counter_fallback`
+            // — والوَسمُ كان **مكتوباً في موضعٍ ومقروءاً في صفر**، فالأدمنُ
+            // يَرى رمزاً لا يُشبهُ أخواتَه ولا يَعرفُ لِمَ. (ومعه الآن
+            // `order_code_counter_failed` في Crashlytics.)
+            if (data['counter_fallback'] == true)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Row(children: [
+                    Icon(Icons.tag, size: 18, color: Colors.amber.shade800),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                          "رقم احتياطي: تعذّر عدّاد الطلبات لحظة الإنشاء فأُخذ "
+                          "رمز زمني — الطلب سليم، والرمز خارج التسلسل.",
+                          style: GoogleFonts.tajawal(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber.shade900)),
+                    ),
+                  ]),
+                ),
+              ),
             Card(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
               child: Padding(

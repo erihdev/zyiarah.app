@@ -1187,16 +1187,31 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             code = ZyiarahOrderUtil.formatSmartCode(nextId);
             transaction.set(orderRef, {...orderPayload, 'code': code});
           });
-        } catch (txErr) {
+        } catch (txErr, txSt) {
+          // **المعامَلةُ هي الكتابةُ الوحيدةُ في هذا المسارِ التي تَفشلُ
+          // بالتنازُع**: تَقرأُ عدّادَ الطلباتِ المشترَكَ، فـ`ABORTED: too
+          // much contention` تَقعُ عند ذروةِ الحجزِ بعينِها. والنتيجةُ رمزٌ
+          // خارجَ السلسلةِ (`ZY-<millis>`) ووَسمُ `counter_fallback` —
+          // و`debugPrint` **لا يُجمَعُ ولا يُرسَل**، فعدّادٌ معطوبٌ يُنتجُ
+          // سلسلةً موازيةً لكلِّ طلبٍ ولا يَظهرُ في أيِّ لوحة. والقاعدةُ
+          // مُنفَّذةٌ على بُعدِ عشرينَ سطراً لحالةٍ أهون (`verify_first_failed`،
+          // وتعليقُها يَقولُ «لا نرمي» ليست «لا نعلم»).
           debugPrint('[order create tx failed → fallback set] $txErr');
+          reportSilent(txErr, txSt, reason: 'order_code_counter_failed');
           try {
             code = 'ZY-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
             await orderRef.set({...orderPayload, 'code': code, 'counter_fallback': true});
-          } catch (fbErr) {
+          } catch (fbErr, fbSt) {
             // لا نرمي: الدفع الأصلي (Apple/Google/Samsung Pay) قد يفشل إنشاؤه للطلب بعد
             // الخصم (حالة/شبكة/خلفية بعد شاشة الدفع). نتابع إلى verifyMoyasarPayment الذي
             // يُنشئ الطلب خادميّاً من metadata الدفعة ويؤكّده — فلا تبقى «دفعة يتيمة» أبداً.
             debugPrint('[client create failed → server verify will create from metadata] $fbErr');
+            // **وهذه حالةُ «خُصِمَ المالُ ولا مستندَ للطلب»** التي يَصفُها
+            // التعليقُ فوقَها. الشبكةُ قائمةٌ (`verifyMoyasarPayment` ثمّ
+            // `reconcileOrphanPayments` يَبنيانِ الطلبَ من بيانات الدفعة)،
+            // لكنّها شبكةٌ لا دليل: لو فاتَته لَبقيت دفعةٌ يتيمةٌ بلا أثرٍ
+            // عندنا إطلاقاً.
+            reportSilent(fbErr, fbSt, reason: 'order_create_failed');
             if (code.isEmpty) code = _pendingOrderId.substring(0, 6).toUpperCase();
           }
         }

@@ -27,6 +27,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'helpers/sources_in.dart';
+import 'helpers/strip_comments.dart';
 
 String _read(String p) => File(p).readAsStringSync();
 
@@ -46,6 +47,13 @@ const _mustReport = <String, List<String>>{
     'surge_fetch_failed',
     'terrain_zone_fetch_failed',
     'notify_order_created_failed',
+    // **إنشاءُ مستندِ الطلبِ نفسُه.** معامَلةُ العدّادِ هي الكتابةُ الوحيدةُ
+    // في هذا المسارِ التي تَفشلُ بالتنازُع (عدّادٌ مشترَك) — عند الذروةِ
+    // بعينِها — فيَأخذُ الطلبُ رمزاً زمنيّاً خارجَ السلسلة. والثانيةُ حالةُ
+    // «خُصِمَ المالُ ولا مستندَ للطلب»، وشبكتُها (`reconcileOrphanPayments`)
+    // بلا دليلٍ لو فاتَتها.
+    'order_code_counter_failed',
+    'order_create_failed',
   ],
   'lib/services/notification_service.dart': [
     // بلا رمز محفوظ لا تصل الإشعارات إطلاقاً، والمستخدم لا يعلم.
@@ -116,6 +124,104 @@ void main() {
         reason: 'سبب متغيّر — مرّر القيمة في `info` لا في `reason`:\n'
             '${offenders.map((o) => '  - $o').join('\n')}',
       );
+    });
+
+    test('كلُّ حقلٍ يَكتبُه العميلُ له قارئ', () {
+      // **الاتّجاهُ المعاكسُ لعائلةِ «قارئٌ بلا كاتب»** (مفاتيحُ الإصدار،
+      // بياناتُ البائعِ على الفاتورة): حقلٌ **يُكتَبُ** ولا يَقرؤه شيء.
+      // وهو ما كشفَ `counter_fallback` — وَسمَ «رمزٌ خارجَ السلسلة» الذي
+      // يُكتَبُ حين تَفشلُ معامَلةُ العدّادِ، **مكتوباً في موضعٍ ومقروءاً
+      // في صفر**، فالأدمنُ يَرى رمزاً شاذّاً ولا يَعرفُ لِمَ.
+      //
+      // والنطاقُ مُشتَقٌّ: كلُّ حِملِ كتابةٍ في `lib/` خارجَ `admin/`
+      // (فحقولُ الإدارةِ سؤالٌ آخر). والمفتاحُ يُلتقَطُ بشرطِ أن يَسبقَه
+      // `{` أو `,` — فـ`'production' : 'development'` في ثلاثيّةٍ ليست
+      // مفتاحاً، وهو ما أخطأَ فيه أوّلُ مُستخرِجٍ كتبتُه.
+      final RegExp wrCall = RegExp(r'\.(set|update|add)\s*\(');
+      final Map<String, Set<String>> written = {};
+      final List<File> clientFiles = sourcesIn('lib', atLeast: 100)
+          .where((f) => !f.path.contains('/admin/'))
+          .toList();
+      final List<String> payloads = [];
+      for (final f in clientFiles) {
+        final String src = stripComments(f.readAsStringSync());
+        for (final m in wrCall.allMatches(src)) {
+          final int b = src.indexOf('{', m.end - 1);
+          if (b < 0) continue;
+          int depth = 0;
+          int j = b;
+          while (j < src.length) {
+            if (src[j] == '{') depth++;
+            if (src[j] == '}') {
+              depth--;
+              if (depth == 0) break;
+            }
+            j++;
+          }
+          if (depth != 0 || j - b > 4000) continue;
+          final String body = src.substring(b, j + 1);
+          payloads.add(body);
+          for (final k in RegExp(r"'([a-z][a-z0-9_]*)'\s*:").allMatches(body)) {
+            final int before = k.start - 1;
+            int t = before;
+            while (t >= 0 && (body[t] == ' ' || body[t] == '\n')) {
+              t--;
+            }
+            if (t < 0) continue;
+            if (body[t] != '{' && body[t] != ',') continue; // ثلاثيّةٌ لا مفتاح
+            written.putIfAbsent(k.group(1)!, () => <String>{}).add(f.path);
+          }
+        }
+      }
+      expect(written.length, greaterThanOrEqualTo(60),
+          reason: 'انحلَّ استخراجُ الحقولِ المكتوبةِ (${written.length}) — '
+              'اشتقاقٌ فاشلٌ لا مستودعٌ أصغر');
+
+      // القُرّاءُ: كلُّ المستودعِ **ناقصاً** حِمْلانِ الكتابةِ نفسَها.
+      //
+      // **والقُرّاءُ من الشفرةِ المُجرَّدةِ لا من الخامّ.** اختبارُ قضمٍ
+      // عطَّلَ قارئَ `counter_fallback` في شاشةِ الإدارةِ فمرَّ **أخضرَ**:
+      // التعليقُ الشارحُ فوقَه يُسمّي الحقلَ، فأرضَى الفحصَ. وهو فخُّ
+      // «الحارسُ يَسقطُ على توثيقِه» مقلوباً — التوثيقُ يُنجيه لا يُسقِطُه،
+      // والعلاجُ هو نفسُه: اقرأِ الشفرةَ لا التعليق.
+      final StringBuffer corpus = StringBuffer();
+      for (final f in sourcesIn('lib', atLeast: 100)) {
+        corpus.write(stripComments(f.readAsStringSync()));
+      }
+      for (final f in sourcesIn('functions', atLeast: 10, exts: const ['.js'])
+          .where((f) => !f.path.contains('node_modules'))) {
+        corpus.write(stripComments(f.readAsStringSync()));
+      }
+      for (final f in sourcesIn('admin_panel/src',
+          atLeast: 20, exts: const ['.ts', '.tsx'])) {
+        corpus.write(stripComments(f.readAsStringSync()));
+      }
+      corpus.write(stripComments(File('firestore.rules').readAsStringSync()));
+      String rest = corpus.toString();
+      for (final p in payloads) {
+        rest = rest.replaceAll(p, '');
+      }
+
+      // مُستثنىً بسببِه: مفتاحٌ **متداخلٌ** في حِملِ بريدٍ تشخيصيٍّ
+      // (`data.environment`) — لا حقلَ قرارٍ على مستند، ولا يَقرؤه الخادمُ
+      // لأنّه يُمرّرُ `data` كما هي إلى القالب.
+      const Set<String> diagnostic = {'environment'};
+
+      final List<String> orphans = [];
+      for (final e in written.entries) {
+        if (diagnostic.contains(e.key)) continue;
+        if (!RegExp('\\b${e.key}\\b').hasMatch(rest)) {
+          orphans.add('${e.key} ← ${e.value.join(", ")}');
+        }
+      }
+      expect(orphans, isEmpty,
+          reason: 'حقولٌ يَكتبُها العميلُ ولا يَقرؤها شيء — إمّا أن يُوصَلَ '
+              'قارئُها أو تُحذَف:\n${orphans.map((o) => '  - $o').join('\n')}');
+      // ومضادّةٌ: المُستثنى ما زال مكتوباً فعلاً، وإلّا كانت القائمةُ تَتعفّن.
+      for (final d in diagnostic) {
+        expect(written.containsKey(d), isTrue,
+            reason: 'استثناءٌ لحقلٍ لم يَعُد يُكتَب: $d');
+      }
     });
 
     test('المساعد لا يرمي ولا يعمل على الويب', () {
