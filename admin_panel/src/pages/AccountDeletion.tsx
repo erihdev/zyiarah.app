@@ -8,6 +8,7 @@ import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/notificationContext.ts';
 import { deletionRowIdentity, deletionStrandedBalance } from '../utils/deletionLogRow.ts';
 import { formatSar } from '../utils/money.ts';
+import { logAudit, AUDIT } from '../services/audit.ts';
 
 interface DeletionRequest {
     id: string;
@@ -81,6 +82,16 @@ export default function AccountDeletion() {
                 status: 'deleted',
                 processed_at: new Date(),
             });
+            // حذفُ حسابٍ لا رجعةَ فيه ويَترُكُ رصيدَ المحفظةِ دَيناً —
+            // ومسارُ تطبيقِ الأدمنِ يُقيّده. نُسجّلُ الرصيدَ العالقَ معه
+            // لأنّه الرقمُ الذي يُراجَعُ لاحقاً.
+            await logAudit(AUDIT.PROCESS_ACCOUNT_DELETION, {
+                decision: 'deleted',
+                account: deletionRowIdentity(req),
+                ...(deletionStrandedBalance(req) !== null
+                    ? { stranded_balance: deletionStrandedBalance(req) }
+                    : {}),
+            }, req.id);
             toast.success('تم تنفيذ طلب الحذف');
         } catch {
             // امتثال آبل: لا تُظهر الحذف كناجح إن فشل فعلاً.
@@ -97,6 +108,12 @@ export default function AccountDeletion() {
                 status: 'rejected',
                 processed_at: new Date(),
             });
+            // ورفضُ طلبِ حذفٍ قرارُ امتثالٍ كذلك: «مَن رفضَ ومتى؟» سؤالٌ
+            // بلا جواب بلا قيد — وكان صامتاً في السطحَين معاً.
+            await logAudit(AUDIT.PROCESS_ACCOUNT_DELETION, {
+                decision: 'rejected',
+                account: deletionRowIdentity(req),
+            }, req.id);
             toast.success('تم رفض الطلب');
         } catch {
             toast.error('تعذّر رفض الطلب — أعد المحاولة');

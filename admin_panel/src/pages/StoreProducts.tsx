@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useNotification } from '../components/notificationContext.ts';
 import { formatSarAny } from '../utils/money';
+import { logAudit, AUDIT } from '../services/audit.ts';
 
 interface Product {
   id: string;
@@ -125,6 +126,11 @@ export default function StoreProducts() {
           created_at: serverTimestamp()
         });
       }
+      await logAudit(
+          editingProduct ? AUDIT.UPDATE_PRODUCT : AUDIT.CREATE_PRODUCT,
+          { name: formData.name, price: formData.price,
+            store_audience: formData.store_audience },
+          editingProduct?.id);
       setIsModalOpen(false);
     } catch (error) {
       // النافذةُ تَبقى مفتوحةً (إغلاقُها آخرُ سطرٍ في try) لكن بلا سببٍ معروض:
@@ -146,6 +152,7 @@ export default function StoreProducts() {
     if (!await confirm('هل أنت متأكد من حذف هذا المنتج؟')) return;
     try {
       await deleteDoc(doc(db, 'products', id));
+      await logAudit(AUDIT.DELETE_PRODUCT, {}, id);
     } catch (error) {
       console.error("Error deleting product:", error);
       toast.error(error instanceof Error ? error.message : 'تعذّر حذف المنتج');
@@ -157,6 +164,8 @@ export default function StoreProducts() {
       await updateDoc(doc(db, 'products', product.id), {
         is_hidden: !product.is_hidden
       });
+      await logAudit(AUDIT.UPDATE_PRODUCT,
+          { name: product.name, is_hidden: !product.is_hidden }, product.id);
     } catch (error) {
       // الفشلُ هنا يَتركُ المنتجَ على عكسِ ما قَصدَه الأدمنُ: معروضاً وهو
       // يَحسبُه مخفيّاً (أو العكس) — وقرارُ العرضِ هذا هو ما يَقرؤه استعلامُ

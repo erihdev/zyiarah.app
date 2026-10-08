@@ -107,13 +107,33 @@ void main() {
     }
   }
 
-  // (٢) اللوحة: `logAudit(AUDIT.X`.
+  // (٢) اللوحة: كلُّ `AUDIT.X` داخلَ **وسائطِ** نداءِ `logAudit(` مُوازَنةً —
+  // لا `logAudit(\s*AUDIT\.` وحدَها، فذاك شكلٌ واحدٌ يَعمى عن
+  // `logAudit(editingId ? AUDIT.UPDATE_SUBSCRIPTION : AUDIT.CREATE_…)`
+  // وعن الوسيطِ على سطرٍ تالٍ، وكلاهما قائمٌ في اللوحة.
+  //
+  // والمجموعةُ تُحفَظُ **لكلِّ سطحٍ على حِدَة** لأنّ الفحصَ (ز) يَسألُ سؤالاً
+  // عن اللوحةِ وحدَها، وكان يُقابِلُه بمجموعةِ المستودعِ كلِّه (أدناه).
+  final panelCalled = <String>{};
   for (final f in sourcesIn('admin_panel/src',
       atLeast: 20, exts: const ['.ts', '.tsx'])) {
     if (f.path.endsWith('services/audit.ts')) continue;
-    for (final m in RegExp(r'logAudit\(\s*AUDIT\.([A-Z_]+)')
-        .allMatches(f.readAsStringSync())) {
-      add(m.group(1)!, f.uri.pathSegments.last);
+    final code = f.readAsStringSync();
+    for (final m in RegExp(r'\blogAudit\s*\(').allMatches(code)) {
+      final end = _bal(code, m.end - 1);
+      if (end < 0) {
+        throw StateError('نداءُ logAudit غيرُ مُوازَنٍ في ${f.path}');
+      }
+      final args = code.substring(m.end, end);
+      final names =
+          RegExp(r'AUDIT\.([A-Z_]+)').allMatches(args).map((x) => x.group(1)!);
+      if (names.isEmpty) {
+        throw StateError('اسمُ الإجراءِ لم يُحَلَّ في ${f.path}: $args');
+      }
+      for (final n in names) {
+        add(n, f.uri.pathSegments.last);
+        panelCalled.add(n);
+      }
     }
   }
 
@@ -213,12 +233,28 @@ void main() {
           .toSet();
       expect(declared.length, greaterThanOrEqualTo(8),
           reason: 'استخراجُ ثوابتِ اللوحةِ انحلّ');
-      final unused = declared.difference(written.keys.toSet()).toList()..sort();
+      expect(panelCalled.length, greaterThanOrEqualTo(8),
+          reason: 'استخراجُ مُنادِي اللوحةِ انحلّ');
+      // **والمُقابَلةُ بمُنادِي اللوحةِ وحدَها**: كانت بمجموعةِ المستودعِ
+      // كلِّه، فثابتٌ في اللوحةِ بلا مُنادٍ فيها يَمُرُّ ما دامَ اسمُه
+      // يُكتَبُ من شاشةٍ دارتيّة — «موضعٌ آخرُ يُرضي الفحصَ». ومُثبَتٌ
+      // بالقضمِ لا بالقراءة: نزعُ نداءِ `BAN_USER` من `Users.tsx` كان
+      // يَمُرُّ أخضرَ لأنّ `admin_users_screen` يَكتبُ الاسمَ نفسَه —
+      // و`UPDATE_SETTINGS`، وهي الحالةُ التي كُتبَ الفحصُ لها، صارت
+      // تَمُرُّ كذلك يومَ قيَّدَ `admin_settings_screen` حفظَه.
+      final unused = declared.difference(panelCalled).toList()..sort();
       expect(unused, isEmpty, reason: 'مُعلَنٌ بلا مُنادٍ في اللوحة: $unused');
     });
   });
 
-  group('كلُّ كتابةٍ إداريّةٍ لها أثرٌ', () {
+  group('كلُّ كتابةٍ إداريّةٍ لها أثرٌ — في السطحَين لا في سطحٍ واحد', () {
+    // **ترويسةُ `admin_panel/src/services/audit.ts` تَقولُ القاعدةَ عامّةً**
+    // («لوحةُ الويبِ كانت تَكتبُ في Firestore بلا أيِّ أثر… بينما تطبيقُ
+    // الأدمنِ يُسجّلُ كلَّ واحدةٍ منها») — وكانت موصولةً بأربعِ صفحاتٍ من
+    // اثنتَي عشرة. وهذا الفحصُ كان يَمسحُ `lib/screens/admin` وحدَها، فجوهرُ
+    // الانحرافِ — **نفسُ الكتابةِ، مُقيَّدةً من سطحٍ ومسكوتاً عنها من آخر** —
+    // كان غيرَ مرئيٍّ له حين يَكونُ السطحانِ بلغتَين.
+    //
     // سلسلةٌ تَبدأُ عندَ `.collection('x')` وتَنتهي عندَ كتابةٍ، بروابطِ
     // السلسلةِ وحدَها بينهما — فلا يُقرأُ `List.add(` كتابةً على Firestore.
     final chain = RegExp(
@@ -228,36 +264,174 @@ void main() {
       dotAll: true,
     );
 
-    final writes = <String, Set<String>>{}; // screen -> collections
+    /// الوسائطُ الكاملةُ لنداءٍ يَبدأُ عند [start] — بموازنةِ الأقواس.
+    String callArgs(String src, int start) {
+      final int open = src.indexOf('(', start);
+      int depth = 0;
+      for (int i = open; i < src.length; i++) {
+        if (src[i] == '(') depth++;
+        if (src[i] == ')') {
+          depth--;
+          if (depth == 0) return src.substring(open + 1, i);
+        }
+      }
+      return '';
+    }
+
+    final writes = <String, Set<String>>{}; // surface -> collections
     final audits = <String>{};
+
+    // وكتابةُ **الدفعةِ أو المعامَلةِ** كتابةٌ إداريّةٌ كغيرِها، والسلسلةُ
+    // أعلاه لا تَراها: فعلُ الكتابةِ هناك على `batch`/`tb` لا على السلسلة،
+    // والمرجعُ وسيطٌ. و**شاشتانِ دارتيّتانِ تَكتبانِ عبرَها وحدَها**
+    // (`admin_managers_screen` تُنشئُ موظّفاً وتُعدّلُه وتُوقِفُه،
+    // و`admin_settings_screen` يَحفظُ وضعَ الصيانةِ وبوّابةَ الإصدارِ
+    // وسياسةَ الخصوصيّةِ المنشورة) فكانتا تُقرآنِ «لا تَكتبانِ شيئاً» — لا
+    // مُعفاتَين بل غيرَ مرئيّتَين، وهو شكلُ الحارسِ العقيم. وكلتاهما
+    // تُقيّد، فالحكمُ لم يَتغيّر: المُصلَحُ هو ما يَراه الكاشف.
+    final batchVerb =
+        RegExp(r'\b(?:batch|tb|tx|transaction)\s*\.\s*(?:set|update|delete)\s*\(');
+    final dartCollection = RegExp(r"\.collection\(\s*'([a-z_]+)'\s*\)");
+    var batchResolved = 0;
     for (final f in sourcesIn('lib/screens/admin', atLeast: 20)) {
       final code = stripComments(f.readAsStringSync());
-      final name = f.uri.pathSegments.last;
+      final name = 'dart:${f.uri.pathSegments.last}';
       final cols = chain.allMatches(code).map((m) => m.group(1)!).toSet();
+      for (final m in batchVerb.allMatches(code)) {
+        final args = callArgs(code, m.start);
+        final hit =
+            dartCollection.allMatches(args).map((c) => c.group(1)!).toSet();
+        if (hit.isEmpty) {
+          // مرجعٌ وسيطٌ: `final ticketRef = …collection('x').doc(id)` ثمّ
+          // `batch.update(ticketRef, …)` — وهو شكلُ شاشةِ التذاكر.
+          final first = args.split(',').first.trim();
+          final d = RegExp(r'^[A-Za-z_]\w*$').hasMatch(first)
+              ? RegExp(r'\b' + RegExp.escape(first) +
+                      r"\s*=\s*[^;]*?\.collection\(\s*'([a-z_]+)'\s*\)")
+                  .firstMatch(code)
+              : null;
+          if (d == null) {
+            throw StateError('كتابةُ دفعةٍ بلا مجموعةٍ مُحَلّةٍ في ${f.path}');
+          }
+          cols.add(d.group(1)!);
+          batchResolved++;
+          continue;
+        }
+        cols.addAll(hit);
+        batchResolved++;
+      }
       if (cols.isNotEmpty) writes[name] = cols;
       if (code.contains('logAction')) audits.add(name);
     }
 
-    test('(ح) الاشتقاقُ أصابَ: شاشاتٌ تَكتبُ وشاشاتٌ تُقيّد', () {
-      expect(writes.length, greaterThanOrEqualTo(12),
-          reason: 'كاشفُ الكتاباتِ انحلّ');
-      expect(audits.length, greaterThanOrEqualTo(10),
-          reason: 'كاشفُ القيودِ انحلّ');
-      expect(writes['admin_compliance_screen.dart'], contains('drivers'));
+    // اللوحة: المجموعةُ تُستخرَجُ من **وسائطِ نداءِ الكتابةِ** لا من الملفِّ
+    // كلِّه — وإلّا حُسِبت مجموعةٌ تُقرَأُ فقط (مُنتقي المناطقِ في
+    // `Marketing.tsx` مثلاً) كتابةً، فظهرَ انحرافٌ لا وجودَ له.
+    final write = RegExp(r'\b(?:updateDoc|setDoc|addDoc|deleteDoc)\s*\(');
+    final inArg = RegExp(r"(?:collection|doc)\(\s*db\s*,\s*'([a-zA-Z_]+)'");
+    for (final f in sourcesIn('admin_panel/src/pages',
+            atLeast: 10, exts: const ['.tsx'])
+        .where((f) => !f.path.contains('.test.'))) {
+      final code = stripComments(f.readAsStringSync());
+      final name = 'tsx:${f.uri.pathSegments.last}';
+      final cols = <String>{};
+      for (final m in write.allMatches(code)) {
+        final String args = callArgs(code, m.start);
+        // **لكلِّ نداءٍ على حِدَة**: نموُّ `cols` ليس دليلَ حلٍّ — المجموعةُ
+        // قد تَكونُ فيها من نداءٍ سابقٍ في الملفِّ نفسِه، فيُقرأُ نداءٌ
+        // مَحلولٌ «غيرَ مَحلولٍ» (أو بالعكس).
+        final hit =
+            inArg.allMatches(args).map((c) => c.group(1)!).toSet();
+        if (hit.isNotEmpty) {
+          cols.addAll(hit);
+          continue;
+        }
+        // مرجعٌ وسيطٌ: `const ref = doc(db, 'x', id)` ثمّ `updateDoc(ref, …)`.
+        final String first = args.split(',').first.trim();
+        final RegExpMatch? d = RegExp(r'^[A-Za-z_]\w*$').hasMatch(first)
+            ? RegExp(r'\b' + RegExp.escape(first) +
+                    r"\s*=\s*(?:doc|collection)\(\s*db\s*,\s*'([a-zA-Z_]+)'")
+                .firstMatch(code)
+            : null;
+        if (d != null) {
+          cols.add(d.group(1)!);
+          continue;
+        }
+        // **ولا تجاهُلَ صامتاً**: كتابةٌ تَعذّرَ ردُّها إلى مجموعتِها تُسقِطُ
+        // الاشتقاقَ — تجاهلُها هو ما يُنتجُ حارساً عقيماً يُخالِفُ دعواه.
+        // (`expect` غيرُ مشروعٍ في نطاقِ `main`، فالرميُ هو السبيل.)
+        throw StateError('كتابةٌ بلا مجموعةٍ مُحَلّةٍ في ${f.path}: '
+            '${args.length > 60 ? args.substring(0, 60) : args}');
+      }
+      // والدفعةُ/المعامَلةُ في اللوحةِ كذلك — بمرجعٍ وسيطٍ في كلِّ مواضعِها
+      // (`tx.update(ref, …)`، `batch.set(docRef, …)`).
+      for (final m in batchVerb.allMatches(code)) {
+        final args = callArgs(code, m.start);
+        final hit =
+            inArg.allMatches(args).map((c) => c.group(1)!).toSet();
+        if (hit.isNotEmpty) {
+          cols.addAll(hit);
+          batchResolved++;
+          continue;
+        }
+        final String first = args.split(',').first.trim();
+        final RegExpMatch? d = RegExp(r'^[A-Za-z_]\w*$').hasMatch(first)
+            ? RegExp(r'\b' + RegExp.escape(first) +
+                    r"\s*=\s*(?:doc|collection)\(\s*db\s*,\s*'([a-zA-Z_]+)'")
+                .firstMatch(code)
+            : null;
+        if (d == null) {
+          throw StateError('كتابةُ دفعةٍ بلا مجموعةٍ مُحَلّةٍ في ${f.path}');
+        }
+        cols.add(d.group(1)!);
+        batchResolved++;
+      }
+      if (cols.isNotEmpty) writes[name] = cols;
+      if (code.contains('logAudit')) audits.add(name);
+    }
+
+    test('(ح) الاشتقاقُ أصابَ السطحَين — وأسطحٌ تَكتبُ وأسطحٌ تُقيّد', () {
+      expect(writes.keys.where((k) => k.startsWith('dart:')).length,
+          greaterThanOrEqualTo(12),
+          reason: 'كاشفُ الكتاباتِ الدارتيّةِ انحلّ');
+      expect(writes.keys.where((k) => k.startsWith('tsx:')).length,
+          greaterThanOrEqualTo(8),
+          reason: 'كاشفُ كتاباتِ اللوحةِ انحلّ');
+      // **وأرضيّةٌ لكلِّ سطحٍ على حِدَة**: مجموعُ القيودِ وحدَه لا يَحمي —
+      // الدارتُ وحدَه ثمانيَ عشرةَ شاشةً، فعتبةٌ جامعةٌ تَمُرُّ ولو عَمِيَ
+      // كاشفُ اللوحةِ تماماً (مُثبَتٌ بالقضم).
+      expect(audits.where((a) => a.startsWith('dart:')).length,
+          greaterThanOrEqualTo(14),
+          reason: 'كاشفُ القيودِ الدارتيّةِ انحلّ');
+      expect(audits.where((a) => a.startsWith('tsx:')).length,
+          greaterThanOrEqualTo(8),
+          reason: 'كاشفُ قيودِ اللوحةِ انحلّ');
+      expect(writes['dart:admin_compliance_screen.dart'], contains('drivers'));
+      expect(writes['tsx:Orders.tsx'], contains('orders'));
+      // ولا مجموعةً تُقرَأُ فقط في حِمْلِ كتابة.
+      expect(writes['tsx:Marketing.tsx'], equals({'promo_codes'}),
+          reason: 'استخراجُ اللوحةِ يَبتلعُ مجموعاتٍ تُقرَأُ فقط');
+      // وكاشفُ الدفعاتِ يَرى شيئاً فعلاً — بلا هذا يَعودُ صامتاً عن
+      // شاشتَين دارتيّتَين تَكتبانِ عبرَها وحدَها.
+      expect(batchResolved, greaterThanOrEqualTo(8),
+          reason: 'كاشفُ كتاباتِ الدفعةِ/المعامَلةِ انحلّ');
+      expect(writes['dart:admin_managers_screen.dart'],
+          containsAll(<String>['admins', 'users']),
+          reason: 'كتاباتُ شاشةِ المديرينَ كلُّها في دفعةٍ — فغيابُها '
+              'يَعني أنّ الكاشفَ أعمى عنها');
     });
 
-    test('(ط) شاشةٌ تَكتبُ مجموعةً تُقيّدُها شاشةٌ أخرى تُقيّدُها كذلك', () {
-      // جوهرُ الانحراف: نفسُ الكتابةِ، مُقيَّدةً من سطحٍ ومسكوتاً عنها من آخر.
+    test('(ط) سطحٌ يَكتبُ مجموعةً يُقيّدُها سطحٌ آخرُ يُقيّدُها كذلك', () {
       final drift = <String>[];
       final byCollection = <String, Set<String>>{};
-      writes.forEach((screen, cols) {
+      writes.forEach((surface, cols) {
         for (final c in cols) {
-          byCollection.putIfAbsent(c, () => <String>{}).add(screen);
+          byCollection.putIfAbsent(c, () => <String>{}).add(surface);
         }
       });
-      byCollection.forEach((col, screens) {
-        final audited = screens.where(audits.contains);
-        final silent = screens.where((s) => !audits.contains(s));
+      byCollection.forEach((col, surfaces) {
+        final audited = surfaces.where(audits.contains);
+        final silent = surfaces.where((s) => !audits.contains(s));
         if (audited.isNotEmpty && silent.isNotEmpty) {
           drift.add('$col: مُقيَّدٌ في $audited وصامتٌ في $silent');
         }
@@ -265,21 +439,47 @@ void main() {
       expect(drift, isEmpty, reason: drift.join(' | '));
     });
 
-    test('(ي) ومجموعةُ الشاشاتِ الصامتةِ كاملةً = المُعلَنةُ بأسبابِها', () {
-      // شاشةُ تفاصيلِ التذكرةِ وحدَها: الردُّ **موقَّعٌ في الخيطِ نفسِه**
-      // (`senderUid` من Auth بقرارِ تأليفِ التذاكر)، فـ«من أجاب؟» مُجاب؛
-      // وقلبُ الحالةِ إلى «مُغلَقة» رجوعٌ عنه ممكنٌ وظاهرٌ في القائمة. فهو
-      // مُسجَّلٌ لا مُغيَّر — ولو صارَ الردُّ غيرَ موقَّعٍ يُراجَعُ هذا.
-      const allowed = {'admin_ticket_details_screen.dart'};
+    test('(ي) ومجموعةُ الأسطحِ الصامتةِ كاملةً = المُعلَنةُ بأسبابِها', () {
+      // **الصامتُ بقصدٍ يَبقى صامتاً، ولكلٍّ سببُه — والسببُ أنّ الفاعلَ
+      // مُسجَّلٌ أصلاً حيث يُراجَع، لا أنّ الكتابةَ هيّنة.**
+      const allowed = {
+        // الردُّ **موقَّعٌ في الخيطِ نفسِه** (`senderUid` من Auth بقرارِ
+        // تأليفِ التذاكر)، فـ«من أجاب؟» مُجاب؛ وقلبُ الحالةِ إلى «مُغلَقة»
+        // رجوعٌ عنه ممكنٌ وظاهرٌ في القائمة.
+        'dart:admin_ticket_details_screen.dart',
+        // وتوأمُها في اللوحةِ **بالتعليلِ نفسِه** — وجدَه هذا التوسيعُ لا
+        // أنا: `Support.tsx` يَكتبُ `senderUid` من Auth على الردِّ، فهو
+        // موقَّعٌ كتوأمِه الدارتيّ، وقلبُ الحالةِ إلى «مُسوّاة» رجوعٌ عنه
+        // ممكنٌ وظاهرٌ. فهو إعفاءٌ مُراجَعٌ بوعيٍ لا مُسكَتٌ بسماحٍ عامّ.
+        'tsx:Support.tsx',
+        // وصرفُ الراتبِ يَكتبُ `paid_by` (بريدَ المُنفِّذ) و`paid_at` على
+        // **السجلِّ نفسِه** — فهو أثرُه، ومثيلُه في القاعدةِ أعلاه. ولو زالَ
+        // `paid_by` يوماً فهذا الإعفاءُ يُراجَعُ لا يُسكَت.
+        'tsx:Payroll.tsx',
+      };
       final silent = writes.keys.where((s) => !audits.contains(s)).toSet();
       expect(silent, allowed,
-          reason: 'شاشةٌ تَكتبُ بلا أثرٍ ولا سببٍ مُعلَن: '
+          reason: 'سطحٌ يَكتبُ بلا أثرٍ ولا سببٍ مُعلَن: '
               '${silent.difference(allowed)}');
-      // وشاهدُ التعليلِ: الردُّ ما زال يُوقَّعُ من Auth.
-      final t = File('lib/screens/admin/admin_ticket_details_screen.dart')
-          .readAsStringSync();
-      expect(t.contains('senderUid'), isTrue,
+      // وشاهدا التعليل.
+      expect(
+          File('lib/screens/admin/admin_ticket_details_screen.dart')
+              .readAsStringSync()
+              .contains('senderUid'),
+          isTrue,
           reason: 'الردُّ لم يَعُدْ موقَّعاً — فتعليلُ الإعفاءِ يُراجَع');
+      expect(
+          File('admin_panel/src/pages/Support.tsx')
+              .readAsStringSync()
+              .contains('senderUid'),
+          isTrue,
+          reason: 'ردُّ اللوحةِ لم يَعُدْ موقَّعاً — فتعليلُ الإعفاءِ يُراجَع');
+      expect(
+          File('admin_panel/src/pages/Payroll.tsx')
+              .readAsStringSync()
+              .contains('paid_by:'),
+          isTrue,
+          reason: 'صرفُ الراتبِ لم يَعُدْ يُسجّلُ الفاعلَ — فإعفاؤه يُراجَع');
     });
 
     test('(ك) حفظُ الإعداداتِ يُقيَّدُ **بعدَ** الالتزامِ لا قبلَه', () {

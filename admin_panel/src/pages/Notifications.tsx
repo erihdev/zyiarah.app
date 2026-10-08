@@ -4,6 +4,7 @@ import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, limit,
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/notificationContext.ts';
 import { useNow } from '../hooks/useNow.ts';
+import { logAudit, AUDIT } from '../services/audit.ts';
 
 interface PopupButton {
     label: string;
@@ -114,6 +115,13 @@ export default function Notifications() {
                 scheduled_at: isScheduled ? new Date(scheduleValue) : null,
                 status: isScheduled ? 'scheduled' : 'pending',
                 operational: isOperational,
+            });
+            await logAudit(AUDIT.SEND_BROADCAST, {
+                title: title.trim(),
+                target,
+                type: notifType,
+                operational: isOperational,
+                scheduled: isScheduled,
             });
             setTitle('');
             setBody('');

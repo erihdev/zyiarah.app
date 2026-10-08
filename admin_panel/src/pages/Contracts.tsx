@@ -12,6 +12,7 @@ import {
 import {
     packageFormError, positiveNum, positiveInt, resolvedVisits,
 } from '../utils/catalogNumber.ts';
+import { logAudit, AUDIT } from '../services/audit.ts';
 
 interface ContractRecord {
     id: string;
@@ -167,6 +168,10 @@ function PackagesSection() {
             };
             if (editingId) await updateDoc(doc(db, 'subscription_packages', editingId), payload);
             else await addDoc(collection(db, 'subscription_packages'), payload);
+            await logAudit(
+                editingId ? AUDIT.UPDATE_SUBSCRIPTION : AUDIT.CREATE_SUBSCRIPTION,
+                { title: payload.title, price: payload.price, visits: payload.visits },
+                editingId ?? undefined);
             toast.success(editingId ? 'تم تحديث الباقة بنجاح' : 'تمت إضافة الباقة بنجاح');
             setShowForm(false); setEditingId(null); setForm(emptyPkgForm);
         } catch (e) {
@@ -182,6 +187,7 @@ function PackagesSection() {
         if (!await confirm(`حذف باقة "${pkg.title}"؟ لن تظهر للعملاء الجدد، ولكن قد تظل نشطة للمشتركين الحاليين.`)) return;
         try {
             await deleteDoc(doc(db, 'subscription_packages', pkg.id));
+            await logAudit(AUDIT.DELETE_SUBSCRIPTION, { title: pkg.title }, pkg.id);
             toast.success('تم حذف الباقة');
         } catch (e) {
             console.error(e);
@@ -405,6 +411,12 @@ function EventWorkerPackagesSection() {
             };
             if (editingId) await updateDoc(doc(db, 'event_worker_packages', editingId), payload);
             else await addDoc(collection(db, 'event_worker_packages'), payload);
+            await logAudit(
+                editingId
+                    ? AUDIT.UPDATE_EVENT_WORKER_PACKAGE
+                    : AUDIT.CREATE_EVENT_WORKER_PACKAGE,
+                { title: payload.title, price: payload.price, workers: payload.workers },
+                editingId ?? undefined);
             toast.success(editingId ? 'تم تحديث الباقة بنجاح' : 'تمت إضافة الباقة بنجاح');
             setShowForm(false); setEditingId(null); setForm(emptyEventWorkerPkgForm);
         } catch (e) {
@@ -420,6 +432,8 @@ function EventWorkerPackagesSection() {
         if (!await confirm(`حذف باقة "${pkg.title}"؟ لن تظهر للعملاء الجدد، ولكن قد تظل نشطة للعقود الحالية.`)) return;
         try {
             await deleteDoc(doc(db, 'event_worker_packages', pkg.id));
+            await logAudit(
+                AUDIT.DELETE_EVENT_WORKER_PACKAGE, { title: pkg.title }, pkg.id);
             toast.success('تم حذف الباقة');
         } catch (e) {
             console.error(e);
@@ -685,6 +699,7 @@ export default function Contracts({ role }: { role?: string | null }) {
                     processed: false,
                 });
             }
+            await logAudit(AUDIT.APPROVE_CONTRACT, { planName, userId }, id);
             toast.success("تم اعتماد العقد بنجاح وبانتظار دفع العميل");
         } catch (error) {
             console.error(error);
@@ -699,6 +714,7 @@ export default function Contracts({ role }: { role?: string | null }) {
         if (!await confirm("هل أنت متأكد من حذف هذا العقد نهائياً؟")) return;
         try {
             await deleteDoc(doc(db, 'contracts', id));
+            await logAudit(AUDIT.DELETE_CONTRACT, {}, id);
             toast.success("تم حذف العقد");
         } catch (error) {
             console.error(error);
