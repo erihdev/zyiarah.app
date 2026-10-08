@@ -49,55 +49,215 @@ void main() {
   /// صِيغت غداً بكلماتٍ أخرى بَقِيَ الفحصُ يُقارِنُ الثلاثةَ ببعضِها.
   const unknownMark = 'إن كان المبلغُ قد خُصم فلا تقلقي';
 
-  test('(١) الثلاثةُ تَقولُ «قد خُصم» ولا تَدّعي الفشلَ على نتيجةٍ مجهولة', () {
-    expect(unknownMark.isNotEmpty, isTrue);
-    final count = unknownMark.allMatches(screen).length;
-    expect(count, greaterThanOrEqualTo(3),
-        reason: 'الجملةُ في $count موضعٍ من ثلاثة — مسارٌ أصليٌّ يَدّعي '
-            'الفشلَ على نتيجةٍ مجهولة');
+  /// جسمُ دالّةٍ من موضعِ إعلانِها — **بموازنةِ قائمةِ المعامَلاتِ أوّلاً**
+  /// ثمّ المعقوفة. أخذُ أوّلِ `{` بعدَ الاسمِ يَلتقطُ قوسَ المعامَلاتِ
+  /// المُسمّاة، وهو فخُّ الحدِّ المسجَّلُ في هذا المستودعِ عشرَ مرّات.
+  String fnBody(String src, int declAt) {
+    final open = src.indexOf('(', declAt);
+    var depth = 1;
+    var i = open + 1;
+    while (i < src.length && depth > 0) {
+      if (src[i] == '(') depth++;
+      if (src[i] == ')') depth--;
+      i++;
+    }
+    final brace = src.indexOf('{', i);
+    if (brace < 0) throw StateError('لم يُوجَد جسمُ الدالّةِ عند $declAt');
+    depth = 1;
+    var j = brace + 1;
+    while (j < src.length && depth > 0) {
+      if (src[j] == '{') depth++;
+      if (src[j] == '}') depth--;
+      j++;
+    }
+    final body = src.substring(brace, j);
+    if (body.length < 40) throw StateError('اقتطاعُ الجسمِ انهارَ عند $declAt');
+    return body;
+  }
+
+  /// كتلةٌ بموازنةِ المعقوفةِ من موضعِ `if (…) {` — لا `indexOf('}')`.
+  String braceBody(String src, int at) {
+    final brace = src.indexOf('{', at);
+    if (brace < 0) throw StateError('لا كتلةَ عند \$at');
+    var depth = 1;
+    var i = brace + 1;
+    while (i < src.length && depth > 0) {
+      if (src[i] == '{') depth++;
+      if (src[i] == '}') depth--;
+      i++;
+    }
+    final body = src.substring(brace, i);
+    if (body.length < 30) throw StateError('اقتطاعُ الكتلةِ انهارَ عند \$at');
+    return body;
+  }
+
+  /// نصُّ الوحدةِ — الجملةُ تَسكنُ هناك، فالفحصُ يَقرؤها من مصدرِها.
+  final String rule = stripComments(
+      File('lib/utils/moyasar_error_text.dart').readAsStringSync());
+
+
+  test('(١) جملةُ النتيجةِ المجهولةِ تَسكنُ الوحدةَ — لا نسخةَ في الشاشة', () {
+    // كانت مكتوبةً **ثلاثَ مرّاتٍ** في هذه الشاشةِ بصياغةٍ تُخالِفُ
+    // `kMoyasarUnknownResult` في الشيءِ الوحيدِ الذي يُهمّ: «**وإلّا فأعيدي
+    // المحاولة**» مقابلَ «لا تُعيدي الدفع». فالمجموعةُ كاملةً تُقابَلُ
+    // باستثناءٍ واحدٍ مُعلَّلٍ — وهو حوارٌ آخرُ لسطحٍ آخر.
+    expect(rule.contains(unknownMark), isTrue,
+        reason: 'الجملةُ ليست في الوحدةِ — فلا مصدرَ لها');
+    const walletDialogMark = 'لن يُخصم منك مرتين';
+    final hits = unknownMark.allMatches(screen).toList();
+    expect(hits.length, 1,
+        reason: 'الجملةُ في ${hits.length} موضعٍ من الشاشة — نسخةٌ محلّيّةٌ '
+            'تَنحرِفُ عن الوحدةِ كما انحرفت الثلاثُ السابقة');
+    final h = hits.single;
+    final near = screen.substring((h.start - 500).clamp(0, screen.length),
+        (h.end + 500).clamp(0, screen.length));
+    expect(near.contains(walletDialogMark), isTrue,
+        reason: 'الموضعُ الباقي ليس حوارَ المحفظةِ المُستثنى — وهو سطحٌ آخر '
+            '(بلا معرّفِ دفعةٍ، ومعه رقمٌ مرجعيٌّ) فلا يُفوَّضُ إلى قاعدةِ '
+            'أخطاءِ البوّابة');
   });
 
-  test(
-      '(٢) ولكلِّ مسارٍ فرعُه: NetworkError في الاثنَين، و`catch` عامٌّ '
-      'في Google Pay', () {
+  test('(٢) ولكلِّ مسارٍ طريقُه إلى الوحدة — لا مُبدِّلٌ محلّيّ', () {
+    // Apple/Samsung: الفرعُ كلُّه مُفوَّضٌ إلى دالّةٍ واحدةٍ تُنادي القاعدة.
     for (final fn in ['_onApplePayResult', '_onSamsungPayResult']) {
-      final i = screen.indexOf(fn);
+      final i = screen.indexOf('$fn(dynamic result)');
       expect(i, greaterThan(-1), reason: 'لم يُوجَد $fn');
-      final body = screen.substring(i, i + 2200);
-      expect(body, contains('result is NetworkError'),
-          reason: '$fn بلا فرعِ انقطاعٍ — فانقطاعُ الشبكةِ يُقرأُ فشلَ دفع');
-      expect(body, contains(unknownMark), reason: '$fn يَدّعي الفشل');
+      final body = fnBody(screen, i);
+      expect(body.contains('_handleNativePayFailure('), isTrue,
+          reason: '$fn لا يُفوّضُ القرارَ — فعادت النسخةُ المحلّيّة');
+      // ولا قراءةَ لرسالةِ البوّابةِ في الفرع.
+      expect(RegExp(r'result\.message').hasMatch(body), isFalse,
+          reason: '$fn يَقرأُ `result.message` — وهو `jsonBody[\'message\']` '
+              'من ميسر أي إنجليزيٌّ في شريطٍ عربيّ');
     }
+    // والمُفوَّضُ إليه يُنادي القاعدةَ ويَعرضُ ناتجَها.
+    final hi = screen.indexOf('_handleNativePayFailure(dynamic result');
+    expect(hi, greaterThan(-1), reason: 'لم تُوجَد الدالّةُ المشترَكة');
+    final shared = fnBody(screen, hi);
+    expect(shared.contains('moyasarErrorText('), isTrue,
+        reason: 'الدالّةُ المشترَكةُ لا تُنادي القاعدة');
+    expect(RegExp(r'Text\(\s*e\.message').hasMatch(shared), isTrue,
+        reason: 'ناتجُ القاعدةِ لا يُعرَض — فالنداءُ زينة');
+    expect(RegExp(r'Text\(\s*e\.detail').hasMatch(shared), isFalse,
+        reason: 'التشخيصُ يُعرَضُ للعميلة');
+    // ولا نسخةَ من المُبدِّلِ باقيةٌ في الشاشةِ كلِّها.
+    for (final t in const [
+      'result is ApiError',
+      'result is ValidationError',
+      'result is NetworkError',
+    ]) {
+      expect(screen.contains(t), isFalse,
+          reason: 'عادَ مُبدِّلٌ محلّيٌّ لأنواعِ أخطاءِ الحزمة: $t');
+    }
+    // Google Pay: فرعُه المفهومُ من الخدمة، والمجهولُ من الوحدة.
     final g = screen.indexOf('onPaymentResult: (result) async {');
     expect(g, greaterThan(-1), reason: 'لم يُوجَد مُعالِجُ Google Pay');
-    final gpay = screen.substring(g, g + 2600);
-    expect(gpay, contains('on MoyasarPayFailure catch'),
+    final gpay = screen.substring(g, g + 2900);
+    expect(gpay.contains('on MoyasarPayFailure catch'), isTrue,
         reason: 'Google Pay لا يُميّزُ الفشلَ المفهومَ من المجهول');
-    expect(gpay, contains(unknownMark),
-        reason: 'المسارُ المجهولُ في Google Pay يَدّعي الفشل');
-    expect(gpay, contains('google_pay_unknown_result'),
-        reason: 'نتيجةٌ مجهولةٌ على مسارِ مالٍ بلا أثرٍ عندنا — '
-            'قاعدةُ `reportSilent`');
+    expect(gpay.contains('kMoyasarUnknownResult'), isTrue,
+        reason: 'المسارُ المجهولُ في Google Pay يَكتبُ صياغتَه — وكانت '
+            'تَدعو إلى الإعادة');
   });
 
-  test('(٣) وتجديدُ المعرّفِ على فشلٍ مُسجَّلٍ وحدَه — في الثلاثة', () {
-    // Apple/Samsung: `ApiError || PaymentResponse` = سجّلته ميسر.
-    // Google Pay: `recorded` من `MoyasarPayFailure`.
-    final mints = RegExp(r'_mintFreshPendingOrderId').allMatches(screen).length;
-    expect(mints, greaterThanOrEqualTo(4),
-        reason: 'مواضعُ التجديدِ $mints — المسارُ الثالثُ بلا تجديدٍ يُعيدُ '
-            'المحاولةَ بمعرّفٍ مُستهلَكٍ فتُعادُ الدفعةُ الفاشلةُ نفسُها');
+  test('(٣) تجديدُ المعرّفِ على نتيجةٍ مؤكَّدةٍ مُسجَّلةٍ وحدَها — سلوكاً', () {
+    // الثابتُ الذي نقضُه هو الشحنُ المزدوجُ بعينِه.
+    final unknownCases = <Object>[
+      ApiError('boom'),
+      TimeoutError(),
+      ValidationError('given_id has already been taken', {'given_id': ['x']}),
+      ValidationError.messageOnly('given_id has already been taken'),
+    ];
+    for (final c in unknownCases) {
+      final e = moyasarErrorText(c);
+      expect(e.resultUnknown, isTrue, reason: '${c.runtimeType} ليست مؤكَّدة');
+      expect(e.givenIdConsumed, isFalse,
+          reason: 'تجديدُ المعرّفِ على نتيجةٍ مجهولةٍ يُجيزُ شحناً مزدوجاً — '
+              '${c.runtimeType}');
+    }
+    // وما لا تُسجّلُه ميسر لا يُجدِّدُ شيئاً.
+    for (final c in <Object>[
+      NetworkError(),
+      AuthError('x'),
+      PaymentCanceledError(),
+      UnprocessableTokenError(),
+      UnspecifiedError('{}'),
+      ValidationError('Amount too low', {'amount': ['x']}),
+    ]) {
+      expect(moyasarErrorText(c).givenIdConsumed, isFalse,
+          reason: 'تجديدٌ بلا سببٍ — ${c.runtimeType}');
+    }
+    // والمُسجَّلُ المؤكَّدُ وحدَه يُجدِّد: ردُّ 2xx أنشأ مستندَ دفعة.
+    // و`PaymentResponse` لا يُبنى في فحصٍ — مُنشِئُه الوحيدُ `fromJson`
+    // بوسيطِ `PaymentType` **غيرِ المُصدَّرِ** من الحزمة، وعشرةُ حقولٍ
+    // `late` غيرِ قابلةٍ للإغفال. فيُشَدُّ **بنيويّاً**: التجديدُ مُعلَنٌ
+    // في فرعٍ واحدٍ لا غير، وهو فرعُ `PaymentResponse`.
+    final consumedSites =
+        RegExp(r'givenIdConsumed: true').allMatches(rule).toList();
+    expect(consumedSites.length, 1,
+        reason: 'التجديدُ مُعلَنٌ في ${consumedSites.length} فرعاً — '
+            'الحالةُ المؤكَّدةُ الوحيدةُ من الحزمةِ هي ردُّ 2xx');
+    final prAt = rule.indexOf('if (result is PaymentResponse) {');
+    expect(prAt, greaterThan(-1), reason: 'زالَ فرعُ `PaymentResponse`');
+    final prBody = braceBody(rule, prAt);
+    expect(prBody.contains('givenIdConsumed: true'), isTrue,
+        reason: 'التجديدُ خارجَ فرعِ الدفعةِ المُسجَّلة — '
+            'فبلا تجديدٍ هناك تَدورُ العميلةُ في رفضٍ لا مخرجَ منه');
+    // والثابتُ بنيويّاً كذلك: لا فرعَ يَجمعُ «مجهولٌ» و«مُستهلَك».
+    for (final m in RegExp(r'MoyasarErrorText\(').allMatches(rule)) {
+      final blk = parenBlock(rule, m.start);
+      final bothFlags =
+          blk.contains('resultUnknown: true') && blk.contains('givenIdConsumed: true');
+      expect(bothFlags, isFalse,
+          reason: 'فرعٌ يُجدّدُ المعرّفَ على نتيجةٍ مجهولة — '
+              'وهو الشحنُ المزدوجُ بعينِه: $blk');
+    }
+
+    // والشاشةُ تَقرأُ القرارَ ولا تُعيدُ تعدادَ الأنواع.
+    final hi = screen.indexOf('_handleNativePayFailure(dynamic result');
+    final shared = fnBody(screen, hi);
+    expect(shared.contains('e.givenIdConsumed'), isTrue,
+        reason: 'الشاشةُ تُجدّدُ بشرطٍ من عندِها — وهكذا كانت تُجدّدُ على '
+            '`ApiError` (ردُّ 5xx، نتيجةٌ مجهولة)');
+    expect(shared.contains('_mintFreshPendingOrderId'), isTrue,
+        reason: 'لا تجديدَ إطلاقاً — فرفضُ البطاقةِ يَصيرُ طريقاً مسدوداً');
+    // Google Pay يَقرأُ نظيرَه من الخدمة.
     final g = screen.indexOf('on MoyasarPayFailure catch');
     expect(g, greaterThan(-1));
     final known = screen.substring(g, screen.indexOf('} catch (e, st)', g));
-    expect(known, contains('f.recorded'),
-        reason: 'Google Pay يُجدّدُ المعرّفَ بلا شرطٍ أو لا يُجدّدُه أبداً');
+    expect(known.contains('f.recorded'), isTrue,
+        reason: 'Google Pay يُجدّدُ بلا شرطٍ أو لا يُجدّدُه أبداً');
     final unknown = screen.substring(screen.indexOf('} catch (e, st)', g));
-    final nextBrace = unknown.indexOf('messenger.showSnackBar');
-    expect(nextBrace, greaterThan(-1));
-    expect(unknown.substring(0, nextBrace).contains('_mintFreshPendingOrderId'),
+    final upTo = unknown.indexOf('messenger.showSnackBar');
+    expect(upTo, greaterThan(-1));
+    expect(unknown.substring(0, upTo).contains('_mintFreshPendingOrderId'),
         isFalse,
         reason: 'تجديدُ المعرّفِ على نتيجةٍ مجهولةٍ يُجيزُ شحناً مزدوجاً');
+  });
+
+  test('(٤) والنتيجةُ المجهولةُ تَترُكُ أثراً عندنا — في الثلاثة', () {
+    // كان فرعُ Apple/Samsung بلا أيِّ تسجيل: لا `debugPrint` ولا تقرير.
+    // ومالٌ قد خُصم بلا طلبٍ مؤكَّدٍ ينقذُه `reconcileOrphanPayments` —
+    // فوقوعُه خبرٌ يَلزمُنا، وهو نطاقُ `reportSilent` المُعلَن.
+    final hi = screen.indexOf('_handleNativePayFailure(dynamic result');
+    final shared = fnBody(screen, hi);
+    expect(shared.contains('e.resultUnknown'), isTrue,
+        reason: 'الدالّةُ لا تُميّزُ المجهولَ — فلا أثرَ له');
+    expect(shared.contains("reason: 'native_pay_unknown_result'"), isTrue,
+        reason: 'نتيجةٌ مجهولةٌ على مسارِ مالٍ بلا تقرير');
+    expect(shared.contains('debugPrint'), isTrue,
+        reason: 'التشخيصُ يُفقَدُ على المسارِ المفهوم');
+    // والسببُ **ثابتٌ**: Crashlytics يُجمِّعُ به، فسببٌ متغيّرٌ يُنتجُ
+    // مجموعةً لكلِّ جهاز. والمسارُ يُمرَّرُ في `info`.
+    expect(RegExp(r"reason: '\$").hasMatch(shared), isFalse,
+        reason: 'سببٌ متغيّرٌ — التجميعُ يَضيع');
+    expect(shared.contains("'method': method"), isTrue,
+        reason: 'لا يُعرَفُ أيُّ مسارٍ أصليٍّ وقعَ فيه');
+    final g = screen.indexOf('} catch (e, st)',
+        screen.indexOf('on MoyasarPayFailure catch'));
+    final gUnknown = screen.substring(g, g + 900);
+    expect(gUnknown.contains('google_pay_unknown_result'), isTrue,
+        reason: 'المسارُ الثالثُ بلا تقريرٍ عن نتيجةٍ مجهولة');
   });
 
   group('والخدمةُ لا تُسرّبُ نصَّ البوّابةِ إلى العميلة', () {
@@ -221,8 +381,6 @@ void main() {
   // نسختُها، وكلتاهما تُسرِّبُ نصَّ البوّابة. فالقاعدةُ تَسكنُ الآن مرّةً في
   // `lib/utils/moyasar_error_text.dart`، نقيّةً فتُختبَرُ سلوكاً.
   group('خطأُ بوّابةِ ميسر: قاعدةٌ واحدةٌ للشاشتَين', () {
-    final String rule =
-        stripComments(File('lib/utils/moyasar_error_text.dart').readAsStringSync());
     final String card = stripComments(
         File('lib/screens/moyasar_card_screen.dart').readAsStringSync());
     final String stc = stripComments(
