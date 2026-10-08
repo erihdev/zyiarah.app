@@ -82,6 +82,84 @@ t("(أ٠) مُعيِّناتُ الصلاحيّةِ هي المعروفةُ وح
       "مُعيِّنُ صلاحيّةٍ جديدٌ — أضِفْه بوعيٍ أو انظر لِمَ أُضيف");
 });
 
+// **«إداريٌّ» قدرةٌ لا حضورُ اسم.** الفحصُ كان يَتخطّى أيَّ جسمٍ **يَحوي**
+// مُعيِّنَ صلاحيّةٍ — و`autoAssignDriverDirectly` يَحويه **داخلَ شرط**
+// (`if (orderData.client_id !== request.auth.uid) await _assertAdmin(...)`)،
+// أي أنّ مالكَ الطلبِ يَمُرُّ بلا صلاحيّةٍ إداريّة. فقُرئَ النداءُ «إداريّاً»
+// وخرجَ من النطاقِ كلِّه — وهو الذي كان يُسنِدُ سائقاً حقيقيّاً لطلبٍ غيرِ
+// مدفوعٍ بنداءٍ من الـSDK الخامّ. الثالثةُ من ثقوبِ هذا المُصنِّفِ، وكلُّها
+// درسٌ واحد: «الاسمُ ليس القدرة».
+//
+// فالمِعيارُ الآن **عمقُ الأقواسِ**: مُعيِّنٌ على عمقِ ١ من جسمِ السهمِ يَجري
+// على كلِّ مسار؛ وعلى عمقٍ أكبرَ فهو داخلَ شرطٍ (أو كتلةٍ) فمشروط.
+/**
+ * @param {string} b جسمُ الصادرِ
+ * @return {boolean} أيَجري مُعيِّنُ الصلاحيّةِ على كلِّ مسار؟
+ */
+function adminOnly(b) {
+  const arrow = b.indexOf("=>");
+  const ab = arrow > -1 ? b.indexOf("{", arrow) : -1;
+  if (ab < 0) return false;
+  for (const am of b.matchAll(/_assert\w*Admin\(/g)) {
+    let d = 0;
+    for (let k = ab; k < am.index; k++) {
+      if (b[k] === "{") d++;
+      else if (b[k] === "}") d--;
+    }
+    if (d === 1) return true;
+  }
+  return false;
+}
+
+// النداءاتُ التي تُجيزُ **مالكَ المستندِ أو أدمناً** — مشروطةٌ بطبيعتِها،
+// فتَدخلُ النطاقَ ويُشَدُّ شكلُها: مُقارنةُ مالكٍ حقيقيّةٌ **ثمّ** مُعيِّنُ
+// صلاحيّةٍ في فرعِ «ليس المالك». لكلٍّ سببُ إدراجِه.
+const OWNER_OR_ADMIN_CALLABLES = {
+  autoAssignDriverDirectly:
+    "إسنادُ سائقٍ لطلبٍ بمعرّفٍ من العميل (مالكُه يُسنِدُ لنفسِه)",
+  generateSubscriptionVisits:
+    "توليدُ زياراتِ عقدٍ بمعرّفٍ من العميل (مالكُه يُولّدُ لنفسِه)",
+};
+
+t("(أ١) ومجموعةُ «مالكٌ أو أدمن» كاملةً — ولكلٍّ مُقارنةُ مالكٍ حقيقيّة", () => {
+  const found = new Set();
+  for (const m of code.matchAll(/^exports\.(\w+) = onCall/gm)) {
+    const b = body(m[1]);
+    // يَحوي مُعيِّنَ صلاحيّةٍ ولا يَجري على كلِّ مسار ⇒ مشروط.
+    if (ADMIN_ASSERTIONS.some((a) => b.includes(a)) && !adminOnly(b)) {
+      found.add(m[1]);
+    }
+  }
+  assert.deepStrictEqual([...found].sort(),
+      Object.keys(OWNER_OR_ADMIN_CALLABLES).sort(),
+      "نداءٌ «مالكٌ أو أدمن» جديدٌ — راجِعْه: المالكُ يَمُرُّ بلا صلاحيّة");
+  for (const name of found) {
+    const b = body(name);
+    assert.ok(/\.(?:client_id|userId)\s*!==\s*request\.auth\.uid/.test(b),
+        `${name} لا يُقارِنُ مالكَ المستندِ بالمُنادي ` +
+        `(${OWNER_OR_ADMIN_CALLABLES[name]})`);
+    // والمُعيِّنُ في فرعِ «ليس المالك» لا بعدَه بلا شرط.
+    const own = b.search(/\.(?:client_id|userId)\s*!==\s*request\.auth\.uid/);
+    const adm = b.search(/_assert\w*Admin\(/);
+    assert.ok(own > -1 && adm > own,
+        `${name}: مُعيِّنُ الصلاحيّةِ لا يَتبعُ مُقارنةَ المالك`);
+  }
+});
+
+t("(أ٢) والمُصنِّفُ يُميّزُ المشروطَ من غيرِه — قدرةً لا اسماً", () => {
+  // المصدرُ بعدَ الإصلاحِ نظيفٌ، فنجاحُ ما سبقَ لا يُبرهِنُ أنّ المُصنِّفَ
+  // يَرى شيئاً. يُختبَرُ على الشكلَين بعينِهما.
+  assert.strictEqual(
+      adminOnly("onCall(async (request) => {\n  await _assertAdmin(request);\n})"),
+      true, "مُعيِّنٌ غيرُ مشروطٍ قُرئَ مشروطاً");
+  assert.strictEqual(
+      adminOnly("onCall(async (request) => {\n  if (x !== y) {\n" +
+        "    await _assertAdmin(request);\n  }\n})"),
+      false, "مُعيِّنٌ **داخلَ شرطٍ** قُرئَ غيرَ مشروطٍ — وهو الثغرةُ نفسُها");
+  assert.strictEqual(adminOnly("onCall(async (request) => {\n  const a = 1;\n})"),
+      false, "جسمٌ بلا مُعيِّنٍ قُرئَ إداريّاً");
+});
+
 const CLIENT_MONEY_CALLABLES = {
   createTamaraCheckout: "جلسةُ تقسيطٍ على طلبٍ بمعرّفٍ من العميل",
   payWithWallet: "خصمٌ من المحفظةِ لطلبٍ بمعرّفٍ من العميل",
@@ -89,28 +167,52 @@ const CLIENT_MONEY_CALLABLES = {
   verifyMoyasarPayment: "قلبُ is_paid لطلبٍ بمعرّفٍ من العميل",
 };
 
-t("(أ) المجموعةُ كاملةً: كلُّ مسارٍ ماليٍّ عميليٍّ يَفحصُ الملكيّة", () => {
-  // الاشتقاقُ من المصدرِ لا من قائمةٍ يدويّة: `onCall` بلا `_assertAdmin`
-  // يَقرأُ معرّفاً من `request.data` ⇒ داخلٌ في النطاق.
+/**
+ * كلُّ `onCall` يَبلغُه **عميلٌ** ويَقرأُ مستنداً بمعرّفٍ من `request.data`.
+ * @return {Set<string>} أسماؤها
+ */
+function clientReachable() {
   const found = new Set();
   for (const m of code.matchAll(/^exports\.(\w+) = onCall/gm)) {
     const name = m[1];
     const b = body(name);
-    if (ADMIN_ASSERTIONS.some((a) => b.includes(a)) ||
-        b.includes("adminRoles.includes")) continue;
+    if (adminOnly(b) || b.includes("adminRoles.includes")) continue;
     if (!/request\.data[^\n]*\b\w*[Ii]d\b/.test(b) &&
         !/\{[^}]*\b\w*[Ii]d\b[^}]*\}\s*=\s*request\.data/.test(b)) continue;
     // يَقرأُ مستنداً بذلك المعرّف؟
     if (!/\.doc\(\s*\w*[Ii]d\s*\)/.test(b)) continue;
     found.add(name);
   }
-  assert.deepStrictEqual([...found].sort(),
-      Object.keys(CLIENT_MONEY_CALLABLES).sort(),
-      "مجموعةُ المساراتِ الماليّةِ العميليّةِ تغيّرت — راجِعْ الجديدَ قبل نشرِه");
+  return found;
+}
 
+t("(أ) المجموعةُ كاملةً: كلُّ مسارٍ ماليٍّ عميليٍّ يَفحصُ الملكيّة", () => {
+  // الاشتقاقُ من المصدرِ لا من قائمةٍ يدويّة، و**المجموعتانِ تَقسمانِ الفضاءَ
+  // قسمةً مُحكمة**: ماليٌّ محضٌ (مالكُه وحدَه) و«مالكٌ أو أدمن» — فنداءٌ
+  // جديدٌ يَقعُ في إحداهما أو يُسقِطُ الفحصَ، ولا يَنسَلُّ بينهما.
+  //
+  // ولا فحصَ تقاطعٍ منفصلاً **بقصد**: اسمٌ في المجموعتَين يُسقِطُ (أ١) أوّلاً
+  // (مجموعتُها مُشتَقّةٌ فلا تَحويه) ويُسقِطُ هذه المقارنةَ معه (الاتّحادُ
+  // يَحملُه مرّتَين). كُتبَ فحصُ تقاطعٍ ثمّ أثبتَ اختبارُ قضمٍ أنّه **لا
+  // يُمكِنُ أن يَفشلَ وحدَه**، فأُزيل: فحصٌ لا يَعضُّ يُدرِّبُ القارئَ على
+  // الثقةِ بما لا يَنطق.
+  const reachable = clientReachable();
+  const declared = [
+    ...Object.keys(CLIENT_MONEY_CALLABLES),
+    ...Object.keys(OWNER_OR_ADMIN_CALLABLES),
+  ].sort();
+  assert.deepStrictEqual([...reachable].sort(), declared,
+      "مجموعةُ النداءاتِ التي يَبلغُها عميلٌ تغيّرت — راجِعْ الجديدَ قبل نشرِه");
+
+  const found = Object.keys(CLIENT_MONEY_CALLABLES);
   for (const name of found) {
     const b = body(name);
-    const hasRule = b.includes("_assertDocOwner(") ||
+    // **شكلُ النداءِ بحدودِ كلمةٍ لا مجرَّدُ احتواء.** اختبارُ قضمٍ أعادَ
+    // تسميةَ `_assertDocOwner` إلى `_noop_assertDocOwner` فمرَّ **أخضرَ**:
+    // الاسمُ الجديدُ يَحوي القديمَ، فالفحصُ رَضيَ بدالّةٍ أخرى — فخُّ
+    // «الاسمُ ليس القدرة» (نظيرُ `packageFormErrorX` الذي أرضى
+    // `packageFormError`).
+    const hasRule = /\b_assertDocOwner\s*\(/.test(b) ||
       /\.get\("client_id"\)\s*!==\s*uid/.test(b) ||
       /\.userId\s*!==\s*uid/.test(b);
     assert.ok(hasRule,
@@ -119,7 +221,7 @@ t("(أ) المجموعةُ كاملةً: كلُّ مسارٍ ماليٍّ عمي
 });
 
 t("(ب) والقاعدةُ تَعيشُ مرّةً — ولا نسخةَ إنلاين من سلسلةِ المالك", () => {
-  assert.ok(code.includes("function _assertDocOwner("),
+  assert.ok(/function\s+_assertDocOwner\s*\(/.test(code),
       "الدالّةُ اختفت — فالسؤالُ عادَ مكتوباً بأشكالٍ");
   // النسخةُ التي كانت في `verifyMoyasarPayment` بعينِها ممنوعةٌ الآن.
   assert.ok(!/const owner = orderDoc\.data\(\)\.client_id/.test(code),
@@ -139,7 +241,7 @@ t("(ب) والقاعدةُ تَعيشُ مرّةً — ولا نسخةَ إنل�
 
 t("(ج) والمسارانِ يُنادِيانِها فعلاً — لا تَسكنُ بلا قارئ", () => {
   for (const name of ["createTamaraCheckout", "verifyMoyasarPayment"]) {
-    assert.ok(body(name).includes("_assertDocOwner("),
+    assert.ok(/\b_assertDocOwner\s*\(/.test(body(name)),
         `${name} لا يُنادي القاعدة`);
   }
 });
