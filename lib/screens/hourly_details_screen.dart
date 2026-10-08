@@ -677,7 +677,13 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                         'price': p.price,
                       },
                 ],
-              if (_materialsCount > 0) 'materials_total': _materialsTotal,
+              // (حُذفَ `materials_total` في 2026-10-08.) كان رقمَ مالٍ
+              // يَحسبُه الجهازُ **ولا يَقرؤه أحد** — لا جدولُ التفاصيلِ
+              // (يُفصّلُ الصفوفَ بـ`quantity × price`) ولا مرآةُ اللوحةِ
+              // ولا `pricing.js` (يُعيدُ التسعيرَ من `products`). وهو
+              // مُستخرَجٌ من الصفوفِ أصلاً، فبقاؤه يَعني أنّ مَن يُضيفُ
+              // غداً سطرَ مجموعٍ أو عمودَ تصديرٍ يَقرأُ رقماً يَضبطُه
+              // العميل — شكلُ `amount`/`discount_amount` بعينِه.
             },
           ),
         ),

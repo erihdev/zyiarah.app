@@ -215,10 +215,6 @@ class _SofaRugCleaningDetailsScreenState
   double get vat => vatOnBase(totalAmount); // 15% مضافة فوق الأساس
   double get grandTotal => totalAmount + vat; // ما يدفعه العميل (شامل الضريبة)
 
-  /// مساحة السجاد الإجمالية (م²) — للإحصاء فقط؛ الكنب يُسعَّر بالطول فلا يدخلها.
-  double get totalArea =>
-      _pieces.where((p) => p.isComplete).fold(0.0, (s, p) => s + p.area);
-
   /// حِمل العمل: مساحة للسجاد، طول للكنب — أساس تقدير مدة انشغال السائق.
   double get _totalWork => _pieces
       .where((p) => p.isComplete)
@@ -270,11 +266,17 @@ class _SofaRugCleaningDetailsScreenState
       return;
     }
 
+    // (حُذفت ثلاثةُ مفاتيحَ في 2026-10-08: `total_area_sqm` و
+    // `sofa_price_per_sqm` و`rug_price_per_sqm`.) **لا قارئَ لأيٍّ منها**
+    // في المستودعِ كلِّه، وثلاثتُها مُستخرَجةٌ من الصفوفِ نفسِها:
+    // `SqmPiece.toMap` يَحملُ `area_sqm` و`price_per_unit` لكلِّ صفّ.
+    // وأسوأُها `total_area_sqm` — اسمٌ يُخالِفُ محتواه: الكنبُ يُسعَّر
+    // بالطولِ فلا يَدخلُ المساحةَ، فكان مجموعَ مساحةِ **السجادِ وحدَه**
+    // تحتَ اسمٍ يَقولُ «الإجماليّة»؛ فتوصيلُه إلى عرضٍ كان سيُظهِرُ رقماً
+    // يُسقِطُ الكنبَ تحتَ عنوانٍ يَزعمُ الكلّ. ومعه زالَ جالبُ `totalArea`
+    // الذي كان تعليقُه يَقولُ «للإحصاء فقط» — والإحصاءُ بلا جامع.
     final meta = {
       'kind': 'sofa_rug_sqm',
-      'total_area_sqm': double.parse(totalArea.toStringAsFixed(2)),
-      'sofa_price_per_sqm': _sofaSqmPrice,
-      'rug_price_per_sqm': _rugSqmPrice,
       'pieces': _pieces
           .where((p) => p.isComplete)
           .map((p) => p.toMap(_priceFor(p.kind)))
