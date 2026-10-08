@@ -5,11 +5,12 @@ import 'package:zyiarah/utils/time_format.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:intl/intl.dart' as intl;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/utils/vat.dart';
+import 'package:zyiarah/utils/invoice_stamp.dart';
+import 'package:zyiarah/utils/ksa_instant.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/arabic_pdf_text.dart';
 
@@ -130,8 +131,10 @@ class ZyiarahPdfService {
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
                 pw.Text(_ar('رقم الطلب / Order ID: #$orderCode')),
+                // بتوقيتِ الرياضِ لا بمنطقةِ الجهاز، وبصيغةِ Tag 3 نفسِها —
+                // القاعدةُ في utils/invoice_stamp.dart.
                 pw.Text(_ar('التاريخ / Date: '
-                    '${intl.DateFormat('yyyy-MM-dd HH:mm').format(issuedAt)}')),
+                    '${invoiceIssuedAtText(issuedAt)}')),
               ],
             ),
             pw.SizedBox(height: 30),
@@ -366,7 +369,7 @@ class ZyiarahPdfService {
                 _buildTableRow(_ar('الباقة المشتراة / Service Plan'), _ar(planName)),
                 _buildTableRow(_ar('إجمالي الزيارات / Total Visits'), _ar('$visits زيارة')),
                 _buildTableRow(_ar('قيمة العقد / Contract Price'), _ar('${price.toStringAsFixed(2)} ر.س')),
-                _buildTableRow(_ar('تاريخ الإصدار / Issue Date'), intl.DateFormat('yyyy-MM-dd').format(startDate)),
+                _buildTableRow(_ar('تاريخ الإصدار / Issue Date'), ksaDateText(startDate)),
               ],
             ),
             pw.SizedBox(height: 20),

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:intl/intl.dart' as intl;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
@@ -11,6 +10,7 @@ import 'package:zyiarah/utils/home_packages.dart';
 import 'package:zyiarah/utils/contract_health.dart';
 import 'package:zyiarah/utils/contract_visits.dart';
 import 'package:zyiarah/utils/contract_ref.dart';
+import 'package:zyiarah/utils/ksa_instant.dart';
 
 class ZyiarahContractsListScreen extends StatelessWidget {
   const ZyiarahContractsListScreen({super.key});
@@ -155,7 +155,7 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                   Text(statusText, style: GoogleFonts.tajawal(color: statusColor, fontSize: 13, fontWeight: FontWeight.bold)),
                   const Spacer(),
                   Text(
-                    intl.DateFormat('yyyy/MM/dd').format(createdAt),
+                    ksaDateText(createdAt),
                     style: GoogleFonts.tajawal(color: Colors.grey.shade600, fontSize: 12),
                   ),
                 ],

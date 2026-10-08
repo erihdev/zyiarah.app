@@ -161,10 +161,6 @@ class _AdminInvoicesScreenState extends State<AdminInvoicesScreen> {
 
   static String _money(double v) => '${v.toStringAsFixed(2)} ر.س';
 
-  static String _fmt(DateTime d) {
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${d.year}/${two(d.month)}/${two(d.day)} ${two(d.hour)}:${two(d.minute)}';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -400,7 +396,7 @@ class _AdminInvoicesScreenState extends State<AdminInvoicesScreen> {
         const SizedBox(height: 6),
         Text('${e.clientName} — ${v.serviceName}',
             style: GoogleFonts.tajawal(fontSize: 13, fontWeight: FontWeight.bold)),
-        Text(_fmt(v.issuedAt),
+        Text(invoiceIssuedAtText(v.issuedAt),
             style: GoogleFonts.tajawal(fontSize: 11, color: ZyiarahTheme.inkMuted)),
         const SizedBox(height: 8),
         Row(children: [

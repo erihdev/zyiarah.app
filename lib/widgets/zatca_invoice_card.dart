@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:zyiarah/models/invoice_view.dart';
 import 'package:zyiarah/services/zatca_service.dart';
+import 'package:zyiarah/utils/invoice_stamp.dart';
 import 'package:zyiarah/theme/app_theme.dart';
 
 /// بطاقة «فاتورة ضريبية مبسطة» على الشاشة (تصميم Stitch zatca_1/zatca_2):
@@ -27,10 +28,6 @@ class ZatcaInvoiceCard extends StatelessWidget {
 
   static String _money(double v) => '${v.toStringAsFixed(2)} ر.س';
 
-  static String _fmt(DateTime d) {
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${d.year}/${two(d.month)}/${two(d.day)} ${two(d.hour)}:${two(d.minute)}';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +81,7 @@ class ZatcaInvoiceCard extends StatelessWidget {
                 _kv('السجل التجاري (CR)', crNumber),
                 _kv('الرقم الضريبي (VAT)', vatNumber),
                 _kv('رقم الطلب', view.orderCode),
-                _kv('التاريخ والوقت', _fmt(view.issuedAt)),
+                _kv('التاريخ والوقت', invoiceIssuedAtText(view.issuedAt)),
                 const SizedBox(height: 14),
 
                 // ─── رمز QR ───
