@@ -46,6 +46,8 @@ import 'package:zyiarah/models/notification_item.dart';
 import 'package:zyiarah/screens/client_notifications_screen.dart';
 import 'package:zyiarah/utils/notification_target.dart';
 
+import 'helpers/strip_comments.dart';
+
 /// معرّفُ مستندِ طابورٍ تلقائيٌّ — ما كان الخادمُ يَضَعُه في `relatedId`.
 const String _queueId = 'kJ3nQ8pLm2Rv7Xy4Ab9C';
 const String _orderDoc = 'AbCdEfGhIjKlMnOpQrSt';
@@ -111,6 +113,99 @@ Set<String> _objectKeys(String obj) {
     if (m != null) keys.add(m.group(1)!);
   }
   return keys;
+}
+
+/// أعضاءُ تعدادٍ بالاسم. يُشتَقُّ ليُقابَلَ بأرماءِ المُبدِّلات: فعضوٌ جديدٌ
+/// بلا رَماءٍ خطأُ ترجمةٍ في دارت — ما لم يُكتَبْ رَماءٌ شامل، وذاك ما
+/// يَمنعُه `_enumSwitchArms` برميِه.
+Set<String> _enumMembers(String src, String name) {
+  final a = src.indexOf('enum $name ');
+  if (a < 0) throw StateError('تعدادُ «$name» لم يُوجَد');
+  final open = src.indexOf('{', a);
+  if (open < 0) throw StateError('لا جسمَ لتعدادِ «$name»');
+  final body = _balanced(src, open, 'تعدادِ «$name»');
+  return _splitTopLevel(body)
+      .map((seg) =>
+          RegExp(r'^\s*([A-Za-z_][A-Za-z0-9_]*)').firstMatch(seg)?.group(1))
+      .whereType<String>()
+      .toSet();
+}
+
+/// جسمُ كتلةٍ **بموازنةِ الأقواس** من `{` المُعطى — لا عدَّ أحرفٍ ولا أوّلَ
+/// `}`: فخُّ الحدِّ غيرِ المُوازَنِ أسقطَ حُرّاساً في هذا المستودعِ مرّاتٍ.
+String _balanced(String src, int open, String what) {
+  var depth = 0;
+  for (var i = open; i < src.length; i++) {
+    final c = src[i];
+    if (c == '{' || c == '(' || c == '[') depth++;
+    if (c == '}' || c == ')' || c == ']') {
+      depth--;
+      if (depth == 0) return src.substring(open + 1, i);
+    }
+  }
+  throw StateError('لم تُوازَنْ أقواسُ $what');
+}
+
+/// تقسيمُ مقاطعَ على فواصلِ **العمقِ صفر** مع احترامِ النصوص — فتعبيرٌ فيه
+/// فاصلةٌ (`NotifTarget(X, id: y)`) لا يُقطَعُ نصفَين.
+List<String> _splitTopLevel(String body) {
+  final segs = <String>[];
+  var buf = StringBuffer();
+  var depth = 0;
+  for (var i = 0; i < body.length; i++) {
+    final c = body[i];
+    if (c == "'" || c == '"') {
+      final q = c;
+      buf.write(c);
+      i++;
+      while (i < body.length) {
+        if (body[i] == r'\' && i + 1 < body.length) {
+          buf.write(body.substring(i, i + 2));
+          i += 2;
+          continue;
+        }
+        buf.write(body[i]);
+        if (body[i] == q) break;
+        i++;
+      }
+      continue;
+    }
+    if (c == '{' || c == '(' || c == '[') depth++;
+    if (c == '}' || c == ')' || c == ']') depth--;
+    if (c == ',' && depth == 0) {
+      segs.add(buf.toString());
+      buf = StringBuffer();
+      continue;
+    }
+    buf.write(c);
+  }
+  segs.add(buf.toString());
+  return segs.where((s) => s.trim().isNotEmpty).toList();
+}
+
+/// أرماءُ `switch` تعبيريٍّ على عضوِ تعداد: المفتاحُ العضوُ والقيمةُ نصُّ
+/// التعبيرِ كما هو.
+///
+/// يَرمي على رَماءٍ لا يُقرأُ — ومنه **الرَّماءُ الشاملُ** (`_ =>`): وجودُه
+/// يُبطِلُ شموليّةَ المُبدِّلِ، وهي وحدَها ما يَجعلُ عضواً جديداً خطأَ
+/// ترجمةٍ بدلَ وجهةٍ صامتةٍ تَسقطُ إلى `null`.
+Map<String, String> _enumSwitchArms(String src, String anchor, String enumName) {
+  final a = src.indexOf(anchor);
+  if (a < 0) throw StateError('مِرساةُ «$anchor» لم تُوجَد');
+  final open = src.indexOf('{', a);
+  if (open < 0) throw StateError('لا جسمَ لـ«$anchor»');
+  final body = _balanced(src, open, '«$anchor»');
+  final re = RegExp(
+      '^\\s*$enumName\\.([A-Za-z_][A-Za-z0-9_]*)\\s*=>\\s*([\\s\\S]*)\$');
+  final arms = <String, String>{};
+  for (final seg in _splitTopLevel(body)) {
+    final m = re.firstMatch(seg);
+    if (m == null) {
+      throw StateError('رَماءٌ لا يُقرأُ في «$anchor»: ${seg.trim()}');
+    }
+    arms[m.group(1)!] = m.group(2)!.trim();
+  }
+  return arms;
 }
 
 void main() {
@@ -225,13 +320,77 @@ void main() {
         reason: 'العميلةُ لا تَصلُ ردَّ تذكرتِها');
   });
 
-  // ── (٦) ومسارا الوجهتَين مُعلَنانِ فعلاً ──────────────────────────────
-  test('/contracts و/support مسارانِ في router.dart', () {
-    final r = _strip(File('lib/router.dart').readAsStringSync());
-    for (final path in const ['/contracts', '/support']) {
-      expect(r.contains("path: '$path'"), isTrue,
-          reason: 'القاعدةُ تُعيدُ $path ولا يَعرفُه go_router — نقرٌ بلا نقل');
-    }
+  // ── (٦) وكلُّ مسارٍ تُعيدُه القاعدةُ مُعلَنٌ في go_router ──────────────
+  //
+  // **كان هذا الفحصُ زوجاً مكتوباً بيدٍ** (`/contracts`, `/support`) ونصُّه
+  // عامٌّ: «القاعدةُ تُعيدُ $path ولا يَعرفُه go_router — نقرٌ بلا نقل».
+  // والقاعدةُ تُعيدُ **خمسةَ** مسارات، فثلاثةٌ منها — ومنها `/track/$id`
+  // المُعامَلُ — كانت خارجَ النظر. فالنطاقُ مُشتَقٌّ من أرماءِ المُبدِّلِ
+  // نفسِه: مسارٌ سادسٌ يَدخلُ الفحصَ بنفسِه.
+  test('(٦) كلُّ مسارٍ تُعيدُه القاعدةُ مُعلَنٌ في go_router', () {
+    final rule = stripComments(
+        File('lib/utils/notification_target.dart').readAsStringSync());
+    final members = _enumMembers(rule, 'NotifDest');
+    expect(members.length, greaterThanOrEqualTo(7),
+        reason: 'انحلَّ استخراجُ أعضاءِ التعداد — فالمقارنةُ بلا موضوع');
+
+    final arms = _enumSwitchArms(rule, 'String? get route', 'NotifDest');
+    expect(arms.keys.toSet(), members,
+        reason: 'المُبدِّلُ لا يُغطّي التعدادَ — ولو كان فيه رَماءٌ شاملٌ '
+            'لَرَمى الاستخراجُ: الشموليّةُ هي ما يَجعلُ عضواً جديداً خطأَ '
+            'ترجمةٍ لا وجهةً صامتة');
+
+    final routes = <String, String>{};
+    final silent = <String>{};
+    arms.forEach((kind, expr) {
+      if (expr == 'null') {
+        silent.add(kind);
+        return;
+      }
+      final m = RegExp(r"^'([^']*)'$").firstMatch(expr);
+      expect(m, isNotNull,
+          reason: 'رَماءُ $kind ليس نصّاً حرفيّاً («$expr») — فالفحصُ لا '
+              'يَستطيعُ مُقابلتَه بـrouter.dart');
+      routes[kind] = m!.group(1)!;
+    });
+    expect(routes.length, greaterThanOrEqualTo(5),
+        reason: 'انحلَّ استخراجُ المسارات — حارسٌ أخضرُ أجوف');
+
+    final r = stripComments(File('lib/router.dart').readAsStringSync());
+    final declared = RegExp(r"path:\s*'([^']*)'")
+        .allMatches(r)
+        .map((m) => m.group(1)!)
+        .toSet();
+    expect(declared.length, greaterThanOrEqualTo(10),
+        reason: 'انحلَّ استخراجُ مساراتِ go_router');
+
+    routes.forEach((kind, route) {
+      final dollar = route.indexOf(r'$');
+      if (dollar < 0) {
+        expect(declared, contains(route),
+            reason: 'القاعدةُ تُعيدُ $route ($kind) ولا يَعرفُه go_router — '
+                'نقرٌ بلا نقل');
+        return;
+      }
+      // مسارٌ بمُعامَل: البادئةُ الساكنةُ ثمّ مقطعُ `:param` — فالمُقابَلةُ
+      // بالشكلِ لا بالنصّ، وإلّا لَقُرئَ `/track/$id` غيرَ مُعلَنٍ أبداً.
+      final prefix = route.substring(0, dollar);
+      expect(prefix.endsWith('/'), isTrue,
+          reason: '$kind: الاستقراءُ في منتصفِ مقطعٍ («$route») — '
+              'لا يُقابَلُ بمسارٍ مُعامَلٍ');
+      final shape = RegExp('^${RegExp.escape(prefix)}:[A-Za-z_][A-Za-z0-9_]*\$');
+      expect(declared.any(shape.hasMatch), isTrue,
+          reason: 'القاعدةُ تُعيدُ $route ($kind) ولا مسارَ مُعامَلٍ بشكلِ '
+              '«$prefix:param» في go_router — نقرٌ بلا نقل');
+    });
+
+    // ومجموعةُ ما لا مسارَ له كاملةً، لكلٍّ سببُه: الصيانةُ أرشيفٌ إداريٌّ
+    // (القواعدُ تَمنعُ العميلةَ من قراءةِ `maintenance_requests`)، و`none`
+    // هي «يَبقى في مكانِه». فعضوٌ ثالثٌ يَسقطُ إلى `null` يُراجَعُ بوعي.
+    expect(silent, {'maintenance', 'none'},
+        reason: 'وجهةٌ بلا مسارٍ لم تُعلَّلْ — أو عُلّةٌ بائتةٌ بقيت');
+
+    // وشاهدا التعليل: المسارانِ اللذانِ أُضيفا للقاعدةِ يَبنيانِ شاشتَيهما.
     expect(r.contains('ZyiarahContractsListScreen('), isTrue);
     expect(r.contains('ZyiarahSupportScreen('), isTrue);
   });
@@ -361,5 +520,105 @@ void main() {
     await t.pump();
     expect(routes, ['/contracts', '/support'],
         reason: 'النقرُ على الشاشةِ الحقيقيّةِ لم يَنقُلْ إلى الوجهتَين');
+  });
+  // ── (١١) وكلُّ موردٍ يُنتجُه نقرُ FCM له فرعٌ في `_handleUri` ───────────
+  //
+  // النصفُ الثاني من العطلِ نفسِه، من الجهةِ الأخرى: `handleNotificationTap`
+  // يُحوّلُ الوجهةَ إلى **اسمِ مورد** ثمّ يَبني `zyiarah://app/<مورد>/<id>`
+  // ويُسلّمُه إلى `_handleUri` — ولا شيءَ كان يُقابِلُ المجموعتَين. وهذا
+  // بعينُه ما وقعَ من قبل: حقلُ `deepLink` كان يَحملُ
+  // `zyiarah://app/contracts` فيَرفُضُه `_handleUri` مرّتَين (بلا معرّفٍ،
+  // وبلا فرعٍ لذلك المورد) — رابطٌ يُبنى ويُرفَضُ بصمت.
+  //
+  // المجموعتانِ متّفقتانِ اليومَ، فهذا سدُّ ثغرةِ حارسٍ لا إصلاحُ عطل.
+  test('(١١) مواردُ نقرِ FCM = فروعُ _handleUri', () {
+    final svc =
+        stripComments(File('lib/services/deep_link_service.dart').readAsStringSync());
+    final members = _enumMembers(
+        stripComments(File('lib/utils/notification_target.dart').readAsStringSync()),
+        'NotifDest');
+    final arms =
+        _enumSwitchArms(svc, 'final String? resource = switch', 'NotifDest');
+    expect(arms.keys.toSet(), members,
+        reason: 'مُبدِّلُ الموردِ لا يُغطّي التعدادَ — ووجهةٌ جديدةٌ بلا '
+            'رَماءٍ تَسقطُ صامتةً لو كان فيه رَماءٌ شامل');
+
+    final produced = <String>{};
+    final silent = <String>{};
+    arms.forEach((kind, expr) {
+      if (expr == 'null') {
+        silent.add(kind);
+        return;
+      }
+      final m = RegExp(r"^'([^']*)'$").firstMatch(expr);
+      expect(m, isNotNull, reason: 'رَماءُ $kind ليس نصّاً حرفيّاً: $expr');
+      produced.add(m!.group(1)!);
+    });
+    expect(produced.length, greaterThanOrEqualTo(4),
+        reason: 'انحلَّ استخراجُ الموارد — حارسٌ أخضرُ أجوف');
+
+    final handled = RegExp(r"resource == '([^']*)'")
+        .allMatches(svc)
+        .map((m) => m.group(1)!)
+        .toSet();
+    expect(handled.length, greaterThanOrEqualTo(4),
+        reason: 'انحلَّ استخراجُ فروعِ `_handleUri`');
+
+    // الاتّجاهانِ معاً: موردٌ يُبنى بلا فرعٍ = رابطٌ يُرفَضُ بصمت، وفرعٌ لا
+    // يُنتجُه أحدٌ = شفرةٌ ميّتةٌ أو وجهةُ رابطٍ خارجيٍّ — وكلاهما يُراجَع.
+    expect(produced, handled,
+        reason: 'افترقت مجموعةُ الموارِدِ المبنيّةِ عن مجموعةِ الفروع');
+
+    // ومجموعةُ ما لا موردَ له كاملةً: `orders` و`offers` قائمتانِ بلا
+    // معرّفٍ (لا شاشةَ تُفتَحُ بمعرّف)، و`none` لا وجهةَ لها أصلاً.
+    expect(silent, {'orders', 'offers', 'none'},
+        reason: 'وجهةٌ بلا موردٍ لم تُعلَّلْ — أو عُلّةٌ بائتةٌ بقيت');
+  });
+
+  // ── (١٢) والكاشفُ يُختبَرُ كالشفرة ─────────────────────────────────────
+  //
+  // المصدرُ بعدَ الإصلاحِ نظيفٌ، فنجاحُ (٦) و(١١) وحدَه لا يُبرهِنُ أنّ
+  // المُستخرِجَ يَرى رَماءً أصلاً.
+  test('(١٢) المُستخرِجُ يَرى الأرماءَ ولا يَرى تعليقاً ولا يَقطعُ تعبيراً', () {
+    const real = '''
+enum D { a, b }
+String? get route => switch (kind) {
+      D.a => '/x/\$id',
+      // D.b => '/معلّق',
+      D.b => null,
+    };
+''';
+    final stripped = stripComments(real);
+    expect(_enumMembers(stripped, 'D'), {'a', 'b'});
+    expect(_enumSwitchArms(stripped, 'String? get route', 'D'),
+        {'a': "'/x/\$id'", 'b': 'null'},
+        reason: 'إمّا لم يُرَ رَماءٌ، أو قُرئَ التعليقُ رَماءً');
+
+    // فاصلةٌ داخلَ تعبيرٍ لا تَقطعُ الرَّماءَ نصفَين.
+    const nested = '''
+X? get r => switch (k) {
+      D.a => Y(D.a, id: z),
+      D.b => null,
+    };
+''';
+    expect(_enumSwitchArms(stripComments(nested), 'X? get r', 'D')['a'],
+        'Y(D.a, id: z)');
+
+    // ورَماءٌ شاملٌ يُسقِطُ الاستخراجَ بدلَ أن يُبتلَع — وهو ما يُبقي
+    // شموليّةَ المُبدِّلِ حارساً عند الترجمة.
+    const wild = '''
+X? get r => switch (k) {
+      D.a => 1,
+      _ => null,
+    };
+''';
+    expect(() => _enumSwitchArms(stripComments(wild), 'X? get r', 'D'),
+        throwsStateError);
+
+    // ومِرساةٌ غائبةٌ أو أقواسٌ غيرُ مُوازَنةٍ تَرمي، فلا تُقرأُ «نظيفة».
+    expect(() => _enumSwitchArms(stripped, 'لا وجودَ لها', 'D'),
+        throwsStateError);
+    expect(() => _enumSwitchArms('X? get r => switch (k) { D.a => 1,', 'X? get r', 'D'),
+        throwsStateError);
   });
 }
