@@ -50,7 +50,18 @@ class NotificationItem {
         t.contains('contract')) {
       return NotificationCategory.payments;
     }
-    if (t.contains('order') || t.contains('driver') || t.contains('visit')) {
+    // `appointment` من المفردات — و**تذكيرُ الموعدِ يُطلَقُ مرّتَين لكلِّ
+    // طلبٍ مدفوعٍ بلا شرطٍ آخر** (٢٤س ثمّ ساعتان) ومعه تغييرُ الموعد،
+    // وثلاثتُها `queuePush(client_id, …, {orderId})` — فالسجلُّ يَحملُ معرّفَ
+    // مستندِ الطلبِ في `relatedId`. وكانت تَسقطُ على `other`، أي
+    // `NotifDest.none`: **لا مسارَ ولا زرَّ إجراءٍ على البطاقة**، ورقاقةُ
+    // «أخرى» بدلَ «الطلبات والميدان» — بينما نقرُ إشعارِ FCM لِلإشعارِ نفسِه
+    // يَفتحُ الطلبَ صحيحاً عبرَ `notifTargetFromData({'orderId': …})`:
+    // سطحانِ للإشعارِ الواحدِ بجوابَين.
+    if (t.contains('order') ||
+        t.contains('appointment') ||
+        t.contains('driver') ||
+        t.contains('visit')) {
       return NotificationCategory.orders;
     }
     return NotificationCategory.other;
