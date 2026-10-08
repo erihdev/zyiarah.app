@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:zyiarah/utils/booking_fields.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -344,16 +345,10 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
             updatePayload['scheduled_at'] = ts;
             // (#7/#22) حقول الحجز المشتقة يقرؤها عدّ السعة والتذكيرات — تركُها
             // على اليوم القديم كان يستهلك سعة يومٍ لم يعد للطلب، ويُذكّر بموعدٍ
-            // مضى. نعيد اشتقاقها محلياً (جهاز الأدمن بتوقيت الرياض) ونصفّر
-            // أعلام التذكير ليُعاد إرسالها للموعد الجديد — كما يفعل الخادم.
-            final d = _editedSchedule!;
-            updatePayload['booking_date'] =
-                '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-            updatePayload['booking_time_slot'] =
-                '${d.hour.toString().padLeft(2, '0')}:00';
-            updatePayload['reminder_sent'] = false;
-            updatePayload['client_reminder_24h_sent'] = false;
-            updatePayload['client_reminder_soon_sent'] = false;
+            // مضى. القاعدة في `utils/booking_fields.dart` (كانت إنلاين هنا
+            // وحدها، ولوحة الويب لا تكتبها إطلاقاً) — ساعة الحائط التي اختارها
+            // الأدمن، وهي ما يفهمه `parseKsaIso` خادمياً من `scheduledIso`.
+            updatePayload.addAll(rescheduleDerivedFields(_editedSchedule!));
           }
           // **لا يُكتب سائقٌ من هنا أبداً.** كان هذا الفرع يكتب
           // driver_id/driver_name/driver_phone/assigned_at مباشرةً لكلّ حالةٍ لا

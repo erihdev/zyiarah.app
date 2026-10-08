@@ -4244,6 +4244,17 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
       service_date: Timestamp.fromDate(startDateTime),
       booking_date: bookingDate,
       booking_time_slot: timeSlot,
+      // **تصفيرُ أعلامِ التذكير** كما يَفعلُ `rescheduleAssignedOrder`: هذا
+      // النداءُ يَكتبُ موعداً جديداً، و`remindClientsUpcomingAppointments`
+      // يَتخطّى ما عَلَمُه مرفوع. و`realAppointment` فيه هو
+      // `is_paid === true || driverAssigned` — فطلبٌ **مدفوعٌ بلا سائق**
+      // يُذكَّرُ عنه ويُرفَعُ علَمُه قبلَ أيِّ إسناد، فاعتمادٌ يُحرّكُ الموعدَ
+      // بلا تصفيرٍ كان يَعني **لا تذكيرَ للموعدِ الجديدِ أبداً**.
+      // (`reminder_sent` تذكيرُ السائقِ: لم يَكُنْ له سائقٌ فلا يَرتفعُ، ويُصفَّرُ
+      // اتّساقاً مع القاعدةِ الواحدة.)
+      reminder_sent: false,
+      client_reminder_24h_sent: false,
+      client_reminder_soon_sent: false,
     });
   });
 
