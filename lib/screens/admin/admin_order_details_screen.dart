@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:zyiarah/utils/ksa_instant.dart';
 import 'package:zyiarah/utils/booking_fields.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -356,7 +357,10 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
           // تعديل الموعد يُطبَّق بصرف النظر عن السائق (كان محبوساً بشرطه).
           final Map<String, dynamic> updatePayload = {'status': _currentStatus};
           if (scheduleChanged) {
-            final ts = Timestamp.fromDate(_editedSchedule!);
+            // ساعةُ الحائطِ التي اختارَها الأدمنُ تُقرأُ **رياضاً**، كما
+            // يَقرأُ `parseKsaIso` الـ`scheduledIso` في الفرعِ الخادميِّ
+            // أعلاه — فالفرعانِ لم يَعودا يَفترقانِ على جهازٍ خارجَ +03.
+            final ts = Timestamp.fromDate(ksaInstantOf(_editedSchedule!));
             updatePayload['service_date'] = ts;
             updatePayload['scheduled_at'] = ts;
             // (#7/#22) حقول الحجز المشتقة يقرؤها عدّ السعة والتذكيرات — تركُها

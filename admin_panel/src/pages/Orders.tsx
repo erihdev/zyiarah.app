@@ -9,6 +9,7 @@ import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../services/firebase.ts';
 import { useNotification } from '../components/notificationContext.ts';
 import { cancelRefundNotice, cancelRefundAdminText } from '../utils/cancelRefundNotice.ts';
+import { ksaInstantOf } from '../utils/ksaInstant';
 import { rescheduleDerivedFields } from '../utils/bookingFields.ts';
 import ServiceMetaTable from '../components/ServiceMetaTable.tsx';
 // الملخّصُ انتقلَ إلى `utils/serviceMeta.ts` بجوارِ `metaRows`/`metaHeadline`:
@@ -244,7 +245,14 @@ export default function Orders() {
                     return;
                 }
                 const chosen = new Date(editScheduledAt);
-                const ts = Timestamp.fromDate(chosen);
+                // اللحظةُ **بتوقيتِ الرياضِ** لا بمنطقةِ المتصفّح —
+                // `utils/ksaInstant.ts`. والتعليقُ أعلاه يَشرحُ العطلَ بنصِّه
+                // لفرعِ النداءِ الخادميِّ، وكان هذا الفرعُ المباشرُ يَحملُه:
+                // `Timestamp.fromDate(new Date('…T14:00'))` يَأخذُ لحظةَ
+                // «14:00» **في منطقةِ المتصفّح**، فيُخزّنُ متصفّحٌ خارجَ
+                // السعوديّةِ لحظةً تُخالِفُ `booking_time_slot` المكتوبَ معها
+                // في الكتابةِ نفسِها.
+                const ts = Timestamp.fromDate(ksaInstantOf(chosen));
                 // الحقلان المشتقّان وتصفير أعلام التذكير — القاعدة في
                 // `utils/bookingFields.ts`. كانت هذه الكتابة `service_date`/
                 // `scheduled_at` وحدهما: `capacity.js` يعدّ من `booking_date`

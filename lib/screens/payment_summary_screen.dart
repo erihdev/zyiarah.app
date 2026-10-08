@@ -11,6 +11,7 @@ import 'package:zyiarah/screens/checkout_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/services/order_service.dart';
+import 'package:zyiarah/utils/ksa_instant.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/utils/moyasar_util.dart';
 import 'package:zyiarah/utils/moyasar_error_text.dart';
@@ -1017,7 +1018,15 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       'payment_method': method,
       'created_at': FieldValue.serverTimestamp(),
       'hours_contracted': widget.hours ?? 4,
-      'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
+      // **لحظةٌ بتوقيتِ الرياضِ لا بمنطقةِ الجهاز** — `ksaInstantOf`.
+      // حقلا الحجزِ أدناه ساعةُ حائطٍ مستقلّةٌ عن المنطقةِ بقرارٍ قائم،
+      // وبيانات الدفعِ تُرسِلُ الموعدَ نصّاً ساذجاً يَقرؤه `parseKsaIso`
+      // رياضاً — فـ`Timestamp.fromDate(<محلّيّة>)` كانت التمثيلَ الثالثَ
+      // المخالفَ: جهازٌ خارجَ +03 يُخزّنُ لحظةً تُخالِفُ ساعتَه المعلَنةَ
+      // وتُخالِفُ ما يَبنيه الخادمُ لنفسِ الحجزِ على مسارِ Apple Pay.
+      'service_date': widget.serviceDate != null
+          ? Timestamp.fromDate(ksaInstantOf(widget.serviceDate!))
+          : null,
       'zone_name': widget.zoneName,
       'worker_count': widget.workerCount,
       'coupon_code': _appliedCoupon,

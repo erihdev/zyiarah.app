@@ -96,12 +96,33 @@ void main() {
   });
 
   group('orderAppointment', () {
-    test('service_date يتقدّم booking_date', () {
+    test('حقلا الحجزِ يَتقدّمانِ `service_date` — التسميةُ التي اختارَها البشر',
+        () {
+      // **كانت الأسبقيّةُ معكوسةً، وأُعيد توجيهُ هذا الفحصِ بوعيٍ لا إسكاتاً.**
+      // حقلا الحجزِ ساعةُ حائطٍ من مكوّناتِ ما اختارَه الإنسانُ، فمستقلّانِ عن
+      // منطقةِ الجهاز؛ و`service_date` لحظةٌ تُعرَضُ بمنطقةِ قارئها. فعلى
+      // جهازٍ خارجَ +03 كانت البطاقةُ تُظهرُ ساعةً لم تَختَرْها العميلةُ —
+      // وساعاتُ جدولِ المنطقةِ ساعاتُ الرياض.
       final sd = DateTime(2026, 7, 18, 6);
       expect(
           orderAppointment(
               serviceDate: sd, bookingDate: '2026-09-01', bookingTimeSlot: '10:00'),
-          sd);
+          DateTime(2026, 9, 1, 10));
+      // وطلبٌ كُتبَ داخلَ السعوديّةِ يَحملُ التمثيلَين متّفقَين: لا تغيُّر.
+      expect(
+          orderAppointment(
+              serviceDate: DateTime(2026, 7, 18, 6),
+              bookingDate: '2026-07-18',
+              bookingTimeSlot: '06:00'),
+          DateTime(2026, 7, 18, 6));
+    });
+
+    test('`service_date` احتياطٌ: بلا حقلَي حجزٍ، أو بتاريخٍ تالف', () {
+      final sd = DateTime(2026, 7, 18, 6);
+      // خدمةٌ لا تَكتبُ حقلَي الحجزِ (بلا موعدٍ مُجدوَل) — اللحظةُ هي ما يوجد.
+      expect(orderAppointment(serviceDate: sd), sd);
+      // وتاريخٌ تالفٌ لا يُخفي الشارةَ كلَّها متى وُجدت لحظةٌ سليمة.
+      expect(orderAppointment(serviceDate: sd, bookingDate: 'ليس تاريخاً'), sd);
     });
 
     test('booking_date + slot حين لا service_date', () {
