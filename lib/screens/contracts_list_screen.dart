@@ -9,6 +9,7 @@ import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/home_packages.dart';
 import 'package:zyiarah/utils/contract_health.dart';
+import 'package:zyiarah/utils/contract_visits.dart';
 import 'package:zyiarah/utils/contract_ref.dart';
 
 class ZyiarahContractsListScreen extends StatelessWidget {
@@ -192,7 +193,18 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      _buildQuickInfo(Icons.calendar_today_outlined, 'الزيارات المتبقية', '${data['planVisits'] ?? 0} زيارة'),
+                      // **الوسمُ يَتبعُ المصدر.** كان «الزيارات المتبقية»
+                      // فوقَ `planVisits` — أي **حجمُ الباقةِ** الذي لا
+                      // يَتغيّرُ أبداً — بينما الرصيدُ الحقيقيُّ
+                      // `visits_remaining` يَكتبُه الخادمُ عند التفعيلِ
+                      // ويَخصِمُ منه `settleVisitAccounting` كلَّ زيارةٍ
+                      // مكتملة. فعميلةٌ استهلكت تسعاً من اثنتَي عشرةَ
+                      // تَقرأُ هنا «١٢ زيارة» وتَقرأُ «٣ / ١٢» على بطاقةِ
+                      // الرئيسيّةِ: رقمانِ متناقضانِ عن رصيدِها في تطبيقٍ
+                      // واحد.
+                      _buildQuickInfo(Icons.calendar_today_outlined,
+                          contractVisitsView(data).label,
+                          contractVisitsView(data).text),
                       const SizedBox(width: 25),
                       _buildQuickInfo(Icons.payments_outlined, 'قيمة التعاقد', '${formatSarAny(data['planPrice'])} ر.س'),
                     ],
