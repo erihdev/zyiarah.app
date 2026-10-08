@@ -36,3 +36,14 @@ const Set<String> kActiveAssignedStatuses = {
   'on_the_way',
   'in_progress',
 };
+
+/// نفسُها قائمةً، لأنّ `whereIn` في Firestore **تَعدادٌ موجَبٌ لا بُدّ منه**
+/// (لا «ليس في هذه المجموعة»). فهي اشتقاقٌ لا نسخةٌ ثانية: حالةٌ تُضافُ إلى
+/// دورةِ الحياةِ تَبلغُ كلَّ استعلامٍ من تلقائها.
+///
+/// **سببُ وجودِها:** `DriverSchedule.activeStatuses` اشتقَّتها لنفسِها
+/// بتعليقٍ يَقولُ إنّ الاشتقاقَ هو ما يَمنعُ «سقوطَ مهمّةٍ عن هاتفِ السائقِ
+/// بصمتٍ» — ثمّ كتبَت لوحةُ السائقِ ولوحةُ العميلةِ الخمسةَ **إنلاين**،
+/// فكانت شاشةُ مهامِّه تَلتقطُ حالةً جديدةً ولوحتُه لا.
+final List<String> kActiveAssignedStatusList =
+    kActiveAssignedStatuses.toList(growable: false);

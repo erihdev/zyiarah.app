@@ -89,8 +89,7 @@ class DriverSchedule {
   /// تَبقى **قائمةً** بقصد: يَخدمُها `whereIn` في Firestore، ولا سبيلَ هناك
   /// إلى «ليس في هذه المجموعة» — فالقاعدةُ السالبةُ (`orderIsOpen`) لا تَصلح
   /// هنا، والتعدادُ الموجبُ هو الصحيح.
-  static final List<String> activeStatuses =
-      kActiveAssignedStatuses.toList(growable: false);
+  static final List<String> activeStatuses = kActiveAssignedStatusList;
 
   /// «ليس حيّاً» قاعدةً لا تعداداً: كان التعدادُ `{completed, cancelled}`،
   /// فمهمّةٌ تَحملُ `driver_id` السائقِ بحالةٍ خارجَ القائمتَين — وأظهرُها

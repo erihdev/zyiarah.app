@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:zyiarah/models/driver_schedule.dart';
 import 'package:zyiarah/utils/order_activity.dart';
+import 'package:zyiarah/utils/order_lifecycle.dart';
 
 /// يُجرّد التعليقاتَ سطراً كاملاً ثمّ يَلتقطُ النصوصَ داخل مجموعةٍ مُسمّاة.
 Set<String> _dartSet(String src, String name) {
@@ -379,4 +381,81 @@ void main() {
       }
     });
   });
+  // ═══ وحالاتُ النشاطِ كذلك: `whereIn` تَعدادٌ موجَبٌ لا بُدّ منه ═══
+  //
+  // `DriverSchedule.activeStatuses` تَشتقُّ القائمةَ من
+  // `kActiveAssignedStatuses` بتعليقٍ يَقولُ سببَها: حالةٌ تُضافُ إلى دورةِ
+  // الحياةِ غداً لا يَجوزُ أن تُسقِطَ مهمّةً عن هاتفِ السائقِ بصمت. ثمّ
+  // كتبَت لوحةُ السائقِ ولوحةُ العميلةِ الأعضاءَ الخمسةَ **حرفيّاً** في
+  // `whereIn` — فشاشةُ مهامِّه تَلتقطُ الحالةَ الجديدةَ ولوحتُه لا.
+  //
+  // وهذا **ليس** من بابِ «نسخةٌ صحيحةٌ في نطاقِها فلا تُلمَس» الذي رُدَّ به
+  // توحيدُ المجموعةِ المنتهيةِ أعلاه: هناك لا اشتقاقَ قائمٌ ولا دليلَ
+  // انحراف، وهنا الاشتقاقُ موجودٌ ومُعلَّلٌ ومكتوبٌ لهذا الخطرِ نفسِه.
+  group('حالاتُ النشاطِ تُشتَقُّ مرّةً — ولا تعدادَ حرفيّاً لها', () {
+    String bare(String p) => File(p)
+        .readAsStringSync()
+        .split('\n')
+        .map((l) {
+          final t = l.trimLeft();
+          return (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*'))
+              ? ''
+              : l;
+        })
+        .join('\n');
+
+    test('(ك) القائمةُ مُشتَقّةٌ من المجموعةِ لا مكتوبةٌ بيد', () {
+      final String src = bare('lib/utils/order_lifecycle.dart');
+      expect(
+          RegExp(r'kActiveAssignedStatusList\s*=\s*\n?\s*'
+                  r'kActiveAssignedStatuses\.toList\(')
+              .hasMatch(src),
+          isTrue,
+          reason: 'القائمةُ لم تَعُدْ مُشتَقّةً — فحالةٌ تُضافُ للمجموعةِ لا '
+              'تَبلغُ أيَّ استعلام');
+      // والقِيمةُ هي القيمةُ: خمسةُ أعضاءَ بعينِهم.
+      expect(kActiveAssignedStatusList.toSet(), kActiveAssignedStatuses);
+    });
+
+    test('(ل) والمُنادُون الثلاثةُ يُنادُونها', () {
+      for (final p in const [
+        'lib/models/driver_schedule.dart',
+        'lib/screens/driver_dashboard.dart',
+        'lib/screens/client_dashboard.dart',
+      ]) {
+        expect(bare(p).contains('kActiveAssignedStatusList'), isTrue,
+            reason: '$p لا يُنادي القائمةَ المشترَكة');
+      }
+      // و`DriverSchedule.activeStatuses` تَبقى **قائمةً موجَبةً** — حارسُها
+      // يَشدُّ ذلك لأنّ `whereIn` لا تَعرفُ «ليس في هذه المجموعة».
+      expect(DriverSchedule.activeStatuses.toSet(), kActiveAssignedStatuses);
+    });
+
+    test('(م) ولا تعدادَ حرفيّاً لأعضاءِ المجموعةِ في `lib/`', () {
+      // مجموعةٌ حرفيّةٌ أو قائمةٌ تَحوي الأعضاءَ الخمسةَ كلَّها داخلَ قوسٍ
+      // واحدٍ — فالموضعُ الواحدُ يُعلِنُها بـ`{}` فلا يُطابَق.
+      final List<String> offenders = [];
+      int scanned = 0;
+      for (final f in Directory('lib')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.dart'))) {
+        scanned++;
+        final String src = bare(f.path);
+        for (final m in RegExp(r'\[[^\[\]]*\]', dotAll: true).allMatches(src)) {
+          final String inner = m.group(0)!;
+          if (kActiveAssignedStatuses
+              .every((s) => inner.contains("'$s'"))) {
+            offenders.add(f.path.replaceAll('\\', '/'));
+          }
+        }
+      }
+      expect(scanned, greaterThanOrEqualTo(100),
+          reason: 'المسحُ انحلّ ($scanned ملفّاً)');
+      expect(offenders, isEmpty,
+          reason: 'تعدادٌ حرفيٌّ لحالاتِ النشاطِ — استعمِلْ '
+              '`kActiveAssignedStatusList`: ${offenders.join(", ")}');
+    });
+  });
+
 }
