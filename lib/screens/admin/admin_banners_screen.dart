@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:zyiarah/utils/upload_content_type.dart';
+import 'package:zyiarah/utils/banner_destination.dart';
 
 class AdminBannersScreen extends StatefulWidget {
   const AdminBannersScreen({super.key});
@@ -92,23 +93,31 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
     // و«مخفيّاً» في الصفِّ نفسِه — تناقضٌ داخلَ شاشةٍ واحدة.
     bool isActive = data?['isActive'] == true;
     int rank = data?['rank'] ?? 0;
-    String selectedRoute = data?['routeType'] ?? 'whatsapp';
+    String selectedRoute = data?['routeType'] ?? kBannerExternalRoute;
     // مكان الظهور: 'main' = البانر الرئيسي على الرئيسية، 'offers' = قسم العروض.
     // الغياب = 'main' كي تبقى كل البانرات القائمة على الرئيسية كما هي.
     String placement = data?['placement'] ?? 'main';
     bool isSaving = false;
     bool isUploading = false;
 
+    // **القائمة مُشتقّة من الوجهات التي يقرؤها البنر فعلاً**
+    // (`kBannerTargetOptions`) لا مكتوبة بيد: كانت ستّاً والسطحان يقرآن
+    // سبعاً — فخدمة المكيفات مقروءة في الطرفين ولا سبيل للأدمن إليها.
     final List<Map<String, String>> routingOptions = [
-      {'value': 'whatsapp', 'label': 'رابط واتساب (خارجي)'},
-      {'value': '/hourly_cleaning', 'label': 'خدمة التنظيف المنزلي'},
-      {'value': '/sofa_cleaning', 'label': 'خدمة تنظيف الكنب'},
-      {'value': '/rug_cleaning', 'label': 'خدمة تنظيف الزل'},
-      {'value': '/store', 'label': 'المتجر'},
-      {'value': '/subscriptions', 'label': 'باقات الاشتراك'},
-      {'value': '/support', 'label': 'الدعم الفني'},
-      {'value': 'none', 'label': 'بدون توجيه (صورة فقط)'},
+      {'value': kBannerExternalRoute, 'label': 'رابط واتساب (خارجي)'},
+      for (final o in kBannerTargetOptions.values)
+        {'value': o.route, 'label': o.label},
+      {'value': kBannerNoRoute, 'label': 'بدون توجيه (صورة فقط)'},
     ];
+    // مستند قائم يحمل قيمة قديمة (`/rug_cleaning`) أو قيمة لا خيار لها:
+    // بلا هذا يرمي DropdownButton («exactly one item with value») فيتعذّر
+    // تعديل البنر إطلاقاً.
+    if (!routingOptions.any((o) => o['value'] == selectedRoute)) {
+      final BannerServiceTarget? legacy = kBannerServiceRoutes[selectedRoute];
+      selectedRoute = legacy != null
+          ? kBannerTargetOptions[legacy]!.route
+          : kBannerNoRoute;
+    }
 
     showDialog(
       context: context,
@@ -218,7 +227,20 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                     ),
                     if (selectedRoute == 'whatsapp') ...[
                       const SizedBox(height: 15),
-                      TextField(controller: actionUrlCtrl, decoration: const InputDecoration(labelText: 'رابط الواتساب (اختياري)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.link))),
+                      // التسمية تتبع الوجهة: الحقل **مطلوب** حين تكون الوجهة
+                      // رابطاً خارجياً (هو الوجهة كلها)، وغير مستخدم مع وجهة
+                      // داخلية. «(اختياري)» ثابتةً كانت تدعو إلى نشر بنر
+                      // ضغطته لا تفعل شيئاً.
+                      TextField(
+                        controller: actionUrlCtrl,
+                        decoration: InputDecoration(
+                          labelText: selectedRoute == kBannerExternalRoute
+                              ? 'الرابط الخارجي (مطلوب) — مع https://'
+                              : 'الرابط الخارجي (غير مستخدم مع وجهة داخلية)',
+                          border: const OutlineInputBorder(),
+                          prefixIcon: const Icon(Icons.link),
+                        ),
+                      ),
                     ],
                     const SizedBox(height: 15),
                     // (تحكّم المالك) مكان ظهور البانر: الرئيسي أعلى الرئيسية أم قسم العروض.
@@ -248,6 +270,19 @@ class _AdminBannersScreenState extends State<AdminBannersScreen> {
                   onPressed: isSaving || isUploading ? null : () async {
                     if (imageUrl == null) {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى اختيار صورة أولاً")));
+                      return;
+                    }
+                    // **وجهة «رابط خارجي» بلا رابط تُنشر بنراً ميّتاً.** كان
+                    // التحقّق على الصورة وحدها، والحقل مُسمّى «اختياري» —
+                    // فبنر واتساب بلا رابط يُحفظ بـ«حفظ ونشر» ثم تُقابَل
+                    // ضغطته بـ«هذا الرابط غير متاح حالياً» (وكانت صامتة
+                    // تماماً في قسم العروض). ونفس قاعدة القارئ هنا:
+                    // bannerExternalUrlIsUsable — فلا يُقبل رابط بلا مخطَّط.
+                    if (selectedRoute == kBannerExternalRoute &&
+                        !bannerExternalUrlIsUsable(actionUrlCtrl.text)) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text(
+                              "وجهة البنر رابط خارجي — يرجى إدخال رابط كامل يبدأ بـ https://، أو اختيار «بدون توجيه (صورة فقط)»")));
                       return;
                     }
                     setDialogState(() => isSaving = true);

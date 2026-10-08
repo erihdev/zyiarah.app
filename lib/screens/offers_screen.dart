@@ -18,6 +18,7 @@ import 'package:zyiarah/theme/app_theme.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/stream_combine.dart';
 import 'package:zyiarah/utils/error_report.dart';
+import 'package:zyiarah/utils/banner_destination.dart';
 
 /// قسم «العروض».
 ///
@@ -143,45 +144,61 @@ class _ZyiarahOffersScreenState extends State<ZyiarahOffersScreen> {
     ).firstEventTimeout();
   }
 
+  /// **التصنيفُ في `lib/utils/banner_destination.dart`، والفالُّ لم يَكن
+  /// هنا أصلاً.** كان هذا تعداداً لِـ`routeType` بلا `default`، فوجهةٌ لا
+  /// يُطابِقُها فرعٌ تُبقي `dest` على `null` فتَمُرُّ الضغطةُ بلا نقلٍ ولا
+  /// كلمة — بينما بنرُ اللوحةِ الرئيسيّةِ على المستندِ **نفسِه** يَقولُ
+  /// «غير متاح». والحالةُ قابلةُ الوصول: «رابط واتساب» بحقلِ رابطٍ فارغٍ
+  /// يُنشَرُ من المُحرِّرِ (كان الحقلُ «اختياري» ولا يُتحقَّقُ منه).
   Future<void> _handleTap(BuildContext context, Map<String, dynamic> data) async {
-    final String routeType = data['routeType'] ?? 'none';
-    final String actionUrl = data['actionUrl'] ?? '';
-    if (routeType == 'whatsapp' && actionUrl.isNotEmpty) {
-      final uri = Uri.parse(actionUrl);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('تعذّر فتح الرابط')));
-      }
-      return;
+    final BannerTap tap = bannerTapOf(data);
+    switch (tap.kind) {
+      case BannerTapKind.externalUrl:
+        await _openBannerUrl(context, tap.url);
+      case BannerTapKind.service:
+        if (!context.mounted) return;
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => _bannerScreen(tap.service!)));
+      case BannerTapKind.silent:
+        return;
+      case BannerTapKind.unavailable:
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text(kBannerUnavailableText)));
     }
-    if (!context.mounted) return;
-    Widget? dest;
-    switch (routeType) {
-      case '/hourly_cleaning':
-        dest = const HourlyCleaningDetailsScreen(serviceName: 'تنظيف منزلي');
-        break;
-      case '/store':
-        dest = const ZyiarahStoreScreen();
-        break;
-      case '/support':
-        dest = const ZyiarahSupportScreen();
-        break;
-      case '/sofa_cleaning':
-      case '/rug_cleaning':
-        dest = const SofaRugCleaningDetailsScreen(serviceName: 'تنظيف الكنب والزل');
-        break;
-      case '/ac':
-      case '/ac_service':
-        dest = const AcServiceDetailsScreen();
-        break;
-      case '/subscriptions':
-        dest = const ZyiarahSubscriptionPlansScreen();
-        break;
+  }
+
+  /// مُبدِّلٌ **شامل** على التعداد: وجهةٌ تُضافُ بلا شاشةٍ هنا خطأُ ترجمةٍ
+  /// لا سقوطٌ صامت.
+  Widget _bannerScreen(BannerServiceTarget target) => switch (target) {
+        BannerServiceTarget.hourlyCleaning =>
+          const HourlyCleaningDetailsScreen(serviceName: 'تنظيف منزلي'),
+        BannerServiceTarget.sofaRug =>
+          const SofaRugCleaningDetailsScreen(serviceName: 'تنظيف الكنب والزل'),
+        BannerServiceTarget.acService => const AcServiceDetailsScreen(),
+        BannerServiceTarget.subscriptions =>
+          const ZyiarahSubscriptionPlansScreen(),
+        BannerServiceTarget.store => const ZyiarahStoreScreen(),
+        BannerServiceTarget.support => const ZyiarahSupportScreen(),
+      };
+
+  /// بلا بوّابةِ `canLaunchUrl`: تُعيدُ `false` **زائفاً** على iOS لمُخطَّطٍ
+  /// غيرِ مُعلَنٍ في `LSApplicationQueriesSchemes` (وهو غيرُ موجودٍ في
+  /// `Info.plist`)، فرابطُ `whatsapp://` صالحٌ كان يُقابَلُ بـ«تعذّر فتح
+  /// الرابط». نفسُ إصلاحِ `driver_dashboard._openExternalUrl`: نَعتمدُ على
+  /// عائدِ `launchUrl` نفسِه. و`Uri.parse` داخلَ `try` لأنّ النصَّ يَكتبُه
+  /// الأدمنُ حرّاً.
+  Future<void> _openBannerUrl(BuildContext context, String url) async {
+    bool ok = false;
+    try {
+      ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint('offers banner url: $e');
+      ok = false;
     }
-    if (dest != null) {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => dest!));
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('تعذّر فتح الرابط')));
     }
   }
 

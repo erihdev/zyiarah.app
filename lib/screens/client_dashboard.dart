@@ -8,6 +8,7 @@ import 'package:zyiarah/screens/hourly_details_screen.dart';
 import 'package:zyiarah/screens/support_screen.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:zyiarah/utils/banner_destination.dart';
 import 'package:zyiarah/utils/zyiarah_strings.dart';
 import 'package:zyiarah/services/popup_service.dart';
 import 'package:zyiarah/services/app_update_service.dart';
@@ -657,38 +658,12 @@ class _ClientDashboardState extends State<ClientDashboard> {
             itemBuilder: (context, index) {
               final data = banners[index].data() as Map<String, dynamic>;
               final imageUrl = data['imageUrl'] ?? '';
-              final String routeType = data['routeType'] ?? 'none';
-              final String actionUrl = data['actionUrl'] ?? '';
-              
+
               return GestureDetector(
-                onTap: () async {
-                  if (routeType == 'whatsapp' && actionUrl.isNotEmpty) {
-                    final uri = Uri.parse(actionUrl);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri);
-                    } else if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('تعذّر فتح الرابط')),
-                      );
-                    }
-                  } else if (routeType == '/hourly_cleaning') {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const HourlyCleaningDetailsScreen(serviceName: "تنظيف منزلي")));
-                  } else if (routeType == '/store') {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahStoreScreen()));
-                  } else if (routeType == '/support') {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahSupportScreen()));
-                  } else if (routeType == '/sofa_cleaning' || routeType == '/rug_cleaning') {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SofaRugCleaningDetailsScreen(serviceName: "تنظيف الكنب والزل")));
-                  } else if (routeType == '/ac' || routeType == '/ac_service') {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const AcServiceDetailsScreen()));
-                  } else if (routeType == '/subscriptions') {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahSubscriptionPlansScreen()));
-                  } else if (routeType != 'none' && routeType.isNotEmpty && context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('هذا الرابط غير متاح حالياً')),
-                    );
-                  }
-                },
+                // التصنيفُ في `lib/utils/banner_destination.dart`: كان مكتوباً
+                // هنا وفي `offers_screen` على المستندِ نفسِه، و**الفالُّ
+                // وحدَه افترق** (هذا السطحُ يَقولُ «غير متاح» وذاك يَصمُت).
+                onTap: () => _handleBannerTap(context, data),
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 5),
                   decoration: BoxDecoration(
@@ -724,6 +699,60 @@ class _ClientDashboardState extends State<ClientDashboard> {
         );
       },
     );
+  }
+
+  /// **ضغطةُ البنر: التصنيفُ مشترَكٌ، والتحويلُ إلى شاشةٍ شاملٌ.**
+  ///
+  /// التصنيفُ في `lib/utils/banner_destination.dart` — لأنّه كان مكتوباً
+  /// في سطحَين على المستندِ نفسِه وافترقَ فالُّهما.
+  Future<void> _handleBannerTap(
+      BuildContext context, Map<String, dynamic> data) async {
+    final BannerTap tap = bannerTapOf(data);
+    switch (tap.kind) {
+      case BannerTapKind.externalUrl:
+        await _openBannerUrl(context, tap.url);
+      case BannerTapKind.service:
+        if (!context.mounted) return;
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => _bannerScreen(tap.service!)));
+      case BannerTapKind.silent:
+        return;
+      case BannerTapKind.unavailable:
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text(kBannerUnavailableText)));
+    }
+  }
+
+  /// مُبدِّلٌ **شامل** على التعداد: وجهةٌ تُضافُ بلا شاشةٍ هنا خطأُ ترجمةٍ
+  /// لا سقوطٌ صامت.
+  Widget _bannerScreen(BannerServiceTarget target) => switch (target) {
+        BannerServiceTarget.hourlyCleaning =>
+          const HourlyCleaningDetailsScreen(serviceName: "تنظيف منزلي"),
+        BannerServiceTarget.sofaRug =>
+          const SofaRugCleaningDetailsScreen(serviceName: "تنظيف الكنب والزل"),
+        BannerServiceTarget.acService => const AcServiceDetailsScreen(),
+        BannerServiceTarget.subscriptions =>
+          const ZyiarahSubscriptionPlansScreen(),
+        BannerServiceTarget.store => const ZyiarahStoreScreen(),
+        BannerServiceTarget.support => const ZyiarahSupportScreen(),
+      };
+
+  /// بلا بوّابةِ `canLaunchUrl` (تُعيدُ `false` زائفاً على iOS لمُخطَّطٍ غيرِ
+  /// مُعلَنٍ في `LSApplicationQueriesSchemes`)، وبـ`externalApplication` —
+  /// كان النداءُ هنا بلا وضعٍ فيُفتَحُ رابطُ واتساب في متصفّحٍ داخليّ.
+  Future<void> _openBannerUrl(BuildContext context, String url) async {
+    bool ok = false;
+    try {
+      ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint('dashboard banner url: $e');
+      ok = false;
+    }
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذّر فتح الرابط')));
+    }
   }
 
   Widget _buildServicesGrid() {
