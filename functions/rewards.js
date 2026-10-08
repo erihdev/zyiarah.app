@@ -36,6 +36,25 @@
 
 const {FieldValue, Timestamp} = require("firebase-admin/firestore");
 
+// ═══ أرقامُ الإحالة — **وعدٌ يُعرَضُ للعميلةِ ودفعٌ يُنفَّذُ هنا** ═══
+//
+// كانا مكتوبَين بيدٍ في **ستّةِ** مواضعَ عبرَ لغتَين: الإيداعُ وصفُّ السجلِّ
+// وقيمةُ الكوبونِ ولاحقةُ رمزِه ووصفُه هنا، ونصّا بطاقةِ «حسابي» ورسالةِ
+// المشاركةِ في `profile_screen`. فتغييرُ المكافأةِ يَعني تعديلَ ستّةِ مواضعَ
+// معاً، وموضعٌ منسيٌّ يَجعلُ التطبيقَ **يَعِدُ برقمٍ لا يَدفعُه** — وهو شكلُ
+// قصّةِ الضريبةِ بعينِه (٢٧ موضعاً، ٥٪ ← ١٥٪، وموضعٌ واحدٌ يُنتجُ فواتيرَ
+// خاطئةً بصمت) واقعاً على **وعدٍ للمستخدمة** لا على فاتورة.
+//
+// والستّةُ متّفقةٌ اليومَ، فالتوحيدُ **وقائيٌّ** كشريحةِ `slots.js`.
+// والنظيرُ الدارتيُّ `lib/utils/referral_rewards.dart`، ومشدودٌ بهذَين
+// في `test/referral_rewards_test.dart` (كـ`KSA_OFFSET_MS` ونظيرِه).
+
+/** مكافأةُ المُحيلِ بالريال — تُودَعُ في محفظتِه عند أوّلِ طلبٍ تُتمّه المُحالة. */
+const REFERRAL_REWARD_SAR = 50;
+
+/** نسبةُ خصمِ المُحالةِ — قيمةُ كوبونِها، ولاحقةُ رمزِه. */
+const REFEREE_DISCOUNT_PERCENT = 10;
+
 /** علمُ الفشلِ لكلِّ مكافأة — المكنسةُ تَستعلمُه، والنجاحُ يَمحوه. */
 const PENDING_FLAGS = {
   qatrat: "qatrat_pending",
@@ -342,7 +361,6 @@ async function payReferralBonus(db, args, queuePush) {
     referralRef = q.docs[0].ref;
   }
 
-  const REFERRER_REWARD = 50;
   let payout = null;
   try {
     payout = await db.runTransaction(async (t) => {
@@ -353,7 +371,10 @@ async function payReferralBonus(db, args, queuePush) {
       const referralId = referralRef.id;
       const referrerWallet = db.collection("wallets").doc(referrerId);
       const bonusTx = referrerWallet.collection("transactions").doc(`refbonus_${referralId}`);
-      const couponCode = `REF${refereeUid.substring(0, 6).toUpperCase()}10`;
+      // اللاحقةُ **مشتقّةٌ** من النسبةِ لا مكتوبةً: رمزٌ يَقولُ ١٠ وقيمةٌ
+      // تُخالفُه يُربِكُ العميلةَ والدعمَ معاً.
+      const couponCode =
+        `REF${refereeUid.substring(0, 6).toUpperCase()}${REFEREE_DISCOUNT_PERCENT}`;
       const couponRef = db.collection("promo_codes").doc(couponCode);
 
       t.update(referralRef, {
@@ -363,11 +384,11 @@ async function payReferralBonus(db, args, queuePush) {
       });
       t.update(orderRef, {referral_processed: true});
       t.set(referrerWallet, {
-        balance: FieldValue.increment(REFERRER_REWARD),
+        balance: FieldValue.increment(REFERRAL_REWARD_SAR),
         last_updated: FieldValue.serverTimestamp(),
       }, {merge: true});
       t.create(bonusTx, {
-        amount: REFERRER_REWARD, points: 0, type: "referral_reward",
+        amount: REFERRAL_REWARD_SAR, points: 0, type: "referral_reward",
         description: "مكافأة إحالة صديق أتمّ أول طلب",
         order_id: orderId,
         created_at: FieldValue.serverTimestamp(),
@@ -378,13 +399,14 @@ async function payReferralBonus(db, args, queuePush) {
       t.set(couponRef, {
         code: couponCode,
         type: "percentage",
-        value: 10,
+        value: REFEREE_DISCOUNT_PERCENT,
         maxUses: 1,
         uses: 0,
         status: "active",
         expiry: Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000),
         target_user_id: refereeUid,
-        description: "خصم الإحالة 10% — مكافأة الانضمام",
+        description:
+          `خصم الإحالة ${REFEREE_DISCOUNT_PERCENT}% — مكافأة الانضمام`,
         created_at: FieldValue.serverTimestamp(),
       }, {merge: true});
 
@@ -407,7 +429,7 @@ async function payReferralBonus(db, args, queuePush) {
       await queuePush("ADMIN_BROADCAST",
           "تعذّر صرفُ مكافأةِ الإحالة ⚠️",
           `الطلب #${args.code || orderId} أتمّ أوّلَ طلبٍ لمُحالٍ، ولم تُصرَف ` +
-          `مكافأةُ الإحالة (${REFERRER_REWARD} ر.س للمُحيل + كوبونُ المُحالة) ` +
+          `مكافأةُ الإحالة (${REFERRAL_REWARD_SAR} ر.س للمُحيل + كوبونُ المُحالة) ` +
           `(${note}). المكنسة تُعيد المحاولة؛ إن تكرّر فالصرفُ يدويّ.`,
           "admin_order_alert",
           {orderId, refereeUid, referralFailed: true},
@@ -423,7 +445,7 @@ async function payReferralBonus(db, args, queuePush) {
       // وقائيٌّ: الثابتُ عددٌ صحيحٌ اليومَ فيُطبَعُ «50»، لكنّ اصطلاحَ
       // الخادمِ في رسائلِ العميلةِ خانتانِ دائماً (أربعةُ مواضعَ أخرى)،
       // فتغييرُ الثابتِ إلى كسرٍ يَومَاً لا يُنتجُ صيغةً خامسة.
-      `أُضيفت ${REFERRER_REWARD.toFixed(2)} ر.س لمحفظتك مكافأة لإحالة صديق ` +
+      `أُضيفت ${REFERRAL_REWARD_SAR.toFixed(2)} ر.س لمحفظتك مكافأة لإحالة صديق ` +
       "أتمّ أول طلب.",
       "referral_reward", {orderId: orderId});
   await queuePush(refereeUid, "🎉 كوبون الإحالة جاهز!",
@@ -544,6 +566,8 @@ async function aggregateRating(db, args, queuePush) {
 }
 
 module.exports = {
+  REFERRAL_REWARD_SAR,
+  REFEREE_DISCOUNT_PERCENT,
   aggregateRating,
   payReferralBonus,
   settleVisitAccounting,

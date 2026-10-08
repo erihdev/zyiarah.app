@@ -16,6 +16,8 @@ import 'package:zyiarah/screens/store_screen.dart';
 import 'package:zyiarah/services/zyiarah_wallet_service.dart';
 import 'package:zyiarah/services/zyiarah_referral_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:zyiarah/utils/home_packages.dart';
+import 'package:zyiarah/utils/referral_rewards.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/qatrat.dart';
 import 'package:zyiarah/utils/wallet_deletion_notice.dart';
@@ -1092,7 +1094,15 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                'أحِل صديقاً واحصل على 50 ر.س، وصديقك يحصل على خصم 10%',
+                // **وعدٌ ماليٌّ: الأرقامُ من `referral_rewards.dart` لا بيدٍ.**
+                // كان النصُّ «واحصل على 50 ر.س» و«خصم 10%» مكتوباً هنا وفي
+                // رسالةِ المشاركةِ أدناه وفي أربعةِ مواضعَ خادميّة، فتغييرُ
+                // المكافأةِ يُبقي الوعدَ على رقمٍ لا يُدفَع.
+                // و`formatSar` لا استقراءً خامّاً: قاعدةُ «كلُّ رقمٍ قبلَ
+                // ر.س مُنسَّق» — وحارسُها لا يَحُلُّ ثابتاً مُستورَداً، فلو
+                // صارَ `double` يوماً طُبعَ «50.0».
+                'أحِل صديقاً واحصل على ${formatSar(kReferralRewardSar.toDouble())} ر.س، '
+                'وصديقك يحصل على خصم $kRefereeDiscountPercent%',
                 style: GoogleFonts.tajawal(
                     fontSize: 11, color: Colors.grey.shade600, height: 1.4),
               ),
@@ -1174,7 +1184,8 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                       HapticFeedback.mediumImpact();
                       final message =
                           'سجّلوا في تطبيق زيارة للخدمات المنزلية باستخدام كودي '
-                          'وتحصلون على خصم 10% على أول خدمة تنظيف للمنزل! ✨ كودي: $_referralCode';
+                          'وتحصلون على خصم $kRefereeDiscountPercent% على أول '
+                          'خدمة تنظيف للمنزل! ✨ كودي: $_referralCode';
                       Clipboard.setData(ClipboardData(text: message));
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
