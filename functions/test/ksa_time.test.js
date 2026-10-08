@@ -252,4 +252,117 @@ t("(ج٦) capacity.js ما زال يَقرأ الحقلَ الذي أصلحنا�
       "السعةُ لم تعد تقرأ حقلَي الحجز — أعِد تقييمَ هذا الحارسِ كلِّه");
 });
 
+// ═══════════ (د) بدايةُ يومِ الرياض — حدُّ «لا موعدَ في الماضي» ═══════════
+
+t("(د١) خاصّيّةٌ: البدايةُ يومُ الرياضِ نفسُه عند منتصفِ ليلِه، على كلِّ ساعة",
+    () => {
+      for (let day = 1; day <= 31; day++) {
+        for (let h = 0; h < 24; h++) {
+          const ms = Date.UTC(2026, 0, day, h, 37, 11, 123);
+          const st = ksa.riyadhDayStartMs(ms);
+          // اليومُ نفسُه بتوقيتِ الرياض…
+          assert.strictEqual(ksa.riyadhLocalDate(st), ksa.riyadhLocalDate(ms),
+              `يومٌ مختلف عند ${new Date(ms).toISOString()}`);
+          // …وعند منتصفِ ليلِه بالضبط…
+          assert.strictEqual(ksa.riyadhLocalSlot(st), "00:00");
+          // …ولا تَتجاوزُه أبداً.
+          assert.ok(st <= ms, "البدايةُ بعدَ اللحظة");
+          assert.ok(ms - st < 24 * 60 * 60 * 1000, "أكثرُ من يومٍ كامل");
+        }
+      }
+    });
+
+t("(د٢) الساعاتُ الثلاثُ الأُولى بـUTC تنتمي لليومِ **السابق** بالرياض", () => {
+  // 2026-10-08T00:30Z = 03:30 بالرياضِ من اليومِ نفسِه، فالبدايةُ 07T21:00Z.
+  const ms = Date.UTC(2026, 9, 8, 0, 30);
+  assert.strictEqual(new Date(ksa.riyadhDayStartMs(ms)).toISOString(),
+      "2026-10-07T21:00:00.000Z");
+  // ولو قُرئت مكوّناتُ UTC لأعطت 08T00:00Z — وهو **بعدَ** بدايةِ يومِ الرياضِ
+  // بثلاثِ ساعات، فيُرفَضُ موعدٌ مشروعٌ من يومِ الرياضِ نفسِه.
+  const naive = Date.UTC(2026, 9, 8, 0, 0);
+  assert.ok(naive > ksa.riyadhDayStartMs(ms), "الصيغةُ الساذجةُ ليست أضعف");
+});
+
+t("(د٣) تَقبلُ Date وتردُّ null للفاسد — كأخواتِها", () => {
+  const ms = Date.UTC(2026, 5, 2, 9, 0);
+  assert.strictEqual(ksa.riyadhDayStartMs(new Date(ms)),
+      ksa.riyadhDayStartMs(ms));
+  for (const bad of [null, undefined, NaN, "x", {}, new Date("x")]) {
+    assert.strictEqual(ksa.riyadhDayStartMs(bad), null, `${String(bad)}`);
+  }
+  // وصفرٌ لحظةٌ صالحة (1970) لا غياب — `Number(null)` صفرٌ، وهو الفخُّ
+  // المسجَّلُ في `riyadhBookingFields`.
+  assert.strictEqual(typeof ksa.riyadhDayStartMs(0), "number");
+});
+
+// ═══════ (هـ) النداءانِ يَرفضانِ الماضيَ — وبنصٍّ واحدٍ عبرَ الأسطح ═══════
+
+t("(هـ١) النداءانِ كلاهما يُنادي الحارسَ، **بعدَ** فكِّ الموعدِ وقبلَ Firestore",
+    () => {
+      for (const fn of ["approveAndAssignOrder", "rescheduleAssignedOrder"]) {
+        const i = idxNoComments.indexOf(`exports.${fn} =`);
+        assert.ok(i > 0, `${fn} غير موجود`);
+        let j = idxNoComments.indexOf("\nexports.", i + 10);
+        if (j < 0) j = idxNoComments.length;
+        const body = idxNoComments.slice(i, j);
+        const iParse = body.indexOf("parseKsaIso(");
+        const iGuard = body.indexOf("_assertServiceDateNotPast(");
+        const iDb = body.indexOf("getFirestore()");
+        assert.ok(iGuard > 0, `${fn} لا يُنادي حارسَ الماضي`);
+        assert.ok(iParse > 0 && iParse < iGuard,
+            `${fn}: الحارسُ قبلَ فكِّ الموعد — يَفحصُ Invalid Date`);
+        assert.ok(iDb > 0 && iGuard < iDb,
+            `${fn}: الحارسُ بعدَ لمسِ Firestore — قراءةٌ لموعدٍ مرفوض`);
+      }
+    });
+
+t("(هـ٢) والحارسُ يَقيسُ ببدايةِ يومِ الرياضِ، ويَفشلُ **مفتوحاً** للفاسد",
+    () => {
+      const i = idxNoComments.indexOf("function _assertServiceDateNotPast");
+      assert.ok(i > 0, "الحارسُ غير موجود");
+      const body = idxNoComments.slice(i, idxNoComments.indexOf("\n}", i));
+      assert.ok(body.includes("riyadhDayStartMs(Date.now())"),
+          "الحدُّ ليس بدايةَ يومِ الرياضِ الحاليّ");
+      // `floor !== null` قبلَ المقارنة: `x < null` كاذبةٌ على أيِّ حال، لكنّ
+      // الشرطَ الصريحُ يَقولُ القرارَ (لحظةٌ لا تُعرَفُ لا تَرفُض).
+      assert.ok(body.includes("floor !== null"), "لا فحصَ للحدِّ الفاسد");
+      assert.ok(body.includes("PAST_SERVICE_DATE_REFUSAL"),
+          "لا يَرفضُ بالثابتِ المشترَك");
+    });
+
+t("(هـ٣) ونصُّ الرفضِ مطابقٌ حرفيّاً للدارتِ ولمرآةِ اللوحة", () => {
+  const take = (src, re) => {
+    const m = src.match(re);
+    assert.ok(m, `لم يُعثر على نصِّ الرفضِ: ${re}`);
+    return m[1];
+  };
+  const srv = take(idx,
+      /PAST_SERVICE_DATE_REFUSAL\s*=\s*\n?\s*"([^"]+)"/);
+  const dartSrc = fs.readFileSync(path.join(__dirname, "..", "..", "lib",
+      "utils", "order_lifecycle.dart"), "utf8");
+  const dart = take(dartSrc,
+      /kPastServiceDateRefusal\s*=\s*\n?\s*'([^']+)'/);
+  const tsSrc = fs.readFileSync(path.join(__dirname, "..", "..",
+      "admin_panel", "src", "utils", "orderDispatch.ts"), "utf8");
+  const ts = take(tsSrc,
+      /PAST_SERVICE_DATE_REFUSAL\s*=\s*\n?\s*'([^']+)'/);
+  assert.strictEqual(dart, srv, "الدارتُ يُخالِفُ الخادم");
+  assert.strictEqual(ts, srv, "اللوحةُ تُخالِفُ الخادم");
+  assert.ok(srv.includes("الماضي"), "النصُّ لا يُسمّي السبب");
+});
+
+t("(هـ٤) والنوافذُ التي يَخرجُ عليها موعدٌ ماضٍ ما زالت كما عُلِّلَ بها", () => {
+  // زوالُ أيٍّ منها يُراجِعُ القاعدةَ لا يُسكِتُها.
+  assert.ok(/13 \* 60 \* 60 \* 1000/.test(idxNoComments),
+      "نافذةُ مكنسةِ الطلبِ المدفوعِ بلا سائق (−١٣س) زالت");
+  const i = idxNoComments.indexOf("exports.remindClientsUpcomingAppointments");
+  assert.ok(i > 0, "مكنسةُ التذكيرِ زالت");
+  let j = idxNoComments.indexOf("\nexports.", i + 10);
+  if (j < 0) j = idxNoComments.length;
+  const rem = idxNoComments.slice(i, j);
+  assert.ok(rem.includes("\"service_date\", \">=\"") &&
+      rem.includes("new Date(now)"),
+  "التذكيرُ لم يَعُد محدوداً بـ`service_date >= now`");
+});
+
 console.log(`\nksa_time tests: ${passed} passed`);

@@ -21,7 +21,7 @@ const {isMarketingBroadcast, excludeOptedOut} = require("./notify_prefs");
 const {countBookings, zoneDailyCap} = require("./capacity");
 const {grossFromBaseRounded, grossFromBase} = require("./vat");
 const {parseKsaIso, riyadhBookingFields, riyadhLocalDate, riyadhLocalSlot,
-  riyadhStamp} = require("./ksa_time");
+  riyadhStamp, riyadhDayStartMs} = require("./ksa_time");
 const coupons = require("./coupons");
 const {isAssignableDriver, assignabilityProblem, chunk, GET_ALL_CHUNK} =
   require("./drivers");
@@ -4197,6 +4197,40 @@ const PRE_DISPATCH_STATUSES = [
 const UNPAID_DISPATCH_REFUSAL =
   "لا يمكن إسناد سائق لطلب غير مدفوع — انتظر تأكيد الدفع";
 
+// **لا موعدَ في الماضي.** أربعةُ مواضعَ تَكتبُ موعدَ الخدمةِ — هذان النداءانِ
+// وفرعا الكتابةِ المباشرةِ في سطحَي الإدارة — وكانت الأربعةُ تَقبلُ أيَّ
+// تاريخ: الفحصُ هنا كان `isNaN(getTime())` وحدَه، و`firestore.rules` صفرُ
+// ذكرٍ لـ`service_date`. ومُدخَلاتُ الواجهةِ الثلاثةُ تُجيزُه كذلك (حقلا
+// `datetime-local` بلا `min`، ومُنتقي الدارتِ بـ`firstDate` أمس) —
+// **بينما يَحدُّ السطحانِ كلَّ موعدٍ آخر** (البثُّ والكوبونُ وجدولُ المنطقة).
+//
+// وموعدٌ ماضٍ يَخرُجُ من كلِّ شبكةٍ آليّة: `sweepUnassignedPaidOrders` تَستعلمُ
+// `service_date >= now − ١٣س` فلا يُسنَدُ، ونافذةُ
+// `autoResolveUnfulfilledPaidOrder` هي `now − ٢٤س .. now − ١س` فلا يُستردُّ،
+// و`remindClientsUpcomingAppointments` من الآنِ إلى `+٢٤س` فلا تُذكَّرُ
+// العميلة — **مالٌ مقبوضٌ، ولا خدمةَ، ولا استردادَ، ولا تنبيه**، وهي الجملةُ
+// التي وُجد محرّكُ الاستردادِ لإلغائها.
+//
+// والحدُّ **بدايةُ يومِ الرياضِ** لا «ليس قبلَ الآن»: دقّةُ مُنتقي التاريخِ
+// يومٌ، وساعةٌ مضت من اليومِ نفسِه موعدٌ مشروعٌ يُسجّلُه الأدمنُ لزيارةٍ
+// تأخّرَ إدخالُها وهي **داخلَ** نافذةِ الـ١٣ ساعةً فقابلةٌ للاستعادة. ويومُ
+// الرياضِ لا يومُ العمليّة: الدوالُ تَعملُ بـUTC، و`parseKsaIso` تَقرأُ
+// الساذجَ بتوقيتِ الرياض. ومطابقٌ حرفيّاً لـ`kPastServiceDateRefusal` في
+// `lib/utils/order_lifecycle.dart` ولمرآتِه في `orderDispatch.ts`.
+const PAST_SERVICE_DATE_REFUSAL =
+  "لا يمكن ضبط موعد في الماضي — اختر اليوم أو تاريخاً بعده";
+
+/**
+ * يَرفضُ موعداً قبلَ بدايةِ يومِ الرياضِ الحاليّ.
+ * @param {Date} parsed اللحظةُ المفكوكةُ من `scheduledIso`
+ */
+function _assertServiceDateNotPast(parsed) {
+  const floor = riyadhDayStartMs(Date.now());
+  if (floor !== null && parsed.getTime() < floor) {
+    throw new HttpsError("invalid-argument", PAST_SERVICE_DATE_REFUSAL);
+  }
+}
+
 exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   await _assertAdmin(request); // super_admin أو orders_manager
   const {orderId, driverId, scheduledIso} = request.data;
@@ -4207,6 +4241,7 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   if (isNaN(startDateTime.getTime())) {
     throw new HttpsError("invalid-argument", "موعد غير صالح");
   }
+  _assertServiceDateNotPast(startDateTime);
   const db = getFirestore();
   const orderRef = db.collection("orders").doc(orderId);
 
@@ -4379,6 +4414,7 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
     if (isNaN(parsedStart.getTime())) {
       throw new HttpsError("invalid-argument", "موعد غير صالح");
     }
+    _assertServiceDateNotPast(parsedStart);
   }
   const db = getFirestore();
   const orderRef = db.collection("orders").doc(orderId);

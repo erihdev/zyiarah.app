@@ -9,7 +9,7 @@ import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../services/firebase.ts';
 import { useNotification } from '../components/notificationContext.ts';
 import { cancelRefundNotice, cancelRefundAdminText } from '../utils/cancelRefundNotice.ts';
-import { ksaInstantOf } from '../utils/ksaInstant';
+import { ksaInstantOf, ksaTodayDate } from '../utils/ksaInstant';
 import { rescheduleDerivedFields } from '../utils/bookingFields.ts';
 import ServiceMetaTable from '../components/ServiceMetaTable.tsx';
 // الملخّصُ انتقلَ إلى `utils/serviceMeta.ts` بجوارِ `metaRows`/`metaHeadline`:
@@ -22,7 +22,7 @@ import { priceReviewOf, priceReviewApprovalPayload } from '../utils/priceReview.
 import PriceReviewBadge from '../components/PriceReviewBadge.tsx';
 import { auth } from '../services/firebase.ts';
 import { logAudit, AUDIT } from '../services/audit.ts';
-import { orderPaidForDispatch, UNPAID_DISPATCH_REFUSAL } from '../utils/orderDispatch.ts';
+import { orderPaidForDispatch, UNPAID_DISPATCH_REFUSAL, serviceDateAllowed, PAST_SERVICE_DATE_REFUSAL } from '../utils/orderDispatch.ts';
 import { refundNoticeText, refundServiceImpact } from '../utils/refundNotice.ts';
 
 // تنسيق تاريخ لحقل datetime-local (YYYY-MM-DDTHH:mm).
@@ -186,6 +186,14 @@ export default function Orders() {
 
     const handleAssignDriver = async () => {
         if (!assignModal || !selectedDriverId || !scheduledAt) return;
+        // **لا موعدَ في الماضي** — الحقلُ محدودٌ بـ`min` كذلك، وهذا الفحصُ هو
+        // ما يَحمي من قيمةٍ مكتوبةٍ بلوحةِ المفاتيحِ (المتصفّحُ لا يُنفّذُ `min`
+        // على الكتابةِ اليدويّة) ومن نافذةٍ بَقيت مفتوحةً عبرَ منتصفِ الليل.
+        // والخادمُ يَرفضُ بالنصِّ نفسِه على أيِّ حال.
+        if (!serviceDateAllowed(scheduledAt)) {
+            toast.error(PAST_SERVICE_DATE_REFUSAL);
+            return;
+        }
         setIsAssigning(true);
         try {
             // نوجّه عبر approveAndAssignOrder: ذرّية، تفحص تفرّغ السائق (لا حجز
@@ -218,6 +226,12 @@ export default function Orders() {
     const ACTIVE_ASSIGNED = ['scheduled', 'assigned', 'accepted', 'on_the_way', 'in_progress'];
     const handleEditVisit = async () => {
         if (!editModal) return;
+        // موضعٌ واحدٌ قبلَ الفرعَين (النداءُ الخادميُّ والكتابةُ المباشرة):
+        // كلاهما يَقرأُ `editScheduledAt`. انظر `utils/orderDispatch.ts`.
+        if (editScheduledAt && !serviceDateAllowed(editScheduledAt)) {
+            toast.error(PAST_SERVICE_DATE_REFUSAL);
+            return;
+        }
         setIsEditing(true);
         try {
             if (editModal.driver_id && ACTIVE_ASSIGNED.includes(editModal.status)) {
@@ -687,9 +701,13 @@ export default function Orders() {
                             )}
                             <div className="space-y-2">
                                 <label className="block text-sm font-extrabold text-slate-700">موعد الخدمة</label>
+                                {/* الحدُّ بيومِ **الرياضِ** لا بيومِ المتصفّح: الخادمُ يَقرأُ هذا
+                                    النصَّ الساذجَ رياضاً (`parseKsaIso`). و`min` لا يُنفّذُه
+                                    المتصفّحُ على الكتابةِ اليدويّة، فالفحصُ في المُعالِج. */}
                                 <input
                                     type="datetime-local"
                                     title="موعد الخدمة"
+                                    min={`${ksaTodayDate()}T00:00`}
                                     value={scheduledAt}
                                     onChange={e => setScheduledAt(e.target.value)}
                                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#660033] focus:ring-2 focus:ring-[#660033]/20 font-medium"
@@ -733,6 +751,7 @@ export default function Orders() {
                                 <input
                                     type="datetime-local"
                                     title="موعد الزيارة"
+                                    min={`${ksaTodayDate()}T00:00`}
                                     value={editScheduledAt}
                                     onChange={e => setEditScheduledAt(e.target.value)}
                                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#660033] focus:ring-2 focus:ring-[#660033]/20 font-medium"

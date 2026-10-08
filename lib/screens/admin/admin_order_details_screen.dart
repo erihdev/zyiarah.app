@@ -277,6 +277,20 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
             _editedSchedule != null && _editedSchedule != originalSchedule;
         final DateTime? effectiveSchedule = _editedSchedule ?? originalSchedule;
 
+        // **لا موعدَ في الماضي** — موضعٌ واحدٌ قبلَ الفرعَين (النداءُ الخادميُّ
+        // والكتابةُ المباشرة)، فكلاهما يَقرأُ `_editedSchedule` من هنا. ومُنتقي
+        // التاريخِ محدودٌ أعلاه كذلك؛ هذا الفحصُ هو ما يَحمي من حالةٍ قديمةٍ
+        // بقيت في `_editedSchedule` عبرَ منتصفِ الليل، والخادمُ يَرفضُ بالنصِّ
+        // نفسِه على أيِّ حال.
+        if (scheduleChanged && !serviceDateAllowed(_editedSchedule!)) {
+          if (mounted) setState(() => _isLoading = false);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text(kPastServiceDateRefusal),
+              backgroundColor: Colors.red));
+          return;
+        }
+
         final bool isOrdersDoc = _srcCollection == 'orders';
 
         // هل هذا إسنادٌ ابتدائيّ؟ القسمة على **وجود سائق** لا على الحالة وحدها:
@@ -479,7 +493,13 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
     final DateTime? pickedDate = await showDatePicker(
       context: context,
       initialDate: base,
-      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      // **بدايةُ يومِ الرياضِ** لا «أمس». كان الحدُّ
+      // `DateTime.now().subtract(const Duration(days: 1))` — يُجيزُ أمسَ
+      // صريحاً، وموعدٌ ماضٍ يَخرُجُ من مكنسةِ الإسنادِ (‎−١٣س) ومن الاستردادِ
+      // الآليِّ (‎−٢٤س..−١س) ومن التذكير. ويومُ الرياضِ لا يومُ الجهاز، لأنّ
+      // `parseKsaIso` تَقرأُ ما يُرسَلُ رياضاً. التفصيلُ في
+      // `utils/order_lifecycle.dart`.
+      firstDate: ksaTodayWall(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
