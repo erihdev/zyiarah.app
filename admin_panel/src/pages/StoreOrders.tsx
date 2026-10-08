@@ -58,8 +58,6 @@ interface StoreOrder {
   price_reviewed_by?: string;
 }
 
-// حالة مدفوعة = العميل دفع فعلاً؛ كانت اللوحة تعرضها كـ"قيد الانتظار" وتُظهر أزرار موافقة/رفض خطأً.
-const PAID_STATUSES = ['processing', 'shipped', 'delivered', 'completed'];
 const STATUS_LABELS: Record<string, string> = {
   pending: 'قيد الانتظار',
   pending_admin_approval: 'بانتظار الموافقة',
@@ -73,10 +71,29 @@ const STATUS_LABELS: Record<string, string> = {
   delivered: 'تم التسليم',
   completed: 'مكتمل',
 };
-function statusTone(status: string): 'green' | 'red' | 'blue' | 'amber' {
+/// لونُ الشارةِ — و«مدفوعٌ» يُقرَأُ من **الحقلِ** لا من تعدادِ حالات.
+///
+/// كان الفرعُ الأزرقُ `PAID_STATUSES = ['processing','shipped','delivered',
+/// 'completed']` بتعليقٍ يَقول إنّه وُجد كي لا يُعرَضَ المدفوعُ «قيد
+/// الانتظار» — و**لا شيءَ في المستودعِ يَكتبُ أيّاً من الأربعة**: دورةُ
+/// طلبِ المتجرِ الحيّةُ `awaiting_payment` (يُنشئُها العميل) ⇒ `under_review`
+/// (يُرقّيها الخادمُ مع قلبِ `is_paid`) ⇒ `delivering` ⇒ `delivered`
+/// (الأدمن). و`delivered` أخضرُ أصلاً لأنّه يُفحَصُ قبلَه — فالفرعُ الأزرقُ
+/// **لم يَكُن يَقعُ أبداً، بنيويّاً**، وكلُّ طلبٍ مدفوعٍ لم يَكتملْ يُرسَمُ
+/// كهرمانيّاً أي «بانتظار الدفع»: وفي `under_review` تُقرأُ الشارةُ «مدفوع —
+/// تحت المراجعة» **بلونٍ يَقولُ عكسَه**، وفي `delivering` لا تُقالُ كلمة.
+/// والأدمنُ يُفرزُ القائمةَ باللون.
+///
+/// و`is_paid` كان **مُحمَّلاً في الحالةِ ولا يَقرؤه شيء** — وهو جوابُ السؤالِ
+/// نفسِه، يَكتبُه الخادمُ (`store_service` يُنشئُ `false`، والتحقّقُ يَقلبُه).
+///
+/// والفرعُ الأخضرُ **يَبقى تعداداً بقصد**: سؤالُه «انتهى بنجاح» لا «انتهى» —
+/// فالمجموعةُ المنتهيةُ تَحوي `rejected`/`cancelled` وهما أحمرَان.
+function statusTone(order: StoreOrder): 'green' | 'red' | 'blue' | 'amber' {
+  const status = order.status;
   if (status === 'rejected') return 'red';
   if (status === 'approved' || status === 'delivered' || status === 'completed') return 'green';
-  if (PAID_STATUSES.includes(status)) return 'blue';
+  if (order.is_paid === true) return 'blue';
   return 'amber';
 }
 
@@ -202,9 +219,9 @@ export default function StoreOrders() {
               >
                 <div className="flex items-center gap-4">
                   <div className={`p-3 rounded-2xl ${
-                    statusTone(order.status) === 'green' ? 'bg-green-50 text-green-600' :
-                    statusTone(order.status) === 'red' ? 'bg-red-50 text-red-600' :
-                    statusTone(order.status) === 'blue' ? 'bg-[#FAF1F6] text-[#660033]' :
+                    statusTone(order) === 'green' ? 'bg-green-50 text-green-600' :
+                    statusTone(order) === 'red' ? 'bg-red-50 text-red-600' :
+                    statusTone(order) === 'blue' ? 'bg-[#FAF1F6] text-[#660033]' :
                     'bg-amber-50 text-amber-600'
                   }`}>
                     <Package size={24} />
@@ -220,9 +237,9 @@ export default function StoreOrders() {
 
                 <div className="flex items-center gap-3">
                   <div className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase ${
-                    statusTone(order.status) === 'green' ? 'bg-green-100 text-green-700' :
-                    statusTone(order.status) === 'red' ? 'bg-red-100 text-red-700' :
-                    statusTone(order.status) === 'blue' ? 'bg-[#F2DEE9] text-[#4D0026]' :
+                    statusTone(order) === 'green' ? 'bg-green-100 text-green-700' :
+                    statusTone(order) === 'red' ? 'bg-red-100 text-red-700' :
+                    statusTone(order) === 'blue' ? 'bg-[#F2DEE9] text-[#4D0026]' :
                     'bg-amber-100 text-amber-700'
                   }`}>
                     {STATUS_LABELS[order.status] ?? order.status}

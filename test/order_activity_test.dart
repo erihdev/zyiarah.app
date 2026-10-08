@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'helpers/strip_comments.dart';
 import 'package:zyiarah/models/driver_schedule.dart';
 import 'package:zyiarah/utils/order_activity.dart';
 import 'package:zyiarah/utils/order_lifecycle.dart';
@@ -248,6 +249,85 @@ void main() {
       expect(storeService.contains("'status': 'pending'"), isFalse);
     });
   });
+  group('ولونُ شارةِ طلبِ المتجرِ يَقرأُ الحقلَ لا تعدادَ الحالات', () {
+    final storeOrders = stripComments(
+        File('admin_panel/src/pages/StoreOrders.tsx').readAsStringSync());
+    final storeOrdersRaw =
+        File('admin_panel/src/pages/StoreOrders.tsx').readAsStringSync();
+
+    test('«مدفوعٌ» من `is_paid` — والتعدادُ الميّتُ زال', () {
+      // كان الفرعُ الأزرقُ تعداداً من أربعِ حالاتٍ **لا يَكتبُها شيء**، فلم
+      // يَقعْ أبداً بنيويّاً: كلُّ مدفوعٍ لم يَكتملْ يُرسَمُ كهرمانيّاً أي
+      // «بانتظار الدفع» — وفي `under_review` تَقولُ الشارةُ «مدفوع» بلونٍ
+      // يَقولُ عكسَه.
+      expect(RegExp(r'order\.is_paid\s*===\s*true').hasMatch(storeOrders),
+          isTrue,
+          reason: 'اللونُ لا يَقرأُ الحقلَ — و`is_paid` كان مُحمَّلاً بلا قارئ');
+      expect(storeOrders.contains('PAID_STATUSES'), isFalse,
+          reason: 'عادَ تعدادُ حالاتٍ لسؤالٍ يُجيبُه الحقل');
+      // والمضادّة: شرحُ العطلِ ما زال في الخامّ (الفحصُ يَقرأُ المُجرَّد).
+      expect(storeOrdersRaw.contains('PAID_STATUSES'), isTrue,
+          reason: 'زالَ شرحُ سببِ الحذف — فيُعادُ التعدادُ بلا علم');
+      // والدالّةُ تَأخذُ الطلبَ لا الحالةَ وحدَها، وإلّا لم تَرَ الحقل.
+      expect(RegExp(r'function statusTone\(order: StoreOrder\)')
+              .hasMatch(storeOrders),
+          isTrue,
+          reason: 'الدالّةُ لا تَرى إلّا الحالةَ — فلا سبيلَ إلى الحقل');
+      expect(storeOrders.contains('statusTone(order.status)'), isFalse,
+          reason: 'موضعُ نداءٍ باقٍ يُمرّرُ الحالةَ وحدَها');
+    });
+
+    test('والأخضرُ يَبقى تعداداً بقصد — المنتهي فيه أحمرُ', () {
+      // سؤالُ الأخضرِ «انتهى بنجاح» لا «انتهى»: المجموعةُ المنتهيةُ تَحوي
+      // `rejected`/`cancelled` وهما أحمرَان، فتوحيدُهما يَجعلُ المرفوضَ أخضر.
+      final i = storeOrders.indexOf('function statusTone(');
+      expect(i, greaterThan(-1));
+      final body = storeOrders.substring(i, storeOrders.indexOf('\n}', i));
+      expect(body.indexOf("=== 'rejected'"), lessThan(body.indexOf('is_paid')),
+          reason: 'المرفوضُ يَجبُ أن يُفحَصَ قبلَ «مدفوع» — وإلّا صارَ أزرق');
+      expect(kTerminalOrderStatuses.contains('rejected'), isTrue,
+          reason: 'لو خرجَ المرفوضُ من المجموعةِ المنتهيةِ فالتعليلُ يُراجَع');
+    });
+
+    test('والأساسُ: مجموعةُ ما يُكتَبُ على حالةِ طلبِ المتجرِ كاملةً', () {
+      // التعليلُ كلُّه قائمٌ على أنّ الحالاتِ الأربعَ التي كان الفرعُ
+      // الأزرقُ يُعدّدُها لا يَكتبُها شيء. والمقارنةُ **موجَبةٌ ومجموعةً
+      // كاملةً** لا مسحاً سالباً على `index.js` كلِّه: أوّلُ صياغةٍ فعلت
+      // ذلك فسقطت على `status: "completed"` في مُشغّلٍ يُحدّثُ
+      // **`maintenance_requests`** لا طلبَ متجرٍ — إبلاغٌ خاطئٌ من خلطِ
+      // المجموعات.
+      final adminDart = File('lib/screens/admin/admin_store_orders_screen.dart')
+          .readAsStringSync();
+      final written = <String>{};
+      // المُنشِئُ (العميل) — الكاتبُ الوحيدُ للحالةِ في تلك الخدمة.
+      for (final m in RegExp(r"'status': '(\w+)'").allMatches(storeService)) {
+        written.add(m.group(1)!);
+      }
+      // السطحانِ الإداريّانِ: القيمةُ وسيطٌ حرفيٌّ في موضعِ النداء.
+      for (final m in RegExp(r"handleStatusUpdate\(order\.id, '(\w+)'\)")
+          .allMatches(storeOrdersRaw)) {
+        written.add(m.group(1)!);
+      }
+      for (final m in RegExp(r"_updateOrderStatus\([^)]*?'(\w+)'\)")
+          .allMatches(adminDart)) {
+        written.add(m.group(1)!);
+      }
+      // والخادمُ يُرقّي المدفوعَ.
+      final fns = File('functions/index.js').readAsStringSync();
+      final promo = RegExp(r'status: "under_review"').allMatches(fns).length;
+      expect(promo, greaterThanOrEqualTo(1),
+          reason: 'الخادمُ لم يَعُدْ يُرقّي إلى `under_review` — القاعدةُ '
+              'تُراجَع');
+      written.add('under_review');
+      expect(written, {'awaiting_payment', 'under_review', 'delivering', 'delivered'},
+          reason: 'دورةُ طلبِ المتجرِ تغيّرت — فالفرعُ الأزرقُ يُراجَعُ لا '
+              'يُسكَت: $written');
+      // و`is_paid` يُنشَأُ كاذباً ويَقلبُه الخادمُ — وإلّا كان اللونُ دعوى.
+      expect(storeService.contains("'is_paid': false"), isTrue,
+          reason: 'إنشاءُ السلّةِ لا يَكتبُ `is_paid` — فالحقلُ قد يَغيب');
+    });
+  });
+
   group('ولا نسخةَ يدويّةً رابعةً للقاعدةِ بلا مراجعة', () {
     test('المواضعُ الثلاثةُ الباقيةُ هي المعروفةُ وحدَها', () {
       // ثلاثةُ فحوصٍ يدويّةٍ للانتهاءِ ما زالت في `lib/`، و**كلُّها صحيحةٌ في
