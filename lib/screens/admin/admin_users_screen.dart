@@ -49,7 +49,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     super.dispose();
   }
 
-  Future<void> _deleteUser(BuildContext context, String uid, String name) async {
+  Future<void> _deleteUser(BuildContext context, String uid, String name,
+      {String? email}) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -88,10 +89,16 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         // نوجّه الحذف عبر account_deletions ليحذف الخادمُ (processAccountDeletion) حساب
         // Auth + مستند users + رموز FCM. حذف مستند users وحده كان يترك حساب Auth حيّاً
         // قابلاً للدخول (وبيانات مالية يتيمة + تجاوز التزام الحذف القانوني).
+        // **الهويّةُ تُسجَّلُ هنا، وإلّا قرأَ سجلُّ الحذفِ «حساب مجهول».**
+        // مسارُ العميلةِ يَكتبُ `email`؛ وهذا المسارُ كان يَكتبُ الحالةَ
+        // وحدَها — فحذفٌ إداريٌّ يُقرأُ في سجلِّ امتثالِ آبل بلا اسمٍ ولا
+        // بريد، والشاشةُ تَحملُهما في يدِها.
         await FirebaseFirestore.instance.collection('account_deletions').doc(uid).set({
           'status': 'deleted',
           'deleted_by_admin': true,
           'requested_at': FieldValue.serverTimestamp(),
+          'name': name,
+          if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
         });
         await ZyiarahAuditService().logAction(
           action: 'DELETE_USER',
@@ -450,7 +457,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                                 _toggleBan(context, doc.id, name, isBanned,
                                     user['is_blocked'] == true);
                               } else if (v == 'delete') {
-                                _deleteUser(context, doc.id, name);
+                                _deleteUser(context, doc.id, name,
+                                    email: user['email'] as String?);
                               }
                             },
                             itemBuilder: (ctx) => [
