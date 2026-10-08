@@ -68,7 +68,10 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen>
   Future<void> _retryInvoice(String docId, Map<String, dynamic> data) async {
     setState(() => _retryingInvoice = true);
     try {
-      final double amount = (data['amount'] as num?)?.toDouble() ?? 0;
+      // **السلسلةُ لا الحقلُ الواحد**: `store_orders` يَحملُ
+      // `total_amount` ولا يَحملُ `amount`، فكانت الإعادةُ تَرفعُ فاتورةً
+      // ضريبيّةً بإجماليٍّ صفرٍ **فوقَ** الفاشلة.
+      final double amount = invoiceTotalOf(data);
       // إعادةُ التوليدِ قد تكون بعد أيّام: اللحظةُ من الوثيقة (paid_at ثمّ
       // created_at) لا `DateTime.now()` — وإلّا طُبع تاريخُ اليومِ على
       // فاتورةٍ ضريبيّةٍ لطلبٍ دُفع قبل أيّام.

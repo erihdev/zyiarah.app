@@ -101,9 +101,16 @@ class InvoiceView {
 
     return InvoiceView(
       orderCode: orderCode,
-      serviceName:
-          str(data['service_name']) ?? str(data['service_type']) ?? '-',
-      total: toD(data['amount']),
+      // **وطلبُ المتجرِ لا يَحملُ اسمَ خدمةٍ ولا نوعَها**، فكانت البطاقةُ
+      // تَطبعُ «-» بينما ملفُّ PDF يَطبعُ «طلب منتجات من المتجر» — افتراقٌ
+      // ثانٍ بين البطاقةِ والملفّ. و`items` لا يَكتبُه إلّا `store_service`،
+      // فهو ما يُميّزُ طلبَ المتجر.
+      serviceName: str(data['service_name']) ??
+          str(data['service_type']) ??
+          (data['items'] is List ? 'طلب منتجات من المتجر' : '-'),
+      // القاعدةُ في `invoice_stamp.dart` — سلسلةُ `expectedAmount` الخادميّةُ
+      // بعينِها. كان `data['amount']` وحدَه، و`store_orders` لا يَحملُه.
+      total: invoiceTotalOf(data),
       discount: toD(data['discount_amount']),
       couponCode: str(data['coupon_code']),
       // القاعدةُ في invoice_stamp.dart كي يَسألها مُولِّدُ PDF نفسُها.
