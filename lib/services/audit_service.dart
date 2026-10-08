@@ -75,4 +75,19 @@ class ZyiarahAuditService {
   /// اعتمادُ مبلغٍ وسَمَه تحقّقُ السعرِ الخادميّ — قرارٌ ماليٌّ بشريٌّ
   /// يُبطِلُ علمَ المكنسةِ، فلا بدَّ من أثرٍ باسمِ من اتّخذَه.
   static const String actionReviewOrderPrice = 'REVIEW_ORDER_PRICE';
+
+  /// اعتمادُ عقدٍ وحذفُه — أكبرُ مبلغٍ في التطبيق. كانت تسميةُ الاعتمادِ
+  /// موجودةً في شاشةِ السجلِّ ولا كاتبَ لها، وحذفُ العقدِ محصورٌ بالمدير
+  /// العامِّ في القواعدِ (عمليّةٌ مدمّرة) وكان بلا أثرٍ إطلاقاً.
+  static const String actionApproveContract = 'APPROVE_CONTRACT';
+  static const String actionDeleteContract = 'DELETE_CONTRACT';
+
+  /// تنفيذُ طلبِ حذفِ حساب — يَحذفُ حسابَ المصادقةِ ومستنداتِه خادميّاً،
+  /// ويَترُكُ رصيدَ المحفظةِ دَيناً مكتوباً. لا رجعةَ فيه.
+  static const String actionProcessAccountDeletion = 'PROCESS_ACCOUNT_DELETION';
+
+  /// تعديلُ إعداداتِ النظام — وضعُ الصيانةِ (يُقفِلُ التطبيقَ على كلِّ
+  /// عميلة)، وبوّابةُ الإصدارِ، والسعةُ اليوميّة، وسياسةُ الخصوصيّةِ
+  /// المنشورةُ. نظيرُه `AUDIT.UPDATE_SETTINGS` في اللوحة.
+  static const String actionUpdateSettings = 'UPDATE_SETTINGS';
 }

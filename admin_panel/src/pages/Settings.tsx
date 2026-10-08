@@ -457,6 +457,9 @@ export default function Settings({ role }: { role?: string | null }) {
         try {
             await setDoc(doc(db, 'system_configs', 'hourly_settings'),
                 { max_orders_per_day: n, updated_at: serverTimestamp() }, { merge: true });
+            // السعةُ اليوميّةُ بزرٍّ مستقلٍّ هنا (وفي دفعةِ التطبيق) — وهي
+            // تَحكمُ قبولَ الحجزِ لكلِّ يوم، فتُقيَّدُ كأختِها.
+            await logAudit(AUDIT.UPDATE_SETTINGS, { daily_cap: n }, 'hourly_settings');
             toast.success(`تم الحفظ — سقف الطلبات اليومي: ${n}`);
         } catch (e) {
             console.error(e);
@@ -584,6 +587,18 @@ export default function Settings({ role }: { role?: string | null }) {
                 updated_at: serverTimestamp(),
             }, { merge: true });
             await batch.commit();
+
+            // **بعد** الالتزامِ لا قبلَه: قيدٌ عن دفعةٍ فشلت كذبٌ. و`AUDIT
+            // .UPDATE_SETTINGS` كان **مُعلَناً في `audit.ts` بلا مُنادٍ واحد**
+            // — أي أنّ الاسمَ وُجدَ لهذه الكتابةِ بعينِها ولم يُستعمَل، بينما
+            // تُقيَّدُ كلُّ كتابةٍ أخرى في هذه الصفحةِ (المناطقُ، الأسعارُ،
+            // حالةُ الخدمة). نظيرُه في التطبيق `actionUpdateSettings`.
+            await logAudit(AUDIT.UPDATE_SETTINGS, {
+                maintenance_mode: settings.maintenance_mode === true,
+                latest_build_ios: iosBuild,
+                latest_build_android: androidBuild,
+                force_update: appUpdate.force === true,
+            }, 'main_settings');
 
             // Show brief success indication
             setSaveSuccess(true);

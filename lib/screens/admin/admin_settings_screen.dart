@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:zyiarah/services/audit_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:ui';
 import 'package:zyiarah/utils/build_gate.dart';
@@ -260,6 +261,23 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
       }, SetOptions(merge: true));
 
       await batch.commit();
+
+      // **بعد** الالتزامِ لا قبلَه: قيدٌ يَقولُ «تمَّ» عن دفعةٍ فشلت كذبٌ.
+      // لوحةُ الويبِ أعلنَت AUDIT.UPDATE_SETTINGS لهذه الكتابةِ بعينِها
+      // **ولم تُنادِها**، والتطبيقُ لم يُقيّدْها إطلاقاً — فوضعُ الصيانةِ
+      // (يُقفِلُ التطبيقَ على كلِّ عميلة) وبوّابةُ الإصدارِ وسياسةُ
+      // الخصوصيّةِ المنشورةُ كانت تُحفَظُ بلا أثرٍ باسمِ من حفظَها.
+      await ZyiarahAuditService().logAction(
+        action: ZyiarahAuditService.actionUpdateSettings,
+        details: {
+          'maintenance_mode': _maintenanceMode,
+          'daily_cap': capacity,
+          'latest_build_ios': iosBuild,
+          'latest_build_android': androidBuild,
+          'force_update': _updateForce,
+        },
+        targetId: 'main_settings',
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
