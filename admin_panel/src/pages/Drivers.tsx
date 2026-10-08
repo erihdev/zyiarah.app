@@ -251,18 +251,48 @@ export default function Drivers() {
     };
 
     // ── Photo upload ──
+    //
+    // **المسارُ كان خارجَ `storage.rules` كلِّها.** `drivers/{id}/photo.jpg`
+    // لا يُطابِقُ أيَّ كتلةِ `match`، فيَقعُ على الشاملةِ في آخرِ الملفِّ
+    // (`allow read, write: if false`) — فنشرُ القواعدِ (وهو إجراءٌ بشريٌّ
+    // مُعلَّقٌ) يَمنعُ رفعَ صورةِ السائقِ من اللوحةِ **من أوّلِ مرّة**، لا
+    // عند الاستبدالِ وحدَه. وترويسةُ القواعدِ تَقولُ عن نفسِها «تغطّي كل
+    // مسارات الرفع في التطبيق» — دعوى بلا قارئ، وهذا هو قارئُها
+    // (`test/storage_path_coverage_test.dart`).
+    //
+    // والعُرفُ قائمٌ في تطبيقِ الإدارة: `uploadWorkerPhoto` يَرفعُ صورةَ
+    // السائقِ إلى `worker_photos/profile_{millis}.jpg` — مسارٌ **مُغطّىً**
+    // واسمٌ **فريد**. والفرادةُ شرطٌ لا تجميل: القواعدُ تُجيزُ `create` ولا
+    // تُجيزُ `update`، فمسارٌ ثابتٌ لا يُمكِنُ استبدالُه أبداً — أي أنّ
+    // تغييرَ صورةِ سائقٍ كان سيَفشلُ حتى لو غُطّي المسار.
     const uploadPhoto = (file: File, driverId: string): Promise<string> => {
         return new Promise((resolve, reject) => {
-            const storageRef = ref(storage, `drivers/${driverId}/photo.jpg`);
-            const task = uploadBytesResumable(storageRef, file);
+            const storageRef = ref(storage, `worker_photos/profile_${Date.now()}.jpg`);
+            // النوعُ يُصرَّحُ: القاعدةُ تَحصرُ المسارَ في `image/.*`، ونظيرُه
+            // في التطبيق `imageContentTypeFor` (`upload_content_type.dart`).
+            const task = uploadBytesResumable(storageRef, file, {
+                contentType: file.type || 'image/jpeg',
+            });
             task.on('state_changed',
                 (snap) => setUploadProgress(Math.round(snap.bytesTransferred / snap.totalBytes * 100)),
                 reject,
                 async () => {
-                    const url = await getDownloadURL(task.snapshot.ref);
-                    await updateDoc(doc(db, 'drivers', driverId), { photo_url: url });
-                    setUploadProgress(0);
-                    resolve(url);
+                    // بلا `try` كان رميُ `getDownloadURL`/`updateDoc` يَترُكُ
+                    // الوعدَ **بلا تسوية**: لا `resolve` ولا `reject`. فـ
+                    // `handlePhotoChange` يَنتظرُ إلى الأبد — الدوّارةُ لا
+                    // تَنتهي، و`finally` لا يَعملُ فلا يُفرَّغُ حقلُ الملفّ،
+                    // ونَفْشةُ «فشل رفع الصورة» المكتوبةُ هناك **غيرُ قابلةِ
+                    // الوصول**. والبايتاتُ مرفوعةٌ فعلاً في تلك اللحظة، فيَبقى
+                    // كائنٌ في المخزنِ بلا `photo_url` على المستند.
+                    try {
+                        const url = await getDownloadURL(task.snapshot.ref);
+                        await updateDoc(doc(db, 'drivers', driverId), { photo_url: url });
+                        setUploadProgress(0);
+                        resolve(url);
+                    } catch (e) {
+                        setUploadProgress(0);
+                        reject(e);
+                    }
                 }
             );
         });
