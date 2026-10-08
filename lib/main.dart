@@ -28,7 +28,6 @@ import 'package:zyiarah/widgets/boot_failure_app.dart';
 
 import 'package:provider/provider.dart';
 import 'package:zyiarah/providers/user_provider.dart';
-import 'package:zyiarah/providers/order_provider.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 
@@ -185,7 +184,6 @@ void main() async {
         // `isSuperAdmin()` وحدَه، فالقراءةُ مرفوضةٌ لكلِّ عميلةٍ وسائق،
         // و`onError` كان `debugPrint`اً وحدَه (لا يُجمَع). ولم يَكتبْ حقلَه
         // أيُّ مُحرِّرٍ قطّ، فلونُ زرِّ الدفعِ كان الافتراضَ الأزرقَ دائماً.
-        ChangeNotifierProvider(create: (_) => ZyiarahOrderProvider()),
       ],
       child: const ZyiarahApp(),
     ),

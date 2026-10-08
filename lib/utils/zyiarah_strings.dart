@@ -29,7 +29,6 @@ class ZyiarahStrings {
   // --- Support ---
 
   // --- Orders ---
-  static String get orderStatus => isArabic ? "حالة الطلب" : "Order Status";
 
   // --- Admin ---
   static String get adminPanel => isArabic ? "لوحة الإدارة" : "Admin Panel";

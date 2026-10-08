@@ -256,7 +256,6 @@ void main() {
       // مخاطرةٌ بلا مقابل. لكنّ رابعةً تَظهرُ غداً على `store_orders` تَعدُّ
       // `delivered` نشطاً — وهذا الفحصُ يُجبرُ على مراجعتِها.
       const known = {
-        'lib/providers/order_provider.dart',
         'lib/screens/admin/admin_more_screen.dart',
         'lib/screens/driver_dashboard.dart',
       };
@@ -322,7 +321,6 @@ void main() {
     /// أعلاه: تَقرأُ `orders` وحدَها، ولا كاتبَ لـ`delivered`/`rejected`
     /// عليها. ورابعةٌ جديدةٌ تَسقطُ هذا الفحصَ فتُراجَع.
     const knownCopies = <String, String>{
-      'lib/providers/order_provider.dart': 'activeOrders على orders',
       'lib/screens/admin/admin_more_screen.dart': 'عدّادُ «نشط» على orders',
       'lib/screens/driver_dashboard.dart': 'فلترٌ دفاعيٌّ بعد whereIn خادميّ',
       'lib/screens/admin/admin_schedule_board_screen.dart':
