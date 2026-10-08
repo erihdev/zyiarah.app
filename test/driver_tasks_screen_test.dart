@@ -29,9 +29,16 @@ void main() {
     t('f', DateTime(2026, 9, 14), status: 'cancelled'),
   ];
 
-  Future<void> pump(WidgetTester t, {List<DriverTask>? items, String? uid = 'd1'}) async {
+  Future<void> pump(WidgetTester t,
+      {List<DriverTask>? items,
+      String? uid = 'd1',
+      bool capped = false}) async {
     await t.pumpWidget(MaterialApp(
-      home: DriverTasksScreen(items: Stream.value(items ?? tasks), uid: uid, now: now),
+      home: DriverTasksScreen(
+          items: Stream.value(items ?? tasks),
+          uid: uid,
+          now: now,
+          itemsHistoryCapped: capped),
     ));
     await t.pump();
     await t.pump();
@@ -151,6 +158,73 @@ void main() {
 
     test('ولا يُفتحان حين تُحقَن البثوث (الاختبارات بلا Firebase)', () {
       expect(src.contains('if (widget.items == null) _openStreams();'), isTrue);
+    });
+  });
+
+  group('نافذةُ السجلِّ: لا صِفرَ يُقرأُ «لم تَعملْ»', () {
+    // استعلامُ السجلِّ محدودٌ بأحدثِ `historyQueryLimit` طلباً، وملاحظةُ
+    // القصِّ كانت في تبويبِ «السجل» وحدَه — فشهرٌ أقدمُ من النافذةِ يُرسَمُ
+    // أصفاراً وشبكةً خاليةً بلا كلمة.
+    const notice = 'السجل المحمَّل يبدأ من';
+    // قائمةٌ خاصّةٌ بهذه المجموعة: أقدمُ ما حُمِّل **أوّلُ** سبتمبر، كي يكون
+    // الشهرُ الحاليُّ داخلَ النافذةِ كاملاً. (وبقائمةِ الملفِّ العامّةِ أقدمُها
+    // 12 سبتمبر — فسبتمبرُ نفسُه ناقصٌ، وتلك حالةٌ صحيحةٌ أوقعت أوّلَ صياغةٍ
+    // لهذا الفحص.)
+    final capTasks = [
+      t('w1', DateTime(2026, 9, 1), status: 'completed'),
+      t('w2', DateTime(2026, 9, 16), slot: '10:00'),
+      t('w3', DateTime(2026, 9, 17), slot: '12:00'),
+    ];
+
+    testWidgets('غيرُ مقصوصٍ ⇒ لا ملاحظةَ ولو رجعنا شهوراً', (t) async {
+      await pump(t, items: capTasks);
+      await t.tap(find.text('الجدول الشهري'));
+      await t.pump();
+      for (var i = 0; i < 3; i++) {
+        await t.tap(find.byIcon(Icons.chevron_right_rounded).first);
+        await t.pump();
+      }
+      expect(find.textContaining(notice), findsNothing,
+          reason: 'ملاحظةٌ حيث لا تَصدُق — السجلُّ كاملٌ');
+    });
+
+    testWidgets('مقصوصٌ والشهرُ داخلَ النافذةِ ⇒ لا ملاحظة', (t) async {
+      await pump(t, items: capTasks, capped: true);
+      await t.tap(find.text('الجدول الشهري'));
+      await t.pump();
+      expect(find.textContaining(notice), findsNothing,
+          reason: 'سبتمبرُ داخلَ النافذةِ (أقدمُ مهمّةٍ أوّلُ سبتمبر)');
+    });
+
+    testWidgets('مقصوصٌ وشهرٌ أقدمُ ⇒ تُقالُ الملاحظةُ **قبلَ** العدّاد',
+        (t) async {
+      await pump(t, items: capTasks, capped: true);
+      await t.tap(find.text('الجدول الشهري'));
+      await t.pump();
+      // سبتمبر ← أغسطس: أقدمُ ما حُمِّل أوّلُ سبتمبر، فأوّلُ أغسطس قبلَه.
+      await t.tap(find.byIcon(Icons.chevron_right_rounded).first);
+      await t.pump();
+      expect(find.textContaining(notice), findsOneWidget);
+      // وتُسمّي الحدَّ لا تُبهِمُه.
+      expect(find.textContaining('1 سبتمبر'), findsWidgets);
+      // **والترتيبُ هو الإصلاح**: رقمٌ يُقرأُ أوّلاً، فتقييدُه بعدَه لا يَمنعُ
+      // قراءتَه دعوى.
+      final yNotice = t.getTopLeft(find.textContaining(notice)).dy;
+      final yKpi = t.getTopLeft(find.text('المجدولة')).dy;
+      expect(yNotice, lessThan(yKpi),
+          reason: 'الملاحظةُ بعدَ العدّادِ لا تُقيّدُ قراءتَه');
+    });
+
+    testWidgets('والأسبوعيُّ مثلُه — القاعدةُ واحدةٌ للعرضَين', (t) async {
+      await pump(t, items: capTasks, capped: true);
+      // الأسبوعُ الحاليُّ (السبت 12 → الجمعة 18) داخلَ النافذة.
+      expect(find.textContaining(notice), findsNothing);
+      // أسبوعانِ للوراء ⇒ قبلَ أوّلِ سبتمبر.
+      for (var i = 0; i < 2; i++) {
+        await t.tap(find.byIcon(Icons.chevron_right_rounded).first);
+        await t.pump();
+      }
+      expect(find.textContaining(notice), findsOneWidget);
     });
   });
 }

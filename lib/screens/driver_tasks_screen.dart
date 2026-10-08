@@ -18,7 +18,20 @@ class DriverTasksScreen extends StatefulWidget {
   final String? uid;
   final DateTime? now;
 
-  const DriverTasksScreen({super.key, this.items, this.uid, this.now});
+  /// للاختبارات كذلك: هل بَلغَ السجلُّ سقفَ الاستعلام؟
+  ///
+  /// المسارُ المحقونُ كان يُمرّرُ `historyCapped: false` **ثابتاً**، فملاحظةُ
+  /// النافذةِ لا تُبلَغُ في فحصِ واجهةٍ بحال — وقاعدةُ هذا المشروعِ أنّ
+  /// الشاشاتَ تَقبلُ حقناً كي تُفحَصَ بلا Firebase.
+  final bool itemsHistoryCapped;
+
+  const DriverTasksScreen({
+    super.key,
+    this.items,
+    this.uid,
+    this.now,
+    this.itemsHistoryCapped = false,
+  });
 
   @override
   State<DriverTasksScreen> createState() => _DriverTasksScreenState();
@@ -62,7 +75,7 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
         .collection('orders')
         .where('driver_id', isEqualTo: id)
         .orderBy('created_at', descending: true)
-        .limit(100)
+        .limit(DriverSchedule.historyQueryLimit)
         .snapshots()
         .firstEventTimeout();
   }
@@ -107,7 +120,8 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
           return _loading();
         }
         if (s.hasError) return _error();
-        return _content(s.data ?? const [], historyCapped: false);
+        return _content(s.data ?? const [],
+            historyCapped: widget.itemsHistoryCapped);
       },
     );
   }
@@ -139,7 +153,8 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
                 : const <DriverTask>[];
             return _content(
               DriverSchedule.merge(activeTasks, historyTasks),
-              historyCapped: (h.data?.docs.length ?? 0) >= 100,
+              historyCapped: (h.data?.docs.length ?? 0) >=
+                  DriverSchedule.historyQueryLimit,
             );
           },
         );
@@ -227,20 +242,24 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
       ),
       Expanded(
         child: switch (_view) {
-          _View.week => _weekView(all, byDay),
-          _View.month => _monthView(all, byDay),
+          _View.week => _weekView(all, byDay, historyCapped),
+          _View.month => _monthView(all, byDay, historyCapped),
           _View.history => _historyView(all, historyCapped),
         },
       ),
     ]);
   }
 
-  Widget _weekView(List<DriverTask> all, Map<DateTime, List<DriverTask>> byDay) {
+  Widget _weekView(List<DriverTask> all,
+      Map<DateTime, List<DriverTask>> byDay, bool historyCapped) {
     final days = DriverSchedule.weekDays(_selected);
     final inWeek = DriverSchedule.inRange(all, days.first, days.last);
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
+        // **قبلَ العدّادِ لا بعدَه**: رقمٌ يُقرأُ أوّلاً، فتقييدُه بعدَه
+        // لا يَمنعُ قراءتَه دعوى.
+        _windowNotice(all, days.first, historyCapped),
         _kpiRow(DriverSchedule.kpis(inWeek)),
         const SizedBox(height: 12),
         _navRow(
@@ -258,13 +277,15 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
     );
   }
 
-  Widget _monthView(List<DriverTask> all, Map<DateTime, List<DriverTask>> byDay) {
+  Widget _monthView(List<DriverTask> all,
+      Map<DateTime, List<DriverTask>> byDay, bool historyCapped) {
     final start = DriverSchedule.monthStart(_selected);
     final end = DriverSchedule.monthEnd(_selected);
     final inMonth = DriverSchedule.inRange(all, start, end);
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
+        _windowNotice(all, start, historyCapped),
         _kpiRow(DriverSchedule.kpis(inMonth)),
         const SizedBox(height: 12),
         _navRow(
@@ -304,7 +325,8 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
         if (capped)
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: Text('يعرض أحدث 100 طلب',
+            child: Text(
+                'يعرض أحدث ${DriverSchedule.historyQueryLimit} طلب',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey)),
           ),
@@ -314,6 +336,33 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
   }
 
   // ───────────────────────── العناصر ─────────────────────────
+
+  /// «لا رقمَ قبل أن نعرفه» على عدّادِ السائق.
+  ///
+  /// استعلامُ السجلِّ محدودٌ بأحدثِ [DriverSchedule.historyQueryLimit] طلباً،
+  /// وملاحظةُ القصِّ كانت في تبويبِ «السجل» **وحدَه** بينما العدّادانِ
+  /// والشبكةُ يُبنَونَ من البياناتِ المقصوصةِ نفسِها — فشهرٌ أقدمُ من
+  /// النافذةِ يُقرأُ أصفاراً: «لم تَعملْ» عن شهرٍ عملَ فيه.
+  Widget _windowNotice(
+      List<DriverTask> all, DateTime rangeStart, bool historyCapped) {
+    final oldest = DriverSchedule.oldestLoaded(all);
+    if (!DriverSchedule.rangePredatesWindow(
+        historyCapped: historyCapped,
+        oldestLoaded: oldest,
+        rangeStart: rangeStart)) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        'السجل المحمَّل يبدأ من ${DriverSchedule.dateLabel(oldest!)} '
+        '(أحدث ${DriverSchedule.historyQueryLimit} طلب) — '
+        'الأقدم غير محسوب هنا',
+        textAlign: TextAlign.center,
+        style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey),
+      ),
+    );
+  }
 
   Widget _kpiRow(({int scheduled, int done, int remaining}) k) {
     Widget tile(String label, int value, String sub, Color color) {

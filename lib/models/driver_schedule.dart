@@ -185,6 +185,41 @@ class DriverSchedule {
     return (a.timeSlot ?? '').compareTo(b.timeSlot ?? '');
   }
 
+  /// سقفُ استعلامِ السجل — **مرّةً واحدةً**، فعَلَمُ القصِّ يُشتَقُّ منه.
+  ///
+  /// كان الرقمُ مكتوباً مرّتَين: في `limit(100)` وفي
+  /// `(docs.length ?? 0) >= 100`. فرفعُ السقفِ في أحدِهما وحدَه يَجعلُ
+  /// العلَمَ **لا يُرفَعُ أبداً** فتَختفي ملاحظةُ «أحدث ١٠٠» بصمت.
+  static const int historyQueryLimit = 100;
+
+  /// أقدمُ مهمّةٍ محمَّلةٍ — حدُّ النافذةِ الذي بعدَه لا نَعرفُ شيئاً.
+  static DateTime? oldestLoaded(Iterable<DriverTask> tasks) {
+    DateTime? out;
+    for (final t in tasks) {
+      if (out == null || t.when.isBefore(out)) out = dayKey(t.when);
+    }
+    return out;
+  }
+
+  /// هل المدى المعروضُ **أقدمُ من النافذةِ المحمَّلة**؟
+  ///
+  /// استعلامُ السجلِّ محدودٌ بأحدثِ [historyQueryLimit] طلباً، وملاحظةُ ذلك
+  /// كانت في تبويبِ «السجل» **وحدَه** — بينما عدّادا الأسبوعِ والشهرِ
+  /// والشبكةُ يُبنَونَ من البياناتِ المقصوصةِ نفسِها. فسائقٌ بلغَ السقفَ
+  /// يَتنقّلُ إلى شهرٍ أقدمَ فيَقرأُ **أصفاراً** في «مجدولة/منجزة/متبقية»
+  /// وشبكةً خاليةً: رقمٌ يَقولُ «لم تَعملْ» عن شهرٍ عملَ فيه، بلا كلمة.
+  ///
+  /// والشرطُ ثلاثيٌّ كي لا تَظهرَ الملاحظةُ حيث لا تَصدُق: السجلُّ مقصوصٌ
+  /// فعلاً **و** هناك نافذةٌ معروفةٌ **و** أوّلُ المدى قبلَ أقدمِ ما حُمِّل.
+  static bool rangePredatesWindow({
+    required bool historyCapped,
+    required DateTime? oldestLoaded,
+    required DateTime rangeStart,
+  }) {
+    if (!historyCapped || oldestLoaded == null) return false;
+    return dayKey(rangeStart).isBefore(oldestLoaded);
+  }
+
   /// المجدولة = كل ما ليس ملغى؛ المنجزة = المكتملة؛ المتبقية = الفرق.
   static ({int scheduled, int done, int remaining}) kpis(
       Iterable<DriverTask> tasks) {
