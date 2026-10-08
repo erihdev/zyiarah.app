@@ -717,5 +717,74 @@ t("(ج٤) والوحدةُ لا تُنادي getFirestore — `db` وسيطٌ أ
       process.exitCode = 1;
     }
   }
-  console.log(`\nrewards tests: ${passed} passed`);
+  
+// ═══════════════════════════════════════════════════════════════════════
+// **لا جوائزَ لطلبٍ لم يُدفَع** — الفرعانِ على قاعدةٍ واحدة.
+//
+// الشرطُ كان في فرعِ الإلغاءِ وحدَه (`after.is_paid === true`) وغائباً عن فرعِ
+// الإكمالِ — في `onOrderRewards` نفسِها، على بُعدِ عشرين سطراً. وكان **حيّاً**:
+// `moyasarRefundPayment` يَكتبُ `is_paid: false` ولا يَمَسُّ `status`، فطلبٌ
+// `scheduled` استُردَّ مالُه يَبقى في لوحةِ السائقِ فيُكمِلُه، فتُمنَحُ
+// القطراتُ ومكافأةُ الإحالةِ لمالٍ أُعيد.
+// ═══════════════════════════════════════════════════════════════════════
+/**
+ * @param {string} src المصدرُ
+ * @param {string} name اسمُ الصادر
+ * @return {string} جسمُه حتى الصادرِ التالي
+ */
+function _exportBody(src, name) {
+  const i = src.indexOf(`exports.${name}`);
+  assert.ok(i > -1, `exports.${name} اختفى`);
+  const j = src.indexOf("\nexports.", i + 10);
+  return src.slice(i, j < 0 ? src.length : j);
+}
+
+t("(ن) فرعُ الإكمالِ مشروطٌ بالدفعِ، وقبلَ أيِّ منحٍ", () => {
+  const b = _exportBody(idx, "onOrderRewards");
+  const gate = b.indexOf("completed && after.is_paid !== true");
+  assert.ok(gate > -1, "فرعُ الإكمالِ بلا شرطِ دفع — القطراتُ والإحالةُ " +
+    "تُمنَحانِ لطلبٍ أُعيد مالُه");
+  const qat = b.indexOf("grantQatratPoints(");
+  const ref = b.indexOf("payReferralBonus(");
+  assert.ok(qat > -1 && ref > -1);
+  assert.ok(gate < qat && gate < ref,
+      "الشرطُ بعدَ المنحِ لا يَمنعُ شيئاً — الترتيبُ هو الإصلاح");
+});
+
+t("(س) والفرعانِ على القاعدةِ نفسِها — لا واحدٌ منهما", () => {
+  const b = _exportBody(idx, "onOrderRewards");
+  const n = (b.match(/after\.is_paid\s*!==\s*true|after\.is_paid === true/g) || [])
+      .length;
+  assert.strictEqual(n, 2,
+      `شرطُ الدفعِ يَرِدُ ${n} مرّةً في onOrderRewards — المقصودُ فرعانِ ` +
+      `(الإكمالُ والإلغاء)؛ زيادةٌ أو نقصٌ يُراجَع`);
+  assert.ok(/after\.is_paid === true &&/.test(b),
+      "شرطُ فرعِ الإلغاءِ زالَ — وهو السابقةُ التي يَقيسُ عليها الإكمال");
+  // المضادّةُ: الصيغةُ ما زالت في الخامِّ (الفحوصُ تَقرأُ المُجرَّد).
+  assert.ok(idxRaw.includes("after.is_paid !== true"));
+});
+
+t("(ع) وشواهدُ التعليلِ الثلاثةُ قائمة", () => {
+  // (١) الاستردادُ يَكتبُ `is_paid: false` ولا يَمَسُّ `status`.
+  const rf = _exportBody(idx, "moyasarRefundPayment");
+  assert.ok(/is_paid:\s*false/.test(rf),
+      "الاستردادُ لم يَعُد يَكتبُ is_paid: false — يُراجَعُ التعليل");
+  assert.ok(!/\bstatus:\s*"cancelled"/.test(rf),
+      "الاستردادُ صارَ يُلغي الطلبَ — فالمَسلكُ تغيّرَ ويُراجَعُ التعليلُ " +
+      "لا يُسكَت (الشرطُ يَبقى صحيحاً على كلِّ حال)");
+  // (٢) و`scheduled` في قائمةِ السائقِ النشطة، فالطلبُ يَبقى على هاتفِه.
+  const lc = fs.readFileSync(
+      path.join(__dirname, "..", "..", "lib", "utils", "order_lifecycle.dart"),
+      "utf8");
+  assert.ok(/kActiveAssignedStatuses = \{[^}]*'scheduled'/.test(lc),
+      "scheduled خرجَ من حالاتِ السائقِ النشطة — يُراجَعُ التعليل");
+  // (٣) وإكمالُ السائقِ يَكتبُ المُميِّزَ الخادميَّ، وهو ما يُطلِقُ الجوائز.
+  const os = fs.readFileSync(
+      path.join(__dirname, "..", "..", "lib", "services", "order_service.dart"),
+      "utf8");
+  assert.ok(/'rewards_handled_by': 'server'/.test(os),
+      "المُميِّزُ الخادميُّ لم يَعُد يُكتَبُ عند الإكمال — يُراجَعُ التعليل");
+});
+
+console.log(`\nrewards tests: ${passed} passed`);
 })();

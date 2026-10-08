@@ -2074,6 +2074,28 @@ exports.onOrderRewards = onDocumentUpdated({document: "orders/{orderId}", cpu: 0
       const code = after.code || orderId;
 
       // ── COMPLETION: Qatrat points (+ referral) ──
+      // **ولا جوائزَ لطلبٍ لم يُدفَع.** الشرطُ كان في فرعِ الإلغاءِ أدناه
+      // (`after.is_paid === true`) وغائباً عن هذا الفرعِ — في الدالّةِ نفسِها
+      // على بُعدِ عشرين سطراً. وهو **حيٌّ عبرَ مسارِ الاسترداد**:
+      // `moyasarRefundPayment` يَكتبُ `is_paid: false` و**لا يَمَسُّ `status`**
+      // (تعليقُه يَقولُها صريحاً: «والحالةُ النشطةُ تُبقيه في لوحةِ السائق»)،
+      // فطلبٌ `scheduled` استُردَّ مالُه يَبقى على هاتفِ السائقِ — `scheduled`
+      // في `kActiveAssignedStatusList` — فيَضغطُ «تم الإنجاز»، و
+      // `order_service.updateOrderStatus` يَكتبُ `status: "completed"` و
+      // `rewards_handled_by: "server"` معاً، فتُمنَحُ `round(amount)` قطرةً
+      // (قيمةٌ حقيقيّةٌ في المحفظةِ بخمسينَ نقطةً للريال) **ومكافأةُ الإحالة**
+      // (خمسونَ ريالاً في محفظةِ المُحيلِ وكوبونُ ١٠٪ للمُحالة، و
+      // `payReferralBonus` بلا أيِّ شرطِ دفعٍ بدورِها) — لطلبٍ أُعيد مالُه.
+      // صامتٌ ومتكرّر.
+      //
+      // والاستردادُ الجزئيُّ يَكتبُ `is_paid: false` كذلك فلا جوائزَ معه، وهو
+      // الاتّجاهُ المحافظُ ومتّسقٌ مع بقيّةِ المستودعِ: السعةُ والتذكيراتُ
+      // والتقاريرُ كلُّها تَقرأُ `is_paid !== true` «غيرَ مدفوع».
+      if (completed && after.is_paid !== true) {
+        console.log(`[rewards] skip completed order ${orderId}: ` +
+          `is_paid !== true (refunded, or never paid)`);
+        return null;
+      }
       if (completed) {
         if (clientId && amount > 0) {
           // **المنطقُ انتقلَ إلى `rewards.grantQatratPoints`.** كان هنا
