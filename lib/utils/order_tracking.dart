@@ -40,8 +40,24 @@ bool canTrackOrder(Map<String, dynamic> order, {required bool passed}) {
   return kTrackableAfterAppointment.contains(order['status']);
 }
 
-/// موعدُ الخدمة من الطلب: `service_date` أوّلاً، ثمّ `booking_date` مع
-/// `booking_time_slot`. يُعيد `null` حين لا موعدَ محدّداً.
+/// موعدُ الخدمة من الطلب: **حقلا الحجزِ أوّلاً** (`booking_date` مع
+/// `booking_time_slot`) ثمّ `service_date`. يُعيد `null` حين لا موعدَ محدّداً.
+///
+/// **والأسبقيّةُ كانت معكوسةً، والسببُ أنّ التمثيلَين لا يَتّفقانِ دائماً.**
+/// حقلا الحجزِ **ساعةُ حائطٍ** يُشتَقّانِ من مكوّناتِ ما اختارَه الإنسانُ،
+/// فهما مستقلّانِ عن منطقةِ الجهازِ بقرارٍ مُسجَّلٍ في
+/// `lib/utils/booking_fields.dart`؛ و`service_date` **لحظةٌ مطلقةٌ** تُعرَضُ
+/// بمنطقةِ الجهازِ الذي يَقرؤها. فساعةٌ اختارَتها العميلةُ «14:00» من جدولِ
+/// المنطقةِ — وساعاتُ الجدولِ ساعاتُ **الرياض** — كانت تُقرأُ على جهازٍ خارجَ
+/// +03 بساعةٍ أخرى، فتَرى في بطاقتِها عنواناً لم تَختَرْه.
+///
+/// فالأسبقيّةُ للتسميةِ التي اختارَها الإنسانُ، و`service_date` احتياطٌ
+/// لطلبٍ بلا موعدٍ مُجدوَلٍ (الخدماتُ التي لا تَكتبُ حقلَي الحجز). وطلبٌ
+/// قديمٌ كُتبَ على جهازٍ داخلَ السعوديّةِ يَحملُ التمثيلَين متّفقَين، فلا
+/// يَتغيّرُ له شيء.
+///
+/// **ولا تُستعمَلُ هذه في سطرِ «تأخّر إسنادُ فريقكِ»**: شرطُ الخادمِ هناك
+/// `service_date` بعينِه، والاحتياطُ بلا خانةِ وقتٍ يُنتجُ منتصفَ الليل.
 ///
 /// الوسائطُ أنواعٌ عاديّة لا مستندُ Firestore، كي تُختبر بلا محاكٍ.
 DateTime? orderAppointment({
@@ -49,16 +65,19 @@ DateTime? orderAppointment({
   String? bookingDate,
   String? bookingTimeSlot,
 }) {
-  if (serviceDate != null) return serviceDate;
-  if (bookingDate == null || bookingDate.isEmpty) return null;
-  final String t = (bookingTimeSlot == null || bookingTimeSlot.length != 5)
-      ? '00:00'
-      : bookingTimeSlot;
-  try {
-    return DateTime.parse('${bookingDate}T$t:00');
-  } catch (_) {
-    return null;
+  if (bookingDate != null && bookingDate.isNotEmpty) {
+    final String t = (bookingTimeSlot == null || bookingTimeSlot.length != 5)
+        ? '00:00'
+        : bookingTimeSlot;
+    try {
+      return DateTime.parse('${bookingDate}T$t:00');
+    } catch (_) {
+      // تاريخٌ تالفٌ لا يُسقِطُ الموعدَ متى وُجدت لحظةٌ — والعكسُ كان يُخفي
+      // الشارةَ كلَّها عن طلبٍ له `service_date` سليم.
+      return serviceDate;
+    }
   }
+  return serviceDate;
 }
 
 /// هل فات الموعد؟ **بدقّة اليوم** لا الدقيقة — موعدُ اليوم في الثامنة صباحاً
