@@ -1,4 +1,5 @@
 import 'package:zyiarah/services/zyiarah_messaging_service.dart';
+import 'package:zyiarah/services/audit_service.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -383,6 +384,13 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
         'status': 'approved_waiting_payment',
         'adminApprovedAt': FieldValue.serverTimestamp(),
       });
+      // تسميةُ APPROVE_CONTRACT كانت في شاشةِ السجلِّ ولا كاتبَ لها: اعتمادُ
+      // العقدِ — وهو ما يَفتحُ بابَ الدفعِ لأكبرِ مبلغٍ في التطبيق — بلا أثر.
+      await ZyiarahAuditService().logAction(
+        action: ZyiarahAuditService.actionApproveContract,
+        details: {'plan': data['planName'] ?? '—', 'client': data['userName'] ?? '—'},
+        targetId: doc.id,
+      );
       await ZyiarahMessagingService().notifyContractApproved(
         data['userId'] ?? '',
         data['planName'] ?? 'باقة اشتراك',
@@ -402,6 +410,13 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
     if (!confirm) return;
     try {
       await FirebaseFirestore.instance.collection('contracts').doc(id).delete();
+      // عمليّةٌ مدمّرةٌ محصورةٌ بالمدير العامِّ في القواعد — فأثرُها باسمِ
+      // فاعلِها هو كلُّ ما يَبقى منها.
+      await ZyiarahAuditService().logAction(
+        action: ZyiarahAuditService.actionDeleteContract,
+        details: {'contract_id': id},
+        targetId: id,
+      );
       messenger.showSnackBar(const SnackBar(
           content: Text('تم حذف العقد'), backgroundColor: Colors.green));
     } on FirebaseException catch (e) {

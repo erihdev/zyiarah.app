@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:zyiarah/utils/audit_actions.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminAuditLogsScreen extends StatefulWidget {
@@ -209,7 +210,7 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
           child: Icon(icon, color: color, size: 24),
         ),
         title: Text(
-          _getActionLabel(action),
+          auditActionLabel(action),
           style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 15),
         ),
         subtitle: Text(
@@ -239,34 +240,6 @@ class _AdminAuditLogsScreenState extends State<AdminAuditLogsScreen> {
         ],
       ),
     );
-  }
-
-  String _getActionLabel(String action) {
-    switch (action) {
-      case 'CREATE_STAFF': return "إضافة موظف جديد";
-      case 'UPDATE_STAFF': return "تعديل بيانات موظف";
-      case 'DELETE_STAFF': return "حذف موظف";
-      case 'CREATE_COUPON': return "إنشاء كود خصم";
-      case 'UPDATE_COUPON': return "تعديل كود خصم";
-      case 'DELETE_COUPON': return "حذف كود خصم";
-      case 'UPDATE_SERVICE_PRICE': return "تغيير سعر خدمة";
-      case 'TOGGLE_SERVICE_STATUS': return "تغيير حالة خدمة";
-      case 'REGISTER_DRIVER': return "تسجيل كادر/عامل جديد";
-      case 'UPDATE_DRIVER': return "تعديل بيانات كادر";
-      case 'DELETE_DRIVER': return "حذف كادر نهائياً";
-      case 'TOGGLE_DRIVER_STATUS': return "تغيير حالة كادر";
-      case 'CREATE_ZONE': return "إضافة منطقة تغطية";
-      case 'UPDATE_ZONE': return "تعديل منطقة تغطية";
-      case 'DELETE_ZONE': return "حذف منطقة تغطية";
-      case 'ADMIN_LOGIN_SUCCESS': return "دخول ناجح للوحة الإدارة";
-      case 'ADMIN_LOGIN_FAILED': return "محاولة دخول فاشلة للمسؤول";
-      case 'UPDATE_ORDER_STATUS': return "تحديث حالة الطلب";
-      case 'ASSIGN_DRIVER': return "تعيين كادر للطلب";
-      case 'ACTIVATE_CONTRACT': return "تفعيل عقد واحتساب رصيد";
-      case 'CLIENT_SIGN_CONTRACT': return "توقيع عقد إلكتروني جديد";
-      case 'APPROVE_CONTRACT': return "اعتماد عقد بانتظار الدفع";
-      default: return action;
-    }
   }
 
   String _translateKey(String key) {

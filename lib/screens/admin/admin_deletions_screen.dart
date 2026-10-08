@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/utils/deletion_log_row.dart';
 
 // StatefulWidget كي تعمل «إعادة المحاولة» بإعادة إنشاء التدفق عند فشل القراءة.
@@ -190,6 +191,19 @@ class _AdminDeletionsScreenState extends State<AdminDeletionsScreen> {
                                   await FirebaseFirestore.instance.collection('account_deletions').doc(doc.id).update({
                                     'status': 'deleted',
                                   });
+                                  // شاشةُ المستخدمينَ تُقيّدُ طلبَ الحذفِ
+                                  // (DELETE_USER)، وتنفيذُه — وهو ما لا رجعةَ
+                                  // فيه ويَترُكُ رصيدَ المحفظةِ دَيناً — كان
+                                  // بلا أثر.
+                                  await ZyiarahAuditService().logAction(
+                                    action: ZyiarahAuditService.actionProcessAccountDeletion,
+                                    details: {
+                                      'account': deletionRowIdentity(req),
+                                      if (deletionStrandedBalance(req) != null)
+                                        'stranded_balance': deletionStrandedBalance(req),
+                                    },
+                                    targetId: doc.id,
+                                  );
                                   if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(content: Text("تم بدء عملية الحذف بنجاح. سيتم مسح البيانات خلال ثوانٍ.")),

@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/screens/admin/admin_drivers_screen.dart';
+import 'package:zyiarah/services/audit_service.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/driver_activation.dart';
@@ -249,6 +250,14 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
                              .collection('drivers')
                              .doc(doc.id)
                              .update(driverActivationFields(active: false));
+                         // نفسُ كتابةِ مفتاحِ شاشةِ الكوادرِ حرفاً بحرف، وتلك
+                         // تُقيّدُها بـTOGGLE_DRIVER_STATUS — فتعطيلٌ من هنا كان
+                         // بلا أثرٍ في سجلِّ التدقيق: «من عطّل هذا السائق؟» بلا جواب.
+                         await ZyiarahAuditService().logAction(
+                           action: ZyiarahAuditService.actionToggleDriver,
+                           details: {'name': name, 'status': 'معطل', 'via': 'شاشة الامتثال'},
+                           targetId: doc.id,
+                         );
                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم تعطيل الحساب بنجاح")));
                        } catch (e) {
                          // كان الفشل (رفض قواعد/شبكة) استثناءً صامتاً — السائق يبقى نشطاً
@@ -372,6 +381,12 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
           'sent_by': 'Admin',
           'kind': 'compliance_alert',
         });
+        // شاشةُ البثِّ تُقيّدُ SEND_BROADCAST لنفسِ المجموعةِ — وهذا بثٌّ
+        // يَبلغُ كلَّ الكوادرِ وكان بلا أثر.
+        await ZyiarahAuditService().logAction(
+          action: 'SEND_BROADCAST',
+          details: {'title': 'تنبيه انتهاء وثائق رسمية', 'target': 'drivers', 'count': count},
+        );
       }
       messenger.showSnackBar(SnackBar(
         content: Text("تم إرسال $count تنبيه استباقي آلي بنجاح 🤖✅"),
