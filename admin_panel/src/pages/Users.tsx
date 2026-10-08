@@ -3,6 +3,7 @@ import { Search, Filter, UserCheck, UserX, Mail, Phone, Users as UsersIcon } fro
 import { collection, onSnapshot, query, orderBy, limit, Timestamp, doc, updateDoc, getCountFromServer, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/notificationContext.ts';
+import { logAudit, AUDIT } from '../services/audit.ts';
 
 interface UserRecord {
     uid: string;
@@ -86,6 +87,7 @@ export default function Users() {
             : 'هل تريد رفع الحظر عن هذا المستخدم؟')) return;
         try {
             await updateDoc(doc(db, 'users', uid), { status: banning ? 'banned' : 'active' });
+            await logAudit(banning ? AUDIT.BAN_USER : AUDIT.UNBAN_USER, {}, uid);
             toast.success(banning ? 'تم حظر المستخدم' : 'تم رفع الحظر');
         } catch {
             toast.error('تعذّر تحديث حالة المستخدم — أعد المحاولة');

@@ -7,6 +7,7 @@ import { endOfLocalDay } from '../utils/couponExpiry';
 import { COUPON_ACTIVE, COUPON_DISABLED, couponIsActive } from '../utils/couponStatus';
 import { couponIsUnlimited, couponMaxUsesLabel, couponUsesProgress } from '../utils/couponUses.ts';
 import { formatSarAny } from '../utils/money';
+import { logAudit, AUDIT } from '../services/audit.ts';
 
 interface PromoCode {
     id: string;
@@ -136,6 +137,10 @@ export default function Marketing() {
                 description: newDescription.trim(),
                 createdAt: serverTimestamp(),
             });
+            await logAudit(AUDIT.CREATE_COUPON, {
+                code: newCode.toUpperCase(), type: newType, value: newValue,
+                maxUses: newMaxUses, restricted_zones: newZones,
+            });
             setIsAddModalOpen(false);
             // Reset form
             setNewCode('');
@@ -160,6 +165,7 @@ export default function Marketing() {
         if (!await confirm("هل أنت متأكد من حذف هذا الكوبون؟")) return;
         try {
             await deleteDoc(doc(db, 'promo_codes', id));
+            await logAudit(AUDIT.DELETE_COUPON, {}, id);
         } catch (error) {
             console.error("Error deleting promo code: ", error);
             toast.error("حدث خطأ أثناء الحذف.");
@@ -174,6 +180,8 @@ export default function Marketing() {
             await updateDoc(doc(db, 'promo_codes', coupon.id), {
                 status: newStatus
             });
+            await logAudit(AUDIT.UPDATE_COUPON,
+                { code: coupon.code, status: newStatus }, coupon.id);
         } catch (error) {
             // الحذفُ في هذا الملفِّ يُنبّه، والتفعيل/التعطيلُ كان لا يُنبّه:
             // كوبونٌ يَبدو أنّه عُطّل وهو ما زال يُقبَل عند العميلة.
