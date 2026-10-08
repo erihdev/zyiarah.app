@@ -46,6 +46,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   bool _updateEnabled = false;
   bool _updateForce = false;
   bool _maintenanceMode = false;
+  // مفتاحُ طريقةِ دفعٍ كاملة: `payment_summary_screen` و`store_payment_screen`
+  // يُخفِيانِ خيارَ التقسيطِ على `tamara_enabled` **وافتراضُهما `false`**،
+  // وكان الكاتبُ الوحيدُ لوحةَ الويب — فمالكٌ يَعملُ من التطبيقِ لا يَستطيعُ
+  // تشغيلَ تمارا إطلاقاً، وقسمُ «إعدادات الدفع» هنا لا يَذكرُ أنّ المفتاحَ موجود.
+  bool _tamaraEnabled = false;
 
   @override
   void initState() {
@@ -76,6 +81,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                 "4. يلتزم الطرف الثاني بتوفير بيئة عمل مناسبة وآمنة لمقدم الخدمة.";
             _privacyPolicyCtrl.text = data['privacy_policy'] ?? '';
             _maintenanceMode = data['maintenance_mode'] == true;
+            _tamaraEnabled = data['tamara_enabled'] == true;
             _isLoading = false;
           });
           
@@ -233,6 +239,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         'contract_terms': _contractTermsCtrl.text.trim(),
         'privacy_policy': _privacyPolicyCtrl.text.trim(),
         'maintenance_mode': _maintenanceMode,
+        'tamara_enabled': _tamaraEnabled,
       }, SetOptions(merge: true));
 
       // (باقات السكن) لم يتبقَّ من hourly_settings إلا **السعة اليومية**.
@@ -271,6 +278,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         action: ZyiarahAuditService.actionUpdateSettings,
         details: {
           'maintenance_mode': _maintenanceMode,
+          'tamara_enabled': _tamaraEnabled,
           'daily_cap': capacity,
           'latest_build_ios': iosBuild,
           'latest_build_android': androidBuild,
@@ -429,6 +437,17 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                           const SizedBox(height: 16),
                           _buildPremiumField("الرقم الضريبي (VAT)", "رقم", _vatNumberCtrl, Icons.account_balance_wallet_rounded),
                           _buildPremiumField("السجل التجاري (CR)", "رقم", _crNumberCtrl, Icons.badge_rounded),
+                          const Divider(),
+                          // المفتاحُ كان في لوحةِ الويبِ وحدَها وافتراضُه مُطفأ،
+                          // فالتقسيطُ مخفيٌّ عن العميلةِ ما لم يُفتَحْ من المتصفّح.
+                          _buildToggle(
+                            "تمارا (التقسيط)",
+                            "عند التفعيل يظهر خيار «قسّم فاتورتك على 4 دفعات» للعميلة في شاشة الدفع. "
+                            "عند الإطفاء لا يُعرض الخيار إطلاقاً.",
+                            _tamaraEnabled,
+                            (v) => setState(() => _tamaraEnabled = v),
+                            const Color(0xFF8B5CF6),
+                          ),
                         ],
                       ),
 
