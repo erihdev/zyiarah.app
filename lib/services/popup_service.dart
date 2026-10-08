@@ -176,9 +176,16 @@ class ZyiarahPopupService {
                                   ));
                                 }
                               } catch (e) {
+                                // **لا نصَّ استثناءٍ خامّاً في وجه العميلة.**
+                                // `launchUrl` يرمي `PlatformException` فتُقرأ
+                                // «تعذّر فتح الرابط: PlatformException(
+                                // ACTIVITY_NOT_FOUND, …)» بحرفٍ لاتينيّ في
+                                // شريطٍ عربيّ. والجملة هي جملة فرع `!ok`
+                                // نفسها — الوجهة واحدة والسبب تشخيصٌ لنا.
+                                debugPrint('popup link: $e');
                                 if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                    content: Text('تعذّر فتح الرابط: $e'),
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                    content: Text('تعذّر فتح الرابط المُرفق بالإعلان'),
                                     backgroundColor: Colors.red,
                                   ));
                                 }
