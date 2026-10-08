@@ -337,6 +337,30 @@ Admin` يشمل الاستضافة)، ويلزمه سرُّ `MAPBOX_TOKEN` ال�
 - **`storage.rules`** — في **لا** مسار. انشرها **بعد** أن يصل بناءُ التطبيق
   الجديد: التضييقُ يحصر الحذفَ في نداءٍ خادميّ (`deleteStorageObject`)، فنشرُها
   قبلَ وصولِ البناء يُعطّل زرَّ الحذف في نسخةِ أدمنٍ أقدم.
+- **حذفُ فهرسٍ زائدٍ من Firestore** — المسارُ يُنشئ ولا يَحذف. ٨ فهارسَ
+  في `firestore.indexes.json` **بلا استعلامٍ يُبرِّرها** (مُعلَّلةٌ واحداً واحداً
+  في `test/firestore_indexes_guard_test.dart`)، وكلفتُها كتابةٌ وتخزينٌ على
+  مجموعاتٍ نشطة.
+
+  **ولا تَحذفها بإزالتها من الملفّ وحدها:** الأداةُ بـ`--non-interactive` وبلا
+  `--force` تَطبع «there are N indexes defined in your project that are not
+  present in your firestore indexes file» ثم **تُكمِل النشرَ بنجاح** — فالإزالةُ
+  من الملفّ تجعله يَكُفّ عن وصفِ الإنتاج ولا تَحذف شيئاً، وهو أسوأُ من بقائها.
+
+  **والخطرُ في `--force` نفسِه:** يَحذف في المرورِ ذاته **كلَّ تجاوزِ حقلٍ**
+  (`fieldOverride`) قائمٍ في الإنتاج وغائبٍ عن الملفّ — والملفُّ يُعلن
+  `fieldOverrides: []`، فتجاوزٌ أحاديٌّ ضُبط من الكونسول يزول معها. فافحصْ
+  **Firestore Console ← Indexes ← Single field** أوّلاً، وأضِفْ ما تريد إبقاءه
+  إلى `fieldOverrides` في الملفّ، ثم:
+
+  ```bash
+  npx firebase-tools@15 deploy --only firestore:indexes \
+    --project zyiarah-app --force
+  ```
+
+  وعددُ الزائدِ يُنشَر الآن في **ملخَّصِ وظيفةِ `Deploy Firestore Indexes`**
+  بعد كلّ نشرٍ ناجح (خطوةُ `Report file ↔ project divergence`)، فلا تَحتاج إلى
+  فتحِ السجلّ لتعرفَه.
 
 ## 2. حرّاس ما قبل الدمج
 

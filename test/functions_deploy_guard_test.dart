@@ -32,6 +32,23 @@ void main() {
       .where((l) => !l.trimLeft().startsWith('#'))
       .join('\n');
 
+  /// جسمُ خطوةٍ **بلا تعليقات**. حدُّ الخطوةِ هو سطرُ اسمِ التاليةِ،
+  /// وتعليقاتُ YAML للتاليةِ تَسكنُ **فوقَ** ذلك السطرِ — فتَقعُ في شريحةِ
+  /// السابقة. وهذا الملفُّ يَشرحُ قراراتَه بذكرِ `--force` و`functions:list`
+  /// في تلك التعليقاتِ بعينِها، فكلُّ فحصٍ موجَبٍ هنا كان يُرضيه **شرحٌ** لا
+  /// شفرة: يَمُرُّ أخضرَ على نداءٍ زالَ منه العلَم. (الفحصُ الجديدُ في
+  /// `firestore_indexes_guard_test` هو ما كشفَ الحدَّ، لأنّ دعواهُ سالبة.)
+  String stepCode(String name) {
+    final int i = wf.indexOf('      - name: $name');
+    if (i < 0) return '';
+    final int next = wf.indexOf('      - name:', i + 10);
+    return wf
+        .substring(i, next < 0 ? wf.length : next)
+        .split('\n')
+        .where((l) => !l.trimLeft().startsWith('#'))
+        .join('\n');
+  }
+
   group('نشرُ الدوالّ آليّاً', () {
     test('يعمل عند الدمج إلى main، ومحصورٌ بما يمسّ الدوالّ', () {
       expect(wf.contains('branches: [main]'), isTrue);
@@ -74,9 +91,7 @@ void main() {
       expect(iGuard, lessThan(iDep),
           reason: 'الحارسُ **بعدَ** النشرِ لا يَحرُسُ شيئاً');
 
-      final nextStep = wf.indexOf('      - name:', iDep + 10);
-      final deployStep =
-          wf.substring(iDep, nextStep < 0 ? wf.length : nextStep);
+      final deployStep = stepCode('Deploy');
       expect(deployStep.contains('firebase-tools'), isTrue,
           reason: 'الاقتطاعُ لم يُصِب نداءَ النشر — فحصٌ أجوف');
       // و`--force` مشروطٌ لا مباح: مسموحٌ **لأنّ** الحارسَ أعلاه أثبتَ أنّ لا
@@ -91,9 +106,7 @@ void main() {
     });
 
     test('والحارسُ يَقرأُ المنشورَ فعلاً، ويَفشلُ مُغلَقاً', () {
-      final iGuard = wf.indexOf('- name: Refuse a silent deletion');
-      final nextStep = wf.indexOf('      - name:', iGuard + 10);
-      final step = wf.substring(iGuard, nextStep < 0 ? wf.length : nextStep);
+      final step = stepCode('Refuse a silent deletion');
       expect(step.contains('functions:list'), isTrue,
           reason: 'الحارسُ لا يَقرأُ ما هو منشورٌ فعلاً — فلا يَعرفُ ما يُحذَف');
       expect(step.contains('--json'), isTrue,

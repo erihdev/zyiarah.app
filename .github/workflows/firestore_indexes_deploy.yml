@@ -63,6 +63,45 @@ jobs:
       # يُنشَرُ الآن في ملخَّصِ الوظيفةِ وكتنبيهاتٍ تُقرأُ عبر
       # `check-runs/{id}/annotations`. (2026-10-05، بعد ثلاثِ دمجاتٍ
       # فشلَ نشرُ دوالِّها بلا سببٍ مقروء.)
+      # **انحرافُ الملفِّ عن الإنتاجِ كان سطراً واحداً في سجلٍّ لا يُقرَأ.**
+      # بـ`--non-interactive` وبلا `--force` تَطبعُ الأداةُ «there are N
+      # indexes defined in your project that are not present in your
+      # firestore indexes file» ثمّ **تُكمِلُ النشرَ بنجاح** — مُتحقَّقٌ من
+      # مصدرِها (`lib/firestore/api.js`: الفرعُ يُسجّلُ ثمّ
+      # `confirm({nonInteractive, force, default: false})`، و`lib/prompt.js`
+      # يُعيدُ الافتراضَ المُعلَنَ ولا يَرمي). فالانحرافُ لا يُفشِلُ شيئاً
+      # ولا يُرى: يُنشَرُ في ملخَّصِ الوظيفةِ الآن ليُقرَأَ بلا فتحِ سجلّ.
+      - name: Report file ↔ project divergence
+        if: success()
+        run: |
+          LOG="$RUNNER_TEMP/deploy.log"
+          N=$(grep -oE '[0-9]+ indexes defined in your project' "$LOG" 2>/dev/null \
+            | grep -oE '^[0-9]+' | head -1 || true)
+          F=$(grep -oE '[0-9]+ field overrides defined in your project' "$LOG" 2>/dev/null \
+            | grep -oE '^[0-9]+' | head -1 || true)
+          {
+            echo "## ✓ نُشرت الفهارس"
+            if [ -n "$N" ] || [ -n "$F" ]; then
+              echo
+              echo "### الملفُّ لا يَصفُ الإنتاجَ كاملاً"
+              [ -n "$N" ] && echo "- **$N فهرساً** في المشروعِ وليست في \`firestore.indexes.json\`."
+              [ -n "$F" ] && echo "- **$F تجاوزَ حقلٍ** في المشروعِ وليست في الملفّ."
+              echo
+              echo "حذفُها **لا يَجري من هنا**: مسارُ النشرِ بلا \`--force\` بقرارٍ"
+              echo "مُثبَّتٍ في \`test/functions_deploy_guard_test.dart\`. والحذفُ"
+              echo "بيدٍ واحدةً، ويَحذفُ في الوقتِ نفسِه **كلَّ تجاوزِ حقلٍ**"
+              echo "قائمٍ في الإنتاجِ وغائبٍ عن الملفّ — والملفُّ يُعلِنُ"
+              echo "\`fieldOverrides: []\`، فتحقّقْ من الكونسولِ أوّلاً:"
+              echo '```'
+              echo "npx firebase-tools@15 deploy --only firestore:indexes \\"
+              echo "  --project zyiarah-app --force"
+              echo '```'
+            else
+              echo
+              echo "الملفُّ يَصفُ الإنتاجَ: لا فهرسَ ولا تجاوزَ حقلٍ زائدٌ هناك."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Surface the failure
         if: failure()
         run: |
