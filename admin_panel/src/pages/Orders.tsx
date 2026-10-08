@@ -22,6 +22,7 @@ import PriceReviewBadge from '../components/PriceReviewBadge.tsx';
 import { auth } from '../services/firebase.ts';
 import { logAudit, AUDIT } from '../services/audit.ts';
 import { orderPaidForDispatch, UNPAID_DISPATCH_REFUSAL } from '../utils/orderDispatch.ts';
+import { refundNoticeText, refundServiceImpact } from '../utils/refundNotice.ts';
 
 // تنسيق تاريخ لحقل datetime-local (YYYY-MM-DDTHH:mm).
 const toDatetimeLocal = (dt: Date) => {
@@ -394,7 +395,15 @@ export default function Orders() {
     const isFinalStatus = (o: OrderRecord) => o.status === 'completed' || o.status === 'cancelled';
     const handleBnplRefund = async (order: OrderRecord) => {
         const provider = order.payment_method === 'tamara' ? 'تمارا' : 'تابي';
-        if (!await confirm(`هل أنت متأكد من استرداد مبلغ الطلب #${order.code || order.id.substring(0, 6).toUpperCase()} عبر ${provider}؟ لا يمكن التراجع.`)) return;
+        // **ما يَحدثُ للخدمةِ يُقال.** الحوارُ كان سطراً واحداً، والبوّابةُ لا
+        // تُلغي الطلبَ: المفتوحُ يَبقى بسائقِه فيَذهبُ الفريق. والجملةُ
+        // مطابقةٌ لتطبيقِ الإدارةِ حرفاً بحرف (`refundNotice.ts`).
+        const notice = refundNoticeText(
+            'refund',
+            refundServiceImpact(order.status, !!(order.driver_id || '').trim()),
+            false,
+        );
+        if (!await confirm(`هل أنت متأكد من استرداد مبلغ الطلب #${order.code || order.id.substring(0, 6).toUpperCase()} عبر ${provider}؟ لا يمكن التراجع.${notice ? `\n\n${notice}` : ''}`)) return;
         setIsRefunding(true);
         try {
             await httpsCallable(functions, order.payment_method === 'tamara' ? 'tamaraRefundPayment' : 'tabbyRefundPayment')({
