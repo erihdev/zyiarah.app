@@ -6,7 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart' as intl;
+import 'package:zyiarah/utils/ksa_instant.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/contract_health.dart';
 import 'package:zyiarah/utils/home_packages.dart';
@@ -265,7 +265,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
             child: Row(
               children: [
                 _buildInfoBit("العميل", clientName, Icons.person_outline),
-                _buildInfoBit("تاريخ التوقيع", intl.DateFormat('dd-MM-yyyy').format(createdAt), Icons.calendar_today_outlined),
+                _buildInfoBit("تاريخ التوقيع", ksaDateText(createdAt), Icons.calendar_today_outlined),
               ],
             ),
           ),

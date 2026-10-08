@@ -197,7 +197,12 @@ void main() {
     test('مُولِّدُ PDF يَطبعُ issuedAt ولا يَلمسُ DateTime.now() للتاريخ', () {
       final pdf = read('lib/services/zyiarah_pdf_service.dart');
       expect(pdf, contains('required DateTime issuedAt'));
-      expect(pdf, contains("intl.DateFormat('yyyy-MM-dd HH:mm').format(issuedAt)"));
+      // **أُعيد توجيهُه بوعي (2026-10-08).** كان يُثبّتُ شكلَ القراءةِ
+      // (`intl.DateFormat('yyyy-MM-dd HH:mm').format(issuedAt)`) لا الحقيقةَ
+      // المقصودةَ — وذاك الشكلُ بعينُه كان يَطبعُ مكوّناتَ لحظةٍ مطلقةٍ
+      // بمنطقةِ الجهاز. المقصودُ «يَطبعُ `issuedAt` لا الآن»، ويُشَدُّ الآن
+      // على النداءِ الذي يَضمنُ ذلك **وتوقيتَ الرياضِ معه**.
+      expect(pdf, contains('invoiceIssuedAtText(issuedAt)'));
       expect(pdf.contains("Date: \${DateTime.now()"), isFalse,
           reason: 'تاريخُ الفاتورةِ عاد إلى لحظةِ التوليد');
     });

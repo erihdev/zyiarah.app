@@ -20,7 +20,10 @@ void main() {
         total: 230,
         discount: discount,
         couponCode: coupon,
-        issuedAt: DateTime(2026, 9, 16, 9, 30),
+        // **لحظةٌ مطلقةٌ لا ساعةٌ محلّيّة** (وهو ما يُعيده `Timestamp.toDate()`):
+        // 06:30Z == 09:30 بالرياض، فالنصُّ المتوقَّعُ ثابتٌ أيّاً كانت منطقةُ
+        // جهازِ التشغيل — وتلك هي الخاصيّةُ التي أُصلِحَت أصلاً.
+        issuedAt: DateTime.utc(2026, 9, 16, 6, 30),
         paymentMethod: 'applepay',
         paymentRef: 'MOY-98234',
         isPaid: paid,
@@ -54,7 +57,9 @@ void main() {
     expect(find.text('310885360200003'), findsOneWidget);
     expect(find.text('7030376342'), findsOneWidget);
     expect(find.text('ZY-202600042'), findsOneWidget);
-    expect(find.text('2026/09/16 09:30'), findsOneWidget);
+    // كان `2026/09/16 09:30` — مكوّناتٌ محلّيّةٌ من لحظةٍ مطلقة، فتَتغيّرُ
+    // بمنطقةِ القارئ. القاعدةُ في `invoice_stamp.dart`.
+    expect(find.text('2026-09-16 09:30 +03'), findsOneWidget);
     expect(find.byType(QrImageView), findsOneWidget);
     expect(find.text('تنظيف منزلي (شقة - 2 كوادر)'), findsOneWidget);
     // الصافي 200 يظهر مرتين (سطر البند بلا خصم = الصافي، وصفّ الملخص).

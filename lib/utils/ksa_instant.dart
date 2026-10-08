@@ -62,6 +62,32 @@ DateTime ksaInstantOf(DateTime wall) => DateTime.utc(
       wall.microsecond,
     ).subtract(kKsaUtcOffset);
 
+/// **ساعةُ الحائطِ السعوديّةُ للحظةٍ مطلقة — عكسُ [ksaInstantOf] بالضبط.**
+///
+/// الاتّجاهُ الذي كان ناقصاً: الوحدةُ تَحملُ «ساعةُ حائطٍ ← لحظة» وحدَه،
+/// فكلُّ مَن أرادَ **طبعَ** لحظةٍ مخزَّنةٍ قرأَ مكوّناتَها محلّيّاً — أي
+/// بمنطقةِ جهازِ القارئ. تُقرأُ هنا من `toUtc()` ثمّ تُزاح، فالمنطقةُ لا
+/// تَدخلُ الحساب؛ والناتجُ `DateTime` **محلّيُّ النكهةِ بقصد** كـ
+/// [ksaTodayWall]: مكوّناتُه هي ما يُطبَع، ولحظتُه لا تُستعمَل.
+DateTime ksaWallOf(DateTime instant) {
+  final r = instant.toUtc().add(kKsaUtcOffset);
+  return DateTime(r.year, r.month, r.day, r.hour, r.minute, r.second,
+      r.millisecond, r.microsecond);
+}
+
+/// **تاريخُ الرياضِ للحظةٍ مخزَّنةٍ، يوماً بلا ساعة** — لوثيقةِ العقد.
+///
+/// «تاريخ الإصدار / Issue Date» في ملفِّ العقدِ، وتاريخُه في بطاقةِ «عقودي»،
+/// كلاهما `intl.DateFormat(…).format(createdAt)` و`createdAt` لحظةٌ مطلقةٌ من
+/// `Timestamp.toDate()` — فالمطبوعُ تاريخُ **جهازِ القارئ**. ودقّةُ اليومِ
+/// تَعني أنّ العطلَ يَقعُ عند حدِّ اليومِ وحدَه: عقدٌ أُنشئ الواحدةَ صباحاً
+/// بالرياضِ يُطبَعُ بتاريخِ **أمس** على جهازٍ غربيَّ الإزاحة.
+String ksaDateText(DateTime instant) {
+  final DateTime w = ksaWallOf(instant);
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${w.year}-${two(w.month)}-${two(w.day)}';
+}
+
 /// **تاريخُ الرياضِ الحاليُّ ساعةَ حائطٍ** — `DateTime` مكوّناتُه Y/M/D
 /// بتوقيتِ الرياضِ عند منتصفِ الليل، **محلّيُّ النكهةِ بقصد**: يُقارَنُ بما
 /// تُعيدُه مُنتقياتُ التاريخِ وبما تَحملُه حقولُ الموعدِ في الشاشات، وتلك
