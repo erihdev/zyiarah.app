@@ -36,6 +36,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zyiarah/utils/contract_health.dart';
+import 'helpers/sources_in.dart';
 
 String _stripJs(String src) => src
     .split('\n')
@@ -261,10 +262,7 @@ void main() {
       // التعليقُ القديمُ قال «أي نقصٍ يُكمِله مسار إداري» وهو
       // `generateSubscriptionVisits`. هذا الفحصُ يُثبّتُ أنّ الحجّةَ صحيحةٌ:
       // لو ظهرَ له مُنادٍ يوماً فالتعليلُ يُراجَعُ لا يُسكَت.
-      final callers = Directory('lib')
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.dart'))
+      final callers = sourcesIn('lib', atLeast: 100)
           .where((f) => RegExp(r"httpsCallable\(\s*'generateSubscriptionVisits'")
               .hasMatch(f.readAsStringSync()))
           .map((f) => f.path)

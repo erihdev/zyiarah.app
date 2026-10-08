@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'helpers/sources_in.dart';
 
 /// كتابةٌ تَفشلُ في لوحةِ الويبِ بلا كلمةٍ للأدمن.
 ///
@@ -111,12 +112,9 @@ void main() {
         'admin_panel/src/pages/Settings.tsx',
       };
       final found = <String>[];
-      for (final f in Directory('admin_panel/src')
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((f) =>
-              (f.path.endsWith('.tsx') || f.path.endsWith('.ts')) &&
-              !f.path.contains('.test.'))) {
+      for (final f in sourcesIn('admin_panel/src',
+              atLeast: 20, exts: const ['.tsx', '.ts'])
+          .where((f) => !f.path.contains('.test.'))) {
         final s = f.readAsStringSync();
         if (!RegExp(r'\b(updateDoc|setDoc|addDoc|deleteDoc|writeBatch|httpsCallable)\b')
             .hasMatch(s)) {

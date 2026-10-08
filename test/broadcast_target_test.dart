@@ -5,6 +5,7 @@ import 'package:zyiarah/utils/broadcast_target.dart';
 
 import 'helpers/notifications_log_writers.dart';
 import 'helpers/strip_comments.dart';
+import 'helpers/sources_in.dart';
 
 /// **جمهورُ البثِّ: قيمةُ الحقلِ شيءٌ واسمُ موضوعِ FCM شيءٌ آخر (2026-10-07).**
 ///
@@ -82,8 +83,7 @@ void main() {
     });
 
     test('ولا تحويلٌ إنلاين باقٍ (نسخةٌ ثانيةٌ تَنحرِف)', () {
-      for (final e in Directory('lib').listSync(recursive: true)) {
-        if (e is! File || !e.path.endsWith('.dart')) continue;
+      for (final e in sourcesIn('lib', atLeast: 100)) {
         if (e.path.endsWith('utils/broadcast_target.dart')) continue;
         final src = stripComments(e.readAsStringSync());
         expect(src.contains("== 'all_users' ? 'all'"), isFalse,

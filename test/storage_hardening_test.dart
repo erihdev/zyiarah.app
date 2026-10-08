@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zyiarah/utils/upload_content_type.dart';
+import 'helpers/sources_in.dart';
 
 /// **مخزنُ المشروعِ كان مفتوحاً لأيِّ عميلةٍ مسجَّلة (2026-10-05).**
 ///
@@ -146,10 +147,7 @@ void main() {
     test('ولا رفعَ بلا بياناتٍ وصفيّةٍ في أيِّ موضعٍ تَحرسُه القاعدة', () {
       // المسحُ مُشتَقّ: أيُّ `putData(` أو `putFile(` بوسيطٍ واحدٍ فقط.
       final List<String> bare = [];
-      for (final f in Directory('lib')
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.dart'))) {
+      for (final f in sourcesIn('lib', atLeast: 100)) {
         final src = codeOnly(f.path);
         for (final m
             in RegExp(r'put(?:Data|File)\(').allMatches(src)) {

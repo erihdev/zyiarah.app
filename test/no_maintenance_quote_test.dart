@@ -13,6 +13,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'helpers/sources_in.dart';
 
 String _code(String path) => File(path)
     .readAsStringSync()
@@ -24,11 +25,8 @@ String _code(String path) => File(path)
     })
     .join('\n');
 
-List<File> _dart(String dir) => Directory(dir)
-    .listSync(recursive: true)
-    .whereType<File>()
-    .where((f) => f.path.endsWith('.dart'))
-    .toList();
+List<File> _dart(String dir) =>
+    sourcesIn(dir, atLeast: dir == 'lib' ? 100 : 1);
 
 void main() {
   test('الشاشات والخدمات المحذوفة لم تعد موجودة', () {

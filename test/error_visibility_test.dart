@@ -26,6 +26,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'helpers/sources_in.dart';
 
 String _read(String p) => File(p).readAsStringSync();
 
@@ -100,10 +101,7 @@ void main() {
       // لكل قيمة، بواحدةٍ في كلٍّ منها — فتختفي الإشارة في الضجيج. وهذا ما كان
       // يفعله `_reportSilent` الخاص في user_provider قبل توحيده.
       final offenders = <String>[];
-      for (final f in Directory('lib')
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.dart'))) {
+      for (final f in sourcesIn('lib', atLeast: 100)) {
         for (final m in RegExp(r"reason:\s*'([^']*)'")
             .allMatches(f.readAsStringSync())) {
           final r = m.group(1)!;
@@ -150,10 +148,7 @@ void main() {
         'lib/utils/global_error_handler.dart',
       };
       final direct = <String>[];
-      for (final f in Directory('lib')
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.dart'))) {
+      for (final f in sourcesIn('lib', atLeast: 100)) {
         if (allowed.contains(f.path)) continue;
         if (RegExp(r'record(Error|FlutterFatalError)\s*\(')
             .hasMatch(f.readAsStringSync())) {

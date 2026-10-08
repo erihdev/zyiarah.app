@@ -13,6 +13,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'helpers/sources_in.dart';
 
 /// يزيل التعليقات: التعليقات هنا **تشرح ما حُذف**، ففحص المصدر الخام يسقط الحارس
 /// على شرحه هو — إنذار كاذب يدفع لتعطيل الحارس فيصير أسوأ من لا شيء.
@@ -28,11 +29,8 @@ String _code(String path) {
       .join('\n');
 }
 
-List<File> _dart(String dir) => Directory(dir)
-    .listSync(recursive: true)
-    .whereType<File>()
-    .where((f) => f.path.endsWith('.dart'))
-    .toList();
+List<File> _dart(String dir) =>
+    sourcesIn(dir, atLeast: dir == 'lib' ? 100 : 1);
 
 void main() {
   test('لا حزمة، لا خدمة، لا مفتاح', () {

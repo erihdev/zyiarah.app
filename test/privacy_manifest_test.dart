@@ -25,6 +25,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'helpers/sources_in.dart';
 
 const String _manifest = 'ios/Runner/PrivacyInfo.xcprivacy';
 
@@ -114,10 +115,7 @@ void main() {
     expect(RegExp(r'<key>NSPrivacyTrackingDomains</key>\s*<array/>')
         .hasMatch(xml), isTrue);
     // ولا `setUserIdentifier` في المستودع، فعدمُ ارتباطِ بياناتِ الانهيارِ صحيح.
-    final libFiles = Directory('lib')
-        .listSync(recursive: true)
-        .whereType<File>()
-        .where((f) => f.path.endsWith('.dart'));
+    final libFiles = sourcesIn('lib', atLeast: 100);
     expect(libFiles.any((f) => f.readAsStringSync().contains('setUserIdentifier')),
         isFalse,
         reason: 'ظهرَ setUserIdentifier — فبياناتُ الانهيارِ صارت مرتبطةً '

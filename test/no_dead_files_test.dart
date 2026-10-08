@@ -22,14 +22,11 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'helpers/sources_in.dart';
 
 void main() {
   test('لا ملف في lib/ بلا مستهلك', () {
-    final libFiles = Directory('lib')
-        .listSync(recursive: true)
-        .whereType<File>()
-        .where((f) => f.path.endsWith('.dart'))
-        .toList();
+    final libFiles = sourcesIn('lib', atLeast: 100);
 
     // النصّ الذي يُبحَث فيه: كل شفرة lib وtest. الاختبارات مستهلكٌ مشروع —
     // ملفٌ لا يستورده إلا اختباره ليس ميتاً، بل مُختبَراً وغير موصول بعد،
@@ -37,10 +34,7 @@ void main() {
     final corpus = StringBuffer();
     for (final f in [
       ...libFiles,
-      ...Directory('test')
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.dart')),
+      ...sourcesIn('test', atLeast: 80),
     ]) {
       corpus.writeln(f.readAsStringSync());
     }

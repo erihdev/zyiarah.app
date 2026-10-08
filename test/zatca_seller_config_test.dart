@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'helpers/sources_in.dart';
 
 /// **بياناتُ البائعِ على كلِّ فاتورةٍ ضريبيّةٍ كانت تُقرأُ من مستندٍ لا
 /// يَكتبُه شيء.**
@@ -95,10 +96,7 @@ void main() {
 
     test('(ه) `invoiceQrFor` ما زالت البوّابةَ الوحيدة', () {
       var direct = 0;
-      for (final f in Directory('lib')
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.dart'))) {
+      for (final f in sourcesIn('lib', atLeast: 100)) {
         final p = f.path.replaceAll(r'\', '/');
         if (p.endsWith('utils/invoice_stamp.dart') ||
             p.endsWith('services/zatca_service.dart')) {

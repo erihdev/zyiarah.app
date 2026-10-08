@@ -5,10 +5,10 @@
 // الخرائط المتداخلة تصل بنوع Map<Object?, Object?> (القناة الأصلية على أندرويد،
 // وبعض إصدارات الويب)، فالكشط الصلب يرمي TypeError **قبل** showDialog — زرٌّ ميت
 // بصمت، وهو بالضبط صنف الفشل الذي تطارده هذه الجلسة كلها.
-import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zyiarah/utils/firestore_maps.dart';
+import 'helpers/sources_in.dart';
 
 String _stripComments(String src) => src
     .replaceAll(RegExp(r'/\*[\s\S]*?\*/'), '')
@@ -56,10 +56,7 @@ void main() {
     final offenders = <String>[];
     final pattern =
         RegExp("\\[['\"][A-Za-z_]+['\"]\\]\\s+as Map<String, dynamic>");
-    for (final f in Directory('lib')
-        .listSync(recursive: true)
-        .whereType<File>()
-        .where((f) => f.path.endsWith('.dart'))) {
+    for (final f in sourcesIn('lib', atLeast: 100)) {
       final code = _stripComments(f.readAsStringSync());
       final rel = f.path.replaceAll(r'\', '/');
       for (final m in pattern.allMatches(code)) {

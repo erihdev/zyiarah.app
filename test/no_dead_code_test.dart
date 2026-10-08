@@ -25,6 +25,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'helpers/sources_in.dart';
 
 /// يُقنّع التعليقات والسلاسل بمسافات **مع حفظ الأطوال**، كي لا يُحسَب ذِكرُ اسمٍ
 /// في تعليقٍ أو نصٍّ نداءً له. (حذفُ الأسطر بدل التقنيع يُزيح الإزاحات — وهو
@@ -95,11 +96,12 @@ String _mask(String s) {
   return out.join();
 }
 
-List<File> _dartFiles(String dir) => Directory(dir)
-    .listSync(recursive: true)
-    .whereType<File>()
-    .where((f) => f.path.endsWith('.dart'))
-    .toList();
+List<File> _dartFiles(String dir) => sourcesIn(dir,
+    atLeast: dir == 'lib'
+        ? 100
+        : dir == 'test'
+            ? 80
+            : 2);
 
 final _ident = RegExp(r'[A-Za-z_$][A-Za-z0-9_$]*');
 
