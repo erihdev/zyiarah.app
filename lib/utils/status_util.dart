@@ -28,7 +28,9 @@ class ZyiarahStatus {
     }
   }
 
-  // Consistent Colors
-  static const Color primaryPurple = Color(0xFF660033);
-  static const Color adminNavy = Color(0xFF1E293B);
+  // **لا لونَ هنا.** كانت `primaryPurple = 0xFF660033` و
+  // `adminNavy = 0xFF1E293B` معلَّقتَين تحتَ «Consistent Colors» **بلا
+  // قارئٍ واحد**، ولونُ العلامةِ له موضعُه (`ZyiarahTheme.brand`) — فنسخةٌ
+  // ثالثةٌ في وحدةِ تسمياتِ الحالاتِ ليست من شأنِها، ولا تُورِثُ اتّساقاً
+  // لا يَقرؤه أحد. (2026-10-08، حين وُسِّعَ `no_dead_code_test` إلى الحقول.)
 }

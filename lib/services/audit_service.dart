@@ -45,29 +45,36 @@ class ZyiarahAuditService {
     }
   }
 
-  // Pre-defined action types for consistency
+  // **مُفرداتُ الإجراءِ تَسكنُ `lib/utils/audit_actions.dart`، لا هنا.**
+  //
+  // كانت هذه القائمةُ تَقولُ عن نفسِها «Pre-defined action types for
+  // consistency» — واثنا عشَرَ موضعاً دارتيّاً من تسعةٍ وعشرينَ يَكتبُ
+  // النصَّ بيدِه ويَتخطّاها. والحمايةُ الحقيقيّةُ صارت في موضعٍ آخر:
+  // `kAuditActionLabels` تَحملُ تسميةً عربيّةً لكلِّ اسمٍ،
+  // و`kAuditActionsWithoutWriter` تُعلِنُ ما لا كاتبَ له **بسببِه**،
+  // و`test/audit_coverage_test.dart` يَشتقُّ المجموعتَين من المستودعِ —
+  // فاسمٌ جديدٌ بلا تسميةٍ يَسقطُ الفحصَ يومَ كتابتِه، وذاك ما لا تَقدِرُ
+  // عليه قائمةُ ثوابتَ أصلاً.
+  //
+  // فحُذِفت منها تسعةُ ثوابتَ بلا مُنادٍ (2026-10-08)، وثلاثةٌ منها ميّتةٌ
+  // **بالبناء** لا بالسهو: `ADMIN_LOGIN_SUCCESS`/`ADMIN_LOGIN_FAILED`
+  // لا يَستطيعُ عميلٌ كتابتَهما (قاعدةُ `audit_logs` تَشترطُ `isAdmin()`،
+  // ومحاولةُ دخولٍ فاشلةٌ بلا هُويّةِ أدمن)، و`UPDATE_SERVICE_PRICE`
+  // خَلَفَها `UPDATE_ZONE`/`APPLY_PRICES_TO_ZONES` — والثلاثةُ مُعلَّلةٌ
+  // في `kAuditActionsWithoutWriter`. وستٌّ أخرى أسماؤها حيّةٌ ويَكتبُها
+  // **سطحٌ آخر**: `DELETE_DRIVER` و`DELETE_STAFF` خادميّاً في `index.js`،
+  // و`TOGGLE_SERVICE_STATUS` من اللوحة، والمناطقُ الثلاثُ بنصٍّ مكتوبٍ
+  // بيدٍ في `admin_hourly_zones_screen`. فثابتٌ دارتيٌّ لها ميّتٌ بالضرورة.
   static const String actionCreateStaff = 'CREATE_STAFF';
   static const String actionUpdateStaff = 'UPDATE_STAFF';
-  static const String actionDeleteStaff = 'DELETE_STAFF';
-  
+
   static const String actionCreateCoupon = 'CREATE_COUPON';
   static const String actionUpdateCoupon = 'UPDATE_COUPON';
   static const String actionDeleteCoupon = 'DELETE_COUPON';
-  
-  static const String actionUpdateServicePrice = 'UPDATE_SERVICE_PRICE';
-  static const String actionToggleService = 'TOGGLE_SERVICE_STATUS';
-  
+
   static const String actionRegisterDriver = 'REGISTER_DRIVER';
   static const String actionUpdateDriver = 'UPDATE_DRIVER';
-  static const String actionDeleteDriver = 'DELETE_DRIVER';
   static const String actionToggleDriver = 'TOGGLE_DRIVER_STATUS';
-
-  static const String actionCreateZone = 'CREATE_ZONE';
-  static const String actionUpdateZone = 'UPDATE_ZONE';
-  static const String actionDeleteZone = 'DELETE_ZONE';
-
-  static const String actionAdminLogin = 'ADMIN_LOGIN_SUCCESS';
-  static const String actionAdminLoginFailed = 'ADMIN_LOGIN_FAILED';
 
   static const String actionUpdateOrderStatus = 'UPDATE_ORDER_STATUS';
   static const String actionAssignDriver = 'ASSIGN_DRIVER';
