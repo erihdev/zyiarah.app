@@ -21,6 +21,7 @@ import { priceReviewOf, priceReviewApprovalPayload } from '../utils/priceReview.
 import PriceReviewBadge from '../components/PriceReviewBadge.tsx';
 import { auth } from '../services/firebase.ts';
 import { logAudit, AUDIT } from '../services/audit.ts';
+import { orderPaidForDispatch, UNPAID_DISPATCH_REFUSAL } from '../utils/orderDispatch.ts';
 
 // تنسيق تاريخ لحقل datetime-local (YYYY-MM-DDTHH:mm).
 const toDatetimeLocal = (dt: Date) => {
@@ -535,7 +536,17 @@ export default function Orders() {
                                                             <CheckCircle2 size={16} />اعتماد المبلغ
                                                         </button>
                                                     )}
-                                                    {(order.status === 'pending' || order.status === 'pending_admin_approval') && (
+                                                    {/* «لا سائقَ لطلبٍ غيرِ مدفوع» — الخادمُ يَرفضُ بالنصِّ نفسِه
+                                                        (`approveAndAssignOrder`)، فزرٌّ مصيرُه الرفضُ دائماً فخٌّ: كان
+                                                        يَظهرُ لكلِّ `pending` بلا نظرٍ إلى الدفع، و`pending` بلا دفعٍ
+                                                        هي الحالةُ الطبيعيّةُ **قبلَ** الدفع. والسببُ يُعرَضُ مكانَه
+                                                        لا يُخفى: الإخفاءُ وحدَه يُقرأُ عطلاً في الشاشة. */}
+                                                    {(order.status === 'pending' || order.status === 'pending_admin_approval') && !orderPaidForDispatch(order.is_paid) && (
+                                                        <div className="px-4 py-3 text-xs font-bold text-amber-700 bg-amber-50 text-right leading-relaxed">
+                                                            {UNPAID_DISPATCH_REFUSAL}
+                                                        </div>
+                                                    )}
+                                                    {(order.status === 'pending' || order.status === 'pending_admin_approval') && orderPaidForDispatch(order.is_paid) && (
                                                         <button
                                                             type="button"
                                                             onClick={() => {

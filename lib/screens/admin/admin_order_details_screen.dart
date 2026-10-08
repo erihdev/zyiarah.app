@@ -298,6 +298,21 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
           return;
         }
 
+        // **ولا سائقَ لطلبٍ غيرِ مدفوع** — الخادمُ هو الحارس
+        // (`approveAndAssignOrder` يَرفضُ بالنصِّ نفسِه)، وهذا الفحصُ يُخبرُ
+        // الأدمنَ قبلَ دورةِ الشبكةِ لا بدلاً منه. وسببُ وجودِه أنّ
+        // `pending` بلا دفعٍ هي الحالةُ الطبيعيّةُ **قبلَ** الدفع، فالطلبُ
+        // يَظهرُ في الرادارِ ثوانيَ بعدَ نقرِ الدفعِ وقبلَ وصولِه (وتمارا
+        // ساعات) — وإسنادُه يُخرجُه من مكنسةِ الإلغاءِ إلى الأبد ويَشغلُ
+        // سائقاً بلا أن يَستهلكَ سعة. التفصيلُ في `order_lifecycle.dart`.
+        if (isInitialAssign && !orderPaidForDispatch(_orderData?['is_paid'])) {
+          if (mounted) setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text(kUnpaidDispatchRefusal),
+              backgroundColor: Colors.red));
+          return;
+        }
+
         // (#22) الإسناد الابتدائي (طلب pending + سائق + موعد) يمرّ عبر approveAndAssignOrder
         // الذي يعيد فحص التعارض **داخل معاملة** فيمنع الحجز المزدوج عند إسناد مديرَين نفس
         // السائق لفترتين متداخلتين معاً — بدل كتابة driver_id مباشرةً بلا فحص ذرّي. الدالة
