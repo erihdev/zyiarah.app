@@ -40,6 +40,29 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
   bool get _canApproveContracts =>
       const ['admin', 'super_admin', 'orders_manager'].contains(_role);
 
+  // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
+  // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
+  // حوار — يُلغي مستمِعَ Firestore ويُنشئُ غيرَه. والبياناتُ لا تَختفي
+  // (`StreamBuilder` يَحفظُ آخرَ لقطةٍ عبرَ إعادةِ الاشتراك) فلا يُرى شيء،
+  // والكلفةُ حقيقيّة — **والأثرُ الأخطرُ أنّ `firstEventTimeout` تُستأنف**:
+  // على وصلةٍ تَبدو قائمةً ولا تَنفُذ (بوّابةُ فندقٍ، وكيلٌ شفّاف) تُعادُ
+  // مهلةُ العشرينَ ثانيةً مع كلِّ حرفٍ يُكتَب، فلا يُبلَغُ فرعُ الخطأِ ولا
+  // زرُّ إعادتِه أبداً — وهو العطلُ بعينِه الذي وُجدت المهلةُ لأجلِه.
+  // والقاعدةُ مقرَّرةٌ في `driver_tasks_screen` ومُنفَّذةٌ فيه وحدَه.
+  //
+  // وإعادةُ المحاولةِ كانت تَعتمدُ على ذلك الأثرِ الجانبيِّ عينِه، فصارت
+  // صريحةً: تَصفيرُ الحقلِ يَجعلُ البناءَ التاليَ يَفتحُ بثّاً جديداً.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _contracts;
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _contractsStream =>
+      _contracts ??= FirebaseFirestore.instance
+          .collection('contracts')
+          .orderBy('createdAt', descending: true)
+          .limit(100)
+          .snapshots()
+          .firstEventTimeout();
+
+  void _reopenContracts() => setState(() => _contracts = null);
+
   @override
   void initState() {
     super.initState();
@@ -132,8 +155,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
             _buildSearchField(),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('contracts').orderBy('createdAt', descending: true).limit(100).snapshots()
-            .firstEventTimeout(),
+                stream: _contractsStream,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -653,7 +675,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
           Text("تعذّر تحميل العقود", style: GoogleFonts.tajawal(fontSize: 18, color: Colors.red[700], fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           ElevatedButton.icon(
-            onPressed: () => setState(() {}),
+            onPressed: _reopenContracts,
             icon: const Icon(Icons.refresh_rounded, size: 18),
             label: Text("إعادة المحاولة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
             style: ElevatedButton.styleFrom(backgroundColor: brandPurple, foregroundColor: Colors.white),

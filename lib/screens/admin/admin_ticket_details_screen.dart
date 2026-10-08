@@ -15,6 +15,30 @@ class AdminTicketDetailsScreen extends StatefulWidget {
 }
 
 class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
+  // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
+  // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
+  // حوار — يُلغي مستمِعَ Firestore ويُنشئُ غيرَه. والبياناتُ لا تَختفي
+  // (`StreamBuilder` يَحفظُ آخرَ لقطةٍ عبرَ إعادةِ الاشتراك) فلا يُرى شيء،
+  // والكلفةُ حقيقيّة — **والأثرُ الأخطرُ أنّ `firstEventTimeout` تُستأنف**:
+  // على وصلةٍ تَبدو قائمةً ولا تَنفُذ (بوّابةُ فندقٍ، وكيلٌ شفّاف) تُعادُ
+  // مهلةُ العشرينَ ثانيةً مع كلِّ حرفٍ يُكتَب، فلا يُبلَغُ فرعُ الخطأِ ولا
+  // زرُّ إعادتِه أبداً — وهو العطلُ بعينِه الذي وُجدت المهلةُ لأجلِه.
+  // والقاعدةُ مقرَّرةٌ في `driver_tasks_screen` ومُنفَّذةٌ فيه وحدَه.
+  //
+  // وإعادةُ المحاولةِ كانت تَعتمدُ على ذلك الأثرِ الجانبيِّ عينِه، فصارت
+  // صريحةً: تَصفيرُ الحقلِ يَجعلُ البناءَ التاليَ يَفتحُ بثّاً جديداً.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _messages;
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _messagesStream =>
+      _messages ??= _db
+          .collection('support_tickets')
+          .doc(widget.ticketId)
+          .collection('messages')
+          .orderBy('sentAt', descending: true)
+          .snapshots()
+          .firstEventTimeout();
+
+  void _reopenMessages() => setState(() => _messages = null);
+
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final TextEditingController _replyCtrl = TextEditingController();
   bool _isSending = false;
@@ -131,11 +155,11 @@ class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
           children: [
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: _db.collection('support_tickets').doc(widget.ticketId).collection('messages').orderBy('sentAt', descending: true).snapshots()
-            .firstEventTimeout(),
+                stream: _messagesStream,
                 builder: (context, snapshot) {
                   // فشل تدفق الرسائل كان يترك سبينر أبدياً يوحي بأن العميل لم يراسل —
-                  // نعرض خطأً بإعادة محاولة (setState يعيد إنشاء التدفق لأنه يُبنى داخل build).
+                  // نعرض خطأً بإعادة محاولة. **وكانت تَعتمدُ على أنّ التدفقَ
+                  // يُبنى داخلَ `build`** — فصارت صريحةً بعدَ تثبيتِه.
                   if (snapshot.hasError) {
                     return Center(
                       child: Column(
@@ -145,7 +169,7 @@ class _AdminTicketDetailsScreenState extends State<AdminTicketDetailsScreen> {
                           const SizedBox(height: 10),
                           const Text('تعذّر تحميل الرسائل', style: TextStyle(color: Colors.red)),
                           TextButton(
-                            onPressed: () => setState(() {}),
+                            onPressed: _reopenMessages,
                             child: const Text('إعادة المحاولة', style: TextStyle(fontWeight: FontWeight.bold)),
                           ),
                         ],

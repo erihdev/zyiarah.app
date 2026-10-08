@@ -24,6 +24,28 @@ class OrderTrackingScreen extends StatefulWidget {
 }
 
 class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
+  // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
+  // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
+  // حوار — يُلغي مستمِعَ Firestore ويُنشئُ غيرَه. والبياناتُ لا تَختفي
+  // (`StreamBuilder` يَحفظُ آخرَ لقطةٍ عبرَ إعادةِ الاشتراك) فلا يُرى شيء،
+  // والكلفةُ حقيقيّة — **والأثرُ الأخطرُ أنّ `firstEventTimeout` تُستأنف**:
+  // على وصلةٍ تَبدو قائمةً ولا تَنفُذ (بوّابةُ فندقٍ، وكيلٌ شفّاف) تُعادُ
+  // مهلةُ العشرينَ ثانيةً مع كلِّ حرفٍ يُكتَب، فلا يُبلَغُ فرعُ الخطأِ ولا
+  // زرُّ إعادتِه أبداً — وهو العطلُ بعينِه الذي وُجدت المهلةُ لأجلِه.
+  // والقاعدةُ مقرَّرةٌ في `driver_tasks_screen` ومُنفَّذةٌ فيه وحدَه.
+  //
+  // وإعادةُ المحاولةِ كانت تَعتمدُ على ذلك الأثرِ الجانبيِّ عينِه، فصارت
+  // صريحةً: تَصفيرُ الحقلِ يَجعلُ البناءَ التاليَ يَفتحُ بثّاً جديداً.
+  Stream<DocumentSnapshot<Map<String, dynamic>>>? _order;
+  Stream<DocumentSnapshot<Map<String, dynamic>>> get _orderStream =>
+      _order ??= FirebaseFirestore.instance
+          .collection('orders')
+          .doc(widget.orderId)
+          .snapshots()
+          .firstEventTimeout();
+
+  void _reopenOrder() => setState(() => _order = null);
+
   final ZyiarahOrderService _orderService = ZyiarahOrderService();
   final ZyiarahCoreService _coreService = ZyiarahCoreService();
   final MapController _mapController = MapController();
@@ -51,14 +73,23 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           systemOverlayStyle: SystemUiOverlayStyle.light,
         ),
         body: StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance.collection('orders').doc(widget.orderId).snapshots()
-            .firstEventTimeout(),
+          stream: _orderStream,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
             if (snapshot.hasError) {
-              return const Center(child: Text("تعذّر تحميل بيانات الطلب", style: TextStyle(color: Colors.grey)));
+              // **ولا مَخرجَ كان من هذا الفرع**: شاشةُ تتبّعِ الطلبِ تُفتَحُ
+              // وهي تَنتظرُ السائق، وكان الخطأُ نصّاً رمادِيّاً بلا زرّ —
+              // يَتعافى بالمصادفةِ وحدَها حين يُعيدُ بناءً شيءٌ آخر.
+              return Center(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Text("تعذّر تحميل بيانات الطلب",
+                    style: TextStyle(color: Colors.grey)),
+                TextButton(
+                    onPressed: _reopenOrder,
+                    child: const Text("إعادة المحاولة")),
+              ]));
             }
             if (!snapshot.hasData || !snapshot.data!.exists) {
               return const Center(child: Text("الطلب غير موجود"));

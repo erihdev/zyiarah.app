@@ -48,6 +48,44 @@ class _DriverDashboardState extends State<DriverDashboard> {
   // DRIVER-001: guard against double-tap on status update
   bool _isUpdatingStatus = false;
 
+  // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
+  // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
+  // حوار — يُلغي مستمِعَ Firestore ويُنشئُ غيرَه. والبياناتُ لا تَختفي
+  // (`StreamBuilder` يَحفظُ آخرَ لقطةٍ عبرَ إعادةِ الاشتراك) فلا يُرى شيء،
+  // والكلفةُ حقيقيّة — **والأثرُ الأخطرُ أنّ `firstEventTimeout` تُستأنف**:
+  // على وصلةٍ تَبدو قائمةً ولا تَنفُذ (بوّابةُ فندقٍ، وكيلٌ شفّاف) تُعادُ
+  // مهلةُ العشرينَ ثانيةً مع كلِّ حرفٍ يُكتَب، فلا يُبلَغُ فرعُ الخطأِ ولا
+  // زرُّ إعادتِه أبداً — وهو العطلُ بعينِه الذي وُجدت المهلةُ لأجلِه.
+  // والقاعدةُ مقرَّرةٌ في `driver_tasks_screen` ومُنفَّذةٌ فيه وحدَه.
+  //
+  // وإعادةُ المحاولةِ كانت تَعتمدُ على ذلك الأثرِ الجانبيِّ عينِه، فصارت
+  // صريحةً: تَصفيرُ الحقلِ يَجعلُ البناءَ التاليَ يَفتحُ بثّاً جديداً.
+  Stream<DocumentSnapshot<Map<String, dynamic>>>? _driverDoc;
+  Stream<DocumentSnapshot<Map<String, dynamic>>> get _driverDocStream =>
+      _driverDoc ??= FirebaseFirestore.instance
+          .collection('drivers')
+          .doc(_currentDriverId)
+          .snapshots()
+          .firstEventTimeout();
+
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _tasks;
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _tasksStream =>
+      _tasks ??= FirebaseFirestore.instance
+          .collection('orders')
+          .where('driver_id', isEqualTo: _currentDriverId)
+          // التعدادُ كان إنلاين هنا بينما `kActiveAssignedStatuses` قائمةٌ
+          // وتَشتقُّ منها شاشةُ مهامِّ السائقِ نفسُها — فحالةٌ تُضافُ غداً
+          // تَبلغُ شاشةَ المهامِّ ولا تَبلغُ هذه، فتَسقطُ مهمّتُه الجاريةُ
+          // عن لوحتِه بصمت.
+          .where('status', whereIn: kActiveAssignedStatusList)
+          .snapshots()
+          .firstEventTimeout();
+
+  void _reopenDriverStreams() => setState(() {
+        _driverDoc = null;
+        _tasks = null;
+      });
+
   @override
   void initState() {
     super.initState();
@@ -222,8 +260,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     }
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('drivers').doc(_currentDriverId).snapshots()
-            .firstEventTimeout(),
+      stream: _driverDocStream,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Scaffold(
@@ -234,6 +271,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   const Icon(Icons.wifi_off_rounded, size: 64, color: Colors.grey),
                   const SizedBox(height: 16),
                   Text('تعذّر الاتصال، تحقق من الإنترنت', style: GoogleFonts.tajawal(color: Colors.grey)),
+                  TextButton(
+                      onPressed: _reopenDriverStreams,
+                      child: Text('إعادة المحاولة',
+                          style: GoogleFonts.tajawal(
+                              fontWeight: FontWeight.bold))),
                 ],
               ),
             ),
@@ -593,16 +635,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       // مرفوضة مدى الحياة) ثم تصفيتها محلياً. المجموعة الخماسية هي مجموعة الحالات
       // النشطة المعتمَدة في التطبيق كله. لا orderBy (يُسقط ما لا يحمل service_date؛
       // الترتيب محلي عبر _focusRank/slotOf). يخدمها فهرس (driver_id, status) القائم.
-      stream: FirebaseFirestore.instance
-          .collection('orders')
-          .where('driver_id', isEqualTo: _currentDriverId)
-          // التعدادُ كان إنلاين هنا بينما `kActiveAssignedStatuses` قائمةٌ
-          // وتَشتقُّ منها شاشةُ مهامِّ السائقِ نفسُها — فحالةٌ تُضافُ غداً
-          // تَبلغُ شاشةَ المهامِّ ولا تَبلغُ هذه، فتَسقطُ مهمّتُه الجاريةُ
-          // عن لوحتِه بصمت.
-          .where('status', whereIn: kActiveAssignedStatusList)
-          .snapshots()
-            .firstEventTimeout(),
+      stream: _tasksStream,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return _buildStatusPlaceholder(Icons.error_outline,

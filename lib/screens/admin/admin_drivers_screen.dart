@@ -32,6 +32,28 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
   // فنحجبه في الواجهة برسالة واضحة بدل خطأ permission-denied غامض.
   String _role = 'none';
 
+  // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
+  // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
+  // حوار — يُلغي مستمِعَ Firestore ويُنشئُ غيرَه. والبياناتُ لا تَختفي
+  // (`StreamBuilder` يَحفظُ آخرَ لقطةٍ عبرَ إعادةِ الاشتراك) فلا يُرى شيء،
+  // والكلفةُ حقيقيّة — **والأثرُ الأخطرُ أنّ `firstEventTimeout` تُستأنف**:
+  // على وصلةٍ تَبدو قائمةً ولا تَنفُذ (بوّابةُ فندقٍ، وكيلٌ شفّاف) تُعادُ
+  // مهلةُ العشرينَ ثانيةً مع كلِّ حرفٍ يُكتَب، فلا يُبلَغُ فرعُ الخطأِ ولا
+  // زرُّ إعادتِه أبداً — وهو العطلُ بعينِه الذي وُجدت المهلةُ لأجلِه.
+  // والقاعدةُ مقرَّرةٌ في `driver_tasks_screen` ومُنفَّذةٌ فيه وحدَه.
+  //
+  // وإعادةُ المحاولةِ كانت تَعتمدُ على ذلك الأثرِ الجانبيِّ عينِه، فصارت
+  // صريحةً: تَصفيرُ الحقلِ يَجعلُ البناءَ التاليَ يَفتحُ بثّاً جديداً.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _staff;
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _staffStream =>
+      _staff ??= FirebaseFirestore.instance
+          .collection('drivers')
+          .limit(100)
+          .snapshots()
+          .firstEventTimeout();
+
+  void _reopenStaff() => setState(() => _staff = null);
+
   @override
   void initState() {
     super.initState();
@@ -476,11 +498,21 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
           label: Text("تسجيل كادر جديد", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
         ),
         body: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('drivers').limit(100).snapshots()
-            .firstEventTimeout(),
+          stream: _staffStream,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return _buildShimmerLoading();
-            if (snapshot.hasError) return const Center(child: Text("تعذّر تحميل السائقين، تحقّق من الاتصال"));
+            if (snapshot.hasError) {
+              // **زرُّ الإعادةِ لازمٌ**: كان القسمُ يَتعافى بالأثرِ الجانبيِّ
+              // لكلِّ حرفٍ في حقلِ البحث، وبعدَ تثبيتِ البثِّ يَلتصقُ الخطأُ
+              // بلا مَخرج.
+              return Center(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Text("تعذّر تحميل السائقين، تحقّق من الاتصال"),
+                TextButton(
+                    onPressed: _reopenStaff,
+                    child: const Text('إعادة المحاولة')),
+              ]));
+            }
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("لا توجد سجلات"));
 
             final docs = snapshot.data!.docs;

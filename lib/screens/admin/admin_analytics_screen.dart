@@ -51,6 +51,28 @@ class AdminAnalyticsScreen extends StatefulWidget {
 }
 
 class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
+  // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
+  // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
+  // حوار — يُلغي مستمِعَ Firestore ويُنشئُ غيرَه. والبياناتُ لا تَختفي
+  // (`StreamBuilder` يَحفظُ آخرَ لقطةٍ عبرَ إعادةِ الاشتراك) فلا يُرى شيء،
+  // والكلفةُ حقيقيّة — **والأثرُ الأخطرُ أنّ `firstEventTimeout` تُستأنف**:
+  // على وصلةٍ تَبدو قائمةً ولا تَنفُذ (بوّابةُ فندقٍ، وكيلٌ شفّاف) تُعادُ
+  // مهلةُ العشرينَ ثانيةً مع كلِّ حرفٍ يُكتَب، فلا يُبلَغُ فرعُ الخطأِ ولا
+  // زرُّ إعادتِه أبداً — وهو العطلُ بعينِه الذي وُجدت المهلةُ لأجلِه.
+  // والقاعدةُ مقرَّرةٌ في `driver_tasks_screen` ومُنفَّذةٌ فيه وحدَه.
+  //
+  // وإعادةُ المحاولةِ كانت تَعتمدُ على ذلك الأثرِ الجانبيِّ عينِه، فصارت
+  // صريحةً: تَصفيرُ الحقلِ يَجعلُ البناءَ التاليَ يَفتحُ بثّاً جديداً.
+  Stream<DocumentSnapshot<Map<String, dynamic>>>? _summary;
+  Stream<DocumentSnapshot<Map<String, dynamic>>> get _summaryStream =>
+      _summary ??= db
+          .collection('metadata')
+          .doc('analytics_summary')
+          .snapshots()
+          .firstEventTimeout();
+
+  void _reopenSummary() => setState(() => _summary = null);
+
   final FirebaseFirestore db = FirebaseFirestore.instance;
   late final Future<_FinancialData> _financialFuture;
 
@@ -502,8 +524,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
       body: Directionality(
         textDirection: TextDirection.rtl,
         child: StreamBuilder<DocumentSnapshot>(
-          stream: db.collection('metadata').doc('analytics_summary').snapshots()
-            .firstEventTimeout(),
+          stream: _summaryStream,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -520,7 +541,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                     Text('تعذّر تحميل ملخص التحليلات',
                         style: GoogleFonts.tajawal(fontSize: 15, color: Colors.red)),
                     TextButton(
-                      onPressed: () => setState(() {}),
+                      onPressed: _reopenSummary,
                       child: Text('إعادة المحاولة', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
                     ),
                   ],

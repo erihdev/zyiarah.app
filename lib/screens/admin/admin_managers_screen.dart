@@ -15,6 +15,27 @@ class AdminManagersScreen extends StatefulWidget {
 }
 
 class _AdminManagersScreenState extends State<AdminManagersScreen> {
+  // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
+  // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
+  // حوار — يُلغي مستمِعَ Firestore ويُنشئُ غيرَه. والبياناتُ لا تَختفي
+  // (`StreamBuilder` يَحفظُ آخرَ لقطةٍ عبرَ إعادةِ الاشتراك) فلا يُرى شيء،
+  // والكلفةُ حقيقيّة — **والأثرُ الأخطرُ أنّ `firstEventTimeout` تُستأنف**:
+  // على وصلةٍ تَبدو قائمةً ولا تَنفُذ (بوّابةُ فندقٍ، وكيلٌ شفّاف) تُعادُ
+  // مهلةُ العشرينَ ثانيةً مع كلِّ حرفٍ يُكتَب، فلا يُبلَغُ فرعُ الخطأِ ولا
+  // زرُّ إعادتِه أبداً — وهو العطلُ بعينِه الذي وُجدت المهلةُ لأجلِه.
+  // والقاعدةُ مقرَّرةٌ في `driver_tasks_screen` ومُنفَّذةٌ فيه وحدَه.
+  //
+  // وإعادةُ المحاولةِ كانت تَعتمدُ على ذلك الأثرِ الجانبيِّ عينِه، فصارت
+  // صريحةً: تَصفيرُ الحقلِ يَجعلُ البناءَ التاليَ يَفتحُ بثّاً جديداً.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _admins;
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _adminsStream =>
+      _admins ??= FirebaseFirestore.instance
+          .collection('admins')
+          .snapshots()
+          .firstEventTimeout();
+
+  void _reopenAdmins() => setState(() => _admins = null);
+
   final _db = FirebaseFirestore.instance;
   final ZyiarahAuditService _audit = ZyiarahAuditService();
 
@@ -65,8 +86,7 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
           label: Text("إضافة منسوب", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 13)),
         ),
         body: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('admins').snapshots()
-            .firstEventTimeout(),
+          stream: _adminsStream,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Color(0xFF1E293B)));
             // فشل البث كان يُعرض كقائمة فارغة — خطأ صريح مع إعادة محاولة.
@@ -75,7 +95,7 @@ class _AdminManagersScreenState extends State<AdminManagersScreen> {
                 const Icon(Icons.cloud_off_rounded, size: 48, color: Colors.redAccent),
                 const SizedBox(height: 10),
                 Text('تعذّر تحميل البيانات', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.red)),
-                TextButton(onPressed: () => setState(() {}), child: const Text('إعادة المحاولة')),
+                TextButton(onPressed: _reopenAdmins, child: const Text('إعادة المحاولة')),
               ]));
             }
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -502,6 +522,18 @@ class _ManagerFormSheetState extends State<_ManagerFormSheet> {
 }
 
 class StaffSearchDelegate extends SearchDelegate {
+  // **المُفوَّضُ ليس `State`، والأثرُ نفسُه**: `buildResults`/`buildSuggestions`
+  // تُستدعى على **كلِّ حرفٍ** يَكتبُه الأدمن، فكان بثُّ `admins` يُفتَحُ من
+  // جديدٍ لكلِّ حرف — ومعه تُستأنف `firstEventTimeout`، فلا يُبلَغُ فرعُ
+  // الخطأِ أبداً ما دامت أصابعُه على اللوح. والمُفوَّضُ يَعيشُ ما دامت صفحةُ
+  // البحثِ مفتوحةً، فالحقلُ يَحفظُ البثَّ بينها.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _admins;
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _adminsStream =>
+      _admins ??= FirebaseFirestore.instance
+          .collection('admins')
+          .snapshots()
+          .firstEventTimeout();
+
   final Function(DocumentSnapshot) onSelect;
   StaffSearchDelegate({required this.onSelect});
 
@@ -521,8 +553,7 @@ class StaffSearchDelegate extends SearchDelegate {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('admins').snapshots()
-            .firstEventTimeout(),
+        stream: _adminsStream,
         builder: (context, snapshot) {
           // **دوّارةٌ لا تَنتهي.** على الخطأِ يَبقى `hasData` كاذباً، فكان
           // الشرطُ الواحدُ يُرجِعُ الدوّارةَ إلى الأبد — والقاعدةُ مُنفَّذةٌ
@@ -535,6 +566,15 @@ class StaffSearchDelegate extends SearchDelegate {
               Text('تعذّر البحث في قائمة المديرين — تحقّق من الاتصال أو الصلاحيات',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.redAccent)),
+              // **ولا مَخرجَ كان من هذا الخطأ**: الفرعُ بلا زرٍّ، وكان
+              // يَتعافى بالأثرِ الجانبيِّ لكلِّ حرف. `showResults` تُعيدُ
+              // بناءَ النتائجِ فيُفتَحُ البثُّ من جديد.
+              TextButton(
+                  onPressed: () {
+                    _admins = null;
+                    showResults(context);
+                  },
+                  child: const Text('إعادة المحاولة')),
             ]));
           }
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());

@@ -97,6 +97,34 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen>
     }
   }
 
+  // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
+  // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
+  // حوار — يُلغي مستمِعَ Firestore ويُنشئُ غيرَه. والبياناتُ لا تَختفي
+  // (`StreamBuilder` يَحفظُ آخرَ لقطةٍ عبرَ إعادةِ الاشتراك) فلا يُرى شيء،
+  // والكلفةُ حقيقيّة — **والأثرُ الأخطرُ أنّ `firstEventTimeout` تُستأنف**:
+  // على وصلةٍ تَبدو قائمةً ولا تَنفُذ (بوّابةُ فندقٍ، وكيلٌ شفّاف) تُعادُ
+  // مهلةُ العشرينَ ثانيةً مع كلِّ حرفٍ يُكتَب، فلا يُبلَغُ فرعُ الخطأِ ولا
+  // زرُّ إعادتِه أبداً — وهو العطلُ بعينِه الذي وُجدت المهلةُ لأجلِه.
+  // والقاعدةُ مقرَّرةٌ في `driver_tasks_screen` ومُنفَّذةٌ فيه وحدَه.
+  //
+  // وإعادةُ المحاولةِ كانت تَعتمدُ على ذلك الأثرِ الجانبيِّ عينِه، فصارت
+  // صريحةً: تَصفيرُ الحقلِ يَجعلُ البناءَ التاليَ يَفتحُ بثّاً جديداً.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _invoice;
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _invoiceStream =>
+      _invoice ??= FirebaseFirestore.instance
+          .collection(widget.invoiceCollection)
+          // قيد client_id إلزامي: قواعد Firestore ترفض جملةً أي استعلام لا يُثبت
+          // ملكية العميل (rules تشترط uid == client_id)، فكان الاستعلام بالكود وحده
+          // يُرفض permission-denied بعد كل دفعة ويختفي زر الفاتورة بصمت.
+          .where('client_id',
+              isEqualTo: FirebaseAuth.instance.currentUser?.uid ?? '')
+          .where('code', isEqualTo: widget.orderCode)
+          .limit(1)
+          .snapshots()
+          .firstEventTimeout();
+
+  void _reopenInvoice() => setState(() => _invoice = null);
+
   @override
   void initState() {
     super.initState();
@@ -239,17 +267,7 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen>
 
   Widget _buildInvoiceSection() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection(widget.invoiceCollection)
-          // قيد client_id إلزامي: قواعد Firestore ترفض جملةً أي استعلام لا يُثبت
-          // ملكية العميل (rules تشترط uid == client_id)، فكان الاستعلام بالكود وحده
-          // يُرفض permission-denied بعد كل دفعة ويختفي زر الفاتورة بصمت.
-          .where('client_id',
-              isEqualTo: FirebaseAuth.instance.currentUser?.uid ?? '')
-          .where('code', isEqualTo: widget.orderCode)
-          .limit(1)
-          .snapshots()
-            .firstEventTimeout(),
+      stream: _invoiceStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Padding(
@@ -266,7 +284,7 @@ class _ZyiarahOrderSuccessScreenState extends State<ZyiarahOrderSuccessScreen>
           debugPrint('invoice section stream error: ${snapshot.error}');
           return TextButton.icon(
             // setState يعيد بناء الاستعلام فيُعاد الاشتراك بالبث من جديد.
-            onPressed: () => setState(() {}),
+            onPressed: _reopenInvoice,
             icon:
                 const Icon(Icons.refresh_rounded, size: 18, color: Colors.red),
             label: Text("تعذّر تحميل الفاتورة — إعادة المحاولة",

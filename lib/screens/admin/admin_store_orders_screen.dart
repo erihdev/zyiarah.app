@@ -16,6 +16,29 @@ class AdminStoreOrdersScreen extends StatefulWidget {
 }
 
 class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
+  // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
+  // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
+  // حوار — يُلغي مستمِعَ Firestore ويُنشئُ غيرَه. والبياناتُ لا تَختفي
+  // (`StreamBuilder` يَحفظُ آخرَ لقطةٍ عبرَ إعادةِ الاشتراك) فلا يُرى شيء،
+  // والكلفةُ حقيقيّة — **والأثرُ الأخطرُ أنّ `firstEventTimeout` تُستأنف**:
+  // على وصلةٍ تَبدو قائمةً ولا تَنفُذ (بوّابةُ فندقٍ، وكيلٌ شفّاف) تُعادُ
+  // مهلةُ العشرينَ ثانيةً مع كلِّ حرفٍ يُكتَب، فلا يُبلَغُ فرعُ الخطأِ ولا
+  // زرُّ إعادتِه أبداً — وهو العطلُ بعينِه الذي وُجدت المهلةُ لأجلِه.
+  // والقاعدةُ مقرَّرةٌ في `driver_tasks_screen` ومُنفَّذةٌ فيه وحدَه.
+  //
+  // وإعادةُ المحاولةِ كانت تَعتمدُ على ذلك الأثرِ الجانبيِّ عينِه، فصارت
+  // صريحةً: تَصفيرُ الحقلِ يَجعلُ البناءَ التاليَ يَفتحُ بثّاً جديداً.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _orders;
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _ordersStream =>
+      _orders ??= FirebaseFirestore.instance
+          .collection('store_orders')
+          .orderBy('created_at', descending: true)
+          .limit(100)
+          .snapshots()
+          .firstEventTimeout();
+
+  void _reopenOrders() => setState(() => _orders = null);
+
   // (المتجر المباشر — قرار المالك) حُذف مسار «الموافقة والتسعير النهائي»:
   // العميل يدفع فوراً، والإدارة تدير التوصيل نقرةً نقرة أدناه.
 
@@ -328,18 +351,27 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
             ),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('store_orders').orderBy('created_at', descending: true).limit(100).snapshots()
-            .firstEventTimeout(),
+                stream: _ordersStream,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
                   if (snapshot.hasError) {
                     // قراءة store_orders كاملةً حكر على مديري الطلبات (firestore.rules)
                     // — رفض القواعد كان يُعرَض «تحقّق من الاتصال» فيلوم الشبكة زوراً.
                     final err = snapshot.error;
+                    final denied =
+                        err is FirebaseException && err.code == 'permission-denied';
+                    // وزرُّ الإعادةِ للاتّصالِ وحدَه: «أعد المحاولة» فوقَ رفضِ
+                    // صلاحيّةٍ دعوى بأنّ المحاولةَ تُجدي، وهي لا تُجدي.
                     return Center(
-                        child: Text(err is FirebaseException && err.code == 'permission-denied'
-                            ? 'لا تملك صلاحية عرض طلبات المتجر — هذه الشاشة لمديري الطلبات فقط'
-                            : 'تعذّر تحميل الطلبات، تحقّق من الاتصال'));
+                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Text(denied
+                          ? 'لا تملك صلاحية عرض طلبات المتجر — هذه الشاشة لمديري الطلبات فقط'
+                          : 'تعذّر تحميل الطلبات، تحقّق من الاتصال'),
+                      if (!denied)
+                        TextButton(
+                            onPressed: _reopenOrders,
+                            child: const Text('إعادة المحاولة')),
+                    ]));
                   }
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("لا توجد طلبات في المتجر حتى الآن"));
 

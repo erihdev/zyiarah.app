@@ -21,6 +21,24 @@ class AdminPoliciesScreen extends StatefulWidget {
 }
 
 class _AdminPoliciesScreenState extends State<AdminPoliciesScreen> {
+  // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
+  // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
+  // حوار — يُلغي مستمِعَ Firestore ويُنشئُ غيرَه. والبياناتُ لا تَختفي
+  // (`StreamBuilder` يَحفظُ آخرَ لقطةٍ عبرَ إعادةِ الاشتراك) فلا يُرى شيء،
+  // والكلفةُ حقيقيّة — **والأثرُ الأخطرُ أنّ `firstEventTimeout` تُستأنف**:
+  // على وصلةٍ تَبدو قائمةً ولا تَنفُذ (بوّابةُ فندقٍ، وكيلٌ شفّاف) تُعادُ
+  // مهلةُ العشرينَ ثانيةً مع كلِّ حرفٍ يُكتَب، فلا يُبلَغُ فرعُ الخطأِ ولا
+  // زرُّ إعادتِه أبداً — وهو العطلُ بعينِه الذي وُجدت المهلةُ لأجلِه.
+  // والقاعدةُ مقرَّرةٌ في `driver_tasks_screen` ومُنفَّذةٌ فيه وحدَه.
+  //
+  // وإعادةُ المحاولةِ كانت تَعتمدُ على ذلك الأثرِ الجانبيِّ عينِه، فصارت
+  // صريحةً: تَصفيرُ الحقلِ يَجعلُ البناءَ التاليَ يَفتحُ بثّاً جديداً.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _policies;
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _policiesStream =>
+      _policies ??= _col.orderBy('order').snapshots().firstEventTimeout();
+
+  void _reopenPolicies() => setState(() => _policies = null);
+
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   CollectionReference<Map<String, dynamic>> get _col =>
@@ -328,8 +346,7 @@ class _AdminPoliciesScreenState extends State<AdminPoliciesScreen> {
           foregroundColor: Colors.white,
         ),
         body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: _col.orderBy('order').snapshots()
-            .firstEventTimeout(),
+          stream: _policiesStream,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -344,7 +361,7 @@ class _AdminPoliciesScreenState extends State<AdminPoliciesScreen> {
                       style: GoogleFonts.tajawal(
                           fontWeight: FontWeight.bold, color: Colors.red)),
                   TextButton(
-                      onPressed: () => setState(() {}),
+                      onPressed: _reopenPolicies,
                       child: const Text('إعادة المحاولة')),
                 ]),
               );
