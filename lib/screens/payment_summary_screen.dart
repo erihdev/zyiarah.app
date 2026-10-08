@@ -35,6 +35,7 @@ import 'package:zyiarah/utils/terrain_surcharge.dart';
 import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/error_report.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/phone_format.dart';
 import 'package:zyiarah/utils/invoice_stamp.dart';
 import 'package:zyiarah/utils/price_review.dart';
 import '../utils/env.dart';
@@ -369,14 +370,38 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   /// تُخفى صفوف الساعات/العاملات في طلبات المتجر وفي الخدمات المُسعَّرة بالقطعة.
   bool get _hidesHourlyRows => _isStoreOrder || _isPerUnitService;
 
+  /// رقمُ الجوالِ بصيغةٍ واحدة — تُكتَبُ على `users.phone` وعلى الطلبِ وفي
+  /// بيانات الدفعِ وتُرسَلُ إلى تمارا.
+  ///
+  /// كانت كلُّ هذه المواضعِ تَقرأُ `_phoneController.text` خامّاً: الحقلُ
+  /// يُعبَّأُ من `users.phone` كما هو، والشاشةُ **بلا أيِّ فحصِ صيغة** (فحصُها
+  /// الوحيدُ «غيرُ فارغ»، وبشرطِ `_needsPhoneUpdate` وحدَه)، ثمّ
+  /// `createTamaraCheckout` يُلحِقُ `+966` — فـ`0501234567` تَصِلُ البوّابةَ
+  /// `+9660501234567`. التفصيلُ في `lib/utils/phone_format.dart`.
+  ///
+  /// وغيرُ المُنحلِّ يُمرَّرُ كما هو، لا يُستبدَلُ بشيء: مستندٌ قديمٌ يَحملُ
+  /// رقماً أرضيّاً أو `000000000` لا يُحجَبُ عنه الدفعُ بقرارٍ مني — والخادمُ
+  /// يُطبِّعُ قبلَ البادئةِ فيُصلِحُ ما يَنحلُّ منها على مسارِ المال.
+  String get _canonicalPhone =>
+      saudiMobile(_phoneController.text) ?? _phoneController.text.trim();
+
   /// سبب منع الدفع الأصلي (Apple/Google/Samsung) — نفس فحوص _handlePayment
   /// المتزامنة (الشروط/الهاتف/المستخدم). لولاها تتجاوز الأزرار الأصلية الفحوص
   /// لأنها تستدعي النجاح مباشرةً.
   String? _nativePayBlockReason() {
     // السعة أولاً: الأزرار الأصلية تخصم فوراً، فنمنعها إن امتلأ الموعد (منع الحجز الزائد).
     if (_capacityError != null) return _capacityError;
-    if (_needsPhoneUpdate && _phoneController.text.trim().isEmpty) {
-      return 'يرجى إدخال رقم جوالك أولاً';
+    // الفحصُ صارَ على **الصيغةِ** لا على الفراغِ وحدَه: البطاقةُ تَقولُ
+    // «مثال: 0501234567» وكانت تَقبلُ أيَّ نصّ، فيُكتَبُ على `users.phone`
+    // ويُرسَلُ إلى البوّابة. ومشروطٌ بـ`_needsPhoneUpdate` كما كان — فحيث
+    // لا تُعرَضُ البطاقةُ لا يُحجَبُ دفعٌ يَمُرُّ اليوم.
+    if (_needsPhoneUpdate) {
+      if (_phoneController.text.trim().isEmpty) {
+        return 'يرجى إدخال رقم جوالك أولاً';
+      }
+      if (saudiMobile(_phoneController.text) == null) {
+        return 'رقم الجوال غير صحيح — أدخلي رقماً سعودياً يبدأ بـ 05';
+      }
     }
     if (!_agreeToTerms) return 'يرجى الموافقة على الشروط والأحكام أولاً';
     if (_currentUser == null) {
@@ -714,6 +739,15 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       return;
     }
 
+    // نفسُ فحصِ `_nativePayBlockReason`: الأزرارُ الأصليّةُ تَتخطّى
+    // `_handlePayment` فلا بدَّ من الصيغةِ في الموضعَين.
+    if (_needsPhoneUpdate && saudiMobile(_phoneController.text) == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('رقم الجوال غير صحيح — أدخلي رقماً سعودياً يبدأ بـ 05',
+              style: GoogleFonts.tajawal())));
+      return;
+    }
+
     if (!_agreeToTerms) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى الموافقة على الشروط والأحكام")));
       return;
@@ -752,7 +786,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       // 1. Update user phone if changed
       if (_needsPhoneUpdate) {
         await FirebaseFirestore.instance.collection('users').doc(_currentUser?.uid).update({
-          'phone': _phoneController.text.trim(),
+          'phone': _canonicalPhone,
         });
       }
 
@@ -827,7 +861,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           // للعقد: مرجع تمارا = معرّف العقد كي يقلب الـ webhook is_paid عليه فيُفعّله.
           orderId: widget.contractId ?? finalOrderId,
           amount: totalWithVat,
-          customerPhone: _phoneController.text.trim(),
+          customerPhone: _canonicalPhone,
           customerName: _currentUser?.name ?? 'عميل زيارة',
         );
 
@@ -847,7 +881,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 zoneName: widget.zoneName,
                 workerCount: widget.workerCount,
                 customerName: _currentUser?.name,
-                customerPhone: _phoneController.text,
+                customerPhone: _canonicalPhone,
                 couponCode: _appliedCoupon,
                 discountAmount: _discountAmount,
                 contractId: widget.contractId,
@@ -999,8 +1033,8 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     return {
       'client_id': _currentUser?.uid,
       'client_name': _currentUser?.name ?? 'عميل زيارة',
-      'client_phone': _phoneController.text.trim(),
-      'user_phone': _phoneController.text.trim(),
+      'client_phone': _canonicalPhone,
+      'user_phone': _canonicalPhone,
       'client_email': _currentUser?.email,
       'service_type': widget.serviceName,
       'service_name': widget.serviceName,
@@ -1111,7 +1145,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         'lng': widget.location!.longitude.toStringAsFixed(6),
       },
       'service_date': widget.serviceDate?.toIso8601String() ?? '',
-      'client_phone': _phoneController.text.trim(),
+      'client_phone': _canonicalPhone,
       // (تفصيل الخدمة عبر Apple/Google/Samsung Pay) نحمله كنصّ JSON كي يعيد الخادم
       // بناءه إن أنشأ الطلب من الـ metadata (سيناريو خلفية Apple Pay) — وإلّا ضاع
       // تفصيل المكيفات/الكنب/السيارة على الطلب المدفوع أصلياً، فلا تراه الإدارة/السائق.
@@ -1287,7 +1321,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     final String? bgCoupon = _appliedCoupon;
     final String bgServiceName = widget.serviceName;
     final String bgClientName = _currentUser?.name ?? 'عميل زيارة';
-    final String bgClientPhone = _phoneController.text;
+    final String bgClientPhone = _canonicalPhone;
     final String? bgClientEmail = _currentUser?.email;
     final String bgDateTime = widget.serviceDate != null
         ? intl.DateFormat('yyyy-MM-dd').format(widget.serviceDate!)

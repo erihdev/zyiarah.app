@@ -7,6 +7,7 @@ import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/services/zyiarah_referral_service.dart';
 import 'package:zyiarah/screens/terms_privacy_screens.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/phone_format.dart';
 
 class ZyiarahSignupScreen extends StatefulWidget {
   const ZyiarahSignupScreen({super.key});
@@ -44,11 +45,15 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
       return;
     }
 
-    // تحقق من رقم الجوال السعودي (05XXXXXXXX أو 5XXXXXXXX أو بمفتاح 966).
-    final phoneDigits = phone.replaceAll(RegExp(r'\D'), '');
-    final normalizedPhone =
-        phoneDigits.startsWith('966') ? phoneDigits.substring(3) : phoneDigits;
-    if (!RegExp(r'^0?5\d{8}$').hasMatch(normalizedPhone)) {
+    // **القاعدةُ في موضعٍ واحد، والمخزَّنُ صيغةٌ واحدة.** كان الفحصُ هنا
+    // `startsWith('966')` وحدَه — فالبادئةُ الدوليّةُ بـ`00966` تُرفَضُ
+    // بينما `+966` تُقبَل، أي رقمٌ واحدٌ بجوابَين بحسبِ ما كَتبَته — ثمّ
+    // كان النصُّ الخامُّ يُخزَّنُ كما هو (`phone: phone`)، فـ`users.phone`
+    // يَحملُ خمسَ صِيَغ، و`createTamaraCheckout` يُلحِقُ `+966` بها فتُرسَلُ
+    // `+9660501234567` إلى بوّابةِ التقسيط. التفصيلُ في
+    // `lib/utils/phone_format.dart`.
+    final normalizedPhone = saudiMobile(phone);
+    if (normalizedPhone == null) {
       _showError('رقم الجوال غير صحيح — أدخلي رقماً سعودياً يبدأ بـ 05');
       return;
     }
@@ -77,7 +82,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
 
     try {
       final credential = await _firebaseService.signUpWithRealEmailAndPassword(
-        phone: phone,
+        phone: normalizedPhone,
         password: password,
         name: name,
         email: email,
@@ -221,7 +226,10 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
                 
                 const SizedBox(height: 15),
                 _buildFieldLabel("رقم الجوال"),
-                _buildTextField(_phoneController, "5XXXXXXXX", keyboardType: TextInputType.phone),
+                // التلميحُ بصيغةِ الرسالةِ نفسِها: كان `5XXXXXXXX` بينما رسالةُ
+                // الخطأِ تَقولُ «يبدأ بـ 05» وبطاقةُ شاشةِ الدفعِ «مثال:
+                // 0501234567» — ثلاثُ صِيَغٍ لحقلٍ واحد.
+                _buildTextField(_phoneController, "0501234567", keyboardType: TextInputType.phone),
                 
                 const SizedBox(height: 15),
                 _buildFieldLabel("البريد الإلكتروني"),

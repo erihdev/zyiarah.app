@@ -18,6 +18,7 @@ import 'package:zyiarah/services/zyiarah_referral_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:zyiarah/utils/home_packages.dart';
 import 'package:zyiarah/utils/referral_rewards.dart';
+import 'package:zyiarah/utils/phone_format.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/qatrat.dart';
 import 'package:zyiarah/utils/wallet_deletion_notice.dart';
@@ -267,11 +268,23 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
           : (_auth.currentUser?.phoneNumber ?? ''),
     );
 
+    // **الكاتبُ الثالثُ لـ`users.phone`، وكان بلا أيِّ فحصِ صيغة.** محرِّرُ
+    // التسجيلِ يَفحصُ ويُطبِّعُ، وشاشةُ الدفعِ تَفحصُ وتُطبِّعُ، وهذا الحوارُ
+    // — «حسابي» ← «تحديث البيانات» — كان يَكتبُ ما كُتبَ فيه حرفاً: فرقمٌ
+    // بأيِّ صيغةٍ (أو بلا صيغةٍ أصلاً) يَبلغُ `users.phone`، ومنه بطاقةَ
+    // السائقِ وبيانات الدفعِ وبوّابةَ التقسيط. التفصيلُ في
+    // `lib/utils/phone_format.dart`.
+    //
+    // والخطأُ في **الحقلِ** لا في شريطٍ: الشريطُ يُرسَمُ تحتَ الحوارِ فلا
+    // يُقرَأ — عُرفُ حوارِ التذكرةِ الإداريِّ نفسُه — والحوارُ لا يُغلَقُ على
+    // قيمةٍ مرفوضةٍ فلا تَفقِدُ ما كتبَته.
+    String? phoneError;
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => Directionality(
         textDirection: TextDirection.rtl,
-        child: AlertDialog(
+        child: StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           title: Text('تحديث البيانات',
@@ -294,6 +307,9 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                 keyboardType: TextInputType.phone,
                 decoration: InputDecoration(
                   labelText: 'رقم الجوال',
+                  hintText: '0501234567',
+                  errorText: phoneError,
+                  errorStyle: GoogleFonts.tajawal(),
                   labelStyle: GoogleFonts.tajawal(),
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12)),
@@ -307,7 +323,14 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
               child: Text('إلغاء', style: GoogleFonts.tajawal()),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
+              onPressed: () {
+                if (saudiMobile(phoneController.text) == null) {
+                  setDialogState(() => phoneError =
+                      'رقم الجوال غير صحيح — أدخلي رقماً سعودياً يبدأ بـ 05');
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: _brand,
                 shape: RoundedRectangleBorder(
@@ -317,6 +340,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
                   Text('حفظ', style: GoogleFonts.tajawal(color: Colors.white)),
             ),
           ],
+          ),
         ),
       ),
     );
@@ -328,7 +352,8 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
         try {
           await _firestore.collection('users').doc(uid).set({
             'name': nameController.text.trim(),
-            'phone': phoneController.text.trim(),
+            // مُطبَّعٌ: الحوارُ لا يُغلَقُ إلّا على رقمٍ يَنحلّ.
+            'phone': saudiMobile(phoneController.text),
           }, SetOptions(merge: true));
           await _loadUserData();
         } catch (e) {

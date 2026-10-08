@@ -40,6 +40,7 @@ const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "";
 // نافذةُ شَغل السائق ومسندُ التداخل — وحدةٌ **نقيّة** (لا db): كان السؤال
 // مكتوباً بيدٍ في ٢٣ موضعاً (مدّةُ الطلب ١٦، ومسحُ التعارض ٧).
 const slots = require("./slots");
+const phoneLib = require("./phone");
 initializeApp();
 
 // Secrets — stored in Firebase Secret Manager, never in source code
@@ -923,8 +924,17 @@ exports.createTamaraCheckout = onCall(
 
       const amount = trueAmount;
       const token = tamaraApiToken.value();
-      const phone = customerPhone.startsWith("+") ?
-        customerPhone : `+966${customerPhone}`;
+      // **التطبيعُ قبلَ البادئة.** كان `"+966" + raw` وحدَه، و`customerPhone`
+      // يَأتي من `users/{uid}.phone` عبرَ شاشةِ الدفع — وذلك الحقلُ يَحملُ في
+      // الإنتاجِ خمسَ صِيَغ لأنّ محرِّرَ التسجيلِ كان يُخزّنُ النصَّ الخامّ.
+      // فـ`0501234567` كانت تُصبِحُ `+9660501234567` و`966501234567` تُصبِحُ
+      // `+966966501234567`: رقمٌ ليس E.164 يُرسَلُ إلى بوّابةِ التقسيط.
+      // وغيرُ المُنحلِّ يَبقى على سلوكِ اليومِ بعينِه — لا رفضَ جديدٌ يَحجبُ
+      // دفعةً تَمُرُّ اليوم (رقمٌ أرضيٌّ أو `000000000` مثلاً، وكلاهما
+      // يَفشلُ عند تمارا اليومَ كما يَفشلُ غداً).
+      const phone = phoneLib.saudiE164(customerPhone) ||
+        (customerPhone.startsWith("+") ?
+          customerPhone : `+966${customerPhone}`);
       // حقول تمارا الإلزامية: اسم مقسّم + بريد + مدينة + عناصر + عنوان شحن.
       const parts = String(customerName).trim().split(/\s+/);
       const firstName = parts[0] || "عميل";
