@@ -136,5 +136,104 @@ void main() {
       expect(found.toSet(), equals(allowed),
           reason: 'موضعٌ جديدٌ يَبتلعُ فشلَ كتابةٍ — أو صامتٌ بقصدٍ يَحتاجُ سطراً هنا');
     });
+
+    // ═══ والعطلُ الآخرُ: كتابةٌ **بلا `catch` أصلاً** ═══
+    //
+    // الفحصُ أعلاه يَمسحُ **أجسامَ `catch`** — فكتابةٌ لا `catch` لها غيرُ
+    // مرئيّةٍ له تماماً: الوعدُ يُرفَضُ بلا مُعالِج، فلا نَفْشةَ ولا سطرَ
+    // وحدةٍ حتى، والصفُّ لا يَتغيّر (لا كتابةَ ⇒ لا مستمعَ يُحدِّث) فيُعيدُ
+    // الأدمنُ النقرَ. أي أنّ الكاشفَ كان يَرى **شكلاً واحداً** من العطل
+    // الذي وُجد له — وهو النمطُ المتكرّرُ في حُرّاسِ هذا المستودع.
+    //
+    // أربعةُ مواضعَ كانت كذلك: حذفُ منتجٍ وتبديلُ عرضِه (و`handleSubmit` في
+    // الملفِّ نفسِه يُنبّه)، وإغلاقُ تذكرةٍ (والردُّ في الملفِّ نفسِه
+    // يُنبّه)، ورفعُ صورةِ سائقٍ — وهذا الأخيرُ أسوأُها: الوعدُ لم يَكن
+    // يُسوّى أصلاً (انظر `storage_hardening_test`).
+    test('ولا كتابةَ بلا `try` — الحارسُ كان يَمسحُ أجسامَ `catch` وحدَها', () {
+      /// النصُّ بلا تعليقات (الأقواسُ داخلَها تَكسِرُ الموازنة). النصوصُ
+      /// الحرفيّةُ تَبقى: قوالبُ `${…}` متوازنةٌ بطبعِها.
+      String noComments(String s) {
+        final out = StringBuffer();
+        int i = 0;
+        String? quote;
+        while (i < s.length) {
+          final String c = s[i];
+          if (quote == null) {
+            if (s.startsWith('//', i)) {
+              final int j = s.indexOf('\n', i);
+              i = j < 0 ? s.length : j;
+              continue;
+            }
+            if (s.startsWith('/*', i)) {
+              final int j = s.indexOf('*/', i + 2);
+              i = j < 0 ? s.length : j + 2;
+              continue;
+            }
+            if (c == '"' || c == "'" || c == '`') quote = c;
+            out.write(c);
+            i++;
+          } else {
+            if (c == r'\') {
+              out.write(s.substring(i, (i + 2).clamp(0, s.length)));
+              i += 2;
+              continue;
+            }
+            if (c == quote) quote = null;
+            out.write(c);
+            i++;
+          }
+        }
+        return out.toString();
+      }
+
+      final RegExp write = RegExp(
+          r'\b(?:updateDoc|setDoc|addDoc|deleteDoc)\s*\(');
+      // **المفتاحُ ملفٌّ وترتيبٌ لا رقمُ سطر**: تعديلٌ أعلى الملفِّ لا
+      // يُسقِطُ الحارسَ زوراً (عُرفُ `stream_timeout_sweep_test`).
+      const Set<String> allowedOutsideTry = {};
+      final List<String> outside = [];
+      int insideTry = 0;
+      for (final f in sourcesIn('admin_panel/src',
+              atLeast: 20, exts: const ['.tsx', '.ts'])
+          .where((f) => !f.path.contains('.test.'))) {
+        final String src = noComments(f.readAsStringSync());
+        int ordinal = 0;
+        for (final m in write.allMatches(src)) {
+          ordinal++;
+          // الكتلُ المُحيطةُ: نمشي إلى الوراءِ ونَجمعُ كلَّ `{` غيرِ مُغلَق.
+          int depth = 0;
+          bool inTry = false;
+          for (int k = m.start - 1; k >= 0; k--) {
+            final String ch = src[k];
+            if (ch == '}') {
+              depth++;
+            } else if (ch == '{') {
+              if (depth == 0) {
+                final String head =
+                    src.substring((k - 120).clamp(0, k), k).trimRight();
+                if (head.endsWith('try')) {
+                  inTry = true;
+                  break;
+                }
+              } else {
+                depth--;
+              }
+            }
+          }
+          if (inTry) {
+            insideTry++;
+          } else {
+            outside.add('${f.uri.pathSegments.last}#$ordinal');
+          }
+        }
+      }
+      // ضبطٌ موجبٌ: لو انهارَ المُوازِنُ لَقرأَ الكلَّ «خارجَ try».
+      expect(insideTry, greaterThanOrEqualTo(15),
+          reason: 'مُوازِنُ الكتلِ انحلّ — $insideTry كتابةً داخلَ try فقط');
+      expect(outside.toSet(), allowedOutsideTry,
+          reason: 'كتابةٌ بلا `try`: الرفضُ بلا مُعالِجٍ لا يُنبّهُ ولا '
+              'يُسجّلُ شيئاً، والصفُّ لا يَتغيّر: ${outside.join(", ")}');
+    });
+
   });
 }

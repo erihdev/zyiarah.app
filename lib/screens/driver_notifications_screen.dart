@@ -106,7 +106,20 @@ class DriverNotificationsScreen extends StatelessWidget {
                                 .doc(doc.id)
                                 .update({'isRead': true, 'is_read': true});
                           } catch (e) {
+                            // **كان `debugPrint` وحدَه** — والقائمةُ هنا
+                            // تَعرضُ غيرَ المقروءِ فقط، فالنقرةُ هي السبيلُ
+                            // الوحيدُ لإخفاءِ البطاقة: فشلُها يُبقيها في
+                            // مكانِها بلا كلمةٍ فيُعيدُ السائقُ النقرَ.
+                            // والشاشةُ النظيرةُ عند العميلةِ تُنبّه
+                            // («تعذّر تعليم الإشعارات كمقروءة») — فالقاعدةُ
+                            // قائمةٌ في سطحٍ من اثنَين.
                             debugPrint("Error marking notification as read: $e");
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text(
+                                          'تعذّر تعليم الإشعار كمقروء')));
+                            }
                           }
                         },
                         child: _NotifCard(data: data),

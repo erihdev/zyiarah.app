@@ -136,15 +136,36 @@ export default function StoreProducts() {
     }
   };
 
+  // **كتابتانِ بلا `try` أصلاً.** حارسُ «كتابةٌ تَفشلُ بلا كلمة» في هذا
+  // المستودعِ يَمسحُ **أجسامَ `catch`** — فكتابةٌ لا `catch` لها غيرُ مرئيّةٍ
+  // له تماماً: الوعدُ يُرفَضُ بلا مُعالِج، فلا نَفْشةَ ولا سطرَ وحدةٍ حتى،
+  // والصفُّ لا يَتغيّر (لا كتابةَ ⇒ لا مستمعَ يُحدِّث) فيُعيدُ الأدمنُ النقرَ.
+  // و`handleSubmit` في هذا الملفِّ بعينِه يُنبّه — فالقاعدةُ موجودةٌ وهذانِ
+  // شذَّا عنها.
   const handleDelete = async (id: string) => {
     if (!await confirm('هل أنت متأكد من حذف هذا المنتج؟')) return;
-    await deleteDoc(doc(db, 'products', id));
+    try {
+      await deleteDoc(doc(db, 'products', id));
+    } catch (error) {
+      console.error("Error deleting product:", error);
+      toast.error(error instanceof Error ? error.message : 'تعذّر حذف المنتج');
+    }
   };
 
   const toggleVisibility = async (product: Product) => {
-    await updateDoc(doc(db, 'products', product.id), {
-      is_hidden: !product.is_hidden
-    });
+    try {
+      await updateDoc(doc(db, 'products', product.id), {
+        is_hidden: !product.is_hidden
+      });
+    } catch (error) {
+      // الفشلُ هنا يَتركُ المنتجَ على عكسِ ما قَصدَه الأدمنُ: معروضاً وهو
+      // يَحسبُه مخفيّاً (أو العكس) — وقرارُ العرضِ هذا هو ما يَقرؤه استعلامُ
+      // العميلةِ `where('is_hidden', isEqualTo: false)`.
+      console.error("Error toggling product visibility:", error);
+      toast.error(error instanceof Error
+          ? error.message
+          : 'تعذّر تغيير حالة عرض المنتج');
+    }
   };
 
   const filteredProducts = products.filter((p: Product) => 
