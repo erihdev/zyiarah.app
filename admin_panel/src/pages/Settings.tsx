@@ -1257,7 +1257,7 @@ export default function Settings({ role }: { role?: string | null }) {
                                             )}
 
                                             <div>
-                                                <h5 className="font-black text-slate-800 text-sm mb-2">أسعار الكنب (بالمتر الطولي) والسجاد (بالمتر المربع)</h5>
+                                                <h5 className="font-black text-slate-800 text-sm mb-2">أسعار الكنب (بالمتر الطولي) والسجاد (بالمتر المربع) — قبل الضريبة</h5>
                                                 <div className="grid grid-cols-2 gap-3">
                                                     {SOFA_RUG_FIELDS.map(f => (
                                                         <div key={f.key}>
@@ -1274,7 +1274,7 @@ export default function Settings({ role }: { role?: string | null }) {
                                             </div>
 
                                             <div>
-                                                <h5 className="font-black text-slate-800 text-sm mb-2">أسعار المكيفات — لكل مكيف (ر.س)</h5>
+                                                <h5 className="font-black text-slate-800 text-sm mb-2">أسعار المكيفات — لكل مكيف (ر.س، قبل الضريبة)</h5>
                                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                                     {AC_FIELDS.map(f => (
                                                         <div key={f.key}>
@@ -1291,7 +1291,7 @@ export default function Settings({ role }: { role?: string | null }) {
                                             </div>
 
                                             <div>
-                                                <h5 className="font-black text-slate-800 text-sm mb-2">تنظيف داخلية السيارة — لكل سيارة (ر.س)</h5>
+                                                <h5 className="font-black text-slate-800 text-sm mb-2">تنظيف داخلية السيارة — لكل سيارة (ر.س، قبل الضريبة)</h5>
                                                 <div className="grid grid-cols-3 gap-3">
                                                     {CAR_FIELDS.map(f => (
                                                         <div key={f.key}>

@@ -664,7 +664,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                       },
                     ),
                     const Divider(height: 30),
-                    const Text("أسعار الكنب (بالمتر الطولي) والسجاد (بالمتر المربع):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Text("أسعار الكنب (بالمتر الطولي) والسجاد (بالمتر المربع) — قبل الضريبة:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     const Text("الكنب يُحسب بالطول فقط (متر طولي)، والسجاد بالطول × العرض (متر مربع). صفر = تعطيل الخدمة في هذه المنطقة.",
                         style: TextStyle(fontSize: 11, color: Colors.grey)),
                     const SizedBox(height: 10),
@@ -677,7 +677,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     ),
 
                     const Divider(height: 30),
-                    const Text("أسعار المكيفات — لكل مكيف (ر.س):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Text("أسعار المكيفات — لكل مكيف (ر.س، قبل الضريبة):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     const Text("اتركه فارغاً لتعطيل النوع في هذه المنطقة.",
                         style: TextStyle(fontSize: 11, color: Colors.grey)),
                     const SizedBox(height: 10),
@@ -698,7 +698,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     ),
 
                     const Divider(height: 30),
-                    const Text("تنظيف داخلية السيارة — لكل سيارة (ر.س):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Text("تنظيف داخلية السيارة — لكل سيارة (ر.س، قبل الضريبة):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     const Text("مراتب وأسقف السيارة. اتركه فارغاً لتعطيل الحجم في هذه المنطقة.",
                         style: TextStyle(fontSize: 11, color: Colors.grey)),
                     const SizedBox(height: 10),
