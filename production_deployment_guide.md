@@ -345,7 +345,7 @@ Admin` يشمل الاستضافة)، ويلزمه سرُّ `MAPBOX_TOKEN` ال�
 | المهمّة | ما تفحصه |
 |---|---|
 | Flutter Analyze | `flutter analyze --no-fatal-infos` |
-| Flutter Test | `flutter test` — **١٧١ ملفَّ فحص** (عددُ الفحوصِ نفسُه لا يُكتَب هنا: كثيرٌ منها يُسجَّل في حلقات، فأيُّ رقمٍ يُدوَّن يَبيت — ويُشدُّ عددُ الملفّاتِ في `test/deploy_guide_accuracy_test.dart`) |
+| Flutter Test | `flutter test` — **١٧٢ ملفَّ فحص** (عددُ الفحوصِ نفسُه لا يُكتَب هنا: كثيرٌ منها يُسجَّل في حلقات، فأيُّ رقمٍ يُدوَّن يَبيت — ويُشدُّ عددُ الملفّاتِ في `test/deploy_guide_accuracy_test.dart`) |
 | Flutter Build (full compile) | `flutter build bundle --release` — تصريف إغلاق `main.dart` كله. الوحيد الذي يكشف خطأ تصريف **داخل اعتمادية**: analyze يُبلّغ عن ملفات المشروع وحدها، وtest يصرّف ما تستورده الاختبارات فقط (درس البناء ٣١) |
 | Cloud Functions Tests | lint + **٢٨ ملفَّ فحصِ وحدة** + **٥ ملفّاتِ محاكٍ** (قواعدُ الطلبات، الأدوار، شروطُ الخدمة، الإشعارات، خصمُ المحفظة) |
 | Admin Panel Build | lint + Vitest + `tsc -b` + بناء |

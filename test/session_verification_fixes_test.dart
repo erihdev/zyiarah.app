@@ -14,16 +14,21 @@ void main() {
   final ordersTsx = File('admin_panel/src/pages/Orders.tsx').readAsStringSync();
 
   test('إشعار انطلاق السائق للعميل عبر queuePush (وارد بلا توكن)', () {
-    final i = fn.indexOf('notifyClientOnDriverDeparture');
-    final body = fn.substring(i, fn.indexOf('exports.', i + 10));
+    // المِرساةُ `exports.` لا الاسمُ العاري: تعليقٌ في دالّةٍ أخرى يَذكرُ
+    // الاسمَ يُزحزِحُ الشريحةَ إلى غيرِ موضعِها — وقد وقعَ ذلك فعلاً في
+    // الفحصِ التالي (2026-10-08).
+    final i = fn.indexOf('exports.notifyClientOnDriverDeparture');
+    expect(i, greaterThan(0), reason: 'التصديرُ غائب');
+    final body = fn.substring(i, fn.indexOf('\nexports.', i + 10));
     expect(body.contains('queuePush('), isTrue,
         reason: '_pushToUid يفقد الإشعار لعميل الويب بلا توكن بلا أثر في الوارد');
     expect(body.contains('_pushToUid('), isFalse);
   });
 
   test('تذكيرات موعد العميل عبر queuePush', () {
-    final i = fn.indexOf('remindClientsUpcomingAppointments');
-    final body = fn.substring(i, fn.indexOf('exports.', i + 10));
+    final i = fn.indexOf('exports.remindClientsUpcomingAppointments');
+    expect(i, greaterThan(0), reason: 'التصديرُ غائب');
+    final body = fn.substring(i, fn.indexOf('\nexports.', i + 10));
     expect(body.contains('_pushToUid('), isFalse,
         reason: 'كان يضبط علم الإرسال ثم يتخطّى بصمت العميل بلا توكن');
     expect(RegExp(r'queuePush\(').allMatches(body).length, greaterThanOrEqualTo(2));

@@ -217,7 +217,7 @@ void main() {
       }
     });
 
-    test('وكلُّ كُتّابِ booking_time_slot معروفون — ثلاثةٌ لكلٍّ سببُه', () {
+    test('وكلُّ كُتّابِ booking_time_slot معروفون — أربعةٌ لكلٍّ سببُه', () {
       // التمرير: `contract_signing_screen` يَكتبُ `widget.bookingTimeSlot`
       // مُمرَّراً، فلا يُطابِقُ نمطَ الـ24 حرفيّاً — ويُحرَسُ بمنادِيَيه.
       final writers = <String>[];
@@ -230,10 +230,22 @@ void main() {
             'lib/screens/checkout_screen.dart',
             'lib/screens/contract_signing_screen.dart',
             'lib/screens/payment_summary_screen.dart',
+            // الرابعُ ليس كاتبَ إنشاءٍ بل **موضعُ قاعدةِ تحريكِ الموعد**
+            // (2026-10-08): يُعيدُ اشتقاقَ الحقلَين بصيغةِ 24 ويُصفّرُ
+            // أعلامَ التذكير، ويُنادِيه سطحا الإدارةِ معاً. وصيغتُه
+            // مشدودةٌ سلوكاً في `booking_fields_test`، وتفويضُه هنا.
+            'lib/utils/booking_fields.dart',
           ]),
-          reason: 'كاتبٌ رابعٌ لـbooking_time_slot — يُراجَعُ بدلَ أن يَمرّ، '
+          reason: 'كاتبٌ خامسٌ لـbooking_time_slot — يُراجَعُ بدلَ أن يَمرّ، '
               'فصيغةُ 12 ساعةً هنا تُسقطُ حسابَ السعةِ خادميّاً: '
               '${writers.join(", ")}');
+      // وموضعُ القاعدةِ يُفوّضُ إلى الدالّةِ النقيّةِ ولا يَبني الصيغةَ إنلاين
+      expect(
+          RegExp(r"'booking_time_slot':\s*bookingTimeSlotOf\(")
+              .hasMatch(_code('lib/utils/booking_fields.dart')),
+          isTrue,
+          reason: 'قاعدةُ التحريكِ تَبني الساعةَ إنلاين بدلَ bookingTimeSlotOf '
+              '— فصيغةُ 24 لم تَبقَ في موضعٍ واحدٍ مشدود');
       // ومُنادِيا شاشةِ التعاقدِ يَبنيانِ القيمةَ بصيغةِ 24
       for (final p in const [
         'lib/screens/subscription_plans_screen.dart',

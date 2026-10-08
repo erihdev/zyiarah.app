@@ -280,11 +280,27 @@ void main() {
     ]) {
       expect(blocked, contains(f), reason: '$f غيرُ محجوبٍ عند الإنشاء');
     }
+    // التصفيرُ انتقلَ إلى القاعدةِ المشترَكةِ (2026-10-08) — وهذا الفحصُ كان
+    // يُثبّتُ **شكلَ** الكتابةِ إنلاين (`updatePayload['reminder_sent'] =
+    // false`) فسقطَ بالنقلِ لا بالانحراف. فالمشدودُ الآن أنّ السطحَ يُنادي
+    // القاعدةَ وأنّ القاعدةَ تُصفّرُ الثلاثةَ — والأسماءُ مثبّتةٌ حرفيّاً
+    // أعلاه فلا دَورَ على المفحوص.
     final adm = File('lib/screens/admin/admin_order_details_screen.dart')
         .readAsStringSync();
-    expect(adm.contains("updatePayload['reminder_sent'] = false"), isTrue,
+    expect(adm.contains('rescheduleDerivedFields('), isTrue,
         reason: 'تصفيرُ الإدارةِ عند تغييرِ الموعدِ زالَ — وهو `update` لا '
             '`create`، فالحجبُ لا يَمَسُّه');
+    final rule = File('lib/utils/booking_fields.dart').readAsStringSync();
+    expect(rule.contains('for (final f in kReminderFlags) f: false'), isTrue,
+        reason: 'قاعدةُ التحريكِ لم تَعُدْ تُصفّرُ أعلامَ التذكير');
+    for (final f in const [
+      'client_reminder_24h_sent',
+      'client_reminder_soon_sent',
+      'reminder_sent',
+    ]) {
+      expect(rule.contains("'$f',"), isTrue,
+          reason: '$f خارجَ kReminderFlags — فتحريكُ الموعدِ لا يُصفّرُه');
+    }
   });
 
 

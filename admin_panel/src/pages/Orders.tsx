@@ -9,6 +9,7 @@ import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../services/firebase.ts';
 import { useNotification } from '../components/notificationContext.ts';
 import { cancelRefundNotice, cancelRefundAdminText } from '../utils/cancelRefundNotice.ts';
+import { rescheduleDerivedFields } from '../utils/bookingFields.ts';
 import ServiceMetaTable from '../components/ServiceMetaTable.tsx';
 // الملخّصُ انتقلَ إلى `utils/serviceMeta.ts` بجوارِ `metaRows`/`metaHeadline`:
 // هو مرآةُ الدالّةِ نفسِها في `service_meta_view.dart`، فمَوضعُه حيثُ تُختبَرُ
@@ -240,10 +241,18 @@ export default function Orders() {
                     setIsEditing(false);
                     return;
                 }
-                const ts = Timestamp.fromDate(new Date(editScheduledAt));
+                const chosen = new Date(editScheduledAt);
+                const ts = Timestamp.fromDate(chosen);
+                // الحقلان المشتقّان وتصفير أعلام التذكير — القاعدة في
+                // `utils/bookingFields.ts`. كانت هذه الكتابة `service_date`/
+                // `scheduled_at` وحدهما: `capacity.js` يعدّ من `booking_date`
+                // و`booking_time_slot` فيستهلك الطلب سعة يومه القديم ويُباع
+                // يومه الجديد أكثر من طاقته، والساعة المعروضة للعميلة تبقى
+                // القديمة، والتذكير لا يُعاد إرساله للموعد الجديد.
                 await updateDoc(doc(db, 'orders', editModal.id), {
                     service_date: ts,
                     scheduled_at: ts,
+                    ...rescheduleDerivedFields(chosen),
                     updated_at: Timestamp.now(),
                 });
             }
