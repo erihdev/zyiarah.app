@@ -13,6 +13,7 @@ import {
     packageFormError, positiveNum, positiveInt, resolvedVisits,
 } from '../utils/catalogNumber.ts';
 import { logAudit, AUDIT } from '../services/audit.ts';
+import { contractRef, contractRefMatches } from '../utils/contractRef.ts';
 
 interface ContractRecord {
     id: string;
@@ -20,6 +21,8 @@ interface ContractRecord {
     userName?: string;
     clientName?: string;
     planName: string;
+    // الرقمُ المطبوعُ على العقد — لم تَكن الصفحةُ تَقرؤه إطلاقاً.
+    contractId?: string;
     planPrice?: number;
     planVisits?: number;
     status: string;
@@ -725,7 +728,8 @@ export default function Contracts({ role }: { role?: string | null }) {
     const filtered = contracts.filter(c =>
         (c.planName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (c.userName || c.clientName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.id.toLowerCase().includes(searchTerm.toLowerCase())
+        // التلميحُ يَقولُ «أو رقم العقد» — وكان المعرّفَ وحدَه.
+        contractRefMatches(c.contractId, c.id, searchTerm)
     );
 
     return (
@@ -834,7 +838,7 @@ export default function Contracts({ role }: { role?: string | null }) {
                                         <h4 className="text-lg font-black text-slate-800 truncate leading-tight">
                                             {contract.planName || 'باقة غير محددة'}
                                         </h4>
-                                        <p className="text-sm font-bold text-slate-400 truncate mt-1">#{(contract.id || '').split('-')[1]?.toUpperCase() || contract.id.substring(0, 8).toUpperCase()}</p>
+                                        <p className="text-sm font-bold text-slate-400 truncate mt-1">#{contractRef(contract.contractId, contract.id)}</p>
                                     </div>
                                 </div>
 

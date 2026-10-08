@@ -10,6 +10,7 @@ import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/contract_health.dart';
 import 'package:zyiarah/utils/home_packages.dart';
+import 'package:zyiarah/utils/contract_ref.dart';
 
 class AdminContractsScreen extends StatefulWidget {
   const AdminContractsScreen({super.key});
@@ -70,10 +71,11 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
     final String planName = (data['planName'] ?? '').toString().toLowerCase();
     final String clientName =
         (data['userName'] ?? data['clientName'] ?? '').toString().toLowerCase();
-    final String contractCode = doc.id.substring(0, 8).toLowerCase();
+    // **تلميحُ الحقلِ يَقولُ «أو رقم العقد»** — وكان المُرشَّحُ معرّفَ
+    // المستندِ وحدَه، فالرقمُ المطبوعُ على العقدِ غيرُ قابلٍ للعثور.
     return planName.contains(query) ||
         clientName.contains(query) ||
-        contractCode.contains(query);
+        contractRefMatches(data['contractId'], doc.id, query);
   }
 
   Widget _buildSearchField() {
@@ -177,7 +179,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
     final String clientName = data['userName'] ?? data['clientName'] ?? 'عميل زيارة';
     final String status = data['status'] ?? 'pending';
     final DateTime createdAt = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
-    final String contractId = doc.id.substring(0, 8).toUpperCase();
+    final String contractId = contractRef(data['contractId'], doc.id);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -283,7 +285,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
                   ),
                 const SizedBox(width: 8),
                 IconButton.filled(
-                  onPressed: () => _showDetails(data),
+                  onPressed: () => _showDetails(data, doc.id),
                   icon: const Icon(Icons.info_outline_rounded),
                   style: IconButton.styleFrom(backgroundColor: Colors.blueGrey[50], foregroundColor: Colors.blueGrey[600]),
                 ),
@@ -433,7 +435,9 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
     }
   }
 
-  void _showDetails(Map<String, dynamic> data) {
+  // **المعرّفُ يُمرَّرُ**: الشِيتُ كان يَقرأُ `data` وحدَها، فزرُّ الـPDF
+  // فيها لا يَملكُ معرّفَ المستندِ — ومن هنا جاءَ احتياطُ `'XXXX'`.
+  void _showDetails(Map<String, dynamic> data, String docId) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -467,7 +471,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
                     final messenger = ScaffoldMessenger.of(context);
                     try {
                       await ZyiarahPdfService.generateAndDownloadContract(
-                        contractId: data['contractId'] ?? 'XXXX',
+                        contractId: contractRef(data['contractId'], docId),
                         planName: data['planName'] ?? 'باقة اشتراك',
                         userName: data['userName'] ?? data['clientName'] ?? 'عميل زيارة',
                         userPhone: data['userPhone'] ?? 'غير مسجل',

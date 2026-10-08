@@ -9,12 +9,7 @@ import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/home_packages.dart';
 import 'package:zyiarah/utils/contract_health.dart';
-
-/// مرجع مختصر آمن (يتجنّب RangeError على معرّفات أقصر من 8).
-String _shortRef(dynamic v) {
-  final s = v.toString().toUpperCase();
-  return s.length >= 8 ? s.substring(0, 8) : s;
-}
+import 'package:zyiarah/utils/contract_ref.dart';
 
 class ZyiarahContractsListScreen extends StatelessWidget {
   const ZyiarahContractsListScreen({super.key});
@@ -187,7 +182,7 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                           children: [
                             Text(planName, 
                               style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF1E293B))),
-                            Text('رقم المرجعي: #${_shortRef(data['contractId'] ?? contractDocId)}',
+                            Text('رقم المرجعي: #${contractRef(data['contractId'], contractDocId)}',
                               style: GoogleFonts.tajawal(fontSize: 12, color: Colors.blueGrey)),
                           ],
                         ),
@@ -245,7 +240,7 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                               );
                               try {
                                 await ZyiarahPdfService.generateAndDownloadContract(
-                                  contractId: data['contractId'] ?? _shortRef(contractDocId),
+                                  contractId: contractRef(data['contractId'], contractDocId),
                                   planName: planName,
                                   userName: data['userName'] ?? data['clientName'] ?? 'عميل زيارة',
                                   userPhone: data['userPhone'] ?? data['clientPhone'] ?? '000000000',
