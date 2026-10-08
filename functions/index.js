@@ -3029,6 +3029,25 @@ async function processAccountDeletion(uid) {
       status: "failed_deletion",
       failed_at: FieldValue.serverTimestamp(),
     });
+    // **والوسمُ وحدَه كان كلَّ ما يَحدث.** `failed_deletion` ترِدُ في هذا
+    // الملفِّ **مرّةً واحدةً** — هذه الكتابةَ: لا دفعةَ، ولا مكنسةَ (
+    // `opsHealthSweep` لا يَمَسُّ `account_deletions` إطلاقاً)، والمُشغّلانِ
+    // بلا `retry` فلا يَعودانِ لمستندٍ فاتَه الحدث. فحذفٌ **يَلزمُه متطلّبُ
+    // آبل** يَفشلُ فيَبقى حسابُ المصادقةِ حيّاً، والعميلةُ لا تَعلم، ولا
+    // أحدَ عندنا يَعلم — والسطحانِ يَقولانِ «يتطلب مراجعة» لِمَن يَفتحُهما
+    // بمحضِ المصادفة. ونظيرُه في الدالّةِ نفسِها يُنبّه: رصيدُ المحفظةِ
+    // المحجوزُ له دفعتُه أعلاه.
+    //
+    // والجمهورُ `super_admin` لا أوسعُ: القاعدةُ تَحصُرُ قراءةَ
+    // `account_deletions` به (`allow read, update, delete: if isSuperAdmin()`)
+    // فتنبيهُ غيرِه يُرسِلُه إلى صفحةٍ لا يَفتحُها.
+    await queuePush("ADMIN_BROADCAST", "فشلَ حذفُ حساب ⚠️",
+        `تعذّر حذفُ حسابِ المستخدم ${uid} خادميّاً: ` +
+        `${error.message || "خطأ غير معروف"} — أعِدِ المحاولةَ من شاشةِ ` +
+        "طلباتِ حذفِ الحساب (المتطلّبُ قانونيٌّ، فلا يُترَكُ معلّقاً).",
+        "admin_deletion_failed", {uid},
+        ["super_admin"]).catch((e) =>
+      console.error(`[deletion] failure alert failed for ${uid}:`, e.message));
   }
 }
 

@@ -6,7 +6,10 @@ import {
 } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/notificationContext.ts';
-import { deletionRowIdentity, deletionStrandedBalance } from '../utils/deletionLogRow.ts';
+import {
+    deletionRowIdentity, deletionStrandedBalance, deletionRequestState,
+    deletionStateLabel, deletionRetryAllowed, deletionFailureReason,
+} from '../utils/deletionLogRow.ts';
 import { formatSar } from '../utils/money.ts';
 import { logAudit, AUDIT } from '../services/audit.ts';
 
@@ -25,7 +28,14 @@ interface DeletionRequest {
     wallet_balance_at_deletion?: number;
     // الدالة onRequestAccountDeletion تكتب deleted_fully_processed عند نجاح التنظيف
     // الكامل، و failed_deletion عند فشله — كانت اللوحة تجهل هاتين الحالتين فتظهران فارغتين.
-    status: 'pending' | 'deleted' | 'rejected' | 'deleted_fully_processed' | 'failed_deletion';
+    //
+    // والنوعُ `string`: التسميةُ والإجراءُ من `deletionLogRow` فتَقرأُ أيَّ
+    // قيمةٍ وتَقولُ «حالة غير معروفة» لما لا تَعرفُه — بدلَ اتّحادٍ يَكذبُ
+    // على مستندٍ كُتبَ بيدٍ في الكونسول.
+    status?: string;
+    // **سببُ الفشلِ الذي يَكتبُه الخادمُ — كان بلا قارئٍ في أيِّ سطح**،
+    // فالصفُّ يَقولُ «يتطلب مراجعة» ولا يُظهرُ ما يُراجَع.
+    error?: unknown;
     userId?: string;
 }
 
@@ -43,6 +53,15 @@ export default function AccountDeletion() {
     // فشل المستمع نهائي — حالة خطأ صريحة بزر إعادة بدل «لا توجد طلبات» المضلّلة.
     const [loadError, setLoadError] = useState(false);
     const [retryKey, setRetryKey] = useState(0);
+    // الساعةُ في الحالةِ لا في جسمِ الرسم: `Date.now()` هناك غيرُ نقيّة
+    // (`react-hooks/purity`)، ونبضةُ الدقيقةِ تَجعلُ الصفَّ الذي يَعلَقُ
+    // والصفحةُ مفتوحةٌ يَكشفُ زرَّه بنفسِه بدلَ أن يَنتظرَ تحديثاً.
+    const [nowMs, setNowMs] = useState(() => Date.now());
+
+    useEffect(() => {
+        const t = setInterval(() => setNowMs(Date.now()), 60_000);
+        return () => clearInterval(t);
+    }, []);
 
     useEffect(() => {
         // (أداء) أحدث 300 فقط — السجلات المعالَجة تتراكم للأبد (متطلب آبل يحفظها)
@@ -101,6 +120,35 @@ export default function AccountDeletion() {
         }
     };
 
+    /// **مَخرَجُ الفشل.** الخادمُ يَكتبُ `failed_deletion` ويَقولُ الصفُّ
+    /// «يتطلب مراجعة» بلا إجراء: الزرّانِ أدناه محصورانِ بـ`'pending'`
+    /// **ولا كاتبَ لها**. وزرُّ «رفض» قرارُ مالكٍ (2026-07-21) فلم يُمَسّ.
+    const handleRetry = async (req: DeletionRequest) => {
+        if (!await confirm(`إعادة تشغيل حذف حساب ${deletionRowIdentity(req)} خادمياً؟ `
+            + 'الحذف لا رجعة فيه: حساب الدخول ومستند المستخدم ورموز الإشعارات '
+            + 'تُمسح، والرصيد المتبقّي يُسجَّل ديناً للتسوية اليدوية.')) return;
+        setProcessingId(req.id);
+        try {
+            await updateDoc(doc(db, 'account_deletions', req.id), {
+                status: 'deleted',
+                processed_at: new Date(),
+            });
+            await logAudit(AUDIT.PROCESS_ACCOUNT_DELETION, {
+                decision: 'retry',
+                account: deletionRowIdentity(req),
+                ...(deletionStrandedBalance(req) !== null
+                    ? { stranded_balance: deletionStrandedBalance(req) }
+                    : {}),
+            }, req.id);
+            toast.success('أُعيد تشغيل الحذف — تابع الحالة بعد ثوانٍ');
+        } catch {
+            // امتثال آبل: لا تُظهر الحذف كناجح إن فشل فعلاً.
+            toast.error('تعذّرت إعادة المحاولة — أعد المحاولة');
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
     const handleReject = async (req: DeletionRequest) => {
         setProcessingId(req.id);
         try {
@@ -123,6 +171,14 @@ export default function AccountDeletion() {
     };
 
     const pendingCount = requests.filter(r => r.status === 'pending').length;
+    // **والرقمُ الذي يَحتاجُه المالكُ هو ما يَنتظرُ إجراءَه فعلاً** — فشلٌ،
+    // أو `'deleted'` عالقٌ تجاوزَ المُهلة. وعدّادُ «معلّق» أعلاه صفرٌ
+    // بنيويّاً (`'pending'` لا يَكتبُه كاتب) فيُتركُ كما هو ويُضافُ هذا.
+    const needsActionCount = requests.filter(r => deletionRetryAllowed(
+        deletionRequestState(r.status),
+        r.requested_at ? r.requested_at.toDate().getTime() : null,
+        nowMs,
+    )).length;
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
@@ -134,6 +190,9 @@ export default function AccountDeletion() {
                         <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200">Apple Compliance</span>
                         {pendingCount > 0 && (
                             <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold">{pendingCount} معلّق</span>
+                        )}
+                        {needsActionCount > 0 && (
+                            <span className="text-xs bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full font-bold">{needsActionCount} يحتاج إجراء</span>
                         )}
                     </h2>
                     <p className="text-slate-500 font-medium text-sm mt-1">
@@ -222,11 +281,38 @@ export default function AccountDeletion() {
                                         </td>
                                         <td className="px-6 py-4 text-sm font-medium text-slate-500">{formatDate(req.requested_at)}</td>
                                         <td className="px-6 py-4 text-sm text-slate-600 line-clamp-1">{req.reason ?? '—'}</td>
+                                        {/* **التسميةُ من القاعدةِ المشترَكة.** كان `'deleted'`
+                                            يُرسَمُ «تم الحذف نهائياً» بعلامةٍ خضراءَ مع
+                                            `deleted_fully_processed` — وهو «سُجِّلَ والخادمُ
+                                            يَعملُ عليه»، وقد يَبقى عليها إلى الأبدِ لو ماتَ
+                                            الحاوي قبلَ تحديثِ الحالة. وشاشةُ التطبيقِ تَقولُ
+                                            «جاري المسح». */}
                                         <td className="px-6 py-4">
-                                            {req.status === 'pending' && <span className="inline-flex items-center gap-1 text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full text-xs font-bold border border-amber-100"><AlertTriangle size={12} />قيد المراجعة</span>}
-                                            {(req.status === 'deleted' || req.status === 'deleted_fully_processed') && <span className="inline-flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full text-xs font-bold border border-emerald-100"><CheckCircle2 size={12} />تم الحذف نهائياً</span>}
-                                            {req.status === 'failed_deletion' && <span className="inline-flex items-center gap-1 text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full text-xs font-bold border border-rose-100"><AlertTriangle size={12} />فشل الحذف</span>}
-                                            {req.status === 'rejected' && <span className="inline-flex items-center gap-1 text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full text-xs font-bold border border-slate-200"><XCircle size={12} />مرفوض</span>}
+                                            {(() => {
+                                                const st = deletionRequestState(req.status);
+                                                const cls = st === 'completed'
+                                                    ? 'text-emerald-600 bg-emerald-50 border-emerald-100'
+                                                    : st === 'failed'
+                                                        ? 'text-rose-600 bg-rose-50 border-rose-100'
+                                                        : st === 'rejected'
+                                                            ? 'text-slate-600 bg-slate-100 border-slate-200'
+                                                            : 'text-amber-600 bg-amber-50 border-amber-100';
+                                                const Ico = st === 'completed'
+                                                    ? CheckCircle2
+                                                    : st === 'rejected' ? XCircle : AlertTriangle;
+                                                return (
+                                                    <>
+                                                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${cls}`}>
+                                                            <Ico size={12} />{deletionStateLabel(st)}
+                                                        </span>
+                                                        {deletionFailureReason(req) && (
+                                                            <div className="text-xs text-rose-600 mt-1 dir-ltr break-all">
+                                                                {deletionFailureReason(req)}
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
                                         </td>
                                         <td className="px-6 py-4 text-center">
                                             {req.status === 'pending' ? (
@@ -253,8 +339,25 @@ export default function AccountDeletion() {
                                                         <XCircle size={14} /> رفض
                                                     </button>
                                                 </div>
+                                            ) : deletionRetryAllowed(
+                                                deletionRequestState(req.status),
+                                                req.requested_at ? req.requested_at.toDate().getTime() : null,
+                                                nowMs,
+                                            ) ? (
+                                                <button
+                                                    type="button"
+                                                    title="إعادة تشغيل الحذف خادمياً"
+                                                    onClick={() => handleRetry(req)}
+                                                    disabled={processingId === req.id}
+                                                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-600 border border-rose-100 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1.5 disabled:opacity-40"
+                                                >
+                                                    {processingId === req.id
+                                                        ? <Loader2 size={14} className="animate-spin" />
+                                                        : <Trash2 size={14} />}
+                                                    إعادة المحاولة
+                                                </button>
                                             ) : (
-                                                <span className="text-xs text-slate-400 font-medium">{req.status === 'failed_deletion' ? 'فشل — يتطلب مراجعة' : 'مكتمل'}</span>
+                                                <span className="text-xs text-slate-400 font-medium">مكتمل</span>
                                             )}
                                         </td>
                                     </tr>
