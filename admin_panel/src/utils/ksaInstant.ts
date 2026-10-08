@@ -32,3 +32,17 @@ export function ksaInstantOf(wall: Date): Date {
         wall.getMilliseconds(),
     ) - KSA_UTC_OFFSET_MS);
 }
+
+/// **تاريخُ الرياضِ الحاليُّ ساعةَ حائطٍ** بصيغةِ `YYYY-MM-DD` — مرآةُ
+/// `ksaTodayWall` في `lib/utils/ksa_instant.dart`، بالصيغةِ التي يَقبلُها
+/// `min` في `<input type="date">`/`datetime-local` (ساعةُ حائطٍ لا لحظة).
+///
+/// فمتصفّحٌ خارجَ السعوديّةِ لا يُعطي «أمس»: الخادمُ يَقرأُ النصَّ الساذجَ
+/// بتوقيتِ الرياضِ (`parseKsaIso`)، فالحدُّ يَجبُ أن يَكونَ بيومِ الرياض.
+///
+/// `nowMs` للفحصِ وحدَه؛ المواضعُ الحقيقيّةُ تَترُكُه فارغاً.
+export function ksaTodayDate(nowMs?: number): string {
+  const r = new Date((nowMs ?? Date.now()) + KSA_UTC_OFFSET_MS);
+  const p = (n: number, w = 2) => String(n).padStart(w, '0');
+  return `${p(r.getUTCFullYear(), 4)}-${p(r.getUTCMonth() + 1)}-${p(r.getUTCDate())}`;
+}

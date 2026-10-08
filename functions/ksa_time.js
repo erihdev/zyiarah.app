@@ -87,6 +87,27 @@ function riyadhLocalSlot(ms) {
 }
 
 /**
+ * **بدايةُ يومِ الرياضِ** الذي تَقعُ فيه [ms] — لحظةٌ زمنيّةٌ (ميلي ثانية).
+ *
+ * تُقاسُ بها «أموعدٌ في الماضي؟»: الحدُّ **بدايةُ اليومِ** لا «ليس قبلَ الآن»،
+ * لأنّ مُنتقي التاريخِ في سطحَي الإدارةِ دقّتُه يومٌ — ولأنّ ساعةً مضت **من
+ * اليومِ نفسِه** موعدٌ مشروعٌ يُسجّلُه الأدمنُ لزيارةٍ تأخّرَ إدخالُها، وهي
+ * داخلَ نافذةِ `sweepUnassignedPaidOrders` (‎−١٣س) فتَبقى قابلةً للاستعادة.
+ *
+ * حسابٌ صِرفٌ على الإزاحةِ لا قراءةُ مكوّناتٍ محلّيّة: الدوالُ تَعملُ بـUTC
+ * (انظر رأسَ الملفّ)، و`riyadhLocalDate` مشدودةٌ بها في فحصِها.
+ * @param {number|Date} ms اللحظةُ الزمنيّة
+ * @return {?number} بدايةُ اليومِ بالميلي، أو `null` للحظةٍ غيرِ صالحة
+ */
+function riyadhDayStartMs(ms) {
+  if (ms === null || ms === undefined) return null;
+  const t = ms instanceof Date ? ms.getTime() : Number(ms);
+  if (!Number.isFinite(t)) return null;
+  const DAY = 24 * 60 * 60 * 1000;
+  return Math.floor((t + KSA_OFFSET_MS) / DAY) * DAY - KSA_OFFSET_MS;
+}
+
+/**
  * ختمٌ للعرضِ في الإشعارات: `YYYY-MM-DD HH:00` بتوقيتِ الرياض.
  * @param {number|Date} ms اللحظةُ الزمنيّة
  * @return {?string} الختم
@@ -104,4 +125,5 @@ module.exports = {
   riyadhLocalDate,
   riyadhLocalSlot,
   riyadhStamp,
+  riyadhDayStartMs,
 };

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ksaInstantOf, KSA_UTC_OFFSET_MS } from './ksaInstant';
+import { ksaInstantOf, KSA_UTC_OFFSET_MS, ksaTodayDate } from './ksaInstant';
 
 // جدولُ الحالاتِ **نسخةٌ مطابقةٌ** لما بين العلامتَين في
 // `test/ksa_instant_test.dart`، وفحصُ الدارتِ يَقرأُ هذا الملفَّ ويُقابِلُهما
@@ -44,5 +44,17 @@ describe('ksaInstantOf', () => {
             .toBe('2026-01-15T07:00:00.000Z');
         expect(ksaInstantOf(new Date(2026, 6, 15, 10, 0)).toISOString())
             .toBe('2026-07-15T07:00:00.000Z');
+    });
+
+    it('`ksaTodayDate` تاريخُ **الرياضِ** لا تاريخُ المتصفّح', () => {
+        // 00:30Z من الثامن = 03:30 بالرياضِ من اليومِ نفسِه.
+        expect(ksaTodayDate(Date.UTC(2026, 9, 8, 0, 30))).toBe('2026-10-08');
+        // و21:30Z من السابعِ = 00:30 بالرياضِ من **الثامن** — وهنا يَفترقُ
+        // تاريخُ UTC عن تاريخِ الرياض، فهو ما يُثبِتُ أنّ الحسابَ رياضيّ.
+        expect(ksaTodayDate(Date.UTC(2026, 9, 7, 21, 30))).toBe('2026-10-08');
+        // و20:30Z من السابعِ = 23:30 بالرياضِ من السابع.
+        expect(ksaTodayDate(Date.UTC(2026, 9, 7, 20, 30))).toBe('2026-10-07');
+        // والصيغةُ هي التي يَقبلُها `min` في حقلِ التاريخ، مُصفَّرةَ الخانات.
+        expect(ksaTodayDate(Date.UTC(2026, 0, 2, 12, 0))).toBe('2026-01-02');
     });
 });
