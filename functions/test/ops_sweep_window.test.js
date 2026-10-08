@@ -367,4 +367,85 @@ test("(١٧) ولا فهرسَ مركَّباً أُضيفَ لأيٍّ منهم
 });
 
 
+// ════════════════════════════════════════════════════════════════════════
+// (١٨–٢١) **نافذتانِ كانتا تَسيلانِ بما تَتخطّاه الحلقة.**
+//
+// العائلةُ أُغلقت أربعَ مرّاتٍ (البثُّ المجدول، «مدفوعٌ وعالق»، المحافظُ
+// السالبة، استردادُ الإلغاء)، ومسحٌ لكلِّ `limit()` في `opsHealthSweep`
+// (خمسةَ عشَرَ) أعطى اثنتَين بالتوقيعِ نفسِه: مستندٌ تَتخطّاه الحلقةُ
+// بـ`continue` **يَبقى مطابقاً للاستعلامِ إلى الأبد**.
+// ════════════════════════════════════════════════════════════════════════
+
+test("(١٨) العقودُ العالقةُ تُقرأُ كاملةً بحدِّ مسحٍ لا بنافذةِ limit", () => {
+  // **على المُجرَّدِ من التعليقات**: شرحُ القرارِ يَذكرُ «نافذةَ limit»
+  // و«المئة» نصّاً، فلولا التجريدُ سقطَ الفحصُ على توثيقِه.
+  const i = code.indexOf("exports.opsHealthSweep");
+  const sweep = code.slice(i);
+  const j = sweep.indexOf("db.collection(\"contracts\")");
+  assert.ok(j > 0, "زالَ إنقاذُ العقودِ من المكنسة");
+  const blk = sweep.slice(j, j + 1400);
+  assert.ok(!/\.limit\(\d+\)/.test(blk.slice(0, 300)),
+      "عادت نافذةُ limit — والمُتخطّى (plan_validation_failed) لا يَخرُجُ " +
+      "منها أبداً فيَدفعُ عقداً مدفوعاً عالقاً خارجَها");
+  assert.ok(blk.includes(".count().get()"), "لا عَدَّ خادميّاً قبلَ القراءة");
+  assert.ok(blk.includes("STUCK_CONTRACT_SCAN_MAX"),
+      "لا حدَّ مسحٍ — فقراءةُ الجمهورِ كاملةً بلا سقف");
+  // وتجاوزُ الحدِّ **يُنبّه** ولا يُعدِّدُ — سابقةُ المحافظِ السالبة.
+  assert.ok(/kCount > STUCK_CONTRACT_SCAN_MAX[\s\S]{0,300}?queuePush\(/.test(blk),
+      "تجاوزُ الحدِّ لا يُنبّه — فالانفجارُ يَمُرُّ صامتاً");
+  // ومضادّةٌ: الشكلُ الممنوعُ ما زال مُقتبَساً في الشرحِ الخامّ.
+  assert.ok(src.includes("نافذةُ الـ100"),
+      "زالَ شرحُ العطلِ — فلا يَعرفُ القارئُ لِمَ لا limit هنا");
+});
+
+test("(١٩) والحدُّ مُعرَّفٌ مرّةً بجوارِ سابقتِه", () => {
+  const m = code.match(/const STUCK_CONTRACT_SCAN_MAX = (\d+);/);
+  assert.ok(m, "الحدُّ ليس ثابتاً مُسمّىً");
+  assert.ok(Number(m[1]) > 0 && Number(m[1]) <= 1000, "حدُّ مسحٍ خارجَ المعقول");
+  assert.strictEqual(
+      (code.match(/const STUCK_CONTRACT_SCAN_MAX\b/g) || []).length, 1,
+      "تعريفانِ للحدّ");
+  assert.ok(code.includes("const NEG_WALLET_SCAN_MAX"),
+      "زالت السابقةُ التي يَقتدي بها — فالقرارُ يُراجَع");
+});
+
+test("(٢٠) وإعادةُ إحياءِ الطابورِ نافذتُها متدحرجةٌ — الحدُّ الأدنى في الاستعلام", () => {
+  const i = code.indexOf("exports.opsHealthSweep");
+  const sweep = code.slice(i);
+  const j = sweep.indexOf("for (const col of [\"notification_queue\"");
+  assert.ok(j > 0, "زالَ إحياءُ الطابورِ من المكنسة");
+  const blk = sweep.slice(j, j + 1600);
+  // المدَيانِ معاً على `createdAt`: بلا الأدنى يُطابِقُ الاستعلامُ كلَّ
+  // مستندٍ غيرِ مُعالَجٍ على الإطلاق، و`asc` يُقدّمُ الأقدمَ — فتُقرأُ مئةٌ
+  // عتيقةٌ وتُتخطّى كلُّها ولا يُرى حديثٌ عالقٌ واحد.
+  assert.ok(/\.where\("createdAt", "<=",/.test(blk), "زالَ الحدُّ الأعلى");
+  assert.ok(/\.where\("createdAt", ">=",/.test(blk),
+      "لا حدَّ أدنى في الاستعلام — فالنافذةُ تَسيلُ بالعتيقِ المُتخطّى");
+  // ولم يَعُد العمرُ يُفحَصُ في الحلقةِ وحدَها (وإلّا فالعتيقُ ما زال يُقرَأ).
+  assert.ok(!/ageMs >/.test(blk),
+      "فحصُ العمرِ ما زال في الحلقةِ — فالاستعلامُ يَقرأُ العتيقَ ثمّ يُلقيه");
+  // والترتيبُ الذي يَجعلُ السيلَ قاتلاً ما زال كما هو (فهو جزءُ التعليل).
+  assert.ok(/orderBy\("createdAt", "asc"\)/.test(blk),
+      "تغيّرَ الترتيبُ — فتعليلُ «الأقدمُ يُقدَّم» يُراجَع");
+});
+
+test("(٢١) وشاهدا التعليل: الفهرسُ يَخدمُ المدَيَين، والفشلُ الدائمُ يُقيم", () => {
+  // مدَيانِ على حقلٍ واحدٍ يَخدمُهما الفهرسُ القائمُ — لا فهرسَ جديد.
+  const idx = JSON.parse(fs.readFileSync(
+      path.join(__dirname, "../../firestore.indexes.json"), "utf8"));
+  for (const coll of ["notification_queue", "notification_triggers"]) {
+    const hit = (idx.indexes || []).filter((x) => x.collectionGroup === coll &&
+        x.fields.some((f) => f.fieldPath === "processed") &&
+        x.fields.some((f) => f.fieldPath === "createdAt"));
+    assert.strictEqual(hit.length, 1,
+        `${coll} بلا فهرسِ (processed, createdAt) — المدَيانِ يَلزمُهما`);
+  }
+  // وسببُ السيلِ قائمٌ: فرعُ الفشلِ يَترُكُ `processed: false` ثمّ يَستسلم.
+  assert.ok(/processed: false,[\s\S]{0,200}?error: error\.message/.test(code),
+      "فرعُ الفشلِ لم يَعُد يَترُكُ processed:false — فالتعليلُ يُراجَع");
+  assert.ok(code.includes("giveUp: true"),
+      "زالَ الاستسلامُ بعد ثلاثِ محاولاتٍ — فالتعليلُ يُراجَع");
+});
+
+
 console.log(`\nops_sweep_window tests: ${passed} passed`);
