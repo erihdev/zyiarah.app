@@ -11,6 +11,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'helpers/sources_in.dart';
 
 /// يزيل التعليقات: التعليقات هنا **تشرح ما حُذف**، ففحص المصدر الخام يسقط الحارس
 /// على شرحه هو — إنذار كاذب يدفع لتعطيل الحارس فيصير أسوأ من لا شيء.
@@ -26,11 +27,10 @@ String _code(String path) {
       .join('\n');
 }
 
-List<File> _sources(String dir, List<String> exts) => Directory(dir)
-    .listSync(recursive: true)
-    .whereType<File>()
-    .where((f) => exts.any((e) => f.path.endsWith(e)))
-    .toList();
+// الأرضيّةُ في `sourcesIn` — مسحٌ ينحلُّ إلى صفرٍ كان يُمرِّرُ هذا الحارسَ
+// أخضرَ على قرارِ جذرٍ (لا دفعَ عند الاستلام). مُثبَتٌ بقضمٍ.
+List<File> _sources(String dir, List<String> exts) =>
+    sourcesIn(dir, atLeast: dir == 'lib' ? 100 : 1, exts: exts);
 
 void main() {
   // الملفّات التي يُسمح فيها بذكر waiting_payment_cod: شاهد قبر للبيانات التاريخية فقط.

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'helpers/sources_in.dart';
 
 /// حارس تثبيت `google_fonts` على المِجَل ٨ — وتوثيقُ السبب كي لا يُعاد بحثُه.
 ///
@@ -113,10 +114,7 @@ void main() {
     // سطحُنا صغير، وعليه قام الحكمُ بأنّ ١٨ ترقيةٌ بلا مخاطر. فاستعمالُ
     // ShellRoute لاحقاً يُدخلنا في إصلاحَي ١٨٫٠٫٢ (الدلالات والمسارات
     // المدفوعة) — ويلزم إعادةُ تقييمٍ، لا تخطٍّ صامت.
-    final dartFiles = Directory('lib')
-        .listSync(recursive: true)
-        .whereType<File>()
-        .where((f) => f.path.endsWith('.dart'));
+    final dartFiles = sourcesIn('lib', atLeast: 100);
     final users = dartFiles
         .where((f) => f.readAsStringSync().contains('ShellRoute'))
         .map((f) => f.path)

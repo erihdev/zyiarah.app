@@ -11,10 +11,10 @@
 // للقيم التي تساوي 0.15 أو 1.15 عرَضاً ولا علاقة لها بالضريبة (شفافية الألوان
 // `withValues(alpha: 0.15)`، و`childAspectRatio: 1.15`، وإزاحات إحداثيات
 // الخريطة). سقوط هذا الفحص يعني موضعاً جديداً يفلت من المصدر الموحَّد.
-import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zyiarah/utils/vat.dart';
+import 'helpers/sources_in.dart';
 
 /// القيم التي يُسمح أن تحمل 0.15 أو 1.15 وليست ضريبة.
 final _notVat = RegExp(
@@ -83,10 +83,7 @@ void main() {
 
     test('لا نسبة مكتوبة يدوياً في أي ملف حيّ', () {
       final offenders = <String>[];
-      for (final f in Directory('lib')
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.dart'))) {
+      for (final f in sourcesIn('lib', atLeast: 100)) {
         if (f.path == 'lib/utils/vat.dart') continue;
         final lines = f.readAsStringSync().split('\n');
         for (var i = 0; i < lines.length; i++) {

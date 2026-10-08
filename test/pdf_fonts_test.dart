@@ -4,12 +4,12 @@
 // بلا timeout عند كل توليد فاتورة أو عقد أو تقرير. على اتصال ضعيف أو محجوب لا يعود
 // الـ await أبداً، فتبقى معاينة الطباعة معلّقة إلى ما لا نهاية — وهو ما ظهر للمستخدم
 // كأن العقد "لا يُحمَّل". الخطّان الآن أصلان محليان.
-import 'dart:io';
 
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'helpers/sources_in.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -51,8 +51,7 @@ void main() {
 
   test('لا توجد أي مناداة على PdfGoogleFonts في كود التطبيق', () {
     final offenders = <String>[];
-    for (final entity in Directory('lib').listSync(recursive: true)) {
-      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+    for (final entity in sourcesIn('lib', atLeast: 100)) {
       for (final line in entity.readAsStringSync().split('\n')) {
         // نتجاهل التعليقات التي تشرح سبب الإزالة.
         if (line.trimLeft().startsWith('//')) continue;

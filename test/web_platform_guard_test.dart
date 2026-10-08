@@ -10,6 +10,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'helpers/sources_in.dart';
 
 String _code(String path) => File(path)
     .readAsStringSync()
@@ -24,10 +25,7 @@ String _code(String path) => File(path)
 void main() {
   test('كل Platform.isX في lib/ محروس بـ kIsWeb', () {
     final offenders = <String>[];
-    for (final f in Directory('lib')
-        .listSync(recursive: true)
-        .whereType<File>()
-        .where((f) => f.path.endsWith('.dart'))) {
+    for (final f in sourcesIn('lib', atLeast: 100)) {
       final code = _code(f.path);
       if (!code.contains('Platform.is') && !code.contains('Platform.operatingSystem')) {
         continue;

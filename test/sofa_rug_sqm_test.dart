@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zyiarah/models/sqm_piece.dart';
+import 'helpers/sources_in.dart';
 
 void main() {
   group('حساب الكنب — بالمتر الطولي (الطول فقط)', () {
@@ -145,10 +146,7 @@ void main() {
 
   test('لا شاشة أخرى ما زالت تقرأ التسعير الطولي القديم', () {
     final offenders = <String>[];
-    for (final f in Directory('lib')
-        .listSync(recursive: true)
-        .whereType<File>()
-        .where((f) => f.path.endsWith('.dart'))) {
+    for (final f in sourcesIn('lib', atLeast: 100)) {
       final s = f.readAsStringSync();
       if (RegExp(r"""\['sofaPrice'\]|\['rugPrice'\]""").hasMatch(s)) {
         offenders.add(f.path.replaceAll(r'\', '/'));

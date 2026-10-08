@@ -4,6 +4,7 @@ import 'package:arabic_reshaper/arabic_reshaper.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zyiarah/utils/arabic_pdf_text.dart';
 import 'helpers/strip_comments.dart';
+import 'helpers/sources_in.dart';
 
 /// **عربيُّ الـPDF: حرفٌ منفصلٌ وحرفٌ ساقط.**
 ///
@@ -160,10 +161,7 @@ void main() {
 
     test('(ه) لا نداءَ مباشرَ للمُشكِّلِ خارجَ البوّابة', () {
       final offenders = <String>[];
-      for (final f in Directory('lib')
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.dart'))) {
+      for (final f in sourcesIn('lib', atLeast: 100)) {
         if (f.path.endsWith('arabic_pdf_text.dart')) continue;
         if (code(f.path).contains('ArabicReshaper(')) offenders.add(f.path);
       }

@@ -26,6 +26,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zyiarah/utils/env.dart';
 import 'package:zyiarah/widgets/boot_failure_app.dart';
+import 'helpers/sources_in.dart';
 
 String _code(String p) {
   final s = File(p).readAsStringSync();
@@ -266,10 +267,7 @@ void main() {
     // لا يُعيدُ خريطةً فارغة. فمواضعُ القراءةِ العشرُ كانت تَكتبُ `?? ''`
     // أي تَقصدُ «مفتاحٌ غائبٌ ⇒ تعطّلُ الميزة»، ولا تَبلغُ `??` أصلاً.
     final offenders = <String>[];
-    for (final f in Directory('lib')
-        .listSync(recursive: true)
-        .whereType<File>()
-        .where((f) => f.path.endsWith('.dart'))) {
+    for (final f in sourcesIn('lib', atLeast: 100)) {
       final p = f.path.replaceAll(r'\', '/');
       if (p.endsWith('lib/utils/env.dart')) continue;
       if (_code(p).contains('dotenv.env')) offenders.add(p);

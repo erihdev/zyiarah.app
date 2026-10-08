@@ -14,6 +14,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'helpers/sources_in.dart';
 
 /// الشاشات التي يملكها GoRouter (lib/router.dart). دفع أيٍّ منها عبر Navigator = العطل.
 const _routerOwnedScreens = <String, String>{
@@ -65,11 +66,7 @@ final _navigatorPush = RegExp(
   r'Navigator\s*\.\s*(?:of\s*\([^)]*\)\s*\.\s*)?push(?:Replacement|AndRemoveUntil|Named)?\s*\(',
 );
 
-List<File> _dartSources() => Directory('lib')
-    .listSync(recursive: true)
-    .whereType<File>()
-    .where((f) => f.path.endsWith('.dart'))
-    .toList();
+List<File> _dartSources() => sourcesIn('lib', atLeast: 100);
 
 void main() {
   test("لا شاشة يملكها الراوتر أو تستدعي go('/') تُدفَع عبر Navigator (فشل صامت)", () {
