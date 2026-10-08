@@ -91,6 +91,86 @@ void main() {
     expect(k.done, 1);
     expect(k.remaining, 2);
   });
+  group('نافذةُ السجلِّ: لا عدّادَ يَقولُ «لم تَعملْ» عن شهرٍ لم يُحمَّل', () {
+    test('oldestLoaded: الأقدمُ بدقّةِ اليوم، وفارغةٌ تُعيدُ null', () {
+      expect(DriverSchedule.oldestLoaded(const <DriverTask>[]), isNull);
+      final got = DriverSchedule.oldestLoaded([
+        t('a', DateTime(2026, 9, 16, 23, 59)),
+        t('b', DateTime(2026, 7, 3, 1, 5)),
+        t('c', DateTime(2026, 8, 1)),
+      ]);
+      expect(got, DateTime(2026, 7, 3));
+    });
+
+    test('rangePredatesWindow: شرطٌ ثلاثيٌّ — ولا ملاحظةَ حيث لا تَصدُق', () {
+      final oldest = DateTime(2026, 7, 3);
+      // السجلُّ غيرُ مقصوصٍ ⇒ كلُّ ما حُمِّل هو كلُّ ما يُوجَد.
+      expect(
+          DriverSchedule.rangePredatesWindow(
+              historyCapped: false,
+              oldestLoaded: oldest,
+              rangeStart: DateTime(2026, 1, 1)),
+          isFalse);
+      // لا نافذةَ معروفةً (لا مهامَّ) ⇒ لا دعوى نُقيّدُها.
+      expect(
+          DriverSchedule.rangePredatesWindow(
+              historyCapped: true,
+              oldestLoaded: null,
+              rangeStart: DateTime(2026, 1, 1)),
+          isFalse);
+      // داخلَ النافذةِ ⇒ العدّادُ كاملٌ.
+      expect(
+          DriverSchedule.rangePredatesWindow(
+              historyCapped: true,
+              oldestLoaded: oldest,
+              rangeStart: DateTime(2026, 8, 1)),
+          isFalse);
+      // وأوّلُ المدى **هو** الحدُّ ⇒ ما زالَ داخلَه.
+      expect(
+          DriverSchedule.rangePredatesWindow(
+              historyCapped: true,
+              oldestLoaded: oldest,
+              rangeStart: DateTime(2026, 7, 3, 20)),
+          isFalse);
+      // وقبلَه بيومٍ ⇒ ناقصٌ فيُقال.
+      expect(
+          DriverSchedule.rangePredatesWindow(
+              historyCapped: true,
+              oldestLoaded: oldest,
+              rangeStart: DateTime(2026, 7, 2)),
+          isTrue);
+    });
+
+    test('سقفُ الاستعلامِ مصدرٌ واحدٌ — الاستعلامُ والعلَمُ والنصُّ', () {
+      // كان الرقمُ مكتوباً مرّتَين: `limit(100)` و`>= 100`. فرفعُ السقفِ في
+      // أحدِهما يَجعلُ العلَمَ لا يُرفَعُ أبداً فتَختفي الملاحظةُ بصمت.
+      final screen = File('lib/screens/driver_tasks_screen.dart')
+          .readAsStringSync();
+      expect(RegExp(r'\.limit\(\s*DriverSchedule\.historyQueryLimit\s*\)')
+              .hasMatch(screen),
+          isTrue,
+          reason: 'الاستعلامُ يَحملُ رقماً مكتوباً بيدٍ');
+      expect(RegExp(r'>=\s*\n?\s*DriverSchedule\.historyQueryLimit')
+              .hasMatch(screen),
+          isTrue,
+          reason: 'علَمُ القصِّ يُقارِنُ برقمٍ مكتوبٍ بيد');
+      expect(RegExp(r'limit\(\s*\d').hasMatch(screen), isFalse,
+          reason: 'عادَ سقفٌ حرفيٌّ في الاستعلام');
+      expect(RegExp(r'>=\s*\d{2,}').hasMatch(screen), isFalse,
+          reason: 'عادَت مقارنةٌ برقمٍ حرفيّ');
+    });
+
+    test('والعرضانِ يُنادِيانِ القاعدةَ ولا يُعيدانِ تعدادَها', () {
+      final screen = File('lib/screens/driver_tasks_screen.dart')
+          .readAsStringSync();
+      expect(RegExp(r'_windowNotice\(').allMatches(screen).length, 3,
+          reason: 'الملاحظةُ مُعرَّفةٌ ومُنادَاةٌ من العرضَين — '
+              'أسبوعٌ وشهرٌ (والسجلُّ له ملاحظتُه)');
+      expect(screen.contains('DriverSchedule.rangePredatesWindow('), isTrue,
+          reason: 'الشاشةُ تُقرّرُ بنفسِها بدلَ القاعدة');
+    });
+  });
+
 }
 
 /// مهمّةٌ مُسنَدةٌ بحالةٍ خارجَ القائمتَين كانت تَغيبُ عن العرضَين معاً.
