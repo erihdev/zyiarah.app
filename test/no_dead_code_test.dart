@@ -125,8 +125,18 @@ bool mentionIsUse(String masked, String name) {
   final asMember = RegExp('${r'\.\s*'}$esc${r'\b'}');
   final asCall =
       RegExp('${r'(?<![\w.$])'}$esc${r'\s*(?:<[^>()]*>)?\s*\('}');
-  if (asMember.hasMatch(masked) || asCall.hasMatch(masked)) return true;
-  final asValue = RegExp('${r'[(,:=]\s*'}$esc${r'\s*[,)\]};]'}');
+  // **ومُستقبِلاً كذلك** — `kJazanSw.longitude`: الاسمُ هو المُستقبِلُ لا
+  // العضو، وهو استعمالٌ لا يَقلُّ صراحةً عن `X.name`. كان خارجَ الصُّوَرِ
+  // الثلاثِ فقُرئَ ثابتانِ حيّانِ ميّتَين.
+  final asReceiver = RegExp('${r'(?<![\w.$])'}$esc${r'\s*\.'}');
+  if (asMember.hasMatch(masked) ||
+      asCall.hasMatch(masked) ||
+      asReceiver.hasMatch(masked)) {
+    return true;
+  }
+  // ومعها `?` في صدرِ صورةِ القيمة: `(data?['x'] ?? kDefaultSofaSqmPrice)`
+  // احتياطيٌّ مكتوبٌ بأحدَ عشَرَ موضعاً، وكان يُقرأُ ذِكراً لا استعمالاً.
+  final asValue = RegExp('${r'[(,:=?]\s*'}$esc${r'\s*[,)\]};]'}');
   if (!asValue.hasMatch(masked)) return false;
   final declaresIt = RegExp(
       '${r'\b(?:final|const|var|late|required)\s+(?:[\w<>?,.]+\s+)?'}'
@@ -150,7 +160,11 @@ List<File> _dartFiles(String dir) => sourcesIn(dir,
     atLeast: _dirFloor[dir] ??
         (throw StateError('مجلّدٌ بلا أرضيّةٍ مُعلَنة: $dir')));
 
-final _ident = RegExp(r'[A-Za-z_$][A-Za-z0-9_$]*');
+/// **و`\$` لا يَبدأُ مُعرِّفاً هنا بقصد.** المُقنِّعُ يُبقي الاستقراءَ
+/// العاريَ (`'\$_baseUrl/payments'`) كي يُعَدَّ الاسم — ولو دخلَ `\$` في
+/// أوّلِ الصنفِ لَصارَ الرمزُ `\$_baseUrl` اسماً آخرَ، فيُقرأُ الحقلُ
+/// المُستعمَلُ ميّتاً. وقد قرأَه فعلاً حين وُسِّعَ الكاشفُ إلى الحقول.
+final _ident = RegExp(r'[A-Za-z_][A-Za-z0-9_$]*');
 
 /// عدّادُ المُعرِّفات لكلّ ملفّ — نبنيه مرّةً ثمّ نستعلم، بدل مسحِ كلّ الملفّات
 /// لكلّ عضو (١٩٠ عضواً × ٢٠٠ ملفّ).
@@ -171,6 +185,37 @@ final _method = RegExp(
 final _getter = RegExp(
     r'^( {2})?(?:static\s+)?(?:[A-Za-z_][\w<>,\s\?\[\]\.]*?)\s+'
     r'get\s+([a-zA-Z_]\w*)\s*(?:=>|\{)');
+
+/// **وحقلٌ جالبٌ كذلك — وهذا ما كان خارجَ النظر.** الرأسُ أعلاه يَقولُ
+/// القاعدةَ عن «كلِّ دالّةٍ وجالب»، و`_method` تَشترطُ `(` بعدَ الاسمِ
+/// و`_getter` تَشترطُ كلمةَ `get` — فحقلٌ ساكنٌ (`static const String
+/// actionX = '…';`) أو حقلُ نسخةٍ (`final DateTime? x;`) لا تُطابِقُه
+/// أيٌّ منهما، **وفي دارت الحقلُ جالبٌ بالبناء**. فأربعُ مئةٍ وخمسون
+/// حقلاً في المجلّداتِ الأربعةِ كانت بلا فحص: «حارسٌ ضيّقٌ وقاعدةٌ
+/// عامّة» في الكاشفِ نفسِه، كشِريحةِ عدِّ الأحرفِ في حارسِ المهلاتِ
+/// ونمطِ `\$e` في حارسِ نصِّ الاستثناء.
+final _field = RegExp(
+    r'^( {2})?(?:static\s+)?(?:(?:late\s+)?(?:final|const)\s+)?'
+    r'(?:[A-Za-z_][\w<>,\s\?\[\]\.]*?)\s+'
+    r'([a-zA-Z_]\w*)\s*(?:=(?!=)[^;]*)?;\s*$');
+
+/// كلماتٌ مفتاحيّةٌ تَبدأُ بها جملةٌ تَنتهي بفاصلةٍ منقوطةٍ فتُقرَأُ
+/// «تعريفَ حقلٍ» زوراً (`return x;`، `await f();`، `part of '…';`).
+///
+/// **وهي ليست حاملةً للمجموعةِ الميّتة، بل لِصدقِ العدّاد — قِيسَ الفرقُ.**
+/// جملةٌ تَذكرُ اسمَها بنفسِها، فـ`own` لها ≥ ٢ ويَتخطّاها تسامحُ
+/// «مرّةٌ واحدةٌ = سطرُ التعريفِ وحدَه» — فاختبارُ قضمٍ نزعَ المُرشِّحَ
+/// ومرَّ **أخضرَ**. لكنّ `fieldsSeen` يَقفزُ من ٤٢٠ إلى ٤٤٠ بلاه، أي أنّ
+/// عشرينَ جملةً تُعَدُّ حقولاً فتُرخي أرضيّةَ الحقولِ — والأرضيّةُ هي ما
+/// يَكشفُ انحلالَ الكاشفِ أصلاً. فيَبقى بسببٍ مكتوبٍ لا بدعوى أنّه يَعضّ.
+const _statementStarters = {
+  'return', 'throw', 'rethrow', 'await', 'yield', 'assert', 'import',
+  'export', 'part', 'library', 'break', 'continue', 'case', 'default',
+  'else', 'do', 'new', 'super', 'this', 'typedef', 'show', 'hide', 'if',
+  'for', 'while', 'switch', 'try', 'catch', 'finally',
+  // و`set` **ليست** فيها بقصد: `set x(v)` مُحدِّدٌ كان `_method` يَراه
+  // (النوعُ `set` والاسمُ `x` ثمّ `(`)، فإقصاؤه هنا يُنقِصُ تغطيةً قائمة.
+};
 
 const _frameworkMembers = {
   'build', 'initState', 'dispose', 'createState', 'didUpdateWidget',
@@ -199,6 +244,7 @@ void main() {
 
   test('لا دالّة ولا جالب ميّتاً في services/utils/models/providers', () {
     final dead = <String>[];
+    var fieldsSeen = 0;
 
     for (final f in scope) {
       final rel = f.path.replaceAll(r'\', '/');
@@ -212,9 +258,13 @@ void main() {
 
       final declared = <String>{};
       for (final l in lines) {
+        final first = RegExp(r'^\s*([a-zA-Z_]\w*)').firstMatch(l)?.group(1);
+        if (first != null && _statementStarters.contains(first)) continue;
         final m = _getter.firstMatch(l) ?? _method.firstMatch(l);
-        if (m == null) continue;
-        final name = m.group(2)!;
+        final fm = m == null ? _field.firstMatch(l) : null;
+        if (m == null && fm == null) continue;
+        if (fm != null) fieldsSeen++;
+        final name = (m ?? fm)!.group(2)!;
         if (_frameworkMembers.contains(name)) continue;
         if (classNames.contains(name)) continue;
         if (name.startsWith('_') && classNames.contains(name.substring(1))) continue;
@@ -247,6 +297,13 @@ void main() {
         if (!used) dead.add('$rel  ←  $name  (ذِكرٌ لا استعمال)');
       }
     }
+
+    // **أرضيّةٌ للحقولِ وحدَها.** الكاشفُ الجديدُ لو انحلَّ (نمطٌ يَضيق،
+    // أو مُرشِّحُ كلماتٍ يَتّسع) لَمَرَّ الفحصُ أخضرَ على لا شيءٍ من الحقولِ
+    // بينما تَبقى الدوالُّ مفحوصةً — فلا يُلاحَظ. والعددُ اليومَ ٤٢٠.
+    expect(fieldsSeen, greaterThanOrEqualTo(300),
+        reason: 'كاشفُ الحقولِ أعطى $fieldsSeen حقلاً — انحلَّ، '
+            'والقاعدةُ عن «كلِّ دالّةٍ وجالب» بلا نصفِها.');
 
     expect(
       dead,
@@ -296,6 +353,56 @@ void main() {
     expect(mentionIsUse('ZyiarahStrings.orderStatusLabel', 'orderStatus'),
         isFalse,
         reason: 'الاحتواءُ ليس تطابُقاً — فخُّ `packageFormErrorX`');
+    // **ومُستقبِلاً** — الصورةُ الرابعةُ، أضافَها توسيعُ الكاشفِ إلى الحقول:
+    // `kJazanSw.longitude` كان يُقرأُ «ذِكراً لا استعمالاً» وهو استعمالٌ
+    // صريحٌ في موضعَين.
+    expect(mentionIsUse(r'bbox=${kJazanSw.longitude},', 'kJazanSw'), isTrue,
+        reason: 'الاسمُ مُستقبِلٌ لعضوٍ — استعمال');
+    // وقيمةً بعدَ `??` — أحدَ عشَرَ احتياطيّاً في محرّرِ المناطق.
+    expect(
+        mentionIsUse(
+            "text: (data?['sofaSqmPrice'] ?? kDefaultSofaSqmPrice).toString()",
+            'kDefaultSofaSqmPrice'),
+        isTrue);
+  });
+
+  test('كاشفُ الحقولِ يَعضُّ — والأشكالُ التي تُشبهُه ولا تُطابِقُه', () {
+    // الحارسُ شفرةٌ تُختبَرُ كالشفرة. والمصدرُ بعدَ الحذفِ نظيفٌ، فنجاحُ
+    // الفحصِ العامِّ لا يُبرهِنُ أنّ هذا الكاشفَ يَرى حقلاً أصلاً.
+    String? seen(String line) => _field.firstMatch(line)?.group(2);
+
+    // ثابتٌ ساكنٌ، وحقلُ نسخةٍ، وحقلٌ عُلويٌّ — ثلاثتُها حقول.
+    expect(seen("  static const String actionX = 'X';"), 'actionX');
+    expect(seen('  final DateTime? subscriptionExpiry;'), 'subscriptionExpiry');
+    expect(seen('const double kDefaultSofaSqmPrice = 35.0;'),
+        'kDefaultSofaSqmPrice');
+    expect(seen('  static const Color adminNavy = Color(0xFF1E293B);'),
+        'adminNavy');
+
+    // وما يَنتهي بفاصلةٍ منقوطةٍ وليس حقلاً: جملةٌ، ونداءٌ، واستيراد.
+    // (الجملةُ يُمسِكُها مُرشِّحُ الكلماتِ لا النمطُ — فالاثنانِ شرطٌ واحد.)
+    expect(_statementStarters.contains('return'), isTrue);
+    expect(_statementStarters.contains('await'), isTrue);
+    expect(seen('  await foo();'), isNull);
+    expect(seen('  obj.method();'), isNull);
+    expect(seen('  library;'), isNull);
+    // ودالّةٌ ذاتُ سهمٍ ليست حقلاً (النمطُ يُسقِطُ ما بعدَه قوسٌ).
+    expect(seen('  int plus(int a) => a + 1;'), isNull);
+    // **و`set` ليست في المُرشِّح**: `_method` تَراها، فإقصاؤها نقصُ تغطية.
+    expect(_statementStarters.contains('set'), isFalse);
+  });
+
+  test('الاستقراءُ العاريُّ يُعَدُّ ذِكراً للاسمِ لا لرمزٍ آخر', () {
+    // `_mask` يُبقي الاستقراءَ العاريَ كي يُعَدَّ الاسم. ولو بدأَ صنفُ
+    // المُعرِّفِ بعلامةِ الدولارِ لَصارَ الاستقراءُ رمزاً مستقلّاً، فيُقرأُ
+    // الحقلُ المُستعمَلُ ميّتاً — وقد قُرئَ فعلاً عند أوّلِ توسيعٍ للحقول
+    // (`moyasar_service._baseUrl`، وهو في `'DOLLAR_baseUrl/payments'`).
+    final toks = _ident
+        .allMatches(_mask(r"      Uri.parse('$_baseUrl/payments'),"))
+        .map((m) => m.group(0)!)
+        .toSet();
+    expect(toks, contains('_baseUrl'));
+    expect(toks.any((t) => t.startsWith(r'$')), isFalse);
   });
 
   test('سطحُ الدخول برقم الجوال و OTP لا يعود — الفحص العامّ أعمى عنه', () {

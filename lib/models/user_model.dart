@@ -60,19 +60,18 @@ class ZyiarahUser {
     );
   }
 
-  Map<String, dynamic> toMap() {
-    return {
-      'name': name,
-      'email': email,
-      'phone': phone,
-      'role': role,
-      'rating': rating,
-      'has_active_subscription': hasActiveSubscription,
-      'visits_remaining': visitsRemaining,
-      'subscription_expiry': subscriptionExpiry != null ? Timestamp.fromDate(subscriptionExpiry!) : null,
-      'subscription_type': subscriptionType,
-      'house_rules': houseRules,
-      'subscription_total_visits': subscriptionTotalVisits,
-    };
-  }
+  // **لا `toMap()` هنا — صفرُ مُنادٍ، وتوصيلُها كان خطراً لا إصلاحاً.**
+  //
+  // كانت تُعيدُ خريطةً كاملةً لمستندِ المستخدمِ ولا يُناديها شيء، ولم يَرَها
+  // `no_dead_code_test` لأنّ اسمَ `toMap` يَتصادمُ مع نظائرِه في كلِّ نموذجٍ
+  // (العمى المُعلَنُ في رأسِ ذلك الحارس). والكاتبُ الحقيقيُّ للمستندِ
+  // `firebase_service.saveUserToRegistry` يَبني خريطتَه بيدٍ ويَكتبُ بـ`set`
+  // **بلا `merge`** — فتمريرُه عبرَها كان سيَكتبُ
+  // `has_active_subscription: false` و`visits_remaining: 0` فوقَ ما يَكتبُه
+  // `_activateContractNow` عند تفعيلِ عقد. شكلانِ لكتابةٍ واحدةٍ وأحدُهما
+  // خطر، فحُذِفَ غيرُ المُستعمَلِ منهما (2026-10-08).
+  //
+  // وحقولُ الاشتراكِ الأربعةُ باقيةٌ: `fromMap` يَقرؤها، ولا جالبَ منها
+  // يُقرَأُ بعدُ — مرفوعٌ في `CLAUDE.md` بوصفِه حدَّ تسامحِ `own > 1`
+  // (مُعامَلُ البانيةِ `this.x` يُعَدُّ ذِكراً فيَحجبُ الحقل).
 }
