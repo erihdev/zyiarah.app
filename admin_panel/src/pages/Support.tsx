@@ -155,10 +155,17 @@ export default function Support() {
         }
     };
 
+    // كتابةٌ بلا `try`: الرفضُ بلا مُعالِجٍ يَمنعُ السطرَ التاليَ أيضاً، فلا
+    // تَتغيّرُ الحالةُ ولا تُقالُ كلمة — والردُّ في هذا الملفِّ بعينِه يُنبّه.
     const handleClose = async () => {
         if (!selected) return;
-        await updateDoc(doc(db, 'support_tickets', selected.id), { status: 'resolved', updatedAt: serverTimestamp() });
-        setSelected(prev => prev ? { ...prev, status: 'resolved' } : null);
+        try {
+            await updateDoc(doc(db, 'support_tickets', selected.id), { status: 'resolved', updatedAt: serverTimestamp() });
+            setSelected(prev => prev ? { ...prev, status: 'resolved' } : null);
+        } catch (e) {
+            console.error('close ticket failed:', e);
+            toast.error('تعذّر إغلاق التذكرة — أعد المحاولة');
+        }
     };
 
     const statusLabel = (s: string) => s === 'open' ? 'مفتوحة' : s === 'replied' ? 'تم الرد' : s === 'resolved' ? 'تم الحل' : s === 'closed' ? 'مغلقة' : s;

@@ -66,4 +66,44 @@ void main() {
     final support = File('lib/screens/support_screen.dart').readAsStringSync();
     expect(support.contains('if (text.isEmpty) return;'), isTrue);
   });
+  // ── والشكلُ الثاني من العائلةِ نفسِها: `catch` يَبتلعُ نهايةَ الضغطة ──
+  //
+  // الفحوصُ أعلاه عن `return;` عارٍ. وهذه ضغطةٌ **تَكتب**، وفشلُها كان
+  // `debugPrint` وحدَه — وهو لا يُجمَعُ ولا يُعرَض. وشاشةُ الإشعاراتِ
+  // تَعرضُ **غيرَ المقروءِ فقط**، فالنقرةُ هي السبيلُ الوحيدُ لإخفاءِ
+  // البطاقة: فشلُها يُبقيها في مكانِها بلا كلمةٍ فيُعيدُ النقرَ.
+  //
+  // والقاعدةُ كانت مُنفَّذةً في سطحٍ من اثنَين: شاشةُ العميلةِ تُنبّه
+  // («تعذّر تعليم الإشعارات كمقروءة») وشاشةُ السائقِ لا.
+  test('تعليمُ الإشعارِ مقروءاً: الفشلُ يُقال في السطحَين', () {
+    for (final p in const [
+      'lib/screens/driver_notifications_screen.dart',
+      'lib/screens/client_notifications_screen.dart',
+    ]) {
+      final String src = File(p).readAsStringSync();
+      final int at = src.indexOf("'isRead': true");
+      expect(at, greaterThan(-1), reason: '$p لم يَعُدْ يُعلّمُ الإشعارَ');
+      // النافذةُ من موضعِ الكتابةِ إلى آخرِ الملفِّ: المطلوبُ **وجودُ**
+      // كلمةٍ في مسارِ الفشلِ، لا موضعُها بالضبط.
+      final String after = src.substring(at);
+      expect(
+          after.contains('ScaffoldMessenger') &&
+              RegExp(r'تعذّر تعليم الإشعار').hasMatch(after),
+          isTrue,
+          reason: '$p: فشلُ تعليمِ الإشعارِ صامتٌ — والبطاقةُ تَبقى '
+              'فيُعيدُ المستخدمُ النقر');
+    }
+  });
+
+  test('ولا نَفْشةَ على نجاحٍ: الكلمةُ في مسارِ الفشلِ وحدَه', () {
+    // شاهدٌ على أنّ الفحصَ أعلاه لا يُرضيه نجاحٌ مُنبّه: الكلمةُ داخلَ
+    // `catch` فعلاً.
+    final String d =
+        File('lib/screens/driver_notifications_screen.dart').readAsStringSync();
+    final int c = d.indexOf('} catch (e) {', d.indexOf("'isRead': true"));
+    expect(c, greaterThan(-1), reason: 'مسارُ الفشلِ زال');
+    expect(d.indexOf('تعذّر تعليم الإشعار'), greaterThan(c),
+        reason: 'الكلمةُ ليست في مسارِ الفشل');
+  });
+
 }
