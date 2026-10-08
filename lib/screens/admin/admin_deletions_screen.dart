@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/deletion_log_row.dart';
 
 // StatefulWidget كي تعمل «إعادة المحاولة» بإعادة إنشاء التدفق عند فشل القراءة.
 class AdminDeletionsScreen extends StatefulWidget {
@@ -125,8 +126,17 @@ class _AdminDeletionsScreenState extends State<AdminDeletionsScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   child: ListTile(
                     leading: const CircleAvatar(backgroundColor: Colors.redAccent, child: Icon(Icons.no_accounts, color: Colors.white)),
-                    title: Text(req['email'] ?? req['phone'] ?? 'حساب مجهول', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text("السبب: ${req['reason'] ?? 'غير محدد'}\nتاريخ الطلب: ${req['requested_at'] != null ? (req['requested_at'] as Timestamp).toDate().toString().split(' ')[0] : ''}\nالحالة: $statusText"),
+                    title: Text(deletionRowIdentity(req), style: const TextStyle(fontWeight: FontWeight.bold)),
+                    // **سطرُ الدَّين.** `wallet_balance_at_deletion` يَكتبُه
+                    // الخادمُ «كي يبقى الدَّينُ مكتوباً في مكانٍ يَقرؤه
+                    // البشرُ» — وكان مكتوباً في موضعٍ **ومقروءاً في صفر**.
+                    subtitle: Text([
+                      "السبب: ${req['reason'] ?? 'غير محدد'}",
+                      "تاريخ الطلب: ${req['requested_at'] != null ? (req['requested_at'] as Timestamp).toDate().toString().split(' ')[0] : ''}",
+                      "الحالة: $statusText",
+                      if (deletionStrandedNotice(req) != null)
+                        deletionStrandedNotice(req)!,
+                    ].join('\n')),
                     isThreeLine: true,
                     trailing: !isPending
                         ? Text(

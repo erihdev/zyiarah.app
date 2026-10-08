@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { ShieldAlert, Trash2, Search, CheckCircle2, XCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import {
-    collection, onSnapshot, updateDoc, deleteDoc,
+    collection, onSnapshot, updateDoc,
     doc, orderBy, query, limit
 } from 'firebase/firestore';
 import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/notificationContext.ts';
+import { deletionRowIdentity, deletionStrandedBalance } from '../utils/deletionLogRow.ts';
+import { formatSar } from '../utils/money.ts';
 
 interface DeletionRequest {
     id: string;
@@ -14,6 +16,12 @@ interface DeletionRequest {
     phone?: string;
     requested_at?: { toDate: () => Date };
     reason?: string;
+    // **`email` كان مكتوباً ولا تَقرؤه اللوحةُ إطلاقاً**، و`name`/`phone`
+    // لا يَكتبُهما كاتبٌ (المصادقةُ بالبريدِ وحدَه فـ`phoneNumber` فارغ) —
+    // فكلُّ صفٍّ كان يُقرأُ «— / —». والقاعدةُ في `utils/deletionLogRow.ts`.
+    email?: string;
+    // الدَّينُ الذي يَكتبُه الخادمُ عند الحذفِ — كان بلا قارئٍ في أيِّ سطح.
+    wallet_balance_at_deletion?: number;
     // الدالة onRequestAccountDeletion تكتب deleted_fully_processed عند نجاح التنظيف
     // الكامل، و failed_deletion عند فشله — كانت اللوحة تجهل هاتين الحالتين فتظهران فارغتين.
     status: 'pending' | 'deleted' | 'rejected' | 'deleted_fully_processed' | 'failed_deletion';
@@ -50,18 +58,25 @@ export default function AccountDeletion() {
         return unsub;
     }, [retryKey]);
 
+    // **البحثُ كان ميّتاً**: يُرشِّحُ على `name`/`phone` ولا كاتبَ لهما
+    // (المصادقةُ بالبريدِ وحدَه). فالمرشَّحُ هو ما يُعرَضُ فعلاً.
     const filtered = requests.filter(r =>
-        r.name?.includes(searchTerm) ||
-        r.phone?.includes(searchTerm)
+        !searchTerm.trim() ||
+        deletionRowIdentity(r).includes(searchTerm.trim())
     );
 
     const handleDelete = async (req: DeletionRequest) => {
         if (!await confirm(`هل تريد مسح بيانات ${req.name ?? 'هذا المستخدم'} نهائياً؟ لا يمكن التراجع.`)) return;
         setProcessingId(req.id);
         try {
-            if (req.userId) {
-                await deleteDoc(doc(db, 'users', req.userId));
-            }
+            // **لا حذفَ مباشراً لمستندِ المستخدم.** كان هنا
+            // `deleteDoc(users/{req.userId})` — و`userId` حقلٌ **لا يَكتبُه
+            // كاتبٌ قطّ**، فالشرطُ كاذبٌ دائماً والسطرُ ميّت. ولو عَمِلَ
+            // لكانَ خطأً: تعليقُ `admin_users_screen` يَقولُه نصّاً («حذفُ
+            // مستندِ users وحدَه كان يَترُكُ حسابَ Auth حيّاً»). والكتابةُ
+            // أدناه هي المُشغِّلُ: `onAccountDeletionStatusChanged` يَنقلُ
+            // الحالةَ إلى `deleted` فيَتولّى `processAccountDeletion` الحذفَ
+            // كاملاً (Auth + users + رموز FCM + رصدُ رصيدِ المحفظة).
             await updateDoc(doc(db, 'account_deletions', req.id), {
                 status: 'deleted',
                 processed_at: new Date(),
@@ -124,7 +139,7 @@ export default function AccountDeletion() {
                         <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                         <input
                             type="text"
-                            placeholder="ابحث برقم الجوال أو الاسم..."
+                            placeholder="ابحث بالبريد أو الاسم أو رقم الجوال..."
                             className="w-full pl-4 pr-11 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-slate-700"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -170,13 +185,23 @@ export default function AccountDeletion() {
                                 {filtered.map((req) => (
                                     <tr key={req.id} className="hover:bg-rose-50/20 transition-colors group">
                                         <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 text-xs font-bold rounded-md ${req.type === 'driver' || req.type === 'سائق' ? 'bg-[#FAF1F6] text-[#4D0026]' : 'bg-teal-50 text-teal-700'}`}>
-                                                {req.type === 'driver' ? 'سائق' : 'عميل'}
-                                            </span>
+                                            {/* لا كاتبَ لـ`type` في المستودع، فكلُّ صفٍّ كان يُوسَمُ
+                                                «عميل» — ومنه حذفُ سائق. «لا رقمَ قبل أن نعرفه». */}
+                                            {req.type ? (
+                                                <span className={`px-2 py-1 text-xs font-bold rounded-md ${req.type === 'driver' || req.type === 'سائق' ? 'bg-[#FAF1F6] text-[#4D0026]' : 'bg-teal-50 text-teal-700'}`}>
+                                                    {req.type === 'driver' ? 'سائق' : 'عميل'}
+                                                </span>
+                                            ) : (
+                                                <span className="text-xs text-slate-400">—</span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="font-bold text-slate-800">{req.name ?? '—'}</div>
-                                            <div className="text-xs text-slate-500 dir-ltr font-mono mt-0.5">{req.phone ?? '—'}</div>
+                                            <div className="font-bold text-slate-800 dir-ltr">{deletionRowIdentity(req)}</div>
+                                            {deletionStrandedBalance(req) !== null && (
+                                                <div className="text-xs text-rose-600 font-bold mt-0.5">
+                                                    رصيد محجوز: {formatSar(deletionStrandedBalance(req)!)} ر.س — التسوية يدوية
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 text-sm font-medium text-slate-500">{formatDate(req.requested_at)}</td>
                                         <td className="px-6 py-4 text-sm text-slate-600 line-clamp-1">{req.reason ?? '—'}</td>
