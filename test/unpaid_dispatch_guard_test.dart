@@ -271,6 +271,112 @@ void main() {
               'يُقرأُ عطلاً في الشاشة');
     });
 
+    test('(ط) والبوّابةُ الحاملةُ في مَوضعِ الكتابةِ نفسِه، قبلَ `tx.update`', () {
+      // `_assignDriverScheduled` هي المعاملةُ **الوحيدةُ** التي تَكتبُ الإسناد،
+      // فالقاعدةُ فيها تُغطّي كلَّ مُنادٍ — حاضراً ومستقبلاً. وكانت غائبةً
+      // عنها: فحوصُها كانت `driver_id` والحالةَ وحدَهما.
+      final int i = idx.indexOf('async function _assignDriverScheduled');
+      expect(i, greaterThan(-1));
+      final int open = idx.indexOf('{', i);
+      int depth = 0;
+      int end = -1;
+      for (int k = open; k < idx.length; k++) {
+        if (idx[k] == '{') depth++;
+        if (idx[k] == '}') {
+          depth--;
+          if (depth == 0) {
+            end = k;
+            break;
+          }
+        }
+      }
+      expect(end, greaterThan(-1), reason: 'جسمٌ غيرُ متوازن');
+      final String fn = stripComments(idx.substring(open, end + 1));
+      final int gate = fn.indexOf('cur.is_paid !== true');
+      final int write = fn.indexOf('tx.update(orderRef');
+      expect(gate, greaterThan(-1),
+          reason: 'بوّابةُ الدفعِ زالت من مَوضعِ الكتابةِ — فكلُّ مُنادٍ '
+              'يَلزمُه فحصُه بنفسِه، وهو ما فتحَ الثغرةَ أوّلاً');
+      expect(write, greaterThan(-1));
+      expect(gate, lessThan(write),
+          reason: 'فحصٌ بعدَ الكتابةِ لا يَمنعُ شيئاً');
+      // والقراءةُ من اللقطةِ الطازجةِ داخلَ المعاملةِ لا من الوسائط.
+      expect(fn.contains('const cur = snap.data()'), isTrue,
+          reason: 'الفحصُ يَقرأُ قيمةً غيرَ طازجةٍ — فيَصيرُ سباقاً');
+    });
+
+    test('(ي) والنداءُ العميليُّ يَرفضُ مبكّراً برمزِه الخاصّ', () {
+      // `autoAssignDriverDirectly` هو المسارُ العميليُّ الوحيدُ إلى الإسناد:
+      // فحصُ المِلكيّةِ فيه يَشترطُ `_assertAdmin` **للغيرِ وحدَه**، فمالكُ
+      // الطلبِ يَمُرّ. والرفضُ المبكّرُ لازمٌ ولو كانت البوّابةُ الحاملةُ
+      // أدناه، لأنّ `false` من المعاملةِ يُترجَمُ إلى `"already_assigned"` —
+      // كذبٌ يَحجبُ السببَ عن أيِّ تشخيصٍ لاحق.
+      final String b = stripComments(exportBody(idx, 'autoAssignDriverDirectly'));
+      expect(b.contains('orderData.is_paid !== true'), isTrue,
+          reason: 'النداءُ العميليُّ بلا فحصِ دفع');
+      expect(b.contains('"unpaid_order"'), isTrue,
+          reason: 'الرفضُ يُعادُ برمزٍ خاصٍّ لا بـalready_assigned');
+      final int paid = b.indexOf('orderData.is_paid !== true');
+      final int assign = b.indexOf('_assignDriverScheduled(');
+      expect(assign, greaterThan(-1));
+      expect(paid, lessThan(assign), reason: 'الرفضُ بعدَ الإسنادِ لا يَمنعُه');
+      // والمِلكيّةُ ما زالت مشروطةً كما كانت (مالكٌ أو أدمن) — شاهدُ التعليل.
+      expect(b.contains('orderData.client_id !== request.auth.uid'), isTrue,
+          reason: 'شرطُ «مالكٌ أو أدمن» تغيّرَ — يُراجَعُ التعليل');
+    });
+
+    test('(ك) ومجموعةُ مُنادِي مَوضعِ الكتابةِ كاملةً مُشتَقّةٌ ومُعلَّلة', () {
+      // سبعةُ مُنادٍ، وستٌّ منهم كانوا يَفحصونَ الدفعَ قبلَ النداءِ والسابعُ
+      // لا. فالمجموعةُ تُشَدُّ كاملةً: ثامنٌ يُراجَعُ بدلَ أن يُفتَرَضَ أنّ
+      // بوّابةَ الكتابةِ تَكفيه (تَكفيه فعلاً — لكنّ مُنادياً جديداً قد
+      // يَبني على `assigned: false` معنًى خاطئاً، كما بنى هذا على
+      // «already_assigned»).
+      final String code = stripComments(idx);
+      final int defAt = code.indexOf('async function _assignDriverScheduled');
+      expect(defAt, greaterThan(-1));
+      // التعريفُ نفسُه يُطابقُ النمطَ (`async function _assignDriverScheduled(db,`)
+      // فيُستبعَدُ بموضعِه لا بقائمةِ أسماء.
+      final List<int> calls = RegExp(r'_assignDriverScheduled\(\s*db')
+          .allMatches(code)
+          .map((m) => m.start)
+          .where((at) => at != defAt + 'async function '.length)
+          .toList();
+      expect(calls.length, 7,
+          reason: 'عددُ مُنادِي مَوضعِ الكتابةِ تغيّرَ (${calls.length}) — '
+              'راجِعْ الجديدَ: أهو على طلبٍ مدفوعٍ بالبناء؟');
+      // ولكلٍّ اسمُ الدالّةِ المُحيطةِ، فالتعليلُ مقروء.
+      final Set<String> owners = <String>{};
+      for (final at in calls) {
+        final String pre = code.substring(0, at);
+        final int e = pre.lastIndexOf('\nexports.');
+        final int f = pre.lastIndexOf('\nasync function ');
+        final int anchorAt = e > f ? e : f;
+        expect(anchorAt, greaterThan(-1));
+        final RegExpMatch? nm =
+            RegExp(r'^\n(?:exports\.|async function )(\w+)')
+                .firstMatch(code.substring(anchorAt));
+        expect(nm, isNotNull);
+        owners.add(nm!.group(1)!);
+      }
+      expect(
+          owners,
+          {
+            // انقلابُ `is_paid` (مرّتان: الفورُ وإعادةُ المحاولةِ عند التحرُّر)
+            'onOrderWritten',
+            // `is_paid !== true` مُرشَّحٌ قبلَ النداء
+            'sweepUnassignedPaidOrders',
+            // بعدَ `_tamaraFlipPaid` المُنتظَر
+            'confirmPendingTamaraOrders',
+            // مولِّدا زياراتِ العقد: المستندُ يُنشَأُ `is_paid: true`
+            // (والثاني مشروطٌ بعقدٍ `active`، ولا يَصيرُ كذلك إلّا بالدفع)
+            '_generateContractVisits',
+            'generateSubscriptionVisits',
+            // **المسارُ العميليّ** — وهو الذي كان بلا فحصٍ إطلاقاً
+            'autoAssignDriverDirectly',
+          },
+          reason: 'مُنادٍ جديدٌ لمَوضعِ كتابةِ الإسناد — يُراجَعُ بوعي');
+    });
+
     test('(ح) ومجموعةُ مُنادِي الإسنادِ كاملةً هي السطحانِ وحدَهما', () {
       final Set<String> callers = <String>{};
       for (final f in [
