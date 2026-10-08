@@ -218,14 +218,17 @@ class ZyiarahOrderService {
 
       transaction.update(orderRef, updates);
 
-      // تحديث حالة السائق بالتزامن (Atomic).
-      // ملاحظة: حالة 'scheduled' تُضبط عند الإسناد (مرحلة التوزيع) لا من هنا،
-      // فلا يُعدّ السائق مشغولاً لمجرد وجود مهمة مجدولة مستقبلية.
+      // تحديث توفّر السائق بالتزامن (Atomic) — `is_available` و
+      // `current_order_id`، وهما الحقلانِ المقروءانِ (شارةُ اللوحةِ وعدّادُها،
+      // وحارسُ المِلكيّةِ هنا وفي المُشغّلَين الخادميَّين).
+      //
+      // ترويسةٌ يتيمةٌ صُحِّحت مع حذفِ `status`: كانت تَقولُ «حالة 'scheduled'
+      // تُضبط عند الإسناد» وتلك كانت عن حقلِ السائقِ المحذوف. ومضمونُها ما زال
+      // صحيحاً عن الحقلَين الباقيَين: `_assignDriverScheduled` لا يَلمسُ
+      // مستندَ السائقِ إطلاقاً — **فلا يُعدُّ مشغولاً لمجرّدِ مهمّةٍ مجدولةٍ
+      // مستقبليّة**، وذاك مشدودٌ في `test/driver_status_field_test.dart`.
       if (driverId != null) {
         final driverRef = _db.collection('drivers').doc(driverId);
-        String driverStatus = 'available';
-        if (status == 'accepted' || status == 'on_the_way') driverStatus = 'en_route';
-        if (status == 'in_progress') driverStatus = 'in_service';
 
         // (حارس التطابق) لا نلمس حالة السائق إلا إن كان منشغلاً بهذا الطلب تحديداً
         // أو حرّاً — نفس حارس المُشغّلات الخادمية (freeDriverOnOrderCancel). بدونه
@@ -234,8 +237,15 @@ class ZyiarahOrderService {
         final dCur = (driverSnap?.data() as Map<String, dynamic>?)?['current_order_id'];
         final bool ownsDriver = dCur == null || dCur == '' || dCur == orderId;
 
+        // **لا `status` على مستندِ السائق.** كان هذا الموضعُ يَكتبُ
+        // `available`/`en_route`/`in_service` ولوحةُ السائقِ تَكتبُ `idle`
+        // والخادمُ `available` — ثلاثُ مفرداتٍ لحالةٍ واحدة، **ولا قارئَ
+        // لأيٍّ منها في المستودعِ كلِّه**: شارةُ اللوحةِ وعدّادُ «السائقون
+        // المتاحون» يَقرآنِ `is_available`، وحارسُ المِلكيّةِ هنا وفي
+        // `freeDriverOnOrderCancel` يَقرأُ `current_order_id`، وخريطةُ
+        // الأسطولِ تَقرأُ حالةَ **الطلبِ** لا السائق. التفصيلُ في
+        // `test/driver_status_field_test.dart`.
         final Map<String, dynamic> driverUpdates = {
-          if (ownsDriver) 'status': driverStatus,
           if (ownsDriver) 'current_order_id': status == 'completed' ? null : orderId,
           if (ownsDriver) 'is_available': status == 'completed',
           // عدّاد المهام المنجزة الدائم — كان غير موجود إطلاقاً، فشاشة أداء الكوادر
