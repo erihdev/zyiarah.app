@@ -9,6 +9,7 @@ import 'package:zyiarah/screens/store_payment_screen.dart';
 import 'package:zyiarah/screens/store_schedule_screen.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
 import 'package:zyiarah/utils/home_packages.dart';
+import 'package:zyiarah/utils/vat.dart';
 
 
 class ZyiarahStoreScreen extends StatefulWidget {
@@ -572,8 +573,8 @@ class _CartSheetState extends State<_CartSheet> {
                           // («تُضاف ضريبة القيمة المضافة 15% عند إتمام الطلب»)
                           // — فالمبلغُ أعلاه أساسٌ لا نهاية.
                           widget.companies
-                              ? 'تُضاف ضريبة القيمة المضافة 15% عند الدفع. ستنتقل لإتمام الدفع مباشرةً (بطاقة / تمارا)، ويصلك طلبك بعد تأكيد الدفع.'
-                              : 'تُضاف ضريبة القيمة المضافة 15% عند الدفع. ستحدّد عنوان التوصيل وموعده في الخطوة التالية، ثم تدفع ويصلك سائق بطلبك في الموعد.',
+                              ? 'تُضاف ضريبة القيمة المضافة $kVatRateLabel عند الدفع. ستنتقل لإتمام الدفع مباشرةً (بطاقة / تمارا)، ويصلك طلبك بعد تأكيد الدفع.'
+                              : 'تُضاف ضريبة القيمة المضافة $kVatRateLabel عند الدفع. ستحدّد عنوان التوصيل وموعده في الخطوة التالية، ثم تدفع ويصلك سائق بطلبك في الموعد.',
                           style: GoogleFonts.tajawal(fontSize: 12, height: 1.5, color: const Color(0xFF660033), fontWeight: FontWeight.w700),
                         ),
                       ),

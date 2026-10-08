@@ -607,7 +607,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                       Expanded(
                         child: _buildStatCard(
                           context,
-                          'ضريبة القيمة المضافة (15%)',
+                          'ضريبة القيمة المضافة ($kVatRateLabel)',
                           intl.NumberFormat.currency(symbol: 'ر.س ', decimalDigits: 0).format(vatAmount),
                           Icons.receipt_long_outlined,
                           Colors.purple,

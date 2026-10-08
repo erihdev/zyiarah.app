@@ -7,6 +7,7 @@ import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:zyiarah/theme/app_theme.dart';
 import 'package:zyiarah/utils/invoice_stamp.dart';
 import '../../utils/net_timeout.dart';
+import 'package:zyiarah/utils/vat.dart';
 
 /// سجل الفواتير الإلكترونية (ZATCA) للإدارة والمحاسب — تصميم Stitch `_61`.
 ///
@@ -328,7 +329,7 @@ class _AdminInvoicesScreenState extends State<AdminInvoicesScreen> {
         Row(children: [
           tile('الإجمالي شامل الضريبة', _money(s.gross), ZyiarahTheme.brand),
           const SizedBox(width: 6),
-          tile('ضريبة القيمة المضافة 15%', _money(s.vat), const Color(0xFFB45309)),
+          tile('ضريبة القيمة المضافة $kVatRateLabel', _money(s.vat), const Color(0xFFB45309)),
           const SizedBox(width: 6),
           tile('الصافي قبل الضريبة', _money(s.net), const Color(0xFF0F766E)),
         ]),

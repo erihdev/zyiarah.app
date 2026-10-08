@@ -175,7 +175,7 @@ class ZyiarahPdfService {
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
                     _buildSummaryRow(_ar('المجموع الفرعي / Net Subtotal:'), netSubtotal.toStringAsFixed(2)),
-                    _buildSummaryRow(_ar('ضريبة القيمة المضافة / VAT (15%):'), vatAmount.toStringAsFixed(2)),
+                    _buildSummaryRow(_ar('ضريبة القيمة المضافة / VAT ($kVatRateLabel):'), vatAmount.toStringAsFixed(2)),
                     _buildSummaryRow(_ar('الإجمالي / Total:'), amount.toStringAsFixed(2), isBold: true),
                   ],
                 ),

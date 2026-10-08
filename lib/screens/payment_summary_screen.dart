@@ -1636,7 +1636,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             ),
           if (_rowDiscount > 0)
             _buildRowDetail('الخصم ($_appliedCoupon)', '-${_rowDiscount.toStringAsFixed(2)} ر.س', isDiscount: true),
-          _buildRowDetail('الضريبة (15%)', '${vatAmount.toStringAsFixed(2)} ر.س'),
+          _buildRowDetail('الضريبة ($kVatRateLabel)', '${vatAmount.toStringAsFixed(2)} ر.س'),
           const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

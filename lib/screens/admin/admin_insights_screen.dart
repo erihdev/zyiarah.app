@@ -325,7 +325,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
               _buildStatCard("الإيراد الإجمالي (شامل الضريبة)", "${stats['revenue'].toStringAsFixed(0)} ر.س", const Color(0xFF059669), Icons.account_balance_wallet_rounded, growth: stats['revenueGrowth']),
               // كانت «الوعاء الضريبي» — والوعاء هو الأساس قبل الضريبة، بينما الرقم
               // المعروض هو حصة الضريبة نفسها (الإجمالي − الإجمالي ÷ 1.15).
-              _buildStatCard("ضريبة القيمة المضافة (15%)", "${stats['vat'].toStringAsFixed(0)} ر.س", const Color(0xFFD97706), Icons.account_balance_rounded),
+              _buildStatCard("ضريبة القيمة المضافة ($kVatRateLabel)", "${stats['vat'].toStringAsFixed(0)} ر.س", const Color(0xFFD97706), Icons.account_balance_rounded),
               _buildStatCard("طلبات نشطة", stats['active'].toString(), const Color(0xFF2563EB), Icons.speed_rounded, growth: stats['ordersGrowth']),
               _buildStatCard("إجمالي العملاء", stats['users'].toString(), const Color(0xFF7C3AED), Icons.people_alt_rounded),
             ],
