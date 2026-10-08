@@ -14,6 +14,7 @@ import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
 import 'package:zyiarah/utils/status_util.dart';
 import '../../utils/order_lifecycle.dart';
+import '../../utils/refund_notice.dart';
 import 'package:zyiarah/screens/map_screen.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/phone_format.dart';
@@ -514,15 +515,32 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
     required String label,
     required String paymentId,
     int? amountHalalas,
+    RefundOp? moneyBackOp,
   }) async {
+    // **ما يَحدثُ للخدمةِ يُقال.** الحوارُ كان سطراً واحداً («لا يمكن
+    // التراجع») — ولا البوّابةُ تُلغي الطلبَ ولا الحوارُ يَقولُ ذلك: الطلبُ
+    // المفتوحُ يَبقى بسائقِه فيَذهبُ الفريقُ. التفصيلُ في `refund_notice.dart`.
+    // و`capture` بلا جملةٍ (تَأخذُ المالَ لا تُعيدُه) فتُمرَّرُ `null`.
+    final String notice = moneyBackOp == null
+        ? ''
+        : refundNoticeText(
+            op: moneyBackOp,
+            impact: refundServiceImpact(
+              status: _orderData?['status'] as String?,
+              hasDriver:
+                  '${_orderData?['driver_id'] ?? ''}'.trim().isNotEmpty,
+            ),
+            partial: amountHalalas != null,
+          );
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: Text(label, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
         content: Text(
-          amountHalalas != null
-              ? 'هل تريد تنفيذ "$label" بمبلغ ${(amountHalalas / 100).toStringAsFixed(2)} ر.س؟'
-              : 'هل أنت متأكد من تنفيذ "$label"؟ لا يمكن التراجع.',
+          (amountHalalas != null
+                  ? 'هل تريد تنفيذ "$label" بمبلغ ${(amountHalalas / 100).toStringAsFixed(2)} ر.س؟'
+                  : 'هل أنت متأكد من تنفيذ "$label"؟ لا يمكن التراجع.') +
+              (notice.isEmpty ? '' : '\n\n$notice'),
           style: GoogleFonts.tajawal(),
         ),
         actions: [
@@ -580,12 +598,23 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
     required String functionName,
     required String label,
   }) async {
+    // نفسُ الجملةِ حرفاً بحرف — القرارُ واحدٌ والجمهورُ واحد. والتقسيطُ
+    // استردادٌ كاملٌ دائماً (`_fullRefundAmount` خادميّاً) فلا جزئيّةَ هنا.
+    final String notice = refundNoticeText(
+      op: RefundOp.refund,
+      impact: refundServiceImpact(
+        status: _orderData?['status'] as String?,
+        hasDriver: '${_orderData?['driver_id'] ?? ''}'.trim().isNotEmpty,
+      ),
+      partial: false,
+    );
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: Text(label, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
         content: Text(
-          'هل أنت متأكد من تنفيذ "$label"؟ لا يمكن التراجع.',
+          'هل أنت متأكد من تنفيذ "$label"؟ لا يمكن التراجع.'
+          '${notice.isEmpty ? '' : '\n\n$notice'}',
           style: GoogleFonts.tajawal(),
         ),
         actions: [
@@ -1006,6 +1035,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                         functionName: 'moyasarVoidPayment',
                         label: 'إلغاء العملية',
                         paymentId: paymentId,
+                        moneyBackOp: RefundOp.voidAuth,
                       ),
                     ),
 
@@ -1019,6 +1049,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                         functionName: 'moyasarRefundPayment',
                         label: 'استرداد كامل',
                         paymentId: paymentId,
+                        moneyBackOp: RefundOp.refund,
                       ),
                     ),
 
@@ -1033,6 +1064,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                         label: 'استرداد جزئي (50%)',
                         paymentId: paymentId,
                         amountHalalas: (amount * 0.5 * 100).round(),
+                        moneyBackOp: RefundOp.refund,
                       ),
                     ),
                 ],
