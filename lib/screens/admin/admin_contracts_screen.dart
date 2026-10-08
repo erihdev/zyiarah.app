@@ -11,6 +11,7 @@ import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/contract_health.dart';
 import 'package:zyiarah/utils/home_packages.dart';
 import 'package:zyiarah/utils/contract_ref.dart';
+import 'package:zyiarah/utils/contract_visits.dart';
 
 class AdminContractsScreen extends StatefulWidget {
   const AdminContractsScreen({super.key});
@@ -481,7 +482,13 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
             _buildDetailRow("اسم العميل", data['userName'] ?? data['clientName'] ?? 'عميل زيارة'),
             _buildDetailRow("الباقة", data['planName'] ?? 'باقة اشتراك'),
             _buildDetailRow("قيمة التعاقد", "${formatSarAny(data['planPrice'])} ر.س"),
-            _buildDetailRow("الزيارات المتاحة", "${data['planVisits'] ?? 0} زيارة"),
+            // **الوسمُ يَتبعُ المصدر.** كان «الزيارات المتاحة» فوقَ
+            // `planVisits` — حجمُ الباقةِ الثابتُ — لا فوقَ
+            // `visits_remaining` الذي يُحرّكُه الخادمُ. وهذه الورقةُ هي ما
+            // يُجيبُ منها الأدمنُ «كم بقيَ لها؟»، فكان يَعِدُ بخدمةٍ على
+            // رصيدٍ أُنفِقَ.
+            _buildDetailRow(contractVisitsView(data).label,
+                contractVisitsView(data).text),
             _buildDetailRow("رقم الاتصال", data['userPhone'] ?? 'غير مسجل'),
             _contractHealthBanner(data),
             const Divider(height: 32),

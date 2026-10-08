@@ -27,6 +27,7 @@ import 'package:zyiarah/screens/client_notifications_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:zyiarah/providers/user_provider.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/contract_visits.dart';
 
 // تحويل رقمي دفاعي: حقول Firestore قد تصل نصّاً ("150") أو null من لوحة الإدارة،
 
@@ -596,7 +597,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
         }
         final active = unique.values.where((m) {
           if (m['status'] != 'active') return false;
-          final rem = (m['visits_remaining'] as num?)?.toInt();
+          final rem = contractVisitsRemaining(m);
           // عقود قديمة قبل العدّاد (rem == null) تظهر أيضاً
           return rem == null || rem > 0;
         }).toList();
@@ -609,10 +610,13 @@ class _ClientDashboardState extends State<ClientDashboard> {
   }
 
   Widget _buildSubscriptionCard(Map<String, dynamic> contract) {
-    final int total = ((contract['visits_total'] ?? contract['planVisits']) as num?)?.toInt() ?? 4;
-    final int remainingRaw = (contract['visits_remaining'] as num?)?.toInt() ?? total;
-    final int remaining = remainingRaw.clamp(0, total); // يمنع عرض "6 / 4"
-    final double progress = total > 0 ? (remaining / total).clamp(0.0, 1.0) : 0.0;
+    // **البطاقةُ كانت السطحَ الوحيدَ من ثلاثةٍ يَقرأُ الرصيدَ الحقيقيّ**،
+    // فالقاعدةُ انتقلت إلى `contract_visits.dart` لتُقرأَ من موضعٍ واحد.
+    // ومعها زالَ افتراضانِ: حجمٌ `?? 4` لم يَعُدَّه أحد، و**شريطٌ ممتلئٌ**
+    // عند غيابِ العدّادِ (عقدٌ قديمٌ قبلَه) — يَقولُ إنّ الباقةَ كاملةٌ
+    // وهو لا يَعرف. كامنٌ لا حيّ: العدّادُ يُكتَبُ عند كلِّ تفعيل.
+    final ContractVisitsView visits = contractVisitsView(contract);
+    final double? progress = visits.progress;
     final String planName = ((contract['planName'] as String?)?.trim().isNotEmpty ?? false)
         ? contract['planName'] as String
         : 'باقة اشتراك';
@@ -664,24 +668,25 @@ class _ClientDashboardState extends State<ClientDashboard> {
                   ),
                 ],
               ),
-              Text('$remaining / $total', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
+              Text(visits.ratioText, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
             ],
           ),
           const SizedBox(height: 20),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: LinearProgressIndicator(
-              value: progress,
-              backgroundColor: Colors.white.withValues(alpha: 0.1),
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.amber),
-              minHeight: 8,
+          if (progress != null)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                value: progress,
+                backgroundColor: Colors.white.withValues(alpha: 0.1),
+                valueColor: const AlwaysStoppedAnimation<Color>(Colors.amber),
+                minHeight: 8,
+              ),
             ),
-          ),
           const SizedBox(height: 15),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('الزيارات المتبقية', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12)),
+              Text(visits.label, style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12)),
               if (expiry != null)
                 Text(
                   'ينتهي في: ${expiry.day}/${expiry.month}/${expiry.year}',
