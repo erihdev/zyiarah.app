@@ -158,7 +158,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       // (خامل/متاح مع طلب حيّ) تُظهر السائق متاحاً في لوحة الإدارة وهو مشغول.
       if (data?['current_order_id'] != null) return;
       try {
-        await ref.update({'is_available': true, 'status': 'idle'});
+        await ref.update({'is_available': true});
       } catch (_) {}
     }
   }

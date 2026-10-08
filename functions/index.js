@@ -4522,8 +4522,10 @@ exports.freeDriverOnOrderCancel = onDocumentUpdated(
         // حرّر السائق فقط إن كان منشغلاً بهذا الطلب الملغى تحديداً،
         // حتى لا نلمس مهمة أخرى يكون قد بدأها بالفعل.
         if (ds.data().current_order_id !== event.params.orderId) return;
+        // لا `status`: حقلٌ بلا قارئٍ في المستودعِ كلِّه، وبثلاثِ مفرداتٍ
+        // مختلفةٍ بين كاتبِيه. الحالةُ الحيّةُ `is_available` و
+        // `current_order_id`. انظر `test/driver_status_field_test.dart`.
         tx.update(driverRef, {
-          status: "available",
           current_order_id: null,
           is_available: true,
         });
@@ -4667,8 +4669,8 @@ exports.freeOldDriverOnReassign = onDocumentUpdated(
         if (!ds.exists) return false;
         // حرّره فقط إن كان لا يزال منشغلاً بهذا الطلب تحديداً (لا نلمس مهمة جديدة بدأها).
         if (ds.data().current_order_id !== event.params.orderId) return false;
+        // لا `status` — انظر الموضعَ التوأمَ في `freeDriverOnOrderCancel`.
         tx.update(driverRef, {
-          status: "available",
           current_order_id: null,
           is_available: true,
         });

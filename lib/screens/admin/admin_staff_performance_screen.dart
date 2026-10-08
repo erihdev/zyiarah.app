@@ -64,7 +64,11 @@ class _AdminStaffPerformanceScreenState extends State<AdminStaffPerformanceScree
           'rating': avgRating,
           'rating_count': ratingCount,
           'phone': driverData['phone'] ?? '-',
-          'status': driverData['status'] ?? 'offline',
+          // **لا `status`.** كان هنا `driverData['status'] ?? 'offline'` —
+          // المِفتاحُ الوحيدُ في المستودعِ الذي يَقرأُ حالةَ مستندِ السائق،
+          // ولم يُعرَض ولا يُفرَزُ به ولا يُرشَّح: مِفتاحُ خريطةٍ ميّت،
+          // وافتراضُه `offline` مفردةٌ **لا يَكتبُها كاتبٌ** — فكان القارئُ
+          // الظاهريُّ يُوهِمُ أنّ للحقلِ معنًى متّفَقاً عليه.
         });
       }
 
