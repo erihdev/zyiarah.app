@@ -966,6 +966,11 @@ class _NotifBell extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection('notifications')
           .where('userId', isEqualTo: uid)
+          // بلا `orderBy` كانت النافذةُ خمسينَ مستنداً بترتيبِ المعرّفِ
+          // العشوائيِّ لا أحدثَها: فالنقطةُ تَظهرُ عن إشعارٍ قديمٍ غيرِ
+          // مقروءٍ وتَغيبُ عن أحدثِ إشعارٍ وصلَ. (الترشيحُ محلّيٌّ بقصد —
+          // غيابُ `isRead` يُقرأُ «غيرَ مقروء» — فالترتيبُ وحدَه هو الناقص.)
+          .orderBy('sentAt', descending: true)
           .limit(50)
           .snapshots()
             .firstEventTimeout(),

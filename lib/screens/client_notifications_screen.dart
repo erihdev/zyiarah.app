@@ -64,6 +64,8 @@ class _ClientNotificationsScreenState extends State<ClientNotificationsScreen> {
       final snap = await FirebaseFirestore.instance
           .collection('notifications')
           .where('userId', isEqualTo: uid)
+          // نفسُ ترتيبِ البثِّ: المؤشّرُ لا معنى له إلّا في ترتيبٍ مُعلَن.
+          .orderBy('sentAt', descending: true)
           .startAfterDocument(cursor)
           .limit(_pageSize)
           .get().timeout(kNetCallTimeout);
@@ -203,6 +205,16 @@ class _ClientNotificationsScreenState extends State<ClientNotificationsScreen> {
       stream: FirebaseFirestore.instance
           .collection('notifications')
           .where('userId', isEqualTo: uid)
+          // **بلا `orderBy` كان `limit` يُرجعُ ترتيبَ المعرّفِ لا الأحدث**،
+          // ومعرّفاتُ `notifications` من `.add()` أي عشوائيّة: فالصفحةُ
+          // الأولى مجموعةٌ **كيفما اتّفق** من الإشعاراتِ لا أحدثُها، فإشعارٌ
+          // جديدٌ قد لا يَظهرَ أصلاً بعد تجاوزِ العتبة. والفرزُ المحلّيُّ
+          // أدناه يُرتّبُ **داخلَ** الصفحةِ فحسب فلا يُصلِحُ ذلك.
+          // وشاشةُ السائقِ أُصلحت بهذا بعينِه وتعليقُها يَحكيه. والفهرسُ
+          // `(userId, sentAt)` قائمٌ أصلاً لأجلِها، فلا فهرسَ جديد؛
+          // و`sentAt` يَكتبُه **كلُّ** كاتبٍ خادميٍّ للمجموعةِ (خمسةٌ)،
+          // فـ`orderBy` لا يُسقِطُ مستنداً.
+          .orderBy('sentAt', descending: true)
           .limit(_pageSize)
           .snapshots()
             .firstEventTimeout(),
