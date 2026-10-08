@@ -129,7 +129,7 @@ class ZyiarahPdfReportUtil {
               '${(netFromGross(revenue)).toStringAsFixed(2)} ر.س'),
           _buildStatItem('الطلبات النشطة', active.toString()),
           _buildStatItem('الطلبات المكتملة', completed.toString()),
-          _buildStatItem('ضريبة القيمة المضافة (15%)',
+          _buildStatItem('ضريبة القيمة المضافة ($kVatRateLabel)',
               '${(vatInGross(revenue)).toStringAsFixed(2)} ر.س'),
         ],
       ),

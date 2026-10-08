@@ -526,7 +526,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
           const Divider(height: 24),
           _row('عدد المنتجات', '${widget.items.length}'),
           _row('المبلغ الأساسي', '${_subtotal.toStringAsFixed(2)} ر.س'),
-          _row('الضريبة (15%)', '${_vat.toStringAsFixed(2)} ر.س'),
+          _row('الضريبة ($kVatRateLabel)', '${_vat.toStringAsFixed(2)} ر.س'),
           const Divider(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

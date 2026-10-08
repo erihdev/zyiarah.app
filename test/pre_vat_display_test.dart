@@ -30,16 +30,22 @@ void main() {
     for (final path in selectionScreens) {
       test(path, () {
         final s = uiOnly(path);
-        expect(s.contains('ضريبة القيمة المضافة (15%)'), isFalse,
+        // **أُعيد توجيهُه بوعي (2026-10-08) وشُدِّد.** كان يَمنعُ النصَّ
+        // الحرفيَّ `ضريبة القيمة المضافة (15%)` — أي **شكلَ** الصفِّ لا
+        // الحقيقةَ المقصودة؛ والنسبةُ صارت مُشتَقّةً (`$kVatRateLabel`) فصفٌّ
+        // جديدٌ بالصيغةِ الجديدةِ كان يَمُرُّ من حولِه. والتنويهُ نفسُه صار
+        // ثابتاً مُسمّىً في `vat.dart`، فلم يَبقَ في نصِّ هذه الشاشاتِ أيُّ
+        // ذكرٍ للعبارة — وذاك أقوى مَنعٍ ممكن: صفرُ ورودٍ لا غيابُ صيغة.
+        expect(s.contains('ضريبة القيمة المضافة'), isFalse,
             reason: 'صفّ الضريبة مكانه تفاصيل الفاتورة لا شاشة الاختيار');
         expect(s.contains('الإجمالي شامل الضريبة'), isFalse);
         expect(s.contains('الإجمالي المطلوب'), isFalse,
             reason: 'عنوان يوحي بمبلغ نهائي شامل الضريبة');
         expect(s.contains('الإجمالي قبل الضريبة'), isTrue,
             reason: 'العنوان الصريح الذي يفهمه العميل');
-        expect(s.contains('تُضاف ضريبة القيمة المضافة 15% عند إتمام الطلب'),
-            isTrue,
-            reason: 'تنويه واضح كي لا يُفاجأ العميل بالفرق عند الدفع');
+        expect(s.contains('kVatAddedAtPaymentNotice'), isTrue,
+            reason: 'تنويه واضح كي لا يُفاجأ العميل بالفرق عند الدفع — '
+                'والجملةُ تسكن `vat.dart` فالنسبةُ فيها مُشتَقّة');
       });
     }
   });
@@ -70,7 +76,9 @@ void main() {
   test('تفاصيل الفاتورة وحدها تعرض الضريبة والإجمالي', () {
     final pay = read('lib/screens/payment_summary_screen.dart');
     expect(pay.contains("_buildRowDetail('المبلغ الأساسي'"), isTrue);
-    expect(pay.contains("_buildRowDetail('الضريبة (15%)'"), isTrue);
+    // أُعيد توجيهُه ثانيةً (2026-10-08): النسبةُ المكتوبةُ في التسميةِ صارت
+    // مُشتَقّةً من `kVatRate` كما صارَ حسابُها من قبل — فالمشدودُ الاستقراءُ.
+    expect(pay.contains(r"_buildRowDetail('الضريبة ($kVatRateLabel)'"), isTrue);
     // كانت الحارسة تطابق `totalWithVat / 1.15`. بعد توحيد النسبة في
     // lib/utils/vat.dart صار الاسم يقول النموذج: netFromGross = الصافي من
     // إجمالٍ شامل. نفس الاشتقاق، ودلالةٌ أصرح.

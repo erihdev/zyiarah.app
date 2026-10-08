@@ -5,6 +5,7 @@ import 'package:zyiarah/models/invoice_view.dart';
 import 'package:zyiarah/services/zatca_service.dart';
 import 'package:zyiarah/utils/invoice_stamp.dart';
 import 'package:zyiarah/theme/app_theme.dart';
+import 'package:zyiarah/utils/vat.dart';
 
 /// بطاقة «فاتورة ضريبية مبسطة» على الشاشة (تصميم Stitch zatca_1/zatca_2):
 /// المنشأة، الرقم الضريبي والسجل، الوقت، رمز QR بصيغة TLV، البنود، الملخص
@@ -145,7 +146,7 @@ class ZatcaInvoiceCard extends StatelessWidget {
                         color: ink)),
                 const SizedBox(height: 6),
                 _lineItem(view.serviceName, _money(view.subtotalBeforeDiscount),
-                    sub: 'خاضع لضريبة 15%'),
+                    sub: 'خاضع لضريبة $kVatRateLabel'),
                 if (view.hasDiscount)
                   _lineItem(
                       'الخصم${view.couponCode != null ? ' (${view.couponCode})' : ''}',
@@ -155,7 +156,7 @@ class ZatcaInvoiceCard extends StatelessWidget {
 
                 // ─── الملخص ───
                 _kv('الإجمالي الخاضع للضريبة (غير شامل)', _money(view.net)),
-                _kv('ضريبة القيمة المضافة (15%)', _money(view.vat)),
+                _kv('ضريبة القيمة المضافة ($kVatRateLabel)', _money(view.vat)),
                 const SizedBox(height: 6),
                 Row(children: [
                   Expanded(
@@ -167,7 +168,7 @@ class ZatcaInvoiceCard extends StatelessWidget {
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
                                 color: ink)),
-                        Text('شامل ضريبة القيمة المضافة 15%',
+                        Text('شامل ضريبة القيمة المضافة $kVatRateLabel',
                             style: GoogleFonts.tajawal(
                                 fontSize: 10.5, color: muted)),
                       ],

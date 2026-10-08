@@ -1418,10 +1418,11 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
             ],
           ),
           const SizedBox(height: 6),
-          const Align(
+          Align(
             alignment: AlignmentDirectional.centerStart,
-            child: Text('تُضاف ضريبة القيمة المضافة 15% عند إتمام الطلب',
-                style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+            child: Text(kVatAddedAtPaymentNotice,
+                style: const TextStyle(
+                    fontSize: 11, color: Color(0xFF94A3B8))),
           )
         ],
       ),

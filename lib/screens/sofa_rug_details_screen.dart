@@ -741,7 +741,7 @@ class _SofaRugCleaningDetailsScreenState
           const SizedBox(height: 6),
           Align(
             alignment: AlignmentDirectional.centerStart,
-            child: Text('تُضاف ضريبة القيمة المضافة 15% عند إتمام الطلب',
+            child: Text(kVatAddedAtPaymentNotice,
                 style: GoogleFonts.tajawal(
                     fontSize: 11, color: const Color(0xFF94A3B8))),
           ),
