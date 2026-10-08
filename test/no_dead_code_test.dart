@@ -96,12 +96,59 @@ String _mask(String s) {
   return out.join();
 }
 
+/// أرضيّةٌ **لكلِّ مجلّدٍ على حِدَة** لا عتبةٌ جامعة: `2` كانت تَكفي لـ
+/// `lib/services` (عشرون) و`lib/utils` (خمسٌ وخمسون) معاً، فانحلالُ مسحِ
+/// أيٍّ منهما إلى ملفَّين يَمُرّ — والعتبةُ الجامعةُ هي ما أمرَّ أخطاءً
+/// مسجَّلةً في هذا المستودعِ مراراً. و`lib/providers` ملفٌّ واحدٌ اليومَ
+/// (`user_provider`) بعد حذفِ `config_provider` و`order_provider`، فأرضيّتُه
+/// `1` — ولو صارَ صفراً فالمجلّدُ زالَ وذاك يُراجَعُ لا يَمُرّ.
+/// أيَعُدُّ ذِكرُ [name] في [masked] **استعمالاً**، أم مجرَّدَ تَصادُفِ اسم؟
+///
+/// الفحصُ العامُّ يُطابقُ الأسماء، فمُعرِّفٌ محلّيٌّ في ملفٍّ آخرَ يَحملُ الاسمَ
+/// نفسَه كان يُقرأُ نداءً: `final orderStatus = …` في
+/// `admin_order_details_screen` أحيا `ZyiarahStrings.orderStatus` وهي بلا
+/// قارئٍ في المستودعِ كلِّه. فالمَواضعُ التي تُعَدُّ استعمالاً ثلاثةٌ بعينِها:
+///
+///   • **وصولُ عضو** — `X.name`.
+///   • **نداء** — `name(` (ومعه الوسائطُ النوعيّةُ `name<T>(`).
+///   • **تمريرُ الدالّةِ قيمةً** — `f(name)` أو `k: name`، وهو اصطلاحٌ دارتيٌّ
+///     حقيقيٌّ (`onPressed: _save`، `.then(handleX)`) فلا يَجوزُ إسقاطُه.
+///     **لكنّه لا يُقبَلُ من ملفٍّ يُعلِنُ الاسمَ لنفسِه**:
+///     `_buildSummaryTable(total, activeOrders, done)` في `pdf_report_util`
+///     تمريرُ **مُعامَلِه** هو لا جالبِ المُزوِّد — فبلا هذا القيدِ يُحيي
+///     مُعامَلٌ مُسمّىً جالباً ميّتاً، وقد أحياه فعلاً.
+///
+/// وما يَبقى أعمى عنه، صراحةً: اسمٌ يُستعمَلُ قيمةً في ملفٍّ لا يُعلِنُه وهو
+/// شيءٌ آخرُ تماماً. ذاك يَلزمُه تحليلُ أنواعٍ لا مُطابَقةُ نصّ.
+bool mentionIsUse(String masked, String name) {
+  final esc = RegExp.escape(name);
+  final asMember = RegExp('${r'\.\s*'}$esc${r'\b'}');
+  final asCall =
+      RegExp('${r'(?<![\w.$])'}$esc${r'\s*(?:<[^>()]*>)?\s*\('}');
+  if (asMember.hasMatch(masked) || asCall.hasMatch(masked)) return true;
+  final asValue = RegExp('${r'[(,:=]\s*'}$esc${r'\s*[,)\]};]'}');
+  if (!asValue.hasMatch(masked)) return false;
+  final declaresIt = RegExp(
+      '${r'\b(?:final|const|var|late|required)\s+(?:[\w<>?,.]+\s+)?'}'
+      '$esc'
+      '${r'\b|\b[A-Za-z_]\w*(?:<[^<>]*>)?\??\s+'}'
+      '$esc'
+      '${r'\s*(?:=|;|,|\))'}');
+  return !declaresIt.hasMatch(masked);
+}
+
+const _dirFloor = <String, int>{
+  'lib': 150,
+  'test': 150,
+  'lib/services': 15,
+  'lib/utils': 45,
+  'lib/models': 10,
+  'lib/providers': 1,
+};
+
 List<File> _dartFiles(String dir) => sourcesIn(dir,
-    atLeast: dir == 'lib'
-        ? 100
-        : dir == 'test'
-            ? 80
-            : 2);
+    atLeast: _dirFloor[dir] ??
+        (throw StateError('مجلّدٌ بلا أرضيّةٍ مُعلَنة: $dir')));
 
 final _ident = RegExp(r'[A-Za-z_$][A-Za-z0-9_$]*');
 
@@ -182,7 +229,22 @@ void main() {
         final elsewhere = counts.entries
             .where((e) => e.key != rel)
             .any((e) => (e.value[name] ?? 0) > 0);
-        if (!elsewhere) dead.add('$rel  ←  $name');
+        if (!elsewhere) {
+          dead.add('$rel  ←  $name');
+          continue;
+        }
+        // **وذِكرٌ ليس استعمالاً.** الفحصُ يُطابقُ الأسماءَ، فمُعرِّفٌ محلّيٌّ
+        // في ملفٍّ آخرَ يَحملُ الاسمَ نفسَه يُقرأُ نداءً: `orderStatus` في
+        // `admin_order_details_screen` متغيّرٌ محلّيٌّ، وكان يُحيي
+        // `ZyiarahStrings.orderStatus` وهي بلا قارئ. فالمَواضعُ التي تُعَدُّ
+        // استعمالاً ثلاثةٌ بعينِها: وصولُ عضوٍ (`.name`)، ونداءٌ
+        // (`name(`)، وتمريرُ الدالّةِ قيمةً (`f(name)`/`k: name`).
+        final hits = counts.entries
+            .where((e) => e.key != rel && (e.value[name] ?? 0) > 0)
+            .map((e) => e.key);
+        final used = hits.any(
+            (q) => mentionIsUse(_mask(File(q).readAsStringSync()), name));
+        if (!used) dead.add('$rel  ←  $name  (ذِكرٌ لا استعمال)');
       }
     }
 
@@ -193,6 +255,47 @@ void main() {
           'السؤال في كلٍّ منها واحد: أنُسِي توصيلُها، أم كُتبت ولم تُستعمل قطّ؟\n'
           '  • ${dead.join('\n  • ')}\n',
     );
+  });
+
+  test('«ذِكرٌ» ليس «استعمالاً» — القاعدةُ تُختبَرُ على الأشكالِ التي أعمَتها',
+      () {
+    // الحارسُ شفرةٌ تُختبَرُ كالشفرة، لا نيّةٌ تُقرَأ. والمصدرُ بعدَ الإصلاحِ
+    // نظيفٌ (العضوانِ الميّتانِ حُذِفا)، فنجاحُ الفحصِ العامِّ أعلاه لا
+    // يُبرهِنُ أنّ هذا التمييزَ يَعملُ — فيُجرَّبُ على الأشكالِ بعينِها.
+    //
+    // الحالةُ الحيّةُ التي كُتبَ لها: `ZyiarahStrings.orderStatus` كان يَبقى
+    // حيّاً لأنّ `admin_order_details_screen` يُعلِنُ متغيّراً محلّيّاً
+    // بالاسمِ نفسِه ويُقارِنُه.
+    expect(
+        mentionIsUse(
+            "final orderStatus = (data['status'] ?? '').toString();\n"
+            "if (orderStatus == 'in_progress') {}",
+            'orderStatus'),
+        isFalse,
+        reason: 'مُعرِّفٌ محلّيٌّ يُقارَنُ ليس نداءً للجالبِ المُسمّى مثلَه');
+    // ووصولُ العضوِ استعمالٌ.
+    expect(mentionIsUse('Text(ZyiarahStrings.orderStatus)', 'orderStatus'),
+        isTrue);
+    // والنداءُ، ومعه الوسائطُ النوعيّة.
+    expect(mentionIsUse(r'"${formatSar(x)} ر.س"', 'formatSar'), isTrue);
+    expect(mentionIsUse('combineLatestById<PromoCoupon>(a, b)',
+            'combineLatestById'),
+        isTrue);
+    // وتمريرُ الدالّةِ قيمةً استعمالٌ — وإلّا سَقطَ كلُّ `onPressed: _save`.
+    expect(mentionIsUse('list.map(formatSar).toList()', 'formatSar'), isTrue);
+    expect(mentionIsUse('ElevatedButton(onPressed: _save)', '_save'), isTrue);
+    // **لكن لا من ملفٍّ يُعلِنُ الاسمَ لنفسِه** — وهي الحالةُ الثانيةُ التي
+    // أحيَت `activeOrders`: مُعامَلٌ في `pdf_report_util` يُمرَّرُ قيمةً.
+    expect(
+        mentionIsUse('required int activeOrders,\n'
+            '_buildSummaryTable(totalRevenue, activeOrders, completedOrders)',
+            'activeOrders'),
+        isFalse,
+        reason: 'مُعامَلٌ مُسمّىً مِثلَ الجالبِ لا يُحييه');
+    // ولا اسمٌ مُركَّبٌ يَحوي الاسمَ بادئةً: `nameX` ليس `name`.
+    expect(mentionIsUse('ZyiarahStrings.orderStatusLabel', 'orderStatus'),
+        isFalse,
+        reason: 'الاحتواءُ ليس تطابُقاً — فخُّ `packageFormErrorX`');
   });
 
   test('سطحُ الدخول برقم الجوال و OTP لا يعود — الفحص العامّ أعمى عنه', () {

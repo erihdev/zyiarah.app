@@ -26,7 +26,6 @@ import 'package:zyiarah/screens/client_notifications_screen.dart';
 
 import 'package:provider/provider.dart';
 import 'package:zyiarah/providers/user_provider.dart';
-import 'package:zyiarah/providers/order_provider.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 
 // تحويل رقمي دفاعي: حقول Firestore قد تصل نصّاً ("150") أو null من لوحة الإدارة،
@@ -92,9 +91,17 @@ class _ClientDashboardState extends State<ClientDashboard> {
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<ZyiarahUserProvider>(context);
-    final orderProvider = Provider.of<ZyiarahOrderProvider>(context);
     final user = userProvider.user;
-    final isLoading = userProvider.isLoading || orderProvider.isLoading;
+    // **كانت `userProvider.isLoading || orderProvider.isLoading`** —
+    // و`ZyiarahOrderProvider` كان يَفتحُ مُستمِعاً على `orders` لكلِّ عميلةٍ
+    // عند الإقلاعِ ويَرتّبُ عشرينَ مستنداً، **ولا قارئَ لشيءٍ من ذلك**:
+    // `recentOrders` لا يَقرؤها إلّا `activeOrders`، و`activeOrders` بلا
+    // قارئٍ في المستودعِ كلِّه. فالعضوُ الحيُّ الوحيدُ كان `isLoading`،
+    // وهذا السطرُ: شِمِرُّ الرئيسيّةِ كلِّها كان يَنتظرُ استعلاماً **لا
+    // يُرسَمُ ناتجُه في أيِّ موضع** — إلى `kNetCallTimeout` (٢٠ث) على ذاكرةٍ
+    // باردةٍ وخادمٍ غيرِ قابلِ الوصول، بعدَ أن يَكونَ الملفُّ الشخصيُّ قد
+    // وصلَ. وكلُّ بطاقةٍ أدناه لها `StreamBuilder` بحالاتِه الخاصّة.
+    final isLoading = userProvider.isLoading;
 
     return Directionality(
       textDirection: TextDirection.rtl,

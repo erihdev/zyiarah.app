@@ -94,7 +94,7 @@ class ZyiarahFirebaseService {
     }
 
     // (B4) تسجيل الخروج فعلياً — يُطلق authStateChanges(null) فتُلغي
-    // ZyiarahUserProvider و ZyiarahOrderProvider اشتراكاتهما الخاصة بالمستخدم تلقائياً.
+    // ZyiarahUserProvider اشتراكَه الخاصَّ بالمستخدم تلقائياً.
     await _auth.signOut();
   }
 
