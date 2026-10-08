@@ -1,3 +1,4 @@
+import 'package:zyiarah/utils/order_lifecycle.dart';
 import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -595,9 +596,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
       stream: FirebaseFirestore.instance
           .collection('orders')
           .where('driver_id', isEqualTo: _currentDriverId)
-          .where('status', whereIn: const [
-            'assigned', 'scheduled', 'accepted', 'on_the_way', 'in_progress',
-          ])
+          // التعدادُ كان إنلاين هنا بينما `kActiveAssignedStatuses` قائمةٌ
+          // وتَشتقُّ منها شاشةُ مهامِّ السائقِ نفسُها — فحالةٌ تُضافُ غداً
+          // تَبلغُ شاشةَ المهامِّ ولا تَبلغُ هذه، فتَسقطُ مهمّتُه الجاريةُ
+          // عن لوحتِه بصمت.
+          .where('status', whereIn: kActiveAssignedStatusList)
           .snapshots()
             .firstEventTimeout(),
       builder: (context, snapshot) {

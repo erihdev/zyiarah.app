@@ -1,3 +1,4 @@
+import 'package:zyiarah/utils/order_lifecycle.dart';
 import 'dart:ui';
 import 'package:zyiarah/utils/service_catalog.dart';
 import 'package:flutter/material.dart';
@@ -332,7 +333,8 @@ class _ClientDashboardState extends State<ClientDashboard> {
       stream: FirebaseFirestore.instance
           .collection('orders')
           .where('client_id', isEqualTo: uid)
-          .where('status', whereIn: ['assigned', 'scheduled', 'accepted', 'on_the_way', 'in_progress'])
+          // نفسُ التعدادِ كان إنلاين — انظر `kActiveAssignedStatusList`.
+          .where('status', whereIn: kActiveAssignedStatusList)
           .limit(20)
           .snapshots()
             .firstEventTimeout(),
