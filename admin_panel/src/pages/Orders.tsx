@@ -185,7 +185,20 @@ export default function Orders() {
     }, []);
 
     const handleAssignDriver = async () => {
-        if (!assignModal || !selectedDriverId || !scheduledAt) return;
+        // الفرعُ الدفاعيُّ يَبقى صامتاً بحقٍّ (الزرُّ لا يُرسَمُ إلّا والنافذةُ
+        // مفتوحة)، أمّا حقلا النافذةِ فضغطةٌ قصدَها الأدمن: الملفُّ بلا `<form>`
+        // وبلا `required`، فكان `!selectedDriverId || !scheduledAt` يُنتجُ لا
+        // شيءَ بلا كلمةٍ على طلبٍ مدفوع — وفحصُ «لا موعدَ في الماضي» أسفلَه
+        // مباشرةً يُنبّه.
+        if (!assignModal) return;
+        if (!selectedDriverId) {
+            toast.error('اختر سائقاً متاحاً قبل التعيين');
+            return;
+        }
+        if (!scheduledAt) {
+            toast.error('حدّد موعد الخدمة قبل التعيين');
+            return;
+        }
         // **لا موعدَ في الماضي** — الحقلُ محدودٌ بـ`min` كذلك، وهذا الفحصُ هو
         // ما يَحمي من قيمةٍ مكتوبةٍ بلوحةِ المفاتيحِ (المتصفّحُ لا يُنفّذُ `min`
         // على الكتابةِ اليدويّة) ومن نافذةٍ بَقيت مفتوحةً عبرَ منتصفِ الليل.

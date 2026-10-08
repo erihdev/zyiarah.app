@@ -475,7 +475,14 @@ export default function Settings({ role }: { role?: string | null }) {
         if (!zoneId) return;
         try {
             const snap = await getDoc(doc(db, 'service_zones', zoneId));
-            if (!snap.exists()) return;
+            // المنطقةُ المصدرُ زالت بين تحميلِ القائمةِ والنسخ: كان
+            // `if (!snap.exists()) return;` يَترُكُ النموذجَ كما هو بلا كلمةٍ
+            // ولا توست نجاحٍ ولا خطأ، فيَحسبُ الأدمنُ أنّ النسخَ تمَّ ويَضغطُ
+            // «حفظ» على قيَمٍ لم تُنسَخ.
+            if (!snap.exists()) {
+                toast.error('تعذّر قراءة أسعار المنطقة المصدر — حدّث الصفحة وأعد المحاولة');
+                return;
+            }
             const d = snap.data() as Record<string, unknown>;
             const s = (v: unknown) => (v === undefined || v === null ? '' : String(v));
             // (باقات السكن) تعبئة من المنطقة المصدر — أسعار وتفعيلات ومدد.
