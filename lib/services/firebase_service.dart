@@ -1,5 +1,6 @@
 import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zyiarah/utils/error_report.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -95,7 +96,28 @@ class ZyiarahFirebaseService {
 
     // (B4) تسجيل الخروج فعلياً — يُطلق authStateChanges(null) فتُلغي
     // ZyiarahUserProvider اشتراكَه الخاصَّ بالمستخدم تلقائياً.
-    await _auth.signOut();
+    //
+    // **ولا يَرمي (2026-10-08).** كان `_auth.signOut()` عارياً، ومن مُنادِيه
+    // الستّةِ **أربعةٌ يُسقِطونَ مستقبَلَه** — فرميُه لا يَجدُ مَن يَلتقطُه،
+    // وكلُّ ما بعدَ سطرِه لا يُنفَّذ. وأخطرُ اثنَين مسارا **إقصاء**:
+    //
+    //  • `user_provider` يَرى `accountIsBlocked` فيُنادي `signOut()` بلا
+    //    `await` ثمّ `return` — فالرميُ يَعني أنّ حالةَ المصادقةِ لم تَتغيّرْ
+    //    و`AuthWrapper` ما زال يَرى جلسةً قائمة: **المحظورةُ تَبقى داخلَ
+    //    التطبيق**.
+    //  • و`driver_dashboard` يَرى `driverIsDisabled` فيُنادِيه داخلَ
+    //    `addPostFrameCallback((_) async …)` — مُسقَطٌ كذلك — والشريطُ الذي
+    //    يُخبِرُ السائقَ بالسبب **بعدَ** الـ`await`، فلا إقصاءَ ولا كلمة.
+    //
+    // ولا مُنادِيَ يَملكُ تصحيحاً: لا يُمكِنُ «عدمُ الخروج». فالعقدُ أفضلُ
+    // جهدٍ **لا يَرمي**، ويُبلَّغُ صامتاً — استمرارُ خدمةٍ وأمنُ جلسةٍ، نطاقُ
+    // `reportSilent` المُعلَن — فلا يُدَّعى نجاحٌ ولا يُفقَدُ الخبر. وجلسةٌ
+    // بَقيت مفتوحةً بعد فشلِ الخروجِ تُقرَأُ عندنا لأوّلِ مرّة.
+    try {
+      await _auth.signOut();
+    } catch (e, st) {
+      reportSilent(e, st, reason: 'sign_out_failed');
+    }
   }
 
   // --- إدارة بيانات المستخدمين في Firestore ---

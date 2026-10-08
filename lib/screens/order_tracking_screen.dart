@@ -493,24 +493,48 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     return const SizedBox();
   }
 
-  Future<void> _whatsappDriver(String phone) async {
-    final number = whatsappNumber(phone);
-    final uri = Uri.parse('https://wa.me/$number');
-    final ok = number.isNotEmpty && await canLaunchUrl(uri) &&
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+  /// **فتحُ تطبيقٍ خارجيٍّ — ورسالةُ الفشلِ لم تَكُن تَظهرُ أبداً.**
+  ///
+  /// الزرّانِ هنا (واتساب السائقِ والاتصالُ به) كانا يَنادِيانِ `launchUrl`
+  /// **بلا `try`**، والنداءُ مُسقَطٌ من `onPressed`: فـ`launchUrl` تَرمي
+  /// `PlatformException` حين يَتعذّرُ الفتحُ — و`canLaunchUrl` الصادقةُ لا
+  /// تَضمنُ نجاحَها — فيَخرُجُ الرميُ إلى لا أحد، **ولا يُنفَّذُ سطرُ الرسالةِ
+  /// المكتوبُ تحتَه**: تَضغطُ فلا يَحدثُ شيءٌ ولا تُقالُ كلمة، على الشاشةِ
+  /// التي تَفتحُها لتَصِلَ إلى سائقِها. و`_callDriver` كانت `void … async`،
+  /// أي **لا يُمكِنُ انتظارُها بالبناء** فالرميُ غيرُ مُعالَجٍ حتماً.
+  ///
+  /// والقاعدةُ قائمةٌ في سطحَين: `_openExternalUrl` في `driver_dashboard`
+  /// و`profile_screen` كلتاهما `try { ok = await launchUrl(…) } catch { ok =
+  /// false }` ثمّ تُخبِرُ. فهذه نسختُها الثالثةُ لا صياغةٌ جديدة.
+  Future<void> _openExternal(Uri uri, String failMessage) async {
+    bool ok = false;
+    try {
+      ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint('[tracking] launch failed: $e');
+      ok = false;
+    }
     if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('تعذّر فتح واتساب — رقم السائق: $phone')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(failMessage)));
     }
   }
 
-  void _callDriver(String phone) async {
-    final uri = Uri.parse('tel:$phone');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('تعذّر فتح الاتصال — رقم السائق: $phone')));
+  Future<void> _whatsappDriver(String phone) async {
+    final number = whatsappNumber(phone);
+    if (number.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('تعذّر فتح واتساب — رقم السائق: $phone')));
+      }
+      return;
     }
+    await _openExternal(Uri.parse('https://wa.me/$number'),
+        'تعذّر فتح واتساب — رقم السائق: $phone');
+  }
+
+  Future<void> _callDriver(String phone) async {
+    await _openExternal(
+        Uri.parse('tel:$phone'), 'تعذّر فتح الاتصال — رقم السائق: $phone');
   }
 }

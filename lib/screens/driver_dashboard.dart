@@ -1,3 +1,4 @@
+import 'package:zyiarah/utils/error_report.dart';
 import 'package:zyiarah/utils/order_lifecycle.dart';
 import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
@@ -130,7 +131,25 @@ class _DriverDashboardState extends State<DriverDashboard> {
   Future<void> _ensureAlwaysAvailable() async {
     if (_currentDriverId == null) return;
     final ref = FirebaseFirestore.instance.collection('drivers').doc(_currentDriverId);
-    final doc = await ref.get().timeout(kNetCallTimeout);
+    // **النداءُ مُسقَطٌ من `initState`**، فرميُه لا يَجدُ مَن يَلتقطُه: كان
+    // `get().timeout(...)` عارياً، و`.timeout` **تَصنعُ** الرميَ بالتصميمِ على
+    // التعليقِ الموثَّقِ (ذاكرةٌ باردةٌ وخادمٌ لا يُبلَغ)، ومعه
+    // `permission-denied` لمستندِ سائقٍ معرّفُه ليس uid و`unavailable` بلا
+    // شبكة. والأثرُ كلُّه صامت: اسمُه يَبقى على النائبِ، وإعادةُ ضبطِ
+    // التوفّرِ — وهي سببُ وجودِ هذه الدالّة — لا تَجري، ويُسجَّلُ الرميُ
+    // **قاتلاً** في Crashlytics عبرَ `PlatformDispatcher.onError`.
+    //
+    // ولا يَمَسُّ الإسنادَ: `_findFreeDriverForSlot` يَشتقُّ الانشغالَ من
+    // الطلباتِ المتقاطعةِ زمنيّاً ولا يَقرأُ `is_available` ولا
+    // `current_order_id` — فالمفقودُ صورةُ الإدارةِ وعدّادُها وتحيّتُه، لا
+    // وصولُ المهامِ إليه. ولا شيءَ يُقالُ له: لا إجراءَ عندَه.
+    final DocumentSnapshot<Map<String, dynamic>> doc;
+    try {
+      doc = await ref.get().timeout(kNetCallTimeout);
+    } catch (e, st) {
+      reportSilent(e, st, reason: 'driver_presence_read_failed');
+      return;
+    }
     if (!mounted) return;
     final data = doc.data();
     setState(() => _driverName = data?['name'] as String? ?? 'السائق');
