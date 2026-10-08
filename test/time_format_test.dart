@@ -47,6 +47,26 @@ String _code(String path) => File(path)
     })
     .join('\n');
 
+/// كلُّ ما تَراه العميلةُ أو السائق. `admin/` مُستثنىً عمداً (أدناه).
+List<String> clientFacingDartFiles() {
+  final out = <String>[];
+  for (final dir in const [
+    'lib/screens',
+    'lib/widgets',
+    'lib/utils',
+    'lib/models',
+    'lib/services',
+  ]) {
+    final d = Directory(dir);
+    if (!d.existsSync()) continue;
+    for (final f in d.listSync(recursive: false).whereType<File>()) {
+      if (f.path.endsWith('.dart')) out.add(f.path);
+    }
+  }
+  out.sort();
+  return out;
+}
+
 void main() {
   group('تحويل 12 ساعة صحيح', () {
     test('منتصف الليل والظهر لا يصيران صفراً', () {
@@ -78,22 +98,40 @@ void main() {
   });
 
   group('التخزين يبقى 24 ساعة — حرج للسعة', () {
-    test("كل كتابة لـ booking_time_slot بصيغة padLeft(2,'0'):00", () {
-      // نفحص كل موضع يكتب الحقل: يجب أن يكون "HH:00" لا نصّ 12 ساعة.
-      final writers = {
-        'lib/screens/payment_summary_screen.dart',
-        'lib/screens/checkout_screen.dart',
-      };
+    test("لا كاتبَ لـbooking_time_slot يُخزّنُ صيغةَ 12 ساعة", () {
+      // النطاقُ **مُشتَقٌّ** لا قائمةٌ مكتوبةٌ بيد. كان ملفَّين مُسمَّيَين
+      // (`payment_summary_screen` و`checkout_screen`) وقاعدتُه عامّةٌ على
+      // كلِّ كاتبٍ للحقل — نمطُ «حارسٌ ضيّقٌ وقاعدةٌ عامّة». وحين زالَ
+      // الكاتبُ الثاني (نسخةٌ احتياطيّةٌ غيرُ مبلوغةٍ، 2026-10-08) سقطَ
+      // الفحصُ على **غيابِ** ملفٍّ لا على عطلٍ فيه — فسؤالُ «مَن يَكتبُ
+      // هذا الحقل؟» صارَ مُشتَقّاً هنا كما هو مُشتَقٌّ في فحصِ المجموعة.
+      final writers = <String>[];
+      for (final p in clientFacingDartFiles()) {
+        if (_code(p).contains("'booking_time_slot':")) writers.add(p);
+      }
+      expect(writers.length, greaterThanOrEqualTo(3),
+          reason: 'انحلَّ المسحُ إلى لا شيء — حارسٌ عقيمٌ أسوأُ من لا حارس');
       for (final p in writers) {
-        final s = _code(p);
-        final writeRe = RegExp(r"'booking_time_slot':\s*[\s\S]{0,120}?padLeft\(2, '0'\)\}:00");
-        expect(writeRe.hasMatch(s), isTrue,
-            reason: '$p يكتب booking_time_slot بصيغة غير 24 ساعة ⇒ تنهار السعة الخادمية');
-        // ولا يكتبه بصيغة 12 ساعة (ص/م) إطلاقاً
-        final badRe = RegExp(r"'booking_time_slot':[^,\n]*(ص|م|formatHour12|formatSlot12)");
-        expect(badRe.hasMatch(s), isFalse,
+        // صيغةُ 12 ساعةً في قيمةِ الحقلِ تُسقطُ حسابَ السعةِ خادميّاً:
+        // "3:00 م" تُقرأُ الثالثةَ فجراً ⇒ سلوتُ المساءِ يُحسَبُ على الفجر.
+        final badRe = RegExp("'booking_time_slot':[^,\n]*"
+            r'(ص|م|formatHour12|formatSlot12|formatTime12|formatClock12)');
+        expect(badRe.hasMatch(_code(p)), isFalse,
             reason: '$p يخزّن وقتاً بصيغة 12 ساعة — يُقرأ خطأً في الخادم');
       }
+      // والموضعُ الذي يَبني الصيغةَ إنلاين ما زال يَبنيها 24 — ويُشترَطُ
+      // أوّلاً أنّه **في** المجموعةِ المُشتَقّة، وإلّا مرَّ الفحصُ على
+      // غيابِه كما كان يَمُرُّ لو حُذفَ من قائمةٍ مكتوبةٍ بيد.
+      const inlineBuilder = 'lib/screens/payment_summary_screen.dart';
+      expect(writers, contains(inlineBuilder),
+          reason: '$inlineBuilder لم يَعُد يَكتبُ booking_time_slot — '
+              'يُراجَعُ موضعُ بناءِ الصيغةِ بدلَ أن يَمُرَّ الفحصُ على غيابِه');
+      expect(
+          RegExp("'booking_time_slot':" r"\s*[\s\S]{0,120}?padLeft\(2, '0'\)\}:00")
+              .hasMatch(_code(inlineBuilder)),
+          isTrue,
+          reason: '$inlineBuilder يكتب booking_time_slot بصيغة غير 24 ساعة '
+              '⇒ تنهار السعة الخادمية');
     });
 
     test('الدالة الخادمية ما زالت تحلّل "HH:00"', () {
@@ -133,26 +171,6 @@ void main() {
   // نمطُ «حارسٌ ضيّقٌ وقاعدةٌ عامّة» للمرّةِ الخامسةِ في هذا المستودع.
   // ونطاقُه المُشتَقُّ وجدَ **ستَّ نسخٍ أخرى** من القاعدة.
   // ══════════════════════════════════════════════════════════════════════
-
-  /// كلُّ ما تَراه العميلةُ أو السائق. `admin/` مُستثنىً عمداً (أدناه).
-  List<String> clientFacingDartFiles() {
-    final out = <String>[];
-    for (final dir in const [
-      'lib/screens',
-      'lib/widgets',
-      'lib/utils',
-      'lib/models',
-      'lib/services',
-    ]) {
-      final d = Directory(dir);
-      if (!d.existsSync()) continue;
-      for (final f in d.listSync(recursive: false).whereType<File>()) {
-        if (f.path.endsWith('.dart')) out.add(f.path);
-      }
-    }
-    out.sort();
-    return out;
-  }
 
   group('قاعدةُ العرضِ لها موضعٌ واحد — مسحٌ مُشتَقٌّ لا قائمةٌ مكتوبة', () {
     // تُستثنى بأسمائها ولكلٍّ سببُها — لا بعدَدٍ، فالعتبةُ العدديّةُ هي ما
@@ -217,9 +235,15 @@ void main() {
       }
     });
 
-    test('وكلُّ كُتّابِ booking_time_slot معروفون — أربعةٌ لكلٍّ سببُه', () {
+    test('وكلُّ كُتّابِ booking_time_slot معروفون — ثلاثةٌ لكلٍّ سببُه', () {
       // التمرير: `contract_signing_screen` يَكتبُ `widget.bookingTimeSlot`
       // مُمرَّراً، فلا يُطابِقُ نمطَ الـ24 حرفيّاً — ويُحرَسُ بمنادِيَيه.
+      //
+      // وكان الرابعُ `checkout_screen`: نسخةٌ ثانيةٌ من حِملِ إنشاءِ الطلبِ
+      // كمسارٍ احتياطيّ، **غيرُ مبلوغةٍ** (`_createUnpaidServiceOrder`
+      // تُنتظَرُ قبلَ فتحِ جلسةِ تمارا وهي بلا `catch`) وقد انحرفت بثلاثةِ
+      // حقول. فحُذفت وصارَ الإنشاءُ نداءً إلى الموضعِ الواحد (2026-10-08).
+      // **وهذا الفحصُ هو ما أمسكَ التغيير** فراجَعناه بدلَ إسكاتِه.
       final writers = <String>[];
       for (final p in clientFacingDartFiles()) {
         if (_code(p).contains("'booking_time_slot':")) writers.add(p);
@@ -227,7 +251,6 @@ void main() {
       expect(
           writers,
           equals([
-            'lib/screens/checkout_screen.dart',
             'lib/screens/contract_signing_screen.dart',
             'lib/screens/payment_summary_screen.dart',
             // الرابعُ ليس كاتبَ إنشاءٍ بل **موضعُ قاعدةِ تحريكِ الموعد**
@@ -236,7 +259,7 @@ void main() {
             // مشدودةٌ سلوكاً في `booking_fields_test`، وتفويضُه هنا.
             'lib/utils/booking_fields.dart',
           ]),
-          reason: 'كاتبٌ خامسٌ لـbooking_time_slot — يُراجَعُ بدلَ أن يَمرّ، '
+          reason: 'كاتبٌ رابعٌ لـbooking_time_slot — يُراجَعُ بدلَ أن يَمرّ، '
               'فصيغةُ 12 ساعةً هنا تُسقطُ حسابَ السعةِ خادميّاً: '
               '${writers.join(", ")}');
       // وموضعُ القاعدةِ يُفوّضُ إلى الدالّةِ النقيّةِ ولا يَبني الصيغةَ إنلاين

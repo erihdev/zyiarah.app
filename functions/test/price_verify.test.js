@@ -492,7 +492,13 @@ function fakeDb({byId = {}, byName = {}} = {}) {
         if (!h.lit.includes("hours_contracted")) bad.push(`${rel}:${h.at}`);
       }
     }
-    assert.ok(scanned >= 12, `المسحُ وجدَ ${scanned} حِملاً فقط — فحصٌ أجوف`);
+    // الأرضيّةُ نزلت من ١٢ إلى ١١ في 2026-10-08: جُمِعت نسختا حِملِ إنشاءِ
+    // الطلبِ في العميلِ وحُذفت نسخةٌ ثالثةٌ ميّتةٌ من `checkout_screen`
+    // (`order_payload_single_site_test`)، فهبطَ عددُ الأحمالِ بواحد.
+    // **وهذه الأرضيّةُ هي ما أمسكَ ذلك** — وهي كذلك الدرسُ: حارسٌ في
+    // `functions/test` يَمسحُ `lib/` أيضاً، فـ«لم أمَسَّ `functions/`» لا
+    // تَعني أنّ مجموعتَها غيرُ متأثّرة.
+    assert.ok(scanned >= 11, `المسحُ وجدَ ${scanned} حِملاً فقط — فحصٌ أجوف`);
     assert.deepStrictEqual(bad, [],
         "حِملٌ يُنشئُ طلباً بلا مدّة — فرعُ «بلا service_meta» سيُنبّهُ عليه:\n" +
         bad.map((x) => "  - " + x).join("\n"));

@@ -3,13 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
-import 'package:zyiarah/utils/order_util.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:intl/intl.dart' as intl;
-import 'package:zyiarah/services/counter_service.dart';
-import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/invoice_stamp.dart';
 
@@ -37,6 +34,19 @@ class TamaraCheckoutScreen extends StatefulWidget {
   /// إذا كان null يتم التوجيه لـ ZyiarahOrderSuccessScreen مباشرة.
   final Future<void> Function(String orderCode)? onOrderCreated;
 
+  /// «أنشِئِ الطلبَ إن غاب وأعطِني كودَه» — يُنادى في مسارِ الخدمةِ وحدَه
+  /// (`contractId == null`) ومتى لم يُوجَد المستند.
+  ///
+  /// كانت هنا **نسخةٌ ثانيةٌ من حِملِ إنشاءِ الطلب** (معامَلةٌ من نحوِ
+  /// أربعينَ سطراً) لتلك الحالة — غيرُ مبلوغةٍ عمليّاً، لأنّ
+  /// `_createUnpaidServiceOrder` تُنتظَرُ **قبلَ** `createCheckoutSession`
+  /// وهي بلا `catch` فرميُها يَمنعُ فتحَ الجلسةِ أصلاً. وقد **انحرفت**
+  /// بثلاثةِ حقولٍ: `client_email` و`terrain_surcharge_percent`
+  /// و`terrain_surcharge_amount` — فلو عملت لأنشأت طلباً مبلغُه يَشملُ
+  /// الوعورةَ وتفصيلُه لا يَذكرُها، وبلا بريدٍ للفاتورة. فالإنشاءُ صارَ
+  /// نداءً إلى الموضعِ الواحدِ الذي يَعرفُ السعر.
+  final Future<String> Function() ensureOrder;
+
   const TamaraCheckoutScreen({
     super.key,
     required this.checkoutUrl,
@@ -56,6 +66,7 @@ class TamaraCheckoutScreen extends StatefulWidget {
     this.customerPhone,
     this.serviceMeta,
     this.onOrderCreated,
+    required this.ensureOrder,
   });
 
 
@@ -111,19 +122,12 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                 String newOrderId = widget.orderId;
                 final user = FirebaseAuth.instance.currentUser;
 
-                // جلب اسم العميل الحقيقي من Firestore (displayName فارغ في معظم الحالات)
-                String clientName = 'عميل زيارة';
-                String clientPhone = widget.customerPhone ?? 'غير متوفر';
-                if (user != null) {
-                  try {
-                    final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get().timeout(kNetCallTimeout);
-                    if (userDoc.exists) {
-                      clientName = userDoc.data()?['name'] ?? clientName;
-                      clientPhone = userDoc.data()?['phone'] ?? clientPhone;
-                    }
-                  } catch (_) {}
-                }
-
+                // (حُذفت قراءةُ `users/{uid}` هنا في 2026-10-08.) كانت
+                // تَجلبُ الاسمَ والهاتفَ لحِملِ الإنشاءِ الاحتياطيِّ وحدَه،
+                // فلمّا زالَ الحِملُ صارا **مُسنَدَين بلا قارئ** — ودورةُ
+                // شبكةٍ بمهلةِ ٢٠ ثانيةً على مسارِ «نجحَ الدفع» تُغذّي لا
+                // شيء. و`analyze` لا يَراها: كلٌّ منهما يُقرَأُ في إسنادِ
+                // نفسِه (`x = d['k'] ?? x`) فيَحسبُها المُحلِّلُ مُستعمَلة.
                 try {
 
                 if (widget.contractId != null) {
@@ -140,99 +144,27 @@ class _TamaraCheckoutScreenState extends State<TamaraCheckoutScreen> {
                     targetId: widget.contractId,
                   );
                 } else {
-                  final bool isHourly = widget.hours != null && widget.serviceDate != null;
 
-                  String tamaraOrderCode = '';
-                  // الطلب أُنشئ مسبقاً (is_paid=false) قبل جلسة تمارا؛ إن وُجد نتخطّى
-                  // الإنشاء والإسناد — يتكفّل sweepUnassignedPaidOrders بالإسناد بعد
-                  // أن يقلب tamaraWebhook is_paid=true.
+                  // الطلبُ أُنشئ مسبقاً (is_paid=false) قبل جلسةِ تمارا؛
+                  // فإن وُجد أخذنا كودَه، وإن غابَ طلبنا إنشاءَه من **موضعِ
+                  // الإنشاءِ الواحد** (`ensureOrder`) بدلَ نسخةٍ ثانيةٍ من
+                  // الحِملِ هنا. والإسنادُ في الحالتَين خادميٌّ: يتكفّلُ به
+                  // `sweepUnassignedPaidOrders` بعد أن يَقلبَ
+                  // `tamaraWebhook` العلَمَ — وكان المسارُ الاحتياطيُّ وحدَه
+                  // يُسنِدُ من العميل، وهو لا يُبلَغ.
                   final existingOrder = await FirebaseFirestore.instance
                       .collection('orders').doc(widget.orderId).get().timeout(kNetCallTimeout);
-                  if (existingOrder.exists) {
-                    tamaraOrderCode = existingOrder.data()?['code'] ?? widget.orderId;
-                    await ZyiarahMessagingService().notifyOrderCreated(
-                      clientId: user?.uid ?? '',
-                      orderCode: tamaraOrderCode,
-                      type: 'cleaning',
-                      serviceName: widget.serviceType,
-                      orderId: widget.orderId,
-                    );
-                  } else {
-                  await FirebaseFirestore.instance.runTransaction((transaction) async {
-                    final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
-                    tamaraOrderCode = ZyiarahOrderUtil.formatSmartCode(nextId);
-                    transaction.set(
-                      FirebaseFirestore.instance.collection('orders').doc(widget.orderId),
-                      {
-                        'code': tamaraOrderCode,
-                        'client_id': user?.uid ?? "unauthenticated_user",
-                        'client_name': clientName,
-                        'client_phone': clientPhone,
-                        'user_phone': clientPhone,
-                        'service_type': widget.serviceType,
-                        'service_name': widget.serviceType,
-                        'amount': widget.amount,
-                        // is_paid يقلبه tamaraWebhook خادمياً — يوافق قاعدة Stage-C.
-                        'is_paid': false,
-                        'status': 'pending',
-                        // موقع غائب ⇒ نُغفل الحقل (لا إحداثيات وهمية) — المستهلكون يتحمّلون غيابه.
-                        if (widget.location != null) 'location': widget.location,
-                        'payment_method': 'tamara',
-                        'created_at': FieldValue.serverTimestamp(),
-                        'hours_contracted': widget.hours ?? 4,
-                        'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
-                        'zone_name': widget.zoneName,
-                        'worker_count': widget.workerCount,
-                        'coupon_code': widget.couponCode,
-                        'discount_amount': widget.discountAmount,
-                        if (widget.serviceMeta != null)
-                          'service_meta': widget.serviceMeta,
-                        if (isHourly && widget.serviceDate != null) ...{
-                          'booking_date': '${widget.serviceDate!.year}-'
-                              '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
-                              '${widget.serviceDate!.day.toString().padLeft(2, '0')}',
-                          'booking_time_slot':
-                              '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00',
-                        },
-                      },
-                    );
-                  });
-
-                  if (isHourly) {
-                    // تعيين سائق تلقائياً وتحديث الطلب إلى accepted
-                    final assigned = await ZyiarahOrderService().autoAssignDriverForHourly(
-                      orderId: widget.orderId,
-                      startDateTime: widget.serviceDate!,
-                      durationHours: widget.hours!,
-                    );
-                    if (assigned) {
-                      await ZyiarahMessagingService().notifyOrderCreated(
-                        clientId: user?.uid ?? '',
-                        orderCode: tamaraOrderCode,
-                        type: 'cleaning',
-                        serviceName: widget.serviceType,
-                        orderId: widget.orderId,
-                      );
-                    } else {
-                      // في حالة تعذر التعيين المباشر، لا نلغي الطلب المدفوع بتمارا! بل يبقى pending للتوزيع اليدوي ونرسل الإشعار الافتراضي
-                      await ZyiarahMessagingService().notifyOrderCreated(
-                        clientId: user?.uid ?? '',
-                        orderCode: tamaraOrderCode,
-                        type: 'cleaning',
-                        serviceName: widget.serviceType,
-                        orderId: widget.orderId,
-                      );
-                    }
-                  } else {
-                    await ZyiarahMessagingService().notifyOrderCreated(
-                      clientId: user?.uid ?? '',
-                      orderCode: tamaraOrderCode,
-                      type: 'cleaning',
-                      serviceName: widget.serviceType,
-                      orderId: widget.orderId,
-                    );
-                  }
-                  } // نهاية مسار الإنشاء الاحتياطي (الطلب غير موجود مسبقاً)
+                  final String tamaraOrderCode = existingOrder.exists
+                      ? ((existingOrder.data()?['code'] as String?) ??
+                          widget.orderId)
+                      : await widget.ensureOrder();
+                  await ZyiarahMessagingService().notifyOrderCreated(
+                    clientId: user?.uid ?? '',
+                    orderCode: tamaraOrderCode,
+                    type: 'cleaning',
+                    serviceName: widget.serviceType,
+                    orderId: widget.orderId,
+                  );
 
                   // ملاحظة: لا نزيد عدّاد استخدام الكوبون من العميل — تكفّلت به الدالة
                   // countCouponUseOnOrderCreate خادميّاً. الزيادة هنا كانت تحسبه مرّتين

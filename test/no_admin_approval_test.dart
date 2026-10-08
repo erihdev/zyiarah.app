@@ -76,9 +76,17 @@ void main() {
   test('المنتجون يكتبون pending مباشرةً', () {
     final pay = File('lib/screens/payment_summary_screen.dart')
         .readAsStringSync();
-    expect(RegExp(r"'status':\s*'pending',").allMatches(pay).length,
-        greaterThanOrEqualTo(2),
-        reason: 'مسارا الدفع في ملخّص الدفع يجب أن يكتبا pending');
+    // **كان هذا عدّاً لموضعَين** (`>= 2`) — ومسارا الدفعِ صارا يَمُرّانِ
+    // بحِملٍ واحدٍ (`_serviceOrderPayload`, 2026-10-08) فهبطَ العددُ إلى
+    // واحد، فسقطَ الفحصُ على **جمعِ النسخِ** لا على عودةِ خطوةِ اعتماد.
+    // ومقصودُه «المنتجُ يَكتبُ pending مباشرةً» يُشَدُّ الآن قدرةً:
+    // الحِملُ الواحدُ يَكتبُها، ومُنادِياه اثنان — وسؤالُ «كم موضعاً
+    // يُنشئُ طلباً؟» مُفوَّضٌ إلى `order_payload_single_site_test`.
+    expect(pay.contains("'status': 'pending',"), isTrue,
+        reason: 'حِملُ طلبِ الخدمةِ لم يَعُد يَكتبُ pending — عادت خطوةُ '
+            'اعتمادٍ قبلَ الدفعِ أو تغيّرت الحالةُ الابتدائيّة');
+    expect(RegExp(r'_serviceOrderPayload\(method:').allMatches(pay).length, 2,
+        reason: 'مسارا الدفعِ في ملخّصِ الدفعِ يجب أن يَمُرّا بالحِملِ الواحد');
     // (تحديث لاحق بنفس اليوم) أُلغي طلب التوصيل المرتبط في orders كلياً —
     // المتجر المباشر يدير طلب المتجر نفسه (store_direct_flow_test يغطيه)،
     // فلا يجوز أن تُنشئ شاشة دفع المتجر أي مستند في orders.

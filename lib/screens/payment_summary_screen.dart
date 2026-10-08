@@ -846,6 +846,12 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                 contractId: widget.contractId,
                 planVisits: widget.planVisits,
                 serviceMeta: widget.serviceMeta,
+                // **موضعُ الإنشاءِ واحدٌ.** شاشةُ تمارا كانت تَحملُ نسخةً
+                // ثانيةً من حِملِ الطلبِ لحالةِ «غيرُ موجودٍ مسبقاً» — وهي
+                // حالةٌ لا تُبلَغُ (الإنشاءُ يُنتظَرُ قبلَ فتحِ الجلسةِ وبلا
+                // `catch`)، وقد انحرفت بثلاثةِ حقول. فصارت تَطلبُ الإنشاءَ
+                // من هنا: شاشةٌ واحدةٌ تَعرفُ السعرَ وتَبنيه.
+                ensureOrder: () => _createUnpaidServiceOrder(finalOrderId),
                 onOrderCreated: (code) async {
                   if (!mounted) return;
                   Navigator.of(context).pushAndRemoveUntil(
@@ -954,58 +960,116 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     }
   }
 
-  /// ينشئ طلب خدمة (ساعة/كنب) بـ is_paid=false قبل فتح جلسة تمارا — كي يجد
-  /// الخادم المبلغ الحقيقي. لا يُعيّن سائقاً (يتكفّل به sweepUnassignedPaidOrders
-  /// بعد أن يقلب الـ webhook is_paid). checkout_screen يتخطّى الإنشاء إن وُجد.
-  Future<void> _createUnpaidServiceOrder(String id, {String method = 'tamara'}) async {
+  /// حِملُ مستندِ طلبِ الخدمةِ — **موضعٌ واحد** (2026-10-08).
+  ///
+  /// كان مكتوباً **ثلاثَ** مرّات: قبلَ الدفعِ في `_createUnpaidServiceOrder`
+  /// (مسارُ البطاقةِ وSTC وتمارا)، وبعدَ الدفعِ في `_processUnifiedSuccess`
+  /// (المحفظةُ والدفعُ الأصليُّ — لا يُنشئانِ الطلبَ قبلَ الخصم)، ونسخةٌ
+  /// ثالثةٌ في `checkout_screen` غيرُ مبلوغةٍ أصلاً.
+  ///
+  /// **والنسختانِ الحيّتانِ اختلفتا في حقلَين**: `terrain_surcharge_percent`
+  /// و`terrain_surcharge_amount` — تَكتبُهما نسخةُ ما قبلَ الدفعِ وتُغفلُهما
+  /// نسخةُ ما بعدَه. فطلبٌ في منطقةٍ وعرةٍ يَحملُ سطرَ الوعورةِ إن دُفعَ
+  /// بالبطاقةِ ولا يَحملُه إن دُفعَ بـApple Pay أو من المحفظة، وقارئُه
+  /// `admin_order_details_screen` يُخفي السطرَ عند الغياب (شرطُه `> 0`) —
+  /// فبطاقةُ التفصيلِ تُعرَضُ وبنودُها لا تَبلغُ المجموعَ بلا كلمةٍ تُفسّر.
+  /// والمالُ سليمٌ في الحالتَين: `pricing.js` يُعيدُ حسابَ الوعورةِ من
+  /// **مستندِ المنطقةِ** ولا يَقرأُ ما يَكتبُه العميل — فالعطلُ في التفصيلِ
+  /// لا في المبلغ.
+  ///
+  /// `code` ليس هنا: كلُّ موضعٍ يُسكّه بطريقتِه (عدّادٌ ذرّيٌّ أو احتياطيٌّ
+  /// زمنيّ) ثمّ يَرشُّه فوقَ هذا الحِمل.
+  ///
+  /// و`amount` **وسيطٌ** لا قراءةٌ حيّةٌ لـ`totalWithVat`: مسارُ ما بعدَ
+  /// الدفعِ يَلتقطُه لقطةً (`amountToSave`) قبلَ قراءةِ المستندِ ويَستعملُها
+  /// في المحفظةِ وفي السجلِّ كذلك، فقراءةٌ حيّةٌ هنا كانت ستُخالفُ تلك
+  /// اللقطةَ لو تغيّرَ التفصيلُ بينهما — حفظُ سلوكٍ على حقلِ مال.
+  Map<String, dynamic> _serviceOrderPayload({
+    required String method,
+    required double amount,
+  }) {
     final bool isHourly = widget.hours != null && widget.serviceDate != null;
+    return {
+      'client_id': _currentUser?.uid,
+      'client_name': _currentUser?.name ?? 'عميل زيارة',
+      'client_phone': _phoneController.text.trim(),
+      'user_phone': _phoneController.text.trim(),
+      'client_email': _currentUser?.email,
+      'service_type': widget.serviceName,
+      'service_name': widget.serviceName,
+      'amount': amount,
+      // is_paid يقلبه الخادم بعد التأكيد (verify/payWithWallet/tamaraWebhook) —
+      // العميل لا يكتبه، وهذا ما توافقه قاعدة Stage-C.
+      'is_paid': false,
+      // (Direct Dispatch) كل خدمة تصل بموعد (hours + serviceDate) تمرّ مباشرةً:
+      // pending ⇒ فحص سعة ⇒ إسناد تلقائي ⇒ scheduled. وهذا يشمل الكنب/السجاد
+      // بعد أن صار يختار يوماً ووقتاً. ما يصل بلا موعد يبقى pending ويُسنَد يدوياً
+      // من إدارة الطلبات (نظام الاعتمادات حُذف من الجذور — قرار المالك).
+      'status': 'pending',
+      // موقع غائب ⇒ نُغفل الحقل (لا إحداثيات الرياض الوهمية) — المستهلكون يتحمّلون غيابه.
+      if (widget.location != null) 'location': widget.location,
+      'payment_method': method,
+      'created_at': FieldValue.serverTimestamp(),
+      'hours_contracted': widget.hours ?? 4,
+      'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
+      'zone_name': widget.zoneName,
+      'worker_count': widget.workerCount,
+      'coupon_code': _appliedCoupon,
+      'discount_amount': _discountAmount,
+      // للعرض الإداري فقط — الخادم يعيد حساب الوعورة من مستند المنطقة.
+      'terrain_surcharge_percent': _isFixedPrice ? 0 : _terrainPct,
+      'terrain_surcharge_amount': (_rowTerrain * 100).roundToDouble() / 100,
+      if (widget.serviceMeta != null) 'service_meta': widget.serviceMeta,
+      // حقول فهرس السعة — يقرؤها `functions/capacity.js` (countBookings)
+      // وهو مسار السعة الحيّ، ولوحة السائق والفواتير وقائمة الطلبات.
+      if (isHourly && widget.serviceDate != null) ...{
+        'booking_date': '${widget.serviceDate!.year}-'
+            '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
+            '${widget.serviceDate!.day.toString().padLeft(2, '0')}',
+        'booking_time_slot':
+            '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00',
+      },
+    };
+  }
+
+  /// ينشئ طلب خدمة (ساعة/كنب) بـ is_paid=false قبل فتح جلسة تمارا — كي يجد
+  /// الخادم المبلغ الحقيقي — ويُعيد **كودَه**. لا يُعيّن سائقاً (يتكفّل به
+  /// sweepUnassignedPaidOrders بعد أن يقلب الـ webhook is_paid).
+  ///
+  /// والكودُ يُعادُ لأنّ هذا هو **موضعُ الإنشاءِ الوحيدُ** في مسارِ الخدمةِ
+  /// من العميل: كانت `checkout_screen` تَحملُ نسخةً ثانيةً من الحِملِ
+  /// كمسارٍ احتياطيٍّ («الطلبُ غيرُ موجودٍ مسبقاً») — غيرَ مبلوغةٍ عمليّاً،
+  /// لأنّ هذه الدالّةَ تُنتظَرُ **قبلَ** `createCheckoutSession` وهي بلا
+  /// `catch`، فرميُها يَمنعُ فتحَ جلسةِ تمارا أصلاً. وقد **انحرفت** تلك
+  /// النسخةُ بثلاثةِ حقول: `client_email` و`terrain_surcharge_percent`
+  /// و`terrain_surcharge_amount` — أي أنّها لو عملت يوماً لأنشأت طلباً
+  /// مبلغُه يَشملُ الوعورةَ وتفصيلُه لا يَذكرُها، وبلا بريدٍ للفاتورة. فهي
+  /// قصّةُ «السلسلةُ مكتوبةٌ في ستّةِ مواضعَ وواحدٌ منها يُخالِف» بعينِها.
+  Future<String> _createUnpaidServiceOrder(String id,
+      {String method = 'tamara'}) async {
     final orderRef = FirebaseFirestore.instance.collection('orders').doc(id);
+    String outCode = '';
     await FirebaseFirestore.instance.runTransaction((transaction) async {
       // حارس وجود (كما في _processUnifiedSuccess): إعادة كتابة مستند قائم تُقيَّم
       // كتحديث تمنعه قواعد Firestore فتفشل المعاملة كلها بـ permission-denied.
       // القراءة قبل العدّاد (قراءات المعاملة قبل كتاباتها إلزاماً) — وتوفّر أيضاً
       // حرق رقم طلب على محاولة مكررة (نقرة مزدوجة متسارعة مثلاً).
       final snap = await transaction.get(orderRef);
-      if (snap.exists) return;
+      if (snap.exists) {
+        outCode = (snap.data()?['code'] as String?) ?? id;
+        return;
+      }
       final nextId = await ZyiarahCounterService().getNextOrderNumber(transaction);
       final code = ZyiarahOrderUtil.formatSmartCode(nextId);
+      outCode = code;
       transaction.set(orderRef, {
+        ..._serviceOrderPayload(method: method, amount: totalWithVat),
         'code': code,
-        'client_id': _currentUser?.uid,
-        'client_name': _currentUser?.name ?? 'عميل زيارة',
-        'client_phone': _phoneController.text.trim(),
-        'user_phone': _phoneController.text.trim(),
-        'client_email': _currentUser?.email,
-        'service_type': widget.serviceName,
-        'service_name': widget.serviceName,
-        'amount': totalWithVat,
-        'is_paid': false,
-        'status': 'pending',
-        // موقع غائب ⇒ نُغفل الحقل (لا إحداثيات الرياض الوهمية) — المستهلكون يتحمّلون غيابه.
-        if (widget.location != null) 'location': widget.location,
-        'payment_method': method,
-        'created_at': FieldValue.serverTimestamp(),
-        'hours_contracted': widget.hours ?? 4,
-        'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
-        'zone_name': widget.zoneName,
-        'worker_count': widget.workerCount,
-        'coupon_code': _appliedCoupon,
-        'discount_amount': _discountAmount,
-        // للعرض الإداري والفاتورة فقط — الخادم يعيد حساب الوعورة من مستند المنطقة.
-        'terrain_surcharge_percent': _isFixedPrice ? 0 : _terrainPct,
-        'terrain_surcharge_amount': (_rowTerrain * 100).roundToDouble() / 100,
-        if (widget.serviceMeta != null) 'service_meta': widget.serviceMeta,
-        if (isHourly && widget.serviceDate != null) ...{
-          'booking_date': '${widget.serviceDate!.year}-'
-              '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
-              '${widget.serviceDate!.day.toString().padLeft(2, '0')}',
-          'booking_time_slot':
-              '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00',
-        },
       });
     });
     // المستند الآن قائم بمبلغ هذه اللحظة — أي محاولة/تغيير لاحق يسكّ معرّفاً جديداً.
     _pendingOrderCreated = true;
+    return outCode.isNotEmpty ? outCode : id;
   }
 
   /// بيانات الطلب الكاملة داخل metadata الدفعة — كي يستطيع verifyMoyasarPayment خادميّاً
@@ -1098,8 +1162,6 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       // العميل يتم كلّه خادميّاً في activateContractOnPaid عند قلب is_paid — لا نكتب
       // من العميل (القواعد تمنعه وتُغلق منح زيارات بلا دفع). قلب is_paid في كتلة أدناه.
     } else {
-      final bool isHourly = widget.hours != null && widget.serviceDate != null;
-
       // إن كان الطلب أُنشئ مسبقاً (بطاقة/STC/تمارا تنشئه is_paid=false قبل الدفع)
       // فلا نُعيد إنشاءه — يتفادى عدّاداً مزدوجاً وكتابةً فوق المستند؛ نكتفي بكوده.
       final existingOrder = await FirebaseFirestore.instance.collection('orders').doc(id).get().timeout(kNetCallTimeout);
@@ -1108,46 +1170,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       } else {
         // حقول الطلب مُجمَّعة مرّة واحدة كي نستخدمها في المعاملة وفي الاحتياطي معاً.
         final orderRef = FirebaseFirestore.instance.collection('orders').doc(id);
-        final Map<String, dynamic> orderPayload = {
-          'client_id': _currentUser?.uid,
-          'client_name': _currentUser?.name ?? 'عميل زيارة',
-          'client_phone': _phoneController.text.trim(),
-          'user_phone': _phoneController.text.trim(),
-          'client_email': _currentUser?.email,
-          'service_type': widget.serviceName,
-          'service_name': widget.serviceName,
-          'amount': amountToSave,
-          // is_paid يقلبه الخادم بعد التأكيد (verify/payWithWallet) — العميل لا يكتبه.
-          'is_paid': false,
-          // (Direct Dispatch) كل خدمة تصل بموعد (hours + serviceDate) تمرّ مباشرةً:
-          // pending ⇒ فحص سعة ⇒ إسناد تلقائي ⇒ scheduled. وهذا يشمل الآن الكنب/السجاد
-          // بعد أن صار يختار يوماً ووقتاً. ما يصل بلا موعد يبقى pending ويُسنَد يدوياً
-          // من إدارة الطلبات (نظام الاعتمادات حُذف من الجذور — قرار المالك).
-          'status': 'pending',
-          // موقع غائب ⇒ نُغفل الحقل (لا إحداثيات الرياض الوهمية) — المستهلكون يتحمّلون غيابه.
-          if (widget.location != null) 'location': widget.location,
-          'payment_method': method,
-          'created_at': FieldValue.serverTimestamp(),
-          'hours_contracted': widget.hours ?? 4,
-          'service_date': widget.serviceDate != null ? Timestamp.fromDate(widget.serviceDate!) : null,
-          'zone_name': widget.zoneName,
-          'worker_count': widget.workerCount,
-          'coupon_code': _appliedCoupon,
-          'discount_amount': _discountAmount,
-          if (widget.serviceMeta != null) 'service_meta': widget.serviceMeta,
-          // حقول فهرس السعة — يقرؤها `functions/capacity.js` (countBookings)
-          // وهو مسار السعة الحيّ، ولوحة السائق والفواتير وقائمة الطلبات.
-          // (كان التعليق يشير إلى ZyiarahCapacityService، وهي خدمة ماتت حين
-          // استُبدلت بوابة السعة بـgetHourlyAvailability الخادمية — انظر الشرح
-          // أعلى `_checkCapacity` — وحُذف ملفها. الحقول نفسها مستعملة بكثافة.)
-          if (isHourly && widget.serviceDate != null) ...{
-            'booking_date': '${widget.serviceDate!.year}-'
-                '${widget.serviceDate!.month.toString().padLeft(2, '0')}-'
-                '${widget.serviceDate!.day.toString().padLeft(2, '0')}',
-            'booking_time_slot':
-                '${widget.serviceDate!.hour.toString().padLeft(2, '0')}:00',
-          },
-        };
+        // حقول الطلب من **الموضع الواحد** كي نستخدمها في المعاملة وفي
+        // الاحتياطي معاً — وكانت نسخةً ثانيةً تُغفل حقلَي الوعورة.
+        final Map<String, dynamic> orderPayload =
+            _serviceOrderPayload(method: method, amount: amountToSave);
         try {
           // Atomic: increment counter + create order in one Transaction
           await FirebaseFirestore.instance.runTransaction((transaction) async {
