@@ -448,4 +448,80 @@ test("(٢١) وشاهدا التعليل: الفهرسُ يَخدمُ المدَ
 });
 
 
+// ═══ حذفُ حسابٍ عالقٌ في «جاري الحذف» (2026-10-08) ═══
+//
+// `processAccountDeletion` يَكتبُ `'deleted'` ثمّ يَحذفُ المصادقةَ والمستندَ
+// والرموزَ ثمّ **يُحدّثُ الحالةَ**. موتُ الحاويِ بين الحذفِ والتحديثِ يُجمّدُ
+// الطلبَ على `'deleted'` إلى الأبد، وزرُّ إعادةِ المحاولةِ يَلزمُه مَن
+// يَفتحُ الشاشة — و`opsHealthSweep` لم يَكن يَمَسُّ المجموعةَ إطلاقاً.
+test("(٢٢) مكنسةُ الحذفِ العالقِ: مساواةٌ واحدةٌ والعمرُ في الشفرة", () => {
+  // **المِرساةُ داخلَ المكنسةِ لا في الملفّ**: أوّلُ ورودٍ لـ
+  // `collection("account_deletions")` في `index.js` هو تحديثُ
+  // `processAccountDeletion` نفسِه — فخُّ «أوّلِ ورودٍ» عضَّ في أوّلِ تشغيل.
+  const sweep = fnBody(code, "exports.opsHealthSweep");
+  const i = sweep.indexOf("collection(\"account_deletions\")");
+  assert.ok(i > 0, "المكنسةُ لا تَمَسُّ account_deletions");
+  const seg = sweep.slice(i, i + 700);
+  assert.ok(seg.includes(".where(\"status\", \"==\", \"deleted\")"),
+      "الاستعلامُ ليس على الحالةِ العابرة");
+  // **ولا مدًى في الاستعلام**: مساواةٌ وحدَها ⇒ لا فهرسَ مركَّب. وهو قرارٌ
+  // لا سهو: `'deleted'` حالةٌ عابرةٌ لا متراكمة، فالنافذةُ لا تَمتلئ.
+  assert.ok(!/\.where\("requested_at"/.test(seg),
+      "عادَ المدى إلى الاستعلامِ — فهرسٌ مركَّبٌ يَلزمُه، واتجاهُ القائمِ "
+      + "يُسقِطُ الأقدمَ عند السقف");
+  assert.ok(/requested_at[\s\S]{0,200}?toMillis/.test(seg),
+      "العمرُ لا يُرشَّحُ في الشفرة — فكلُّ حذفٍ جارٍ يُنبَّهُ عنه");
+});
+
+test("(٢٣) والعلَمُ والجمهورُ والمُهلةُ: واحدٌ، المدير العامُّ، ساعة", () => {
+  const sweep = fnBody(code, "exports.opsHealthSweep");
+  const i = sweep.indexOf("collection(\"account_deletions\")");
+  assert.ok(i > 0, "المكنسةُ لا تَمَسُّ account_deletions");
+  const seg = sweep.slice(i, i + 1400);
+  assert.ok(seg.includes("\"deletion_stuck_alerted\""),
+      "بلا علَمٍ ⇒ تنبيهٌ كلَّ دورةِ مكنسة");
+  // القاعدةُ تَحصُرُ قراءةَ `account_deletions` بالمدير العامّ، فتنبيهُ غيرِه
+  // يُرسِلُه إلى صفحةٍ لا يَفتحُها.
+  assert.ok(/\["super_admin"\]\)/.test(seg),
+      "جمهورُ التنبيهِ ليس المدير العامَّ وحدَه");
+  const rules = fs.readFileSync(
+      path.join(__dirname, "../../firestore.rules"), "utf8");
+  assert.ok(rules.includes("allow read, update, delete: if isSuperAdmin();"),
+      "تغيّرت قاعدةُ قراءةِ account_deletions — يُراجَعُ جمهورُ التنبيه");
+  // والمُهلةُ عينُ `kDeletionStuckGrace` في العميل: تنبيهٌ عن صفٍّ لا يَحملُ
+  // زرَّ إعادةٍ بعدُ هو إرسالُ الأدمنِ إلى شاشةٍ بلا إجراء.
+  const dart = fs.readFileSync(path.join(__dirname,
+      "../../lib/utils/deletion_log_row.dart"), "utf8");
+  assert.ok(dart.includes("kDeletionStuckGrace = Duration(hours: 1)"),
+      "مُهلةُ العميلِ لم تَعُد ساعةً — تُراجَعُ مُهلةُ المكنسة");
+  // **بالتعبيرِ كاملاً لا بالاحتواء**: اختبارُ قضمٍ جعلَها
+  // `2 * 60 * 60 * 1000` فمرَّ **أخضرَ** — فالنصُّ يَحتوي الأوّلَ.
+  assert.ok(seg.includes("toMillis() >= 60 * 60 * 1000"),
+      "مُهلةُ المكنسةِ ليست ساعةً — فالطرفانِ افترقا");
+});
+
+test("(٢٤) ولا فهرسَ مركَّباً أُضيفَ للمجموعة", () => {
+  const idx = JSON.parse(fs.readFileSync(
+      path.join(__dirname, "../../firestore.indexes.json"), "utf8"));
+  const hit = (idx.indexes || [])
+      .filter((x) => x.collectionGroup === "account_deletions");
+  // **الفهرسُ القائمُ يَبقى بلا استعلامٍ ومُعلَّقاً لحذفٍ بشريّ.** لم يُشكَّل
+  // الاستعلامُ ليُبرّرَه: اتجاهُه `requested_at DESC` يُعطي الأحدثَ أوّلاً
+  // فيُسقِطُ الأقدمَ — الأوجبَ قانونيّاً — عند السقف، وتصحيحُ اتّجاهِ فهرسٍ
+  // منشورٍ تعديلٌ ومسارُ الفهارسِ بلا `--force`.
+  assert.strictEqual(hit.length, 1,
+      "تغيّرَ عددُ فهارسِ account_deletions — راجِعْ: أصارَ له استعلام؟");
+});
+
+test("(٢٥) وشاهدُ التعليل: الحالةُ تُكتَبُ أوّلاً وتُحدَّثُ آخِراً", () => {
+  const a = code.indexOf("async function processAccountDeletion(");
+  const b = code.indexOf("\nexports.onAccountDeletionRequested", a);
+  assert.ok(a > 0 && b > a, "اقتطاعٌ فاشلٌ لجسمِ processAccountDeletion");
+  const body = code.slice(a, b);
+  const iAuth = body.indexOf("getAuth().deleteUser(");
+  const iDone = body.indexOf("status: \"deleted_fully_processed\"");
+  assert.ok(iAuth > 0 && iDone > iAuth,
+      "تحديثُ الحالةِ لم يَعُد بعدَ حذفِ المصادقةِ — فنافذةُ العلوقِ تُراجَع");
+});
+
 console.log(`\nops_sweep_window tests: ${passed} passed`);

@@ -5646,6 +5646,52 @@ exports.opsHealthSweep = onSchedule(
           console.error(`opsHealthSweep: redrive ${col} failed:`, e.message);
         }
       }
+
+      // 8) حذفُ حسابٍ عالقٌ في `'deleted'` — **المُشغّلُ ماتَ بين الخطوتَين.**
+      //    `processAccountDeletion` يَحذفُ المصادقةَ ثمّ المستندَ ثمّ الرموزَ
+      //    ثمّ **يُحدّثُ الحالةَ** إلى `deleted_fully_processed`؛ ولو ماتَ
+      //    الحاوي بين `getAuth().deleteUser` وذلك التحديثِ بقيَ الطلبُ
+      //    `'deleted'` إلى الأبد. وزرُّ إعادةِ المحاولةِ (2026-10-08) هو
+      //    المَخرَجُ الوحيدُ **ويَلزمُه مَن يَفتحُ الشاشة** — و`opsHealthSweep`
+      //    لم يَكن يَمَسُّ `account_deletions` إطلاقاً، فحقٌّ يَلزمُه متطلّبُ
+      //    آبل يَبقى معلّقاً بلا كلمة.
+      //
+      //    **ومساواةٌ واحدةٌ بلا مدًى، والعمرُ يُرشَّحُ في الشفرة — عن قصد.**
+      //    عائلةُ «نافذةٌ بـ`limit` تَمتلئُ بما لا يُزيلُه أحد» أُغلقت هنا
+      //    ثلاثَ مرّاتٍ بتضييقِ الاستعلام، وهذه ليست منها: `'deleted'` حالةٌ
+      //    **عابرةٌ لا متراكمة** — كلُّ مستندٍ يَتركُها في ثوانٍ إلّا العالق،
+      //    فمجموعتُها «الجاري الآن + العالق» وهي أصغرُ من المئتَين بمراتب.
+      //    والمدى كان يَلزمُه فهرسٌ مركَّب، وفي `firestore.indexes.json`
+      //    فهرسٌ لهذه المجموعةِ بعينِها (`status ASC, requested_at DESC`) —
+      //    **ولم يُشكَّل الاستعلامُ ليُبرّرَه**: اتجاهُه يُعطي الأحدثَ أوّلاً
+      //    فيُسقِطُ الأقدمَ (الأوجبَ قانونيّاً) عند السقف، وتصحيحُ اتّجاهِه
+      //    تعديلٌ على فهرسٍ منشورٍ ومسارُ الفهارسِ بلا `--force`. فالفهرسُ
+      //    يَبقى بلا استعلامٍ ومُعلَّقاً لحذفٍ بشريٍّ كما هو مُسجَّل.
+      //
+      //    والمُهلةُ عينُ `kDeletionStuckGrace` التي يَكشفُ بها السطحانِ زرَّ
+      //    الإعادة — فلا تَرى الإدارةُ تنبيهاً عن صفٍّ بلا زرّ.
+      try {
+        const dSnap = await db.collection("account_deletions")
+            .where("status", "==", "deleted").limit(200).get();
+        const stuckDel = dSnap.docs
+            .map((doc) => ({doc, d: doc.data()}))
+            .filter(({d}) => {
+              const t = d.requested_at;
+              if (!t || typeof t.toMillis !== "function") return false;
+              return now - t.toMillis() >= 60 * 60 * 1000;
+            });
+        const n = await alertBatch(
+            stuckDel,
+            "deletion_stuck_alerted",
+            "حذفُ حسابٍ عالق ⚠️",
+            (codes, c) => `${c} طلبُ حذفِ حسابٍ ما زال «جاري الحذف» بعد ساعة ` +
+              `(${codes}) — افتح شاشةَ طلباتِ حذفِ الحساب: الصفُّ يَحملُ زرَّ ` +
+              "إعادةِ المحاولة، والمتطلّبُ قانونيٌّ فلا يُترَكُ معلّقاً.",
+            ["super_admin"]);
+        console.log(`opsHealthSweep: stuck deletions alerted=${n}`);
+      } catch (e) {
+        console.error("opsHealthSweep: stuck deletion check failed:", e.message);
+      }
       console.log(`opsHealthSweep: stalled triggers redriven=${redriven}`);
     },
 );
