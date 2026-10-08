@@ -605,7 +605,13 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             'endDate': bookingDate,
             if (widget.zoneName != null) 'zoneName': widget.zoneName,
           })
-          .timeout(const Duration(seconds: 20));
+          // **الثابتُ المشترَك لا مُدّةٌ مكتوبةٌ هنا** (2026-10-08): كانت
+          // `const Duration(seconds: 20)` — قيمةُ `kNetCallTimeout` بعينِها
+          // مكتوبةً بيد، فتغييرُ المهلةِ من موضعِها الواحدِ لا يَبلغُ
+          // **قراءةَ السعةِ** التي تُقرّرُ أيَّ الأيّامِ تُعرَضُ قابلةً
+          // للحجز. والحارسُ لم يَرَها: نطاقُه `.get()` في الشاشاتِ
+          // والخدمات، وهذه `.call(`.
+          .timeout(kNetCallTimeout);
       data = result.data as Map;
     } catch (e) {
       debugPrint('[capacity] getHourlyAvailability failed: $e');

@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/utils/date_strip.dart';
 import 'package:zyiarah/utils/day_capacity.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/time_format.dart';
 
 /// منتقي التاريخ والوقت مع الإتاحة الحقيقية من الخادم — **مصدر «اللون الأخضر» الوحيد.**
@@ -112,7 +113,10 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
             // هم بلا مناطق).
             if (widget.zoneName != null) 'zoneName': widget.zoneName,
           })
-          .timeout(const Duration(seconds: 20));
+          // **الثابتُ المشترَك لا مُدّةٌ مكتوبةٌ هنا** (2026-10-08): نظيرُها
+          // في `payment_summary_screen` كان مكتوباً بيدٍ كذلك — نسختانِ من
+          // قيمةِ `kNetCallTimeout` على **نفسِ النداء**.
+          .timeout(kNetCallTimeout);
 
       final data = res.data as Map;
       final daily = (data['dailyCounts'] as Map? ?? {})

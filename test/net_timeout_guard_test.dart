@@ -361,6 +361,24 @@ class _GetHit {
 }
 
 /// بدايةُ التعبيرِ المنتهي بـ`.get()` عند `i` — مشياً إلى الوراء.
+/// نهايةُ قوسٍ مُوازَنٍ يَبدأُ عند [i] (حيث `s[i] == '('`).
+///
+/// وسائطُ `.timeout(` قد تَحملُ أقواساً داخليّةً (`const Duration(seconds: 8)`)،
+/// فـ`[^)]*` يَقفُ عند أوّلِها — فخُّ الحدِّ المُسجَّلُ في هذا المستودعِ
+/// إحدى عشرةَ مرّة.
+int _balanced(String s, int i) {
+  var d = 0;
+  for (var k = i; k < s.length; k++) {
+    if (s[k] == '(') {
+      d++;
+    } else if (s[k] == ')') {
+      d--;
+      if (d == 0) return k;
+    }
+  }
+  return -1;
+}
+
 int _chainStart(String s, int i) {
   final ident = RegExp(r'[A-Za-z0-9_$]');
   while (i > 0) {
@@ -429,6 +447,8 @@ List<_GetHit> _firestoreGets(String src) {
 ///
 /// الارتكازُ على `httpsCallable` إلزاميّ: مطابقةُ `.call(` وحدَها تلتقط
 /// `onTap?.call()` وأمثالَه — وهو ما حدث فعلاً وكشفه هذا الفحص على نفسه.
+bool _ws(String c) => c == ' ' || c == '\n' || c == '\r' || c == '\t';
+
 int _bareCallableCalls(String src) {
   var n = 0;
   for (final m in RegExp(r'\.call\(').allMatches(src)) {
@@ -444,8 +464,17 @@ int _bareCallableCalls(String src) {
       if (src[i] == ')') depth--;
       i++;
     }
-    final tail = src.substring(i, (i + 40).clamp(0, src.length)).trimLeft();
-    if (!tail.startsWith('.timeout(')) n++;
+    // **تخطّي الفراغِ لا شريحةُ أربعينَ محرفاً.** `_code` يَستبدلُ
+    // التعليقاتَ **فراغاً** (لا يَحذفُها)، فتعليقٌ من ستّةِ أسطرٍ بين
+    // `)` و`.timeout(` يَصيرُ ثلاثَ مئةِ مسافةٍ فتَقعُ المهلةُ خارجَ
+    // الشريحةِ ويُقرأُ النداءُ «بلا مهلة» — إيجابٌ كاذبٌ يَدفعُ إلى **حذفِ
+    // الشرحِ** لِيَرضى الحارس، أي عكسُ «الحارسُ يَسقطُ على توثيقِه». وقعَ
+    // فعلاً في 2026-10-08 حين وُثِّقَ سببُ استعمالِ الثابتِ في موضعِ
+    // النداء. وهو فخُّ الحدِّ الثابتِ الثانيَ عشَرَ هنا.
+    while (i < src.length && _ws(src[i])) {
+      i++;
+    }
+    if (!src.startsWith('.timeout(', i)) n++;
   }
   return n;
 }
@@ -541,24 +570,124 @@ void main() {
             '  • ${offenders.join('\n  • ')}\n');
   });
 
-  test('والمهلةُ هي الثابتُ المشترَك لا مُدّةٌ مكتوبةٌ في موضعِها', () {
-    // القاعدةُ أدناه («المهلتان معرَّفتان مرّةً واحدة») تَفحصُ الخمسَ الأُولى
-    // وحدَها، وهذه تَشدُّها على **كلِّ** قراءةٍ في النطاقِ المُشتَقّ: مُدّةٌ
-    // محلّيّةٌ تَعني أنّ تغييرَ المهلةِ لا يَبلغُها.
-    final offenders = <String>[];
-    for (final f in [..._allScreens(), ..._allServices()]) {
+  test('وكاشفُ النداءِ يَتحمّلُ الفراغَ بين `)` و`.timeout(`', () {
+    // مصدرُ المشروعِ نظيفٌ، فنجاحُ الفحوصِ وحدَه لا يُبرهِنُ أنّ الكاشفَ
+    // يَتحمّلُ شرحاً بين النداءِ ومهلتِه. فيُقاسُ على الشكلِ الذي أسقطَه
+    // فعلاً: `_code` يُبدِلُ التعليقَ **فراغاً**، فستّةُ أسطرِ شرحٍ تَصيرُ
+    // مئاتَ المسافات.
+    final withSpace = [
+      'final r = await FirebaseFunctions.instance',
+      "    .httpsCallable('x')",
+      '    .call({})',
+      ' ' * 70,
+      ' ' * 70,
+      ' ' * 70,
+      '    .timeout(kNetCallTimeout);',
+    ].join('\n');
+    expect(_bareCallableCalls(withSpace), 0,
+        reason: 'الكاشفُ يَقرأُ نداءً مُمهَلاً «بلا مهلة» لمجرّدِ فراغٍ '
+            'بينهما — إيجابٌ كاذبٌ يَدفعُ إلى حذفِ الشرح');
+    // وما **بلا** مهلةٍ يَبقى مكشوفاً: استثناءُ الفراغِ لا يَأكلُ القاعدة.
+    final without = [
+      'final r = await FirebaseFunctions.instance',
+      "    .httpsCallable('x')",
+      '    .call({});',
+    ].join('\n');
+    expect(_bareCallableCalls(without), 1,
+        reason: 'تخطّي الفراغِ أعمى الكاشفَ عن نداءٍ بلا مهلة');
+  });
+
+  test('والمهلةُ هي الثابتُ المشترَك — على كلِّ `.timeout(` في lib/', () {
+    // **كانت هذه القاعدةُ على `.get()` في الشاشاتِ والخدماتِ وحدَها، وهي
+    // عامّة.** ومسحُ كلِّ `.timeout(` في `lib/` وجدَ موضعَين يَكتبانِ
+    // `const Duration(seconds: 20)` — قيمةَ `kNetCallTimeout` بعينِها —
+    // على **نفسِ النداء** (`getHourlyAvailability`، قراءةُ السعةِ التي
+    // تُقرّرُ أيَّ الأيّامِ تُعرَضُ قابلةً للحجز): واحدٌ في
+    // `payment_summary_screen` وواحدٌ في `booking_slot_picker`. وغابا عن
+    // الحارسِ لسببَين معاً: النمطُ كان `\.get\(\)\s*\.timeout\(`
+    // فلا يَرى `.call(`، والنطاقُ كان بلا `lib/widgets/`.
+    //
+    // فالنطاقُ الآن **كلُّ `lib/`**، والمطابقةُ **أيُّ** `.timeout(`
+    // بموازنةِ الأقواس، ومجموعةُ ما ليس ثابتاً مشترَكاً تُقابَلُ **كاملةً**
+    // بقائمةٍ مُعلَنةٍ لكلٍّ سببُه — فمُدّةٌ جديدةٌ مكتوبةٌ بيدٍ تُراجَعُ
+    // بدلَ أن تَخرُجَ من المصدرِ الواحدِ بصمت.
+    //
+    // والاستثناءاتُ ليست تسامُحاً: ترويسةُ `net_timeout.dart` نفسُها
+    // تَقولُها («`.timeout()` مستعملةٌ في عشرة مواضع — PDF، ميسر، GPS،
+    // App Check، نداءات HTTP — والناقصُ كان Firestore والدوالَّ
+    // والمصادقة»)، فكلُّ واحدٍ منها **عمليّةٌ أخرى بمهلةٍ أخرى**.
+    const allowed = <String, String>{
+      // ══ تهيئةٌ وتثبيتٌ عند الإقلاع ══
+      'lib/main.dart|const Duration(seconds: 8)':
+          'تفعيلُ App Check — إقلاعٌ لا يَنتظرُ: فشلُه يَمضي بلا تصديق',
+      // ══ نداءاتُ HTTP إلى أطرافٍ ثالثة ══
+      'lib/services/moyasar_service.dart|const Duration(seconds: 30)':
+          'بوّابةُ ميسر عبرَ HTTP — أسخى من قراءةٍ داخليّة',
+      'lib/screens/location_picker_screen.dart|const Duration(seconds: 10)':
+          'ترميزُ Mapbox الجغرافيُّ — بحثٌ تفاعليٌّ يُعادُ بضغطة',
+      'lib/screens/admin/admin_hourly_zones_screen.dart|const Duration(seconds: 8)':
+          'ترميزُ Mapbox نفسُه في محرِّرِ المناطق — **ثمانٍ لا عشر**، '
+              'وتبايُنٌ مُبلَّغٌ لا مُغيَّر: الاثنتانِ صحيحتانِ في موضعِهما',
+      // ══ موقعُ الجهاز ══
+      'lib/services/zone_locator_service.dart|gpsTimeout':
+          'ثابتٌ مُسمّىً خاصٌّ بالـGPS — ليس مُدّةً مكتوبةً بيد',
+      'lib/screens/driver_dashboard.dart|const Duration(seconds: 8)':
+          'قراءةُ GPS لفحصِ إكمالِ المهمّة — fail-open موثَّق',
+      // ══ التخزينُ والفاتورة: كلُّ عمليّةٍ بمهلتِها ══
+      'lib/services/zyiarah_pdf_service.dart|const Duration(seconds: 30)':
+          'تنزيلُ بايتاتِ الفاتورةِ ورفعُ الـPDF — ملفٌّ لا مستند',
+      'lib/services/zyiarah_pdf_service.dart|const Duration(seconds: 15)':
+          '`getDownloadURL` وكتابةُ `invoice_pdf_url` — أقصرُ من الرفع',
+      'lib/services/zyiarah_pdf_service.dart|const Duration(seconds: 10)':
+          'وسمُ `invoice_pdf_status: failed` — كتابةٌ على مسارِ الفشلِ '
+              'تَفشلُ سريعاً كي لا تُؤخّرَ ظهورَ زرِّ الإعادة',
+    };
+    final seen = <String, String>{};
+    var scanned = 0;
+    final files = <File>[
+      ..._allScreens(),
+      ..._allServices(),
+      ..._allWidgets(),
+      ..._allProvidersModelsUtils(),
+      File('lib/main.dart'),
+    ];
+    // أرضيّةٌ: مسحٌ يَنحلُّ إلى صفرٍ يَمرُّ أخضرَ أجوفَ.
+    expect(files.length, greaterThanOrEqualTo(150),
+        reason: 'انحلَّ تعدادُ الملفّات — حارسٌ عقيمٌ أسوأُ من لا حارس');
+    for (final f in files) {
       final p = f.path.replaceAll(r'\', '/');
       final src = _code(p);
-      for (final m in RegExp(r'\.get\(\)\s*\.timeout\(([^)]*)').allMatches(src)) {
-        final arg = m.group(1)!.trim();
-        if (arg != 'kNetCallTimeout') {
-          offenders.add('$p  ←  .timeout($arg)');
+      for (final m in RegExp(r'\.timeout\(').allMatches(src)) {
+        final e = _balanced(src, m.end - 1);
+        if (e < 0) continue;
+        scanned++;
+        final arg = src.substring(m.end, e).trim().replaceAll(RegExp(r'\s+'), ' ');
+        if (arg == 'kNetCallTimeout' || arg == 'kAuthTimeout' || arg.isEmpty) {
+          continue;
         }
+        seen['$p|$arg'] = arg;
       }
     }
-    expect(offenders, isEmpty,
-        reason: '\n\nمهلةُ قراءةٍ ليست kNetCallTimeout — فلا تَتغيّرُ من مكانٍ واحد:\n'
-            '  • ${offenders.join('\n  • ')}\n');
+    expect(scanned, greaterThanOrEqualTo(60),
+        reason: 'انحلَّ كاشفُ `.timeout(` — وجدَ $scanned موضعاً');
+    expect(seen.keys.toSet(), allowed.keys.toSet(),
+        reason: '\n\nمُدّةٌ مكتوبةٌ بيدٍ مكانَ الثابتِ المشترَك — فتغييرُ '
+            'المهلةِ من موضعِها الواحدِ لا يَبلغُها. إمّا `kNetCallTimeout` '
+            '(أو `kAuthTimeout`)، أو تُضافُ إلى القائمةِ بسببٍ مكتوبٍ يَشرحُ '
+            'لماذا هي عمليّةٌ أخرى:\n  • ${seen.keys.join('\n  • ')}\n');
+    // ودعوى القائمةِ تُتحقَّق: قراءةُ السعةِ في الموضعَين هي الثابت.
+    for (final p in const [
+      'lib/screens/payment_summary_screen.dart',
+      'lib/widgets/booking_slot_picker.dart',
+    ]) {
+      final src = _code(p);
+      final i = src.indexOf("httpsCallable('getHourlyAvailability')");
+      expect(i, greaterThan(-1), reason: '$p لم يَعُد يَقرأُ السعة');
+      final j = src.indexOf('.timeout(', i);
+      expect(j, greaterThan(-1));
+      expect(src.substring(j, j + 40), contains('kNetCallTimeout'),
+          reason: '$p عادَ يَكتبُ مُدّةَ قراءةِ السعةِ بيدِه');
+    }
   });
 
   test('نداءاتُ الخدمات السحابيّة الأربعةُ مُغيِّرةٌ للحالة — تُترك عمداً', () {
