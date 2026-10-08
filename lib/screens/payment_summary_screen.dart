@@ -13,6 +13,7 @@ import 'package:zyiarah/models/user_model.dart';
 import 'package:zyiarah/services/order_service.dart';
 import 'package:zyiarah/utils/order_util.dart';
 import 'package:zyiarah/utils/moyasar_util.dart';
+import 'package:zyiarah/utils/moyasar_error_text.dart';
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
@@ -431,35 +432,46 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       setState(() => _isLoading = true);
       await _processUnifiedSuccess(_pendingOrderId, 'apple_pay', paymentId: result.id);
     } else {
-      String msg = 'فشل الدفع عبر Apple Pay';
-      if (result is ApiError) msg = result.message;
-      if (result is ValidationError) msg = result.message;
-      // **«لا نعرف» ليست «فشل».** هذا الفرعُ كان ناقصاً هنا وموجوداً في
-      // توأمِه (Samsung Pay) حرفيّاً: انقطاعُ الشبكةِ يُقرأُ «فشل الدفع عبر
-      // Apple Pay» — دعوى فشلٍ، بينما التعليقُ أسفلَه يَقولُ إنّ
-      // `NetworkError` **مجهولُ النتيجة** ولذلك يُبقي المعرّفَ منعاً للشحنِ
-      // المزدوج. فالقرارُ الواحدُ كان مكتوباً مرّتَين وسقطت منه حالةٌ في
-      // إحداهما — وApple Pay هي مسارُ الدفعِ الأصليِّ على iOS.
-      if (result is NetworkError) {
-        msg = 'تعذّر الاتصال — إن كان المبلغُ قد خُصم فلا تقلقي، سيُعالَج '
-            'طلبكِ تلقائياً. وإلّا فأعيدي المحاولة.';
-      }
-      // فشل نهائي سجّلته ميسر (رفض/PaymentResponse غير مدفوعة أو ApiError)
-      // يستهلك given_id الحالي — إعادة المحاولة به تُعيد الدفعة الفاشلة نفسها.
-      // نسكّ معرّفاً جديداً للمحاولة التالية. (ValidationError محلي بلا سجل لدى
-      // ميسر، وNetworkError مجهول النتيجة — نُبقي المعرّف لمنع الشحن المزدوج.)
-      if (result is ApiError || result is PaymentResponse) {
-        if (mounted) setState(_mintFreshPendingOrderId);
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(msg, style: GoogleFonts.tajawal()),
-          backgroundColor: Colors.red.shade800,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          margin: const EdgeInsets.all(15),
-        ));
-      }
+      _handleNativePayFailure(result, 'apple_pay');
+    }
+  }
+
+  /// نتيجةٌ غيرُ ناجحةٍ من حزمةِ ميسر على مسارٍ أصليّ — القرارُ مرّةً واحدةً
+  /// للمسارَين.
+  ///
+  /// كان لكلٍّ منهما مُبدِّلُه المكتوبُ بيدٍ: `ApiError.message`
+  /// و`ValidationError.message` **خامَّينِ** (إنجليزيّانِ من ميسر)، وكلُّ ما
+  /// سواهما على «فشل الدفع عبر X» — ومنه إغلاقُها لورقةِ Apple Pay بيدِها
+  /// (`PaymentCanceledError`) فتُقرأُ «فشل الدفع»، والمهلةُ (`TimeoutError`)
+  /// وهي مجهولةُ النتيجةِ فتُقرأُ دعوى فشل. والقاعدةُ تَسكنُ
+  /// `lib/utils/moyasar_error_text.dart` ولها حارسُها، وكان نطاقُه شاشتَي
+  /// SDK وحدَهما.
+  void _handleNativePayFailure(dynamic result, String method) {
+    final e = moyasarErrorText(result);
+    if (e.resultUnknown) {
+      // **مالٌ قد خُصم بلا طلبٍ مؤكَّد** — و`reconcileOrphanPayments` هو ما
+      // يَبنيه من بيانات الدفع. فأثرٌ عندنا واجبٌ (مالٌ واستمرارُ خدمة،
+      // نطاقُ `reportSilent` المُعلَن)، وكان هذا الفرعُ بلا أيِّ تسجيل:
+      // لا `debugPrint` ولا تقرير.
+      reportSilent(result ?? 'null', StackTrace.current,
+          reason: 'native_pay_unknown_result',
+          info: {'method': method, 'detail': e.detail});
+    } else {
+      debugPrint('[$method] ${e.detail}');
+    }
+    // **تجديدُ المعرّفِ على ما سجّلته ميسر وحدَه.** كان الشرطُ
+    // `ApiError || PaymentResponse` — و`ApiError` من `Moyasar.pay` ردُّ
+    // **5xx**: الطلبُ بَلغَ ميسر وفشلَ خادمُها، فقد تَكونُ الدفعةُ أُنشِئت.
+    // فتجديدُه هناك يُلغي حمايةَ المعرّفِ من التكرار: الإعادةُ دفعةٌ ثانية.
+    if (e.givenIdConsumed && mounted) setState(_mintFreshPendingOrderId);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(e.message, style: GoogleFonts.tajawal()),
+        backgroundColor: Colors.red.shade800,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(15),
+      ));
     }
   }
 
@@ -473,29 +485,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       setState(() => _isLoading = true);
       await _processUnifiedSuccess(_pendingOrderId, 'samsung_pay', paymentId: result.id);
     } else {
-      String msg = 'فشل الدفع عبر Samsung Pay';
-      if (result is ApiError) msg = result.message;
-      if (result is ValidationError) msg = result.message;
-      // نفسُ نصِّ Apple Pay حرفاً بحرف: القرارُ واحدٌ فلا تَختلفُ الصياغة
-      // («يرجى المحاولة مجدداً» وحدَها تَسكتُ عن احتمالِ الخصم).
-      if (result is NetworkError) {
-        msg = 'تعذّر الاتصال — إن كان المبلغُ قد خُصم فلا تقلقي، سيُعالَج '
-            'طلبكِ تلقائياً. وإلّا فأعيدي المحاولة.';
-      }
-      // فشل نهائي سجّلته ميسر يستهلك given_id — معرّف جديد للمحاولة التالية
-      // (لا نسكّ على NetworkError: النتيجة مجهولة والثبات يمنع الشحن المزدوج).
-      if (result is ApiError || result is PaymentResponse) {
-        if (mounted) setState(_mintFreshPendingOrderId);
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(msg, style: GoogleFonts.tajawal()),
-          backgroundColor: Colors.red.shade800,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          margin: const EdgeInsets.all(15),
-        ));
-      }
+      _handleNativePayFailure(result, 'samsung_pay');
     }
   }
 
@@ -1775,10 +1765,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                     // completed» في شريطٍ عربيٍّ على شاشةِ الدفع.
                     reportSilent(e, st, reason: 'google_pay_unknown_result');
                     if (mounted) setState(() => _isLoading = false);
+                    // والجملةُ من الوحدةِ لا مكتوبةً هنا: كانت الصياغةُ
+                    // المحلّيّةُ تَقولُ «**وإلّا فأعيدي المحاولة**» —
+                    // دعوةُ إعادةٍ على نتيجةٍ مجهولة، وهي ما يَمنعُه
+                    // `kMoyasarUnknownResult` («لا تُعيدي الدفع») ويَشدُّه
+                    // حارسُ شاشتَي SDK.
                     messenger.showSnackBar(SnackBar(
                       content: Text(
-                        'تعذّر الاتصال — إن كان المبلغُ قد خُصم فلا تقلقي، '
-                        'سيُعالَج طلبكِ تلقائياً. وإلّا فأعيدي المحاولة.',
+                        kMoyasarUnknownResult,
                         style: GoogleFonts.tajawal(),
                       ),
                       backgroundColor: Colors.red.shade800,
