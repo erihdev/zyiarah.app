@@ -14,6 +14,29 @@ class AdminDeletionsScreen extends StatefulWidget {
 }
 
 class _AdminDeletionsScreenState extends State<AdminDeletionsScreen> {
+  // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
+  // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
+  // حوار — يُلغي مستمِعَ Firestore ويُنشئُ غيرَه. والبياناتُ لا تَختفي
+  // (`StreamBuilder` يَحفظُ آخرَ لقطةٍ عبرَ إعادةِ الاشتراك) فلا يُرى شيء،
+  // والكلفةُ حقيقيّة — **والأثرُ الأخطرُ أنّ `firstEventTimeout` تُستأنف**:
+  // على وصلةٍ تَبدو قائمةً ولا تَنفُذ (بوّابةُ فندقٍ، وكيلٌ شفّاف) تُعادُ
+  // مهلةُ العشرينَ ثانيةً مع كلِّ حرفٍ يُكتَب، فلا يُبلَغُ فرعُ الخطأِ ولا
+  // زرُّ إعادتِه أبداً — وهو العطلُ بعينِه الذي وُجدت المهلةُ لأجلِه.
+  // والقاعدةُ مقرَّرةٌ في `driver_tasks_screen` ومُنفَّذةٌ فيه وحدَه.
+  //
+  // وإعادةُ المحاولةِ كانت تَعتمدُ على ذلك الأثرِ الجانبيِّ عينِه، فصارت
+  // صريحةً: تَصفيرُ الحقلِ يَجعلُ البناءَ التاليَ يَفتحُ بثّاً جديداً.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _requests;
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _requestsStream =>
+      _requests ??= FirebaseFirestore.instance
+          .collection('account_deletions')
+          .orderBy('requested_at', descending: true)
+          .limit(300)
+          .snapshots()
+          .firstEventTimeout();
+
+  void _reopenRequests() => setState(() => _requests = null);
+
   // (دمج من لوحة الويب) رفض طلب حذف الحساب — بدل إجبار الأدمن على الحذف أو تركه معلّقاً.
   // يضبط status='rejected' (الشاشة تعرضه أصلاً). لا يُحذف الحساب.
   Widget _rejectButton(BuildContext context, String docId) {
@@ -78,8 +101,7 @@ class _AdminDeletionsScreenState extends State<AdminDeletionsScreen> {
         ),
         body: StreamBuilder<QuerySnapshot>(
           // نافذة محدودة (300) مثل لوحة الويب — لا نحمّل الأرشيف كله في بثّ حي.
-          stream: FirebaseFirestore.instance.collection('account_deletions').orderBy('requested_at', descending: true).limit(300).snapshots()
-            .firstEventTimeout(),
+          stream: _requestsStream,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
             // فشل القراءة كان يظهر كقائمة فارغة نظيفة — خطر على مهلة معالجة
@@ -93,7 +115,7 @@ class _AdminDeletionsScreenState extends State<AdminDeletionsScreen> {
                     const SizedBox(height: 10),
                     const Text("تعذّر تحميل طلبات حذف الحسابات", style: TextStyle(color: Colors.red)),
                     TextButton(
-                      onPressed: () => setState(() {}),
+                      onPressed: _reopenRequests,
                       child: const Text("إعادة المحاولة", style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ],

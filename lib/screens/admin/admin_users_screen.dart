@@ -23,6 +23,30 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   // نخفي/نمنع هذه الأفعال في الواجهة بدل خطأ permission-denied غامض.
   String _role = 'none';
 
+  // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
+  // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
+  // حوار — يُلغي مستمِعَ Firestore ويُنشئُ غيرَه. والبياناتُ لا تَختفي
+  // (`StreamBuilder` يَحفظُ آخرَ لقطةٍ عبرَ إعادةِ الاشتراك) فلا يُرى شيء،
+  // والكلفةُ حقيقيّة — **والأثرُ الأخطرُ أنّ `firstEventTimeout` تُستأنف**:
+  // على وصلةٍ تَبدو قائمةً ولا تَنفُذ (بوّابةُ فندقٍ، وكيلٌ شفّاف) تُعادُ
+  // مهلةُ العشرينَ ثانيةً مع كلِّ حرفٍ يُكتَب، فلا يُبلَغُ فرعُ الخطأِ ولا
+  // زرُّ إعادتِه أبداً — وهو العطلُ بعينِه الذي وُجدت المهلةُ لأجلِه.
+  // والقاعدةُ مقرَّرةٌ في `driver_tasks_screen` ومُنفَّذةٌ فيه وحدَه.
+  //
+  // وإعادةُ المحاولةِ كانت تَعتمدُ على ذلك الأثرِ الجانبيِّ عينِه، فصارت
+  // صريحةً: تَصفيرُ الحقلِ يَجعلُ البناءَ التاليَ يَفتحُ بثّاً جديداً.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _clients;
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _clientsStream =>
+      _clients ??= FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'client')
+          .orderBy('created_at', descending: true)
+          .limit(100)
+          .snapshots()
+          .firstEventTimeout();
+
+  void _reopenClients() => setState(() => _clients = null);
+
   @override
   void initState() {
     super.initState();
@@ -250,13 +274,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         body: StreamBuilder<QuerySnapshot>(
           // نصفّي role=='client' خادميّاً: كان التصفية محليّاً على آخر 100 مستخدم
           // (قد يكونون سائقين/إدارة) فيختفي عملاء حقيقيون ويكون العدّاد مضلِّلاً.
-          stream: FirebaseFirestore.instance
-              .collection('users')
-              .where('role', isEqualTo: 'client')
-              .orderBy('created_at', descending: true)
-              .limit(100)
-              .snapshots()
-            .firstEventTimeout(),
+          stream: _clientsStream,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator(color: Color(0xFF6366F1)));
@@ -267,7 +285,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 const Icon(Icons.cloud_off_rounded, size: 48, color: Colors.redAccent),
                 const SizedBox(height: 10),
                 Text('تعذّر تحميل البيانات', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.red)),
-                TextButton(onPressed: () => setState(() {}), child: const Text('إعادة المحاولة')),
+                TextButton(onPressed: _reopenClients, child: const Text('إعادة المحاولة')),
               ]));
             }
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {

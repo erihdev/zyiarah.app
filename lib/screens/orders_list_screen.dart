@@ -40,6 +40,44 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
   late TabController _tabController;
   int _activePhase = 0; // 0 for Active, 1 for History
 
+  // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
+  // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
+  // حوار — يُلغي مستمِعَ Firestore ويُنشئُ غيرَه. والبياناتُ لا تَختفي
+  // (`StreamBuilder` يَحفظُ آخرَ لقطةٍ عبرَ إعادةِ الاشتراك) فلا يُرى شيء،
+  // والكلفةُ حقيقيّة — **والأثرُ الأخطرُ أنّ `firstEventTimeout` تُستأنف**:
+  // على وصلةٍ تَبدو قائمةً ولا تَنفُذ (بوّابةُ فندقٍ، وكيلٌ شفّاف) تُعادُ
+  // مهلةُ العشرينَ ثانيةً مع كلِّ حرفٍ يُكتَب، فلا يُبلَغُ فرعُ الخطأِ ولا
+  // زرُّ إعادتِه أبداً — وهو العطلُ بعينِه الذي وُجدت المهلةُ لأجلِه.
+  // والقاعدةُ مقرَّرةٌ في `driver_tasks_screen` ومُنفَّذةٌ فيه وحدَه.
+  //
+  // وإعادةُ المحاولةِ كانت تَعتمدُ على ذلك الأثرِ الجانبيِّ عينِه، فصارت
+  // صريحةً: تَصفيرُ الحقلِ يَجعلُ البناءَ التاليَ يَفتحُ بثّاً جديداً.
+  /// المفتاحُ هُويّةٌ: الاستعلامانِ مقيّدانِ بها، فتغيُّرُها يَعني عميلةً
+  /// أخرى. و`null` حالةٌ مشروعةٌ (غيرُ مُسجَّلة) فلا بثَّ لها.
+  String? _streamsUid;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _orders;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _storeOrders;
+
+  void _ensureStreams(String? uid) {
+    if (_streamsUid == uid && (_orders != null || uid == null)) return;
+    _streamsUid = uid;
+    if (uid == null) {
+      _orders = null;
+      _storeOrders = null;
+      return;
+    }
+    _orders = FirebaseFirestore.instance
+        .collection('orders')
+        .where('client_id', isEqualTo: uid)
+        .snapshots()
+        .firstEventTimeout();
+    _storeOrders = FirebaseFirestore.instance
+        .collection('store_orders')
+        .where('client_id', isEqualTo: uid)
+        .snapshots()
+        .firstEventTimeout();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +94,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
+    _ensureStreams(user?.uid);
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -145,11 +184,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
 
   Widget _buildOrdersTab(User? user) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('orders')
-          .where('client_id', isEqualTo: user?.uid)
-          .snapshots()
-            .firstEventTimeout(),
+      stream: _orders,
       builder: (context, snapshot) {
         if (user == null) return const Center(child: Text('يرجى تسجيل الدخول لعرض حجوزاتك'));
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -199,11 +234,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
 
   Widget _buildStoreOrdersTab(User? user) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('store_orders')
-          .where('client_id', isEqualTo: user?.uid)
-          .snapshots()
-            .firstEventTimeout(),
+      stream: _storeOrders,
       builder: (context, snapshot) {
         if (user == null) return const Center(child: Text('يرجى تسجيل الدخول'));
         if (snapshot.connectionState == ConnectionState.waiting) {

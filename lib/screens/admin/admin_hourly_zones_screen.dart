@@ -33,6 +33,28 @@ class AdminHourlyZonesScreen extends StatefulWidget {
 }
 
 class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
+  // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
+  // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
+  // حوار — يُلغي مستمِعَ Firestore ويُنشئُ غيرَه. والبياناتُ لا تَختفي
+  // (`StreamBuilder` يَحفظُ آخرَ لقطةٍ عبرَ إعادةِ الاشتراك) فلا يُرى شيء،
+  // والكلفةُ حقيقيّة — **والأثرُ الأخطرُ أنّ `firstEventTimeout` تُستأنف**:
+  // على وصلةٍ تَبدو قائمةً ولا تَنفُذ (بوّابةُ فندقٍ، وكيلٌ شفّاف) تُعادُ
+  // مهلةُ العشرينَ ثانيةً مع كلِّ حرفٍ يُكتَب، فلا يُبلَغُ فرعُ الخطأِ ولا
+  // زرُّ إعادتِه أبداً — وهو العطلُ بعينِه الذي وُجدت المهلةُ لأجلِه.
+  // والقاعدةُ مقرَّرةٌ في `driver_tasks_screen` ومُنفَّذةٌ فيه وحدَه.
+  //
+  // وإعادةُ المحاولةِ كانت تَعتمدُ على ذلك الأثرِ الجانبيِّ عينِه، فصارت
+  // صريحةً: تَصفيرُ الحقلِ يَجعلُ البناءَ التاليَ يَفتحُ بثّاً جديداً.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _zones;
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _zonesStream =>
+      _zones ??= _db
+          .collection('service_zones')
+          .orderBy('rank')
+          .snapshots()
+          .firstEventTimeout();
+
+  void _reopenZones() => setState(() => _zones = null);
+
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   Future<void> _toggleZoneEnabled(String id, bool currentValue) async {
@@ -1101,11 +1123,22 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
           child: const Icon(Icons.add_location_alt_rounded, color: Colors.white),
         ),
         body: StreamBuilder<QuerySnapshot>(
-          stream: _db.collection('service_zones').orderBy('rank').snapshots()
-            .firstEventTimeout(),
+          stream: _zonesStream,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-            if (snapshot.hasError) return const Center(child: Text("تعذّر تحميل المناطق", style: TextStyle(color: Colors.grey)));
+            if (snapshot.hasError) {
+              // **زرُّ الإعادةِ لازمٌ بعدَ تثبيتِ البثّ**: كان الفرعُ يَتعافى
+              // بالأثرِ الجانبيِّ لأيِّ `setState` في الشاشة، وبدونِه يَلتصقُ
+              // الخطأُ بلا مَخرج.
+              return Center(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Text("تعذّر تحميل المناطق",
+                    style: TextStyle(color: Colors.grey)),
+                TextButton(
+                    onPressed: _reopenZones,
+                    child: const Text('إعادة المحاولة')),
+              ]));
+            }
             final docs = snapshot.data?.docs ?? [];
             if (docs.isEmpty) return const Center(child: Text("لا توجد مناطق تغطية حالياً"));
 

@@ -25,6 +25,28 @@ class AdminStoreScreen extends StatefulWidget {
 }
 
 class _AdminStoreScreenState extends State<AdminStoreScreen> {
+  // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
+  // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
+  // حوار — يُلغي مستمِعَ Firestore ويُنشئُ غيرَه. والبياناتُ لا تَختفي
+  // (`StreamBuilder` يَحفظُ آخرَ لقطةٍ عبرَ إعادةِ الاشتراك) فلا يُرى شيء،
+  // والكلفةُ حقيقيّة — **والأثرُ الأخطرُ أنّ `firstEventTimeout` تُستأنف**:
+  // على وصلةٍ تَبدو قائمةً ولا تَنفُذ (بوّابةُ فندقٍ، وكيلٌ شفّاف) تُعادُ
+  // مهلةُ العشرينَ ثانيةً مع كلِّ حرفٍ يُكتَب، فلا يُبلَغُ فرعُ الخطأِ ولا
+  // زرُّ إعادتِه أبداً — وهو العطلُ بعينِه الذي وُجدت المهلةُ لأجلِه.
+  // والقاعدةُ مقرَّرةٌ في `driver_tasks_screen` ومُنفَّذةٌ فيه وحدَه.
+  //
+  // وإعادةُ المحاولةِ كانت تَعتمدُ على ذلك الأثرِ الجانبيِّ عينِه، فصارت
+  // صريحةً: تَصفيرُ الحقلِ يَجعلُ البناءَ التاليَ يَفتحُ بثّاً جديداً.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _products;
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _productsStream =>
+      _products ??= _db
+          .collection('products')
+          .orderBy('created_at', descending: true)
+          .snapshots()
+          .firstEventTimeout();
+
+  void _reopenProducts() => setState(() => _products = null);
+
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final ImagePicker _picker = ImagePicker();
 
@@ -395,8 +417,7 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
               )
             : null,
         body: StreamBuilder<QuerySnapshot>(
-          stream: _db.collection('products').orderBy('created_at', descending: true).snapshots()
-            .firstEventTimeout(),
+          stream: _productsStream,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -408,7 +429,10 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
                 const Icon(Icons.cloud_off_rounded, size: 48, color: Colors.redAccent),
                 const SizedBox(height: 10),
                 Text('تعذّر تحميل البيانات', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.red)),
-                TextButton(onPressed: () => setState(() {}), child: const Text('إعادة المحاولة')),
+                // **زرٌّ كان قائماً، وصارَ عدمَ عملٍ بعدَ تثبيتِ البثّ**:
+                // `setState(() {})` كان يُعيدُ فتحَ المستمِعِ بالأثرِ
+                // الجانبيِّ لإعادةِ البناء — وبعدَ تثبيتِه لا يَفعلُ شيئاً.
+                TextButton(onPressed: _reopenProducts, child: const Text('إعادة المحاولة')),
               ]));
             }
 

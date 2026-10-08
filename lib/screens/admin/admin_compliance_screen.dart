@@ -109,7 +109,33 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
   static String _isoDate(DateTime x) =>
       '${x.year.toString().padLeft(4, '0')}-${x.month.toString().padLeft(2, '0')}-${x.day.toString().padLeft(2, '0')}';
 
+  // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
+  // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
+  // حوار — يُلغي مستمِعَ Firestore ويُنشئُ غيرَه. والبياناتُ لا تَختفي
+  // (`StreamBuilder` يَحفظُ آخرَ لقطةٍ عبرَ إعادةِ الاشتراك) فلا يُرى شيء،
+  // والكلفةُ حقيقيّة — **والأثرُ الأخطرُ أنّ `firstEventTimeout` تُستأنف**:
+  // على وصلةٍ تَبدو قائمةً ولا تَنفُذ (بوّابةُ فندقٍ، وكيلٌ شفّاف) تُعادُ
+  // مهلةُ العشرينَ ثانيةً مع كلِّ حرفٍ يُكتَب، فلا يُبلَغُ فرعُ الخطأِ ولا
+  // زرُّ إعادتِه أبداً — وهو العطلُ بعينِه الذي وُجدت المهلةُ لأجلِه.
+  // والقاعدةُ مقرَّرةٌ في `driver_tasks_screen` ومُنفَّذةٌ فيه وحدَه.
+  //
+  // وإعادةُ المحاولةِ كانت تَعتمدُ على ذلك الأثرِ الجانبيِّ عينِه، فصارت
+  // صريحةً: تَصفيرُ الحقلِ يَجعلُ البناءَ التاليَ يَفتحُ بثّاً جديداً.
+  // **والمفتاحُ هنا المُرشِّحُ** لأنّ الاستعلامَ يَتبعُه فعلاً (ثلاثُ نوافذَ
+  // على `id_expiry`): فتبديلُ التبويبِ يَفتحُ بثّاً جديداً بحقٍّ، وما سواه
+  // من إعاداتِ البناءِ لا يُوجِبُ شيئاً.
+  String? _streamFilter;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _compliance;
+
+  void _reopenCompliance() => setState(() => _compliance = null);
+
   Stream<QuerySnapshot<Map<String, dynamic>>> _getComplianceStream() {
+    if (_compliance != null && _streamFilter == _filter) return _compliance!;
+    _streamFilter = _filter;
+    return _compliance = _buildComplianceQuery();
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _buildComplianceQuery() {
     final now = DateTime.now();
     final today = _isoDate(now);
     final soon = _isoDate(now.add(const Duration(days: 30)));
@@ -329,7 +355,7 @@ class _AdminComplianceScreenState extends State<AdminComplianceScreen> {
           Text("لا يمكن التأكد من حالة الوثائق الآن", style: GoogleFonts.tajawal(color: Colors.grey)),
           const SizedBox(height: 16),
           ElevatedButton.icon(
-            onPressed: () => setState(() {}),
+            onPressed: _reopenCompliance,
             icon: const Icon(Icons.refresh_rounded, size: 18),
             label: Text("إعادة المحاولة", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF660033), foregroundColor: Colors.white),

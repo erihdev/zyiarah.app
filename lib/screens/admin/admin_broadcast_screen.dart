@@ -19,6 +19,29 @@ class AdminBroadcastScreen extends StatefulWidget {
 }
 
 class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
+  // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
+  // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
+  // حوار — يُلغي مستمِعَ Firestore ويُنشئُ غيرَه. والبياناتُ لا تَختفي
+  // (`StreamBuilder` يَحفظُ آخرَ لقطةٍ عبرَ إعادةِ الاشتراك) فلا يُرى شيء،
+  // والكلفةُ حقيقيّة — **والأثرُ الأخطرُ أنّ `firstEventTimeout` تُستأنف**:
+  // على وصلةٍ تَبدو قائمةً ولا تَنفُذ (بوّابةُ فندقٍ، وكيلٌ شفّاف) تُعادُ
+  // مهلةُ العشرينَ ثانيةً مع كلِّ حرفٍ يُكتَب، فلا يُبلَغُ فرعُ الخطأِ ولا
+  // زرُّ إعادتِه أبداً — وهو العطلُ بعينِه الذي وُجدت المهلةُ لأجلِه.
+  // والقاعدةُ مقرَّرةٌ في `driver_tasks_screen` ومُنفَّذةٌ فيه وحدَه.
+  //
+  // وإعادةُ المحاولةِ كانت تَعتمدُ على ذلك الأثرِ الجانبيِّ عينِه، فصارت
+  // صريحةً: تَصفيرُ الحقلِ يَجعلُ البناءَ التاليَ يَفتحُ بثّاً جديداً.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _history;
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _historyStream =>
+      _history ??= FirebaseFirestore.instance
+          .collection('broadcasts')
+          .orderBy('timestamp', descending: true)
+          .limit(5)
+          .snapshots()
+          .firstEventTimeout();
+
+  void _reopenHistory() => setState(() => _history = null);
+
   final TextEditingController _titleCtrl = TextEditingController();
   final TextEditingController _bodyCtrl = TextEditingController();
   String _target = 'all_users'; // all_users, drivers, clients
@@ -625,15 +648,27 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
 
   Widget _buildRecentBroadcastsList() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('broadcasts').orderBy('timestamp', descending: true).limit(5).snapshots()
-            .firstEventTimeout(),
+      stream: _historyStream,
       builder: (context, snapshot) {
         // كان الفشلُ يُسقِطُ القسمَ كلَّه بصمتٍ (`!hasData → shrink`)، فيُقرأُ
         // «لا سجلّ» — نفسُ العطلِ المُصلَحِ في قائمةِ المجدولِ أسفلَ هذا
         // الملفِّ، وقاعدتُه هناك مكتوبة.
         if (snapshot.hasError) {
-          return Center(child: Text("تعذّر تحميل سجل البث — ليست «لا عمليات»",
-              style: GoogleFonts.tajawal(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)));
+          // **وزرُّ الإعادةِ لازمٌ هنا**: كان القسمُ يَتعافى بالأثرِ الجانبيِّ
+          // لكلِّ `setState` من حقولِ النموذجِ العشرةِ فوقَه — وبعدَ تثبيتِ
+          // البثِّ يَلتصقُ الخطأُ بلا مَخرج، وهو عطلٌ أسوأُ من الكلفة.
+          return Center(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text("تعذّر تحميل سجل البث — ليست «لا عمليات»",
+                style: GoogleFonts.tajawal(
+                    color: Colors.redAccent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold)),
+            TextButton(
+                onPressed: _reopenHistory,
+                child: Text("إعادة المحاولة",
+                    style: GoogleFonts.tajawal(fontWeight: FontWeight.bold))),
+          ]));
         }
         if (!snapshot.hasData) return const SizedBox.shrink();
         final docs = snapshot.data!.docs;

@@ -88,10 +88,75 @@ class _ClientDashboardState extends State<ClientDashboard> {
     });
   }
 
+  // **البثوثُ الأربعةُ تُبنى مرّةً لكلِّ هُويّة، لا في كلِّ `build`.** كانت
+  // تُنشأُ داخلَ بُناةِ البطاقات، وهذه الشاشةُ تُعيدُ البناءَ عند تبديلِ
+  // تبويبِ الشريطِ السفليِّ وعند السحبِ للتحديث وعند وصولِ الملفِّ الشخصيّ —
+  // فكلُّ لمسةٍ تُلغي أربعةَ مستمِعاتٍ وتُنشئُ غيرَها، **وتُستأنفُ معها
+  // `firstEventTimeout`**: على وصلةٍ تَبدو قائمةً ولا تَنفُذ تُعادُ مهلةُ
+  // العشرينَ ثانيةً فلا تُبلَغُ لافتةُ الخطأِ في البطاقات.
+  //
+  // والمفتاحُ هو الهُويّةُ لأنّ الاستعلاماتَ مقيّدةٌ بها: تَصِلُ متأخّرةً
+  // (`userProvider` يُحمّلُها) فلا تُفتَحُ البثوثُ قبلَها، وتغيُّرُها يَعني
+  // عميلةً أخرى فتُفتَحُ من جديد.
+  //
+  // والسحبُ للتحديثِ كان يَعتمدُ على الأثرِ الجانبيِّ عينِه — فصارَ صريحاً.
+  String? _streamsUid;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _activeOrders;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _contracts;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _banners;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _notifications;
+
+  void _ensureStreams(String? uid) {
+    if (_streamsUid == uid && _banners != null) return;
+    _streamsUid = uid;
+    _banners = FirebaseFirestore.instance
+        .collection('promo_banners')
+        .where('isActive', isEqualTo: true)
+        .snapshots()
+        .firstEventTimeout();
+    if (uid == null) {
+      _activeOrders = null;
+      _contracts = null;
+      _notifications = null;
+      return;
+    }
+    _activeOrders = FirebaseFirestore.instance
+        .collection('orders')
+        .where('client_id', isEqualTo: uid)
+        // نفسُ التعدادِ كان إنلاين — انظر `kActiveAssignedStatusList`.
+        .where('status', whereIn: kActiveAssignedStatusList)
+        .limit(20)
+        .snapshots()
+        .firstEventTimeout();
+    // فلترة userId فقط (حقل واحد، بلا فهرس مركّب)؛ نُصفّي الحالة محلياً.
+    _contracts = FirebaseFirestore.instance
+        .collection('contracts')
+        .where('userId', isEqualTo: uid)
+        .snapshots()
+        .firstEventTimeout();
+    _notifications = FirebaseFirestore.instance
+        .collection('notifications')
+        .where('userId', isEqualTo: uid)
+        // بلا `orderBy` كانت النافذةُ خمسينَ مستنداً بترتيبِ المعرّفِ
+        // العشوائيِّ لا أحدثَها: فالنقطةُ تَظهرُ عن إشعارٍ قديمٍ غيرِ
+        // مقروءٍ وتَغيبُ عن أحدثِ إشعارٍ وصلَ. (الترشيحُ محلّيٌّ بقصد —
+        // غيابُ `isRead` يُقرأُ «غيرَ مقروء» — فالترتيبُ وحدَه هو الناقص.)
+        .orderBy('sentAt', descending: true)
+        .limit(50)
+        .snapshots()
+        .firstEventTimeout();
+  }
+
+  void _reopenStreams() => setState(() {
+        _streamsUid = null;
+        _banners = null;
+      });
+
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<ZyiarahUserProvider>(context);
     final user = userProvider.user;
+    _ensureStreams(user?.uid);
     // **كانت `userProvider.isLoading || orderProvider.isLoading`** —
     // و`ZyiarahOrderProvider` كان يَفتحُ مُستمِعاً على `orders` لكلِّ عميلةٍ
     // عند الإقلاعِ ويَرتّبُ عشرينَ مستنداً، **ولا قارئَ لشيءٍ من ذلك**:
@@ -118,7 +183,9 @@ class _ClientDashboardState extends State<ClientDashboard> {
                   color: const Color(0xFF660033),
                   onRefresh: () async {
                     await Future.delayed(const Duration(milliseconds: 600));
-                    if (mounted) setState(() {});
+                    // كان `setState(() {})` وحدَه: يُعيدُ فتحَ البثوثِ
+                    // **بالأثرِ الجانبيِّ** لإعادةِ البناء. صارَ صريحاً.
+                    if (mounted) _reopenStreams();
                   },
                   child: SingleChildScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
@@ -337,14 +404,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
     if (uid == null) return const SizedBox.shrink();
 
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('orders')
-          .where('client_id', isEqualTo: uid)
-          // نفسُ التعدادِ كان إنلاين — انظر `kActiveAssignedStatusList`.
-          .where('status', whereIn: kActiveAssignedStatusList)
-          .limit(20)
-          .snapshots()
-            .firstEventTimeout(),
+      stream: _activeOrders,
       builder: (context, snapshot) {
         if (snapshot.hasError) return _buildCardLoadError('طلبكِ الجاري');
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -493,6 +553,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
       ),
       actions: [
         _NotifBell(
+          stream: _notifications,
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const ClientNotificationsScreen()),
@@ -507,12 +568,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
   Widget _buildSubscriptionCards(String? uid) {
     if (uid == null) return const SizedBox.shrink();
     return StreamBuilder<QuerySnapshot>(
-      // فلترة userId فقط (حقل واحد، بلا فهرس مركّب)؛ نُصفّي الحالة محلياً.
-      stream: FirebaseFirestore.instance
-          .collection('contracts')
-          .where('userId', isEqualTo: uid)
-          .snapshots()
-            .firstEventTimeout(),
+      stream: _contracts,
       builder: (context, snapshot) {
         if (snapshot.hasError) return _buildCardLoadError('باقتكِ');
         if (!snapshot.hasData) return const SizedBox.shrink();
@@ -640,11 +696,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
   Widget _buildPromoBanners() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('promo_banners')
-          .where('isActive', isEqualTo: true)
-          .snapshots()
-            .firstEventTimeout(),
+      stream: _banners,
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const SizedBox.shrink();
@@ -960,29 +1012,24 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
 class _NotifBell extends StatelessWidget {
   final VoidCallback onTap;
-  const _NotifBell({required this.onTap});
+
+  /// **البثُّ يُمرَّرُ، ولا يُنشَأُ هنا.** هذه ودجةٌ بلا حالة، فكانت تَفتحُ
+  /// مستمِعَ الإشعاراتِ من جديدٍ في كلِّ إعادةِ بناءٍ لأبيها — ولا حقلَ لها
+  /// تَحفظُه فيه. فالبثُّ يَسكنُ حالةَ اللوحةِ (`_notifications`) ويُمرَّرُ
+  /// وسيطاً، فتَبقى الودجةُ بلا حالةٍ ويُفتَحُ المستمِعُ مرّةً.
+  final Stream<QuerySnapshot<Map<String, dynamic>>>? stream;
+  const _NotifBell({required this.onTap, required this.stream});
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
+    if (stream == null) {
       return IconButton(
         onPressed: onTap,
         icon: const Icon(Icons.notifications_outlined, color: Color(0xFF0F172A)),
       );
     }
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('notifications')
-          .where('userId', isEqualTo: uid)
-          // بلا `orderBy` كانت النافذةُ خمسينَ مستنداً بترتيبِ المعرّفِ
-          // العشوائيِّ لا أحدثَها: فالنقطةُ تَظهرُ عن إشعارٍ قديمٍ غيرِ
-          // مقروءٍ وتَغيبُ عن أحدثِ إشعارٍ وصلَ. (الترشيحُ محلّيٌّ بقصد —
-          // غيابُ `isRead` يُقرأُ «غيرَ مقروء» — فالترتيبُ وحدَه هو الناقص.)
-          .orderBy('sentAt', descending: true)
-          .limit(50)
-          .snapshots()
-            .firstEventTimeout(),
+      stream: stream,
       builder: (context, snapshot) {
         // غير المقروء = لا isRead ولا is_read = true (يوحّد مع شاشة الإشعارات)
         final hasUnread = (snapshot.data?.docs ?? []).any((d) {

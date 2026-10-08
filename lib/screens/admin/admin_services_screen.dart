@@ -27,6 +27,28 @@ class AdminServicesScreen extends StatefulWidget {
 }
 
 class _AdminServicesScreenState extends State<AdminServicesScreen> {
+  // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
+  // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
+  // حوار — يُلغي مستمِعَ Firestore ويُنشئُ غيرَه. والبياناتُ لا تَختفي
+  // (`StreamBuilder` يَحفظُ آخرَ لقطةٍ عبرَ إعادةِ الاشتراك) فلا يُرى شيء،
+  // والكلفةُ حقيقيّة — **والأثرُ الأخطرُ أنّ `firstEventTimeout` تُستأنف**:
+  // على وصلةٍ تَبدو قائمةً ولا تَنفُذ (بوّابةُ فندقٍ، وكيلٌ شفّاف) تُعادُ
+  // مهلةُ العشرينَ ثانيةً مع كلِّ حرفٍ يُكتَب، فلا يُبلَغُ فرعُ الخطأِ ولا
+  // زرُّ إعادتِه أبداً — وهو العطلُ بعينِه الذي وُجدت المهلةُ لأجلِه.
+  // والقاعدةُ مقرَّرةٌ في `driver_tasks_screen` ومُنفَّذةٌ فيه وحدَه.
+  //
+  // وإعادةُ المحاولةِ كانت تَعتمدُ على ذلك الأثرِ الجانبيِّ عينِه، فصارت
+  // صريحةً: تَصفيرُ الحقلِ يَجعلُ البناءَ التاليَ يَفتحُ بثّاً جديداً.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _catalog;
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _catalogStream =>
+      _catalog ??= _db
+          .collection('services')
+          .orderBy('order_index')
+          .snapshots()
+          .firstEventTimeout();
+
+  void _reopenCatalog() => setState(() => _catalog = null);
+
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   static const Color _brand = Color(0xFF660033);
 
@@ -48,13 +70,20 @@ class _AdminServicesScreenState extends State<AdminServicesScreen> {
             _honestNotice(),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: _db.collection('services').orderBy('order_index').snapshots()
-            .firstEventTimeout(),
+                stream: _catalogStream,
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
                     return Center(
-                      child: Text('تعذّر تحميل الكتالوج، تحقّق من الاتصال',
-                          style: GoogleFonts.tajawal(color: Colors.grey)),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        Text('تعذّر تحميل الكتالوج، تحقّق من الاتصال',
+                            style: GoogleFonts.tajawal(color: Colors.grey)),
+              // **زرُّ الإعادةِ لازمٌ بعدَ تثبيتِ البثّ**: كان الفرعُ يَتعافى
+              // بالأثرِ الجانبيِّ لأيِّ `setState` في الشاشة، وبدونِه يَلتصقُ
+              // الخطأُ بلا مَخرج.
+                        TextButton(
+                            onPressed: _reopenCatalog,
+                            child: const Text('إعادة المحاولة')),
+                      ]),
                     );
                   }
                   if (snapshot.connectionState == ConnectionState.waiting) {
