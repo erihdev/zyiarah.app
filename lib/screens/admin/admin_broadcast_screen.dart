@@ -561,6 +561,13 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
           'body': _bodyCtrl.text.trim(),
           'target': mappedTarget,
           'created_at': FieldValue.serverTimestamp(),
+          // **الغيابُ يُخرِجُ المستندَ من `orderBy` كلّه (2026-10-07).** سجلُّ
+          // لوحةِ الويبِ يُرتّبُ بـ`sent_at`، وFirestore **تُستثني** كلَّ
+          // مستندٍ لا يَحملُ حقلَ الترتيب — فكلُّ بثٍّ أُرسِلَ من هنا كان
+          // غائباً عن «سجل الإشعارات» إلى الأبد، ومرئيّاً في شاشةِ التطبيقِ
+          // كذلك (تُرشِّحُ `status == 'scheduled'` وهذا بلا حالة): بثٌّ وصلَ
+          // العملاءَ ولا سطرَ له في أيِّ سطح.
+          'sent_at': FieldValue.serverTimestamp(),
           'type': 'admin_broadcast',
           'operational': _operational,
         });

@@ -160,6 +160,13 @@ class ZyiarahMessagingService {
         // يَطبعُ الرمزَ حرفيّاً. القاعدةُ في `utils/broadcast_target.dart`.
         'target': broadcastTargetOf(target),
         'scheduled_at': Timestamp.fromDate(scheduledAt),
+        // **حاضرٌ `null` لا غائب**: سجلُّ اللوحةِ يُرتّبُ بـ`sent_at`
+        // وFirestore تُستثني المستندَ الذي لا يَحملُ حقلَ الترتيب — فمجدولٌ
+        // من التطبيقِ كان غائباً عن السجلِّ قبلَ الإرسالِ وبعدَه. و`null`
+        // يُطابقُ الترتيبَ (ويَقعُ آخراً تنازليّاً) ولا يُطابقُ `<=` فلا
+        // يُحرّكُ مكنسةَ الإفراجِ — وهو ما تَكتبُه اللوحةُ أصلاً.
+        // و`_deliverBroadcast` يَملؤه لحظةَ الإرسالِ الفعليّ.
+        'sent_at': null,
         'created_at': FieldValue.serverTimestamp(),
         'created_by': createdBy ?? 'Admin',
         'processed': false,

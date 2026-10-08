@@ -20,8 +20,8 @@ const {
   assertFails,
   assertSucceeds,
 } = require("@firebase/rules-unit-testing");
-const {setDoc, doc, addDoc, collection, getDocs} =
-  require("firebase/firestore");
+const {setDoc, doc, addDoc, collection, getDocs, query, orderBy, limit,
+  Timestamp} = require("firebase/firestore");
 
 (async () => {
   const testEnv = await initializeTestEnvironment({
@@ -107,6 +107,37 @@ const {setDoc, doc, addDoc, collection, getDocs} =
       "وغيرُ المسجَّلِ لا يَكتبُ طابورَ العميلِ أصلاً",
       addDoc(collection(anon, "notification_triggers"), trigger({})),
       false);
+
+  // ── `orderBy` يُستثني المستندَ الذي لا يَحملُ حقلَ الترتيب ──
+  //
+  // ليست قاعدةَ أمانٍ بل **دلالةَ Firestore**، وهي التعليلُ الذي يَقومُ عليه
+  // إصلاحُ `sent_at`: سجلُّ لوحةِ الويبِ `orderBy("sent_at","desc")`، وكلُّ
+  // بثٍّ أُرسِلَ من تطبيقِ الإدارةِ كان بلا الحقلِ — فغائبٌ عن السجلِّ إلى
+  // الأبد. تُثبَتُ على المُحاكي لا استنتاجاً من التوثيق.
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, "notifications_log/withTs"),
+        {title: "له طابع", target: "all", sent_at: Timestamp.now()});
+    await setDoc(doc(db, "notifications_log/withNull"),
+        {title: "بطابعٍ فارغ", target: "all", sent_at: null});
+    await setDoc(doc(db, "notifications_log/noField"),
+        {title: "بلا حقلِ ترتيب", target: "all"});
+  });
+  {
+    const snap = await getDocs(query(
+        collection(asUser("adminA"), "notifications_log"),
+        orderBy("sent_at", "desc"), limit(20)));
+    const ids = snap.docs.map((d) => d.id).sort();
+    const ok = ids.includes("withTs") && ids.includes("withNull") &&
+        !ids.includes("noField");
+    if (ok) {
+      console.log("  ✓ غيابُ حقلِ الترتيبِ يُستثني المستندَ، و`null` لا " +
+          "يُستثنيه (تعليلُ إصلاحِ sent_at)"); pass++;
+    } else {
+      console.error("  ✗ دلالةُ orderBy تغيّرت — التعليلُ يُراجَعُ لا " +
+          `يُسكَت: ${ids.join(",")}`); fail++;
+    }
+  }
 
   console.log(`\nnotification rules: ${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
