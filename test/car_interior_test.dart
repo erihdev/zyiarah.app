@@ -102,7 +102,9 @@ void main() {
 
     test('البطاقة على الرئيسية والصورة أصل حقيقي', () {
       expect(dash.contains('CarInteriorDetailsScreen()'), isTrue);
-      expect(dash.contains("'assets/images/car_cleaning.png'"), isTrue);
+      // مسارُ الصورة انتقل إلى الكتالوج (بطاقةٌ واحدةٌ للوحةِ وشاشةِ الزائر).
+      final cat = File('lib/utils/service_catalog.dart').readAsStringSync();
+      expect(cat.contains("'assets/images/car_cleaning.png'"), isTrue);
       expect(File('assets/images/car_cleaning.png').existsSync(), isTrue,
           reason: 'البطاقة تشير لصورة غير موجودة ⇒ أيقونة بديلة باهتة');
       expect(

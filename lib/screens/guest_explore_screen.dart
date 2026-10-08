@@ -1,4 +1,5 @@
 import 'package:go_router/go_router.dart';
+import 'package:zyiarah/utils/service_catalog.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -9,62 +10,6 @@ class GuestExploreScreen extends StatelessWidget {
 
   static const Color _brand = Color(0xFF660033);
 
-  static const List<_ServiceItem> _services = [
-    _ServiceItem(
-      title: 'تنظيف منزلي',
-      subtitle: 'باقة حسب نوع سكنك وعدد الكوادر',
-      price: 'حسب الباقة',
-      themeColor: Color(0xFF10B981),
-      iconBgColor: Color(0xFFE1F0E4),
-      icon: Icons.access_time_filled,
-      imagePath: 'assets/images/hourly_cleaning.png',
-    ),
-    _ServiceItem(
-      title: 'تنظيف الكنب والزل',
-      subtitle: 'تنظيف عميق بالبخار',
-      price: 'حسب المتر',
-      themeColor: Color(0xFF8B5CF6),
-      iconBgColor: Color(0xFFF1E9FE),
-      icon: Icons.chair,
-      imagePath: 'assets/images/sofa_cleaning.png',
-    ),
-    _ServiceItem(
-      title: 'باقات الاشتراك',
-      subtitle: 'زيارات مجدولة شهرية',
-      price: 'باقات شهرية',
-      themeColor: Color(0xFF10B981),
-      iconBgColor: Color(0xFFE1F0E4),
-      icon: Icons.workspace_premium,
-      imagePath: 'assets/images/monthly_cleaning.png',
-    ),
-    _ServiceItem(
-      title: 'صيانة وغسيل المكيفات',
-      subtitle: 'تنظيف وصيانة شاملة',
-      price: 'حسب الطلب',
-      themeColor: Color(0xFF475569),
-      iconBgColor: Color(0xFFF1F5F9),
-      icon: Icons.handyman,
-      imagePath: 'assets/images/company_cleaning.png',
-    ),
-    _ServiceItem(
-      title: 'تنظيف داخلية السيارة',
-      subtitle: 'مراتب وأسقف السيارة',
-      price: 'حسب حجم السيارة',
-      themeColor: Color(0xFF0E7490),
-      iconBgColor: Color(0xFFE0F2FE),
-      icon: Icons.directions_car_filled_rounded,
-      imagePath: 'assets/images/car_cleaning.png',
-    ),
-    _ServiceItem(
-      title: 'متجر المنظفات',
-      subtitle: 'أدوات احترافية',
-      price: 'عروض حصرية',
-      themeColor: Color(0xFF660033),
-      iconBgColor: Color(0xFFFCEEFA),
-      icon: Icons.storefront,
-      imagePath: 'assets/images/store.png',
-    ),
-  ];
 
   void _onServiceTap(BuildContext context) {
     ZyiarahCoreService.triggerHapticLight();
@@ -233,13 +178,13 @@ class GuestExploreScreen extends StatelessWidget {
           mainAxisSpacing: 15,
           crossAxisSpacing: 15,
           childAspectRatio: cols == 3 ? 0.85 : 0.75,
-          children: _services.map((s) => _buildServiceCard(context, s)).toList(),
+          children: kServiceCatalog.map((s) => _buildServiceCard(context, s)).toList(),
         );
       },
     );
   }
 
-  Widget _buildServiceCard(BuildContext context, _ServiceItem s) {
+  Widget _buildServiceCard(BuildContext context, ZyiarahServiceCard s) {
     return InkWell(
       onTap: () => _onServiceTap(context),
       borderRadius: BorderRadius.circular(24),
@@ -290,7 +235,7 @@ class GuestExploreScreen extends StatelessWidget {
                         color: s.themeColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Text(s.price,
+                      child: Text(s.priceLabel,
                           style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: s.themeColor)),
                     ),
                   ],
@@ -375,22 +320,3 @@ class _LoginPromptSheet extends StatelessWidget {
   }
 }
 
-class _ServiceItem {
-  final String title;
-  final String subtitle;
-  final String price;
-  final Color themeColor;
-  final Color iconBgColor;
-  final IconData icon;
-  final String imagePath;
-
-  const _ServiceItem({
-    required this.title,
-    required this.subtitle,
-    required this.price,
-    required this.themeColor,
-    required this.iconBgColor,
-    required this.icon,
-    required this.imagePath,
-  });
-}

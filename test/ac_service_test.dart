@@ -90,13 +90,21 @@ void main() {
 
   group('المصدر: مسار واحد للمكيفات، مباشر ومسعّر', () {
     test('البلاطة تفتح الشاشة المباشرة لا شاشة عرض السعر', () {
+      // انتقلت نصوص البطاقة إلى `utils/service_catalog.dart` (بطاقةٌ واحدةٌ
+      // للسطحَين)، فالمشدود هو **الوجهة** في مُبدِّل اللوحة لا نصُّ البطاقة:
+      // شريحةُ ٧٠٠ محرفٍ من العنوان كانت تقرأ حِمْلاً زال.
       final dash = File('lib/screens/client_dashboard.dart').readAsStringSync();
-      final i = dash.indexOf('صيانة وغسيل المكيفات');
-      expect(i, greaterThan(-1), reason: 'بلاطة المكيفات اختفت — حدِّث الحارس');
-      final card = dash.substring(i, i + 700);
-      expect(card.contains('AcServiceDetailsScreen'), isTrue);
-      expect(card.contains('ZyiarahMaintenanceRequestScreen'), isFalse,
+      final i = dash.indexOf('ZyiarahService.acService =>');
+      expect(i, greaterThan(-1), reason: 'فرعُ المكيفات اختفى — حدِّث الحارس');
+      final arm = dash.substring(i, dash.indexOf(',', i) + 1);
+      expect(arm.contains('AcServiceDetailsScreen'), isTrue);
+      expect(dash.contains('ZyiarahMaintenanceRequestScreen'), isFalse,
           reason: 'المكيفات لم تعد تنتظر تسعير الإدارة');
+      // والبطاقةُ نفسُها في الكتالوج، وشارتُها مشدودةٌ في
+      // `service_catalog_test (ج)`.
+      final cat = File('lib/utils/service_catalog.dart').readAsStringSync();
+      expect(cat.contains('صيانة وغسيل المكيفات'), isTrue,
+          reason: 'بطاقة المكيفات اختفت من الكتالوج');
     });
 
     test('لا مسار ثانٍ للمكيفات — شاشة عرض السعر لم تعد موجودة أصلاً', () {
