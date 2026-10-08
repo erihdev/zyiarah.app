@@ -299,7 +299,10 @@ class _ZyiarahContractSigningScreenState extends State<ZyiarahContractSigningScr
                 Text('اتفاقية تقديم خدمات منزلية', 
                   style: GoogleFonts.tajawal(fontSize: 18, fontWeight: FontWeight.bold, color: brandPurple)),
                 const SizedBox(height: 5),
-                Text('الرقم المرجعي: CTR-XXXX', style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
+                // **لا رقمَ قبل أن نعرفه**: المرجعُ يُمنَحُ لحظةَ التوثيقِ
+                // (`CTR-…` في `_submitContract`)، فنصُّ `CTR-XXXX` كان
+                // يَعرضُ عليها رقماً لن يَكونَ رقمَها.
+                Text('يُمنَح الرقم المرجعي عند التوثيق', style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
               ],
             ),
           ),
