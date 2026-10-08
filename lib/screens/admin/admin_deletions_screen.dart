@@ -37,6 +37,79 @@ class _AdminDeletionsScreenState extends State<AdminDeletionsScreen> {
 
   void _reopenRequests() => setState(() => _requests = null);
 
+  /// **زرُّ إعادةِ المحاولة — المَخرَجُ الذي لم يَكن للفشل.**
+  ///
+  /// الخادمُ يَكتبُ `failed_deletion` ويَقولُ السطحانِ «يتطلب مراجعة»
+  /// **بلا إجراء**: الأزرارُ كلُّها محصورةٌ بـ`status == 'pending'` ولا
+  /// كاتبَ لها في المستودع (المساراتُ الأربعةُ تَكتبُ `'deleted'` مباشرةً)،
+  /// فالمَخرَجُ الوحيدُ كان تعديلَ Firestore بيدٍ — على مسارٍ يَلزمُه
+  /// متطلّبُ آبل وقد يَكونُ حسابُ المصادقةِ ما زال حيّاً.
+  ///
+  /// وزرُّ «رفض» وشقيقُه «حذف» **لم يُمَسّا**: قرارُ مالكٍ مسجَّلٌ
+  /// (2026-07-21، «رفض الطلب بدل الحذف الإجباري») يَحرُسُه
+  /// `admin_ban_reject_test`. وأنّهما غيرُ قابلَي الوصولِ حقيقةٌ مشدودةٌ في
+  /// `account_deletion_log_test` لا قراراً يُنقَض هنا.
+  ///
+  /// وإعادةُ كتابةِ `'deleted'` هي المُشغِّلُ نفسُه:
+  /// `onAccountDeletionStatusChanged` شرطُه `before.status !== 'deleted'`
+  /// وهو مُستوفًى من `failed_deletion` — فلا آليّةَ جديدة.
+  Widget _retryButton(BuildContext context, String docId, String identity) {
+    return OutlinedButton.icon(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFF660033),
+        side: const BorderSide(color: Color(0xFF660033)),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+      ),
+      icon: const Icon(Icons.refresh, size: 16),
+      label: const Text("إعادة المحاولة"),
+      onPressed: () async {
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => Directionality(
+            textDirection: TextDirection.rtl,
+            child: AlertDialog(
+              title: Text("إعادة محاولة الحذف",
+                  style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+              content: Text("إعادة تشغيل حذف حساب $identity خادمياً؟ "
+                  "الحذف لا رجعة فيه: حساب الدخول ومستند المستخدم ورموز "
+                  "الإشعارات تُمسح، والرصيد المتبقّي يُسجَّل ديناً للتسوية "
+                  "اليدوية."),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text("إلغاء")),
+                ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text("إعادة المحاولة")),
+              ],
+            ),
+          ),
+        );
+        if (ok != true) return;
+        try {
+          await FirebaseFirestore.instance
+              .collection('account_deletions')
+              .doc(docId)
+              .update({'status': 'deleted'});
+          await ZyiarahAuditService().logAction(
+            action: ZyiarahAuditService.actionProcessAccountDeletion,
+            details: {'account': identity, 'decision': 'retry'},
+            targetId: docId,
+          );
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text("أُعيد تشغيل الحذف — تابع الحالة بعد ثوانٍ.")));
+          }
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text("تعذّرت إعادة المحاولة: $e")));
+          }
+        }
+      },
+    );
+  }
+
   // (دمج من لوحة الويب) رفض طلب حذف الحساب — بدل إجبار الأدمن على الحذف أو تركه معلّقاً.
   // يضبط status='rejected' (الشاشة تعرضه أصلاً). لا يُحذف الحساب.
   Widget _rejectButton(BuildContext context, String docId) {
@@ -131,18 +204,25 @@ class _AdminDeletionsScreenState extends State<AdminDeletionsScreen> {
                 final doc = snapshot.data!.docs[index];
                 final req = doc.data() as Map<String, dynamic>;
                 final status = req['status'] as String? ?? 'pending';
-                // زر الحذف يظهر فقط للحالة pending. الدالة تكتب failed_deletion عند فشل
-                // التنظيف — كان يظهر كـ«قيد الانتظار» بزرّ حذف نشط فيُعيد الأدمن تشغيله بصمت.
+                // زر الحذف/الرفض يظهر فقط للحالة pending (قرارُ مالكٍ
+                // 2026-07-21 يَحرُسُه `admin_ban_reject_test`) — **ولا كاتبَ
+                // لها في المستودع**، فهذان سجلٌّ لا إجراء. والحقيقةُ
+                // مشدودةٌ في `account_deletion_log_test`، وما يَلزمُ فعلاً
+                // هو مَخرَجُ الفشلِ أدناه لا نقضُ ذلك القرار.
                 final isPending = status == 'pending';
-                final statusText = status == 'deleted_fully_processed'
-                    ? 'تم مسح البيانات نهائياً'
-                    : status == 'deleted'
-                        ? 'جاري المسح...'
-                        : status == 'failed_deletion'
-                            ? 'فشل الحذف — يتطلب مراجعة'
-                            : status == 'rejected'
-                                ? 'مرفوض'
-                                : 'قيد الانتظار';
+                // **التسميةُ من القاعدةِ المشترَكة** — كانت تعداداً هنا
+                // وثانياً في اللوحة، وافترقا: `'deleted'` يُقرأُ هنا «جاري
+                // المسح» (صحيح) وفي اللوحةِ «تم الحذف نهائياً» بعلامةٍ
+                // خضراءَ، وهو «سُجِّلَ والخادمُ يَعملُ عليه» وقد يَعلَق.
+                final state = deletionRequestState(req['status']);
+                final DateTime? requestedAt =
+                    (req['requested_at'] as Timestamp?)?.toDate();
+                final bool canRetry = deletionRetryAllowed(
+                    state: state,
+                    requestedAt: requestedAt,
+                    now: DateTime.now());
+                final statusText = deletionStateLabel(state);
+                final String? failureReason = deletionFailureReason(req);
 
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -155,27 +235,35 @@ class _AdminDeletionsScreenState extends State<AdminDeletionsScreen> {
                     // البشرُ» — وكان مكتوباً في موضعٍ **ومقروءاً في صفر**.
                     subtitle: Text([
                       "السبب: ${req['reason'] ?? 'غير محدد'}",
-                      "تاريخ الطلب: ${req['requested_at'] != null ? (req['requested_at'] as Timestamp).toDate().toString().split(' ')[0] : ''}",
+                      // `requestedAt` نفسُها: التحويلُ الصلبُ `as Timestamp`
+                      // كان يَرمي على قيمةٍ نصّيّةٍ (مستندٌ كُتبَ بيدٍ في
+                      // الكونسول — مسارٌ موثَّقٌ في هذا المشروع).
+                      if (requestedAt != null)
+                        "تاريخ الطلب: ${requestedAt.toString().split(' ')[0]}",
                       "الحالة: $statusText",
+                      // سببُ الفشلِ كما كتبَه الخادمُ — كان بلا قارئٍ في
+                      // أيِّ سطح، فـ«يتطلب مراجعة» بلا ما يُراجَع. واسمُه
+                      // «سبب الفشل» لا «السبب»: الأوّلُ فوقَه سببُ العميلة.
+                      if (failureReason != null) "سبب الفشل: $failureReason",
                       if (deletionStrandedNotice(req) != null)
                         deletionStrandedNotice(req)!,
                     ].join('\n')),
                     isThreeLine: true,
-                    trailing: !isPending
+                    // الترتيبُ: إعادةُ المحاولةِ أوّلاً (فهي الإجراءُ
+                    // القابلُ للوصولِ فعلاً)، ثمّ زوجُ `pending` كما تَركَه
+                    // قرارُ المالك، وإلّا التسمية. ولا تقاطُع: `'pending'`
+                    // تُقرأُ `unknown` و`canRetry` تَرفُضُ الجهلَ.
+                    trailing: canRetry
+                        ? _retryButton(
+                            context, doc.id, deletionRowIdentity(req))
+                        : !isPending
                         ? Text(
-                            status == 'deleted_fully_processed'
-                                ? "تم الحذف"
-                                : status == 'deleted'
-                                    ? "جاري الحذف..."
-                                    : status == 'failed_deletion'
-                                        ? "فشل الحذف"
-                                        : status == 'rejected'
-                                            ? "مرفوض"
-                                            : status,
+                            statusText,
                             style: TextStyle(
-                              color: status == 'deleted_fully_processed'
+                              color: state == DeletionRequestState.completed
                                   ? Colors.green
-                                  : status == 'failed_deletion' || status == 'rejected'
+                                  : state == DeletionRequestState.failed ||
+                                          state == DeletionRequestState.rejected
                                       ? Colors.red
                                       : Colors.orange,
                               fontWeight: FontWeight.bold,

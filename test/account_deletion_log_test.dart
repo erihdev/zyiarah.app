@@ -44,6 +44,80 @@ String _deletionFnBody(String idx) {
   return code.substring(a, b);
 }
 
+/// كتابةُ حالةٍ بعينِها في أيِّ لغةٍ من السطحَين (دارت `'status': 'x'`،
+/// وTS `status: 'x'`).
+final RegExp _deletedWrite =
+    RegExp('''['"]?status['"]?\\s*:\\s*['"]deleted['"]''');
+
+/// جدولُ حالاتٍ مشترَكٌ من ملفِّ فحصِ اللوحة، بين علامتَي `<marker>_START`
+/// و`_END`. والاقتطاعُ **من آخرِ `]` إلى الوراءِ بموازنةِ الأقواس**:
+/// `indexOf('[')` يَلتقِطُ قوسَ تعليقِ النوعِ (`[...][]`) لا بدايةَ
+/// المصفوفة — فخٌّ مسجَّلٌ في هذا المستودع.
+List<dynamic> _sharedTable(String ts, String marker) {
+  final String a = '${marker}_START';
+  final String b = '${marker}_END';
+  if (!ts.contains(a) || !ts.contains(b)) {
+    throw StateError('زالت علامةُ $marker من مرآةِ اللوحة');
+  }
+  final String mid = ts.substring(ts.indexOf(a) + a.length, ts.indexOf(b));
+  final int end = mid.lastIndexOf(']');
+  if (end <= 0) throw StateError('لا مصفوفةَ في $marker');
+  int depth = 0;
+  int start = -1;
+  for (int i = end; i >= 0; i--) {
+    if (mid[i] == ']') depth++;
+    if (mid[i] == '[') {
+      depth--;
+      if (depth == 0) {
+        start = i;
+        break;
+      }
+    }
+  }
+  if (start < 0) throw StateError('اقتطاعٌ غيرُ مُوازَنٍ في $marker');
+  String raw = mid.substring(start, end + 1);
+  // مفاتيحُ TS بلا اقتباسٍ، والفاصلةُ المتدلّيةُ ليست JSON.
+  raw = raw.replaceAllMapped(
+      RegExp(r'([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:'),
+      (m) => '${m.group(1)}"${m.group(2)}":');
+  raw = raw.replaceAll("'", '"');
+  raw = raw.replaceAllMapped(RegExp(r',(\s*[}\]])'), (m) => m.group(1)!);
+  return jsonDecode(raw) as List<dynamic>;
+}
+
+/// جسمُ دالّةٍ من موضعِ إعلانِها بموازنةِ المعقوفة — **بعدَ** موازنةِ
+/// قائمةِ المعامَلات. (أخذُ أوّلِ `{` بعدَ الاسمِ يَلتقِطُ قوسَ
+/// المعامَلاتِ المُسمّاةِ في دارت لا الجسمَ: فخٌّ مسجَّلٌ في هذا
+/// المستودعِ سبعَ مرّات.)
+String _fnBody(String code, String decl) {
+  final int a = code.indexOf(decl);
+  if (a < 0) throw StateError('لم يُعثَر على «$decl»');
+  int i = a + decl.length - 1; // عند قوسِ النداء
+  int depth = 0;
+  while (i < code.length) {
+    if (code[i] == '(') depth++;
+    if (code[i] == ')') {
+      depth--;
+      if (depth == 0) break;
+    }
+    i++;
+  }
+  final int b = code.indexOf('{', i);
+  if (b < 0) throw StateError('لا جسمَ لـ«$decl»');
+  depth = 0;
+  int j = b;
+  while (j < code.length) {
+    if (code[j] == '{') depth++;
+    if (code[j] == '}') {
+      depth--;
+      if (depth == 0) break;
+    }
+    j++;
+  }
+  if (depth != 0) throw StateError('اقتطاعٌ غيرُ مُوازَنٍ لـ«$decl»');
+  return code.substring(b, j + 1);
+}
+
 void main() {
   final String flutterScreen =
       File('lib/screens/admin/admin_deletions_screen.dart').readAsStringSync();
@@ -92,36 +166,7 @@ void main() {
   test('(د) جدولُ الحالاتِ مشترَكٌ مع مرآةِ اللوحة', () {
     final String ts =
         File('admin_panel/src/utils/deletionLogRow.test.ts').readAsStringSync();
-    const a = 'DELETION_ROW_CASES_START';
-    const b = 'DELETION_ROW_CASES_END';
-    expect(ts.contains(a) && ts.contains(b), isTrue,
-        reason: 'زالت علامةُ جدولِ الحالاتِ من مرآةِ اللوحة');
-    final String mid = ts.substring(ts.indexOf(a) + a.length, ts.indexOf(b));
-    // الاقتطاعُ من آخرِ `]` إلى الوراءِ بموازنةِ الأقواس: `indexOf('[')`
-    // يَلتقِطُ قوسَ تعليقِ النوعِ (`[...][]`) لا بدايةَ المصفوفة.
-    final int end = mid.lastIndexOf(']');
-    expect(end, greaterThan(0));
-    int depth = 0;
-    int start = -1;
-    for (int i = end; i >= 0; i--) {
-      if (mid[i] == ']') depth++;
-      if (mid[i] == '[') {
-        depth--;
-        if (depth == 0) {
-          start = i;
-          break;
-        }
-      }
-    }
-    expect(start, greaterThanOrEqualTo(0), reason: 'اقتطاعٌ غيرُ مُوازَن');
-    String raw = mid.substring(start, end + 1);
-    // مفاتيحُ TS بلا اقتباسٍ، و`undefined` ليست JSON — ولا نُستعملُها.
-    raw = raw.replaceAllMapped(
-        RegExp(r'([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:'), (m) =>
-            '${m.group(1)}"${m.group(2)}":');
-    raw = raw.replaceAll("'", '"');
-    raw = raw.replaceAllMapped(RegExp(r',(\s*[}\]])'), (m) => m.group(1)!);
-    final List<dynamic> cases = jsonDecode(raw) as List<dynamic>;
+    final List<dynamic> cases = _sharedTable(ts, 'DELETION_ROW_CASES');
     expect(cases.length, greaterThanOrEqualTo(12),
         reason: 'انحلَّ جدولُ الحالات');
     for (final c in cases) {
@@ -239,9 +284,16 @@ void main() {
       () {
     // الكاتبانِ كلاهما `status: 'deleted'`، فالمُشغّلُ يَعمَلُ فوراً
     // والحذفُ كاملٌ خادميّاً. فواجهةُ «قبول/رفض» لا تُعرَضُ قطّ — تُركت
-    // كما هي (قرارُ «لا تُلمَسْ شفرةٌ سليمة»)، وهذا الفحصُ يُبقي الحقيقةَ
+    // كما هي (قرارُ مالكٍ 2026-07-21 يَحرُسُه `admin_ban_reject_test`:
+    // «رفض الطلب بدل الحذف الإجباري»)، وهذا الفحصُ يُبقي الحقيقةَ
     // مقروءةً: لو ظهرَ كاتبٌ لـ`pending` فتلك الواجهةُ تَصيرُ حيّةً
     // ويُراجَعُ ما حولَها.
+    //
+    // **وما تغيّر (2026-10-08):** كان الفحصُ يَكتفي بذلك، فبقيَ **الفشلُ**
+    // مُعلَّقاً على الحالةِ الميتةِ نفسِها — `failed_deletion` يَقولُ عنه
+    // السطحانِ «يتطلب مراجعة» والأزرارُ محصورةٌ بـ`'pending'`، فلا زرَّ
+    // ولا سببَ ولا تنبيه. فالقرارُ لم يُنقَض، وإنّما **فُصِلَ مَخرَجُ
+    // الفشلِ عنه** وشُدَّ في (س) و(ع).
     for (final src in [adminWriter, clientWriter]) {
       expect(stripComments(src).contains("'status': 'pending'"), isFalse);
     }
@@ -255,6 +307,174 @@ void main() {
     expect(body.contains('.update('), isTrue);
     expect(body.contains('.set('), isFalse,
         reason: 'الخادمُ صارَ يُنشئُ الطلبَ — يُراجَعُ التعليل');
+    // وزوجُ `pending` باقٍ في السطحَين كما قرَّرَ المالك — فإسقاطُه ليس
+    // إصلاحاً لهذا العطل، وهذا الفحصُ يَمنعُ أن يُسقَطَ بحجّتِه.
+    expect(stripComments(flutterScreen).contains("status == 'pending'"), isTrue,
+        reason: 'زالَ زوجُ `pending` من شاشةِ التطبيق — وهو قرارُ مالك');
+    expect(stripComments(panel).contains("req.status === 'pending'"), isTrue,
+        reason: 'زالَ زوجُ `pending` من اللوحة — وهو قرارُ مالك');
+  });
+
+  // ===== فشلُ الحذفِ: يُقالُ، ويُقرأُ سببُه، ويُعادُ تشغيلُه =====
+
+  test('(ل) حالةُ الطلبِ: `deleted` ليست «تمَّ»، و`pending` غيرُ معروفة', () {
+    expect(deletionRequestState('deleted'), DeletionRequestState.inProgress);
+    expect(deletionRequestState('deleted_fully_processed'),
+        DeletionRequestState.completed);
+    expect(deletionRequestState('failed_deletion'), DeletionRequestState.failed);
+    expect(deletionRequestState('rejected'), DeletionRequestState.rejected);
+    // افتراضُ السطحَين القديمُ — ولا كاتبَ له، فلا ندّعي عنه.
+    expect(deletionRequestState('pending'), DeletionRequestState.unknown);
+    expect(deletionRequestState(null), DeletionRequestState.unknown);
+    expect(deletionRequestState(7), DeletionRequestState.unknown);
+    // و«تمَّ نهائياً» تُقالُ للمكتملِ وحدَه: دمجُ `deleted` معه كان دعوى
+    // إتمامٍ على حالةٍ قد تَعلَق.
+    expect(deletionStateLabel(DeletionRequestState.completed),
+        'تم الحذف نهائياً');
+    expect(deletionStateLabel(DeletionRequestState.inProgress),
+        isNot(contains('نهائياً')));
+  });
+
+  test('(م) إعادةُ المحاولة: الفشلُ دائماً، والعالقُ بعدَ المُهلة، ولا جهل',
+      () {
+    final DateTime now = DateTime(2026, 10, 8, 12);
+    final DateTime old = now.subtract(kDeletionStuckGrace * 2);
+    final DateTime fresh = now.subtract(const Duration(seconds: 5));
+    bool r(DeletionRequestState s, DateTime? at) =>
+        deletionRetryAllowed(state: s, requestedAt: at, now: now);
+    expect(r(DeletionRequestState.failed, null), isTrue);
+    expect(r(DeletionRequestState.failed, fresh), isTrue);
+    expect(r(DeletionRequestState.inProgress, old), isTrue);
+    // تنفيذٌ جارٍ: لا نُعيدُ تشغيلَه فوقَ نفسِه.
+    expect(r(DeletionRequestState.inProgress, fresh), isFalse);
+    expect(r(DeletionRequestState.inProgress, null), isFalse);
+    expect(r(DeletionRequestState.completed, old), isFalse);
+    expect(r(DeletionRequestState.rejected, old), isFalse);
+    // الجهلُ لا يُعاد تشغيلُه: الحذفُ لا رجعةَ فيه.
+    expect(r(DeletionRequestState.unknown, old), isFalse);
+  });
+
+  test('(ن) سببُ الفشلِ يُقرَأُ ويُقلَّم', () {
+    expect(deletionFailureReason({'error': 'auth/internal-error'}),
+        'auth/internal-error');
+    expect(deletionFailureReason({'error': '  x  '}), 'x');
+    expect(deletionFailureReason({'error': ''}), isNull);
+    expect(deletionFailureReason({}), isNull);
+    expect(deletionFailureReason(null), isNull);
+  });
+
+  test('(س) السطحانِ يُنادِيانِ القاعدةَ ويَعرِضانِ السببَ ويُعيدانِ التشغيل',
+      () {
+    for (final e in {'التطبيق': flutterScreen, 'اللوحة': panel}.entries) {
+      final String code = stripComments(e.value);
+      for (final f in const [
+        'deletionRequestState',
+        'deletionStateLabel',
+        'deletionRetryAllowed',
+        'deletionFailureReason',
+      ]) {
+        expect(RegExp('\\b$f\\s*\\(').hasMatch(code), isTrue,
+            reason: '${e.key}: لا يُنادي $f — فالقاعدةُ في موضعٍ واحدٍ '
+                'وهذا السطحُ يُعدِّدُ بنفسِه');
+      }
+    }
+    // **والكتابةُ في مسارِ الإعادةِ بعينِه، لا في الملفّ.** صياغةٌ أولى
+    // طلبت ورودَ `status: 'deleted'` في السطحِ كلِّه، فمرَّ قضمٌ بدَّلَ
+    // كتابةَ زرِّ الإعادةِ **أخضرَ**: زرُّ `pending` المجاورُ يَكتبُها
+    // أيضاً فأرضَى الفحصَ — «موضعٌ آخرُ يُرضي الفحصَ» للمرّةِ الخامسةِ
+    // في هذا المستودع.
+    expect(
+        _deletedWrite.hasMatch(
+            _fnBody(stripComments(flutterScreen), '_retryButton(')),
+        isTrue,
+        reason: 'زرُّ إعادةِ المحاولةِ في التطبيقِ لا يَكتبُ الحالةَ التي '
+            'تُطلِقُ المُشغّل');
+    expect(
+        _deletedWrite.hasMatch(
+            _fnBody(stripComments(panel), 'handleRetry = async (')),
+        isTrue,
+        reason: 'إعادةُ المحاولةِ في اللوحةِ لا تَكتبُ الحالةَ التي '
+            'تُطلِقُ المُشغّل');
+    // **والإجراءُ نفسُه مشروطٌ بالقاعدة، لا بحضورِ نداءٍ في مكانٍ آخر.**
+    // اختبارُ قضمٍ أسقطَ `deletionRetryAllowed` من خليّةِ الإجراءِ في
+    // اللوحةِ واستبدلَها بـ`state === 'failed'` فمرَّ **أخضرَ**: النداءُ
+    // باقٍ في العدّادِ فوقَ الجدول، والصفُّ العالقُ يَفقدُ زرَّه — «موضعٌ
+    // آخرُ يُرضي الفحصَ» للمرّةِ الرابعةِ في هذا المستودع.
+    expect(
+        RegExp(r'\bdeletionRetryAllowed\s*\(')
+            .allMatches(stripComments(panel))
+            .length,
+        greaterThanOrEqualTo(2),
+        reason: 'اللوحةُ تُنادي القاعدةَ في موضعٍ واحدٍ — فأحدُهما '
+            '(العدّادُ أو زرُّ الإجراء) يُقرّرُ بتعدادٍ من عندِه');
+    expect(stripComments(flutterScreen).contains('trailing: canRetry'), isTrue,
+        reason: 'إجراءُ شاشةِ التطبيقِ لم يَعُد مشروطاً بناتجِ القاعدة');
+  });
+
+  test('(ع) الخادمُ يُنبّهُ عند الفشلِ — وكان الوسمُ كلَّ ما يَحدث', () {
+    final String body = _deletionFnBody(idx);
+    final int iMark = body.indexOf('status: "failed_deletion"');
+    expect(iMark, greaterThan(0));
+    // الدفعةُ **بعدَ** الوسم: أوّلُ ما يَلزمُ أن يَثبُتَ هو الحالةُ على
+    // المستند، ثمّ يُقالَ للبشر.
+    final int iPush = body.indexOf('queuePush(', iMark);
+    expect(iPush, greaterThan(iMark),
+        reason: 'فشلُ حذفٍ يَلزمُه متطلّبُ آبل بلا تنبيه — الوسمُ وحدَه '
+            'لا يَقرؤه أحدٌ إلّا بمحضِ المصادفة');
+    // **وحضورُ النداءِ ليس تشغيلَه.** اختبارُ قضمٍ غلَّفَه بـ`if (false)`
+    // فمرَّ **أخضرَ**: الفحصُ رَضيَ بورودِ النصِّ. فالمشدودُ أنّه جملةٌ
+    // غيرُ مشروطةٍ — بلا أيِّ `if (` بين الوسمِ والدفعة — وأنّه يَبدأُ
+    // سطرَه بـ`await`. («الاسمُ ليس القدرة»، وقد وقعَ على حارسِ
+    // `syncRoleToPushToken` بالصيغةِ نفسِها.)
+    expect(body.substring(iMark, iPush).contains('if ('), isFalse,
+        reason: 'الدفعةُ مشروطةٌ — ففشلٌ قد يَقعُ بلا تنبيه');
+    expect(body.contains('\n    await queuePush("ADMIN_BROADCAST", '
+        '"فشلَ حذفُ حساب'), isTrue,
+        reason: 'الدفعةُ لم تَعُد جملةً مستقلّةً غيرَ مشروطة');
+    // والجمهورُ `super_admin` وحدَه: القاعدةُ تَحصُرُ قراءةَ المجموعةِ به.
+    final int iAud = body.indexOf('["super_admin"]', iPush);
+    expect(iAud, greaterThan(iPush),
+        reason: 'جمهورُ تنبيهِ الفشلِ ليس `super_admin` وحدَه — '
+            'والقواعدُ تَحصُرُ قراءةَ `account_deletions` به');
+    // وفشلُ الدفعةِ نفسِه لا يَحجبُ الوسمَ (سابقةُ دفعةِ الرصيدِ المحجوز).
+    expect(body.substring(iPush).contains('.catch('), isTrue,
+        reason: 'فشلُ الدفعةِ يَرمي فوقَ خطأٍ أصليٍّ فيُخفيه');
+    // ومضادّةٌ: الشرحُ الذي يَقتبسُ العطلَ ما زال في الخامّ.
+    expect(idx.contains('ترِدُ في هذا'), isTrue,
+        reason: 'زالَ الشرحُ الذي يُعلّلُ التنبيه');
+    // وقاعدةُ الوصولِ التي يَقومُ عليها اختيارُ الجمهورِ ما زالت كما هي.
+    expect(
+        File('firestore.rules')
+            .readAsStringSync()
+            .contains('allow read, update, delete: if isSuperAdmin();'),
+        isTrue,
+        reason: 'تغيّرت قاعدةُ قراءةِ `account_deletions` — يُراجَعُ جمهورُ '
+            'التنبيه');
+  });
+
+  test('(ف) جدولُ حالاتِ الحالةِ مشترَكٌ بين اللغتَين', () {
+    final String ts =
+        File('admin_panel/src/utils/deletionLogRow.test.ts').readAsStringSync();
+    final List<dynamic> cases = _sharedTable(ts, 'DELETION_STATE_CASES');
+    expect(cases.length, greaterThanOrEqualTo(10),
+        reason: 'انحلَّ جدولُ حالاتِ الحالة');
+    // الأصنافُ المُسمّاةُ لا حدٌّ عدديٌّ وحدَه.
+    for (final want in const ['deleted', 'failed_deletion', 'pending']) {
+      expect(cases.any((c) => c[0] == want), isTrue,
+          reason: 'صنفٌ مفقودٌ من الجدول: $want');
+    }
+    const Map<String, DeletionRequestState> byName = {
+      'inProgress': DeletionRequestState.inProgress,
+      'completed': DeletionRequestState.completed,
+      'failed': DeletionRequestState.failed,
+      'rejected': DeletionRequestState.rejected,
+      'unknown': DeletionRequestState.unknown,
+    };
+    for (final c in cases) {
+      final DeletionRequestState got = deletionRequestState(c[0]);
+      expect(got, byName[c[1]], reason: 'حالةُ ${c[0]}');
+      expect(deletionStateLabel(got), c[2], reason: 'تسميةُ ${c[0]}');
+    }
   });
 
   test('(ك) الأرضيّة: المسحُ قرأَ ملفّاتٍ فعلاً', () {
