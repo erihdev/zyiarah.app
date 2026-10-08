@@ -34,7 +34,10 @@ void main() {
 
     test('لها بطاقة في واجهة العميل تفتح شاشة الباقات الجديدة', () {
       expect(dash.contains('EventWorkerPackagesScreen'), isTrue);
-      expect(dash.contains('عاملات للمناسبات'), isTrue);
+      // عنوانُ البطاقة في الكتالوج الآن — وغيابُه عن **شاشةِ الزائر** هو
+      // بعينه ما كشفه توحيدُ الكتالوج، فيُشَدُّ حيث يَسكن.
+      final cat = File('lib/utils/service_catalog.dart').readAsStringSync();
+      expect(cat.contains('عاملات للمناسبات'), isTrue);
     });
 
     test('مسار التسعير الخادمي القديم لعاملات المناسبات يبقى كما هو (خارج النطاق)', () {

@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:zyiarah/utils/service_catalog.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -769,6 +770,24 @@ class _ClientDashboardState extends State<ClientDashboard> {
     );
   }
 
+  /// وجهةُ كلِّ خدمة. `switch` **تعبيريٌّ شامِلٌ** على `ZyiarahService`:
+  /// خدمةٌ تُضافُ للكتالوجِ ولا فرعَ لها **تُسقِطُ الترجمةَ** — فلا بطاقةَ
+  /// تُعرَضُ بلا وجهةٍ ولا ضغطةَ بلا أثر.
+  Widget _screenFor(ZyiarahServiceCard svc) => switch (svc.id) {
+        // `serviceName` من الكتالوجِ لا مكتوباً ثانيةً: الشاشتانِ تَعرضانِه
+        // عنواناً وتُمرّرانِه في `serviceName` على الطلب.
+        ZyiarahService.hourlyCleaning =>
+          HourlyCleaningDetailsScreen(serviceName: svc.title),
+        ZyiarahService.sofaRug =>
+          SofaRugCleaningDetailsScreen(serviceName: svc.title),
+        ZyiarahService.subscriptions => const ZyiarahSubscriptionPlansScreen(),
+        // صارت طلباً مباشراً مسعّراً بدل طلب عرض سعر ينتظر تسعير الإدارة.
+        ZyiarahService.acService => const AcServiceDetailsScreen(),
+        ZyiarahService.carInterior => const CarInteriorDetailsScreen(),
+        ZyiarahService.eventWorkers => const EventWorkerPackagesScreen(),
+        ZyiarahService.store => const ZyiarahStoreScreen(),
+      };
+
   Widget _buildGrid(int crossAxisCount, double childAspectRatio) {
     return GridView.count(
       crossAxisCount: crossAxisCount,
@@ -778,86 +797,21 @@ class _ClientDashboardState extends State<ClientDashboard> {
       crossAxisSpacing: 15,
       childAspectRatio: childAspectRatio,
       children: [
-        // (باقات السكن) البطاقة تعكس المنتج الجديد: باقة بنوع السكن وعدد الكوادر —
-        // لا ساعات ولا «من 50 ر.س» التي لم تعد تطابق أي سعر خلف الضغطة.
-        _buildWebStyleServiceCard(
-          title: "تنظيف منزلي",
-          subtitle: "باقة حسب نوع سكنك وعدد الكوادر",
-          price: "حسب الباقة",
-          numericPrice: 50.0,
-          themeColor: const Color(0xFF10B981),
-          icon: Icons.access_time_filled,
-          iconBgColor: const Color(0xFFE1F0E4),
-          imagePath: 'assets/images/hourly_cleaning.png',
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HourlyCleaningDetailsScreen(serviceName: "تنظيف منزلي"))),
-        ),
-        _buildWebStyleServiceCard(
-          title: "تنظيف الكنب والزل",
-          subtitle: "تنظيف عميق بالبخار",
-          price: "حسب المتر",
-          numericPrice: 0.0,
-          themeColor: const Color(0xFF8B5CF6),
-          icon: Icons.chair,
-          iconBgColor: const Color(0xFFF1E9FE),
-          imagePath: 'assets/images/sofa_cleaning.png',
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SofaRugCleaningDetailsScreen(serviceName: "تنظيف الكنب والزل"))),
-        ),
-        _buildWebStyleServiceCard(
-          title: "باقات الاشتراك",
-          subtitle: "زيارات مجدولة",
-          price: "باقات شهرية",
-          numericPrice: 0.0,
-          themeColor: const Color(0xFF10B981),
-          icon: Icons.workspace_premium,
-          iconBgColor: const Color(0xFFE1F0E4),
-          imagePath: 'assets/images/monthly_cleaning.png',
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahSubscriptionPlansScreen())),
-        ),
-        _buildWebStyleServiceCard(
-          title: "صيانة وغسيل المكيفات",
-          subtitle: "شباك أو سبليت",
-          price: "سعر لكل مكيف",
-          numericPrice: 0.0,
-          themeColor: const Color(0xFF475569),
-          icon: Icons.ac_unit_rounded,
-          iconBgColor: const Color(0xFFF1F5F9),
-          imagePath: 'assets/images/company_cleaning.png',
-          // صارت طلباً مباشراً مسعّراً بدل طلب عرض سعر ينتظر تسعير الإدارة.
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AcServiceDetailsScreen())),
-        ),
-        _buildWebStyleServiceCard(
-          title: "تنظيف داخلية السيارة",
-          subtitle: "مراتب وأسقف السيارة",
-          price: "حسب حجم السيارة",
-          numericPrice: 0.0,
-          themeColor: const Color(0xFF0E7490),
-          icon: Icons.directions_car_filled_rounded,
-          iconBgColor: const Color(0xFFE0F2FE),
-          imagePath: 'assets/images/car_cleaning.png',
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CarInteriorDetailsScreen())),
-        ),
-        _buildWebStyleServiceCard(
-          title: "عاملات للمناسبات",
-          subtitle: "باقات جاهزة بأسعار ثابتة",
-          price: "باقات مسبقة الإعداد",
-          numericPrice: 0.0,
-          themeColor: const Color(0xFF9333EA),
-          icon: Icons.celebration_rounded,
-          iconBgColor: const Color(0xFFF3E8FF),
-          imagePath: 'assets/images/event_workers.png',
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EventWorkerPackagesScreen())),
-        ),
-        _buildWebStyleServiceCard(
-          title: "متجر المنظفات",
-          subtitle: "أدوات احترافية",
-          price: "عروض حصرية",
-          numericPrice: 0.0,
-          themeColor: const Color(0xFF660033),
-          icon: Icons.storefront,
-          iconBgColor: const Color(0xFFFCEEFA),
-          imagePath: 'assets/images/store.png',
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ZyiarahStoreScreen())),
-        ),
+        // الكتالوجُ واحدٌ في `utils/service_catalog.dart`: شاشةُ الزائرِ كانت
+        // تَعرضُ ستّاً من سبعٍ وبصياغةٍ مهجورةٍ للمكيفات. وما يَبقى هنا هو
+        // ودجةُ البطاقةِ وسلوكُ الضغطةِ وحدَهما.
+        for (final svc in kServiceCatalog)
+          _buildWebStyleServiceCard(
+            title: svc.title,
+            subtitle: svc.subtitle,
+            price: svc.priceLabel,
+            themeColor: svc.themeColor,
+            icon: svc.icon,
+            iconBgColor: svc.iconBgColor,
+            imagePath: svc.imagePath,
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => _screenFor(svc))),
+          ),
       ],
     );
   }
@@ -866,7 +820,6 @@ class _ClientDashboardState extends State<ClientDashboard> {
     required String title,
     required String subtitle,
     required String price,
-    required double numericPrice,
     required Color themeColor,
     required IconData icon,
     required Color iconBgColor,
