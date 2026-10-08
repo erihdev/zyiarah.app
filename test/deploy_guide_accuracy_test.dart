@@ -283,6 +283,40 @@ void main() {
       expect(File('firestore.rules').readAsStringSync(), contains('STAGE-C'),
           reason: 'علاماتُ STAGE-C زالت من القواعد — يُراجَعُ القسم');
     });
+
+    test('(ط) حذفُ الفهارسِ الزائدةِ: عددٌ مُشتَقٌّ وأمرٌ كاملٌ وخطرٌ مذكور',
+        () {
+      final i = guide.indexOf('## 1-و.');
+      final j = guide.indexOf('## 2.', i);
+      final sect = guide.substring(i, j);
+
+      // **العددُ يُشتَقُّ من قائمةِ التعليلِ نفسِها.** الدليلُ يَقولُ للمالكِ
+      // «كم فهرساً زائداً»، وهو عددٌ يَتغيّرُ مع كلِّ شريحةٍ — فنسخةٌ ثانيةٌ
+      // تَنحرِفُ، كما انحرفَ عددُ محجوزاتِ STAGE-C أعلاه.
+      final gsrc =
+          File('test/firestore_indexes_guard_test.dart').readAsStringSync();
+      final orphans = RegExp("بلا استعلام',").allMatches(gsrc).length;
+      expect(orphans, greaterThanOrEqualTo(4),
+          reason: 'اشتقاقُ عددِ الفهارسِ الزائدةِ انهار — لا قائمةٌ أصغر');
+      expect(sect, contains('${_ar(orphans)} فهارسَ'),
+          reason: 'الدليلُ يَذكرُ عدداً غيرَ $orphans للفهارسِ الزائدة');
+
+      // والأمرُ اليدويُّ كاملٌ: بلا `--project` يَنشرُ إلى ما تَختارُه
+      // البيئةُ، وبلا `--force` لا يَحذفُ شيئاً فيُقرأُ المسارُ عاجزاً.
+      expect(sect, contains('--force'));
+      expect(sect, contains('--project zyiarah-app'));
+      expect(sect, contains('--only firestore:indexes'));
+
+      // والخطرُ الحقيقيُّ مذكورٌ: `--force` يَمحو تجاوزاتِ الحقولِ كذلك.
+      expect(sect, contains('fieldOverrides'),
+          reason: 'الدليلُ يَأمرُ بـ`--force` ولا يَذكرُ أنّه يَمحو تجاوزاتِ '
+              'الحقولِ الغائبةَ عن الملفّ');
+      final fo = (jsonDecode(File('firestore.indexes.json').readAsStringSync())
+          as Map<String, dynamic>)['fieldOverrides'];
+      expect(fo, isA<List<dynamic>>());
+      expect(fo as List<dynamic>, isEmpty,
+          reason: 'صارَ للملفِّ تجاوزُ حقلٍ — يُراجَعُ تحذيرُ `--force` هنا');
+    });
   });
 }
 
