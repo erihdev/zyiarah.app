@@ -65,6 +65,10 @@ const ENFORCE_PRICE_TIER_B = true;
 // وحدَه بلا تعداد. لا يُستبدَلُ بـ`limit()` على الاستعلام: القصُّ قبلَ
 // الترشيحِ هو العطلُ نفسُه الذي أُغلق.
 const NEG_WALLET_SCAN_MAX = 500;
+/// حدُّ مسحِ العقودِ المدفوعةِ العالقةِ — جمهورُ **خللٍ** لا استعمال، إلّا أنّ
+/// المُتخطَّى منه (`plan_validation_failed`) لا يَخرُجُ أبداً، فتجاوزُ الحدِّ
+/// هو الخبرُ بذاتِه (سابقةُ `NEG_WALLET_SCAN_MAX` أعلاه).
+const STUCK_CONTRACT_SCAN_MAX = 300;
 
 // 1. Notify user when admin replies to a support ticket
 exports.sendNotificationOnTicketReply = onDocumentCreated({document: "support_tickets/{ticketId}/messages/{messageId}", cpu: 0.083},
@@ -5346,27 +5350,55 @@ exports.opsHealthSweep = onSchedule(
       //    المَحروسة. و`in` تَنحلُّ إلى مساواتَين، فلا فهرسَ مركَّباً.
       //    القائمةُ مرآةٌ لـ`kContractPreActiveStatuses` في
       //    `lib/utils/contract_health.dart` ويَشدُّ التطابقَ حارسٌ دارتيّ.
+      //    ⚠️ **ونافذةُ الـ100 كانت تَسيلُ.** الحلقةُ تَتخطّى
+      //    `plan_validation_failed` بـ`continue` — عدمُ تفعيلٍ **مقصودٌ**
+      //    نُبِّه عنه سلفاً — وذلك العقدُ يَبقى `is_paid: true` وفي حالةٍ
+      //    قبلَ التفعيلِ **إلى الأبد**، فلا يَخرُجُ من مطابقةِ الاستعلام.
+      //    فبعدَ مئةٍ منها يُدفَعُ عقدٌ **عالقٌ حقيقيٌّ** خارجَ النافذةِ فلا
+      //    يُفعَّلُ أبداً بلا خطأٍ ولا سطرِ سجلّ — وهو أكبرُ مبلغٍ في
+      //    التطبيق. ومَسلكُها لا يَلزمُه تلاعبٌ: تغييرُ سعرِ باقةٍ أثناءَ
+      //    تعاقدٍ جارٍ يُفشِلُ تحقّقَ خطّتِه، وتلك تَتراكمُ مع العمر.
+      //
+      //    والعلاجُ سابقةُ المحافظِ السالبةِ في هذا الملفِّ نفسِه: `count()`
+      //    أوّلاً ثمّ قراءةُ **الجمهورِ كاملاً**، وانفجارُ العددِ نفسُه هو
+      //    الخبرُ. و`!=` في Firestore تَشترطُ وجودَ الحقل، فاستثناءُ
+      //    المُتخطَّى بمساواةٍ ثالثةٍ غيرُ متاحٍ أصلاً.
       try {
-        const kSnap = await db.collection("contracts")
+        const kQ = db.collection("contracts")
             .where("is_paid", "==", true)
-            .where("status", "in", ["pending", "approved_waiting_payment"])
-            .limit(100).get();
-        let revived = 0; let deliberate = 0;
-        for (const doc of kSnap.docs) {
-          const d = doc.data();
-          if (d.plan_validation_failed === true) {
-            deliberate++;
-            continue;
+            .where("status", "in", ["pending", "approved_waiting_payment"]);
+        const kCount = await kQ.count().get().then((a) => a.data().count);
+        if (kCount > STUCK_CONTRACT_SCAN_MAX) {
+          await queuePush("ADMIN_BROADCAST", "عقود مدفوعة بلا تفعيل ⚠️",
+              `${kCount} عقداً مدفوعاً ما زال قبل التفعيل — عددٌ يتجاوز حدَّ ` +
+              `المسح (${STUCK_CONTRACT_SCAN_MAX})، وهو بذاته خللٌ منهجيٌّ لا ` +
+              "حالاتٌ فرديّة. راجع تحقّق الخطط وسجل التفعيل فوراً.",
+              "admin_order_alert", {count: kCount},
+              ["super_admin", "accountant_admin"]);
+          console.error("opsHealthSweep: stuck contracts above scan cap: " +
+            `${kCount}`);
+          // ولا تَعدادَ: الخبرُ العددُ. (إن/وإلّا كسابقةِ المحافظ — لا
+          // `throw` فيَلتقطُه `catch` الكتلةِ ويُسجّلُ «فشلَ التفعيل» وهو
+          // لم يَفشل.)
+        } else {
+          const kSnap = await kQ.get();
+          let revived = 0; let deliberate = 0;
+          for (const doc of kSnap.docs) {
+            const d = doc.data();
+            if (d.plan_validation_failed === true) {
+              deliberate++;
+              continue;
+            }
+            // **نُنادي المنطقَ نفسَه، لا نُعيدُ إطلاقَ المُشغّل.** لمسةُ
+            // المستندِ لا تُطلِقُه: شرطُه `before.is_paid !== true` وهو
+            // `true` سلفاً. ولذلك اُستُخرِجت `_activateContractNow` —
+            // قاعدةٌ واحدةٌ بمُنادِيَين، بدلَ نسخةٍ ثانيةٍ تَنحرِف.
+            const r = await _activateContractNow(db, doc.ref, doc.id);
+            if (r.activated) revived++;
           }
-          // **نُنادي المنطقَ نفسَه، لا نُعيدُ إطلاقَ المُشغّل.** لمسةُ
-          // المستندِ لا تُطلِقُه: شرطُه `before.is_paid !== true` وهو `true`
-          // سلفاً. ولذلك اُستُخرِجت `_activateContractNow` — قاعدةٌ واحدةٌ
-          // بمُنادِيَين، بدلَ نسخةٍ ثانيةٍ في المكنسةِ تَنحرِف.
-          const r = await _activateContractNow(db, doc.ref, doc.id);
-          if (r.activated) revived++;
+          console.log(`opsHealthSweep: contracts revived=${revived} ` +
+            `deliberate=${deliberate} scanned=${kSnap.size}`);
         }
-        console.log(`opsHealthSweep: contracts revived=${revived} ` +
-          `deliberate=${deliberate}`);
       } catch (e) {
         console.error("opsHealthSweep: contract activation retry failed:",
             e.message);
@@ -5489,15 +5521,29 @@ exports.opsHealthSweep = onSchedule(
       let redriven = 0;
       for (const col of ["notification_queue", "notification_triggers"]) {
         try {
+          // ⚠️ **والحدُّ الأدنى للعمرِ في الاستعلامِ لا في الحلقةِ وحدَها.**
+          // كان `createdAt <= now-30m` يُطابِقُ **كلَّ** مستندٍ غيرِ مُعالَجٍ
+          // على الإطلاق، والحلقةُ تَتخطّى ما تجاوزَ ثلاثةَ أيّامٍ بـ`continue`
+          // — و`orderBy("createdAt","asc")` يُقدّمُ **الأقدمَ**. فبمئةٍ من
+          // المستنداتِ العتيقةِ تَقرأُ المكنسةُ مئةً وتَتخطّاها كلَّها ولا
+          // تَرى مستنداً حديثاً عالقاً واحداً: شبكةُ الأمانِ التي كُتبت
+          // لانقطاعِ أغسطس تَصيرُ عاطلةً بصمت. والمَسلكُ قائمٌ في الشفرة:
+          // فرعُ الفشلِ في مُعالِجِ المُشغّلِ يَكتبُ `processed: false` ثمّ
+          // `giveUp: true` بعد ثلاثِ محاولاتٍ **ويَترُكُ العلمَ `false`** —
+          // فكلُّ فشلٍ دائمٍ يُقيمُ في المطابقةِ للأبد.
+          //
+          // والمدَيانِ على حقلٍ واحدٍ يَخدمُهما الفهرسُ القائمُ نفسُه
+          // (`processed ASC, createdAt ASC`) — لا فهرسَ جديد. وما بقي من
+          // تخطٍّ (`error`/`emailStatus`/`redriven_from`) يَسيلُ داخلَ
+          // ثلاثةِ أيّامٍ وحدَها ثمّ يَخرُجُ بنفسِه: نافذةٌ متدحرجة.
           const snap = await db.collection(col)
               .where("processed", "==", false)
               .where("createdAt", "<=", new Date(now - 30 * 60 * 1000))
+              .where("createdAt", ">=", new Date(now - 3 * 24 * 60 * 60 * 1000))
               .orderBy("createdAt", "asc").limit(100).get();
           for (const doc of snap.docs) {
             const d = doc.data();
             if (d.error || d.emailStatus || d.redriven_from) continue;
-            const ageMs = now - (d.createdAt?.toDate?.().getTime() || now);
-            if (ageMs > 3 * 24 * 60 * 60 * 1000) continue;
             const copy = {...d, redriven_from: doc.id,
               createdAt: FieldValue.serverTimestamp()};
             await db.collection(col).add(copy);
