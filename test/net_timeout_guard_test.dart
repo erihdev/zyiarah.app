@@ -131,6 +131,65 @@ List<String> _rawErrorSinksIn(String src, String path) {
   return out;
 }
 
+/// **نسخةٌ أضيقُ لِما ليس شاشةً ولا ودجة: المصرَفُ ودجةٌ فحسب.**
+///
+/// في شاشةٍ، أيُّ استعمالٍ غيرِ تشخيصيٍّ لاسمِ المُلتقَطِ عرضٌ عمليّاً.
+/// أمّا في خدمةٍ فالاستثناءُ **يُصنَّف** مشروعاً (`e.toString().contains(
+/// 'Timeout')` في `zone_locator_service`) و**يُحفَظُ تشخيصاً** في حقلٍ لا
+/// يُعرَض (`detail:` في `TamaraCheckoutFailure`) — فالكاشفُ العامُّ أبلغَ عن
+/// الثلاثةِ زوراً. ونصُّ خدمةٍ تَرميه يُلتقَطُ عند **الشاشةِ** التي
+/// تَعرضُه، وهو ما وجدَ عطلَ «خطأ في بوابة تمارا: Exception: …» أصلاً.
+/// فالمصرَفُ هنا ودجةُ نصٍّ بعينِها، بموازنةِ الأقواسِ لا بنافذة.
+List<String> _rawErrorInWidgetsIn(String src, String path) {
+  final caught = RegExp(r'catch\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)')
+      .allMatches(src)
+      .map((m) => m.group(1)!)
+      .toSet();
+  if (caught.isEmpty) return const [];
+  final pats = <RegExp>[
+    RegExp('\\\$\\{?\\s*(?:${caught.map(RegExp.escape).join('|')})\\b'),
+    RegExp('\\b(?:${caught.map(RegExp.escape).join('|')})\\.toString\\(\\)'),
+  ];
+  final out = <String>[];
+  for (final pat in pats) {
+    for (final m in pat.allMatches(src)) {
+      if (_diagnosticSink(src, m.start)) continue;
+      if (_lambdaBound(src, m.start, m.group(0)!)) continue;
+      if (!_insideTextWidget(src, m.start)) continue;
+      final ctx = src
+          .substring((m.start - 55).clamp(0, src.length),
+              (m.start + 35).clamp(0, src.length))
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      out.add('$path  ←  ...$ctx...');
+    }
+  }
+  return out;
+}
+
+/// هل الموضعُ [pos] داخلَ وسائطِ ودجةِ نصٍّ تَراها المستخدمة؟
+bool _insideTextWidget(String src, int pos) {
+  const widgets = {'Text', 'SnackBar', 'AlertDialog', 'SelectableText'};
+  var depth = 0;
+  var i = pos;
+  while (i > 0) {
+    i--;
+    final c = src[i];
+    if (c == ')') {
+      depth++;
+    } else if (c == '(') {
+      if (depth > 0) {
+        depth--;
+      } else {
+        final head = src.substring((i - 60).clamp(0, i), i);
+        final m = RegExp(r'([A-Za-z_][A-Za-z0-9_]*)\s*$').firstMatch(head);
+        if (m != null && widgets.contains(m.group(1)!)) return true;
+      }
+    }
+  }
+  return false;
+}
+
 /// أسماءُ النداءاتِ المُحيطةِ بالموضعِ [pos] — **بموازنةِ الأقواسِ إلى
 /// الوراء** لا بنافذةِ عدِّ أحرف (فخُّ الحدِّ مسجَّلٌ في هذا المستودعِ تسعَ
 /// مرّات). كلُّ `(` غيرِ مُطابَقٍ يَعني نداءً نحنُ داخلَ وسائطِه.
@@ -251,6 +310,16 @@ List<File> _allServices() => Directory('lib/services')
     .whereType<File>()
     .where((f) => f.path.endsWith('.dart'))
     .toList();
+
+/// بقيّةُ `lib/` التي يَبلغُ نصُّها العميلةَ: مزوّداتٌ ونماذجُ وأدوات.
+/// (الشاشاتُ والودجاتُ والخدماتُ لها دوالُّها أعلاه.)
+List<File> _allProvidersModelsUtils() => [
+      for (final d in const ['lib/providers', 'lib/models', 'lib/utils'])
+        ...Directory(d)
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((f) => f.path.endsWith('.dart')),
+    ];
 
 /// ملفّاتٌ نداءاتُها السحابيّة **تُغيّر حالة** لا تقرأ — مهلتُها قرارٌ مختلف.
 /// «انقضت المهلة» ليست «لم يحدث شيء»: قد يكون الخادمُ نفّذ. فرسالةُ «فشل» بعد
@@ -658,6 +727,17 @@ void main() {
     // after 0:00:30.000000: Future not completed» وانقطاعُ الشبكةِ
     // «ClientException with SocketException: Failed host lookup» — ولا
     // تَمَسُّهما `replaceAll` لأنّهما لا يَبدآنِ بـ`Exception: `.
+    //
+    // **ورابعةً إلى `lib/services/` (2026-10-08) — وهو ما أغفلَه المسحُ
+    // الثالثُ بعينِه:** التعليقُ أعلاه يَقولُ «ومسحُ
+    // `widgets`+`utils`+`providers`+`models`» — و`services` ليست فيها،
+    // بينما `_allServices()` موجودةٌ في هذا الملفِّ ويُنادِيها فحصُ
+    // **المهلةِ** مرّتَين. فمُسِحَت الأربعةُ مع الخدماتِ فوُجد موضعٌ واحدٌ:
+    // `popup_service` يَعرضُ «تعذّر فتح الرابط: $e» في حوارِ الإعلانِ
+    // المنبثقِ الذي تَفتحُه **لوحةُ العميلة**، و`launchUrl` يَرمي
+    // `PlatformException` فتُقرأُ «… PlatformException(ACTIVITY_NOT_FOUND,
+    // No Activity found to handle Intent…)» بحرفٍ لاتينيّ. والسطرُ
+    // المجاورُ (فرعُ `!ok`) يَقولُ الجملةَ الصحيحةَ أصلاً.
     final offenders = <String>[];
     for (final f in [..._allScreens(), ..._allWidgets()]) {
       final path = f.path.replaceAll('\\', '/');
@@ -665,6 +745,14 @@ void main() {
       if (path.split('/').last.startsWith('driver_')) continue;
       offenders.addAll(_rawErrorSinks(path));
     }
+    var nonUi = 0;
+    for (final f in [..._allServices(), ..._allProvidersModelsUtils()]) {
+      final path = f.path.replaceAll('\\', '/');
+      nonUi++;
+      offenders.addAll(_rawErrorInWidgetsIn(_code(path), path));
+    }
+    expect(nonUi, greaterThanOrEqualTo(60),
+        reason: 'انحلَّ مسحُ الخدماتِ والأدواتِ — اشتقاقٌ فاشلٌ لا مستودعٌ أصغر');
     expect(offenders, isEmpty,
         reason: '\n\nنصُّ الاستثناء يصل العميلة كما هو:\n  • ${offenders.join('\n  • ')}\n');
   });
@@ -745,6 +833,40 @@ void main() {
             'synthetic'),
         isEmpty,
         reason: 'Theme.error لونٌ لا استثناء');
+  });
+
+  test('وكاشفُ ما ليس شاشةً يُختبَرُ كذلك — الودجةُ تَعضُّ والتشخيصُ لا', () {
+    // المصدرُ نظيفٌ بعدَ الإصلاح، فنجاحُ الفحصِ أعلاه لا يُبرهِنُ أنّ
+    // الكاشفَ الأضيقَ يَرى شيئاً. فيُختبَرُ على الأشكالِ التي أعمَت العامَّ
+    // أو أضلَّته، كلٌّ وحدَه.
+    String sink(String body) => 'void f() { try { g(); } catch (e) { $body } }';
+
+    // (١) ودجةُ نصٍّ ⇒ يُلتقَط. وهو عطلُ `popup_service` بعينِه.
+    expect(
+        _rawErrorInWidgetsIn(
+            sink("show(SnackBar(content: Text('تعذّر فتح الرابط: \$e')));"),
+            'x.dart'),
+        isNotEmpty,
+        reason: 'نصٌّ خامٌّ داخلَ ودجةٍ لم يُلتقَط — الكاشفُ أعمى');
+
+    // (٢) حقلُ تشخيصٍ مُسمّى ⇒ لا. (`detail:` في `TamaraCheckoutFailure`.)
+    expect(
+        _rawErrorInWidgetsIn(
+            sink("throw F(userFacingError(e), detail: '\${e.code}: \${e.message}');"),
+            'x.dart'),
+        isEmpty,
+        reason: 'حقلُ التشخيصِ ليس عرضاً — إيجابيّةٌ كاذبة');
+
+    // (٣) تصنيفُ الاستثناءِ ⇒ لا. (`zone_locator_service`.)
+    expect(
+        _rawErrorInWidgetsIn(
+            sink("return e.toString().contains('Timeout') ? a : b;"), 'x.dart'),
+        isEmpty,
+        reason: 'تصنيفُ الاستثناءِ ليس عرضاً — إيجابيّةٌ كاذبة');
+
+    // (٤) مصرَفٌ تشخيصيٌّ داخلَ ودجةٍ؟ لا يُجتمَعان؛ والتشخيصُ وحدَه لا.
+    expect(_rawErrorInWidgetsIn(sink("debugPrint('x: \$e');"), 'x.dart'),
+        isEmpty);
   });
 
   test('والنصُّ الخامُّ يَبقى للأدمنِ — تشخيصٌ لا عطل', () {
