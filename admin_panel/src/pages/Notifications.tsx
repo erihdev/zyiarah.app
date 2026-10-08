@@ -91,7 +91,15 @@ export default function Notifications() {
     };
 
     const handleSend = async () => {
-        if (!title.trim() || !body.trim()) return;
+        // **ضغطةٌ تَنتهي بلا كلمة.** الملفُّ بلا `<form>` وبلا `required`، فهذا
+        // الفحصُ هو كلُّ ما يَمنع — وكان `if (!title.trim() || !body.trim()) return;`
+        // صامتاً: الأدمنُ يَكتبُ بثّاً ويَنسى المحتوى (أو يَترُكُه مسافاتٍ)
+        // فيَضغطُ «إرسال» فلا يَحدثُ شيءٌ ولا تُقالُ كلمة — بينما فحصُ موعدِ
+        // الجدولةِ أسفلَه في الدالّةِ نفسِها يُنبّه.
+        if (!title.trim() || !body.trim()) {
+            toast.error('العنوان والمحتوى مطلوبان قبل الإرسال');
+            return;
+        }
 
         if (isScheduled) {
             const scheduledDate = new Date(scheduleValue);

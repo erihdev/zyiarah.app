@@ -122,7 +122,15 @@ export default function Support() {
         ticketMessageIsFromTeam(m, selected?.userId);
 
     const handleSend = async () => {
-        if (!reply.trim() || !selected || sending) return;
+        // `sending` حرسُ ضغطةٍ مزدوجةٍ و`selected` دفاعيٌّ — كلاهما صامتٌ بحقٍّ.
+        // أمّا نصُّ الردِّ فضغطةٌ قصدَها الأدمن، وكان `!reply.trim()` يُنهيها بلا
+        // كلمةٍ ولا `<form>` في الملفِّ يَمنعُها — بينما `catch` في الدالّةِ
+        // نفسِها يُنبّه.
+        if (sending || !selected) return;
+        if (!reply.trim()) {
+            toast.error('اكتب نص الرد قبل الإرسال');
+            return;
+        }
         setSending(true);
         try {
             // نكتب senderRole و senderId='admin' معاً: الأول ليتعرّف عليه تطبيق العميل،
