@@ -261,7 +261,18 @@ tAsync("(ب٤) الفشل: العلمُ يُكتَب ويُصعَّدُ للتس
 });
 
 // ── رصيدُ زياراتِ الاشتراك ────────────────────────────────────────────────
-tAsync("(د١) الإكمال: الزيارةُ تُخصَمُ من العميلةِ ومن العقد، والعلمُ يُمحى",
+// **وأُعيد توجيهُ (د١) و(د٢) بوعيٍ لا إسكاتاً (2026-10-08):** كانا يَشُدّانِ
+// الكتابةَ على `users/{uid}.visits_remaining` — نسخةً ثانيةً من العدّادِ لا
+// يَقرؤها سطح (صفرُ `.visitsRemaining` في `lib/`) — وحُذفت. والمشدودُ الآن
+// عدّادُ العقدِ، وهو ما تَقرؤه بطاقةُ الباقةِ وشاشتا العقود عبر
+// `contract_visits.dart`، **ومعه أنّ النسخةَ لا تَعود**.
+//
+// وفحصُ (د٧) أدناه هو ما يُجعلُ الحذفَ بلا فقد: `payment_method:
+// "subscription"` — شرطُ بلوغِ هذه الدالّةِ — يُكتَبُ في موضعَين خادميَّين
+// وكلاهما يَكتبُ `contract_id` في الحِمْلِ نفسِه، فالفرعُ «بلا عقد» غيرُ
+// قابلِ الوصول. ولذلك حمَلَ حِمْلُ (د٢) `contract_id` الآن: فِخاخُه القديمةُ
+// كانت تُسنِدُ الردَّ إلى نسخةِ المستخدمِ وحدَها، وهي حالةٌ لا تَقع.
+tAsync("(د١) الإكمال: الزيارةُ تُخصَمُ من عدّادِ العقد، والعلمُ يُمحى",
     async () => {
       const db = fakeDb({
         "orders/o9": {
@@ -270,16 +281,16 @@ tAsync("(د١) الإكمال: الزيارةُ تُخصَمُ من العميل
         },
       });
       const r = await rewards.settleVisitAccounting(db, {
-        orderRef: db._ref("orders/o9"), orderId: "o9", clientId: "c1",
+        orderRef: db._ref("orders/o9"), orderId: "o9",
         status: "completed", code: "S9",
       }, async () => null);
       assert.strictEqual(r.settled, true);
       assert.strictEqual(r.delta, -1);
-      assert.deepStrictEqual(db._store.get("users/c1").visits_remaining,
-          FieldValue.increment(-1));
       assert.deepStrictEqual(db._store.get("contracts/k1").visits_remaining,
           FieldValue.increment(-1),
           "عدّادُ العقدِ لم يُخصَم — بطاقةُ الباقةِ تَعرضُ رصيداً خاطئاً");
+      assert.strictEqual(db._store.get("users/c1"), undefined,
+          "عادت نسخةُ `users/{uid}` — عدّادٌ ثانٍ بلا قارئ");
       const o = db._store.get("orders/o9");
       assert.strictEqual(o.visit_counted, true);
       assert.deepStrictEqual(o.visit_accounting_pending, FieldValue.delete());
@@ -287,15 +298,19 @@ tAsync("(د١) الإكمال: الزيارةُ تُخصَمُ من العميل
 
 tAsync("(د٢) الإلغاء: تُردُّ زيارةٌ **استُهلكت** فقط", async () => {
   const db = fakeDb({
-    "orders/o9": {code: "S9", status: "cancelled", visit_counted: true},
+    "orders/o9": {
+      code: "S9", status: "cancelled", visit_counted: true, contract_id: "k1",
+    },
   });
   const r = await rewards.settleVisitAccounting(db, {
-    orderRef: db._ref("orders/o9"), orderId: "o9", clientId: "c1",
+    orderRef: db._ref("orders/o9"), orderId: "o9",
     status: "cancelled", code: "S9",
   }, async () => null);
   assert.strictEqual(r.delta, 1);
-  assert.deepStrictEqual(db._store.get("users/c1").visits_remaining,
+  assert.deepStrictEqual(db._store.get("contracts/k1").visits_remaining,
       FieldValue.increment(1));
+  assert.strictEqual(db._store.get("users/c1"), undefined,
+      "عادت نسخةُ `users/{uid}` — عدّادٌ ثانٍ بلا قارئ");
   assert.strictEqual(db._store.get("orders/o9").visit_counted, false);
 });
 
@@ -306,7 +321,7 @@ tAsync("(د٣) وإلغاءُ ما لم يُستهلَك لا يَخلقُ زي�
     },
   });
   const r = await rewards.settleVisitAccounting(db, {
-    orderRef: db._ref("orders/o9"), orderId: "o9", clientId: "c1",
+    orderRef: db._ref("orders/o9"), orderId: "o9",
     status: "cancelled", code: "S9",
   }, async () => null);
   assert.strictEqual(r.skipped, "never_counted");
@@ -322,11 +337,11 @@ tAsync("(د٤) والخصمُ مرّتَين ممتنع — `visit_counted` طا
         "orders/o9": {code: "S9", status: "completed", visit_counted: true},
       });
       const r = await rewards.settleVisitAccounting(db, {
-        orderRef: db._ref("orders/o9"), orderId: "o9", clientId: "c1",
+        orderRef: db._ref("orders/o9"), orderId: "o9",
         status: "completed", code: "S9",
       }, async () => null);
       assert.strictEqual(r.skipped, "already_counted");
-      assert.strictEqual(db._store.get("users/c1"), undefined);
+      assert.strictEqual(db._store.get("contracts/k1"), undefined);
     });
 
 tAsync("(د٥) حالةٌ تَحرّكت بعد الفشل ⇒ لا تسويةَ، والعلمُ يُمحى", async () => {
@@ -338,7 +353,7 @@ tAsync("(د٥) حالةٌ تَحرّكت بعد الفشل ⇒ لا تسويةَ
     },
   });
   const r = await rewards.settleVisitAccounting(db, {
-    orderRef: db._ref("orders/o9"), orderId: "o9", clientId: "c1",
+    orderRef: db._ref("orders/o9"), orderId: "o9",
     status: "in_progress", code: "S9",
   }, async () => null);
   assert.strictEqual(r.skipped, "not_terminal");
@@ -353,7 +368,7 @@ tAsync("(د٦) الفشل: العلمُ والسببُ، ويُصعَّدُ مر
   };
   const pushes = [];
   const r = await rewards.settleVisitAccounting(db, {
-    orderRef: db._ref("orders/o9"), orderId: "o9", clientId: "c1",
+    orderRef: db._ref("orders/o9"), orderId: "o9",
     status: "completed", code: "S9",
   }, async (...a) => pushes.push(a));
   assert.strictEqual(r.settled, false);
@@ -369,11 +384,82 @@ tAsync("(د٦) الفشل: العلمُ والسببُ، ويُصعَّدُ مر
 
   // ومحاولةٌ ثانيةٌ فاشلةٌ لا تُصعِّدُ مرّةً أخرى
   const again = await rewards.settleVisitAccounting(db, {
-    orderRef: db._ref("orders/o9"), orderId: "o9", clientId: "c1",
+    orderRef: db._ref("orders/o9"), orderId: "o9",
     status: "completed", code: "S9", alreadyAlerted: true,
   }, async (...a) => pushes.push(a));
   assert.strictEqual(again.failed, "deadline exceeded");
   assert.strictEqual(pushes.length, 1, "تصعيدٌ مكرَّرٌ لكلِّ دورةِ مكنسة");
+});
+
+// **(د٧) وشاهدُ أنّ حذفَ نسخةِ `users/{uid}` بلا فقد.**
+//
+// الدالّةُ لا تُنادى إلّا على طلبٍ `payment_method === "subscription"`، وهذه
+// القيمةُ تُكتَبُ في موضعَين خادميَّين — مولِّدَي زياراتِ العقدِ — وكلاهما
+// يَكتبُ `contract_id` في **الحِمْلِ نفسِه**. ولا كاتبَ لها في العميلِ ولا
+// في اللوحة. فالفرعُ «زيارةُ اشتراكٍ بلا عقد» غيرُ قابلِ الوصول، وعدّادُ
+// العقدِ وحدَه يُغطّي كلَّ تسوية. ولو ظهرَ كاتبٌ ثالثٌ بلا `contract_id`
+// فهذا الفحصُ هو ما يُراجَع — لا الحذف.
+t("(د٧) `payment_method: subscription` لا يُكتَبُ إلّا مع `contract_id`", () => {
+  const raw = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
+  const sites = [];
+  const re = /payment_method:\s*"subscription"/g;
+  let m;
+  while ((m = re.exec(raw)) !== null) {
+    // إلى الوراءِ حتى `{` الحِمْلِ الحاوي، ثمّ إلى الأمامِ بموازنةٍ.
+    let i = m.index; let d = 0;
+    while (i >= 0) {
+      if (raw[i] === "}") d++;
+      else if (raw[i] === "{") {
+        if (d === 0) break;
+        d--;
+      }
+      i--;
+    }
+    let j = i; d = 0;
+    while (j < raw.length) {
+      if (raw[j] === "{") d++;
+      else if (raw[j] === "}") {
+        d--;
+        if (d === 0) break;
+      }
+      j++;
+    }
+    sites.push(raw.slice(i, j + 1));
+  }
+  assert.strictEqual(sites.length, 2,
+      `مواضعُ \`payment_method: "subscription"\` ${sites.length} لا ٢ — ` +
+      "يُراجَعُ التعليل");
+  for (const blk of sites) {
+    assert.ok(/contract_id:/.test(blk),
+        "حِمْلٌ يَكتبُ `subscription` بلا `contract_id` — فتسويةُ زيارتِه " +
+        "تَفقدُ عدّادَها، وكانت نسخةُ `users/{uid}` تُغطّيها");
+  }
+  // ولا كاتبَ للقيمةِ في العميلِ ولا في اللوحة.
+  const root = path.join(__dirname, "..", "..");
+  const scan = (dir, exts) => {
+    const out = [];
+    const walk = (d) => {
+      for (const e of fs.readdirSync(d, {withFileTypes: true})) {
+        const fp = path.join(d, e.name);
+        if (e.isDirectory()) {
+          if (e.name !== "node_modules") walk(fp);
+        } else if (exts.some((x) => e.name.endsWith(x))) {
+          out.push(fp);
+        }
+      }
+    };
+    walk(dir);
+    return out;
+  };
+  const client = scan(path.join(root, "lib"), [".dart"])
+      .concat(scan(path.join(root, "admin_panel", "src"), [".ts", ".tsx"]));
+  assert.ok(client.length >= 150, `مسحُ العميلِ أعطى ${client.length} ملفّاً`);
+  const writers = client.filter((f) =>
+    /['"]payment_method['"]\s*:\s*['"]subscription['"]/
+        .test(fs.readFileSync(f, "utf8")));
+  assert.deepStrictEqual(writers, [],
+      "سطحٌ عميليٌّ يَكتبُ `payment_method: 'subscription'` — فقد يَصنعُ " +
+      "زيارةً بلا `contract_id`");
 });
 
 // ── مكافأةُ الإحالة ──────────────────────────────────────────────────────

@@ -2206,7 +2206,6 @@ exports.syncOrderLinkedRecords = onDocumentUpdated({document: "orders/{orderId}"
         await rewards.settleVisitAccounting(db, {
           orderRef,
           orderId,
-          clientId,
           status: afterStatus,
           code: after.code || orderId,
         }, queuePush);
@@ -4013,8 +4012,20 @@ async function _activateContractNow(db, contractRef, contractId) {
       visits_generated: true,
       visits_generated_at: FieldValue.serverTimestamp(),
     });
-    // منح رصيد الزيارات + حقول عرض الاشتراك ذرّياً — بدونها كانت بطاقة الاشتراك
-    // في لوحة العميل لا تظهر أبداً (has_active_subscription تبقى false).
+    // عدّادُ زياراتِ العقدِ + انتهاؤه، ذرّياً مع التفعيل.
+    //
+    // **ولا حقولَ اشتراكٍ على `users/{uid}` (حُذفت 2026-10-08).** كان هنا
+    // `tx.set` ثانٍ يَكتبُ `visits_remaining` و`has_active_subscription` و
+    // `subscription_total_visits` و`subscription_type` و`subscription_expiry`
+    // على مستندِ المستخدم، وتعليقُه يَقولُ إنّ بطاقةَ الاشتراكِ في لوحةِ
+    // العميلِ «لا تظهر أبداً» بدونها — **وهو غيرُ صحيح**: البطاقةُ تَبثُّ
+    // `contracts` وتَقرأُ `status`/`planName`/`expiry` وعدّادَ العقدِ عبر
+    // `contract_visits.dart`، ولا تَمَسُّ مستندَ المستخدم. وصفرُ قارئٍ
+    // للحقولِ الخمسةِ في العميلِ والخادمِ واللوحة.
+    //
+    // ونسختُها كانت خاطئةً بالبناءِ مع عقدَين نشطَين: الرصيدُ `increment`
+    // (مجموعٌ على العقود) والثلاثةُ الأخرى يَغلِبُ فيها آخرُ كاتب — وهو
+    // سببُ العدّاداتِ المستقلّةِ الموصوفِ أسفلَه.
     if (c.userId && Number(c.planVisits || 0) > 0) {
       const pv = Number(c.planVisits);
       // انتهاء الاشتراك = تاريخ آخر زيارة مجدولة + مهلة 7 أيام (بدل ثابت 90 يوماً
@@ -4038,13 +4049,6 @@ async function _activateContractNow(db, contractRef, contractId) {
       const expiryMs = Math.max(
           lastVisitMs + 7 * 24 * 60 * 60 * 1000, // مهلة بعد آخر زيارة
           Date.now() + 24 * 60 * 60 * 1000); // لا يقلّ عن يوم من الآن
-      tx.set(db.collection("users").doc(c.userId), {
-        visits_remaining: FieldValue.increment(pv),
-        has_active_subscription: true,
-        subscription_total_visits: pv,
-        subscription_type: c.planName || "باقة زيارة",
-        subscription_expiry: Timestamp.fromMillis(expiryMs),
-      }, {merge: true});
       // عدّادات مستقلّة لكل عقد — كي تعرض الرئيسية بطاقة منفصلة لكل باقة نشطة
       // (الشهرية + الأسبوعية معاً) بدل طمس حقول المستخدم المجمّعة بعضها بعضاً.
       tx.set(contractRef, {
@@ -5396,7 +5400,6 @@ exports.opsHealthSweep = onSchedule(
           const r = await rewards.settleVisitAccounting(db, {
             orderRef: doc.ref,
             orderId: doc.id,
-            clientId: d.client_id,
             // الاتّجاهُ من الحالةِ **الراهنة** لا من حالةِ لحظةِ الفشل.
             status: d.status,
             code: d.code || doc.id,
@@ -6175,8 +6178,14 @@ exports.applyReferralCode = onCall({cpu: 0.25}, async (request) => {
       rewarded_at: null,
       rewarded_on_order: null,
     });
-    t.set(db.collection("users").doc(uid),
-        {used_referral_code: code, referred_by: referrerId}, {merge: true});
+    // **ولا نسخةَ على `users/{uid}` (حُذفت 2026-10-08).** كانت المعامَلةُ
+    // نفسُها تَكتبُ `used_referral_code` و`referred_by` هناك، وهما الحقيقتانِ
+    // اللتانِ يَحملُهما مستندُ الإحالةِ أعلاه بمعرّفٍ حتميٍّ هو uid المُحالِ
+    // إليه (`referrer_id`/`referee_id`/`referral_code`) — تمثيلٌ ثالثٌ
+    // **بصفرِ قارئٍ** في العميلِ والخادمِ واللوحة، ولا استعلامَ عليه.
+    // والدفعُ يَقرأُ `referrals.referrer_id` لا مستندَ المستخدم.
+    // ومنعُهما في `firestore.rules` باقٍ: حظرُ حقلٍ لا يَكتبُه أحدٌ لا يَضرّ،
+    // ويَحمي الاسمَ إن عادَ له كاتبٌ يوماً.
     return true;
   });
   return {ok: created, reason: created ? null : "already"};

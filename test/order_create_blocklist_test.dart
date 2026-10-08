@@ -60,7 +60,10 @@ const Map<String, String> _notAnOrderFlag = {
   'retry': 'خيارُ onDocument*({retry: true})',
   // حقولٌ على مجموعاتٍ أخرى — لها قواعدُها.
   'is_available': 'حقلُ drivers (حالةُ اتصالِ السائقِ نفسِه)',
-  'has_active_subscription': 'حقلُ users',
+  // (وزالَ `has_active_subscription`: الخادمُ لم يَعُد يَكتبُه على
+  // `users/{uid}` — حقلٌ يُحلَّلُ ولا يَقرؤه سطح، حُذفَ 2026-10-08. وهذه
+  // القائمةُ تُقارَنُ بمجموعةِ ما يَكتبُه الخادمُ **كاملةً**، فمُدخَلٌ
+  // لكاتبٍ زالَ يُسقطُ الفحصَ بدلَ أن يَتعفّن — وقد أسقطَه.)
   'owner_deleted': 'حقلُ wallets — والمحافظُ allow write: if false',
   'ops_negative_alerted': 'حقلُ wallets — allow write: if false',
   'plan_validation_failed': 'حقلُ contracts',

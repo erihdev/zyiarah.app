@@ -239,7 +239,6 @@ async function countCouponUse(db, args, queuePush) {
  * @param {object} args المعطيات.
  * @param {object} args.orderRef مرجعُ الطلب.
  * @param {string} args.orderId معرّفُ الطلب.
- * @param {string} args.clientId معرّفُ العميلة.
  * @param {string} args.status حالةُ الطلبِ الراهنة.
  * @param {string} args.code رقمُ الطلبِ المعروض.
  * @param {boolean} [args.alreadyAlerted] هل صُعِّدَ الفشلُ سابقاً؟
@@ -248,8 +247,7 @@ async function countCouponUse(db, args, queuePush) {
  *   failed?: string}>} النتيجة.
  */
 async function settleVisitAccounting(db, args, queuePush) {
-  const {orderRef, orderId, clientId, status, code} = args;
-  const userRef = db.collection("users").doc(clientId);
+  const {orderRef, orderId, status, code} = args;
   let skipped = null;
   let delta = 0;
   try {
@@ -276,10 +274,13 @@ async function settleVisitAccounting(db, args, queuePush) {
         return;
       }
       const cId = oSnap.get("contract_id");
-      t.set(userRef, {
-        visits_remaining: FieldValue.increment(delta),
-      }, {merge: true});
-      // ومن عدّادِ العقدِ نفسِه كذلك كي تَعكسَ بطاقةُ الباقةِ رصيدَها الفعليّ.
+      // عدّادُ العقدِ وحدَه — وهو ما تَقرؤه بطاقةُ الباقةِ وشاشتا العقود عبر
+      // `contract_visits.dart`.
+      //
+      // **وزالَ معه `t.set(userRef, {visits_remaining})` (2026-10-08):**
+      // النسخةُ على `users/{uid}` كانت تُحرَّكُ مع كلِّ زيارةٍ تُستهلَكُ أو
+      // تُردّ، وصفرُ قارئٍ لها في أيِّ سطح — كتابةُ مستندٍ ثانيةٍ في كلِّ
+      // تسويةٍ لنفعِ لا أحد.
       if (cId) {
         t.set(db.collection("contracts").doc(cId), {
           visits_remaining: FieldValue.increment(delta),
@@ -315,7 +316,8 @@ async function settleVisitAccounting(db, args, queuePush) {
           "تعذّرت تسويةُ رصيد زيارات الاشتراك ⚠️",
           `الطلب #${code} (${status}) — تعذّر ${what} (${note}). ` +
           "المكنسة تُعيد المحاولة؛ إن تكرّر فالتسويةُ يدويّة على " +
-          "users/{uid}.visits_remaining وعلى عدّاد العقد.",
+          "contracts/{id}.visits_remaining — وهو العدّادُ الذي تَقرؤه " +
+          "بطاقةُ الباقةِ وشاشتا العقود.",
           "admin_order_alert",
           {orderId, code, visitAccountingFailed: true},
           ["super_admin", "accountant_admin"]).catch(() => {});

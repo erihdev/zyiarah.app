@@ -12,7 +12,6 @@ class StoreProduct {
   final double price;
   final String imageUrl;
   final String description;
-  final bool isHidden;
 
   /// جمهور المنتج: 'client' (المتجر العادي) أو 'companies' (متجر الشركات).
   /// الغياب = 'client' كي يبقى كل القديم في متجر العميل كما هو حرفياً.
@@ -24,7 +23,6 @@ class StoreProduct {
     required this.price,
     required this.imageUrl,
     this.description = "",
-    this.isHidden = false,
     this.audience = 'client',
   });
 
@@ -36,30 +34,24 @@ class StoreProduct {
       price: (data['price'] ?? 0).toDouble(),
       imageUrl: data['image_url'] ?? '',
       description: data['description'] ?? '',
-      isHidden: data['is_hidden'] ?? false,
+      // **لا `isHidden` هنا.** `streamProducts` يُرشّح `is_hidden == false`
+      // في الاستعلام، فمنتجٌ مخفيٌّ لا يَبلغُ هذا النموذجَ أبداً؛ والسطحُ
+      // الإداريُّ يَقرأُ `data['is_hidden']` خامّاً. فكان الحقلُ يُحلَّل
+      // ولا يَقرؤه أحد (2026-10-08).
       audience: data['store_audience'] ?? 'client',
     );
   }
 }
 
-class StoreOrder {
-  final String id;
-  final String clientId;
-  final List<dynamic> items;
-  final double totalAmount;
-  final String status;
-  final DateTime createdAt;
-
-  StoreOrder({
-    required this.id,
-    required this.clientId,
-    required this.items,
-    required this.totalAmount,
-    required this.status,
-    required this.createdAt,
-  });
-}
-
+// **ولا نوعَ `StoreOrder` هنا (حُذف 2026-10-08).** كان تعريفاً وبانيةً بلا
+// `fromFirestore` وبلا مرجعٍ واحدٍ في المستودع: طلباتُ المتجرِ تَنتقلُ بين
+// الشاشاتِ خرائطَ خامّةً (`Map<String, dynamic>`) كما تَنتقلُ طلباتُ الخدمة —
+// وهو سببُ حذفِ `lib/models/order_model.dart` نفسُه، مجموعةً إلى الجانب.
+//
+// ولم يَرَه `no_dead_code_test`: حقولُه أسماءٌ عامّةٌ (`id`، `items`،
+// `status`) تَتصادمُ مع نظائرِها في كلِّ نموذج، وهو العمى المُعلَنُ في رأسِ
+// ذلك الحارس — وعلاجُه المُعلَنُ قائمةُ منعٍ صريحة، في
+// `test/unread_user_fields_test.dart`.
 class ZyiarahStoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
@@ -77,9 +69,13 @@ class ZyiarahStoreService {
         .firstEventTimeout();
   }
 
-  /// إنشاء طلب متجر بانتظار موافقة الإدارة (بدون دفع).
-  /// الدفع وتوليد طلب التوصيل والفاتورة تتم لاحقاً عبر [StorePaymentScreen]
-  /// بعد اعتماد الإدارة للطلب.
+  /// إنشاء طلب متجر بحالة `awaiting_payment` — **لا موافقةَ قبل الدفع**
+  /// (قرارُ المالك): الدورةُ `awaiting_payment ⇒ under_review ⇒ delivering
+  /// ⇒ delivered`، فالمراجعةُ تَلي الدفعَ لا تَسبقُه. والدفعُ وتوليدُ
+  /// الفاتورةِ عبر [StorePaymentScreen].
+  ///
+  /// (وكان هذا الشرحُ يَقولُ «بانتظار موافقة الإدارة (بدون دفع) … بعد اعتماد
+  /// الإدارة للطلب» — وهو عكسُ ما يَكتبُه السطرُ أدناه وعكسُ القرار.)
   Future<Map<String, dynamic>?> createStoreOrder({
     required List<Map<String, dynamic>> items,
     required double totalAmount,

@@ -25,12 +25,7 @@ class ZyiarahWalletService {
       return ZyiarahWallet.fromFirestore(doc);
     } else {
       // المحفظة تُنشأ خادمياً عند أول إيداع (كتابة العميل للمحفظة محظورة بعد قفل القاعدة).
-      return ZyiarahWallet(
-        userId: userId,
-        balance: 0.0,
-        qatratPoints: 0,
-        lastUpdated: DateTime.now(),
-      );
+      return ZyiarahWallet(balance: 0.0, qatratPoints: 0);
     }
   }
 
@@ -51,10 +46,14 @@ class ZyiarahWalletService {
   /// رسالة مخترَعة. نترك الاستثناء يصعد لتعرضه الواجهة كما هو.
   ///
   /// **وتُعيد ما أودعَه الخادمُ، لا مجرَّدَ نجاح.** كانت تُعيد `bool` فتُهمل
-  /// `newBalance`/`newPoints` اللذَين تُعيدُهما الدالّةُ الخادميّة، وتُعيد
+  /// `newBalance` الذي تُعيدُه الدالّةُ الخادميّة، وتُعيد
   /// الشاشةُ حسابَ المبلغِ بنفسِها من ٥٠ مكتوبةٍ بيدٍ — فلو تَباعدَ الرقمان
   /// يوماً لبُشِّرت العميلةُ بمبلغٍ لم يُودَع. سعرُ الصرفِ في
   /// `lib/utils/qatrat.dart`، والأرقامُ المعروضةُ من هنا.
+  ///
+  /// و`newPoints` **لا تُحمَل**: الشاشةُ تُعيدُ جلبَ المحفظةِ بعدَ الاستبدال
+  /// (`_loadWallet`) فعدّادُ النقاطِ يأتي من المستندِ نفسِه، وكان الحقلُ
+  /// يُحلَّل ولا يَقرؤه أحد (2026-10-08).
   Future<QatratRedeemResult?> redeemQatratPoints(
       {required String userId, required int pointsToRedeem}) async {
     if (pointsToRedeem < kQatratRedeemMin) return null;
@@ -81,22 +80,19 @@ class ZyiarahWalletService {
     return QatratRedeemResult(
       pointsRedeemed: pointsToRedeem,
       newBalance: (d['newBalance'] as num?)?.toDouble(),
-      newPoints: (d['newPoints'] as num?)?.toInt(),
     );
   }
 
 }
 
-/// ما أودعَه الخادمُ فعلاً. `newBalance`/`newPoints` قد يَغيبان على نسخةٍ
-/// خادميّةٍ أقدم — والشاشةُ تَقعُ حينها على نصٍّ بلا رقمٍ لا على رقمٍ مُختلَق.
+/// ما أودعَه الخادمُ فعلاً. `newBalance` قد يَغيبُ على نسخةٍ خادميّةٍ أقدم —
+/// والشاشةُ تَقعُ حينها على نصٍّ بلا رقمٍ لا على رقمٍ مُختلَق.
 class QatratRedeemResult {
   const QatratRedeemResult({
     required this.pointsRedeemed,
     required this.newBalance,
-    required this.newPoints,
   });
 
   final int pointsRedeemed;
   final double? newBalance;
-  final int? newPoints;
 }
