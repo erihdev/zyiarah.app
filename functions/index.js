@@ -4136,6 +4136,13 @@ const PRE_DISPATCH_STATUSES = [
   "pending", "under_review", "awaiting_payment", "assigned",
 ];
 
+// سببُ رفضِ إسنادِ سائقٍ لطلبٍ غيرِ مدفوع — ثابتٌ واحدٌ لموضعَي الرفضِ
+// (الفحصُ قبلَ المعاملةِ والفحصُ الذرّيُّ داخلَها) ومطابقٌ حرفيّاً لـ
+// `kUnpaidDispatchRefusal` في `lib/utils/order_lifecycle.dart`: صياغتانِ
+// لقرارٍ واحدٍ هي ما يُنتجُ هذا النوعَ من العطل، وكلا الجمهورَين هو الأدمن.
+const UNPAID_DISPATCH_REFUSAL =
+  "لا يمكن إسناد سائق لطلب غير مدفوع — انتظر تأكيد الدفع";
+
 exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   await _assertAdmin(request); // super_admin أو orders_manager
   const {orderId, driverId, scheduledIso} = request.data;
@@ -4174,6 +4181,32 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
         "الطلب مُسنَد سلفاً — استعمل إعادة الجدولة/الإسناد لتغيير سائقه");
   }
 
+  // **لا سائقَ لطلبٍ غيرِ مدفوع.** القاعدةُ مُنفَّذةٌ في أربعةِ مساراتٍ هنا —
+  // `onOrderWritten` لا يُسنِدُ إلّا على **انقلابِ** `is_paid`، وكتلتا
+  // `sweepUnassignedPaidOrders` تتخطّيانِ `is_paid !== true`،
+  // و`capacity.countBookings` تتخطّاه فلا يَستهلكُ سعة،
+  // و`cancelStaleUnpaidOrders` تُلغيه بعد ثلاثين دقيقة — وكانت غائبةً عن هذا
+  // المسارِ وحدَه، وهو ما يَنقُرُه الأدمنُ من سطحَين (شاشةُ تفاصيلِ الطلب،
+  // وقائمةُ إجراءاتِ صفِّ لوحةِ الويب، وكلتاهما تَفتحُ الإسنادَ لكلِّ
+  // `pending` بلا أيِّ نظرٍ إلى الدفع). شكلُ `isAssignableDriver` بعينِه:
+  // مُنفَّذةٌ في اثنَين من أربعة، والمكشوفُ هو ما يُنقَر.
+  //
+  // وإسنادُ غيرِ المدفوعِ ثلاثُ نتائج: (أ) الحالةُ تصيرُ `scheduled` ومكنسةُ
+  // الإلغاءِ تَستعلمُ `status == "pending"` وحدَها، فالطلبُ غيرُ المدفوعِ
+  // **لا يُلغى أبداً**؛ (ب) `scheduled` داخلَ `CONFLICT_STATUSES` فيَشغلُ
+  // السائقَ، و`countBookings` تتخطّى غيرَ المدفوعِ فلا يَستهلكُ سعة — فتُعرَضُ
+  // الساعةُ على عميلةٍ تَدفعُ ثمّ لا يُوجَدُ سائقٌ حرٌّ فتَعلقُ حتى الاستردادِ
+  // الآلي، وهي الحادثةُ المسجَّلةُ بنصِّها؛ (ج) السائقُ يُرسَلُ، وشرطُ
+  // `remindClientsUpcomingAppointments` هو `is_paid === true || driverAssigned`
+  // و`driverAssigned` يَكفيه `scheduled` — فتَصِلُها «فريقنا في الطريق إليكِ»
+  // لخدمةٍ لم تُدفَع.
+  //
+  // و`pending` بلا دفعٍ هي الحالةُ الطبيعيّةُ **قبلَ** الدفعِ لكلِّ طلبِ خدمة،
+  // فالنافذةُ ثوانٍ في البطاقةِ وساعاتٌ في تمارا — ليست نظريّة.
+  if (orderData.is_paid !== true) {
+    throw new HttpsError("failed-precondition", UNPAID_DISPATCH_REFUSAL);
+  }
+
   // (الثغرة #2) تأكّد أن السائق المختار حرّ فعلاً في الفترة المطلوبة
   const hours = slots.orderHours(orderData);
   const endDateTime = new Date(startDateTime.getTime() + hours * 60 * 60 * 1000);
@@ -4209,6 +4242,11 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
     // أثناء العملية يُوقِف هذه. (كان الفحص `!== "pending"` فيتجاوز الحالات الأخرى.)
     if (!PRE_DISPATCH_STATUSES.includes(fd.status) || fd.driver_id) {
       throw new HttpsError("failed-precondition", "تم اعتماد الطلب بالفعل من مدير آخر");
+    }
+    // ونفسُ شرطِ الدفعِ ذرّياً: استردادٌ جرى أثناءَ العمليّة يَكتبُ
+    // `is_paid: false`، فالقراءةُ الطازجةُ هي ما يَمنعُ إسنادَ المُستردِّ.
+    if (fd.is_paid !== true) {
+      throw new HttpsError("failed-precondition", UNPAID_DISPATCH_REFUSAL);
     }
     // (منع الحجز المزدوج) إعادة فحص حرّية السائق ذرّياً داخل المعاملة — الفحص أعلاه
     // خارج المعاملة كان يسمح لموافقتين متزامنتين على طلبين مختلفين بإسناد نفس السائق
