@@ -11,6 +11,7 @@ import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/store_service.dart';
 import 'package:zyiarah/services/zone_locator_service.dart';
 import 'package:zyiarah/utils/home_packages.dart';
+import 'package:zyiarah/utils/zone_schedule.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
 import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/vat.dart';
@@ -61,8 +62,9 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   // النشطين — لا تُعرض كأوقات للعميل، بل تقرر داخلياً هل يتسع اليومُ لمدة الباقة.
   Map<String, int> _slotCounts = {};          // "yyyy-MM-dd_HH:00" → طلبات تشغل الساعة
   int _maxTeamsPerSlot = 5;                   // عدد السائقين النشطين
-  Map<String, List<int>> _openHours = {};     // yyyy-MM-dd → [فتح، إغلاق] — لساعة بدء الإرساء
-  Set<String> _closedDates = {};              // أيام لا تُخدَم فيها المنطقة
+  // جدول فتح المنطقة من قاعدة واحدة: النطاق الافتراضي يأتي من الخادم
+  // (`defaultOpen`) لا من 8..22 مكتوبةً في كل شاشة.
+  ZoneSchedule _zoneSchedule = const ZoneSchedule();
   bool _loadingDailyCounts = true;
 
   /// تعذّر جلب الإتاحة من الخادم. **لا يجوز عرض تقويم أخضر في هذه الحالة**: الأعداد
@@ -213,19 +215,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       );
       // (تحكم المالك ساعة-بساعة) الساعات المقفلة من محرر الجدول تُحقن كخانات
       // ممتلئة — فكل منطق الجدوى القائم (slot >= max) يستبعدها بلا تعديل.
-      final closedHrs = data['closedHours'] as Map? ?? {};
-      closedHrs.forEach((date, hours) {
-        for (final h in (hours as List)) {
-          slots['${date}_${(h as num).toInt().toString().padLeft(2, '0')}:00'] =
-              999999;
-        }
-      });
-      final Map<String, List<int>> openHours =
-          (data['openHours'] as Map? ?? {}).map((k, v) => MapEntry(
-              k.toString(), (v as List).map((e) => (e as num).toInt()).toList()));
-      final Set<String> closed = ((data['closedDates'] as List?) ?? [])
-          .map((e) => e.toString())
-          .toSet();
+      final sched = ZoneSchedule.fromAvailability(data);
+      sched.markClosedHoursFull(slots);
 
       final int maxPerDay = ((data['maxOrdersPerDay'] as num?)?.toInt()) ?? 10;
       final int maxPerSlot = ((data['maxTeamsPerSlot'] as num?)?.toInt()) ?? 5;
@@ -237,8 +228,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       setState(() {
         _dailyOrderCounts = daily;
         _slotCounts = slots;
-        _openHours = openHours;
-        _closedDates = closed;
+        _zoneSchedule = sched;
         _maxOrdersPerDay = maxPerDay;
         _maxTeamsPerSlot = maxPerSlot;
         _zoneMaxOrdersPerDay = zoneMax;
@@ -485,11 +475,9 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     });
   }
 
-  /// ساعات فتح المنطقة في يومٍ ما (من الجدول، وإلا 8..22 الافتراضية).
-  List<int> _openHoursFor(DateTime d) {
-    final key = intl.DateFormat('yyyy-MM-dd').format(d);
-    return _openHours[key] ?? const [8, 22];
-  }
+  /// ساعات فتح المنطقة في يومٍ ما (من الجدول، وإلا افتراضيّ الخادم).
+  List<int> _openHoursFor(DateTime d) =>
+      _zoneSchedule.openHoursFor(intl.DateFormat('yyyy-MM-dd').format(d));
 
   /// المدّةُ التي يُفحَص بها اليوم — مشتقّةٌ دائماً من `_packages` و`_selectedType`
   /// لا من الحقل، فلا يُلوَّن الشريطُ بمدّةِ باقةٍ من منطقةٍ أخرى. انظر
@@ -531,7 +519,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   /// لا يكفي أحدهما. اليوم المغلق بجدول المنطقة غير متاح بداهةً.
   bool _dateUnavailable(DateTime d) {
     final s = intl.DateFormat('yyyy-MM-dd').format(d);
-    if (_closedDates.contains(s)) return true;
+    if (_zoneSchedule.dateIsClosed(s)) return true;
     if (_dayCapacityFull(s)) return true;
     return _firstFeasibleStart(d) == null; // لا سائق يتسع جدوله = غير متاح
   }
@@ -1111,7 +1099,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           final dateStr = intl.DateFormat('yyyy-MM-dd').format(date);
           // مغلق بالجدول (رمادي) ≠ محجوز بالكامل (أحمر) — سببان مختلفان.
           // «محجوز» = سعة اليوم امتلأت **أو** لا سائق يتسع لمدة الباقة (قرار المالك).
-          final isClosed = _closedDates.contains(dateStr);
+          final isClosed = _zoneSchedule.dateIsClosed(dateStr);
           final isFullyBooked = !isClosed &&
               (_dayCapacityFull(dateStr) ||
                   _firstFeasibleStart(date) == null);

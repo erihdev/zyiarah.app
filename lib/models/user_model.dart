@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class ZyiarahUser {
   final String uid;
   final String name;
@@ -13,12 +11,7 @@ class ZyiarahUser {
   /// الثابت 4.9 يجعل **كلَّ** عميلةٍ ترى «تقييمك 4.9 ★» وتظنُّه تقييمَها،
   /// وهو رقمٌ لم يحسبه أحد. `null` الآن تعني «لا تقييم» وتُعرض «—».
   final double? rating;
-  final bool hasActiveSubscription;
-  final int visitsRemaining;
-  final DateTime? subscriptionExpiry;
-  final String? subscriptionType;
   final String? houseRules;
-  final int subscriptionTotalVisits;
 
   ZyiarahUser({
     required this.uid,
@@ -27,21 +20,14 @@ class ZyiarahUser {
     required this.phone,
     required this.role,
     this.rating,
-    this.hasActiveSubscription = false,
-    this.visitsRemaining = 0,
-    this.subscriptionExpiry,
-    this.subscriptionType,
     this.houseRules,
-    this.subscriptionTotalVisits = 4,
   });
 
   factory ZyiarahUser.fromMap(String id, Map<String, dynamic> data) {
-    // تحويل دفاعي: قيمة بنوع خاطئ (rating نصّ، visits عدد عشري، expiry ليس
-    // Timestamp) كانت ترمي استثناءً يُعطّل أي شاشة تقرأ هذا المستخدم.
+    // تحويل دفاعي: `rating` بنوع خاطئ (نصّ مثلاً) كان يرمي استثناءً يُعطّل
+    // أي شاشة تقرأ هذا المستخدم. و`toI` زالت مع حقول الاشتراك الخمسة.
     double toD(dynamic v, double fallback) =>
         v is num ? v.toDouble() : double.tryParse('$v') ?? fallback;
-    int toI(dynamic v, int fallback) =>
-        v is num ? v.toInt() : int.tryParse('$v') ?? fallback;
     return ZyiarahUser(
       uid: id,
       name: data['name'] ?? '',
@@ -49,14 +35,7 @@ class ZyiarahUser {
       phone: data['phone'] ?? '',
       role: data['role'] ?? 'client',
       rating: data['rating'] == null ? null : toD(data['rating'], 0),
-      hasActiveSubscription: data['has_active_subscription'] ?? false,
-      visitsRemaining: toI(data['visits_remaining'], 0),
-      subscriptionExpiry: data['subscription_expiry'] is Timestamp
-          ? (data['subscription_expiry'] as Timestamp).toDate()
-          : null,
-      subscriptionType: data['subscription_type'],
       houseRules: data['house_rules'],
-      subscriptionTotalVisits: toI(data['subscription_total_visits'], 4),
     );
   }
 
@@ -71,7 +50,20 @@ class ZyiarahUser {
   // `_activateContractNow` عند تفعيلِ عقد. شكلانِ لكتابةٍ واحدةٍ وأحدُهما
   // خطر، فحُذِفَ غيرُ المُستعمَلِ منهما (2026-10-08).
   //
-  // وحقولُ الاشتراكِ الأربعةُ باقيةٌ: `fromMap` يَقرؤها، ولا جالبَ منها
-  // يُقرَأُ بعدُ — مرفوعٌ في `CLAUDE.md` بوصفِه حدَّ تسامحِ `own > 1`
-  // (مُعامَلُ البانيةِ `this.x` يُعَدُّ ذِكراً فيَحجبُ الحقل).
+  // **وحقولُ الاشتراكِ الخمسةُ زالت معها (2026-10-08).** كانت
+  // `has_active_subscription` و`visits_remaining` و`subscription_expiry`
+  // و`subscription_total_visits` و`subscription_type`: يَكتبُها الخادمُ على
+  // `users/{uid}`، و`fromMap` يَقرؤها، **ولا جالبَ منها يُقرَأُ في أيِّ سطح**
+  // (صفرُ `.visitsRemaining` في `lib/` كلِّها). والرصيدُ الحيُّ لكلِّ عقدٍ
+  // على `contracts/{id}.visits_remaining` تَقرؤه `contract_visits.dart`،
+  // وبطاقةُ الرئيسيّةِ تَبثُّ `contracts` لا مستندَ المستخدم.
+  //
+  // ونسخةُ المستخدمِ **خاطئةٌ بالبناءِ** مع عقدَين نشطَين: الرصيدُ
+  // `increment` (مجموعٌ على العقود) بينما الثلاثةُ الأخرى يَغلِبُ فيها آخرُ
+  // كاتب — فـ«١٦ من ٨». وتعليقُ `_activateContractNow` يَقولُ سببَ
+  // العدّاداتِ المستقلّةِ بنصِّه: «بدل طمس حقول المستخدم المجمّعة».
+  //
+  // وما حجبَها هو تسامحُ `own > 1` في `no_dead_code_test`: لكلِّ حقلٍ في
+  // صنفِ بياناتٍ ذِكرانِ دفتريّانِ بالبناء (`this.x` ووَسمُ `x:` في
+  // `fromMap`)، فيُعَدُّ ثلاثاً ويَمُرّ. الكاشفُ يُفرِّغُهما الآن.
 }

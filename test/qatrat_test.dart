@@ -115,17 +115,30 @@ void main() {
           reason: 'الحسابُ المحلّيُّ للمبلغِ عاد');
     });
 
-    test('الخدمةُ تُعيد الرقمَين لا bool', () {
+    test('الخدمةُ تُعيد الرصيدَ لا bool — و`newPoints` بلا تحليلٍ بقصد', () {
       expect(service, contains('Future<QatratRedeemResult?> redeemQatratPoints'));
       expect(service, contains("d['newBalance']"));
-      expect(service, contains("d['newPoints']"));
       expect(service.contains('Future<bool> redeemQatratPoints'), isFalse);
+      // **و`newPoints` لا تُحلَّل (2026-10-08).** كان الحقلُ يُحلَّلُ ويُحمَلُ
+      // في `QatratRedeemResult` **ولا يَقرؤه أحد**: عدّادُ النقاطِ يأتي من
+      // المستندِ نفسِه لأنّ الشاشةَ تُعيدُ جلبَ المحفظةِ بعدَ الاستبدال.
+      // (وهذا الفحصُ كان يَشترطُ تحليلَه، فأُعيد توجيهُه بوعيٍ لا إسكاتاً.)
+      expect(service.contains("d['newPoints']"), isFalse,
+          reason: 'عادَ تحليلُ `newPoints` — حقلٌ يُحمَلُ ولا يُقرَأ');
+      // **وفي جسمِ مُعالِجِ الاستبدالِ بعينِه، لا في الملفّ**: `_loadWallet`
+      // تُنادى من أربعةِ مواضعَ (التحميلُ الأوّلُ، وزرُّ الإعادة، …) فأيٌّ
+      // منها يُرضي فحصَ الملفِّ — ومرَّ قضمٌ نزعَ النداءَ من هذا المسارِ
+      // **أخضرَ**: «موضعٌ آخرُ يُرضي الفحصَ» للمرّةِ السابعةِ هنا.
+      final rb = _body(screen, '_redeemQatrat');
+      expect(rb, contains('_loadWallet(uid)'),
+          reason: 'مسارُ الاستبدالِ لم يَعُد يُعيدُ جلبَ المحفظةِ — فعدّادُ '
+              'النقاطِ يَبقى قديماً، و`newPoints` تَصيرُ لازمةً: يُراجَعُ '
+              'الحذف');
     });
 
-    test('والخادمُ ما زال يُعيدُهما — وإلّا فالقراءةُ بلا مصدر', () {
+    test('والخادمُ ما زال يُعيدُ الرصيدَ — وإلّا فالقراءةُ بلا مصدر', () {
       expect(idx, contains('return {newBalance:'),
           reason: 'الدالّةُ الخادميّةُ لم تَعد تُعيد newBalance');
-      expect(idx, contains('newPoints:'));
       // وسعرُ الصرفِ الخادميُّ هو نفسُه (٥٠ نقطة = ١ ر.س): لو تَغيّر هناك
       // وحدَه لانحرفَ عن kQatratPerSar بلا أن يَكسِرَ شيئاً.
       expect(idx, contains('pointsToRedeem / 50.0'),
@@ -134,4 +147,35 @@ void main() {
       expect(kQatratPerSar, 50);
     });
   });
+}
+
+/// جسمُ دالّةٍ بموازنةِ الأقواس — **قائمةُ المعامَلاتِ أوّلاً**، فأوّلُ `{`
+/// بعدَ الاسمِ قد يَكونُ قوسَ المعامَلاتِ المُسمّاةِ لا الجسمَ (فخُّ الحدِّ
+/// المسجَّلُ في هذا المستودعِ مرّاتٍ).
+String _body(String src, String name) {
+  final m = RegExp(r'[A-Za-z_][\w<>?,\s]*\s' + name + r'\s*\(').firstMatch(src);
+  if (m == null) throw StateError('لم يُعثَر على `$name` — الحارسُ بلا موضوع');
+  var i = m.end - 1, d = 0;
+  while (i < src.length) {
+    if (src[i] == '(') d++;
+    if (src[i] == ')') {
+      d--;
+      if (d == 0) {
+        i++;
+        break;
+      }
+    }
+    i++;
+  }
+  final j = src.indexOf('{', i);
+  if (j < 0) throw StateError('جسمُ `$name` لم يُقتطَع');
+  d = 0;
+  for (var k = j; k < src.length; k++) {
+    if (src[k] == '{') d++;
+    if (src[k] == '}') {
+      d--;
+      if (d == 0) return src.substring(j, k + 1);
+    }
+  }
+  throw StateError('جسمُ `$name` غيرُ مُوازَن');
 }

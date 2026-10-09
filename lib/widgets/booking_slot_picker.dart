@@ -6,6 +6,7 @@ import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/utils/date_strip.dart';
 import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/zone_schedule.dart';
 import 'package:zyiarah/utils/time_format.dart';
 
 /// منتقي التاريخ والوقت مع الإتاحة الحقيقية من الخادم — **مصدر «اللون الأخضر» الوحيد.**
@@ -46,8 +47,6 @@ class ZyiarahBookingSlotPicker extends StatefulWidget {
 
 class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
   static const Color _brand = Color(0xFF660033);
-  static const int _workStart = 8;
-  static const int _workEnd = 22;
   static const int _horizonDays = 30;
 
   bool _loading = true;
@@ -55,8 +54,9 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
 
   Map<String, int> _dailyCounts = {};
   Map<String, int> _slotCounts = {};
-  Map<String, List<int>> _openHours = {}; // yyyy-MM-dd -> [فتح، إغلاق]
-  Set<String> _closedDates = {};          // أيام لا تُخدَم فيها المنطقة
+  // جدول فتح المنطقة من قاعدة واحدة: النطاق الافتراضي يأتي من الخادم
+  // (`defaultOpen`) لا من 8..22 مكتوبةً في كل شاشة.
+  ZoneSchedule _zoneSchedule = const ZoneSchedule();
   int _maxOrdersPerDay = 10;
   int? _zoneMaxOrdersPerDay; // سقف المنطقة الخاص (اختياري — يضيّق العام فقط)
   Map<String, int> _zoneDailyCounts = {};
@@ -123,28 +123,16 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
           .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
       final slots = (data['slotCounts'] as Map? ?? {})
           .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
-      // (تحكم المالك ساعة-بساعة) الساعات المقفلة تُحقن كخانات ممتلئة —
-      // فتظهر شرائحها معطّلة كأي ساعة مكتملة الحجز.
-      (data['closedHours'] as Map? ?? {}).forEach((date, hours) {
-        for (final h in (hours as List)) {
-          slots['${date}_${(h as num).toInt().toString().padLeft(2, '0')}:00'] =
-              999999;
-        }
-      });
-      // جدول الفتح المرجعيّ من الخادم — يرسم منه العرض ويفرضه الدفع.
-      final openHours = (data['openHours'] as Map? ?? {}).map((k, v) =>
-          MapEntry(k.toString(),
-              (v as List).map((e) => (e as num).toInt()).toList()));
-      final closed = ((data['closedDates'] as List?) ?? [])
-          .map((e) => e.toString())
-          .toSet();
+      // جدول الفتح المرجعيّ من الخادم — يرسم منه العرض ويفرضه الدفع؛ والساعات
+      // المقفلة تُحقن كخانات ممتلئة فتظهر شرائحها معطّلة كأي ساعة مكتملة.
+      final sched = ZoneSchedule.fromAvailability(data);
+      sched.markClosedHoursFull(slots);
 
       if (!mounted) return;
       setState(() {
         _dailyCounts = daily;
         _slotCounts = slots;
-        _openHours = openHours;
-        _closedDates = closed;
+        _zoneSchedule = sched;
         _maxOrdersPerDay = (data['maxOrdersPerDay'] as num?)?.toInt() ?? 10;
         _zoneMaxOrdersPerDay = (data['zoneMaxOrdersPerDay'] as num?)?.toInt();
         _zoneDailyCounts = (data['zoneDailyCounts'] as Map? ?? {})
@@ -185,12 +173,12 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
       );
 
   /// اليوم مغلق بجدول المنطقة (لا نخدمها هذا اليوم) — **سبب مختلف عن الامتلاء.**
-  bool _isDayClosed(DateTime d) => _closedDates.contains(_key(d));
+  bool _isDayClosed(DateTime d) => _zoneSchedule.dateIsClosed(_key(d));
 
   bool _isDayUnavailable(DateTime d) => _isDayFull(d) || _isDayClosed(d);
 
-  /// ساعات فتح المنطقة في اليوم: من الجدول إن وُجد، وإلا 8..22 الافتراضية.
-  List<int> _openHoursFor(DateTime d) => _openHours[_key(d)] ?? [_workStart, _workEnd];
+  /// ساعات فتح المنطقة في اليوم: من الجدول إن وُجد، وإلا افتراضيّ الخادم.
+  List<int> _openHoursFor(DateTime d) => _zoneSchedule.openHoursFor(_key(d));
 
   /// متاح فقط إن: (١) ضمن ساعات فتح المنطقة، و(٢) توفّر سائق حرّ **طوال المدة**.
   bool _isSlotFree(DateTime day, int startHour) {
@@ -208,13 +196,12 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
   }
 
   /// خانات البدء المحتملة لليوم المختار — محصورة بساعات فتح المنطقة.
-  List<int> _startHours() {
-    final open = _openHoursFor(_selectedDate);
-    final first = open[0].clamp(_workStart, _workEnd);
-    final last = open[1] - widget.durationHours;
-    if (last < first) return const [];
-    return List.generate(last - first + 1, (i) => first + i);
-  }
+  ///
+  /// وكان `open[0]` يُقَصّ إلى 8..22 هنا وحدَه: `_isSlotFree` في هذا الملفِّ
+  /// يَقرؤه خامّاً، وبوّابةُ `payment_summary_screen` كذلك — فمنطقةٌ تفتح 6..23
+  /// كانت تَخسرُ ساعاتٍ تَقبلُها البوّابةُ نفسُها، والملفُّ يُناقِضُ نفسَه.
+  List<int> _startHours() =>
+      _zoneSchedule.startHoursFor(_key(_selectedDate), widget.durationHours);
 
   bool _sameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;

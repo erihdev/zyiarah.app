@@ -35,6 +35,7 @@ import 'package:zyiarah/utils/terrain_surcharge.dart';
 import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/error_report.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/zone_schedule.dart';
 import 'package:zyiarah/utils/phone_format.dart';
 import 'package:zyiarah/utils/invoice_stamp.dart';
 import 'package:zyiarah/utils/price_review.dart';
@@ -645,15 +646,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     }
 
     final Map daily = data['dailyCounts'] as Map? ?? {};
-    final Map slots = data['slotCounts'] as Map? ?? {};
-    // (تحكم المالك ساعة-بساعة) الساعات المقفلة تُحقن كخانات ممتلئة —
-    // فيرفضها فحصا النافذة (المحدد واليومي) كأي ساعة مكتملة.
-    (data['closedHours'] as Map? ?? {}).forEach((date, hours) {
-      for (final h in (hours as List)) {
-        slots['${date}_${(h as num).toInt().toString().padLeft(2, '0')}:00'] =
-            999999;
-      }
-    });
+    // مُصنَّفة لأن `markClosedHoursFull` تَحقن فيها — كبقية قُرّاء الإتاحة.
+    final Map<String, int> slots = (data['slotCounts'] as Map? ?? {}).map(
+        (k, v) => MapEntry(
+            k.toString(), v is num ? v.toInt() : (int.tryParse('$v') ?? 0)));
+    // جدول فتح المنطقة من القاعدة المشتركة التي ترسم بها شاشات الحجز نفسها —
+    // والساعات المقفلة تُحقن كخانات ممتلئة فيرفضها فحصا النافذة (المحدد واليومي).
+    final sched = ZoneSchedule.fromAvailability(data);
+    sched.markClosedHoursFull(slots);
     final int maxOrdersPerDay = (data['maxOrdersPerDay'] as num?)?.toInt() ?? 10;
     // maxTeamsPerSlot = عدد السائقين النشطين (بلا مناطق — تحسبه الدالة).
     final int maxTeamsPerSlot = (data['maxTeamsPerSlot'] as num?)?.toInt() ?? 0;
@@ -662,9 +662,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       return 'لا يوجد فريق متاح حالياً. تواصلي معنا لتحديد موعد.';
     }
 
-    final closedDates =
-        ((data['closedDates'] as List?) ?? []).map((e) => e.toString()).toSet();
-    if (closedDates.contains(bookingDate)) {
+    if (sched.dateIsClosed(bookingDate)) {
       return 'نعتذر، لا نخدم منطقتك في هذا اليوم. يرجى اختيار يوم آخر.';
     }
 
@@ -680,11 +678,9 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
       return 'نعتذر، هذا اليوم محجوز بالكامل حالياً. يرجى اختيار تاريخ آخر.';
     }
 
-    final openRaw = (data['openHours'] as Map? ?? {})[bookingDate];
-    final int openStart =
-        (openRaw is List && openRaw.isNotEmpty) ? (openRaw[0] as num).toInt() : 8;
-    final int openEnd =
-        (openRaw is List && openRaw.length > 1) ? (openRaw[1] as num).toInt() : 22;
+    final open = sched.openHoursFor(bookingDate);
+    final int openStart = open[0];
+    final int openEnd = open[1];
 
     // مساران بحسب نوع الطلب:
     // • باقات السكن (home_package): العميل اختار **اليوم فقط** — الشرط وجود

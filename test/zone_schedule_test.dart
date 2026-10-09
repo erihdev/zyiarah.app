@@ -13,15 +13,48 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:zyiarah/utils/zone_schedule.dart';
+
+import 'helpers/sources_in.dart';
+import 'helpers/strip_comments.dart';
+
 String _read(String p) => File(p).readAsStringSync();
-String _code(String p) => _read(p)
-    .replaceAll(RegExp(r'/\*[\s\S]*?\*/'), '')
-    .split('\n')
-    .map((l) {
-      final i = l.indexOf('//');
-      return i == -1 ? l : l.substring(0, i);
-    })
-    .join('\n');
+// النسخة الواحدة المختبَرة: تَحفظ النصوص (الفحوص تَشدّ حروفاً عربيّة) وتفهم
+// الكتل والقوالب — والصياغة المحلّيّة السابقة كانت تَقتطع نصّاً فيه `https://`.
+String _code(String p) => stripComments(_read(p));
+
+/// **كلُّ سطحٍ يَسأل `getHourlyAvailability`** — مُشتَقٌّ لا مكتوبٌ بيد.
+///
+/// محرِّرُ جدولِ المنطقةِ مُستثنىً بسببِه: كاتبٌ إداريٌّ يُعاين جدولَه هو، لا
+/// سطحَ حجزٍ يَرسم للعميلةِ يوماً وساعة (ولا يُمرّر `zoneName` أصلاً).
+final List<String> _availabilityConsumers = () {
+  final out = <String>[];
+  for (final f in [
+    ...sourcesIn('lib/screens', atLeast: 40),
+    ...sourcesIn('lib/widgets', atLeast: 8),
+  ]) {
+    final code = stripComments(f.readAsStringSync());
+    if (!code.contains("httpsCallable('getHourlyAvailability')")) continue;
+    final p = f.path.replaceAll(r'\', '/');
+    if (p.endsWith('admin/admin_zone_schedule_editor.dart')) continue;
+    out.add(p);
+  }
+  out.sort();
+  // أرضيّةٌ متدنّيةٌ بقصد: سؤالُها «أجرى المسحُ شيئاً؟»، وأمّا **العضويّةُ**
+  // فيَحكمها الفحصُ (و) بالأسماء — فأرضيّةٌ عند العددِ الحقيقيِّ (٥) كانت
+  // تَحجبه: أيُّ نقصٍ يَرمي هنا قبلَ أن يَبلغَ المقارنةَ بالأسماء.
+  if (out.length < 3) {
+    throw StateError('مستهلكو الإتاحة ${out.length} — الاشتقاقُ انحلّ.');
+  }
+  return out;
+}();
+
+/// الأسطحُ التي **تُحدِّد منطقتَها بنفسِها** (GPS أو خريطة) ثمّ تَسأل الإتاحة:
+/// الجلبُ الأوّلُ يَسبق معرفةَ المنطقةِ، فلها وحدَها يَلزم جلبٌ ثانٍ.
+final List<String> _selfLocatingConsumers = _availabilityConsumers
+    .where((p) => RegExp(r'_(?:user|selected)ZoneName\s*=\s*(?!=)')
+        .hasMatch(stripComments(File(p).readAsStringSync())))
+    .toList();
 
 void main() {
   group('الخادم مرجعيّ لجدول الفتح', () {
@@ -78,13 +111,18 @@ void main() {
   group('بوابة الدفع تفرض الجدول خادميّاً', () {
     final gate = _code('lib/screens/payment_summary_screen.dart');
     test('اليوم المغلق يُمنع', () {
-      expect(gate.contains("data['closedDates']"), isTrue);
+      // الحقيقةُ المقصودةُ «البوّابةُ تَرفُض يوماً مغلقاً»، لا شكلُ القراءة:
+      // كان الفحصُ يَشدّ `data['closedDates']` فسقطَ لحظةَ انتقالِ التحليلِ إلى
+      // `ZoneSchedule` — بالنقل لا بالانحراف. والآن على القاعدةِ حيث تَسكن.
+      expect(gate.contains('sched.dateIsClosed(bookingDate)'), isTrue,
+          reason: 'البوّابةُ تَسأل القاعدةَ المشتركةَ لا تُحلّل الحقلَ بنفسِها');
       expect(gate.contains('لا نخدم منطقتك في هذا اليوم'), isTrue);
     });
     test('بوابة مزدوجة: باقات السكن باليوم، والخدمات المجدولة بخانتها المحددة', () {
       // باقات السكن (home_package): العميل اختار اليوم فقط — الشرط وجود **أي**
       // فترة بطول الخدمة دون عدد السائقين ضمن ساعات الفتح.
-      expect(gate.contains("data['openHours']"), isTrue);
+      expect(gate.contains('sched.openHoursFor(bookingDate)'), isTrue,
+          reason: 'نطاقُ الفتحِ من القاعدةِ المشتركة — لا 8..22 مكتوبةً هنا');
       expect(gate.contains("== 'home_package'"), isTrue,
           reason: 'التفريع بنوع الطلب — لا بوابة واحدة للجميع');
       expect(gate.contains('anyWindowFree'), isTrue);
@@ -102,13 +140,14 @@ void main() {
   });
 
   group('العرض يميّز مغلق عن ممتلئ', () {
-    for (final p in [
-      'lib/widgets/booking_slot_picker.dart',
-      'lib/screens/hourly_details_screen.dart',
-    ]) {
+    // **نطاقٌ مُشتَقٌّ لا ملفّان بأسمائهما**: كان الفحصُ على اثنَين، وشاشتا
+    // العقدِ — وهما أطولُ أثراً (زياراتٌ لأسابيع) — خارجَه، فكانتا تَقولانِ
+    // «محجوز بالكامل» عن يومٍ لا نخدمه أصلاً.
+    for (final p in _availabilityConsumers) {
       test('$p: حالة إغلاق منفصلة برسالة مختلفة', () {
         final s = _code(p);
-        expect(s.contains('_closedDates') || s.contains('closedDates'), isTrue, reason: p);
+        expect(s.contains('dateIsClosed('), isTrue,
+            reason: '$p يَسأل القاعدةَ عن اليومِ المغلق');
         expect(s.contains('لا نخدم منطقتك في هذا اليوم'), isTrue,
             reason: '$p يعرض «مغلق» برسالته الخاصة لا كـ«ممتلئ»');
       });
@@ -162,18 +201,15 @@ void main() {
   });
 
   group('الساعات المقفلة تُفرض على كل مستهلكي الإتاحة', () {
-    // الحقن كخانات ممتلئة (999999) يجعل كل منطق الجدوى/الشرائح القائم يستبعدها
-    // بلا أي تعديل — حارس ضد نسيان مستهلكٍ عند إضافة شاشة حجز جديدة.
-    for (final p in [
-      'lib/screens/hourly_details_screen.dart',
-      'lib/screens/payment_summary_screen.dart',
-      'lib/widgets/booking_slot_picker.dart',
-      'lib/screens/subscription_plans_screen.dart',
-    ]) {
+    // الحقن كخانات ممتلئة يجعل كل منطق الجدوى/الشرائح القائم يستبعدها بلا أي
+    // تعديل. وكان الفحصُ قائمةً مكتوبةً بيدٍ من **أربعةٍ من خمسة** — تعليقُه
+    // يَقول «حارس ضد نسيان مستهلكٍ عند إضافة شاشة حجز جديدة» والمنسيُّ
+    // (`event_worker_packages_screen`) شاشةُ عقد. فالنطاقُ مُشتَقٌّ الآن.
+    for (final p in _availabilityConsumers) {
       test(p, () {
         final s = _code(p);
-        expect(s.contains("data['closedHours']"), isTrue, reason: p);
-        expect(s.contains('999999'), isTrue, reason: p);
+        expect(s.contains('markClosedHoursFull('), isTrue,
+            reason: '$p يَحقن الساعاتِ المقفلةَ عبر القاعدةِ المشتركة');
       });
     }
   });
@@ -300,4 +336,257 @@ void main() {
     expect(guards, forwards,
         reason: 'كل forward بعد await يحتاج حارس mounted — وإلا رمى بعد dispose');
   });
+
+  group('القاعدةُ المشتركةُ لجدولِ المنطقة', () {
+    const data = {
+      'openHours': {
+        '2026-10-10': [10, 18],
+        '2026-10-11': [6, 23],
+      },
+      'closedDates': ['2026-10-12'],
+      'closedHours': {
+        '2026-10-10': [13, 14],
+      },
+      'defaultOpen': [9, 21],
+    };
+
+    test('(أ) تقرأ الحِمْل، والافتراضيُّ من الخادمِ لا من حرفيٍّ في الشاشة', () {
+      final z = ZoneSchedule.fromAvailability(data);
+      expect(z.openHoursFor('2026-10-10'), [10, 18]);
+      // يومٌ بلا نطاقٍ ⇒ افتراضيُّ الخادمِ (9..21) لا 8..22 المكتوبةُ في الشاشات.
+      expect(z.openHoursFor('2026-12-31'), [9, 21]);
+      expect(z.dateIsClosed('2026-10-12'), isTrue);
+      expect(z.dateIsClosed('2026-10-10'), isFalse);
+    });
+
+    test('(ب) حِمْلٌ ناقصٌ يُقرأ «بلا جدول» ولا يَرمي في منتصفِ الرسم', () {
+      final bads = <Map?>[
+        null,
+        {},
+        {'openHours': 'nope', 'closedDates': 7, 'closedHours': null},
+        {
+          'openHours': {'d': 'x'},
+          'defaultOpen': 'x',
+        },
+        {'defaultOpen': [5]}, // طرفٌ واحدٌ ليس نطاقاً
+      ];
+      for (final bad in bads) {
+        final z = ZoneSchedule.fromAvailability(bad);
+        expect(z.openHoursFor('2026-10-10'), kFallbackOpenHours);
+        expect(z.dateIsClosed('2026-10-10'), isFalse);
+        // 8..22 بمدّةِ ٤ ⇒ 8..18 — وهو **بعينِه** ما كان يُنتجه الشكلُ القديم
+        // (`startHour = 8; endHour = 22; last = endHour - visitHours`).
+        expect(z.startHoursFor('2026-10-10', 4),
+            [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
+      }
+    });
+
+    test('(ج) ساعاتُ البدءِ محصورةٌ بنطاقِ الفتحِ — ولا قَصَّ إلى 8..22', () {
+      final z = ZoneSchedule.fromAvailability(data);
+      // منطقةٌ تفتح 10..18 ومدّةٌ ٤: كانت الشاشتانِ تَعرضانِ 08 و09.
+      expect(z.startHoursFor('2026-10-10', 4), [10, 11, 12, 13, 14]);
+      // ومنطقةٌ تفتح 6..23: القَصُّ إلى 8..22 كان يَحجب 6 و7 و18 و19 —
+      // وبوّابةُ الدفعِ تَقبلها، و`_isSlotFree` في المُنتقي نفسِه يَقبلها.
+      expect(z.startHoursFor('2026-10-11', 4),
+          [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+      // يومٌ مغلقٌ ⇒ لا ساعةَ بدءٍ أصلاً
+      expect(z.startHoursFor('2026-10-12', 4), isEmpty);
+      // مدّةٌ لا تتّسع للنطاق، ومدّةٌ غيرُ موجبة
+      expect(z.startHoursFor('2026-10-10', 9), isEmpty);
+      expect(z.startHoursFor('2026-10-10', 0), isEmpty);
+      expect(z.startHoursFor('2026-10-10', -1), isEmpty);
+      // الحدُّ الأعلى شامل: 10..18 بمدّةِ ٨ ⇒ البدءُ 10 وحدَه
+      expect(z.startHoursFor('2026-10-10', 8), [10]);
+    });
+
+    test('(د) الساعاتُ المقفلةُ تُحقَن ممتلئةً بمفاتيحِ الخانات', () {
+      final slots = <String, int>{'2026-10-10_09:00': 1};
+      ZoneSchedule.fromAvailability(data).markClosedHoursFull(slots);
+      expect(slots['2026-10-10_13:00'], kClosedHourSlotSentinel);
+      expect(slots['2026-10-10_14:00'], kClosedHourSlotSentinel);
+      expect(slots['2026-10-10_09:00'], 1, reason: 'لا تَمسّ ما ليس مقفلاً');
+      expect(slots.length, 3);
+    });
+
+    test('(هـ) الافتراضيُّ الأخيرُ = DEFAULT_OPEN خادميّاً', () {
+      // النطاقُ الافتراضيُّ كان مكتوباً بيدٍ في خمسةِ مواضع، والخادمُ يُعيد
+      // `defaultOpen` **ولا يَقرؤه أحد** — فتغييرُه خادميّاً كان يَترُك خمسَ
+      // نسخٍ تَقول 8..22. الآن موضعٌ واحدٌ، ويُقابَل بالمصدرِ الخادميّ.
+      final m = RegExp(r'const DEFAULT_OPEN = \[(\d+), (\d+)\];')
+          .firstMatch(_read('functions/index.js'));
+      expect(m, isNotNull, reason: 'DEFAULT_OPEN انتقلَ أو تغيّرَ شكلُه');
+      expect(kFallbackOpenHours,
+          [int.parse(m!.group(1)!), int.parse(m.group(2)!)]);
+    });
+  });
+
+  group('الجدولُ يَصِل كلَّ سطحِ حجز', () {
+    test('(و) النطاقُ مُشتَقٌّ ويَضمّ شاشتَي العقد', () {
+      expect(
+          _availabilityConsumers,
+          containsAll(<String>[
+            'lib/screens/event_worker_packages_screen.dart',
+            'lib/screens/hourly_details_screen.dart',
+            'lib/screens/payment_summary_screen.dart',
+            'lib/screens/subscription_plans_screen.dart',
+            'lib/widgets/booking_slot_picker.dart',
+          ]));
+    });
+
+    for (final p in _availabilityConsumers) {
+      test('(ز) $p يَمُرّ بالقاعدةِ ولا يُحلّل الحقولَ بنفسِه', () {
+        final s = _code(p);
+        expect(s.contains('ZoneSchedule.fromAvailability('), isTrue,
+            reason: '$p يَبني الجدولَ من القاعدةِ المشتركة');
+        for (final k in ['closedHours', 'closedDates', 'openHours']) {
+          expect(s.contains("data['$k']"), isFalse,
+              reason: '$p يُحلّل $k بنفسِه — نسخةٌ سادسةٌ تَنحرِف');
+        }
+        // ولا نطاقَ فتحٍ مكتوبٌ بيدٍ: كان 8 و22 في خمسةِ مواضع.
+        expect(RegExp(r'_workStart|_workEnd|const startHour\s*=').hasMatch(s),
+            isFalse,
+            reason: '$p يَكتب نطاقَ الفتحِ بيدِه');
+      });
+    }
+
+    for (final p in _selfLocatingConsumers) {
+      test('(ح) $p يُعيد الجلبَ متى تغيّرت المنطقة', () {
+        final s = _code(p);
+        final loader = RegExp(
+                r'Future<void>\s+(_load[A-Za-z0-9_]*Availability[A-Za-z0-9_]*)\s*\(')
+            .firstMatch(s);
+        expect(loader, isNotNull, reason: '$p: لم يُعرَف اسمُ جالبِ الإتاحة');
+        final name = loader!.group(1)!;
+        // كلُّ دالّةٍ تُسنِد المنطقةَ يَجبُ أن تُعيد الجلبَ من جسمِها نفسِه —
+        // وهذا ما كان مفقوداً في `subscription_plans_screen`: الجلبُ الوحيدُ
+        // في `initState` قبلَ معرفةِ المنطقة، فلا `zoneName` يُرسَل أبداً.
+        var zones = 0;
+        for (final m
+            in RegExp(r'_(?:user|selected)ZoneName\s*=\s*(?!=)').allMatches(s)) {
+          final body = _enclosingFunctionBody(s, m.start);
+          if (body == null) continue;
+          zones++;
+          expect(body.contains(name) || body.contains('IfZoneChanged'), isTrue,
+              reason: '$p: إسنادُ منطقةٍ لا يُعيد الجلبَ — '
+                  'سقفُ المنطقةِ وجدولُها لا يَصِلان أبداً');
+        }
+        expect(zones, greaterThanOrEqualTo(2),
+            reason: '$p: لم يُعثَر على مسارَي التحديد (تلقائيّ + خريطة)');
+      });
+    }
+
+    test('(ط) الكاشفُ يَعضّ على الأشكالِ التي أعمَته', () {
+      // المصدرُ بعدَ التوحيدِ نظيفٌ، فنجاحُ (ز) و(ح) وحدَه لا يُبرهِن أنّهما
+      // يَرَيان شيئاً — فيُجرَّبان على شكلٍ مُصطنَعٍ يَحمل العطلَ بعينِه.
+      const bad = 'Future<void> _loadAvailabilityFromServer() async {\n'
+          '  final data = await x();\n'
+          "  (data['closedHours'] as Map? ?? {}).forEach((k, v) {});\n"
+          '}\n'
+          'Future<void> _pickLocation({bool userInitiated = false}) async {\n'
+          '  _userZoneName = z;\n'
+          '}\n';
+      expect(bad.contains("data['closedHours']"), isTrue);
+      final b = _enclosingFunctionBody(bad, bad.indexOf('_userZoneName ='));
+      expect(b, isNotNull, reason: 'اقتطاعُ الجسمِ انحلّ');
+      expect(b!.contains('_loadAvailabilityFromServer'), isFalse,
+          reason: 'الكاشفُ يَجب أن يَرى مسارَ منطقةٍ بلا إعادةِ جلب');
+      // والقوسُ المُوازَن: أوّلُ `{` بعدَ الاسمِ هو قوسُ المعامَلاتِ المُسمّاة.
+      expect(b.contains('userInitiated'), isFalse,
+          reason: 'الجسمُ اقتُطِع من قوسِ المعامَلاتِ لا من الجسم');
+      // ولا إيجابيّةَ كاذبة: الجسمُ الصحيحُ يُقرأ صحيحاً.
+      const good = 'Future<void> _pickLocation() async {\n'
+          '  _userZoneName = z;\n'
+          '  _reloadAvailabilityIfZoneChanged(before);\n'
+          '}\n';
+      final g = _enclosingFunctionBody(good, good.indexOf('_userZoneName ='));
+      expect(g, isNotNull);
+      expect(g!.contains('IfZoneChanged'), isTrue);
+      // ولا يَقرأ كتلةَ `if` دالّةً.
+      const inIf = 'Future<void> f() async {\n'
+          '  if (ok) {\n'
+          '    _userZoneName = z;\n'
+          '  }\n'
+          '}\n';
+      final q = _enclosingFunctionBody(inIf, inIf.indexOf('_userZoneName ='));
+      expect(q, isNotNull);
+      expect(q!.startsWith('{\n  if (ok)'), isTrue,
+          reason: 'يَصعد من كتلةِ if إلى جسمِ الدالّة');
+    });
+
+    test('(ي) شاهدُ التعليل: بلا zoneName يَعود الجدولُ افتراضيّاً', () {
+      final fn = _read('functions/index.js');
+      // الجدولُ وسقفُ المنطقةِ داخلَ `if (zoneName)` — فغيابُه يَترُكهما null.
+      expect(fn.contains('if (zoneName) {'), isTrue);
+      expect(fn.contains('let zoneSchedule = null;'), isTrue);
+      expect(fn.contains('let zoneMaxOrdersPerDay = null;'), isTrue);
+      // و`null` تُقرأ «مفتوحٌ بالنطاقِ الافتراضيِّ بلا ساعاتٍ مقفلة».
+      expect(fn.contains('if (!schedule || schedule.enabled !== true) {'), isTrue);
+      expect(fn.contains('return {range: DEFAULT_OPEN, closed: []};'), isTrue,
+          reason: 'لو صارَ الغيابُ «مغلقاً» لَزِمَ مراجعةُ تعليلِ هذه الشريحة');
+      // ولا فحصَ خادميّاً للجدولِ على مسارِ العقد: قارئا `zoneDayScheduleForDate`
+      // هما الإتاحةُ نفسُها والغلافُ التوافقيُّ بلا مُنادٍ — فشاشةُ العقدِ هي
+      // الحارسُ الوحيدُ، وهو سببُ وزنِ هذه الشريحة.
+      expect(RegExp(r'zoneDayScheduleForDate\(').allMatches(fn).length, 3,
+          reason: 'ظهرَ قارئٌ ثالثٌ — يُراجَع: قد يَكون فحصاً خادميّاً فعليّاً');
+    });
+  });
+}
+
+/// جسمُ الدالّةِ المُحيطةِ بموضعٍ — بالصعودِ من أقربِ كتلةٍ حاويةٍ حتى كتلةٍ
+/// ترويستُها دالّةٌ لا `if`/`for`/`catch`.
+///
+/// وموازنةُ قائمةِ المعامَلاتِ أوّلاً ليست زينةً: أوّلُ `{` بعدَ اسمِ دالّةٍ قد
+/// يَكون قوسَ معامَلاتٍ مُسمّاة (`{bool userInitiated = false}`) لا الجسمَ —
+/// فخُّ الحدِّ غيرِ المُوازَنِ المسجَّلُ في هذا المستودعِ مرّاتٍ. و«بقيّةُ
+/// الكتلةِ الحاوية» وحدَها لا تَكفي: إسنادٌ داخلَ `if` تَنتهي كتلتُه قبلَ
+/// نداءٍ يَليه على مستوى الدالّة.
+String? _enclosingFunctionBody(String src, int at) {
+  var open = -1;
+  var depth = 0;
+  for (var i = at; i >= 0; i--) {
+    final c = src[i];
+    if (c == '}') {
+      depth++;
+    } else if (c == '{') {
+      if (depth > 0) {
+        depth--;
+        continue;
+      }
+      open = i;
+      if (_headIsFunction(src.substring(0, i))) break;
+      open = -1; // كتلةٌ ليست دالّةً — اصعد
+    }
+  }
+  if (open < 0) return null;
+  var e = 0;
+  for (var k = open; k < src.length; k++) {
+    if (src[k] == '{') {
+      e++;
+    } else if (src[k] == '}') {
+      e--;
+      if (e == 0) return src.substring(open, k + 1);
+    }
+  }
+  return src.substring(open);
+}
+
+/// هل ما قبلَ `{` ترويسةُ دالّةٍ؟ — قائمةُ معامَلاتٍ مُوازَنةٌ يَسبقها اسمٌ
+/// ليس من كلماتِ التحكّم.
+bool _headIsFunction(String head) {
+  final tail = head.trimRight().replaceAll(RegExp(r'\basync\*?$'), '').trimRight();
+  if (!tail.endsWith(')')) return false;
+  var d = 0;
+  var j = tail.length - 1;
+  for (; j >= 0; j--) {
+    if (tail[j] == ')') {
+      d++;
+    } else if (tail[j] == '(') {
+      d--;
+      if (d == 0) break;
+    }
+  }
+  if (j < 0) return false;
+  final name = RegExp(r'([A-Za-z_][A-Za-z0-9_]*)\s*$').firstMatch(tail.substring(0, j));
+  if (name == null) return false;
+  return !const {'if', 'for', 'while', 'switch', 'catch'}.contains(name.group(1));
 }

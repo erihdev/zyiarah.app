@@ -14,6 +14,7 @@ import 'package:zyiarah/widgets/zone_location_card.dart';
 import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/date_strip.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/zone_schedule.dart';
 import 'package:zyiarah/utils/home_packages.dart';
 
 class ZyiarahSubscriptionPlansScreen extends StatefulWidget {
@@ -56,6 +57,10 @@ class _ZyiarahSubscriptionPlansScreenState
 
   int _maxOrdersPerDay = 10;
   int? _zoneMaxOrdersPerDay;
+  // جدول فتح المنطقة: الأيام المغلقة كلياً، ونطاق كل يوم، والساعات المقفلة.
+  // كانت الشاشة تقرأ `closedHours` وحدها — وهي خالية دائماً هنا، لأن الجلب
+  // الوحيد كان في initState قبل أن تُعرَف المنطقة فلا يُرسَل `zoneName`.
+  ZoneSchedule _zoneSchedule = const ZoneSchedule();
   Map<String, int> _zoneDailyCounts = {};
   int _maxTeamsPerSlot = 5;
   Map<String, int> _dailyOrderCounts = {};
@@ -136,12 +141,14 @@ class _ZyiarahSubscriptionPlansScreenState
       return;
     }
 
+    final String? zoneBefore = _userZoneName;
     setState(() {
       _userLocation = res.location;
       _userZoneName = res.zoneName;
       _isLocating = false;
       _locateFailure = null;
     });
+    _reloadAvailabilityIfZoneChanged(zoneBefore);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text("تم تحديد موقعك تلقائياً: $_userZoneName"),
       backgroundColor: _brand,
@@ -184,12 +191,14 @@ class _ZyiarahSubscriptionPlansScreenState
     }
 
     final matchedZone = ZyiarahZoneLocator.matchZone(loc, _zones);
+    final String? zoneBefore = _userZoneName;
     if (matchedZone != null) {
       setState(() {
         _userLocation = loc;
         _userZoneName = matchedZone['name'] as String?;
         _locateFailure = null;
       });
+      _reloadAvailabilityIfZoneChanged(zoneBefore);
     } else {
       setState(() {
         _userLocation = loc;
@@ -200,6 +209,12 @@ class _ZyiarahSubscriptionPlansScreenState
           content: Text("نأسف، موقعك خارج نطاق الخدمة حالياً"),
           backgroundColor: Colors.red));
     }
+  }
+
+  /// المنطقة تغيّرت ⇒ نعيد جلب الإتاحة، لأن جدول فتحها وسقفها اليومي الخاص
+  /// وعدّها يتبعون المنطقة (الإتاحة الأولى تُجلب عند الفتح قبل معرفة المنطقة).
+  void _reloadAvailabilityIfZoneChanged(String? before) {
+    if (before != _userZoneName) _loadAvailabilityFromServer();
   }
 
   /// جلب بيانات الإتاحة عبر Cloud Function (Admin SDK — لا قيود صلاحيات).
@@ -234,12 +249,8 @@ class _ZyiarahSubscriptionPlansScreenState
       );
       // (تحكم المالك ساعة-بساعة) الساعات المقفلة تُحقن كخانات ممتلئة —
       // فتستبعدها شرائح المواعيد كأي ساعة مكتملة.
-      (data['closedHours'] as Map? ?? {}).forEach((date, hours) {
-        for (final h in (hours as List)) {
-          slots['${date}_${(h as num).toInt().toString().padLeft(2, '0')}:00'] =
-              999999;
-        }
-      });
+      final sched = ZoneSchedule.fromAvailability(data);
+      sched.markClosedHoursFull(slots);
 
       final int maxPerDay  = ((data['maxOrdersPerDay'] as num?)?.toInt()) ?? 10;
       final int maxPerSlot = ((data['maxTeamsPerSlot']  as num?)?.toInt()) ?? 5;
@@ -249,6 +260,7 @@ class _ZyiarahSubscriptionPlansScreenState
 
       if (!mounted) return;
       setState(() {
+        _zoneSchedule     = sched;
         _dailyOrderCounts = daily;
         _slotCounts       = slots;
         _maxOrdersPerDay  = maxPerDay;
@@ -259,11 +271,11 @@ class _ZyiarahSubscriptionPlansScreenState
 
         // انتقل تلقائياً لأول تاريخ متاح إذا كان المحدد ممتلئاً
         final String selStr = intl.DateFormat('yyyy-MM-dd').format(_selectedDate);
-        if (_dayCapacityFull(selStr)) {
+        if (_dateUnavailable(selStr)) {
           for (int i = 0; i < 30; i++) {
             final candidate = now.add(Duration(days: i + 1));
             final candStr = intl.DateFormat('yyyy-MM-dd').format(candidate);
-            if (!_dayCapacityFull(candStr)) {
+            if (!_dateUnavailable(candStr)) {
               _selectedDate = candidate;
               break;
             }
@@ -303,11 +315,10 @@ class _ZyiarahSubscriptionPlansScreenState
       final data = _packages[_selectedPackageIndex!].data() as Map<String, dynamic>;
       visitHours = int.tryParse('${data['hours'] ?? 4}') ?? 4;
     }
-    const startHour = 8;
-    const endHour = 22;
-    final last = endHour - visitHours;
-    if (last < startHour) return [];
-    return List.generate(last - startHour + 1, (i) => startHour + i);
+    // نطاق فتح المنطقة لهذا اليوم — لا 8..22 مكتوبةً بيد: منطقةٌ تفتح 10..18
+    // كانت تَعرض 08:00 و09:00، وأخرى تفتح حتى 23 كانت تَحجب آخر ساعاتها.
+    return _zoneSchedule.startHoursFor(
+        intl.DateFormat('yyyy-MM-dd').format(_selectedDate), visitHours);
   }
 
   /// (2c) إضافة الزيارة المختارة (تاريخ + وقت) للجدول.
@@ -348,6 +359,10 @@ class _ZyiarahSubscriptionPlansScreenState
 
   /// يحسب إتاحة الخانات الزمنية من الـ cache المحلي (لا يصدر أي طلب شبكة).
   /// السقف العام ثم سقف المنطقة الخاص (إن ضُبط) — انظر dayIsFull.
+  /// مغلق بجدول المنطقة **أو** ممتلئ — سببان مختلفان، ولا يُحجَز في أيهما.
+  bool _dateUnavailable(String dateStr) =>
+      _zoneSchedule.dateIsClosed(dateStr) || _dayCapacityFull(dateStr);
+
   bool _dayCapacityFull(String dateStr) => dayIsFull(
         count: _dailyOrderCounts[dateStr] ?? 0,
         max: _maxOrdersPerDay,
@@ -870,10 +885,35 @@ class _ZyiarahSubscriptionPlansScreenState
           final isSelected = _isSameDay(_selectedDate, date);
           
           final dateStr = intl.DateFormat('yyyy-MM-dd').format(date);
-          final isFullyBooked = _dayCapacityFull(dateStr);
+          // مغلق بجدول المنطقة (رمادي) ≠ محجوز بالكامل (أحمر) — سببان مختلفان،
+          // ورسالةٌ واحدةٌ لهما كانت تَقول «محجوز» عن يومٍ لا نخدمه أصلاً.
+          final isClosed = _zoneSchedule.dateIsClosed(dateStr);
+          final isFullyBooked = !isClosed && _dayCapacityFull(dateStr);
+          final unavailable = isClosed || isFullyBooked;
+          final Color availBg = isClosed
+              ? const Color(0xFFF1F5F9)
+              : isFullyBooked
+                  ? const Color(0xFFFEF2F2)
+                  : const Color(0xFFECFDF5);
+          final Color availBorder = isClosed
+              ? const Color(0xFFE2E8F0)
+              : isFullyBooked
+                  ? const Color(0xFFFECACA)
+                  : const Color(0xFFE8F5E9);
 
           return GestureDetector(
-            onTap: isFullyBooked
+            onTap: isClosed
+                ? () {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text(
+                        "لا نخدم منطقتك في هذا اليوم. اختاري يوماً متاحاً (الأخضر).",
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      backgroundColor: Color(0xFF64748B),
+                      duration: Duration(seconds: 2),
+                    ));
+                  }
+                : isFullyBooked
                 ? () {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                       content: Text(
@@ -896,18 +936,10 @@ class _ZyiarahSubscriptionPlansScreenState
               margin: const EdgeInsets.symmetric(horizontal: 5),
               width: 58,
               decoration: BoxDecoration(
-                color: isSelected
-                    ? _brand
-                    : isFullyBooked
-                        ? const Color(0xFFFEF2F2)
-                        : const Color(0xFFECFDF5),
+                color: isSelected ? _brand : availBg,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: isSelected
-                      ? _brand
-                      : isFullyBooked
-                          ? const Color(0xFFFECACA)
-                          : const Color(0xFFE8F5E9),
+                  color: isSelected ? _brand : availBorder,
                   width: 1.5,
                 ),
                 boxShadow: isSelected
@@ -923,7 +955,7 @@ class _ZyiarahSubscriptionPlansScreenState
                       fontSize: 9, 
                       color: isSelected 
                           ? Colors.white70 
-                          : isFullyBooked 
+                          : unavailable 
                               ? const Color(0xFFFCA5A5) 
                               : const Color(0xFF34D399),
                       fontWeight: FontWeight.bold,
@@ -937,7 +969,7 @@ class _ZyiarahSubscriptionPlansScreenState
                       fontWeight: FontWeight.bold,
                       color: isSelected 
                           ? Colors.white 
-                          : isFullyBooked 
+                          : unavailable 
                               ? const Color(0xFFEF4444) 
                               : const Color(0xFF10B981),
                     ),
@@ -948,7 +980,7 @@ class _ZyiarahSubscriptionPlansScreenState
                       fontSize: 10, 
                       color: isSelected 
                           ? Colors.white60 
-                          : isFullyBooked 
+                          : unavailable 
                               ? const Color(0xFFFCA5A5) 
                               : const Color(0xFF34D399),
                       fontWeight: FontWeight.bold,

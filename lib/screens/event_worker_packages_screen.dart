@@ -15,6 +15,7 @@ import 'package:zyiarah/utils/date_strip.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/home_packages.dart';
+import 'package:zyiarah/utils/zone_schedule.dart';
 
 /// باقات عاملات المناسبات — جاهزة ومسعّرة مسبقاً (بدل الإدخال الحر السابق):
 /// العميل يختار باقة بعدد عاملات وساعات وزيارات ثابتة، ثم يحدّد مواعيد الزيارات
@@ -58,6 +59,9 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
 
   int _maxOrdersPerDay = 10;
   int? _zoneMaxOrdersPerDay; // سقف المنطقة الخاص (اختياري — يضيّق العام فقط)
+  // جدول فتح المنطقة: الأيام المغلقة كلياً، ونطاق كل يوم، والساعات المقفلة.
+  // كانت الشاشة تقرأ `closedHours` وحدها وتحصر البدء بـ8..22 مكتوبةً بيد.
+  ZoneSchedule _zoneSchedule = const ZoneSchedule();
   int _maxTeamsPerSlot = 5;
   Map<String, int> _dailyOrderCounts = {};
   Map<String, int> _zoneDailyCounts = {}; // طلبات منطقة العميل وحدها بالتاريخ
@@ -214,6 +218,10 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
     if (before != _userZoneName) _loadAvailabilityFromServer();
   }
 
+  /// مغلق بجدول المنطقة **أو** ممتلئ — سببان مختلفان، ولا يُحجَز في أيهما.
+  bool _dateUnavailable(String dateStr) =>
+      _zoneSchedule.dateIsClosed(dateStr) || _dayCapacityFull(dateStr);
+
   /// اليوم ممتلئ بالسقف العام **أو** بسقف منطقة العميل الخاص (إن وُجد).
   bool _dayCapacityFull(String dateStr) => dayIsFull(
         count: _dailyOrderCounts[dateStr] ?? 0,
@@ -256,14 +264,10 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
       final Map<String, int> slots = rawSlots.map(
         (k, v) => MapEntry(k.toString(), int.tryParse('$v') ?? 0),
       );
-      // (تحكم المالك ساعة-بساعة) الساعات المقفلة تُحقن كخانات ممتلئة —
-      // فتستبعدها شرائح المواعيد كأي ساعة مكتملة.
-      (data['closedHours'] as Map? ?? {}).forEach((date, hours) {
-        for (final h in (hours as List)) {
-          slots['${date}_${(h as num).toInt().toString().padLeft(2, '0')}:00'] =
-              999999;
-        }
-      });
+      // جدول المنطقة كاملاً (أيام مغلقة + نطاق كل يوم + ساعات مقفلة) من قاعدة
+      // واحدة؛ والمقفلة تُحقن كخانات ممتلئة فتستبعدها شرائح المواعيد.
+      final sched = ZoneSchedule.fromAvailability(data);
+      sched.markClosedHoursFull(slots);
 
       final int maxPerDay = ((data['maxOrdersPerDay'] as num?)?.toInt()) ?? 10;
       final int maxPerSlot =
@@ -274,6 +278,7 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
 
       if (!mounted) return;
       setState(() {
+        _zoneSchedule = sched;
         _dailyOrderCounts = daily;
         _slotCounts = slots;
         _maxOrdersPerDay = maxPerDay;
@@ -284,11 +289,11 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
 
         // انتقل تلقائياً لأول تاريخ متاح إذا كان المحدد ممتلئاً
         final String selStr = intl.DateFormat('yyyy-MM-dd').format(_selectedDate);
-        if (_dayCapacityFull(selStr)) {
+        if (_dateUnavailable(selStr)) {
           for (int i = 0; i < 30; i++) {
             final candidate = now.add(Duration(days: i + 1));
             final candStr = intl.DateFormat('yyyy-MM-dd').format(candidate);
-            if (!_dayCapacityFull(candStr)) {
+            if (!_dateUnavailable(candStr)) {
               _selectedDate = candidate;
               break;
             }
@@ -331,11 +336,10 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
           _packages[_selectedPackageIndex!].data() as Map<String, dynamic>;
       visitHours = int.tryParse('${data['hours'] ?? 4}') ?? 4;
     }
-    const startHour = 8;
-    const endHour = 22;
-    final last = endHour - visitHours;
-    if (last < startHour) return [];
-    return List.generate(last - startHour + 1, (i) => startHour + i);
+    // نطاق فتح المنطقة لهذا اليوم — لا 8..22 مكتوبةً بيد: منطقةٌ تفتح 10..18
+    // كانت تَعرض 08:00 و09:00، وأخرى تفتح حتى 23 كانت تَحجب آخر ساعاتها.
+    return _zoneSchedule.startHoursFor(
+        intl.DateFormat('yyyy-MM-dd').format(_selectedDate), visitHours);
   }
 
   /// إضافة الزيارة المختارة (تاريخ + وقت) للجدول.
@@ -893,10 +897,35 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
           final isSelected = _isSameDay(_selectedDate, date);
 
           final dateStr = intl.DateFormat('yyyy-MM-dd').format(date);
-          final isFullyBooked = _dayCapacityFull(dateStr);
+          // مغلق بجدول المنطقة (رمادي) ≠ محجوز بالكامل (أحمر) — سببان مختلفان،
+          // ورسالةٌ واحدةٌ لهما كانت تَقول «محجوز» عن يومٍ لا نخدمه أصلاً.
+          final isClosed = _zoneSchedule.dateIsClosed(dateStr);
+          final isFullyBooked = !isClosed && _dayCapacityFull(dateStr);
+          final unavailable = isClosed || isFullyBooked;
+          final Color availBg = isClosed
+              ? const Color(0xFFF1F5F9)
+              : isFullyBooked
+                  ? const Color(0xFFFEF2F2)
+                  : const Color(0xFFECFDF5);
+          final Color availBorder = isClosed
+              ? const Color(0xFFE2E8F0)
+              : isFullyBooked
+                  ? const Color(0xFFFECACA)
+                  : const Color(0xFFE8F5E9);
 
           return GestureDetector(
-            onTap: isFullyBooked
+            onTap: isClosed
+                ? () {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text(
+                        "لا نخدم منطقتك في هذا اليوم. اختاري يوماً متاحاً (الأخضر).",
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      backgroundColor: Color(0xFF64748B),
+                      duration: Duration(seconds: 2),
+                    ));
+                  }
+                : isFullyBooked
                 ? () {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                       content: Text(
@@ -919,18 +948,10 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
               margin: const EdgeInsets.symmetric(horizontal: 5),
               width: 58,
               decoration: BoxDecoration(
-                color: isSelected
-                    ? _brand
-                    : isFullyBooked
-                        ? const Color(0xFFFEF2F2)
-                        : const Color(0xFFECFDF5),
+                color: isSelected ? _brand : availBg,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: isSelected
-                      ? _brand
-                      : isFullyBooked
-                          ? const Color(0xFFFECACA)
-                          : const Color(0xFFE8F5E9),
+                  color: isSelected ? _brand : availBorder,
                   width: 1.5,
                 ),
                 boxShadow: isSelected
@@ -946,7 +967,7 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
                       fontSize: 9,
                       color: isSelected
                           ? Colors.white70
-                          : isFullyBooked
+                          : unavailable
                               ? const Color(0xFFFCA5A5)
                               : const Color(0xFF34D399),
                       fontWeight: FontWeight.bold,
@@ -960,7 +981,7 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
                       fontWeight: FontWeight.bold,
                       color: isSelected
                           ? Colors.white
-                          : isFullyBooked
+                          : unavailable
                               ? const Color(0xFFEF4444)
                               : const Color(0xFF10B981),
                     ),
@@ -971,7 +992,7 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
                       fontSize: 10,
                       color: isSelected
                           ? Colors.white60
-                          : isFullyBooked
+                          : unavailable
                               ? const Color(0xFFFCA5A5)
                               : const Color(0xFF34D399),
                       fontWeight: FontWeight.bold,

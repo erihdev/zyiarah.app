@@ -147,6 +147,26 @@ bool mentionIsUse(String masked, String name) {
   return !declaresIt.hasMatch(masked);
 }
 
+/// **ويُفرَّغُ الدفتريُّ قبلَ العدِّ داخلَ ملفِّه.** تسامحُ `own > 1` يَعني
+/// «ذُكِرَ ثانيةً في ملفِّه فهو مُستعمَل»، وفي صنفِ بياناتٍ لكلِّ حقلٍ ذِكرانِ
+/// دفتريّانِ بالبناء: مُعامَلُ البانيةِ `this.name` ووَسمُ الوسيطِ المُسمّى
+/// `name:` في `fromMap`. فحقلٌ تَقرؤه `fromMap` ولا يَقرأُ جالبَه أحدٌ يُعَدُّ
+/// ثلاثَ مرّاتٍ ويَمُرّ — وهو ما حجبَ خمسةَ حقولِ اشتراكٍ على
+/// `users/{uid}` يَكتبُها الخادمُ ولا يَقرؤها سطح.
+///
+/// والشكلانِ آمنانِ تجريبيّاً لا تخميناً: كلُّ `this.X` في `lib/` (٤١١ موضعاً)
+/// مُعامَلُ بانيةٍ مُهيِّئ، ويَشدُّ ذلك فحصٌ أدناه؛ و`name:` لا يُفرَّغُ إلّا في
+/// موضعِ وسيطٍ (بعدَ `(` أو `,` أو `{` أو سطرٍ جديد) فلا يُطابِقُ ثلاثيّةً
+/// (`cond ? field : 0`، فالسابقُ `?`) ولا `case kMax:`.
+String _blankBookkeeping(String masked) {
+  var s = masked.replaceAllMapped(
+      RegExp(r'this\s*\.\s*[A-Za-z_]\w*'), (m) => ' ' * m.group(0)!.length);
+  s = s.replaceAllMapped(
+      RegExp(r'(?<=[(,{\n])(\s*)([A-Za-z_]\w*)(\s*:)'),
+      (m) => '${m.group(1)}${' ' * m.group(2)!.length}${m.group(3)}');
+  return s;
+}
+
 const _dirFloor = <String, int>{
   'lib': 150,
   'test': 150,
@@ -238,8 +258,14 @@ void main() {
 
   final all = [..._dartFiles('lib'), ..._dartFiles('test')];
   final counts = <String, Map<String, int>>{};
+  // عدٌّ ثانٍ للملفِّ نفسِه، مُفرَّغاً من الصُّوَرِ الدفتريّة — الأوّلُ يَخدمُ
+  // «خارجَ ملفِّه» حيث `k: name` تمريرُ دالّةٍ قيمةً وهو استعمالٌ حقيقيّ.
+  final ownCounts = <String, Map<String, int>>{};
   for (final f in all) {
-    counts[f.path.replaceAll(r'\', '/')] = _identCounts(_mask(f.readAsStringSync()));
+    final masked = _mask(f.readAsStringSync());
+    counts[f.path.replaceAll(r'\', '/')] = _identCounts(masked);
+    ownCounts[f.path.replaceAll(r'\', '/')] =
+        _identCounts(_blankBookkeeping(masked));
   }
 
   test('لا دالّة ولا جالب ميّتاً في services/utils/models/providers', () {
@@ -273,7 +299,7 @@ void main() {
 
       for (final name in declared) {
         // داخل ملفّه: مرّةٌ واحدة = سطرُ التعريف وحده.
-        final own = counts[rel]?[name] ?? 0;
+        final own = ownCounts[rel]?[name] ?? 0;
         if (own > 1) continue;
         // خارج ملفّه: أيُّ ذكرٍ في lib/ أو test/ يكفي.
         final elsewhere = counts.entries
@@ -373,7 +399,7 @@ void main() {
 
     // ثابتٌ ساكنٌ، وحقلُ نسخةٍ، وحقلٌ عُلويٌّ — ثلاثتُها حقول.
     expect(seen("  static const String actionX = 'X';"), 'actionX');
-    expect(seen('  final DateTime? subscriptionExpiry;'), 'subscriptionExpiry');
+    expect(seen('  final String? houseRules;'), 'houseRules');
     expect(seen('const double kDefaultSofaSqmPrice = 35.0;'),
         'kDefaultSofaSqmPrice');
     expect(seen('  static const Color adminNavy = Color(0xFF1E293B);'),
@@ -390,6 +416,59 @@ void main() {
     expect(seen('  int plus(int a) => a + 1;'), isNull);
     // **و`set` ليست في المُرشِّح**: `_method` تَراها، فإقصاؤها نقصُ تغطية.
     expect(_statementStarters.contains('set'), isFalse);
+  });
+
+  test('الدفتريُّ يُفرَّغ قبلَ عدِّ الملفِّ نفسِه — وفرضيّتُه مقيسة', () {
+    // (أ) `this.name` يُفرَّغ، فلا يُقرأُ وصولَ عضوٍ يُحيي الحقل.
+    expect(_blankBookkeeping('    this.visitsRemaining = 0,')
+        .contains('visitsRemaining'), isFalse);
+    // (ب) ووَسمُ الوسيطِ المُسمّى في موضعِ وسيطٍ — بعدَ `(` أو `,` أو سطرٍ.
+    // والحِمْلُ كما يَبدو في `fromMap` فعلاً: الوَسمُ على سطرِه بعدَ فاصلة.
+    expect(
+        _blankBookkeeping('    return ZyiarahUser(\n'
+                '      uid: id,\n'
+                '      visitsRemaining: toI(x, 0),\n'
+                '    );')
+            .contains('visitsRemaining'),
+        isFalse);
+    expect(_blankBookkeeping('f(visitsRemaining: 1)').contains('visitsRemaining'),
+        isFalse);
+    // (ج) **ولا يُفرَّغُ ما ليس وسماً**: الثلاثيّةُ والـ`case` قراءتانِ
+    // حقيقيّتان، والسابقُ فيهما `?` و`case` لا `(`/`,`/سطر.
+    expect(_blankBookkeeping('final x = c ? visitsRemaining : 0;')
+        .contains('visitsRemaining'), isTrue,
+        reason: 'ثلاثيّةٌ فُرِّغت — الفحصُ يَقرأُ حقلاً حيّاً ميّتاً');
+    expect(_blankBookkeeping('      case kQatratRate:')
+        .contains('kQatratRate'), isTrue);
+    // (د) والقيمةُ المُمرَّرةُ بعدَ وسمٍ تَبقى: `onPressed: _save`.
+    expect(_blankBookkeeping('onPressed: _save,').contains('_save'), isTrue);
+    // (هـ) ولا يُفرَّغُ التعريفُ نفسُه.
+    expect(_blankBookkeeping('  final int visitsRemaining;')
+        .contains('visitsRemaining'), isTrue);
+
+    // **والفرضيّةُ مقيسة، لا مظنونة**: كلُّ `this.X` في `lib/` مُعامَلُ بانيةٍ
+    // مُهيِّئ (٤١١ موضعاً حين قيست)، فلا `this.x` قراءةٌ حقيقيّة — ولو كُتبت
+    // يوماً (و`unnecessary_this` تَمنعُها) فهذا الفحصُ هو ما يُراجَع.
+    final notFormal = <String>[];
+    for (final f in _dartFiles('lib')) {
+      final masked = _mask(f.readAsStringSync());
+      for (final m
+          in RegExp(r'this\s*\.\s*[A-Za-z_]\w*([^\n]*)').allMatches(masked)) {
+        final tail = m.group(1)!.trimLeft();
+        if (tail.isEmpty ||
+            tail.startsWith('=') ||
+            tail.startsWith(',') ||
+            tail.startsWith('}') ||
+            tail.startsWith(')') ||
+            tail.startsWith(']')) {
+          continue;
+        }
+        notFormal.add('${f.path.replaceAll(r'\', '/')}  ←  ${m.group(0)!.trim()}');
+      }
+    }
+    expect(notFormal, isEmpty,
+        reason: '`this.x` ليست مُعامَلَ بانيةٍ هنا — فتفريغُها يُحيي حقلاً '
+            'ميّتاً أو يُميتُ حيّاً، ويُراجَعُ `_blankBookkeeping`');
   });
 
   test('الاستقراءُ العاريُّ يُعَدُّ ذِكراً للاسمِ لا لرمزٍ آخر', () {
