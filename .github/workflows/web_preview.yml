@@ -25,6 +25,7 @@ jobs:
           printf 'MAPBOX_TOKEN=%s\nMOYASAR_PUBLISHABLE_KEY=%s\nSAMSUNG_PAY_SERVICE_ID=%s\n' \
             "$MAPBOX_TOKEN" "$MOYASAR_PUBLISHABLE_KEY" "$SAMSUNG_PAY_SERVICE_ID" > .env
       - run: flutter build web --release
+      - run: cp preview/iphone.html build/web/iphone.html
       - name: Write service account key
         env:
           SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
