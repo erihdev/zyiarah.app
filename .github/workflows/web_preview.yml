@@ -25,25 +25,34 @@ jobs:
           printf 'MAPBOX_TOKEN=%s\nMOYASAR_PUBLISHABLE_KEY=%s\nSAMSUNG_PAY_SERVICE_ID=%s\n' \
             "$MAPBOX_TOKEN" "$MOYASAR_PUBLISHABLE_KEY" "$SAMSUNG_PAY_SERVICE_ID" > .env
       - run: flutter build web --release
-      - run: cp preview/iphone.html build/web/iphone.html
+      - run: cp preview/iphone.html preview/trio.html build/web/
       - name: Write service account key
         env:
           SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
           printf '%s' "$SA_JSON" > "$RUNNER_TEMP/sa.json"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
-      - name: Deploy preview channel
+      - name: Deploy preview channels
         run: |
           set -o pipefail
           cat > firebase.preview.json <<'JSON'
           {"hosting":[{"target":"web","public":"build/web","rewrites":[{"source":"**","destination":"/index.html"}]}]}
           JSON
-          npx --yes firebase-tools@15 hosting:channel:deploy app-preview \
-            --config firebase.preview.json --only web --expires 7d \
-            --project zyiarah-app --non-interactive --json 2>&1 | tee "$RUNNER_TEMP/out.json"
-          URL=$(grep -oE 'https://[A-Za-z0-9.-]+\.web\.app' "$RUNNER_TEMP/out.json" | head -1)
-          echo "::warning::PREVIEW $URL"
-          echo "::warning::RAW $(tr -d "\n" < "$RUNNER_TEMP/out.json" | tail -c 700)"
-          echo "## رابط المعاينة: $URL" >> "$GITHUB_STEP_SUMMARY"
+          deploy() {
+            npx --yes firebase-tools@15 hosting:channel:deploy "$1" \
+              --config firebase.preview.json --only web --expires 7d \
+              --project zyiarah-app --non-interactive --json 2>&1 | tee "$RUNNER_TEMP/$1.json" >&2
+            grep -oE 'https://[A-Za-z0-9.-]+\.web\.app' "$RUNNER_TEMP/$1.json" | head -1
+          }
+          # كلُّ دورٍ على قناةٍ (أصلٍ) مستقلّةٍ كي لا تَتشارك الإطاراتُ جلسةَ الدخول.
+          DRIVER=$(deploy driver-preview)
+          ADMIN=$(deploy admin-preview)
+          test -n "$DRIVER" && test -n "$ADMIN"
+          printf '{"client":"/","driver":"%s/","admin":"%s/"}\n' "$DRIVER" "$ADMIN" > build/web/trio.json
+          cat build/web/trio.json
+          URL=$(deploy app-preview)
+          echo "::warning::PREVIEW $URL/trio.html"
+          echo "::warning::DRIVER $DRIVER ADMIN $ADMIN"
+          echo "## رابط المعاينة: $URL/trio.html" >> "$GITHUB_STEP_SUMMARY"
       - if: always()
         run: rm -f "$RUNNER_TEMP/sa.json"

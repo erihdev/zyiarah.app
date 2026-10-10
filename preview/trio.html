@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>زيارة — العميل والسائق والإدارة</title>
+<style>
+  :root { --w: 428px; --h: 926px; }
+  html, body { margin: 0; height: 100%; background: #1c1c1e; overflow: hidden;
+    font-family: -apple-system, "SF Pro Text", "Segoe UI", Tahoma, sans-serif; }
+  .stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .row { display: flex; gap: 70px; flex: none; }
+  .slot { display: flex; flex-direction: column; align-items: center; gap: 26px; }
+  .slot h2 { margin: 0; color: #f2f2f7; font-size: 30px; font-weight: 700; }
+  .slot p { margin: -18px 0 0; color: #8e8e93; font-size: 18px; }
+  .device { position: relative; width: calc(var(--w) + 28px); height: calc(var(--h) + 28px);
+    border-radius: 68px; background: #2b2b2e; padding: 14px; box-sizing: border-box;
+    box-shadow: 0 0 0 2px #4a4a4e, 0 0 0 9px #1a1a1c, 0 30px 80px rgba(0,0,0,.6);
+    transform-origin: center center; flex: none; }
+  .btn { position: absolute; background: #3a3a3d; border-radius: 3px; width: 4px; }
+  .btn.power { right: -13px; top: 250px; height: 100px; }
+  .btn.mute { left: -13px; top: 170px; height: 34px; }
+  .btn.up { left: -13px; top: 235px; height: 64px; }
+  .btn.down { left: -13px; top: 315px; height: 64px; }
+  .screen { position: relative; width: var(--w); height: var(--h); border-radius: 54px;
+    overflow: hidden; background: #fff; }
+  .status { position: absolute; top: 0; left: 0; right: 0; height: 47px; z-index: 3;
+    display: flex; align-items: center; justify-content: space-between; padding: 0 34px 0 34px;
+    direction: ltr; color: #000; font-size: 16px; font-weight: 600; background: #fff; }
+  .notch { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 210px;
+    height: 32px; background: #000; border-radius: 0 0 22px 22px; z-index: 4; }
+  .icons { display: flex; gap: 6px; align-items: center; }
+  .bars { display: flex; gap: 2px; align-items: flex-end; height: 12px; }
+  .bars i { display: block; width: 3px; background: #000; border-radius: 1px; }
+  .battery { width: 25px; height: 12px; border: 1.5px solid rgba(0,0,0,.4); border-radius: 4px;
+    position: relative; box-sizing: border-box; padding: 1px; }
+  .battery::after { content: ""; position: absolute; right: -4px; top: 3px; width: 2px; height: 4px;
+    background: rgba(0,0,0,.4); border-radius: 0 1px 1px 0; }
+  .battery b { display: block; height: 100%; width: 80%; background: #000; border-radius: 2px; }
+  iframe { position: absolute; top: 47px; left: 0; width: 100%; height: calc(100% - 47px - 21px);
+    border: 0; background: #fff; }
+  .home-area { position: absolute; bottom: 0; left: 0; right: 0; height: 21px; background: #fff; z-index: 3; }
+  .home { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); width: 140px;
+    height: 5px; border-radius: 3px; background: #000; z-index: 4; }
+  .label { position: fixed; top: 10px; right: 14px; color: #8e8e93; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="label">ثلاثة أجهزة آيفون ١٢ برو ماكس — كلّ جهازٍ بحسابه</div>
+<div class="stage"><div class="row" id="row"></div></div>
+<template id="dev"><div class="device">
+    <span class="btn power"></span><span class="btn mute"></span>
+    <span class="btn up"></span><span class="btn down"></span>
+    <div class="screen">
+      <div class="notch"></div>
+      <div class="status">
+        <span class="clock">9:41</span>
+        <span class="icons">
+          <span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:9px"></i><i style="height:12px"></i></span>
+          <svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 11.5 5.6 9a3.4 3.4 0 0 1 4.8 0L8 11.5zM3.3 6.7a6.6 6.6 0 0 1 9.4 0l-1.2 1.2a4.9 4.9 0 0 0-7 0L3.3 6.7zM1 4.4a9.9 9.9 0 0 1 14 0l-1.2 1.2a8.2 8.2 0 0 0-11.6 0L1 4.4z" fill="#000"/></svg>
+          <span class="battery"><b></b></span>
+        </span>
+      </div>
+      <iframe src="__SRC__" title="__T__" allow="geolocation; clipboard-write"></iframe>
+      <div class="home-area"></div>
+      <div class="home"></div>
+    </div>
+  </div>
+</template>
+<script>
+  var slots = [
+    { key: 'client', title: 'العميل', hint: 'حسابك الحالي' },
+    { key: 'driver', title: 'السائق', hint: 'سجّل دخولاً بحساب سائق' },
+    { key: 'admin',  title: 'الإدارة', hint: 'سجّل دخولاً بحساب الإدارة' }
+  ];
+  function fit() {
+    var r = document.getElementById('row');
+    var s = Math.min((innerHeight - 40) / r.offsetHeight, (innerWidth - 40) / r.offsetWidth, 1);
+    r.style.transform = 'scale(' + s + ')';
+  }
+  function tick() {
+    var t = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true,
+      timeZone: 'Asia/Riyadh' }).format(new Date()).replace(/\s?[AP]M/, '');
+    document.querySelectorAll('.clock').forEach(function (c) { c.textContent = t; });
+  }
+  fetch('trio.json', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (urls) {
+    var row = document.getElementById('row'), tpl = document.getElementById('dev').innerHTML;
+    slots.forEach(function (s) {
+      var div = document.createElement('div');
+      div.className = 'slot';
+      div.innerHTML = '<h2>' + s.title + '</h2><p>' + s.hint + '</p>' +
+        tpl.replace('__SRC__', urls[s.key]).replace('__T__', 'زيارة — ' + s.title);
+      row.appendChild(div);
+    });
+    fit(); tick();
+  });
+  addEventListener('resize', fit); setInterval(tick, 15000);
+</script>
+</body>
+</html>
