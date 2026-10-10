@@ -42,7 +42,7 @@ jobs:
             --project zyiarah-app --non-interactive --json 2>&1 | tee "$RUNNER_TEMP/out.json"
           URL=$(grep -oE 'https://[A-Za-z0-9.-]+\.web\.app' "$RUNNER_TEMP/out.json" | head -1)
           echo "::warning::PREVIEW $URL"
-          echo "::warning::RAW $(tr -d '\n' < "$RUNNER_TEMP/out.json" | cut -c1-600)"
+          echo "::warning::RAW $(tr -d "\n" < "$RUNNER_TEMP/out.json" | tail -c 700)"
           echo "## رابط المعاينة: $URL" >> "$GITHUB_STEP_SUMMARY"
       - if: always()
         run: rm -f "$RUNNER_TEMP/sa.json"
