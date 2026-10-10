@@ -224,8 +224,14 @@ void main() {
       // تُطابِقُه القاعدة. لو تغيّرَت فالقاعدةُ تُراجَعُ لا تُسكَت.
       expect(js.contains(r'/(?:Z|[+-]\d{2}:?\d{2})$/'), isTrue,
           reason: 'كاشفُ لاحقةِ المنطقةِ زال من `parseKsaIso`');
-      expect(js.contains('d : new Date(d.getTime() - KSA_OFFSET_MS)'), isTrue,
+      // كان هذا يُثبّتُ `d : new Date(…)` — ذيلَ الثلاثيّةِ القديمةِ بعينِه — وتلك
+      // صارت جملةً مستقلّةً حين أُلحِقت `Z` قبلَ الفكّ (2026-10-10: الساذجُ كان
+      // يُقرأُ بمنطقةِ العمليّةِ لا بـUTC). فالمشدودُ الطرحُ نفسُه، والقراءةُ
+      // بـUTC صراحةً؛ والسلوكُ بمناطقَ ثلاثٍ يَحرُسُه `functions/test/ksa_time.test.js` (و).
+      expect(js.contains('new Date(d.getTime() - KSA_OFFSET_MS)'), isTrue,
           reason: '`parseKsaIso` لم تَعُدْ تَقرأُ الساذجَ رياضاً');
+      expect(js.contains(r'new Date(hasTime ? `${str}Z` : str)'), isTrue,
+          reason: '`parseKsaIso` عادت تَترُكُ للمحرّكِ قراءةَ الساذجِ بمنطقةِ العمليّة');
       // وحقلا الحجزِ ما زالا يُشتَقّانِ من المكوّناتِ (مستقلّانِ عن المنطقة).
       final bf = File('lib/utils/booking_fields.dart').readAsStringSync();
       expect(bf.contains('chosen.hour.toString().padLeft(2'), isTrue,
