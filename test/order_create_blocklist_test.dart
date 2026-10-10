@@ -82,13 +82,20 @@ const Map<String, String> _notAnOrderFlag = {
   'contract_visits_pending': '[contracts] علَمُ إعادةِ توليدِ الزيارات',
 };
 
-/// قائمةُ منعِ الإنشاءِ في قاعدةِ **العقود** — بموازنةِ الأقواس.
+/// قائمةُ حقولِ الخادمِ على **العقود** — من جسمِ `contractServerFields()`،
+/// بموازنةِ الأقواس.
+///
+/// كانت تُقرأُ من `hasAny([` بعدَ `match /contracts/{` لأنّ القائمةَ كانت
+/// إنلاين في قاعدةِ الإنشاءِ وحدَها؛ فلمّا صارت دالّةً يُنادِيها الإنشاءُ
+/// **وتحديثُ المالك** معاً (2026-10-10) انتقلَ الاقتطاعُ إلى جسمِها، وصارَ
+/// النداءانِ مشدودَين في (ب٢) — بلاهما يَكونُ الاقتطاعُ عن دالّةٍ لا يُطبّقُها
+/// شيء. نفسُ طريقِ `serverTrustFlags()` أعلاه.
 Set<String> _contractBlocklist(String rules) {
-  final i = rules.indexOf('match /contracts/{');
-  if (i < 0) throw StateError('كتلةُ قاعدةِ العقودِ اختفت');
-  final seg = rules.substring(i, rules.indexOf('allow read', i));
-  final h = seg.indexOf('hasAny([');
-  if (h < 0) throw StateError('قائمةُ منعِ العقودِ اختفت');
+  final i = rules.indexOf('function contractServerFields()');
+  if (i < 0) throw StateError('دالّةُ حقولِ العقدِ الخادميّةِ اختفت');
+  final seg = rules.substring(i);
+  final h = seg.indexOf('return');
+  if (h < 0) throw StateError('جسمُ الدالّةِ بلا return');
   final open = seg.indexOf('[', h);
   int depth = 0, end = -1;
   for (int j = open; j < seg.length; j++) {
@@ -106,6 +113,16 @@ Set<String> _contractBlocklist(String rules) {
       .allMatches(seg.substring(open, end))
       .map((m) => m.group(1)!)
       .toSet();
+}
+
+/// كتلةُ قاعدةِ العقود — من `match` إلى `allow delete` (بلا موازنة: الكتلةُ
+/// لا تَحملُ `allow delete` غيرَ واحدة، والفحصُ يُثبِتُ أنّ الاقتطاعَ أصابَ).
+String _contractRuleBlock(String rules) {
+  final i = rules.indexOf('match /contracts/{');
+  if (i < 0) throw StateError('كتلةُ قاعدةِ العقودِ اختفت');
+  final j = rules.indexOf('allow delete', i);
+  if (j < 0) throw StateError('كتلةُ العقودِ بلا allow delete');
+  return rules.substring(i, j);
 }
 
 String _stripJs(String src) => src
@@ -497,5 +514,36 @@ void main() {
     expect(claimed.difference(contractBlocked), isEmpty,
         reason: 'أُعفيَ بحجّةِ «حقلُ عقد» وهو غيرُ محجوبٍ هناك: '
             '${claimed.difference(contractBlocked)}');
+  });
+
+  // ═══ (ب٢) حقولُ العقدِ الخادميّةُ محجوبةٌ في الإنشاءِ **وفي تحديثِ المالك** ═══
+  //
+  // كانت القائمةُ إنلاين في الإنشاءِ وحدَه، وتحديثُ المالكِ يَمنعُ تسعةَ
+  // أسماءٍ غيرَها — فما يُمنَعُ عند الإنشاءِ يُكتَبُ بعدَه بتحديث: عميلةٌ
+  // تَضبطُ `plan_validation_failed` على عقدِها المدفوعِ فتُخرِجُه من مكنسةِ
+  // الإنقاذ، أو تَنقلُ `userId` إلى مستخدمٍ آخر. فالدالّةُ واحدةٌ والنداءانِ
+  // مشدودان، ولا قائمةَ إنلاين باقيةٌ في الكتلة (نسختانِ تَنحرِفان).
+  test('(ب٢) الإنشاءُ وتحديثُ المالكِ يُنادِيانِ contractServerFields()', () {
+    final block = _contractRuleBlock(rules);
+    expect(block.contains('allow create') && block.contains('allow update'),
+        isTrue, reason: 'اقتطاعُ كتلةِ العقودِ لم يُصِب');
+    final create = block.substring(
+        block.indexOf('allow create'), block.indexOf('allow read'));
+    expect(create.contains('hasAny(contractServerFields())'), isTrue,
+        reason: 'الإنشاءُ لم يَعُد يُنادي القائمةَ المشتركة');
+    final update = block.substring(block.indexOf('allow update'));
+    // فرعُ المالكِ وحدَه: ما بعدَ شرطِ المِلكيّة.
+    final ownerAt = update.indexOf('request.auth.uid == resource.data.userId');
+    expect(ownerAt, greaterThan(0), reason: 'فرعُ المالكِ اختفى من التحديث');
+    final owner = update.substring(ownerAt);
+    expect(owner.contains('hasAny(contractServerFields())'), isTrue,
+        reason: 'تحديثُ المالكِ لا يَحجبُ حقولَ الخادم — تُكتَبُ بعدَ الإنشاء');
+    expect(owner.contains("'userId'"), isTrue,
+        reason: 'المالكُ يَستطيعُ نقلَ عقدِه إلى مستخدمٍ آخر');
+    // ولا قائمةٌ إنلاين ثانيةٌ في الإنشاءِ تَحملُ اسماً خادميّاً.
+    for (final f in _contractBlocklist(rules)) {
+      expect(create.contains("'$f'"), isFalse,
+          reason: '«$f» عادَ إنلاين في الإنشاء — نسخةٌ ثانيةٌ من القائمة');
+    }
   });
 }
