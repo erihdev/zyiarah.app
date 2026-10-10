@@ -35,6 +35,7 @@ import 'package:zyiarah/utils/terrain_surcharge.dart';
 import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/error_report.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/native_pay_config.dart';
 import 'package:zyiarah/utils/zone_schedule.dart';
 import 'package:zyiarah/utils/phone_format.dart';
 import 'package:zyiarah/utils/invoice_stamp.dart';
@@ -125,6 +126,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   late String _pendingOrderId;
   late final Future<PaymentConfiguration>? _googlePayConfigFuture;
 
+  /// أُهيَّأَ إعدادُ Google Pay للمالِ الحقيقيِّ؟ يُقرَأُ من الأصلِ مرّةً عند
+  /// الإقلاع، وافتراضُه `false` فالزرُّ مخفيٌّ حتى يَثبُتَ العكس (fail-closed).
+  bool _googlePayLive = false;
+
   // dart:io Platform **يرمي على الويب** (Unsupported operation: Platform._operatingSystem)
   // فيقتل الشاشة كاملة بشاشة حمراء لحظة فتحها. نحرسه بـ kIsWeb: على الويب لا
   // Apple/Google/Samsung Pay (حِزمها أصلية فقط) — تُخفى أزرارها وتبقى البطاقة
@@ -139,7 +144,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         FirebaseFirestore.instance.collection('orders').doc().id;
     if (_isNativeAndroid) {
       _googlePayConfigFuture =
-          PaymentConfiguration.fromAsset('assets/google_pay_config.json');
+          PaymentConfiguration.fromAsset(kGooglePayConfigAsset);
+      // غيرُ مُنتظَرٍ بقصد: لا نُؤخّرُ أوّلَ رسمٍ على قراءةِ أصل، و
+      // `googlePayAssetIsLive` لا تَرمي بحالٍ فلا رميَ يَضيع.
+      googlePayAssetIsLive().then((live) {
+        if (mounted && live != _googlePayLive) {
+          setState(() => _googlePayLive = live);
+        }
+      });
     } else {
       _googlePayConfigFuture = null;
     }
@@ -1785,7 +1797,13 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         ],
 
         // --- Google Pay (Android only) ---
-        if (_isNativeAndroid && _googlePayConfigFuture != null) ...[
+        // `_googlePayConfigFuture` لا يَكونُ null على أندرويد أبداً، فالشرطُ
+        // الحقيقيُّ هو أنّ الإعدادَ يَقبضُ مالاً — ومعه `moyasarReady` لأنّ
+        // الرمزَ يُسلَّمُ إلى ميسر.
+        if (_isNativeAndroid &&
+            moyasarReady &&
+            _googlePayLive &&
+            _googlePayConfigFuture != null) ...[
           const SizedBox(height: 16),
           Row(children: [
             const Expanded(child: Divider()),
@@ -1878,8 +1896,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           Builder(builder: (context) {
             final samsungServiceId =
                 envOrEmpty('SAMSUNG_PAY_SERVICE_ID');
-            if (samsungServiceId.isEmpty ||
-                samsungServiceId.startsWith('REPLACE')) {
+            if (nativePayPlaceholder(samsungServiceId)) {
               return const SizedBox.shrink();
             }
             return Column(
