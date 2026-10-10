@@ -194,12 +194,18 @@ class _DriverDashboardState extends State<DriverDashboard> {
       );
     }
     if (defaultTargetPlatform == TargetPlatform.iOS) {
+      // بلا تحديثاتِ خلفيّة، مثلُ أندرويد: رفضت أبل 1.2.50 بالبند 2.5.4 لأنّ
+      // `UIBackgroundModes` كان يُعلِنُ `location` ولا ميزةَ تَستلزمُ موقعاً
+      // دائماً، فحُذِفَ النمطُ من Info.plist (2026-10-10). و`allowBackgroundLocationUpdates`
+      // يَجبُ أن يَتبعَه: تفعيلُه بلا النمطِ المُعلَنِ يُسقِطُ التطبيقَ على iOS
+      // (CLLocationManager يُؤكِّدُ أنّ التطبيقَ قابلٌ للخلفيّة). فالتتبّعُ يَعملُ
+      // والتطبيقُ مفتوحٌ ويَتوقّفُ عند تصغيره.
       return AppleSettings(
         accuracy: LocationAccuracy.high,
         distanceFilter: 20,
-        allowBackgroundLocationUpdates: true,
+        allowBackgroundLocationUpdates: false,
         pauseLocationUpdatesAutomatically: false,
-        showBackgroundLocationIndicator: true,
+        showBackgroundLocationIndicator: false,
       );
     }
     return const LocationSettings(
