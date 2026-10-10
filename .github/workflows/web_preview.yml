@@ -1,0 +1,47 @@
+# معاينةٌ مؤقّتةٌ لتطبيق العميل على الويب — قناةُ معاينةٍ في Firebase Hosting
+# (تنتهي بعد ٧ أيام) على موقع zyiarah-web، لا تَمَسُّ الموقعَ المنشور.
+# الغرضُ: فتحُ التطبيقِ الحاليِّ في المتصفّحِ لالتقاطِ لقطاتِ المتجر.
+name: Web App Preview
+on:
+  push:
+    branches: [preview/web-app]
+  workflow_dispatch:
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+      - run: flutter pub get
+      - name: Write .env
+        env:
+          MAPBOX_TOKEN: ${{ secrets.MAPBOX_TOKEN }}
+          MOYASAR_PUBLISHABLE_KEY: ${{ secrets.MOYASAR_PUBLISHABLE_KEY }}
+          SAMSUNG_PAY_SERVICE_ID: ${{ secrets.SAMSUNG_PAY_SERVICE_ID }}
+        run: |
+          printf 'MAPBOX_TOKEN=%s\nMOYASAR_PUBLISHABLE_KEY=%s\nSAMSUNG_PAY_SERVICE_ID=%s\n' \
+            "$MAPBOX_TOKEN" "$MOYASAR_PUBLISHABLE_KEY" "$SAMSUNG_PAY_SERVICE_ID" > .env
+      - run: flutter build web --release
+      - name: Write service account key
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+      - name: Deploy preview channel
+        run: |
+          set -o pipefail
+          cat > firebase.preview.json <<'JSON'
+          {"hosting":[{"target":"web","public":"build/web","rewrites":[{"source":"**","destination":"/index.html"}]}]}
+          JSON
+          npx --yes firebase-tools@15 hosting:channel:deploy app-preview \
+            --config firebase.preview.json --only web --expires 7d \
+            --project zyiarah-app --non-interactive --json 2>&1 | tee "$RUNNER_TEMP/out.json"
+          URL=$(grep -o 'https://[^"]*app-preview[^"]*' "$RUNNER_TEMP/out.json" | head -1)
+          echo "::notice title=preview-url::$URL"
+          echo "## رابط المعاينة: $URL" >> "$GITHUB_STEP_SUMMARY"
+      - if: always()
+        run: rm -f "$RUNNER_TEMP/sa.json"
