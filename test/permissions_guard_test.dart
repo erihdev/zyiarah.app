@@ -18,10 +18,9 @@
 // ═══ ما لا يَحكمُ فيه هذا الحارس ═══
 //
 // موقعُ الخلفيّةِ على iOS (`UIBackgroundModes: location` + سلسلتا
-// `...Always...`) **مُستعمَلٌ ضِمناً**: `driver_dashboard` يَفتحُ
-// `Geolocator.getPositionStream`، والنمطُ المُعلَنُ هو ما يُبقيه يَبثُّ وقتَ
-// تأنيبِ التطبيق — فحذفُه يُجمّدُ خريطةَ التتبُّعِ عند العميلةِ لحظةَ أن
-// يُغادِرَ السائقُ الشاشة. وأندرويد **بلا** `ACCESS_BACKGROUND_LOCATION` ولا
+// `...Always...`) **حُذِفَ في 2026-10-10** بعد أن رفضت أبل 1.2.50 بالبند
+// 2.5.4 (لا ميزةَ تَستلزمُ موقعاً دائماً). فالتتبّعُ على iOS صارَ كأندرويد:
+// يَعملُ والتطبيقُ مفتوحٌ ويَتوقّفُ عند تصغيره. وأندرويد **بلا** `ACCESS_BACKGROUND_LOCATION` ولا
 // خدمةِ مُقدِّمة — و**هذا قرارٌ مسجَّلٌ لا سهو**: تعليقُ بيانِ أندرويد
 // (2026-07-19) يَقولُ إنّ كلَّ واحدٍ منها «يُفعّل بوّابة إقرار سياسة في
 // Google Play تمنع النشر»، ويُقرّرُ أنّ «التتبّع يعمل والتطبيق مفتوح فقط
@@ -120,14 +119,6 @@ void main() {
       'Geolocator',
       'تحديدُ المنطقةِ أثناء الاستعمال',
     ],
-    'NSLocationAlwaysAndWhenInUseUsageDescription': [
-      'getPositionStream',
-      'بثُّ موقعِ السائقِ ووقتَ تأنيبِ التطبيق',
-    ],
-    'NSLocationAlwaysUsageDescription': [
-      'getPositionStream',
-      'نظيرُها لنسخِ iOS الأقدم',
-    ],
     'NSCameraUsageDescription': [
       'ImageSource.camera',
       'التصويرُ داخلَ التطبيق'
@@ -140,7 +131,9 @@ void main() {
 
   test('الاستخراجُ يَجدُ الإعلاناتِ فعلاً — وإلّا فالفحوصُ جوفاء', () {
     expect(androidPermissions().length, greaterThanOrEqualTo(5));
-    expect(iosUsageKeys().length, greaterThanOrEqualTo(4));
+    // ثلاثةٌ منذ حذفِ سلسلتَي «دائماً» (2026-10-10): الموقعُ أثناء الاستعمال،
+    // والكاميرا، ومكتبةُ الصور.
+    expect(iosUsageKeys().length, greaterThanOrEqualTo(3));
   });
 
   test('مجموعةُ صلاحيّاتِ أندرويد = مجموعةُ ما له شاهد', () {
@@ -247,13 +240,23 @@ void main() {
         reason: 'اختفى شرحُ الدعوى القديمةِ — فتُعادُ بلا علمٍ بسببِ زوالِها');
   });
 
-  test('التباينُ المُعلَن: موقعُ الخلفيّةِ على iOS ولا نظيرَ له في أندرويد',
+  test('لا موقعَ خلفيّةٍ على المنصّتَين: iOS بقرارِ مراجعةِ أبل وأندرويد بقرارِ Play',
       () {
-    // ليس حُكماً — تثبيتُ الحالةِ القائمةِ كي يُراجَعَ أيُّ تغيُّرٍ فيها
-    // بوعيٍ بنموذجِ إقرارِ Play الذي يَستلزمُه الطرفُ الآخر.
-    expect(plist.contains('<string>location</string>'), isTrue,
-        reason: 'زالَ نمطُ الخلفيّةِ — فبثُّ موقعِ السائقِ يَتوقّفُ عند '
-            'تأنيبِ التطبيقِ وتَجمدُ خريطةُ العميلة');
+    // رفضت أبل 1.2.50 بالبند 2.5.4 (2026-10-10): `UIBackgroundModes` يُعلِنُ
+    // `location` ولا ميزةَ تَستلزمُ موقعاً دائماً. فحُذِفَ النمطُ وسلسلتا
+    // `...Always...` (وجودُهما يَجعلُ geolocator يَطلبُ «دائماً» فتُسألُ عنه
+    // المراجعةُ مرّةً أخرى). عودةُ أيٍّ منها رفضٌ ثالثٌ ما لم تُرفَقْ ميزةٌ
+    // وتسجيلُ شاشةٍ في ملاحظاتِ المراجعة.
+    final plistCode = plist.replaceAll(RegExp(r'<!--[\s\S]*?-->'), '');
+    expect(plistCode.contains('<string>location</string>'), isFalse,
+        reason: 'عادَ نمطُ موقعِ الخلفيّةِ إلى Info.plist — سببُ رفضِ أبل 2.5.4');
+    expect(plistCode.contains('NSLocationAlways'), isFalse,
+        reason: 'عادت سلسلةُ «دائماً» — geolocator يَطلبُ الإذنَ الدائمَ بوجودِها');
+    // ومستلزمُه في الشفرة: تفعيلُ تحديثاتِ الخلفيّةِ بلا النمطِ المُعلَنِ
+    // يُسقِطُ التطبيقَ على iOS.
+    expect(lib.contains('allowBackgroundLocationUpdates: true'), isFalse,
+        reason: 'allowBackgroundLocationUpdates: true بلا UIBackgroundModes '
+            'location يُسقِطُ التطبيقَ على iOS');
     // **مُجرَّداً من التعليق**: الإذنُ غائبٌ عن الشفرةِ وحاضرٌ في شرحِ
     // غيابِه، فالبحثُ في الخامِّ يَقرأُ الشرحَ إعلاناً (وهو ما حدث).
     final manifestCode = _stripXmlComments(manifest);
