@@ -21,7 +21,7 @@
     "geofire-common": "^6.0.0",
     "handlebars": "^4.7.9",
     "jsonwebtoken": "^9.0.3",
-    "resend": "^6.29.0"
+    "resend": "^6.32.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
