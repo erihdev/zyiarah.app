@@ -18,10 +18,15 @@
 // ═══ وما ليس من عملِ هذا الحارس ═══
 //
 // أجوبةُ App Store Connect ونموذجُ «أمان البيانات» في Play **لا يُولَّدانِ**
-// من هذا الملفّ — عملُ المالك. وكذلك نصُّ `privacy_policy.md`: وثيقةٌ
-// قانونيّةٌ، وتصحيحُها قرارُ المالكِ لا قرارُ حارس (والتباينُ القائمُ فيها
-// مرفوعٌ إليه: تَذكرُ تحقّقاً بـOTP لا وجودَ له، ولا تَذكرُ البريدَ وهو
-// مفتاحُ الحساب).
+// من هذا الملفّ — عملُ المالك؛ مسوّدتُها في `play_data_safety.md`.
+//
+// ═══ ونصُّ `privacy_policy.md` (2026-10-10) ═══
+//
+// صُحِّحَ بطلبِ المالكِ قبلَ مراجعةِ Google Play للإنتاج: كان يَقول «نجمع رقم
+// الجوال لغرض التحقق (OTP)» — ولا OTP في التطبيق — ولا يَذكرُ البريدَ وهو
+// مفتاحُ الحساب، ولا الدفعَ ولا الصورَ ولا التحليلات. والفحصُ الأخيرُ أدناه
+// يُقابِلُ كلَّ نوعٍ مُعلَنٍ هنا بعبارةٍ تُسمّيه في السياسة: وثيقةٌ تُخفي ما
+// يُجمَعُ فعلاً هي ما يَرفضُ عليه المُراجِع (Play User Data policy).
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -70,6 +75,18 @@ void main() {
       'true', 'lib/services/order_service.dart', "'driver_location': location",
     ],
     'DeviceID': ['true', 'lib/services/notification_service.dart', "'fcmToken'"],
+    // صورةُ الإثباتِ مع التقييم (مرتبطةٌ: تُكتَبُ على مستندِ الطلب).
+    'PhotosorVideos': [
+      'true', 'lib/services/order_service.dart', "'rating_evidence_url'",
+    ],
+    // التوقيعُ بخطِّ اليدِ على العقدِ وتعليقُ التقييم.
+    'OtherUserContent': [
+      'true', 'lib/screens/contract_signing_screen.dart', "'signatureData'",
+    ],
+    // تذاكرُ الدعمِ ورسائلُها.
+    'CustomerSupport': [
+      'true', 'lib/screens/support_screen.dart', "collection('support_tickets')",
+    ],
     'PaymentInfo': ['false', 'pubspec.yaml', 'moyasar:'],
     'CoarseLocation': ['false', 'pubspec.yaml', 'firebase_analytics:'],
     'ProductInteraction': ['false', 'pubspec.yaml', 'firebase_analytics:'],
@@ -129,5 +146,38 @@ void main() {
       expect(xml.contains('NSPrivacyAccessedAPICategory$cat'), isTrue,
           reason: '$cat سقطت — آبل تَرفضُ الرفعَ برسالةٍ تُسمّيها');
     }
+  });
+
+  test('وسياسةُ الخصوصيّةِ تُسمّي كلَّ نوعٍ مُعلَنٍ، ولا تَدّعي OTP', () {
+    final policy = File('privacy_policy.md').readAsStringSync();
+    // عبارةٌ عربيّةٌ لكلِّ نوع — فنوعٌ يُضافُ إلى البيانِ بلا عبارةٍ هنا
+    // يَسقطُ (المجموعتانِ متساويتان)، وعبارةٌ تَزولُ من السياسةِ تَسقطُ كذلك.
+    const named = <String, String>{
+      'Name': 'الاسم',
+      'EmailAddress': 'البريد الإلكتروني',
+      'PhoneNumber': 'رقم الجوال',
+      'PreciseLocation': 'موقعك الدقيق',
+      'CoarseLocation': 'المنطقة التقريبية',
+      'PurchaseHistory': 'سجل الطلبات',
+      'PaymentInfo': 'بيانات البطاقة',
+      'UserID': 'حساب الدخول',
+      'DeviceID': 'معرّف الجهاز',
+      'CrashData': 'تقارير الأعطال',
+      'ProductInteraction': 'الشاشات المستخدمة',
+      'OtherUsageData': 'إحصاءات استخدام',
+      'PhotosorVideos': 'صورة',
+      'OtherUserContent': 'التوقيع',
+      'CustomerSupport': 'تذاكر الدعم',
+    };
+    expect(named.keys.toSet(), declared.keys.toSet(),
+        reason: 'نوعٌ في البيانِ بلا عبارةٍ في السياسة، أو العكس');
+    for (final e in named.entries) {
+      expect(policy, contains(e.value),
+          reason: 'السياسةُ لا تُسمّي ${e.key} («${e.value}») وهو يُجمَع');
+    }
+    expect(policy.contains('OTP'), isFalse,
+        reason: 'عادت دعوى التحقّقِ بـOTP — ولا OTP في تسجيلِ الدخول');
+    expect(policy, contains('حذف الحساب'),
+        reason: 'مسارُ حذفِ الحسابِ شرطٌ في Play وآبل، ويَجبُ أن تُسمّيه');
   });
 }
