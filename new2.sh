@@ -1,2 +1,0 @@
-sh
-    flutter pub get

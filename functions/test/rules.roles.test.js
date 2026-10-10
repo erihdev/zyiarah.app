@@ -333,6 +333,36 @@ const {setDoc, doc, updateDoc, getDoc, getDocs, collection, query, addDoc,
       updateDoc(doc(asUser("ordersMgr"), "contracts/cOld"),
           {status: "approved_waiting_payment"}), true);
 
+  // ─── عقود: فرعُ تحديثِ المالكِ يَحجبُ ما يَحجبُه الإنشاء ──────────────
+  // `contractServerFields()` كانت قائمةَ الإنشاءِ وحدَه، وفرعُ المالكِ يَمنعُ
+  // سبعةَ حقولٍ — فتلفيقُ `plan_validation_failed` (يُظهِرُ للأدمنِ سبباً لم
+  // يُكتَب ويُخرِجُ العقدَ من مكنسةِ الإنقاذ) أو `contract_visits_pending` أو
+  // نقلُ العقدِ بـ`userId` كان يَمُرُّ بالتحديثِ بعد الإنشاء. مستندٌ لكلِّ فحص.
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    for (const id of ["cOwn1", "cOwn2", "cOwn3", "cOwn4", "cOwn5"]) {
+      await setDoc(doc(db, `contracts/${id}`),
+          {userId: "client1", status: "pending", is_paid: false,
+            planPrice: 500, planVisits: 4});
+    }
+  });
+  await check("contract owner: CANNOT set plan_validation_failed",
+      updateDoc(doc(asUser("client1"), "contracts/cOwn1"),
+          {plan_validation_failed: true}), false);
+  await check("contract owner: CANNOT change userId",
+      updateDoc(doc(asUser("client1"), "contracts/cOwn2"),
+          {userId: "client2"}), false);
+  await check("contract owner: CANNOT set visits_remaining",
+      updateDoc(doc(asUser("client1"), "contracts/cOwn3"),
+          {visits_remaining: 99}), false);
+  await check("contract owner: CANNOT set contract_visits_pending",
+      updateDoc(doc(asUser("client1"), "contracts/cOwn4"),
+          {contract_visits_pending: true}), false);
+  // والفاتورةُ تُكتَبُ من شاشةِ الدفعِ على مستندِ العقد — التضييقُ لا يَمسُّها.
+  await check("contract owner: CAN write invoice_pdf fields",
+      updateDoc(doc(asUser("client1"), "contracts/cOwn5"),
+          {invoice_pdf_url: "https://x", invoice_pdf_status: "ready"}), true);
+
   await check("staff off: orders_manager CANNOT update an order",
       updateDoc(doc(asUser("offMgr"), "orders/o1"), {status: "assigned"}),
       false);
