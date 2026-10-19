@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:zyiarah/screens/admin/admin_services_screen.dart';
 import 'package:zyiarah/screens/admin/admin_orders_screen.dart';
 import 'package:zyiarah/screens/admin/admin_more_screen.dart';
-import 'package:zyiarah/screens/admin/admin_store_screen.dart';
+import 'package:zyiarah/screens/admin/admin_store_hub_screen.dart';
 import 'package:zyiarah/screens/admin/admin_insights_screen.dart';
 import 'package:zyiarah/screens/admin/admin_search_screen.dart';
 import 'package:zyiarah/screens/splash_screen.dart';
@@ -57,21 +56,33 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
   }
 
+  /// التبويباتُ **بانياتٌ لا ودجاتٌ مبنيّة**: كلُّ تبويبٍ يُبنى أوّلَ مرّةٍ
+  /// يُزارُ فيها لا عند فتحِ اللوحة. كانت الخمسةُ تُبنى معاً داخلَ
+  /// `IndexedStack`، فيَفتحُ كلٌّ منها مستمِعاتِه واستعلاماتِه (الإحصاءاتُ
+  /// وحدَها خمسةُ استعلامات) لحظةَ الدخولِ وإن لم يُفتَحْ إلّا الأوّل.
+  ///
+  /// وأُسقِطَ تبويبُ «خدماتنا» (`AdminServicesScreen`): ترويستُه نفسُها تقولُ
+  /// إنّه «للعرض فقط» — مجموعةُ `services` لا يَقرؤها تطبيقُ العميلةِ إطلاقاً،
+  /// وكلُّ ما يُضبَطُ فعلاً (الأسعارُ والتفعيلُ) في «المناطق والأسعار». تبويبٌ
+  /// كاملٌ في الشريطِ السفليِّ لقائمةٍ لا أثرَ لها.
   List<Map<String, dynamic>> _getFilteredTabs() {
-    final allTabs = [
+    final allTabs = <Map<String, dynamic>>[
       // نمرّر الدور كـ AdminMoreScreen: قواعد Firestore تمنع accountant/marketing من
       // قراءة store_orders، فتحتاج الشاشة للدور كي تتخطى ذلك الاستعلام بدل رفضٍ حتمي.
-      {'page': AdminInsightsScreen(role: _role), 'label': ZyiarahStrings.dashboardTitle, 'icon': Icons.insights_rounded, 'roles': ['super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin']},
-      {'page': const AdminServicesScreen(), 'label': ZyiarahStrings.servicesHeader, 'icon': Icons.design_services, 'roles': ['super_admin', 'orders_manager']},
-      {'page': const AdminOrdersScreen(), 'label': ZyiarahStrings.ordersManagement, 'icon': Icons.list_alt, 'roles': ['super_admin', 'orders_manager']},
-      // marketing_admin هو من تُجيز له القواعد كتابة المنتجات — كان بلا تبويب متجر أصلاً؛
-      // accountant_admin يبقى للاطلاع فقط (الشاشة تخفي أدوات الكتابة حسب الدور الممرَّر).
-      {'page': AdminStoreScreen(role: _role), 'label': ZyiarahStrings.storeManagement, 'icon': Icons.storefront, 'roles': ['super_admin', 'accountant_admin', 'marketing_admin']},
-      {'page': AdminMoreScreen(role: _role), 'label': ZyiarahStrings.systemSettings, 'icon': Icons.grid_view_rounded, 'roles': ['super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin']},
+      {'build': () => AdminInsightsScreen(role: _role), 'label': ZyiarahStrings.dashboardTitle, 'icon': Icons.insights_rounded, 'roles': ['super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin']},
+      {'build': () => const AdminOrdersScreen(embedded: true), 'label': ZyiarahStrings.ordersManagement, 'icon': Icons.list_alt, 'roles': ['super_admin', 'orders_manager']},
+      // المتجر: المنتجاتُ وطلباتُ المتجرِ معاً، وكلُّ شريحةٍ بأدوارِها السابقةِ
+      // نفسِها (انظر AdminStoreHubScreen) — marketing_admin هو من تُجيز له القواعد
+      // كتابة المنتجات، وaccountant_admin للاطلاع، ومدير الطلبات لطلبات المتجر.
+      {'build': () => AdminStoreHubScreen(role: _role), 'label': ZyiarahStrings.storeManagement, 'icon': Icons.storefront, 'roles': AdminStoreHubScreen.tabRoles},
+      {'build': () => AdminMoreScreen(role: _role), 'label': ZyiarahStrings.systemSettings, 'icon': Icons.grid_view_rounded, 'roles': ['super_admin', 'orders_manager', 'accountant_admin', 'marketing_admin']},
     ];
 
     return allTabs.where((tab) => (tab['roles'] as List).contains(_role)).toList();
   }
+
+  /// تبويباتٌ زِيرَت — تُبنى مرّةً وتُحفَظُ حالتُها في `IndexedStack`.
+  final Set<int> _visitedTabs = {0};
 
   void _logout() async {
     // <bool> + ?? false: النقر خارج الحوار (barrier) يُرجع null، وبدونهما كان
@@ -152,6 +163,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     final filteredTabs = _getFilteredTabs();
     if (_currentIndex >= filteredTabs.length) _currentIndex = 0;
+    _visitedTabs.add(_currentIndex);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
@@ -179,13 +191,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         ),
         body: IndexedStack(
           index: _currentIndex,
-          children: filteredTabs.map((t) => t['page'] as Widget).toList(),
+          children: [
+            for (var i = 0; i < filteredTabs.length; i++)
+              _visitedTabs.contains(i)
+                  ? (filteredTabs[i]['build'] as Widget Function())()
+                  : const SizedBox.shrink(),
+          ],
         ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _currentIndex,
           onDestinationSelected: (index) {
             HapticFeedback.lightImpact();
-            setState(() => _currentIndex = index);
+            setState(() {
+              _currentIndex = index;
+              _visitedTabs.add(index);
+            });
           },
           backgroundColor: Colors.white,
           surfaceTintColor: Colors.transparent,

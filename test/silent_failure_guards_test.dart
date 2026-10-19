@@ -5,6 +5,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/sources_in.dart';
+
 /// يزيل التعليقات قبل الفحص.
 ///
 /// ضروري: التعليقات في هذا المشروع **تشرح ما أُزيل** («كان يقول تم إخفاء الخدمة…»)،
@@ -112,33 +114,35 @@ void main() {
     });
   });
 
-  group('كتالوج الخدمات لا يكذب على الإدارة', () {
-    final src = _code('lib/screens/admin/admin_services_screen.dart');
-
-    test('لا مفتاح «إخفاء الخدمة» — لا أحد يقرأ is_active', () {
-      // الشبكة المعروضة للعميلة نصوص ثابتة في الشيفرة، فالمفتاح كان يقول
-      // «تم إخفاء الخدمة» والخدمة تبقى معروضة وتُطلب. مفتاح يكذب أسوأ من غيابه.
-      expect(src.contains("'is_active'"), isFalse);
-      expect(src.contains('تم إخفاء الخدمة'), isFalse);
-      expect(src.contains('Switch('), isFalse);
+  // **أُعيد توجيهُ هذه المجموعةِ لا إسكاتُها (2026-10-11).** كانت تَحرُسُ
+  // `admin_services_screen` من ثلاثِ دعاوى كاذبة (مفتاحُ إخفاءٍ لا يَقرؤه أحد،
+  // وتعديلُ تسعيرٍ على مجموعةٍ لا تُقرأ، وشارةٌ مُلفَّقة) — وبعدَ نزعِها لم يَبقَ
+  // في الشاشةِ إلّا بيانٌ يقول «هذه القائمة للعرض فقط». فحُذفت الشاشةُ وتبويبُها
+  // من لوحةِ الإدارة: تبويبٌ كاملٌ لقائمةٍ لا أثرَ لها. والحقيقةُ التي كانت
+  // تَحرُسُها باقيةٌ وتُشَدُّ هنا: مجموعةُ `services` لا يَقرؤها تطبيقُ العميلة،
+  // فأيُّ شاشةٍ تعودُ إليها تُعيدُ الكذبةَ نفسَها.
+  group('كتالوج الخدمات الميّت لا يعود', () {
+    test('لا شاشةَ ولا تبويبَ للكتالوج', () {
+      expect(File('lib/screens/admin/admin_services_screen.dart').existsSync(),
+          isFalse);
+      expect(
+          _code('lib/screens/admin/admin_dashboard_screen.dart')
+              .contains('AdminServicesScreen'),
+          isFalse);
     });
 
-    test('لا تعديل تسعير — الأسعار في service_zones لكل منطقة', () {
-      expect(src.contains("'base_price'"), isFalse);
-      expect(src.contains("'price_text'"), isFalse);
-      expect(src.contains('تعديل تسعير'), isFalse);
-      expect(src.contains('التحديث الجذري'), isFalse);
-    });
-
-    test('لا شارة «الأكثر طلباً» ملفّقة', () {
-      // كان شرطها title.contains("تنظيف") — لا علاقة لها بالطلبات إطلاقاً.
-      expect(src.contains('الأكثر طلباً'), isFalse);
-      expect(src.contains('contains("تنظيف")'), isFalse);
-    });
-
-    test('بيان صريح يقول أين تُضبط الأسعار فعلاً', () {
-      expect(src.contains('نطاقات التغطية'), isTrue);
-      expect(src.contains('للعرض فقط'), isTrue);
+    test('لا موضعَ في lib يَقرأ أو يَكتبُ مجموعةَ services', () {
+      final hits = <String>[];
+      // أرضيّةٌ: فحصٌ سالبٌ على مسحٍ انحلَّ يَمُرُّ أخضرَ على لا شيء.
+      for (final f in sourcesIn('lib', atLeast: 150)) {
+        if (RegExp(r"""collection\(\s*['"]services['"]\s*\)""")
+            .hasMatch(_code(f.path))) {
+          hits.add(f.path);
+        }
+      }
+      expect(hits, isEmpty,
+          reason: 'مجموعةُ services لا يَقرؤها تطبيقُ العميلة — الأسعارُ '
+              'والتفعيلُ في service_zones');
     });
   });
 

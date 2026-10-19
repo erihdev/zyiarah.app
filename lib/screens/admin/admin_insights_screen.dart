@@ -4,6 +4,7 @@ import 'package:intl/intl.dart' as intl;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/screens/admin/admin_compliance_screen.dart';
+import 'package:zyiarah/screens/admin/admin_analytics_screen.dart';
 import 'package:zyiarah/screens/admin/admin_staff_performance_screen.dart';
 import 'package:zyiarah/screens/admin/admin_orders_screen.dart';
 import 'package:zyiarah/screens/admin/admin_order_details_screen.dart';
@@ -178,7 +179,12 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
                 // (دمج من لوحة الويب — Accountants) لوحة مالية مصغّرة: الصافي قبل
                 // الضريبة + توزيع طرق الدفع بعدد المعاملات ومبالغها.
                 _buildFinanceCard(stats),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
+                if (_canOpenAnalytics) ...[
+                  _buildAnalyticsEntry(),
+                  const SizedBox(height: 20),
+                ] else
+                  const SizedBox(height: 8),
                 _buildRecentActivityList(_orders, _maintenance),
                 const SizedBox(height: 20),
                 _buildSystemHealthSection(_drivers),
@@ -407,6 +413,59 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
   /// (دمج من لوحة الويب) اللوحة المالية: الصافي قبل الضريبة (الإجمالي ÷ 1.15)
   /// + توزيع طرق الدفع (عدد المعاملات والمبلغ ونسبته) من الطلبات المدفوعة في
   /// العيّنة المجلوبة.
+  /// «لوحة الإحصائيات والأرباح» كانت بلاطةً في «المزيد» بجوارِ تبويبِ
+  /// الإحصاءاتِ هذا — موضعانِ للأرقام. فصارت تُفتَحُ من هنا وحدَه، لأنّ ما
+  /// تَنفردُ به (الإجماليُّ التراكميُّ من `metadata/analytics_summary` الذي
+  /// يُحدّثُه الخادم، لا عيّنةُ آخرِ ٥٠٠ طلبٍ هنا) تفصيلٌ لِما في هذه البطاقات.
+  /// والأدوارُ هي أدوارُ بلاطتِها السابقةِ حرفاً (التسويقُ لم يكن يراها).
+  bool get _canOpenAnalytics =>
+      const ['admin', 'super_admin', 'accountant_admin', 'orders_manager']
+          .contains(widget.role);
+
+  Widget _buildAnalyticsEntry() {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const AdminAnalyticsScreen())),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF660033).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.insert_chart_outlined,
+                    color: Color(0xFF660033)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('التحليلات المالية التفصيلية',
+                        style: GoogleFonts.tajawal(
+                            fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 2),
+                    Text('الإيراد التراكمي، طرق الدفع، وأحدث المعاملات',
+                        style: GoogleFonts.tajawal(
+                            fontSize: 12, color: Colors.grey.shade600)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_left_rounded, color: Colors.grey),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFinanceCard(Map<String, dynamic> stats) {
     double d(dynamic v) => v is num ? v.toDouble() : (double.tryParse('$v') ?? 0.0);
     const labels = {

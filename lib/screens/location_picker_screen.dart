@@ -20,6 +20,14 @@ class LocationPickerScreen extends StatefulWidget {
   final double? radius;
   final Color? circleColor;
 
+  /// نقطةُ بدءٍ معروفة (تعديلُ منطقةٍ قائمة): تَفتحُ الخريطةُ عليها مباشرةً
+  /// بدلَ موقعِ الجهاز — فمركزُ المنطقةِ لا يَقفزُ إلى مكانِ الأدمنِ صامتاً.
+  final GeoPoint? initialLocation;
+
+  /// مُنزلِقُ نصفِ القطرِ (محرّرُ المناطق): الدائرةُ تَتبعُه حيّاً، والنتيجةُ
+  /// خريطةٌ `{location, radiusKm}` بدلَ `GeoPoint` وحدَه.
+  final bool adjustableRadius;
+
   const LocationPickerScreen({
     super.key, 
     required this.serviceName,
@@ -30,6 +38,8 @@ class LocationPickerScreen extends StatefulWidget {
     this.workerCount = 1,
     this.radius,
     this.circleColor,
+    this.initialLocation,
+    this.adjustableRadius = false,
   });
 
   @override
@@ -54,10 +64,21 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
   final String _mapboxToken = envOrEmpty('MAPBOX_TOKEN');
 
+  /// نصفُ القطرِ المعروض — يَبدأُ بما مُرِّر ويُحرّكُه المُنزلِق.
+  late double? _radiusKm = widget.radius;
+
   @override
   void initState() {
     super.initState();
-    _locateMe();
+    final init = widget.initialLocation;
+    if (init != null) {
+      // موقعٌ معروفٌ سلفاً: لا تحديدَ تلقائيّاً يَنقلُ الدبوسَ عنه.
+      _selectedLatLng = LatLng(init.latitude, init.longitude);
+      _userSelected = true;
+      _isMapReady = true;
+    } else {
+      _locateMe();
+    }
   }
 
   /// يضع الدبوس على موقع المستخدم — **ويقول لماذا إن لم يستطع.**
@@ -200,7 +221,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       return;
     }
     final geoPoint = GeoPoint(_selectedLatLng.latitude, _selectedLatLng.longitude);
-    if (widget.hours != null) {
+    if (widget.adjustableRadius) {
+      Navigator.pop(context, {'location': geoPoint, 'radiusKm': _radiusKm});
+    } else if (widget.hours != null) {
       Navigator.pop(context, {
         'location': geoPoint,
         'hours': widget.hours,
@@ -261,6 +284,14 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       LatLng(kJazanNe.latitude + 0.15, kJazanNe.longitude + 0.15),
                     ),
                   ),
+                  // النقرُ يَنقلُ الدبوسَ إلى موضعِه — مكمّلٌ لسحبِ الخريطة.
+                  onTap: (_, ll) {
+                    setState(() {
+                      _selectedLatLng = ll;
+                      _userSelected = true;
+                    });
+                    _mapController.move(ll, _mapController.camera.zoom);
+                  },
                   onPositionChanged: (position, hasGesture) {
                     if (hasGesture) {
                       setState(() {
@@ -297,12 +328,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                         color: const Color(0xFF660033),
                       ),
                   ]),
-                  if (widget.radius != null)
+                  if (_radiusKm != null)
                     CircleLayer(
                       circles: [
                         CircleMarker(
                           point: _selectedLatLng,
-                          radius: widget.radius! * 1000, // Convert km to meters
+                          radius: _radiusKm! * 1000, // Convert km to meters
                           useRadiusInMeter: true,
                           color: (widget.circleColor ?? Colors.blue).withValues(alpha: 0.3),
                           borderColor: widget.circleColor ?? Colors.blue,
@@ -429,6 +460,43 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                 ],
               ),
             ),
+
+            // مُنزلِقُ نصفِ القطر — الدائرةُ تَتبعُه حيّاً.
+            if (widget.adjustableRadius && _radiusKm != null)
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 160,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'نصف قطر التغطية: ${_radiusKm!.toStringAsFixed(_radiusKm! % 1 == 0 ? 0 : 1)} كم',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      Slider(
+                        value: _radiusKm!.clamp(1.0, 100.0),
+                        min: 1,
+                        max: 100,
+                        divisions: 198,
+                        activeColor: const Color(0xFF660033),
+                        label: '${_radiusKm!.toStringAsFixed(1)} كم',
+                        onChanged: (v) => setState(
+                            () => _radiusKm = (v * 2).roundToDouble() / 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
             // Confirm Button
             Positioned(
