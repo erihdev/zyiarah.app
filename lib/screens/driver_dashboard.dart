@@ -27,6 +27,7 @@ import 'package:zyiarah/screens/driver_profile_screen.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/phone_format.dart';
 import 'package:zyiarah/utils/driver_activation.dart';
+import 'package:zyiarah/models/driver_schedule.dart';
 
 class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
@@ -490,31 +491,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
+  /// الخروجُ بعدَ تأكيدٍ **واحد**: شاشةُ «حسابي» تَسألُ قبلَ أن تُنادِيَ هذه
+  /// الدالّة (`_confirmLogout`). كانت هنا نافذةُ تأكيدٍ ثانيةٌ، فيُسألُ السائقُ
+  /// «هل تريد بالتأكيد؟» مرّتَين متتاليتَين لضغطةٍ واحدة.
   Future<void> _performLogout() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: AlertDialog(
-          title: Text('تسجيل الخروج',
-              style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-          content: Text('هل تريد بالتأكيد تسجيل الخروج من التطبيق؟',
-              style: GoogleFonts.tajawal()),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: Text('إلغاء', style: GoogleFonts.tajawal())),
-            TextButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: Text('نعم، خروج',
-                    style: GoogleFonts.tajawal(color: Colors.red))),
-          ],
-        ),
-      ),
-    );
-
-    if (confirm != true) return;
-    HapticFeedback.lightImpact();
     _stopSync();
     // الخروج المركزي (B3): تنظيف كامل للذاكرة بدل FirebaseAuth.signOut() المباشرة
     await ZyiarahFirebaseService().signOut();
@@ -532,9 +512,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
   Future<List<int>> _loadStats() async {
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
-    // يُقتطع لمنتصف الليل أولاً — بدونه يبدأ الأسبوع من ساعة اللحظة الحالية،
-    // فتُحتسب إكمالات الصباح الباكر من اليوم نفسه ناقصةً.
-    final weekStart = todayStart.subtract(Duration(days: now.weekday - 1));
+    // الأسبوعُ السعوديُّ يبدأ **السبت** — القاعدةُ نفسُها التي يَبني بها جدولُ
+    // المهامّ أسبوعَه (`DriverSchedule.weekStart`)؛ كان هنا طرحُ `weekday - 1`
+    // أي الإثنين، فعدّادُ «الأسبوع» في الرئيسيّة يُخالِفُ أسبوعَ «مهامي».
+    // ومُقتطَعٌ لمنتصف الليل كما كان (`dayKey`).
+    final weekStart = DriverSchedule.weekStart(now);
     final monthStart = DateTime(now.year, now.month, 1);
     final windowStart = monthStart.subtract(const Duration(days: 45));
 
@@ -681,8 +663,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
         }
 
         // المهمة محل التركيز: الأكثر تقدّماً (قيد التنفيذ ← في الطريق ← مجدولة)
-        final sorted = [...active]
-          ..sort((a, b) => _focusRank(a).compareTo(_focusRank(b)));
+        // ترتيبٌ حتميٌّ: الأولويّةُ ثمّ الموعدُ ثمّ الرمزُ ثمّ المعرّف
+        // (`DriverSchedule.focusCompare`) — لا ترتيبُ وصولِ المستندات.
+        final sorted = [...active]..sort((a, b) => DriverSchedule.focusCompare(
+            _taskOf(a), _taskOf(b)));
         final focus = sorted.first;
         final focusStatus =
             (focus.data() as Map<String, dynamic>)['status'] as String? ?? '';
@@ -711,12 +695,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
-  // ترتيب أولوية التركيز بين مهام السائق غير المكتملة
-  int _focusRank(QueryDocumentSnapshot doc) {
-    final status = (doc.data() as Map<String, dynamic>)['status'] as String? ?? '';
-    const order = {'in_progress': 0, 'on_the_way': 1, 'accepted': 1, 'scheduled': 2};
-    return order[status] ?? 3;
-  }
+  /// المهمّةُ كما يَقرؤها جدولُ المهامّ — مصدرٌ واحدٌ للموعدِ والأولويّةِ
+  /// والتأخّر بين الرئيسيّةِ و«مهامي».
+  DriverTask _taskOf(DocumentSnapshot doc) =>
+      DriverTask.fromMap(doc.id, doc.data() as Map<String, dynamic>);
 
   // ─────────────────────────────────────────────
   // DAILY ROUTE MANIFEST (جدول الرحلات اليومي)
@@ -811,8 +793,17 @@ class _DriverDashboardState extends State<DriverDashboard> {
             ),
           ),
           ...(byDay[day]!
-                ..sort((a, b) => slotOf(a['data'] as Map<String, dynamic>)
-                    .compareTo(slotOf(b['data'] as Map<String, dynamic>))))
+                ..sort((a, b) {
+                  final c = slotOf(a['data'] as Map<String, dynamic>)
+                      .compareTo(slotOf(b['data'] as Map<String, dynamic>));
+                  if (c != 0) return c;
+                  // تساوي الموعد: الرمزُ ثمّ المعرّف — ترتيبٌ حتميّ.
+                  final k = '${(a['data'] as Map<String, dynamic>)['code'] ?? ''}'
+                      .compareTo(
+                          '${(b['data'] as Map<String, dynamic>)['code'] ?? ''}');
+                  if (k != 0) return k;
+                  return (a['id'] as String).compareTo(b['id'] as String);
+                }))
               .map((t) => _buildManifestOrderCard(
                   t['id'] as String, t['data'] as Map<String, dynamic>)),
         ],
@@ -922,9 +913,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
     final String clientName = data['client_name'] ?? 'العميل';
     final String status = data['status'] ?? 'pending';
     final GeoPoint? location = data['location'] as GeoPoint?;
+    // فات موعدُها ولم تبدأ: «متأخرة» لا «مجدولة».
+    final bool overdue =
+        DriverTask.fromMap(orderId, data).isOverdue(DateTime.now());
 
     // لون شارة الحالة (نموذج التوزيع المباشر)
-    final Color statusColor = status == 'in_progress'
+    final Color statusColor = overdue
+        ? Colors.red
+        : status == 'in_progress'
         ? Colors.green
         : (status == 'on_the_way' || status == 'accepted')
             ? Colors.blue
@@ -1008,7 +1004,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    _statusLabelAr(status),
+                    overdue ? 'متأخرة — فات موعدها' : _statusLabelAr(status),
                     style: GoogleFonts.tajawal(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
@@ -1061,6 +1057,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     final data = doc.data() as Map<String, dynamic>;
     final status = data['status'];
     final orderId = doc.id;
+    final bool overdue = _taskOf(doc).isOverdue(DateTime.now());
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1078,9 +1075,20 @@ class _DriverDashboardState extends State<DriverDashboard> {
             children: [
               const Icon(Icons.flash_on, color: Colors.orange, size: 22),
               const SizedBox(width: 8),
-              Text(
-                (status == 'scheduled' || status == 'assigned') ? "مهمتك القادمة — استعد للانطلاق" : "مهمة نشطة — يُرجى التركيز",
-                style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.orange.shade900),
+              Expanded(
+                child: Text(
+                  overdue
+                      ? "مهمة متأخرة — فات موعدها، انطلق الآن"
+                      : (status == 'scheduled' || status == 'assigned')
+                          ? "مهمتك القادمة — استعد للانطلاق"
+                          : "مهمة نشطة — يُرجى التركيز",
+                  style: GoogleFonts.tajawal(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: overdue
+                          ? Colors.red.shade800
+                          : Colors.orange.shade900),
+                ),
               ),
             ],
           ),

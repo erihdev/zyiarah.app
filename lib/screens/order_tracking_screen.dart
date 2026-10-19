@@ -11,7 +11,7 @@ import 'package:zyiarah/widgets/rating_dialog.dart';
 import 'package:zyiarah/models/tracking_steps.dart';
 import 'package:zyiarah/utils/phone_format.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
-import 'package:zyiarah/utils/home_packages.dart';
+import 'package:zyiarah/utils/order_amount_label.dart';
 
 
 class OrderTrackingScreen extends StatefulWidget {
@@ -161,7 +161,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   }
 
   Widget _buildLiveMap(GeoPoint? clientLoc, GeoPoint? driverLoc) {
-    if (clientLoc == null) return const Center(child: Text("موقع العميل غير متوفر"));
+    if (clientLoc == null) return const Center(child: Text("موقع الخدمة غير متوفر على الخريطة"));
 
     final clientLatLng = LatLng(clientLoc.latitude, clientLoc.longitude);
     final driverLatLng = driverLoc != null ? LatLng(driverLoc.latitude, driverLoc.longitude) : null;
@@ -221,10 +221,19 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   }
 
   Widget _buildDetailsPanel(Map<String, dynamic> data, String status, GeoPoint? driverLoc, GeoPoint? clientLoc) {
-    String distanceInfo = "جاري حساب المسافة...";
+    // «جاري حساب المسافة...» كانت تُعرض لكلِّ طلبٍ بلا موقعِ سائق — ومنه
+    // طلبٌ لم يُسنَد بعد، فتنتظر العميلةُ حساباً لن يأتي. النصُّ يقول الآن
+    // لماذا لا مسافة.
+    String distanceInfo;
     if (driverLoc != null && clientLoc != null) {
       double dist = _coreService.getDistanceInMeters(driverLoc.latitude, driverLoc.longitude, clientLoc.latitude, clientLoc.longitude);
-      distanceInfo = "يبعد عنك: ${_coreService.getFormattedDistance(dist)}";
+      distanceInfo = "يبعد الفريق عنكِ: ${_coreService.getFormattedDistance(dist)}";
+    } else if (_driverName(data) == null) {
+      distanceInfo = "بانتظار تعيين الفريق";
+    } else if (status == 'completed') {
+      distanceInfo = "اكتملت الخدمة";
+    } else {
+      distanceInfo = "موقع الفريق يظهر عند انطلاقه إليكِ";
     }
 
     return Container(
@@ -240,18 +249,30 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
+                  // Expanded + ellipsis: كان العمودُ بلا قيدٍ بجوارِ المؤقّتِ
+                  // وزرَّي التواصل، فنصُّ مسافةٍ طويلٌ يَفيضُ على شاشةٍ ضيّقة.
+                  Expanded(
+                    child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("حالة الطلب الحالية", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF1E293B))),
+                      Text("حالة الطلب",
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFF1E293B))),
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Text(distanceInfo, style: const TextStyle(color: Color(0xFF660033), fontWeight: FontWeight.bold, fontSize: 12)),
+                          Flexible(
+                            child: Text(distanceInfo,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Color(0xFF660033), fontWeight: FontWeight.bold, fontSize: 12)),
+                          ),
                           _buildStaleStatus(data['last_location_update']),
                         ],
                       ),
                     ],
+                  ),
                   ),
                   if (status == 'in_progress')
                     Row(mainAxisSize: MainAxisSize.min, children: [
@@ -404,8 +425,11 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("الكادر المعين", style: TextStyle(fontSize: 11, color: Colors.grey)),
-                Text(data['assigned_driver'] ?? "جاري تعيين سائق", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const Text("الفريق المعيَّن", style: TextStyle(fontSize: 11, color: Colors.grey)),
+                Text(_driverName(data) ?? "لم يُعيَّن فريق بعد",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               ],
             ),
           ),
@@ -430,6 +454,15 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   }
 
 
+  /// اسمُ الفريقِ المعيَّن، أو `null` إن لم يُعيَّن. شاشةُ تفاصيلِ الطلبِ
+  /// الإداريّةُ تكتب `'None'` حرفيّاً حين يُزالُ السائق — فكانت العميلةُ تقرأ
+  /// «None» اسماً لفريقِها.
+  static String? _driverName(Map<String, dynamic> data) {
+    final n = (data['assigned_driver'] ?? '').toString().trim();
+    if (n.isEmpty || n == 'None') return null;
+    return n;
+  }
+
   /// تقييمُ السائق على الطلب، أو `null` إن لم يُختم. صفرٌ أو قيمةٌ تالفة =
   /// لا تقييم، لا «0.0 ★».
   static double? _ratingOf(Map<String, dynamic> data) {
@@ -449,7 +482,16 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text("نوع الخدمة", style: TextStyle(color: Colors.grey)),
-            Text(data['service_type'] ?? "-", style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Text(
+                  (data['service_name'] ?? data['service_type'] ?? "-")
+                      .toString(),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -457,7 +499,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text("المبلغ", style: TextStyle(color: Colors.grey)),
-            Text("${formatSarAny(data['amount'])} ر.س", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+            Text(clientOrderAmountLabel(data), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
           ],
         ),
       ],

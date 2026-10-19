@@ -7,7 +7,10 @@ import 'package:zyiarah/utils/home_packages.dart';
 import 'package:zyiarah/utils/catalog_number.dart';
 
 class AdminEventWorkerPackagesScreen extends StatefulWidget {
-  const AdminEventWorkerPackagesScreen({super.key});
+  /// داخلَ حاويةِ «الباقات» تُرسَمُ بلا شريطِ عنوانٍ خاصٍّ — الحاويةُ تَحملُ
+  /// العنوانَ ومُبدِّلَ الشريحتَين، وشريطانِ متراكبانِ يُهدِرانِ الشاشة.
+  final bool embedded;
+  const AdminEventWorkerPackagesScreen({super.key, this.embedded = false});
 
   @override
   State<AdminEventWorkerPackagesScreen> createState() => _AdminEventWorkerPackagesScreenState();
@@ -231,7 +234,7 @@ class _AdminEventWorkerPackagesScreenState extends State<AdminEventWorkerPackage
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
-        appBar: AppBar(
+        appBar: widget.embedded ? null : AppBar(
           title: Text('إدارة باقات عاملات المناسبات', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
           backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,

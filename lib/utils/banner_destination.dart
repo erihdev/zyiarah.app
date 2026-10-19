@@ -147,3 +147,24 @@ BannerTap bannerTapOf(Map<String, dynamic>? data) {
 
   return BannerTap.unavailable;
 }
+
+/// ترتيبُ البنرات كما يرتّبها المحرِّرُ (`orderBy('rank')` تصاعديّاً في
+/// `admin_banners_screen`). الرتبةُ تُقرأ محلّيّاً لا بـ`orderBy` في استعلامِ
+/// العميلة: مساواةُ `isActive` مع ترتيبٍ على `rank` تحتاج فهرساً مركّباً غيرَ
+/// موجودٍ في `firestore.indexes.json`، والفهارسُ لا تُضاف لقائمةٍ صغيرة.
+/// رتبةٌ غائبةٌ أو تالفةٌ = 0 (افتراضُ المحرِّر)، والتعادلُ يحفظ ترتيبَ الوصول.
+List<T> sortedByBannerRank<T>(
+    List<T> items, Map<String, dynamic> Function(T) dataOf) {
+  int rankOf(T item) {
+    final Object? r = dataOf(item)['rank'];
+    if (r is num) return r.toInt();
+    return int.tryParse('${r ?? ''}') ?? 0;
+  }
+
+  final indexed = [for (var i = 0; i < items.length; i++) (i, items[i])];
+  indexed.sort((a, b) {
+    final c = rankOf(a.$2).compareTo(rankOf(b.$2));
+    return c != 0 ? c : a.$1.compareTo(b.$1);
+  });
+  return [for (final e in indexed) e.$2];
+}

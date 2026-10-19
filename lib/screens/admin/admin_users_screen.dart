@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -41,11 +43,92 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           .collection('users')
           .where('role', isEqualTo: 'client')
           .orderBy('created_at', descending: true)
-          .limit(100)
+          .limit(_windowLimit)
           .snapshots()
           .firstEventTimeout();
 
   void _reopenClients() => setState(() => _clients = null);
+
+  /// سقفُ نافذةِ البثّ — مرّةً واحدةً، فملاحظةُ القصِّ تُشتَقُّ منه.
+  static const int _windowLimit = 100;
+
+  // **البحثُ كان يُفتِّشُ أحدثَ مئةِ عميلٍ وحدَها**: عميلٌ أقدمُ لا يُعثَرُ عليه
+  // أبداً، والشاشةُ تَقولُ «لا نتائج» كأنّه غيرُ موجود. فصارَ البحثُ خادميّاً
+  // **بالبادئة** على الاسمِ والبريدِ والجوّال — كلُّ استعلامٍ مدًى على حقلٍ
+  // واحدٍ فيَخدمُه فهرسُ الحقلِ الأحاديُّ التلقائيّ، **ولا فهرسَ مركَّبٌ جديد**
+  // (`role` يُرشَّحُ محلّيّاً بعدَ الجلب لهذا السبب بعينِه: `role ==` مع مدًى
+  // على حقلٍ آخرَ يَستلزمُ فهرساً مركَّباً).
+  static const int _searchLimit = 25;
+  Timer? _searchDebounce;
+  String _serverQuery = '';
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _serverHits = const [];
+  bool _serverSearching = false;
+  bool _serverFailed = false;
+
+  void _onSearchChanged(String v) {
+    setState(() => _search = v);
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 400),
+        () => _runServerSearch(v.trim()));
+  }
+
+  /// قراءةُ عرضٍ لا قرارَ كتابةٍ خلفَها — جسمٌ كتليٌّ لا سهميّ، فنافذةُ
+  /// `cache_decided_write_test` (جسمُ الدالّةِ الحاوية) تَنتهي عندَه.
+  Future<QuerySnapshot<Map<String, dynamic>>> _byPrefix(
+      String field, String prefix) {
+    return FirebaseFirestore.instance
+        .collection('users')
+        .where(field, isGreaterThanOrEqualTo: prefix)
+        .where(field, isLessThan: '$prefix\uf8ff')
+        .limit(_searchLimit)
+        .get()
+        .timeout(kNetCallTimeout);
+  }
+
+  /// محروسٌ بنفسِه: يُنادى من مؤقِّتٍ لا يَنتظرُه أحد.
+  Future<void> _runServerSearch(String q) async {
+    if (!mounted) return;
+    if (q.length < 2) {
+      setState(() {
+        _serverQuery = '';
+        _serverHits = const [];
+        _serverSearching = false;
+        _serverFailed = false;
+      });
+      return;
+    }
+    setState(() {
+      _serverQuery = q;
+      _serverSearching = true;
+      _serverFailed = false;
+    });
+    try {
+      final snaps = await Future.wait([
+        _byPrefix('name', q),
+        _byPrefix('email', q.toLowerCase()),
+        _byPrefix('phone', q),
+      ]);
+      final seen = <String>{};
+      final hits = <QueryDocumentSnapshot<Map<String, dynamic>>>[
+        for (final snap in snaps)
+          for (final d in snap.docs)
+            if (d.data()['role'] == 'client' && seen.add(d.id)) d,
+      ];
+      if (!mounted || q != _serverQuery) return;
+      setState(() {
+        _serverHits = hits;
+        _serverSearching = false;
+      });
+    } catch (e) {
+      debugPrint('admin users prefix search failed: $e');
+      if (!mounted || q != _serverQuery) return;
+      setState(() {
+        _serverHits = const [];
+        _serverSearching = false;
+        _serverFailed = true;
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -69,6 +152,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -305,10 +389,12 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             }
 
             final allDocs = snapshot.data!.docs;
+            final bool windowCapped = allDocs.length >= _windowLimit;
 
-            // تصفية محليّة على القائمة المحمَّلة فقط (لا نغيّر استعلام Firestore)
+            // تصفيةٌ محليّةٌ (احتواءٌ لا بادئة) على النافذةِ المحمَّلة، يُضافُ
+            // إليها ما يُعيدُه البحثُ الخادميُّ بالبادئةِ في **كلِّ** العملاء.
             final String query = _search.trim().toLowerCase();
-            final docs = query.isEmpty
+            final List<QueryDocumentSnapshot> local = query.isEmpty
                 ? allDocs
                 : allDocs.where((d) {
                     final u = d.data() as Map<String, dynamic>;
@@ -319,6 +405,26 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                         phone.contains(query) ||
                         email.contains(query);
                   }).toList();
+            final bool serverApplies =
+                query.isNotEmpty && _serverQuery == _search.trim();
+            final seenIds = local.map((d) => d.id).toSet();
+            final List<QueryDocumentSnapshot> docs = [
+              ...local,
+              if (serverApplies)
+                ..._serverHits.where((d) => seenIds.add(d.id)),
+            ];
+            // ما يُقالُ تحتَ شريطِ العدِّ: لا عدَّ «إجماليّاً» عن نافذةٍ مقصوصة.
+            final String? searchNote = query.isEmpty
+                ? (windowCapped
+                    ? 'المعروض أحدث $_windowLimit عميل — ابحث للوصول إلى الأقدم'
+                    : null)
+                : (_search.trim().length < 2
+                    ? 'اكتب حرفين على الأقل للبحث في كل العملاء'
+                    : (_serverSearching || !serverApplies)
+                        ? 'جارٍ البحث في كل العملاء…'
+                        : _serverFailed
+                            ? 'تعذّر البحث في كل العملاء — النتائج من المعروض فقط'
+                            : 'البحث في كل العملاء يطابق بداية الاسم أو البريد أو الجوال');
 
             return Column(
               children: [
@@ -331,19 +437,34 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                       const Icon(Icons.people, color: Colors.white70, size: 18),
                       const SizedBox(width: 8),
                       Text(
-                        'إجمالي العملاء: ${docs.length}',
+                        query.isEmpty
+                            ? (windowCapped
+                                ? 'المعروض: ${docs.length} عميل'
+                                : 'إجمالي العملاء: ${docs.length}')
+                            : 'نتائج البحث: ${docs.length}',
                         style: GoogleFonts.tajawal(color: Colors.white70, fontSize: 13),
                       ),
                     ],
                   ),
                 ),
+                if (searchNote != null)
+                  Container(
+                    width: double.infinity,
+                    color: const Color(0xFFFFF7ED),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                    child: Text(
+                      searchNote,
+                      style: GoogleFonts.tajawal(
+                          fontSize: 12, color: const Color(0xFF9A3412)),
+                    ),
+                  ),
                 // شريط البحث الحيّ — يصفّي القائمة المعروضة فقط
                 Container(
                   color: Colors.white,
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                   child: TextField(
                     controller: _searchController,
-                    onChanged: (v) => setState(() => _search = v),
+                    onChanged: _onSearchChanged,
                     textInputAction: TextInputAction.search,
                     style: GoogleFonts.tajawal(fontSize: 14),
                     decoration: InputDecoration(
@@ -359,7 +480,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                                   color: Color(0xFF64748B)),
                               onPressed: () {
                                 _searchController.clear();
-                                setState(() => _search = '');
+                                _onSearchChanged('');
                               },
                             ),
                       isDense: true,

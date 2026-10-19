@@ -49,6 +49,39 @@ class DriverTask {
     );
   }
 
+  /// موعدُ المهمّةِ بدقّةِ الدقيقة: ساعةُ `booking_time_slot` على يومِ [when]
+  /// حين تُكتَب، وإلّا [when] نفسُها. `null` حين لا وقتَ معروفاً (منتصفُ ليلٍ
+  /// بلا خانة) — فالسؤالُ هناك بدقّةِ اليومِ لا الدقيقة.
+  DateTime? get appointmentTime {
+    final slot = timeSlot;
+    if (slot != null) {
+      final parts = slot.split(':');
+      if (parts.length >= 2) {
+        var h = int.tryParse(parts[0].trim());
+        final m = int.tryParse(parts[1].trim().split(' ').first);
+        if (h != null && m != null) {
+          if (slot.contains('م') && h < 12) h += 12;
+          return DateTime(when.year, when.month, when.day, h, m);
+        }
+      }
+    }
+    if (when.hour == 0 && when.minute == 0) return null;
+    return when;
+  }
+
+  /// **متأخّرة**: لم تبدأ بعدُ (مجدولةٌ أو مُسنَدة) وقد فات موعدُها.
+  ///
+  /// كانت تُعرَضُ «قادمة ⏳» و«مهمتك القادمة — استعد للانطلاق» وموعدُها مضى —
+  /// تسميةٌ تَقولُ عكسَ الحال. والجاريةُ (في الطريق/قيد التنفيذ) ليست متأخّرةً
+  /// بهذا المعنى: السائقُ عليها الآن. وبلا وقتٍ معروفٍ يُقاسُ باليوم: موعدُ
+  /// اليوم بلا ساعةٍ لا يَصيرُ «متأخراً» قبلَ أن ينتهيَ اليوم.
+  bool isOverdue(DateTime now) {
+    if (!DriverSchedule.notStartedStatuses.contains(status)) return false;
+    final at = appointmentTime;
+    if (at != null) return at.isBefore(now);
+    return DriverSchedule.dayKey(when).isBefore(DriverSchedule.dayKey(now));
+  }
+
   bool get isCompleted => status == 'completed';
   bool get isCancelled => status == 'cancelled';
   bool get isActive => DriverSchedule.activeStatuses.contains(status);
@@ -99,6 +132,31 @@ class DriverSchedule {
   /// إليه في نظرِ الإدارة. والبطاقةُ تَحملُ أصلاً فرعَ `default` يَعرضُها
   /// «معلقة» — واجهةٌ مكتوبةٌ لا يَصلُها شيء.
   static bool isHistory(String status) => !activeStatuses.contains(status);
+
+  /// حالاتٌ نشطةٌ **لم يبدأ** السائقُ فيها بعد — وحدَها تَصيرُ «متأخّرة».
+  static const Set<String> notStartedStatuses = {'scheduled', 'assigned'};
+
+  /// أولويّةُ بطاقةِ التركيز: الأكثرُ تقدّماً أوّلاً
+  /// (قيد التنفيذ ← في الطريق/مقبولة ← مجدولة ← غيرها).
+  static int focusRank(String status) {
+    const order = {
+      'in_progress': 0,
+      'on_the_way': 1,
+      'accepted': 1,
+      'scheduled': 2,
+    };
+    return order[status] ?? 3;
+  }
+
+  /// ترتيبُ بطاقةِ التركيز **حتميّاً**: الأولويّةُ ثمّ الموعدُ ثمّ الرمزُ ثمّ
+  /// المعرّف. كان الترتيبُ بالأولويّةِ وحدَها، فمهمّتانِ مجدولتانِ تَتبادلانِ
+  /// موضعَ التركيزِ بحسبِ ترتيبِ وصولِ المستنداتِ من Firestore — وقد يُقدَّمُ
+  /// موعدُ الغدِ على موعدِ اليوم.
+  static int focusCompare(DriverTask a, DriverTask b) {
+    final r = focusRank(a.status).compareTo(focusRank(b.status));
+    if (r != 0) return r;
+    return byTime(a, b);
+  }
 
   static const List<String> dayNames = [
     'السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة',
@@ -179,10 +237,16 @@ class DriverSchedule {
     return out;
   }
 
+  /// الموعدُ ثمّ الخانةُ ثمّ الرمزُ ثمّ المعرّف — ترتيبٌ حتميٌّ لا يَتبعُ
+  /// ترتيبَ وصولِ المستندات حين يَتساوى الموعدان.
   static int byTime(DriverTask a, DriverTask b) {
     final c = a.when.compareTo(b.when);
     if (c != 0) return c;
-    return (a.timeSlot ?? '').compareTo(b.timeSlot ?? '');
+    final s = (a.timeSlot ?? '').compareTo(b.timeSlot ?? '');
+    if (s != 0) return s;
+    final k = a.code.compareTo(b.code);
+    if (k != 0) return k;
+    return a.id.compareTo(b.id);
   }
 
   /// سقفُ استعلامِ السجل — **مرّةً واحدةً**، فعَلَمُ القصِّ يُشتَقُّ منه.
