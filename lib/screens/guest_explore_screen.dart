@@ -1,6 +1,5 @@
 import 'package:go_router/go_router.dart';
 import 'package:zyiarah/utils/service_catalog.dart';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/zyiarah_core_services.dart';
@@ -54,15 +53,11 @@ class GuestExploreScreen extends StatelessWidget {
 
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     return AppBar(
-      backgroundColor: Colors.white.withValues(alpha: 0.9),
+      // لونٌ شبهُ مُعتِمٍ بدلَ تمويهِ BackdropFilter: التمويهُ يُعادُ رسمُه
+      // مع كلِّ إطارِ تمريرٍ تحتَ الشريط، والفرقُ البصريُّ عند 0.97 لا يُرى.
+      backgroundColor: Colors.white.withValues(alpha: 0.97),
       elevation: 0,
       scrolledUnderElevation: 0,
-      flexibleSpace: ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(color: Colors.transparent),
-        ),
-      ),
       title: Row(
         children: [
           Container(
@@ -205,6 +200,8 @@ class GuestExploreScreen extends StatelessWidget {
                 s.imagePath,
                 height: 110,
                 width: double.infinity,
+                // بطاقةٌ في شبكةٍ بعمودَين: نصفُ الشاشةِ يَكفي دقّةً.
+                cacheWidth: 540,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => Container(
                   height: 110,

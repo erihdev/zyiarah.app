@@ -38,6 +38,11 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
   int _userCount = 0;
   bool _isLoading = true;
 
+  /// إحصاءاتُ اللوحةِ تُحسَبُ **مرّةً عند وصولِ البيانات** لا في كلِّ `build`:
+  /// كانت `_calculateStats` تمرُّ على ألفِ مستندٍ (٥٠٠ طلب + ٥٠٠ متجر) بعدّةِ
+  /// حلقاتٍ مع كلِّ إعادةِ رسمٍ — سحبٌ للتحديث، تبديلُ تبويب، أو تغيّرُ MediaQuery.
+  Map<String, dynamic>? _stats;
+
   @override
   void initState() {
     super.initState();
@@ -98,6 +103,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
         _drivers     = driversSnap?.docs ?? _drivers;
         _storeOrders = storeSnap?.docs ?? _storeOrders;
         _pendingContracts = contractsSnap?.count ?? _pendingContracts;
+        _stats = _calculateStats(_orders, _maintenance, _storeOrders);
         _isLoading   = false;
       });
       if (firstError != null) {
@@ -118,7 +124,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       return const Center(child: CircularProgressIndicator(color: Color(0xFF1E293B)));
     }
 
-    final stats = _calculateStats(_orders, _maintenance, _storeOrders);
+    final stats = _stats ??= _calculateStats(_orders, _maintenance, _storeOrders);
 
     return Directionality(
       textDirection: TextDirection.rtl,
