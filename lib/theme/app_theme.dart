@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class ZyiarahTheme {
@@ -52,13 +51,12 @@ class ZyiarahTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        titleTextStyle: GoogleFonts.tajawal(
-          color: ink,
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-        ),
-        iconTheme: const IconThemeData(color: ink),
-        systemOverlayStyle: SystemUiOverlayStyle.dark,
+        // **لا `titleTextStyle` ولا `iconTheme` ولا `systemOverlayStyle` هنا**
+        // (2026-10-11): أسبقيّةُ AppBar هي `widget ?? theme ?? defaults(foregroundColor)`،
+        // فلونُ العنوانِ والأيقوناتِ في الثيم كان يَغلِبُ `foregroundColor: Colors.white`
+        // في نحوِ أربعينَ شاشةً بخلفيّةٍ عنّابيّة — عنوانٌ داكنٌ على خلفيّةٍ داكنة.
+        // الافتراضيُّ يَأخذُ `titleLarge` (تجوّل، عريض، ١٨) بلونِ `foregroundColor`،
+        // وشريطُ الحالةِ يُشتَقُّ من سطوعِ الخلفيّة.
       ),
 
       cardTheme: CardThemeData(
