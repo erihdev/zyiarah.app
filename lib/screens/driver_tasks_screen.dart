@@ -565,7 +565,15 @@ class _DriverTasksScreenState extends State<DriverTasksScreen> {
     String statusLabel;
     IconData statusIcon;
 
-    switch (t.status) {
+    // فات موعدُها ولم تبدأ: «متأخرة» — كانت تُقرأُ «قادمة ⏳» عن موعدٍ مضى.
+    final overdue = t.isOverdue(widget.now ?? DateTime.now());
+
+    switch (overdue ? 'overdue' : t.status) {
+      case 'overdue':
+        statusColor = Colors.red;
+        statusLabel = 'متأخرة — فات موعدها';
+        statusIcon = Icons.warning_amber_rounded;
+        break;
       case 'completed':
         statusColor = Colors.green;
         statusLabel = 'مكتملة بنجاح ✓';
