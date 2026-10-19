@@ -87,7 +87,9 @@ void main() {
       // الاستعلامُ يَتبعُ `seesAll` (دورُ المستخدم، يَصِلُ لاحقاً) فيُبنى معه.
       'lib/screens/admin/admin_broadcast_screen.dart#0': 'query يَتبعُ الدور',
       // `_pageSize` يَنمو بزرِّ «المزيد» — فإعادةُ الفتحِ هي الميزةُ نفسُها.
-      'lib/screens/admin/admin_orders_screen.dart#0': '_pageSize يَنمو',
+      // (كان هنا `admin_orders_screen` بالسببِ نفسِه، وهو كاذبٌ هناك:
+      // `_pageSize` فيه `static const` والأقدمُ يُجلَبُ بـ`startAfterDocument`
+      // — فثُبِّتَ بثُّه وأُزيلَ المُدخَل.)
       'lib/screens/client_notifications_screen.dart#0': '_pageSize يَنمو',
       // `q` يَتبعُ اليومَ المختارَ في لوحِ المواعيد.
       'lib/screens/admin/admin_schedule_board_screen.dart#0': 'q يَتبعُ اليوم',
@@ -101,7 +103,9 @@ void main() {
       'lib/screens/contracts_list_screen.dart#0': 'StatelessWidget بلا setState',
       'lib/screens/driver_notifications_screen.dart#0':
           'StatelessWidget بلا setState',
-      'lib/screens/driver_profile_screen.dart#0': 'بلا setState في الملفّ',
+      // (كان هنا `driver_profile_screen` بحجّةِ «بلا setState في الملفّ» —
+      // والقراءةُ تُعادُ مع كلِّ إعادةِ بناءٍ يُطلقُها الأب؛ فثُبِّتت في حقلٍ
+      // وأُزيلَ المُدخَل.)
       // وداخلَ ورقةٍ سفليّةٍ يَبنيها `StatefulBuilder`: البثُّ يُفتَحُ عند
       // فتحِ الورقة، و`setSheetState` هو زرُّ الإعادةِ ولا شيءَ غيرُه يُعيدُ
       // بناءَها.

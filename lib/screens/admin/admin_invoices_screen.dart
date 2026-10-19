@@ -38,6 +38,16 @@ class _AdminInvoicesScreenState extends State<AdminInvoicesScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   final Set<String> _busy = {};
 
+  /// سقفُ كلِّ استعلامٍ شهريّ — **مرّةً واحدةً**، فملاحظةُ القصِّ تُشتَقُّ منه.
+  static const int _queryLimit = 1000;
+
+  /// المصادرُ التي بلغ استعلامُها السقفَ في الشهرِ المعروض.
+  ///
+  /// كان القصُّ **صامتاً**: شهرٌ فيه أكثرُ من ألفِ طلبٍ يُعرَضُ ملخّصُه
+  /// (العددُ والإجماليُّ والضريبةُ والصافي) ناقصاً بلا كلمة، والأقدمُ من
+  /// الألفِ غائبٌ عن القائمةِ وعن البحثِ — والمحاسبُ يَقرأُ الملخّصَ رقماً نهائيّاً.
+  Set<String> _cappedSources = const {};
+
   @override
   void initState() {
     super.initState();
@@ -61,6 +71,7 @@ class _AdminInvoicesScreenState extends State<AdminInvoicesScreen> {
   Future<List<InvoiceLogEntry>> _loadFromFirestore(DateTime monthStart) async {
     final nextMonth = DateTime(monthStart.year, monthStart.month + 1, 1);
     final db = FirebaseFirestore.instance;
+    final capped = <String>{};
     Future<List<InvoiceLogEntry>> fetch(String source) async {
       final snap = await db
           .collection(source)
@@ -68,19 +79,24 @@ class _AdminInvoicesScreenState extends State<AdminInvoicesScreen> {
               isGreaterThanOrEqualTo: Timestamp.fromDate(monthStart))
           .where('created_at', isLessThan: Timestamp.fromDate(nextMonth))
           .orderBy('created_at', descending: true)
-          .limit(1000)
+          .limit(_queryLimit)
           .get().timeout(kNetCallTimeout);
+      if (snap.docs.length >= _queryLimit) capped.add(source);
       return [
         for (final d in snap.docs) InvoiceLogEntry.fromMap(source, d.id, d.data()),
       ];
     }
 
     final results = await Future.wait([fetch('orders'), fetch('store_orders')]);
+    // يُنسَبُ القصُّ إلى شهرِه وحدَه: تنقّلٌ سريعٌ بين الأشهرِ لا يُلصِقُ
+    // ملاحظةَ شهرٍ بآخر.
+    if (monthStart == _month) _cappedSources = capped;
     return InvoiceLogEntry.paidNewestFirst([...results[0], ...results[1]]);
   }
 
   void _shift(int months) {
     setState(() {
+      _cappedSources = const {};
       _month = DateTime(_month.year, _month.month + months, 1);
       _future = _load(_month);
     });
@@ -199,6 +215,10 @@ class _AdminInvoicesScreenState extends State<AdminInvoicesScreen> {
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                   children: [
+                    if (_cappedSources.isNotEmpty) ...[
+                      _cappedNotice(),
+                      const SizedBox(height: 12),
+                    ],
                     _summaryCard(summary),
                     const SizedBox(height: 12),
                     TextField(
@@ -261,6 +281,38 @@ class _AdminInvoicesScreenState extends State<AdminInvoicesScreen> {
         Text('تعذّر تحميل الفواتير',
             style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: Colors.red)),
         TextButton(onPressed: _reload, child: const Text('إعادة المحاولة')),
+      ]),
+    );
+  }
+
+  /// ملاحظةُ القصِّ **قبلَ** الملخّص: رقمٌ يُقرأُ أوّلاً، فتقييدُه بعدَه لا
+  /// يَمنعُ قراءتَه دعوى.
+  Widget _cappedNotice() {
+    final which = [
+      if (_cappedSources.contains('orders')) 'الخدمات',
+      if (_cappedSources.contains('store_orders')) 'المتجر',
+    ].join(' و');
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Row(children: [
+        Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800, size: 20),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            'بلغت طلبات $which في هذا الشهر سقف العرض ($_queryLimit طلب) — '
+            'الملخّص والقائمة يشملان الأحدث فقط، والأقدم غير محسوب هنا',
+            style: GoogleFonts.tajawal(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.orange.shade900),
+          ),
+        ),
       ]),
     );
   }

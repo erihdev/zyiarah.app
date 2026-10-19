@@ -175,8 +175,16 @@ void main() {
     expect(dash.contains("data['zone_name']"), isTrue);
   });
 
-  test('بدء الأسبوع في الإحصاءات مُقتطع لمنتصف الليل', () {
-    expect(dash.contains('todayStart.subtract(Duration(days: now.weekday - 1))'),
-        isTrue);
+  test('بدء الأسبوع في الإحصاءات: السبت، مُقتطعاً لمنتصف الليل', () {
+    // أُعيد توجيهُه بوعي (2026-10-11): كان يُثبّتُ
+    // `todayStart.subtract(Duration(days: now.weekday - 1))` — أي **الإثنين**
+    // — فكان يَحرُسُ مخالفةَ الأسبوعِ السعوديِّ الذي يَبني به جدولُ «مهامي»
+    // أسبوعَه. مقصودُه (الاقتطاعُ لمنتصف الليل) باقٍ: `DriverSchedule.weekStart`
+    // يَمُرُّ بـ`dayKey`.
+    expect(dash.contains('DriverSchedule.weekStart(now)'), isTrue);
+    expect(dash.contains('now.weekday - 1'), isFalse,
+        reason: 'عاد بدءُ الأسبوعِ بالإثنين');
+    final sched = File('lib/models/driver_schedule.dart').readAsStringSync();
+    expect(sched, contains('dayKey(d).subtract(Duration(days: daysSinceSaturday(d)))'));
   });
 }

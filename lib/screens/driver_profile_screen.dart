@@ -21,6 +21,20 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   static const Color _brand = Color(0xFF660033);
   final _auth = FirebaseAuth.instance;
 
+  /// القراءةُ تُنشَأُ **مرّةً واحدةً** لا في كلِّ `build`: كانت وسيطَ `future:`
+  /// مباشرةً، فكلُّ إعادةِ بناءٍ (والشاشةُ تبويبٌ في `IndexedStack` يُعيدُه
+  /// الأبُ مع كلِّ لقطةٍ من بثِّ السائق) تُطلقُ قراءةً جديدةً بمهلةٍ جديدة.
+  /// وإعادةُ المحاولةِ صريحة: `_reloadProfile` تُصفّرُها فتُنشأُ غيرُها.
+  Future<DocumentSnapshot>? _profileFuture;
+  Future<DocumentSnapshot> _profile(String uid) => _profileFuture ??=
+      FirebaseFirestore.instance
+          .collection('drivers')
+          .doc(uid)
+          .get()
+          .timeout(kNetCallTimeout);
+
+  void _reloadProfile() => setState(() => _profileFuture = null);
+
   @override
   Widget build(BuildContext context) {
     final uid = _auth.currentUser?.uid;
@@ -45,17 +59,28 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
             // مهلة: مع ذاكرةٍ باردةٍ وخادمٍ غيرِ مبلوغ لا يَرمي `get()` بل
             // يَنتظر، فتَبقى الدوّارةُ إلى الأبد.
             : FutureBuilder<DocumentSnapshot>(
-                future: FirebaseFirestore.instance
-                    .collection('drivers')
-                    .doc(uid)
-                    .get().timeout(kNetCallTimeout),
+                future: _profile(uid),
                 builder: (context, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (snap.hasError) {
-                    return const Center(
-                        child: Text('تعذّر تحميل الملف، تحقّق من الاتصال'));
+                    return Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('تعذّر تحميل الملف، تحقّق من الاتصال'),
+                          const SizedBox(height: 8),
+                          TextButton.icon(
+                            onPressed: _reloadProfile,
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: Text('إعادة المحاولة',
+                                style: GoogleFonts.tajawal(
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    );
                   }
                   final data =
                       snap.data?.data() as Map<String, dynamic>? ?? {};
