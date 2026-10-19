@@ -12,20 +12,17 @@ import 'package:zyiarah/screens/admin/admin_coupons_screen.dart';
 import 'package:zyiarah/screens/admin/admin_contracts_screen.dart';
 import 'package:zyiarah/screens/admin/admin_managers_screen.dart';
 import 'package:zyiarah/screens/admin/admin_deletions_screen.dart';
-import 'package:zyiarah/screens/admin/admin_store_orders_screen.dart';
 import 'package:zyiarah/screens/admin/admin_hourly_zones_screen.dart';
-import 'package:zyiarah/screens/admin/admin_subscriptions_screen.dart';
-import 'package:zyiarah/screens/admin/admin_event_worker_packages_screen.dart';
 import 'package:zyiarah/screens/admin/admin_audit_logs_screen.dart';
-import 'package:zyiarah/screens/admin/admin_analytics_screen.dart';
 import 'package:zyiarah/screens/admin/admin_fleet_map_screen.dart';
 import 'package:zyiarah/screens/admin/admin_invoices_screen.dart';
 import 'package:zyiarah/screens/admin/admin_schedule_board_screen.dart';
 import 'package:zyiarah/screens/admin/admin_broadcast_screen.dart';
+import 'package:zyiarah/screens/admin/admin_packages_screen.dart';
+import 'package:zyiarah/utils/csv_export_util.dart';
 import 'package:zyiarah/utils/pdf_report_util.dart';
 import 'package:zyiarah/utils/zyiarah_strings.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/utils/net_timeout.dart';
 
 class AdminMoreScreen extends StatelessWidget {
@@ -112,14 +109,7 @@ class AdminMoreScreen extends StatelessWidget {
             'page': const AdminContractsScreen(),
             'roles': ['super_admin', 'orders_manager'],
           },
-          {
-            'title': 'طلبات المتجر',
-            'icon': Icons.shopping_cart_checkout_outlined,
-            'color': Colors.teal,
-            'page': const AdminStoreOrdersScreen(),
-            // القواعد: تحديث store_orders = isOrdersManager (لا المحاسب)
-            'roles': ['super_admin', 'orders_manager'],
-          },
+          // «طلبات المتجر» انتقلت إلى تبويبِ «المتجر» (AdminStoreHubScreen) بأدوارِها نفسِها.
           {
             'title': 'طلبات الحذف',
             'icon': Icons.person_remove_outlined,
@@ -149,19 +139,13 @@ class AdminMoreScreen extends StatelessWidget {
             'roles': ['super_admin', 'marketing_admin'],
           },
           {
-            'title': 'باقات الاشتراك',
+            // باقاتُ الاشتراكِ وعاملاتِ المناسباتِ في شاشةٍ واحدةٍ بشريحتَين —
+            // كانتا بلاطتَين بالأدوارِ نفسِها. القواعد: كتابة المجموعتَين =
+            // isMarketingAdmin (لا المحاسب).
+            'title': 'الباقات',
             'icon': Icons.card_giftcard_outlined,
             'color': Colors.deepPurple,
-            'page': const AdminSubscriptionsScreen(),
-            // القواعد: كتابة subscription_packages = isMarketingAdmin (لا المحاسب)
-            'roles': ['super_admin', 'marketing_admin'],
-          },
-          {
-            'title': 'باقات عاملات المناسبات',
-            'icon': Icons.celebration_rounded,
-            'color': Colors.pink,
-            'page': const AdminEventWorkerPackagesScreen(),
-            // القواعد: كتابة event_worker_packages = isMarketingAdmin (لا المحاسب)
+            'page': const AdminPackagesScreen(),
             'roles': ['super_admin', 'marketing_admin'],
           },
           {
@@ -194,13 +178,8 @@ class AdminMoreScreen extends StatelessWidget {
             'page': const AdminFleetMapScreen(),
             'roles': ['super_admin', 'orders_manager'],
           },
-          {
-            'title': 'لوحة الإحصائيات والأرباح',
-            'icon': Icons.insert_chart_outlined,
-            'color': Colors.teal,
-            'page': const AdminAnalyticsScreen(),
-            'roles': ['super_admin', 'accountant_admin', 'orders_manager'],
-          },
+          // «لوحة الإحصائيات والأرباح» تُفتَحُ من تبويبِ الإحصاءاتِ نفسِه (بطاقةُ
+          // «التحليلات المالية») — لا بلاطةٌ ثانيةٌ للأرقامِ في «المزيد».
           {
             // سجل فواتير ZATCA لكل الطلبات المدفوعة (خدمات ومتجر) بالشهر.
             'title': 'سجل الفواتير الإلكترونية (ZATCA)',
@@ -217,17 +196,12 @@ class AdminMoreScreen extends StatelessWidget {
             'roles': ['super_admin'],
           },
           {
-            'title': 'تصدير الطلبات (CSV)',
+            // بلاطةٌ واحدةٌ للتصدير بدل اثنتَين: التقريرُ الماليُّ PDF وجدولُ
+            // الطلباتِ CSV، يُختارُ بينهما من ورقةٍ سفليّة.
+            'title': 'تصدير التقارير (PDF / CSV)',
             'icon': Icons.file_download_outlined,
             'color': const Color(0xFF059669),
-            'onTap': _exportOrdersCsv,
-            'roles': ['super_admin', 'accountant_admin', 'orders_manager'],
-          },
-          {
-            'title': 'تقرير مالي (PDF)',
-            'icon': Icons.picture_as_pdf_outlined,
-            'color': const Color(0xFFDC2626),
-            'onTap': _exportFinancialPdf,
+            'onTap': _showExportSheet,
             'roles': ['super_admin', 'accountant_admin', 'orders_manager'],
           },
         ],
@@ -392,7 +366,47 @@ class AdminMoreScreen extends StatelessWidget {
     );
   }
 
-  // تصدير الطلبات CSV — نُقل من الرئيسية إلى «التقارير والمالية» (مكانه الأساسي).
+  /// ورقةُ التصدير: خياران في موضعٍ واحد.
+  static Future<void> _showExportSheet(BuildContext context) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheet) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.picture_as_pdf_outlined, color: Color(0xFFDC2626)),
+                title: const Text('تقرير مالي (PDF)'),
+                subtitle: const Text('الإيراد المدفوع والطلبات النشطة لآخر 2000 طلب'),
+                onTap: () => Navigator.pop(sheet, 'pdf'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.table_view_outlined, color: Color(0xFF059669)),
+                title: const Text('تصدير الطلبات (CSV)'),
+                subtitle: const Text('يُنسخ إلى الحافظة لِلَصقه في جدول بيانات'),
+                onTap: () => Navigator.pop(sheet, 'csv'),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!context.mounted || choice == null) return;
+    if (choice == 'pdf') {
+      await _exportFinancialPdf(context);
+    } else {
+      await _exportOrdersCsv(context);
+    }
+  }
+
+  // تصدير الطلبات CSV — **عبر `ZyiarahExportUtil` لا بناءٌ يدويّ.** كان هذا
+  // الموضعُ يَبني السطرَ بفواصلَ عاريةٍ (`${d['client_name']},…`): اسمٌ فيه
+  // فاصلةٌ يَكسِرُ الصفَّ، ونصٌّ يَبدأُ بـ`=` يُقيَّمُ صيغةً في جدولِ المالك —
+  // وهو بعينِه ما أُصلحَ في `csv_export_util` لزرِّ شاشةِ الطلبات.
   static Future<void> _exportOrdersCsv(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(const SnackBar(content: Text('جاري تجهيز التصدير...')));
@@ -402,16 +416,8 @@ class AdminMoreScreen extends StatelessWidget {
           .orderBy('created_at', descending: true)
           .limit(2000)
           .get().timeout(kNetCallTimeout);
-      final buffer = StringBuffer();
-      buffer.writeln('الكود,التاريخ,الخدمة,العميل,المبلغ,الحالة');
-      for (final doc in snap.docs) {
-        final d = doc.data();
-        final date = d['created_at'] is Timestamp
-            ? intl.DateFormat('yyyy-MM-dd').format((d['created_at'] as Timestamp).toDate())
-            : '';
-        buffer.writeln('${d['code']},$date,${d['service_name']},${d['client_name']},${d['amount']},${d['status']}');
-      }
-      await Clipboard.setData(ClipboardData(text: buffer.toString()));
+      await Clipboard.setData(
+          ClipboardData(text: ZyiarahExportUtil.convertToCsv(snap.docs)));
       messenger.showSnackBar(const SnackBar(
         content: Text('تم نسخ بيانات الطلبات (CSV) إلى الحافظة — الصقها في Excel أو Google Sheets ✅'),
         backgroundColor: Colors.green,
