@@ -50,8 +50,10 @@ class ZyiarahNotificationService {
       );
 
       if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-        String? token = await _fcm.getToken();
-        if (token != null) await _saveTokenToFirestore(token);
+        // لا حفظَ للتوكن هنا: مستمعُ `authStateChanges` أدناه يُطلَقُ فوراً
+        // بحالةِ المصادقةِ الحاليّة، فيَحفظُه للمستخدمِ المسجَّل. كان الحفظُ
+        // هنا وهناك معاً يَكتبُ `fcm_tokens` مرّتَين عند كلِّ إقلاعٍ ويَقرأُ
+        // `users/{uid}` مرّتَين — بلا مستخدمٍ أصلاً يَتخطّاه `_saveTokenToFirestore`.
         _tokenRefreshSub = _fcm.onTokenRefresh.listen(_saveTokenToFirestore);
         
         // Subscribe to general topic

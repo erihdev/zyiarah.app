@@ -386,6 +386,11 @@ class _ZyiarahOffersScreenState extends State<ZyiarahOffersScreen> {
             child: CachedNetworkImage(
               imageUrl: data['imageUrl'] ?? '',
               fit: BoxFit.cover,
+              // سقفُ فكِّ الترميزِ بعرضِ الشاشةِ (كبنرِ الرئيسيّة): البنرُ يُرفَعُ
+              // بدقّةِ الكاميرا، وفكُّه كاملاً لكلِّ بطاقةٍ في القائمةِ يُقطّعُ التمرير.
+              memCacheWidth: (MediaQuery.sizeOf(context).width *
+                      MediaQuery.devicePixelRatioOf(context))
+                  .round(),
               placeholder: (c, u) => Container(color: Colors.grey.shade200),
               errorWidget: (c, u, e) => Container(
                 color: Colors.grey.shade200,

@@ -91,18 +91,36 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     _fetchConfigAndZones();
     _loadAvailabilityFromServer();
     // إعادة تحديد صامتة دورية: إن تنقّل العميل لمحافظة أخرى تتبدّل المنطقة تلقائياً.
-    _zoneWatch = Timer.periodic(
-        const Duration(seconds: 45), (_) => _attemptAutoLocation(silent: true));
+    _startZoneWatch();
     _fetchMaterials();
     // شرط الخدمة: يجب أن تُقرّ العميلة بوجود سيدة في المنزل قبل طلب العاملات.
     // «إلغاء» يعيدها للرئيسية فلا تُكمل الطلب؛ «نعم» يتيح المتابعة.
     WidgetsBinding.instance.addPostFrameCallback((_) => _confirmWomanPresent());
   }
 
+  /// كلُّ دورةٍ قراءةُ GPS كاملة. كانت كلَّ 45 ثانية — قراءةُ موقعٍ دقيقٍ
+  /// متكرّرةٌ تستنزفُ البطاريةَ والعميلةُ على شاشةِ حجزٍ واحدةٍ لا تتنقّلُ
+  /// بين المحافظاتِ في دقيقة. الحالةُ الواقعيّةُ (عادت من مدينةٍ أخرى) يُغطّيها
+  /// حدثُ الاستئنافِ أدناه فوراً؛ والدورةُ شبكةُ أمانٍ فحسب.
+  static const Duration _zoneWatchInterval = Duration(minutes: 5);
+
+  void _startZoneWatch() {
+    _zoneWatch?.cancel();
+    _zoneWatch = Timer.periodic(
+        _zoneWatchInterval, (_) => _attemptAutoLocation(silent: true));
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // عاد للتطبيق (ربما من مدينة أخرى) → أعد التحديد بصمت.
-    if (state == AppLifecycleState.resumed) _attemptAutoLocation(silent: true);
+    if (state == AppLifecycleState.resumed) {
+      // عاد للتطبيق (ربما من مدينة أخرى) → أعد التحديد بصمت، وأعِد الدورة.
+      _attemptAutoLocation(silent: true);
+      _startZoneWatch();
+    } else if (state == AppLifecycleState.paused) {
+      // في الخلفيّة لا قراءاتِ GPS: على أندرويد تبقى العمليّةُ حيّةً فتستمرُّ الدورة.
+      _zoneWatch?.cancel();
+      _zoneWatch = null;
+    }
   }
 
   Future<void> _confirmWomanPresent() async {
@@ -1301,6 +1319,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
                         : Image.network(p.imageUrl,
                             width: 46,
                             height: 46,
+                            // مصغّرةٌ 46px: لا تُفَكُّ صورةُ المنتجِ بدقّتِها الكاملة.
+                            cacheWidth: 150,
                             fit: BoxFit.cover,
                             errorBuilder: (_, __, ___) => const SizedBox(
                                 width: 46,
