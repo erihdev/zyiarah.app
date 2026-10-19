@@ -34,7 +34,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       // النصَّ: قاعدةُ `system_configs` تَشترطُ `isLoggedIn()` وهذه الشاشةُ
       // تَسبقُ التسجيل — فالعلاجُ في النصِّ لا في القراءة.
       "title": "دفع آمن وسهل",
-      "desc": "احجزي خدمتكِ وادفعي بالبطاقة أو من محفظتكِ — ومع خيارات تقسيط عند توفّرها.",
+      "desc":
+          "احجزي خدمتكِ وادفعي بالبطاقة أو من محفظتكِ — ومع خيارات تقسيط عند توفّرها.",
       "art": OnboardingArtKind.payment,
     },
     {
@@ -87,7 +88,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       onPressed: _goToLogin,
                       child: Text(
                         'تخطي',
-                        style: GoogleFonts.tajawal(color: Colors.grey[400], fontSize: 14),
+                        style: GoogleFonts.tajawal(
+                            color: Colors.grey[400], fontSize: 14),
                       ),
                     ),
                   ),
@@ -130,7 +132,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 child: SizedBox(
                   width: artSize,
                   height: artSize,
-                  child: OnboardingArt(kind: item['art'] as OnboardingArtKind, progress: t),
+                  child: OnboardingArt(
+                      kind: item['art'] as OnboardingArtKind, progress: t),
                 ),
               ),
               const SizedBox(height: 32),
@@ -142,13 +145,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     children: [
                       Text(
                         item['title'] as String,
-                        style: GoogleFonts.tajawal(fontSize: 26, fontWeight: FontWeight.w900, color: _brand, height: 1.3),
+                        style: GoogleFonts.tajawal(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w900,
+                            color: _brand,
+                            height: 1.3),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 12),
                       Text(
                         item['desc'] as String,
-                        style: GoogleFonts.tajawal(fontSize: 15.5, color: const Color(0xFF64748B), height: 1.7),
+                        style: GoogleFonts.tajawal(
+                            fontSize: 15.5,
+                            color: const Color(0xFF64748B),
+                            height: 1.7),
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -169,17 +179,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(_data.length, (i) => AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              width: _currentPage == i ? 28 : 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: _currentPage == i ? _brand : Colors.grey[300],
-                borderRadius: BorderRadius.circular(4),
-              ),
-            )),
+            children: List.generate(
+                _data.length,
+                (i) => AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      width: _currentPage == i ? 28 : 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: _currentPage == i ? _brand : Colors.grey[300],
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    )),
           ),
           const SizedBox(height: 28),
           SizedBox(
@@ -204,7 +216,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               onPressed: _goToGuest,
               child: Text(
                 'تصفّح بدون تسجيل',
-                style: GoogleFonts.tajawal(fontSize: 14, color: Colors.grey[500]),
+                style:
+                    GoogleFonts.tajawal(fontSize: 14, color: Colors.grey[500]),
               ),
             ),
           ),
@@ -222,11 +235,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         backgroundColor: _brand,
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(vertical: 18),
+        // عرضٌ كاملٌ صريح: AnimatedSwitcher يُرخي قيودَ ابنِه (Stack)، فكان الزرُّ
+        // يَنكمشُ إلى عرضِ نصِّه رغمَ SizedBox(width: infinity) حولَه.
+        minimumSize: const Size.fromHeight(56),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         elevation: 0,
       ),
       child: Text(label,
-          style: GoogleFonts.tajawal(fontSize: 17, fontWeight: FontWeight.bold, letterSpacing: 0.3)),
+          style: GoogleFonts.tajawal(
+              fontSize: 17, fontWeight: FontWeight.bold, letterSpacing: 0.3)),
     );
   }
 }
