@@ -40,6 +40,8 @@ import 'package:zyiarah/utils/phone_format.dart';
 import 'package:zyiarah/utils/invoice_stamp.dart';
 import 'package:zyiarah/utils/price_review.dart';
 import '../utils/env.dart';
+import 'package:zyiarah/utils/home_packages.dart' show formatSar;
+import 'package:zyiarah/screens/terms_privacy_screens.dart';
 
 
 
@@ -2137,12 +2139,44 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         value: _agreeToTerms,
         onChanged: (val) => setState(() => _agreeToTerms = val ?? false),
         activeColor: const Color(0xFF660033),
-        title: Text(
-          "أوافق على شروط الخدمة وسياسة الخصوصية الخاصة بزيارة",
-          style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold),
+        // الشروطُ والسياسةُ رابطانِ يُفتحانِ في شاشتَيهما — موافقةٌ على نصٍّ لا
+        // سبيلَ إلى قراءتِه من موضعِها ليست موافقةً مستنيرة.
+        title: Text.rich(
+          TextSpan(
+            style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold),
+            children: [
+              const TextSpan(text: 'أوافق على '),
+              _legalLink('شروط الخدمة', const ZyiarahTermsScreen()),
+              const TextSpan(text: ' و'),
+              _legalLink('سياسة الخصوصية', const ZyiarahPrivacyScreen()),
+              const TextSpan(text: ' الخاصة بزيارة'),
+            ],
+          ),
         ),
         controlAffinity: ListTileControlAffinity.leading,
         contentPadding: EdgeInsets.zero,
+      ),
+    );
+  }
+
+  /// رابطٌ داخلَ نصِّ الموافقة يَفتحُ شاشتَه — `WidgetSpan` لا
+  /// `TapGestureRecognizer` كي لا يَلزمَ مُعرِّفٌ يُحرَّرُ في `dispose`.
+  InlineSpan _legalLink(String label, Widget screen) {
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      child: InkWell(
+        onTap: () => Navigator.push(
+            context, MaterialPageRoute(builder: (_) => screen)),
+        child: Text(
+          label,
+          style: GoogleFonts.tajawal(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF660033),
+            decoration: TextDecoration.underline,
+          ),
+        ),
       ),
     );
   }
@@ -2158,7 +2192,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           color: Colors.white,
           boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
         ),
-        child: ElevatedButton(
+        // داخلَ SafeArea: الزرُّ ملاصقٌ لأسفلِ الشاشة، وبلا هذا يقع تحت شريطِ
+        // الإيماءات في الأجهزةِ بلا زرٍّ مادّيّ.
+        child: SafeArea(
+          top: false,
+          child: ElevatedButton(
           onPressed: _isLoading ? null : _handlePayment,
           style: ElevatedButton.styleFrom(
                         // **لونُ العلامةِ لا لونَ تجربةٍ لا يَكتبُها أحد.** كان
@@ -2183,7 +2221,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                   width: 24,
                   child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
                 )
-              : Text('تأكيد وإتمام الدفع', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
+              // المبلغُ على الزرِّ نفسِه: هو ما سيُخصَم (شاملاً الضريبة)، فلا
+              // تضغطُ على «إتمام الدفع» وهي لا تَرى الرقم.
+              : FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                      'تأكيد وإتمام الدفع · ${formatSar(totalWithVat)} ر.س',
+                      style: GoogleFonts.tajawal(
+                          fontWeight: FontWeight.bold, fontSize: 18)),
+                ),
+          ),
         ),
       ),
     );

@@ -182,6 +182,9 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
       body: Directionality(
         textDirection: TextDirection.rtl,
         child: SafeArea(
+          // AutofillGroup: مديرُ كلماتِ المرورِ يقترحُ كلمةً قويّةً ويحفظُها مع
+          // البريد، ويملأ الاسمَ والجوالَ من بطاقةِ الجهاز.
+          child: AutofillGroup(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 30.0),
             child: Column(
@@ -222,18 +225,21 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
                 const SizedBox(height: 40),
                 
                 _buildFieldLabel("الاسم"),
-                _buildTextField(_nameController, "أدخلي الاسم الكامل"),
+                _buildTextField(_nameController, "أدخلي الاسم الكامل",
+                    autofillHints: const [AutofillHints.name]),
                 
                 const SizedBox(height: 15),
                 _buildFieldLabel("رقم الجوال"),
                 // التلميحُ بصيغةِ الرسالةِ نفسِها: كان `5XXXXXXXX` بينما رسالةُ
                 // الخطأِ تَقولُ «يبدأ بـ 05» وبطاقةُ شاشةِ الدفعِ «مثال:
                 // 0501234567» — ثلاثُ صِيَغٍ لحقلٍ واحد.
-                _buildTextField(_phoneController, "0501234567", keyboardType: TextInputType.phone),
+                _buildTextField(_phoneController, "0501234567", keyboardType: TextInputType.phone,
+                    autofillHints: const [AutofillHints.telephoneNumber]),
                 
                 const SizedBox(height: 15),
                 _buildFieldLabel("البريد الإلكتروني"),
-                _buildTextField(_emailController, "example@mail.com", keyboardType: TextInputType.emailAddress),
+                _buildTextField(_emailController, "example@mail.com", keyboardType: TextInputType.emailAddress,
+                    autofillHints: const [AutofillHints.email]),
                 
                 const SizedBox(height: 15),
                 _buildFieldLabel("كلمة المرور"),
@@ -242,6 +248,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
                   "********", 
                   isPassword: true, 
                   isVisible: _isPasswordVisible,
+                  autofillHints: const [AutofillHints.newPassword],
                   onToggle: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
                 ),
                 
@@ -252,6 +259,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
                   "********", 
                   isPassword: true, 
                   isVisible: _isConfirmVisible,
+                  autofillHints: const [AutofillHints.newPassword],
                   onToggle: () => setState(() => _isConfirmVisible = !_isConfirmVisible),
                 ),
                 
@@ -296,6 +304,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
               ],
             ),
           ),
+          ),
         ),
       ),
     );
@@ -319,6 +328,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
     bool isVisible = false,
     VoidCallback? onToggle,
     TextCapitalization textCapitalization = TextCapitalization.none,
+    Iterable<String>? autofillHints,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -328,6 +338,7 @@ class _ZyiarahSignupScreenState extends State<ZyiarahSignupScreen> {
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
+        autofillHints: autofillHints,
         obscureText: isPassword && !isVisible,
         textCapitalization: textCapitalization,
         decoration: InputDecoration(

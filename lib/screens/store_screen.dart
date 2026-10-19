@@ -28,6 +28,17 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
+  /// البثُّ يُبنى مرّةً واحدةً لا في كلِّ `build` — كلُّ حرفٍ في حقلِ البحثِ
+  /// `setState`، وإعادةُ إنشائه كانت تُلغي المستمِعَ وتُعيدُ مهلةَ الحدثِ
+  /// الأوّل (انظر `test/stream_build_once_test.dart`). وزرُّ الإعادةِ يُصفّرُه
+  /// صراحةً فيُعيدُ فتحَه.
+  Stream<List<StoreProduct>>? _productsStream;
+  Stream<List<StoreProduct>> get _products => _productsStream ??=
+      _storeService.streamProducts(
+          audience: widget.companies ? 'companies' : 'client');
+
+  void _reopenProducts() => setState(() => _productsStream = null);
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -50,6 +61,11 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
       builder: (ctx) => _CartSheet(
         cart: _cart,
         storeService: _storeService,
+        // تعديلُ الكمّيّةِ داخلَ الورقةِ يَمَسُّ الخريطةَ نفسَها، فيُعادُ رسمُ
+        // عدّادِ أيقونةِ السلّة.
+        onCartChanged: () {
+          if (mounted) setState(() {});
+        },
         companies: widget.companies,
         onSubmitted: (result) {
           setState(() => _cart.clear());
@@ -188,8 +204,7 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
             ),
             Expanded(
               child: StreamBuilder<List<StoreProduct>>(
-                stream: _storeService.streamProducts(
-                    audience: widget.companies ? 'companies' : 'client'),
+                stream: _products,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return GridView.builder(
@@ -206,8 +221,20 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
                   }
                   if (snapshot.hasError) {
                     return Center(
-                      child: Text('تعذّر تحميل المتجر، تحقّقي من الاتصال',
-                          style: GoogleFonts.tajawal(color: Colors.grey)),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('تعذّر تحميل المتجر، تحقّقي من الاتصال',
+                              style: GoogleFonts.tajawal(color: Colors.grey)),
+                          const SizedBox(height: 8),
+                          TextButton.icon(
+                            onPressed: _reopenProducts,
+                            icon: const Icon(Icons.refresh),
+                            label: Text('إعادة المحاولة',
+                                style: GoogleFonts.tajawal()),
+                          ),
+                        ],
+                      ),
                     );
                   }
                   if (!snapshot.hasData || snapshot.data!.isEmpty) {
@@ -349,12 +376,22 @@ class _ProductCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('${formatSarAny(product.price)} ر.س', style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF660033))),
-                    InkWell(
-                      onTap: onAdd,
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(color: const Color(0xFF660033), borderRadius: BorderRadius.circular(8)),
-                        child: const Icon(Icons.add_shopping_cart, color: Colors.white, size: 18),
+                    // هدفُ لمسٍ ٤٤×٤٤ على الأقلّ (كان ~٣٠ بكسلاً فيُخطِئه الإصبع).
+                    Tooltip(
+                      message: 'إضافة إلى السلة',
+                      child: Material(
+                        color: const Color(0xFF660033),
+                        borderRadius: BorderRadius.circular(10),
+                        child: InkWell(
+                          onTap: onAdd,
+                          borderRadius: BorderRadius.circular(10),
+                          child: const SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: Icon(Icons.add_shopping_cart,
+                                color: Colors.white, size: 20),
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -376,11 +413,15 @@ class _CartSheet extends StatefulWidget {
   final bool companies;
   final void Function(Map<String, dynamic> result) onSubmitted;
 
+  /// يُنادى بعد كلِّ تعديلٍ للكمّيّة أو حذفِ صنف — الأبُ يُعيدُ رسمَ العدّاد.
+  final VoidCallback onCartChanged;
+
   const _CartSheet({
     required this.cart,
     required this.storeService,
     required this.companies,
     required this.onSubmitted,
+    required this.onCartChanged,
   });
 
   @override
@@ -389,17 +430,29 @@ class _CartSheet extends StatefulWidget {
 
 class _CartSheetState extends State<_CartSheet> {
   bool _isSubmitting = false;
-  bool _agreeToTerms = false;
 
+  // **لا موافقةَ على الشروطِ هنا.** كانت السلّةُ تَطلبُها ثمّ تَطلبُها شاشةُ
+  // الدفعِ مرّةً ثانية (`store_payment_screen` لمتجر الشركات،
+  // و`payment_summary_screen` عبر الجدولة لمتجر العميل) — والموافقةُ مكانُها
+  // لحظةَ الدفعِ نفسِها، فبقيت هناك وحدَها.
+
+  /// البثُّ مرّةً واحدةً للورقة (كلُّ تعديلِ كمّيّةٍ `setState`).
+  Stream<List<StoreProduct>>? _cartStream;
+  Stream<List<StoreProduct>> get _cartProducts =>
+      _cartStream ??= widget.storeService.streamProducts(audience: null);
+
+  void _setQty(String id, int qty) {
+    setState(() {
+      if (qty <= 0) {
+        widget.cart.remove(id);
+      } else {
+        widget.cart[id] = qty;
+      }
+    });
+    widget.onCartChanged();
+  }
 
   void _checkout(List<StoreProduct> products) async {
-    if (!_agreeToTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('يرجى الموافقة على شروط المتجر')),
-      );
-      return;
-    }
-
     setState(() => _isSubmitting = true);
 
     try {
@@ -478,11 +531,25 @@ class _CartSheetState extends State<_CartSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(24),
+      // الهامشُ السفليُّ يَحترمُ شريطَ الإيماءات كي لا يَقعَ زرُّ المتابعة تحته.
+      padding: EdgeInsets.fromLTRB(
+          24, 24, 24, 24 + MediaQuery.of(context).viewPadding.bottom),
       child: StreamBuilder<List<StoreProduct>>(
-          stream: widget.storeService.streamProducts(audience: null),
+          stream: _cartProducts,
           builder: (context, snapshot) {
-            if (snapshot.hasError) return const Center(child: Text('تعذّر تحميل السلة، تحقّقي من الاتصال'));
+            if (snapshot.hasError) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('تعذّر تحميل السلة، تحقّقي من الاتصال'),
+                  TextButton.icon(
+                    onPressed: () => setState(() => _cartStream = null),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('إعادة المحاولة'),
+                  ),
+                ],
+              );
+            }
             if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
             
             final cartProducts = snapshot.data!.where((p) => widget.cart.containsKey(p.id)).toList();
@@ -531,10 +598,63 @@ class _CartSheetState extends State<_CartSheet> {
                     itemCount: cartProducts.length,
                     itemBuilder: (context, index) {
                       final p = cartProducts[index];
-                      return ListTile(
-                        title: Text(p.name, style: const TextStyle(fontSize: 14)),
-                        subtitle: Text('${formatSarAny(p.price)} ر.س x ${widget.cart[p.id]}'),
-                        trailing: Text('${formatSarAny(p.price * widget.cart[p.id]!)} ر.س', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      final qty = widget.cart[p.id]!;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(p.name,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 14)),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                      '${formatSarAny(p.price)} ر.س × $qty = ${formatSarAny(p.price * qty)} ر.س',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'إنقاص الكمية',
+                              constraints: const BoxConstraints(
+                                  minWidth: 44, minHeight: 44),
+                              onPressed: _isSubmitting
+                                  ? null
+                                  : () => _setQty(p.id, qty - 1),
+                              icon: const Icon(Icons.remove_circle_outline),
+                            ),
+                            Text('$qty',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15)),
+                            IconButton(
+                              tooltip: 'زيادة الكمية',
+                              constraints: const BoxConstraints(
+                                  minWidth: 44, minHeight: 44),
+                              onPressed: _isSubmitting
+                                  ? null
+                                  : () => _setQty(p.id, qty + 1),
+                              icon: const Icon(Icons.add_circle_outline,
+                                  color: Color(0xFF660033)),
+                            ),
+                            IconButton(
+                              tooltip: 'حذف من السلة',
+                              constraints: const BoxConstraints(
+                                  minWidth: 44, minHeight: 44),
+                              onPressed: _isSubmitting
+                                  ? null
+                                  : () => _setQty(p.id, 0),
+                              icon: const Icon(Icons.delete_outline,
+                                  color: Colors.redAccent),
+                            ),
+                          ],
+                        ),
                       );
                     },
                   ),
@@ -573,24 +693,22 @@ class _CartSheetState extends State<_CartSheet> {
                           // («تُضاف ضريبة القيمة المضافة 15% عند إتمام الطلب»)
                           // — فالمبلغُ أعلاه أساسٌ لا نهاية.
                           widget.companies
-                              ? 'تُضاف ضريبة القيمة المضافة $kVatRateLabel عند الدفع. ستنتقل لإتمام الدفع مباشرةً (بطاقة / تمارا)، ويصلك طلبك بعد تأكيد الدفع.'
-                              : 'تُضاف ضريبة القيمة المضافة $kVatRateLabel عند الدفع. ستحدّد عنوان التوصيل وموعده في الخطوة التالية، ثم تدفع ويصلك سائق بطلبك في الموعد.',
+                              ? 'تُضاف ضريبة القيمة المضافة $kVatRateLabel عند الدفع. ستنتقلين لإتمام الدفع مباشرةً (بطاقة / تمارا)، ويصلكِ طلبكِ بعد تأكيد الدفع.'
+                              : 'تُضاف ضريبة القيمة المضافة $kVatRateLabel عند الدفع. ستحدّدين عنوان التوصيل وموعده في الخطوة التالية، ثم تدفعين ويصلكِ سائقٌ بطلبكِ في الموعد.',
                           style: GoogleFonts.tajawal(fontSize: 12, height: 1.5, color: const Color(0xFF660033), fontWeight: FontWeight.w700),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 15),
-                _buildTermsAndConditions(),
                 const SizedBox(height: 20),
                 SizedBox(
                   height: 55,
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: (_isSubmitting || !_agreeToTerms) ? null : () => _checkout(snapshot.data!),
+                    onPressed: _isSubmitting ? null : () => _checkout(snapshot.data!),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _agreeToTerms ? const Color(0xFF660033) : Colors.grey.shade300,
+                      backgroundColor: const Color(0xFF660033),
                       foregroundColor: Colors.white,
                     ),
                     child: _isSubmitting
@@ -603,28 +721,6 @@ class _CartSheetState extends State<_CartSheet> {
               ],
             );
           },
-      ),
-    );
-  }
-
-  Widget _buildTermsAndConditions() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _agreeToTerms ? const Color(0xFF660033) : Colors.grey.shade200),
-      ),
-      child: CheckboxListTile(
-        value: _agreeToTerms,
-        onChanged: (val) => setState(() => _agreeToTerms = val ?? false),
-        activeColor: const Color(0xFF660033),
-        title: Text(
-          "أوافق على شروط المتجر وسياسة الخصوصية",
-          style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold),
-        ),
-        controlAffinity: ListTileControlAffinity.leading,
-        contentPadding: EdgeInsets.zero,
       ),
     );
   }
