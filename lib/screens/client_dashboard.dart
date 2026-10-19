@@ -190,7 +190,10 @@ class _ClientDashboardState extends State<ClientDashboard> {
                   },
                   child: SingleChildScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+                    // هامشٌ سفليٌّ بارتفاعِ زرِّ الدعمِ العائم (~٥٦ + هامشه):
+                    // بلا هذا يُغطّي الزرُّ آخرَ بطاقةٍ في الشبكة ولا يُمرَّر
+                    // ما تحته أبداً إلى مكانٍ مكشوف.
+                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 96),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -710,10 +713,12 @@ class _ClientDashboardState extends State<ClientDashboard> {
         // الرئيسية تعرض بانرات «الرئيسي» فقط؛ ما اختارت له الإدارة «قسم العروض»
         // يظهر في شاشة العروض. الغياب = رئيسي (توافق مع البانرات القائمة).
         // التصفية محلية: لا يمكن استعلام «الحقل غائب أو = main» في Firestore.
-        final banners = snapshot.data!.docs.where((d) {
-          final p = (d.data() as Map<String, dynamic>)['placement'];
-          return p == null || p == 'main';
-        }).toList();
+        final banners = sortedByBannerRank(
+            snapshot.data!.docs.where((d) {
+              final p = (d.data() as Map<String, dynamic>)['placement'];
+              return p == null || p == 'main';
+            }).toList(),
+            (d) => d.data() as Map<String, dynamic>);
         if (banners.isEmpty) return const SizedBox.shrink();
 
         return Container(

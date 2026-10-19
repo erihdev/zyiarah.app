@@ -22,6 +22,7 @@ import 'package:zyiarah/utils/crew_delay_notice.dart';
 import 'package:zyiarah/utils/time_format.dart';
 import 'package:zyiarah/utils/cancel_refund_notice.dart';
 import 'package:zyiarah/utils/user_facing_error.dart';
+import 'package:zyiarah/utils/order_amount_label.dart';
 
 // تحويل رقمي دفاعي — حقول Firestore (amount/total_amount/quotePrice) قد تصل نصّاً
 // أو null، و.toDouble()/as num المباشر كان يعطّل بطاقة الطلب داخل القائمة.
@@ -76,6 +77,41 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
         .where('client_id', isEqualTo: uid)
         .snapshots()
         .firstEventTimeout();
+  }
+
+  /// زرُّ «إعادة المحاولة» يُعيدُ فتحَ البثّين **صراحةً**: البثُّ مُثبَّت، فـ
+  /// `setState(() {})` وحدَه لم يَعُد يُعيدُ الاشتراكَ (والخطأُ يَلتصق).
+  void _reopenStreams() {
+    setState(() {
+      _streamsUid = null;
+      _orders = null;
+      _storeOrders = null;
+    });
+  }
+
+  Widget _buildLoadError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_off_rounded, size: 52, color: Colors.grey.shade400),
+            const SizedBox(height: 12),
+            Text('تعذّر تحميل البيانات، تحقّقي من الاتصال',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.tajawal(color: const Color(0xFF64748B))),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _reopenStreams,
+              icon: const Icon(Icons.refresh),
+              label: Text('إعادة المحاولة',
+                  style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -195,7 +231,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           );
         }
         if (snapshot.hasError) {
-          return const Center(child: Text('تعذّر تحميل البيانات، تحقّقي من الاتصال'));
+          return _buildLoadError();
         }
         // القسمة قاعدة واحدة (`orderIsOpen`) لا قائمتان: القائمتان كانتا
         // صحيحتين هنا، لكن أي حالة لا تَرِد في إحداهما تسقط من التبويبين معاً
@@ -208,7 +244,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
         }).toList();
 
         if (orders.isEmpty) {
-          return _buildEmptyState();
+          return _buildEmptyState(store: false);
         }
 
         // Sort in-memory to avoid composite index requirement
@@ -245,7 +281,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           );
         }
         if (snapshot.hasError) {
-          return const Center(child: Text('تعذّر تحميل البيانات، تحقّقي من الاتصال'));
+          return _buildLoadError();
         }
         
         // دورة المتجر الحقيقية: awaiting_payment ⇒ under_review ⇒ delivering ⇒
@@ -259,7 +295,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
         }).toList();
 
         if (storeOrders.isEmpty) {
-          return _buildEmptyState();
+          return _buildEmptyState(store: true);
         }
 
         storeOrders.sort((a, b) {
@@ -399,7 +435,19 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
   }
 
 
-  Widget _buildEmptyState() {
+  /// فراغٌ يقول **أيُّ** قائمةٍ فارغة (جارية/سابقة، خدمات/متجر) ويدعوها إلى
+  /// الخطوة التالية — «لا توجد طلبات» وحدَها تحت تبويب «السابقة» تُقرأ كأنّ
+  /// طلباتِها الجاريةَ ضاعت.
+  Widget _buildEmptyState({required bool store}) {
+    final bool history = _activePhase != 0;
+    final String title = store
+        ? (history ? 'لا توجد طلبات متجر سابقة' : 'لا توجد طلبات متجر جارية')
+        : (history ? 'لا توجد حجوزات سابقة' : 'لا توجد حجوزات جارية');
+    final String body = history
+        ? 'ستظهر هنا طلباتكِ بعد اكتمالها أو إلغائها.'
+        : (store
+            ? 'لم تطلبي من المتجر بعد.\nتصفّحي أدوات التنظيف واطلبي ما تحتاجينه.'
+            : 'لم تحجزي أي خدمة بعد.\nاحجزي خدمتكِ الأولى الآن!');
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -412,32 +460,46 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                 color: const Color(0xFF660033).withValues(alpha: 0.06),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.calendar_today_rounded, size: 52, color: Color(0xFF660033)),
+              child: Icon(
+                  store
+                      ? Icons.shopping_bag_outlined
+                      : Icons.calendar_today_rounded,
+                  size: 52,
+                  color: const Color(0xFF660033)),
             ),
             const SizedBox(height: 24),
             Text(
-              'لا توجد طلبات',
+              title,
+              textAlign: TextAlign.center,
               style: GoogleFonts.tajawal(fontSize: 20, color: const Color(0xFF0F172A), fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
             Text(
-              'لم تقم بأي حجز بعد.\nابدأ بطلب خدمتك الأولى الآن!',
+              body,
               textAlign: TextAlign.center,
               style: GoogleFonts.tajawal(color: const Color(0xFF64748B), height: 1.6, fontSize: 14),
             ),
             const SizedBox(height: 28),
             ElevatedButton.icon(
               onPressed: () {
-                // الشاشة مسار في الراوتر: pop يرجع للرئيسية إن جئنا منها، وإلا نذهب
-                // إليها صراحةً (رابط عميق فتح '/orders' مباشرةً بلا مكدّس تحته).
+                if (store) {
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const ZyiarahStoreScreen()));
+                  return;
+                }
+                // الخدماتُ في الرئيسيّة: الشاشة مسار في الراوتر، فـpop يرجع
+                // إليها إن جئنا منها، وإلا نذهب صراحةً (رابط عميق فتح
+                // '/orders' مباشرةً بلا مكدّس تحته).
                 if (context.canPop()) {
                   context.pop();
                 } else {
                   context.go('/client');
                 }
               },
-              icon: const Icon(Icons.home_rounded),
-              label: Text('العودة للرئيسية', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+              icon: Icon(store ? Icons.storefront_rounded : Icons.add_circle_outline_rounded),
+              label: Text(store ? 'تصفّحي المتجر' : 'احجزي خدمة الآن', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF660033),
                 foregroundColor: Colors.white,
@@ -599,7 +661,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('${_asDouble(order['amount']).toStringAsFixed(2)} ر.س',
+              Text(clientOrderAmountLabel(order),
                 style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF660033))),
               if (status == 'completed' && order['rating'] == null)
                 TextButton.icon(

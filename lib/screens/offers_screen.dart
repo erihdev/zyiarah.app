@@ -73,10 +73,12 @@ class _ZyiarahOffersScreenState extends State<ZyiarahOffersScreen> {
             .where('isActive', isEqualTo: true)
             .snapshots()
             // التصفية محلية لأن Firestore لا يستعلم «= offers» مع بانرات بلا الحقل.
-            .map((q) => q.docs
-                .map((d) => d.data())
-                .where((m) => m['placement'] == 'offers')
-                .toList())
+            .map((q) => sortedByBannerRank(
+                q.docs
+                    .map((d) => d.data())
+                    .where((m) => m['placement'] == 'offers')
+                    .toList(),
+                (m) => m))
             .firstEventTimeout();
 
     final uid = _uid;
