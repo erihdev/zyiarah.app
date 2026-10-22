@@ -1,6 +1,9 @@
-# معاينةٌ مؤقّتةٌ لتطبيق العميل على الويب — قناةُ معاينةٍ في Firebase Hosting
-# (تنتهي بعد ٧ أيام) على موقع zyiarah-web، لا تَمَسُّ الموقعَ المنشور.
-# الغرضُ: فتحُ التطبيقِ الحاليِّ في المتصفّحِ لالتقاطِ لقطاتِ المتجر.
+# معاينةٌ ثابتةٌ للأجهزة الثلاثة (العميل والسائق والإدارة) على قنواتِ معاينةٍ في
+# Firebase Hosting على موقع zyiarah-web، لا تَمَسُّ الموقعَ المنشور.
+# الرابطُ وأصولُ القنواتِ ثابتةٌ ما دامت أسماءُ القنواتِ ثابتة، وجلساتُ الدخولِ
+# محفوظةٌ لكلِّ أصل — فلا تُغيَّرُ أسماءُ القنوات. أقصى صلاحيةٍ تَقبلُها Firebase
+# ٣٠ يوماً، وكلُّ نشرٍ يُجدّدُها؛ ومهمّةٌ مجدولةٌ تُشغّلُ هذا السيرَ دوريّاً كي لا
+# تنتهي القنواتُ فتُمحى معها جلساتُ الدخول.
 name: Web App Preview
 on:
   push:
@@ -40,7 +43,7 @@ jobs:
           JSON
           deploy() {
             npx --yes firebase-tools@15 hosting:channel:deploy "$1" \
-              --config firebase.preview.json --only web --expires 7d \
+              --config firebase.preview.json --only web --expires 30d \
               --project zyiarah-app --non-interactive --json 2>&1 | tee "$RUNNER_TEMP/$1.json" >&2
             grep -oE 'https://[A-Za-z0-9.-]+\.web\.app' "$RUNNER_TEMP/$1.json" | head -1
           }
