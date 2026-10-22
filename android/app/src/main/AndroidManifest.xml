@@ -64,8 +64,11 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- Deep Linking -->
-            <intent-filter android:autoVerify="true">
+            <!-- Deep Linking — بلا `autoVerify`: التحقّقُ التلقائيُّ يَخصُّ روابطَ
+                 http/https بملفِّ `assetlinks.json` ولا معنى له لمُخطَّطٍ مخصَّص
+                 (`zyiarah://`)، وكان يُنتجُ تحذيرَ lint ومحاولةَ تحقّقٍ تَفشلُ
+                 عند التثبيت (2026-10-22). -->
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
@@ -102,23 +105,17 @@
             <data android:mimeType="text/plain"/>
         </intent>
         <!-- Package visibility (Android 11+): without these, canLaunchUrl/launchUrl
-             cannot resolve https/market/tel/mailto handlers, which broke the store
-             link (force-update lockout) and any external link. -->
+             cannot resolve https/tel handlers, which broke the store link
+             (force-update lockout) and any external link.
+             `market` و`mailto` حُذِفا (2026-10-22): لا رابطَ بأيٍّ منهما في lib/ —
+             رابطُ المتجرِ https (app_update_service) والبريدُ لا يُفتَحُ من التطبيق. -->
         <intent>
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="https"/>
         </intent>
         <intent>
-            <action android:name="android.intent.action.VIEW"/>
-            <data android:scheme="market"/>
-        </intent>
-        <intent>
             <action android:name="android.intent.action.DIAL"/>
             <data android:scheme="tel"/>
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.SENDTO"/>
-            <data android:scheme="mailto"/>
         </intent>
     </queries>
 </manifest>

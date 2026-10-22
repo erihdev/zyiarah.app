@@ -74,8 +74,33 @@ jobs:
           storeFile=upload-keystore.jks
           EOF
 
+      # versionCode = آخرُ رقمٍ منشورٍ على Google Play + 1، بالأداةِ نفسِها التي
+      # يَستعملُها `codemagic.yaml` (`google-play get-latest-build-number` من
+      # codemagic-cli-tools). كان هذا المسارُ يَأخذُه من `pubspec.yaml` بلا تزايدٍ،
+      # فوسمٌ يُنتجُ رقماً مستعمَلاً يَرفضُه Play. وتعذُّرُ القراءةِ **يُفشِلُ
+      # الوظيفةَ** لا يَسقطُ إلى رقمٍ مكتوب (2026-10-22).
+      - name: Resolve versionCode from Google Play
+        env:
+          GCLOUD_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -o pipefail
+          if [ -z "$GCLOUD_SERVICE_ACCOUNT_CREDENTIALS" ]; then
+            echo "::error::سرُّ GOOGLE_PLAY_SERVICE_ACCOUNT_JSON غير مضبوط — لا يُمكِنُ اشتقاقُ versionCode"
+            exit 1
+          fi
+          pip install -q codemagic-cli-tools
+          LATEST=$(google-play get-latest-build-number --package-name com.zyiarah.zyiarah | tail -n1 | tr -d '[:space:]')
+          case "$LATEST" in
+            ''|*[!0-9]*) echo "::error::تعذّر قراءةُ آخرِ versionCode من Play: '$LATEST'"; exit 1 ;;
+          esac
+          NEW_CODE=$((LATEST + 1))
+          # الحارسُ نفسُه الذي في codemagic.yaml: 191 رُفِعَ مرّةً ولم يُنشَر.
+          if [ "$NEW_CODE" -le 191 ]; then NEW_CODE=192; fi
+          echo "Auto versionCode: $NEW_CODE (latest on Play: $LATEST)"
+          echo "NEW_CODE=$NEW_CODE" >> "$GITHUB_ENV"
+
       - name: Build AAB
-        run: flutter build appbundle --release
+        run: flutter build appbundle --release --build-number="$NEW_CODE"
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4

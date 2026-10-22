@@ -104,7 +104,40 @@ class _DriverDashboardState extends State<DriverDashboard> {
   /// يطلب إذن الموقع ثم يُنشئ تيار الموقع. بدون هذا الطلب الصريح لا يظهر مربّع الإذن
   /// على أندرويد وتفشل كل عمليات الموقع بصمت.
   Future<void> _ensureLocationPermission() async {
-    final granted = await ZyiarahLocationService().requestPermission();
+    final svc = ZyiarahLocationService();
+    // إفصاحٌ بارزٌ **قبلَ** نافذةِ النظام (سياسةُ Play لبياناتِ الموقع،
+    // وتَقرؤه مراجعةُ أبل كذلك): ما يُجمَع، ومتى، وأنّه لا يُجمَعُ في الخلفيّة.
+    // يُعرَضُ مرّةً واحدةً ما دامَ الإذنُ لم يُقرَّرْ بعد.
+    if (await svc.permissionUndecided()) {
+      if (!mounted) return;
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('إذن الموقع'),
+          content: const Text(
+            'يستخدم التطبيق موقعك أثناء فتحه فقط لعرض المهام القريبة منك '
+            'ولإظهار موقعك للعميل أثناء التوصيل. لا يُجمع الموقع في الخلفية '
+            'ولا يُشارك مع أي طرف آخر، ويمكنك إيقافه من إعدادات الجهاز في أي وقت.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('ليس الآن'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('متابعة'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true) {
+        // رفضُ الإفصاحِ يُقرأُ كرفضِ الإذن: الزرُّ والشريطُ يَبقيانِ مَخرجاً.
+        if (mounted) setState(() => _locationDenied = true);
+        return;
+      }
+    }
+    final granted = await svc.requestPermission();
     if (!mounted) return;
     if (granted) {
       if (mounted) setState(() => _locationDenied = false);
