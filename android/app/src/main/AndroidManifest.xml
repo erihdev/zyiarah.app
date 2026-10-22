@@ -33,7 +33,7 @@
          يَشدُّ المطابقةَ `test/permissions_guard_test.dart`. -->
 
     <application
-        android:label="Zyiarah"
+        android:label="زيارة"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
         <!-- `android:usesCleartextTraffic="true"` حُذِف (2026-10-22): لا نقطةَ

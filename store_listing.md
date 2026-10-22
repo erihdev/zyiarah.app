@@ -46,6 +46,9 @@ Zyiarah is a project of Moath Yahya Mohammed Al-Maliki Foundation.
 - **Email:** بريدُ حسابِ عميلةٍ تجريبيٍّ قائمٍ (مسجَّلٌ بالبريدِ من شاشةِ التسجيل)، في منطقةِ تغطيةٍ (جازان) كي تُعرَضَ الباقاتُ والأسعار.
 - **Password:** كلمةُ مرورِ ذلك الحساب.
 - ملاحظةٌ للمراجع (Notes): «الدفعُ بالبطاقةِ يَقبلُ بطاقاتِ اختبارِ ميسر؛ وزرُّ Apple Pay يَعملُ على جهازٍ حقيقيٍّ ببطاقةِ اختبار.»
+- وفي Notes كذلك (بالإنجليزيّة، لأنّ المراجعَ خارجَ السعوديّة ومنطقةُ التغطيةِ جازان وحدَها — فتحديدُ الموقعِ التلقائيُّ عندَه يُعطي «خارج نطاق خدماتنا»):
+  `Reviewer outside Saudi Arabia: when asked for the service location, choose "From the map" and drag the pin inside the Jazan region boundary shown on the map; the catalog and prices then load.`
+- وتبريرُ الدخولِ قبلَ الحجزِ (Apple 5.1.1(v)): `Sign-in is required before booking because orders, payment records, ZATCA tax invoices and the wallet balance are account-specific, driver assignment and live tracking are tied to a verified user, and subscription contracts are signed electronically under the user identity. The service catalog is browsable without sign-in (guest screen). All items sold are physical services delivered at the customer's home (no digital content), so payment goes through external gateways (Moyasar / Tamara).`
 
 ### 2. ميزة الموقع الجغرافي (Location — while in use only)
 نظام التتبع في التطبيق ضروري نظراً لطبيعة العمل في المناطق الجبلية الوعرة (جازان). يُستخدم الموقع الجغرافي لربط العملاء بأقرب سائق متاح، ولتزويد العميل بتحديثات حية عن موقع السائق القادم إليه **والتطبيقُ مفتوح**. لا يَطلبُ التطبيقُ موقعاً في الخلفيّةِ على أيٍّ من المنصّتَين: على iOS أُزيل نمطُ `location` من `UIBackgroundModes` (سببُ رفضِ 2.5.4 لنسخة 1.2.50)، وعلى أندرويد لا يُعلَنُ `ACCESS_BACKGROUND_LOCATION`. تم توضيح ذلك للمستخدم في رسالة طلب الصلاحية.
