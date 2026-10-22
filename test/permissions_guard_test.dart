@@ -203,6 +203,11 @@ void main() {
         ['مسح', 'qr_code_scanner'],
         ['الملف الشخصي', 'uploadProfilePhoto'],
       ],
+      // رفضُ 1.2.50 (5.1.1(ii)): «أقرب سائق» دعوى لا ميزةَ لها — الإسنادُ
+      // بالوقتِ لا بالمسافة، والنداءُ الخادميُّ الوحيدُ بالقُربِ بلا مُنادٍ.
+      'NSLocationWhenInUseUsageDescription': [
+        ['أقرب سائق', 'findNearestDrivers'],
+      ],
       'NSPhotoLibraryUsageDescription': [
         ['حفظ', 'image_gallery_saver'],
         ['الفواتير', 'GallerySaver'],
@@ -210,6 +215,8 @@ void main() {
       ],
     };
     const required = <String, List<String>>{
+      // أبل تَطلبُ مثالاً محدّداً على الاستعمال، لا وصفاً عامّاً.
+      'NSLocationWhenInUseUsageDescription': ['مثلاً', 'منطقة الخدمة'],
       'NSCameraUsageDescription': ['تقييم', 'الإدارة'],
       'NSPhotoLibraryUsageDescription': ['اختيار', 'الإدارة'],
     };
