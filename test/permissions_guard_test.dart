@@ -240,7 +240,8 @@ void main() {
         reason: 'اختفى شرحُ الدعوى القديمةِ — فتُعادُ بلا علمٍ بسببِ زوالِها');
   });
 
-  test('لا موقعَ خلفيّةٍ على المنصّتَين: iOS بقرارِ مراجعةِ أبل وأندرويد بقرارِ Play',
+  test(
+      'لا موقعَ خلفيّةٍ على المنصّتَين: iOS بقرارِ مراجعةِ أبل وأندرويد بقرارِ Play',
       () {
     // رفضت أبل 1.2.50 بالبند 2.5.4 (2026-10-10): `UIBackgroundModes` يُعلِنُ
     // `location` ولا ميزةَ تَستلزمُ موقعاً دائماً. فحُذِفَ النمطُ وسلسلتا
@@ -249,9 +250,11 @@ void main() {
     // وتسجيلُ شاشةٍ في ملاحظاتِ المراجعة.
     final plistCode = plist.replaceAll(RegExp(r'<!--[\s\S]*?-->'), '');
     expect(plistCode.contains('<string>location</string>'), isFalse,
-        reason: 'عادَ نمطُ موقعِ الخلفيّةِ إلى Info.plist — سببُ رفضِ أبل 2.5.4');
+        reason:
+            'عادَ نمطُ موقعِ الخلفيّةِ إلى Info.plist — سببُ رفضِ أبل 2.5.4');
     expect(plistCode.contains('NSLocationAlways'), isFalse,
-        reason: 'عادت سلسلةُ «دائماً» — geolocator يَطلبُ الإذنَ الدائمَ بوجودِها');
+        reason:
+            'عادت سلسلةُ «دائماً» — geolocator يَطلبُ الإذنَ الدائمَ بوجودِها');
     // ومستلزمُه في الشفرة: تفعيلُ تحديثاتِ الخلفيّةِ بلا النمطِ المُعلَنِ
     // يُسقِطُ التطبيقَ على iOS.
     expect(lib.contains('allowBackgroundLocationUpdates: true'), isFalse,
@@ -272,5 +275,65 @@ void main() {
         reason: 'اختفت خطواتُ الاستعادةِ من التعليق');
     expect(lib.contains('getPositionStream'), isTrue,
         reason: 'زالَ بثُّ الموقعِ — فنمطُ الخلفيّةِ صارَ بلا مُستعمِل');
+  });
+
+  test('أنماطُ الخلفيّةِ على iOS = {remote-notification} — لا نمطَ بلا ميزة',
+      () {
+    // `fetch` كان مُعلَناً (2026-10-22) ولا BGTaskScheduler ولا حزمةَ جلبٍ
+    // خلفيٍّ في المستودع. نمطٌ بلا ميزةٍ هو بندُ 2.5.4 الذي رُفضت به 1.2.50.
+    // المجموعةُ كاملةً لا «لا يَحوي fetch»: نمطٌ ثالثٌ يُراجَعُ بدلَ أن يَمُرّ.
+    final plistCode = plist.replaceAll(RegExp(r'<!--[\s\S]*?-->'), '');
+    final m =
+        RegExp(r'<key>UIBackgroundModes</key>\s*<array>([\s\S]*?)</array>')
+            .firstMatch(plistCode);
+    expect(m, isNotNull, reason: 'اختفت مصفوفةُ UIBackgroundModes');
+    final modes = RegExp(r'<string>([^<]+)</string>')
+        .allMatches(m!.group(1)!)
+        .map((x) => x.group(1)!)
+        .toSet();
+    expect(modes, {'remote-notification'},
+        reason: 'نمطُ خلفيّةٍ بلا ميزةٍ تَستلزمُه — سؤالُ مُراجِعٍ مضمون');
+    // والمضادّة: اسمُ النمطِ المحذوفِ ما زال في شرحِ حذفِه.
+    expect(plist.contains('`fetch`'), isTrue,
+        reason: 'اختفى شرحُ حذفِ fetch — فيُعادُ بلا علمٍ بسببِ زوالِه');
+    // ولا جلبَ خلفيّاً دخلَ بلا أن يُراجَعَ هذا الفحص.
+    for (final pkg in const ['background_fetch', 'workmanager']) {
+      expect(File('pubspec.yaml').readAsStringSync().contains(pkg), isFalse,
+          reason:
+              'أُضيفت حزمةُ $pkg — فنمطُ fetch قد صارَ له مُستعمِلٌ: راجِع');
+    }
+  });
+
+  test('لا حركةَ غيرَ مشفّرةٍ ولا معرّفَ إعلاناتٍ على أندرويد', () {
+    // `usesCleartextTraffic="true"` كان مُعلَناً بلا نقطةِ http:// واحدةٍ في
+    // lib/ أو functions/، ويُناقضُ جوابَ «مشفّرة أثناء النقل» في نموذجِ أمانِ
+    // البيانات. و`AD_ID` يَدمجُه play-services-measurement تلقائيّاً، وإذنٌ
+    // حاضرٌ في البيانِ المدمجِ وغائبٌ عن النموذجِ سببُ رفضٍ معروفٌ في Play.
+    final code = _stripXmlComments(manifest);
+    expect(code.contains('usesCleartextTraffic'), isFalse,
+        reason: 'عادَ usesCleartextTraffic — ولا نقطةَ http:// تَستلزمُه');
+    expect(
+        RegExp(r'android:name="com\.google\.android\.gms\.permission\.AD_ID"\s+tools:node="remove"')
+            .hasMatch(code),
+        isTrue,
+        reason: 'زالَ حذفُ AD_ID من الدمج — يَعودُ الإذنُ إلى البيانِ المدمج');
+    expect(
+        RegExp(r'android:name="google_analytics_adid_collection_enabled"\s+android:value="false"')
+            .hasMatch(code),
+        isTrue,
+        reason: 'جمعُ معرّفِ الإعلاناتِ لم يَعُد مُطفأً');
+    expect(code.contains('xmlns:tools='), isTrue,
+        reason: 'tools:node="remove" بلا xmlns:tools لا يُترجَم');
+    // والمضادّةُ على الخامّ: الشرحُ يُسمّي العلَمَ المحذوف.
+    expect(manifest.contains('usesCleartextTraffic'), isTrue,
+        reason: 'اختفى شرحُ حذفِ usesCleartextTraffic');
+    // وشاهدُ التعليلِ: لا نقطةَ http:// في شفرةِ العميلِ خارجَ التعليقات.
+    // مُجرَّداً من أسطرِ التعليق: `csv_export_util` يَقتبسُ `"http://…"` في
+    // شرحِ حقنِ الصيغة — «الحارسُ يَسقطُ على توثيقِه».
+    final libCode =
+        lib.split('\n').where((l) => !l.trimLeft().startsWith('//')).join('\n');
+    final httpInCode = RegExp(r'''['"]http://''').allMatches(libCode).length;
+    expect(httpInCode, 0,
+        reason: 'ظهرت نقطةُ http:// في lib/ — يُراجَعُ قرارُ حذفِ cleartext');
   });
 }
