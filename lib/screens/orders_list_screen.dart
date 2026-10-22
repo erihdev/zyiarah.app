@@ -67,14 +67,20 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
       _storeOrders = null;
       return;
     }
+    // الأحدثُ أوّلاً وبسقفٍ (`kClientOrdersQueryLimit`): كان البثُّ يَقرأُ
+    // كلَّ طلبٍ في عمرِ الحسابِ بلا حدّ. والفهرسُ المركَّبُ قائمٌ للمجموعتَين.
     _orders = FirebaseFirestore.instance
         .collection('orders')
         .where('client_id', isEqualTo: uid)
+        .orderBy('created_at', descending: true)
+        .limit(kClientOrdersQueryLimit)
         .snapshots()
         .firstEventTimeout();
     _storeOrders = FirebaseFirestore.instance
         .collection('store_orders')
         .where('client_id', isEqualTo: uid)
+        .orderBy('created_at', descending: true)
+        .limit(kClientOrdersQueryLimit)
         .snapshots()
         .firstEventTimeout();
   }
@@ -87,6 +93,21 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
       _orders = null;
       _storeOrders = null;
     });
+  }
+
+  /// ملاحظةُ السقفِ تُعرَضُ **في تبويبِ السجلِّ وحدَه** ومتى بلغَ البثُّ حدَّه
+  /// فعلاً: الطلبُ المفتوحُ يُحَلُّ أو يُلغى خلالَ أيّام فلا يَكادُ يَسقطُ
+  /// خلفَ مئتَي طلبٍ أحدثَ منه، أمّا السجلُّ فيَطولُ مع العمر.
+  Widget? _capNotice(int loaded) {
+    if (_activePhase == 0 || loaded < kClientOrdersQueryLimit) return null;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 16),
+      child: Text(
+        'يُعرض أحدث $kClientOrdersQueryLimit طلب من سجلّكِ',
+        textAlign: TextAlign.center,
+        style: GoogleFonts.tajawal(fontSize: 12, color: const Color(0xFF94A3B8)),
+      ),
+    );
   }
 
   Widget _buildLoadError() {
@@ -247,17 +268,20 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           return _buildEmptyState(store: false);
         }
 
-        // Sort in-memory to avoid composite index requirement
+        // الاستعلامُ مرتَّبٌ خادميّاً؛ الفرزُ المحلّيُّ يَبقى لِما لم يَصِله
+        // طابعُ الخادمِ بعدُ (كتابةٌ معلَّقةٌ محلّيّاً بلا `created_at`).
         orders.sort((a, b) {
           final aTime = (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
           final bTime = (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
           return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
         });
 
+        final cap = _capNotice(allDocs.length);
         return ListView.builder(
           padding: const EdgeInsets.all(16),
-          itemCount: orders.length,
+          itemCount: orders.length + (cap == null ? 0 : 1),
           itemBuilder: (context, index) {
+            if (index == orders.length) return cap!;
             final order = orders[index].data() as Map<String, dynamic>;
             final orderDocId = orders[index].id;
             return _buildOrderCard(context, order, orderDocId);
@@ -304,10 +328,12 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
         });
 
+        final cap = _capNotice(allDocs.length);
         return ListView.builder(
           padding: const EdgeInsets.all(16),
-          itemCount: storeOrders.length,
+          itemCount: storeOrders.length + (cap == null ? 0 : 1),
           itemBuilder: (context, index) {
+            if (index == storeOrders.length) return cap!;
             final data = storeOrders[index].data() as Map<String, dynamic>;
             return _buildStoreOrderCard(context, storeOrders[index].id, data);
           },

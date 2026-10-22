@@ -159,3 +159,6 @@ functions/_tmp_ord198.js
 /*.docx
 # حالةُ جلساتِ العصفِ الذهنيّ المحلّيّة (pid وعلاماتُ الإيقاف) — آثارُ تشغيلٍ لا محتوى.
 .superpowers/**/state/
+
+# نسخُ سكربتِ التصفير (reset_test_data.js) — بياناتُ إنتاجٍ لا تُلتزَم
+functions/backups/

@@ -31,8 +31,14 @@ class AdminStoreHubScreen extends StatelessWidget {
     final showProducts = productRoles.contains(role);
     final showOrders = orderRoles.contains(role);
 
-    if (showProducts && !showOrders) return AdminStoreScreen(role: role);
-    if (showOrders && !showProducts) return const AdminStoreOrdersScreen();
+    // الشاشتانِ تُرسَمانِ **مُضمَّنتَين** (بلا `AppBar` خاصّ): اللوحةُ
+    // تَحملُ شريطَها فوقَهما، وكان كلٌّ منهما يَرسمُ شريطاً ثانياً تحتَه.
+    if (showProducts && !showOrders) {
+      return AdminStoreScreen(role: role, embedded: true);
+    }
+    if (showOrders && !showProducts) {
+      return const AdminStoreOrdersScreen(embedded: true);
+    }
     if (!showProducts && !showOrders) return const SizedBox.shrink();
 
     return Directionality(
@@ -59,8 +65,8 @@ class AdminStoreHubScreen extends StatelessWidget {
             Expanded(
               child: TabBarView(
                 children: [
-                  AdminStoreScreen(role: role),
-                  const AdminStoreOrdersScreen(),
+                  AdminStoreScreen(role: role, embedded: true),
+                  const AdminStoreOrdersScreen(embedded: true),
                 ],
               ),
             ),

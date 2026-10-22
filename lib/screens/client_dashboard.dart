@@ -1,5 +1,4 @@
 import 'package:zyiarah/utils/order_lifecycle.dart';
-import 'dart:ui';
 import 'package:zyiarah/utils/service_catalog.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -524,15 +523,13 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
   PreferredSizeWidget _buildTopBar() {
     return AppBar(
-      backgroundColor: Colors.white.withValues(alpha: 0.85),
+      // لونٌ شبهُ مُعتِمٍ بدلَ تمويهِ BackdropFilter: التمويهُ يُعادُ رسمُه
+      // مع كلِّ إطارِ تمريرٍ تحتَ الشريط — وهذه أثقلُ شاشةٍ تمريراً في
+      // التطبيق — والفرقُ البصريُّ عند 0.97 لا يُرى (نفسُ قرارِ شاشتَي
+      // الملفِّ والاستكشاف).
+      backgroundColor: Colors.white.withValues(alpha: 0.97),
       elevation: 0,
       scrolledUnderElevation: 0,
-      flexibleSpace: ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(color: Colors.transparent),
-        ),
-      ),
       iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
       title: Row(
         children: [
