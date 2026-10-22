@@ -206,4 +206,49 @@ void main() {
               'يُحدَّثُ معه هذا الحارسُ عمداً');
     }
   });
+
+  // ════════════════════════════════════════════════════════════════════
+  // **versionCode يُشتَقُّ من Play في كلِّ مسارٍ يَنشرُ إليه (2026-10-22).**
+  //
+  // كان `android_release.yml` يَبني بـ`flutter build appbundle --release`
+  // عارياً فيَأخذُ `versionCode` من `pubspec.yaml` — ورقمٌ لا يَتزايدُ يُنتجُ
+  // «versionCode مستخدم مسبقاً» عند Play، بينما `codemagic.yaml` يَسألُ Play
+  // عن آخرِ رقمٍ ويَزيد. القاعدةُ عامّةٌ فتُشَدُّ على **المجموعةِ المُشتَقّةِ**
+  // نفسِها: كلُّ ناشرٍ يُمرّرُ `--build-number` من `get-latest-build-number`،
+  // وتعذُّرُ القراءةِ يُفشِلُ (لا `|| echo <رقم>` ولا سقوطٌ صامت في سيرِ GitHub).
+  test('كلُّ مسارٍ يَنشرُ إلى Play يَبني بـversionCode مُشتَقٍّ من Play', () {
+    final paths = Directory('.github/workflows')
+        .listSync()
+        .whereType<File>()
+        .map((f) => f.path.replaceAll(r'\', '/'))
+        .where((f) => f.endsWith('.yml'))
+        .where((f) => File(f).readAsStringSync().contains('upload-google-play'))
+        .toList()
+      ..add('codemagic.yaml')
+      ..sort();
+    expect(paths.length, greaterThanOrEqualTo(2), reason: 'انحلَّ الاشتقاق: $paths');
+    for (final p in paths) {
+      final code = read_(p)
+          .split('\n')
+          .where((l) => !l.trimLeft().startsWith('#'))
+          .join('\n');
+      expect(code.contains('get-latest-build-number'), isTrue,
+          reason: '$p: لا يَسألُ Play عن آخرِ versionCode');
+      expect(RegExp(r'build appbundle --release --build-number=').hasMatch(code),
+          isTrue,
+          reason: '$p: يَبني الحزمةَ بلا --build-number — فالرقمُ من pubspec '
+              'ولا يَتزايد');
+      expect(RegExp(r'-le 191').hasMatch(code), isTrue,
+          reason: '$p: زالَ حارسُ 191 (رُفِعَ مرّةً ولم يُنشَر)');
+    }
+    // سيرُ GitHub يَفشلُ مُغلَقاً عند تعذّرِ القراءة — لا رقمَ احتياطيّاً.
+    final gh = read_('.github/workflows/android_release.yml')
+        .split('\n')
+        .where((l) => !l.trimLeft().startsWith('#'))
+        .join('\n');
+    expect(RegExp(r"get-latest-build-number[^\n]*\|\|\s*echo").hasMatch(gh), isFalse,
+        reason: 'سيرُ الوسمِ يَسقطُ إلى رقمٍ مكتوبٍ عند الفشل — تصادمٌ صامت');
+    expect(gh.contains("''|*[!0-9]*)"), isTrue,
+        reason: 'زالَ فحصُ أنّ الناتجَ رقمٌ — خَرْجٌ تالفٌ يُبنى به');
+  });
 }
