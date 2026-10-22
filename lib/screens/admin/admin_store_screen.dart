@@ -18,7 +18,11 @@ class AdminStoreScreen extends StatefulWidget {
   // (admin/super_admin/marketing_admin) — نمرّر الدور من اللوحة (نمط AdminMoreScreen)
   // كي نخفي أدوات الكتابة عمّن تُرفض كتابته حتماً (accountant_admin).
   final String role;
-  const AdminStoreScreen({super.key, this.role = 'none'});
+
+  /// داخلَ تبويبِ المتجرِ في اللوحةِ (`AdminStoreHubScreen`) تُرسَمُ بلا
+  /// `AppBar` خاصٍّ، كي لا يَظهرَ شريطانِ متراكبانِ فوقَ شريطِ اللوحة.
+  final bool embedded;
+  const AdminStoreScreen({super.key, this.role = 'none', this.embedded = false});
 
   @override
   State<AdminStoreScreen> createState() => _AdminStoreScreenState();
@@ -402,7 +406,7 @@ class _AdminStoreScreenState extends State<AdminStoreScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
-        appBar: AppBar(
+        appBar: widget.embedded ? null : AppBar(
           title: Text("إدارة المتجر", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
           backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,

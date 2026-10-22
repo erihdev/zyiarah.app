@@ -9,7 +9,10 @@ import 'package:zyiarah/utils/price_review.dart';
 import 'package:zyiarah/utils/home_packages.dart';
 
 class AdminStoreOrdersScreen extends StatefulWidget {
-  const AdminStoreOrdersScreen({super.key});
+  /// داخلَ تبويبِ المتجرِ في اللوحةِ (`AdminStoreHubScreen`) تُرسَمُ بلا
+  /// `AppBar` خاصٍّ؛ وتَحتفظُ به حين تُفتَحُ وحدَها من الإحصاءات.
+  final bool embedded;
+  const AdminStoreOrdersScreen({super.key, this.embedded = false});
 
   @override
   State<AdminStoreOrdersScreen> createState() => _AdminStoreOrdersScreenState();
@@ -307,7 +310,7 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: Colors.grey[50],
-        appBar: AppBar(
+        appBar: widget.embedded ? null : AppBar(
           title: Text("مبيعات المتجر الإلكتروني", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
           backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,

@@ -51,6 +51,28 @@ void main() {
       }
     });
 
+    test('المتجرُ يُضمِّنُ شاشتَيه بلا شريطٍ مزدوج، وتَحتفظانِ بشريطِهما وحدَهما', () {
+      // كان تبويبُ المتجرِ يَرسمُ شريطَ اللوحةِ ثمّ شريطَ «إدارة المتجر» تحتَه
+      // (وشريطَ «مبيعات المتجر» في الشريحةِ الثانية) — الشكلُ الذي أُصلحَ في
+      // الطلباتِ والباقاتِ بعلَمِ `embedded`، وتُرِكَ هنا.
+      final hub = _code('lib/screens/admin/admin_store_hub_screen.dart');
+      expect(RegExp(r'AdminStoreScreen\(role: role, embedded: true\)').allMatches(hub).length, 2,
+          reason: 'الشريحةُ المفردةُ والتبويبُ كلاهما مُضمَّن');
+      expect(RegExp(r'AdminStoreOrdersScreen\(embedded: true\)').allMatches(hub).length, 2);
+      for (final f in [
+        'lib/screens/admin/admin_store_screen.dart',
+        'lib/screens/admin/admin_store_orders_screen.dart',
+      ]) {
+        final c = _code(f);
+        expect(c.contains('this.embedded = false'), isTrue, reason: '$f: الافتراضُ شريطٌ خاصّ');
+        expect(c.contains('appBar: widget.embedded ? null : AppBar('), isTrue,
+            reason: '$f يَرسمُ شريطَه داخلَ الحاوية');
+      }
+      // من الإحصاءاتِ تُفتَحُ طلباتُ المتجرِ وحدَها فتَحتاجُ شريطَها.
+      final ins = _code('lib/screens/admin/admin_insights_screen.dart');
+      expect(ins.contains('const AdminStoreOrdersScreen()'), isTrue);
+    });
+
     test('التحليلاتُ تُفتَحُ من الإحصاءاتِ بأدوارِ بلاطتِها السابقة', () {
       final ins = _code('lib/screens/admin/admin_insights_screen.dart');
       expect(ins.contains('const AdminAnalyticsScreen()'), isTrue);
