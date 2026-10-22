@@ -58,6 +58,8 @@ const Map<String, String> _notAnOrderFlag = {
   // وسائطُ خيارات.
   'merge': 'خيارُ set({merge: true})',
   'retry': 'خيارُ onDocument*({retry: true})',
+  'recursive': 'خيارُ fs.mkdirSync({recursive: true}) في سكربتِ التصفيرِ '
+      'reset_test_data.js — خيارُ نظامِ ملفّاتٍ لا حقلَ Firestore',
   // حقولٌ على مجموعاتٍ أخرى — لها قواعدُها.
   'is_available': 'حقلُ drivers (حالةُ اتصالِ السائقِ نفسِه)',
   // (وزالَ `has_active_subscription`: الخادمُ لم يَعُد يَكتبُه على

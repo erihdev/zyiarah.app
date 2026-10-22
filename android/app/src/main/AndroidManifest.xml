@@ -1,5 +1,12 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- AD_ID يُضيفُه play-services-measurement (عبر firebase_analytics) إلى
+         البيانِ المدمجِ تلقائيّاً، والتطبيقُ لا يَستعملُ إعلاناتٍ ولا معرّفَ
+         إعلاناتٍ أصلاً (NSPrivacyTracking=false على iOS، ولا نداءَ logEvent).
+         إذنٌ حاضرٌ في البيانِ وغائبٌ عن نموذجِ «أمان البيانات» سببُ رفضٍ
+         معروفٌ في Play، فيُحذَفُ من الدمجِ ويُطفأُ جمعُه (2026-10-22). -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- تتبّع موقع السائق أثناء التوصيل. مؤقّتاً بلا خدمة أمامية ولا أذون
@@ -28,8 +35,14 @@
     <application
         android:label="Zyiarah"
         android:name="${applicationName}"
-        android:icon="@mipmap/launcher_icon"
-        android:usesCleartextTraffic="true">
+        android:icon="@mipmap/launcher_icon">
+        <!-- `android:usesCleartextTraffic="true"` حُذِف (2026-10-22): لا نقطةَ
+             http:// في lib/ ولا functions/ (كلُّ الاتصالاتِ https)، وكان يُناقضُ
+             جوابَ «مشفّرة أثناء النقل = نعم» في نموذجِ أمانِ البيانات. الافتراضُ
+             من API 28+ هو false. -->
+        <meta-data
+            android:name="google_analytics_adid_collection_enabled"
+            android:value="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

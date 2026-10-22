@@ -38,6 +38,15 @@ workflows:
       # ─────────────────────────────────────────────
       - name: Create .env file
         script: |
+          # مفتاحُ ميسر الغائبُ يُكتَبُ فارغاً فيَمُرُّ البناءُ أخضرَ وتُرفَعُ حزمةٌ
+          # بلا بطاقةٍ ولا Apple Pay (moyasarReady = publishableKey.isNotEmpty).
+          # نفسُ قرارِ android_release.yml وadmin_deploy.yml: السرُّ الغائبُ يُفشِلُ.
+          if [ -z "$MOYASAR_PUBLISHABLE_KEY" ]; then
+            echo "::error::MOYASAR_PUBLISHABLE_KEY فارغٌ في مجموعة payment_keys"; exit 1
+          fi
+          if [ -z "$MAPBOX_TOKEN" ]; then
+            echo "::error::MAPBOX_TOKEN فارغٌ في مجموعة payment_keys"; exit 1
+          fi
           echo "MAPBOX_TOKEN=$MAPBOX_TOKEN"                         > .env
           echo "MOYASAR_PUBLISHABLE_KEY=$MOYASAR_PUBLISHABLE_KEY"  >> .env
           echo "SAMSUNG_PAY_SERVICE_ID=$SAMSUNG_PAY_SERVICE_ID"    >> .env
@@ -332,6 +341,15 @@ workflows:
     scripts:
       - name: Create .env file
         script: |
+          # مفتاحُ ميسر الغائبُ يُكتَبُ فارغاً فيَمُرُّ البناءُ أخضرَ وتُرفَعُ حزمةٌ
+          # بلا بطاقةٍ ولا Apple Pay (moyasarReady = publishableKey.isNotEmpty).
+          # نفسُ قرارِ android_release.yml وadmin_deploy.yml: السرُّ الغائبُ يُفشِلُ.
+          if [ -z "$MOYASAR_PUBLISHABLE_KEY" ]; then
+            echo "::error::MOYASAR_PUBLISHABLE_KEY فارغٌ في مجموعة payment_keys"; exit 1
+          fi
+          if [ -z "$MAPBOX_TOKEN" ]; then
+            echo "::error::MAPBOX_TOKEN فارغٌ في مجموعة payment_keys"; exit 1
+          fi
           echo "MAPBOX_TOKEN=$MAPBOX_TOKEN"                         > .env
           echo "MOYASAR_PUBLISHABLE_KEY=$MOYASAR_PUBLISHABLE_KEY"  >> .env
           echo "SAMSUNG_PAY_SERVICE_ID=$SAMSUNG_PAY_SERVICE_ID"    >> .env

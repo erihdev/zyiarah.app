@@ -159,7 +159,10 @@ void main() {
   });
 
   test('وغيابُ مفتاحِ الدفعِ يُفشِلُ الوظيفةَ لا يُكتَبُ فارغاً', () {
-    for (final w in envWriters().where((w) => w.startsWith('.github/'))) {
+    // كان النطاقُ `.github/` وحدَه — و`codemagic.yaml` هو ما يَرفعُ إلى
+    // TestFlight وPlay فعلاً، وكان يَكتبُ `echo "K=$K"` فيُنتجُ `K=` على سرٍّ
+    // غائبٍ ويَمُرُّ أخضرَ (2026-10-22). النطاقُ الآن كلُّ كاتبٍ لـ.env.
+    for (final w in envWriters()) {
       final src = read_(w);
       expect(src.contains(r'if [ -z "$MOYASAR_PUBLISHABLE_KEY" ]'), isTrue,
           reason: '$w: سرٌّ غائبٌ يُكتَبُ فارغاً فتُبنى حزمةٌ بلا دفعٍ بصمت — '
