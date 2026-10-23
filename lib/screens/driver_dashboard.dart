@@ -1,4 +1,5 @@
 import 'package:zyiarah/utils/error_report.dart';
+import 'package:zyiarah/utils/map_tiles.dart';
 import 'package:zyiarah/utils/order_lifecycle.dart';
 import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:flutter/material.dart';
@@ -1455,7 +1456,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
             interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
           ),
           children: [
-            TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.zyiarah.zyiarah'),
+            zyiarahTileLayer(),
             MarkerLayer(markers: [
               Marker(point: driverLatLng, width: 30, height: 30, child: const Icon(Icons.directions_car, color: Colors.blue, size: 30)),
               Marker(point: clientLatLng, width: 30, height: 30, child: const Icon(Icons.location_on, color: Colors.red, size: 30)),

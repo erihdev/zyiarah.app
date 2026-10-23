@@ -126,7 +126,7 @@ void main() {
       final init = p.indexOf('void initState()');
       final body = p.substring(init, p.indexOf('Future<void> _locateMe', init));
       expect(body.contains('if (init != null)'), isTrue);
-      expect(body.indexOf('_locateMe()'), greaterThan(body.indexOf('} else {')));
+      expect(body.indexOf('_locateMe('), greaterThan(body.indexOf('} else {')));
     });
 
     test('المُنزلِقُ يَكتبُ في حقلِ نصفِ القطرِ نفسِه — تحقّقُ الحفظِ باقٍ', () {

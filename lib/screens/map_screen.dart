@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:zyiarah/utils/map_tiles.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -89,10 +90,7 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
                     initialZoom: 14.0,
                   ),
                   children: [
-                    TileLayer(
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.zyiarah.zyiarah',
-                    ),
+                    zyiarahTileLayer(),
                     if (driverLatLng != null)
                       PolylineLayer(
                         polylines: [

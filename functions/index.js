@@ -6369,7 +6369,11 @@ function zoneOpenHoursForDate(schedule, dateStr) {
   return day === null ? null : day.range;
 }
 
-exports.getHourlyAvailability = onCall({cpu: 0.25}, async (request) => {
+// نسخةٌ مستيقظةٌ دائماً (قرارُ المالك 2026-10-24): هذه الدالّةُ تُقرّرُ أيَّ
+// الأيّامِ تُعرَضُ قابلةً للحجز، والإقلاعُ البارد كان يَتجاوزُ مهلةَ العميل
+// (kNetCallTimeout = 20ث) فتَظهرُ «تعذّر تحميل المواعيد» في أوّلِ فتحٍ للشاشة.
+// الكلفةُ نسخةٌ واحدةٌ خاملةٌ بـcpu: 0.25.
+exports.getHourlyAvailability = onCall({cpu: 0.25, minInstances: 1}, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "يجب تسجيل الدخول");
   }

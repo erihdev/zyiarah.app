@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:zyiarah/utils/order_lifecycle.dart';
 import 'package:zyiarah/utils/service_catalog.dart';
 import 'package:flutter/material.dart';
@@ -54,6 +55,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
   @override
   void dispose() {
+    _firstPaintCap?.cancel();
     _bannerController.dispose();
     super.dispose();
   }
@@ -147,6 +149,37 @@ class _ClientDashboardState extends State<ClientDashboard> {
         .firstEventTimeout();
   }
 
+  // **لا قفزَ عند الفتح (قرارُ المالك 2026-10-24).** بطاقةُ «طلبكِ الجاري»
+  // والبانر وبطاقةُ الباقةِ كانت تَظهرُ واحدةً بعد أخرى كلّما وصلَ أوّلُ حدثٍ
+  // من بثِّها، فتَدفعُ شبكةَ الخدماتِ إلى الأسفلِ تحتَ إصبعِ العميلة. فالمحتوى
+  // يُبنى خلفَ الشِمِرّ (`Offstage` يُبقي البثوثَ مُشترَكةً) ولا يُكشَفُ إلّا
+  // حين يَصِلُ أوّلُ حدثٍ — أو خطأ — من الثلاثة: انتقالٌ واحد. وسقفٌ قصير
+  // ([kFirstPaintCap]) كي لا يُحجَبَ المحتوى خلفَ بثٍّ بطيء: بعدَه يُكشَفُ
+  // ويَقبلُ قفزةً واحدةً متأخّرة بدلَ شِمِرٍّ طويل.
+  static const Duration kFirstPaintCap = Duration(seconds: 3);
+  final Set<String> _firstSeen = {};
+  bool _firstPaintForced = false;
+  Timer? _firstPaintCap;
+
+  bool get _firstPaintReady =>
+      _firstPaintForced ||
+      _firstSeen.containsAll(const ['active', 'banners', 'contracts']);
+
+  void _markFirstSeen(String key) {
+    if (_firstPaintReady || !_firstSeen.add(key)) return;
+    if (!_firstPaintReady) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _armFirstPaintCap() {
+    if (_firstPaintCap != null || _firstPaintReady) return;
+    _firstPaintCap = Timer(kFirstPaintCap, () {
+      if (mounted && !_firstPaintReady) setState(() => _firstPaintForced = true);
+    });
+  }
+
   void _reopenStreams() => setState(() {
         _streamsUid = null;
         _banners = null;
@@ -167,6 +200,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
     // باردةٍ وخادمٍ غيرِ قابلِ الوصول، بعدَ أن يَكونَ الملفُّ الشخصيُّ قد
     // وصلَ. وكلُّ بطاقةٍ أدناه لها `StreamBuilder` بحالاتِه الخاصّة.
     final isLoading = userProvider.isLoading;
+    if (!isLoading) _armFirstPaintCap();
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -179,7 +213,10 @@ class _ClientDashboardState extends State<ClientDashboard> {
         body: SafeArea(
           child: isLoading
               ? _buildShimmerLoading()
-              : RefreshIndicator(
+              : Stack(children: [
+                Offstage(
+                offstage: !_firstPaintReady,
+                child: RefreshIndicator(
                   color: const Color(0xFF660033),
                   onRefresh: () async {
                     await Future.delayed(const Duration(milliseconds: 600));
@@ -210,6 +247,9 @@ class _ClientDashboardState extends State<ClientDashboard> {
                     ),
                   ),
                 ),
+                ),
+                if (!_firstPaintReady) _buildShimmerLoading(),
+              ]),
         ),
       ),
     );
@@ -404,11 +444,15 @@ class _ClientDashboardState extends State<ClientDashboard> {
   }
 
   Widget _buildActiveTrackingCard(String? uid) {
-    if (uid == null) return const SizedBox.shrink();
+    if (uid == null) {
+      _markFirstSeen('active');
+      return const SizedBox.shrink();
+    }
 
     return StreamBuilder<QuerySnapshot>(
       stream: _activeOrders,
       builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.waiting) _markFirstSeen('active');
         if (snapshot.hasError) return _buildCardLoadError('طلبكِ الجاري');
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const SizedBox.shrink();
@@ -567,10 +611,14 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
   // يعرض بطاقة مستقلّة لكل عقد اشتراك نشط (الشهرية + الأسبوعية معاً) — لا يُنسى أيٌّ منها.
   Widget _buildSubscriptionCards(String? uid) {
-    if (uid == null) return const SizedBox.shrink();
+    if (uid == null) {
+      _markFirstSeen('contracts');
+      return const SizedBox.shrink();
+    }
     return StreamBuilder<QuerySnapshot>(
       stream: _contracts,
       builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.waiting) _markFirstSeen('contracts');
         if (snapshot.hasError) return _buildCardLoadError('باقتكِ');
         if (!snapshot.hasData) return const SizedBox.shrink();
         // إزالة التكرار بمعرّف العقد ثم إبقاء العقود النشطة التي بقيت بها زيارات
@@ -703,6 +751,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
     return StreamBuilder<QuerySnapshot>(
       stream: _banners,
       builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.waiting) _markFirstSeen('banners');
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const SizedBox.shrink();
         }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:zyiarah/utils/map_tiles.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -203,10 +204,7 @@ class _AdminFleetMapScreenState extends State<AdminFleetMapScreen> {
       ),
       children: [
         widget.tileLayer ??
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.zyiarah.zyiarah',
-            ),
+            zyiarahTileLayer(),
         MarkerLayer(
           markers: [
             for (final v in list)
