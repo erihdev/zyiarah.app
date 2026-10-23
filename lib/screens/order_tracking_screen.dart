@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:zyiarah/utils/map_tiles.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -173,11 +174,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
         initialZoom: 14.0,
       ),
       children: [
-        TileLayer(
-          urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          subdomains: const ['a', 'b', 'c'],
-          userAgentPackageName: 'com.zyiarah.zyiarah',
-        ),
+        zyiarahTileLayer(),
         // (تصميم Stitch) خط المسار بين السائق والعميل — كان في خريطة الإدارة
         // (map_screen.dart) وحدها؛ شاشة العميل كانت علامتين بلا خط بينهما.
         if (driverLatLng != null)

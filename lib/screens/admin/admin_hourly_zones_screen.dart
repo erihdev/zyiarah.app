@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:zyiarah/utils/map_tiles.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -1514,14 +1515,8 @@ class _ZoneCoveragePreview extends StatelessWidget {
                     },
                   ),
                   children: [
-                    // بلاطات OSM القياسية: تعرض الأسماء المحلية (العربية في السعودية)
-                    // بدل بلاطات Mapbox النقطية الإنجليزية التي لا يُغيَّر لسانها من
-                    // العميل — وتوحيدٌ مع بقية خرائط التطبيق (التتبع/السائق/العامة).
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.zyiarah.zyiarah',
-                    ),
+                    // البلاطاتُ من موضعٍ واحد (Mapbox) — انظر map_tiles.dart.
+                    zyiarahTileLayer(),
                     // قناع «خارج جازان»: مستطيل واسع بثقوبٍ = حلقات المنطقة — يُعتِّم
                     // كل ما حولها فلا يظهر إلا محافظات جازان وقراها وهجرها، بحدٍّ بنفسجي.
                     PolygonLayer(polygons: [
