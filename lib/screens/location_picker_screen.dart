@@ -8,6 +8,8 @@ import 'package:latlong2/latlong.dart';
 
 import 'package:zyiarah/services/zone_locator_service.dart';
 import 'package:zyiarah/utils/jazan_boundary.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/zone_search.dart';
 import '../utils/env.dart';
 
 class LocationPickerScreen extends StatefulWidget {
@@ -41,6 +43,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   final MapController _mapController = MapController();
   Timer? _debounce;
   List<dynamic> _searchResults = [];
+  // مناطقُ الخدمة: محرّكُ البحثِ لا يَعرفُ قرى الخدمة، فنُطابِقُ أسماءَها هنا
+  // أوّلاً، ونَبدأُ الخريطةَ عند مركزِها إن تعذّرَ التحديد (`zone_search.dart`).
+  List<Map<String, dynamic>> _zones = const [];
+  List<ZoneHit> _zoneHits = const [];
   // الافتراضي: مدينة جازان — الخدمة محصورة بمنطقة جازان (كان الرياض خارج النطاق).
   LatLng _selectedLatLng = const LatLng(16.8894, 42.5706);
   bool _isMapReady = false;
@@ -57,7 +63,40 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   @override
   void initState() {
     super.initState();
-    _locateMe();
+    // التحديدُ تلقائيٌّ ويَطلبُ الإذنَ مرّةً (قرارُ المالك: لا زرَّ تَحتاجُه).
+    _locateMe(userInitiated: true);
+    _loadZones();
+  }
+
+  Future<void> _loadZones() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('service_zones')
+          .get()
+          .timeout(kNetCallTimeout);
+      if (!mounted) return;
+      _zones = snap.docs.map((d) => d.data()).toList();
+      _centerOnServiceIfUnplaced();
+    } catch (e) {
+      // البحثُ الجغرافيُّ يَبقى يعمل؛ نَخسرُ مطابقةَ أسماءِ القرى فقط.
+      debugPrint('[LocationPicker] zones load failed: $e');
+    }
+  }
+
+  /// إن لم يُحدَّد موقعٌ بعد (فشلَ GPS أو لم يَنتهِ) فلا معنى لفتحِ الخريطةِ على
+  /// مدينةٍ خارجَ الخدمة: نَنقلُها إلى مركزِ المناطقِ المفعّلة. الدبوسُ يَبقى
+  /// «غيرَ محدَّد» فتحذيرُ التأكيدِ قائمٌ كما هو.
+  void _centerOnServiceIfUnplaced() {
+    if (_userSelected || _isLocating) return;
+    final c = serviceCenter(_zones);
+    if (c == null) return;
+    setState(() => _selectedLatLng = LatLng(c.lat, c.lng));
+    try {
+      _mapController.move(_selectedLatLng, 11.0);
+    } catch (e) {
+      // الخريطةُ لم تُرسَم بعد — `initialCenter` يأخذُ القيمةَ الجديدة.
+      debugPrint('[LocationPicker] map not ready for move: $e');
+    }
   }
 
   /// يضع الدبوس على موقع المستخدم — **ويقول لماذا إن لم يستطع.**
@@ -104,10 +143,13 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       _isMapReady = true; // تُعرض الخريطة دائماً — الاختيار اليدوي متاح
       _locateFailure = res.failure;
     });
+    _centerOnServiceIfUnplaced();
   }
 
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
+    // مناطقُ الخدمةِ فوراً، بلا شبكةٍ ولا انتظار.
+    setState(() => _zoneHits = matchZones(_zones, query));
     _debounce = Timer(const Duration(milliseconds: 500), () {
       if (query.isNotEmpty) {
         _performSearch(query);
@@ -161,6 +203,21 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       _searchController.clear();
     });
     _mapController.move(newLatLng, 15.0);
+    FocusScope.of(context).unfocus();
+  }
+
+  /// اختيارُ منطقةِ خدمةٍ من النتائج: الخريطةُ تَنتقلُ إلى مركزِها لتُحرِّكَ
+  /// العميلةُ الدبوسَ إلى بيتِها بدقّة (المركزُ ليس عنوانَها).
+  void _selectZoneHit(ZoneHit hit) {
+    final p = LatLng(hit.lat, hit.lng);
+    setState(() {
+      _selectedLatLng = p;
+      _userSelected = true;
+      _searchResults = [];
+      _zoneHits = const [];
+      _searchController.clear();
+    });
+    _mapController.move(p, 15.0);
     FocusScope.of(context).unfocus();
   }
 
@@ -403,7 +460,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       ),
                     ),
                   ),
-                  if (_searchResults.isNotEmpty)
+                  if (_zoneHits.isNotEmpty || _searchResults.isNotEmpty)
                     Container(
                       margin: const EdgeInsets.only(top: 8),
                       decoration: BoxDecoration(
@@ -414,9 +471,20 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       child: ListView.builder(
                         padding: EdgeInsets.zero,
                         shrinkWrap: true,
-                        itemCount: _searchResults.length,
+                        itemCount: _zoneHits.length + _searchResults.length,
                         itemBuilder: (context, index) {
-                          final feature = _searchResults[index];
+                          if (index < _zoneHits.length) {
+                            final hit = _zoneHits[index];
+                            return ListTile(
+                              leading: const Icon(Icons.verified_rounded,
+                                  color: Color(0xFF059669)),
+                              title: Text(hit.name),
+                              subtitle: const Text('ضمن مناطق خدمة زيارة'),
+                              onTap: () => _selectZoneHit(hit),
+                            );
+                          }
+                          final feature =
+                              _searchResults[index - _zoneHits.length];
                           final props = feature['properties'];
                           return ListTile(
                             title: Text(props['name'] ?? props['full_address'] ?? ''),
