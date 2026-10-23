@@ -1,3 +1,4 @@
+import 'package:zyiarah/utils/payment_keys.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -6,7 +7,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:moyasar/moyasar.dart';
 import 'package:zyiarah/utils/moyasar_error_text.dart';
 import 'package:zyiarah/utils/moyasar_util.dart';
-import '../utils/env.dart';
 
 /// STC Pay OTP payment screen powered by Moyasar SDK.
 ///
@@ -141,7 +141,7 @@ class _MoyasarStcScreenState extends State<MoyasarStcScreen> {
   // ── API calls ──────────────────────────────────────────────────────────────
 
   String get _apiKey =>
-      envOrEmpty('MOYASAR_PUBLISHABLE_KEY');
+      moyasarPublishableKey();
 
   /// Step 1: initiate STC Pay — triggers OTP to phone.
   Future<void> _initiatePayment() async {

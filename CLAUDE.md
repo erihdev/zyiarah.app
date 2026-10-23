@@ -168,6 +168,7 @@ The Android workflow (`android-release`) mirrors iOS: it declares the same push-
 ## Environment & Config
 
 - `.env` — Mapbox token + publishable payment keys (Moyasar pk, Samsung Pay service ID), loaded via `flutter_dotenv` and bundled as an app asset — publishable keys only, never secrets
+- **The Moyasar publishable key is also embedded in code** (`lib/utils/payment_keys.dart`, owner decision 2026-10-24): every reader goes through `moyasarPublishableKey()`, which prefers a non-empty `.env` value and falls back to the constant. Before this, any build path that did not write the key (the web preview, an empty GitHub secret) shipped with no card and no Apple Pay, silently. A `pk_` key is meant to ship inside the app; the secret `sk_` key stays in Secret Manager. `test/payment_keys_test.dart` forbids any `sk_` literal in `lib/` and any direct read of the key outside that file.
 - `.env.automation` — Additional automation env vars
 - `firebase.json` — Firebase project config (Firestore, hosting, functions)
 - `firestore.rules` — Database security rules
