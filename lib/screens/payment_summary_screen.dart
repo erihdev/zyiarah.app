@@ -1,3 +1,4 @@
+import 'package:zyiarah/utils/payment_keys.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -1742,7 +1743,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
   Widget _buildPaymentMethods() {
     final String publishableKey =
-        envOrEmpty('MOYASAR_PUBLISHABLE_KEY');
+        moyasarPublishableKey();
     final bool moyasarReady = publishableKey.isNotEmpty;
 
     return Column(

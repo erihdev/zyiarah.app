@@ -1,9 +1,9 @@
+import 'package:zyiarah/utils/payment_keys.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:zyiarah/utils/moyasar_util.dart';
 import 'package:zyiarah/utils/error_report.dart';
-import '../utils/env.dart';
 import 'package:zyiarah/utils/user_facing_error.dart';
 
 /// Moyasar payment gateway service.
@@ -46,7 +46,7 @@ class MoyasarPayFailure implements UserFacingFailure {
 
 class MoyasarService {
   static String get _publishableKey =>
-      envOrEmpty('MOYASAR_PUBLISHABLE_KEY');
+      moyasarPublishableKey();
 
   static const String _baseUrl = 'https://api.moyasar.com/v1';
 

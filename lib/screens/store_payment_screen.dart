@@ -1,3 +1,4 @@
+import 'package:zyiarah/utils/payment_keys.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -15,7 +16,6 @@ import 'package:zyiarah/utils/global_error_handler.dart';
 import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/invoice_stamp.dart';
-import '../utils/env.dart';
 import 'package:zyiarah/utils/user_facing_error.dart';
 
 /// شاشة دفع طلب المتجر — تُفتح فور إنشاء الطلب (طلب مباشر، لا موافقة مسبقة).
@@ -141,7 +141,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
   // هل تتوفّر أي طريقة دفع؟ (بطاقة عبر مفتاح Moyasar أو تمارا) — لتعطيل زر الدفع
   // حين لا تُعرَض أي طريقة، بدل زرّ ميّت يفتح شاشة بمفتاح فارغ.
   bool get _hasPaymentMethod =>
-      _tamaraAvailable || (envOrEmpty('MOYASAR_PUBLISHABLE_KEY')).isNotEmpty;
+      _tamaraAvailable || moyasarPublishableKey().isNotEmpty;
 
   Future<void> _handlePay() async {
     if (_isLoading) return;
@@ -163,7 +163,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
       // البطاقة (Moyasar) هي الطريقة الافتراضية، لكنها لا تُعرَض حين يغيب المفتاح.
       // لو بقيت الطريقة 'card' بلا مفتاح لفُتحت شاشة بطاقة بمفتاح فارغ (طريق مسدود).
       // نحوّل لتمارا إن توفّرت، وإلا نُبلغ المستخدم بدل المتابعة.
-      final moyasarReady = (envOrEmpty('MOYASAR_PUBLISHABLE_KEY')).isNotEmpty;
+      final moyasarReady = moyasarPublishableKey().isNotEmpty;
       if (_selectedMethod == 'card' && !moyasarReady) {
         if (_tamaraAvailable) {
           _selectedMethod = 'tamara';
@@ -373,7 +373,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
   @override
   Widget build(BuildContext context) {
     final bool moyasarReady =
-        (envOrEmpty('MOYASAR_PUBLISHABLE_KEY')).isNotEmpty;
+        moyasarPublishableKey().isNotEmpty;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
