@@ -96,7 +96,9 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
       debugPrint('[EventWorkerPackages] fetchZones failed: $e');
     }
     if (!mounted) return;
-    _attemptAutoLocation();
+    // التحديدُ تلقائيٌّ عند الفتح ويَطلبُ الإذنَ مرّةً (قرارُ المالك: لا زرَّ
+    // «حدّد موقعي» تَحتاجُه العميلة). المراقبةُ الدوريّةُ تبقى صامتة.
+    _attemptAutoLocation(userInitiated: true);
   }
 
   /// تحديد تلقائي **يقول السبب عند الفشل** (نمط hourly_details_screen).

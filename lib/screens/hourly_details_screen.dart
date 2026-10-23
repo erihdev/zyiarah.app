@@ -280,7 +280,9 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           _zones = sorted;
           _isLoading = false;
         });
-        _attemptAutoLocation();
+        // التحديدُ تلقائيٌّ عند الفتح ويَطلبُ الإذنَ مرّةً (قرارُ المالك: لا زرَّ
+        // «حدّد موقعي» تَحتاجُه العميلة). المراقبةُ الدوريّةُ تبقى صامتة.
+        _attemptAutoLocation(userInitiated: true);
       }
     } catch (e) {
       // **لا نبتلع فشل جلب المناطق بصمت** (كما أُصلح جلب الإتاحة أعلاه): كان
