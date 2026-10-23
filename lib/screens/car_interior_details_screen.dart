@@ -59,7 +59,9 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
         _zones = zones;
         _isLoading = false;
       });
-      _attemptAutoLocation();
+      // التحديدُ تلقائيٌّ عند الفتح ويَطلبُ الإذنَ مرّةً (قرارُ المالك: لا زرَّ
+      // «حدّد موقعي» تَحتاجُه العميلة). المراقبةُ الدوريّةُ تبقى صامتة.
+      _attemptAutoLocation(userInitiated: true);
     } catch (e) {
       // **لا نبتلع فشل جلب المناطق بصمت**: كان الـ catch يكتفي بإطفاء الدوّار
       // فتُرسم الشاشة طبيعية بقائمة مناطق فارغة — زر «حدّد موقعي» يصبح ميتاً
