@@ -10,7 +10,9 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:zyiarah/services/tamara_service.dart';
 import 'package:zyiarah/services/moyasar_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
-import 'package:zyiarah/screens/moyasar_card_screen.dart';
+import 'package:zyiarah/widgets/moyasar_inline_card.dart';
+import 'package:zyiarah/utils/moyasar_util.dart';
+import 'package:moyasar/moyasar.dart' show PaymentConfig, CreditCardConfig;
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
 import 'package:zyiarah/utils/vat.dart';
@@ -176,33 +178,16 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
         }
       }
       if (_selectedMethod == 'card') {
-        if (mounted) setState(() => _isLoading = false);
-        if (!mounted) return;
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => MoyasarCardScreen(
-              amountSAR: widget.total,
-              description: 'طلب متجر زيارة #${widget.orderCode}',
-              orderId: widget.storeOrderId,
-              onSuccess: (paymentId) async {
-                setState(() => _isLoading = true);
-                // is_paid=false يكتبه العميل (القاعدة تمنعه من true)، ثم نؤكّد خادميّاً
-                // فوراً عبر verifyMoyasarPayment (يقلب is_paid=true بعد فحص المبلغ). كان
-                // المتجر يعتمد على webhook ميسر وحده (المعلّق) فيبقى الطلب غير مؤكَّد.
-                await _finalizeStorePayment('card', isPaid: false, paymentId: paymentId);
-              },
-              onFailure: (error) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(error, style: GoogleFonts.tajawal()),
-                    backgroundColor: Colors.red.shade800,
-                  ));
-                }
-              },
-            ),
-          ),
-        );
+        // البطاقةُ تَدفعُ من زرِّ ميسر داخلَ خيارِها (`MoyasarInlineCard`)،
+        // وهذا الزرُّ مخفيٌّ ما دامت مختارة — فلا يُبلَغُ هذا الفرعُ إلّا
+        // بخطأ، ولا يَترُكُ `_isLoading` عالقاً.
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('أدخلي بيانات البطاقة أعلاه ثم اضغطي «ادفع»',
+                  style: GoogleFonts.tajawal())));
+        }
+        return;
       } else if (_selectedMethod == 'tamara') {
         String? checkoutUrl;
         try {
@@ -476,6 +461,40 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
                       subtitle: 'دفع آمن عبر ميسر',
                       icon: Icons.credit_card,
                     ),
+                  // حقولُ البطاقةِ تحتَ خيارِها لا في صفحةٍ ثانية. طلبُ المتجرِ
+                  // قائمٌ قبلَ هذه الشاشة، فمعرّفُه في البياناتِ الوصفيّة يَكفي
+                  // الـwebhook و`verifyMoyasarPayment`.
+                  if (moyasarReady && _selectedMethod == 'card')
+                    MoyasarInlineCard(
+                      blockedReason: _cardBlockReason(),
+                      config: PaymentConfig(
+                        publishableApiKey: moyasarPublishableKey(),
+                        amount: (widget.total * 100).round(),
+                        description: 'طلب متجر زيارة #${widget.orderCode}',
+                        givenID:
+                            MoyasarUtil.givenIdFromOrder(widget.storeOrderId),
+                        metadata: {'order_id': widget.storeOrderId},
+                        creditCard:
+                            CreditCardConfig(saveCard: false, manual: false),
+                      ),
+                      onSuccess: (paymentId) async {
+                        if (!mounted) return;
+                        setState(() => _isLoading = true);
+                        // is_paid=false يكتبه العميل (القاعدة تمنعه من true)، ثم
+                        // نؤكّد خادميّاً فوراً عبر verifyMoyasarPayment.
+                        // (`_finalizeStorePayment` يَلتقطُ أخطاءَه بنفسِه.)
+                        await _finalizeStorePayment('card',
+                            isPaid: false, paymentId: paymentId);
+                      },
+                      onFailure: (e, _) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content:
+                              Text(e.message, style: GoogleFonts.tajawal()),
+                          backgroundColor: Colors.red.shade800,
+                        ));
+                      },
+                    ),
                   if (_tamaraAvailable) ...[
                     const SizedBox(height: 12),
                     _buildOption(
@@ -640,7 +659,18 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
     );
   }
 
+  /// ما يَفحصُه `_handlePay` قبلَ أيِّ دفع — والبطاقةُ لا تَمرُّ به.
+  String? _cardBlockReason() {
+    if (_deliveryLocation == null) return 'يرجى تحديد عنوان التوصيل أولاً';
+    if (!_agreeToTerms) return 'يرجى الموافقة على الشروط والأحكام أولاً';
+    return null;
+  }
+
   Widget _buildBottomButton() {
+    // البطاقةُ تَدفعُ من زرِّ ميسر داخلَ خيارِها؛ زرٌّ ثانٍ لا يَدفع.
+    if (_selectedMethod == 'card' && !_isLoading) {
+      return const SizedBox.shrink();
+    }
     return Positioned(
       bottom: 0,
       left: 0,
