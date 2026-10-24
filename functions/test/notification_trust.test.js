@@ -129,7 +129,8 @@ t("(و) كلُّ كاتبٍ عميليٍّ يَكتبُ معرّفَه هو", ()
   const writers = {
     "lib/services/zyiarah_messaging_service.dart": 2,
     "lib/screens/admin/admin_compliance_screen.dart": 1,
-    "admin_panel/src/pages/Contracts.tsx": 1,
+    // (2026-10-24) `Contracts.tsx` لم يَعُدْ كاتباً: كتابتُه الوحيدةُ كانت
+    // إشعارَ «اعتماد العقد»، ولا اعتمادَ للعقود.
   };
   for (const [rel, n] of Object.entries(writers)) {
     const src = strip(read(rel));
