@@ -89,9 +89,11 @@ class ZyiarahContractsListScreen extends StatelessWidget {
     final createdAt = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
     final planName = data['planName'] ?? 'عقد باقة عائلية';
     
-    Color statusColor = Colors.orange;
-    String statusText = "بانتظار الاعتماد";
-    IconData statusIcon = Icons.hourglass_empty_rounded;
+    // توقيعٌ لم يُدفَع: لا اعتمادَ ينتظرُه (قرار المالك 2026-10-24) — يَتفعّلُ
+    // العقدُ وحدَه لحظةَ الدفع، والزرُّ أدناه يُكمِلُه.
+    Color statusColor = const Color(0xFF2563EB);
+    String statusText = "بانتظار الدفع";
+    IconData statusIcon = Icons.payments_outlined;
 
     if (status == 'active') {
       statusColor = Colors.green;
@@ -217,8 +219,9 @@ class ZyiarahContractsListScreen extends StatelessWidget {
                       // إلى شاشةِ الدفعِ حيث **البطاقةُ تُخصَمُ عند البوّابةِ
                       // قبلَ أيِّ فحصٍ خادميّ** — فعقدٌ فشلَ تفعيلُه كان
                       // يَعرضُ «دفع وتفعيل العقد» لمن دفعت.
-                      if (status == 'approved_waiting_payment' &&
-                          data['is_paid'] != true)
+                      // `pending` كذلك: لا اعتمادَ قبلَ الدفع، فتوقيعٌ لم يُدفَع
+                      // يُكمَلُ من هنا — وإلّا بقيَ بلا زرٍّ إلى الأبد.
+                      if (contractAwaitingPayment(data))
                         Expanded(
                           child: ElevatedButton.icon(
                             onPressed: () {

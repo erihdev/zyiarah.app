@@ -28,6 +28,9 @@ export const TERMINAL_ORDER_STATUSES: readonly string[] = [
 /** حالاتُ طلبِ المتجرِ التي تَنتظرُ نقرةً من الإدارة. */
 export const STORE_NEEDS_ACTION_STATUSES: readonly string[] = [
   'under_review',
+  // دورةُ 2026-10-24: «قيد التجهيز» يَنتظرُ «جاهز»، و«جاهز» يَنتظرُ اختيارَ السائق.
+  'preparing',
+  'ready',
   'delivering',
   'processing',
   'shipped',

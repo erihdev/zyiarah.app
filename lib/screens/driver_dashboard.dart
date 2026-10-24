@@ -1,3 +1,4 @@
+import 'package:zyiarah/widgets/driver_store_deliveries.dart';
 import 'package:zyiarah/utils/error_report.dart';
 import 'package:zyiarah/utils/map_tiles.dart';
 import 'package:zyiarah/utils/order_lifecycle.dart';
@@ -398,6 +399,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // توصيلاتُ المتجرِ المُسندةُ من الإدارة (store_orders) —
+                              // قسمٌ مستقلٌّ فوقَ مهامِّ الخدمات، يَختفي حين لا شيء.
+                              if (_currentDriverId != null)
+                                DriverStoreDeliveries(driverId: _currentDriverId!),
                               _buildMainSection(),
                               const SizedBox(height: 25),
                               _buildStatsRow(),

@@ -474,6 +474,15 @@ exports.notifyClientOnStoreOrderStatus = onDocumentUpdated({document: "store_ord
         });
         return null;
       }
+      // **السائقُ المختارُ يُشعَر** (قرار المالك 2026-10-24: الإدارةُ تختارُ
+      // سائقَ طلبِ المتجر). عند كلِّ إسنادٍ جديد — أوّلَ مرّةٍ أو إعادةً.
+      if (after.driver_id && after.driver_id !== before.driver_id) {
+        const code0 = after.code || event.params.orderId.substring(0, 6);
+        await queuePush(after.driver_id, "توصيل طلب متجر جديد 🛍️",
+            `أُسند إليك توصيل طلب المتجر #${code0} — تجده في لوحتك.`,
+            "store_delivery_assigned", {orderId: event.params.orderId})
+            .catch((e) => console.error("[store] driver push failed:", e.message));
+      }
       if (before.status === after.status) return null;
       const clientId = after.client_id;
       if (!clientId) return null;
@@ -485,6 +494,9 @@ exports.notifyClientOnStoreOrderStatus = onDocumentUpdated({document: "store_ord
         delivering: {t: "طلبكِ في الطريق 🚚", b: "جاري توصيل طلبكِ من المتجر إليكِ."},
         processing: {t: "جارٍ تجهيز طلبكِ 📦", b: "بدأنا تجهيز طلبكِ من المتجر."},
         preparing: {t: "جارٍ تجهيز طلبكِ 📦", b: "بدأنا تجهيز طلبكِ من المتجر."},
+        // دورةُ المتجرِ الجديدة: جاهز ⇒ مع السائق (الإدارةُ تختارُه) ⇒ تم التسليم.
+        ready: {t: "طلبكِ جاهز 📦", b: "جُهِّز طلبكِ من المتجر وسيُسلَّم للسائق قريباً."},
+        with_driver: {t: "طلبكِ مع السائق 🚚", b: "استلم السائق طلبكِ من المتجر وهو في طريقه إليكِ."},
         shipped: {t: "طلبكِ في الطريق 🚚", b: "شُحن طلبكِ من المتجر وهو في طريقه إليكِ."},
         out_for_delivery: {t: "طلبكِ قارب الوصول 🚚", b: "خرج طلبكِ للتوصيل — يصلكِ قريباً."},
         delivered: {t: "تم تسليم طلبكِ ✅", b: "سُلّم طلبكِ من المتجر. نتمنى لكِ تجربة سعيدة 🌿"},

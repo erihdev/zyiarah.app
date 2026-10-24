@@ -86,7 +86,6 @@ class ZyiarahAuditService {
   /// اعتمادُ عقدٍ وحذفُه — أكبرُ مبلغٍ في التطبيق. كانت تسميةُ الاعتمادِ
   /// موجودةً في شاشةِ السجلِّ ولا كاتبَ لها، وحذفُ العقدِ محصورٌ بالمدير
   /// العامِّ في القواعدِ (عمليّةٌ مدمّرة) وكان بلا أثرٍ إطلاقاً.
-  static const String actionApproveContract = 'APPROVE_CONTRACT';
   static const String actionDeleteContract = 'DELETE_CONTRACT';
 
   /// تنفيذُ طلبِ حذفِ حساب — يَحذفُ حسابَ المصادقةِ ومستنداتِه خادميّاً،

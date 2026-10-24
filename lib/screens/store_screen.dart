@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zyiarah/services/store_service.dart';
 import 'package:zyiarah/widgets/shimmer_loading.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:zyiarah/screens/store_payment_screen.dart';
-import 'package:zyiarah/screens/store_schedule_screen.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
 import 'package:zyiarah/utils/home_packages.dart';
 import 'package:zyiarah/utils/vat.dart';
@@ -72,34 +70,22 @@ class _ZyiarahStoreScreenState extends State<ZyiarahStoreScreen> {
           final items = (result['items'] as List)
               .map((e) => Map<String, dynamic>.from(e as Map))
               .toList();
-          if (widget.companies) {
-            // متجر الشركات: طلب مباشر — إلى الدفع فوراً (store_orders).
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (_) => StorePaymentScreen(
-                  storeOrderId: result['id'] as String,
-                  orderCode: result['code'] as String,
-                  items: items,
-                  total: (result['total'] as num).toDouble(),
-                  customerName: result['client_name'] as String,
-                  customerPhone: result['client_phone'] as String,
-                ),
+          // **المتجرانِ دورةٌ واحدة** (قرار المالك 2026-10-24): السلّةُ ⇒ الدفعُ
+          // فوراً (store_orders) ⇒ الإدارةُ تُجهِّزُ وتختارُ السائق. كان متجرُ
+          // الأدواتِ يَمرُّ بشاشةِ جدولةٍ (يومٌ ووقتٌ وسائقٌ تلقائيّ).
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => StorePaymentScreen(
+                storeOrderId: result['id'] as String,
+                orderCode: result['code'] as String,
+                items: items,
+                total: (result['total'] as num).toDouble(),
+                customerName: result['client_name'] as String,
+                customerPhone: result['client_phone'] as String,
               ),
-            );
-          } else {
-            // متجر الأدوات والتنظيف: طلب مجدول — إلى تحديد العنوان والموعد ثم الدفع
-            // (يُنشأ طلب `orders` عند الدفع مثل بقية الخدمات، ويُسنَد سائق تلقائياً).
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (_) => StoreScheduleScreen(
-                  items: items,
-                  total: (result['total'] as num).toDouble(),
-                ),
-              ),
-            );
-          }
+            ),
+          );
         },
       ),
     );
@@ -484,42 +470,27 @@ class _CartSheetState extends State<_CartSheet> {
       final double total = items.fold(
         0.0, (acc, item) => acc + (item['price'] as double) * (item['quantity'] as int));
 
-      if (widget.companies) {
-        // متجر الشركات (طلب مباشر — قرار المالك): أنشئ طلب store_orders بانتظار
-        // الدفع وافتح شاشة الدفع فوراً. إشعار الإدارة خادمي عند الإنشاء وعند الدفع.
-        final result = await widget.storeService.createStoreOrder(
-          items: items,
-          totalAmount: total,
+      // المتجرانِ (الأدوات والشركات) طلبٌ مباشرٌ واحد — قرار المالك
+      // 2026-10-24: أنشئ store_orders بانتظار الدفع وافتح الدفعَ فوراً. لا
+      // يَظهرُ عند الإدارةِ قبلَ الدفع (`storeOrderVisibleToAdmin`).
+      final result = await widget.storeService.createStoreOrder(
+        items: items,
+        totalAmount: total,
+      );
+
+      if (!mounted) return;
+      if (result == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('يجب تسجيل الدخول لإتمام الطلب')),
         );
-
-        if (!mounted) return;
-        if (result == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('يجب تسجيل الدخول لإتمام الطلب')),
-          );
-          setState(() => _isSubmitting = false);
-          return;
-        }
-        result['items'] = items;
-
-        // أغلق الـ Sheet ثم نقّل عبر callback الـ parent (إلى الدفع المباشر).
-        Navigator.pop(context);
-        widget.onSubmitted(result);
-      } else {
-        // متجر الأدوات والتنظيف (طلب مجدول — قرار المالك 2026-07-21): لا سجلّ
-        // store_orders؛ نمرّر الأصناف والإجمالي لشاشة الجدولة، ويُنشأ طلب `orders`
-        // عند الدفع (فحص سعة ⇒ إسناد سائق ⇒ scheduled) مثل بقية الخدمات.
-        if (FirebaseAuth.instance.currentUser == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('يجب تسجيل الدخول لإتمام الطلب')),
-          );
-          setState(() => _isSubmitting = false);
-          return;
-        }
-        if (!mounted) return;
-        Navigator.pop(context);
-        widget.onSubmitted({'items': items, 'total': total});
+        setState(() => _isSubmitting = false);
+        return;
       }
+      result['items'] = items;
+
+      // أغلق الـ Sheet ثم نقّل عبر callback الـ parent (إلى الدفع المباشر).
+      Navigator.pop(context);
+      widget.onSubmitted(result);
 
     } catch (e) {
       GlobalErrorHandler.handleError(e);
@@ -665,8 +636,8 @@ class _CartSheetState extends State<_CartSheet> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // **قبل الضريبة**: `store_schedule_screen` يأخذ هذا
-                      // الرقمَ أساساً ويضيف 15% فوقه (`_grandTotal`). فـ«المجموع
+                      // **قبل الضريبة**: شاشةُ الدفعِ تأخذُ هذا الرقمَ أساساً
+                      // وتُضيفُ 15% فوقه. فـ«المجموع
                       // الإجمالي» بلا قيدٍ تقرأ كآخرِ ما يُدفع، وهو ليس كذلك —
                       // نفسُ شكل «الأسعار شاملة الضريبة» في شاشة التنظيف
                       // المنزليّ. وبقيّةُ الشاشات تقول «الإجمالي قبل الضريبة».
@@ -692,9 +663,7 @@ class _CartSheetState extends State<_CartSheet> {
                           // تُذكر الضريبةُ هنا كما تُذكر في شاشات الحجز
                           // («تُضاف ضريبة القيمة المضافة 15% عند إتمام الطلب»)
                           // — فالمبلغُ أعلاه أساسٌ لا نهاية.
-                          widget.companies
-                              ? 'تُضاف ضريبة القيمة المضافة $kVatRateLabel عند الدفع. ستنتقلين لإتمام الدفع مباشرةً (بطاقة / تمارا)، ويصلكِ طلبكِ بعد تأكيد الدفع.'
-                              : 'تُضاف ضريبة القيمة المضافة $kVatRateLabel عند الدفع. ستحدّدين عنوان التوصيل وموعده في الخطوة التالية، ثم تدفعين ويصلكِ سائقٌ بطلبكِ في الموعد.',
+                          'تُضاف ضريبة القيمة المضافة $kVatRateLabel عند الدفع. ستنتقلين لإتمام الدفع مباشرةً، ثم نجهّز طلبكِ ويوصله سائقٌ إلى موقعكِ — ويصلكِ إشعارٌ بكل خطوة.',
                           style: GoogleFonts.tajawal(fontSize: 12, height: 1.5, color: const Color(0xFF660033), fontWeight: FontWeight.w700),
                         ),
                       ),
@@ -713,9 +682,7 @@ class _CartSheetState extends State<_CartSheet> {
                     ),
                     child: _isSubmitting
                         ? const CircularProgressIndicator(color: Colors.white)
-                        : Text(widget.companies
-                            ? 'متابعة للدفع'
-                            : 'متابعة لتحديد الموعد'),
+                        : const Text('متابعة للدفع'),
                   ),
                 ),
               ],

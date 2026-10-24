@@ -29,7 +29,7 @@ const String kCasesJson = '''
   [{"status": "pending"}, "ok", true],
   [{"status": "pending", "is_paid": false}, "ok", true],
   [{"status": "pending", "is_paid": true}, "activationStuck", false],
-  [{"status": "approved_waiting_payment"}, "ok", false],
+  [{"status": "approved_waiting_payment"}, "ok", true],
   [{"status": "approved_waiting_payment", "is_paid": true},
    "activationStuck", false],
   [{"status": "active", "is_paid": true}, "ok", false],
@@ -114,29 +114,16 @@ void main() {
 
     for (var i = 0; i < cases.length; i++) {
       final pos = i;
-      test('[$pos] ${cases[pos][0]} ⇒ ${cases[pos][1]} / اعتماد=${cases[pos][2]}',
+      test('[$pos] ${cases[pos][0]} ⇒ ${cases[pos][1]} / بانتظار الدفع=${cases[pos][2]}',
           () {
         final doc = Map<String, dynamic>.from(cases[pos][0] as Map);
         expect(contractHealthOf(doc), _byName[cases[pos][1] as String],
             reason: 'حالةُ الصحّةِ لا تُطابقُ الجدول');
-        expect(contractApproveAllowed(doc), cases[pos][2] as bool,
-            reason: 'بوّابةُ الاعتمادِ لا تُطابقُ الجدول');
+        expect(contractAwaitingPayment(doc), cases[pos][2] as bool,
+            reason: '«بانتظار الدفع» لا يُطابقُ الجدول');
       });
     }
 
-    test('المدفوعُ المعلَّقُ وحدَه يُحجَبُ بسببٍ منطوق، وغيرُ موضعِه بلا سبب', () {
-      expect(contractApproveBlockedReason({'status': 'pending', 'is_paid': true}),
-          isNotNull);
-      expect(contractApproveBlockedReason({'status': 'pending'}), isNull);
-      // ليس موضعَ الزرِّ أصلاً ⇒ لا سببَ يُعرَض (وإلّا ظهرَ نصُّ حجبٍ على
-      // كلِّ عقدٍ فاعل).
-      expect(contractApproveBlockedReason({'status': 'active', 'is_paid': true}),
-          isNull);
-      expect(
-          contractApproveBlockedReason(
-              {'status': 'approved_waiting_payment', 'is_paid': true}),
-          isNull);
-    });
   });
 
   group('السطحانِ يُنادِيانِ القاعدةَ ولا يُعيدانِ تعدادَها', () {
@@ -145,49 +132,44 @@ void main() {
     final panelRaw = File('admin_panel/src/pages/Contracts.tsx').readAsStringSync();
     final panel = _mask(panelRaw);
 
-    test('(أ) شاشةُ Flutter: البوّابةُ في الرسمِ وفي الضغطةِ معاً', () {
-      expect(RegExp(r'if \(contractApproveAllowed\(data\) && _canApproveContracts\)')
-              .hasMatch(flutter),
-          isTrue,
-          reason: 'زرُّ الاعتمادِ لا يُنادي البوّابة');
-      expect(flutter.contains("status == 'pending' && _canApproveContracts"), isFalse,
-          reason: 'عادَ الشرطُ القديمُ — وهو العطلُ بعينِه');
-      // الضغطةُ تُعيدُ الفحصَ: لقطةٌ قديمةٌ تَحرُسُها البوّابةُ في الرسمِ
-      // وحدَها لا تَمنعُ كتابةً.
-      final body = flutter.substring(flutter.indexOf('void _approveContract('));
-      final gate = body.indexOf('contractApproveBlockedReason(');
-      final write = body.indexOf("'status': 'approved_waiting_payment'");
-      expect(gate, greaterThan(0), reason: 'لا فحصَ عند الضغطة');
-      expect(write, greaterThan(0));
-      expect(gate, lessThan(write),
-          reason: 'الفحصُ بعد الكتابةِ لا يَمنعُ شيئاً — الترتيبُ هو الإصلاح');
+    test('(أ) لا زرَّ «اعتماد العقد» ولا كتابةَ اعتمادٍ في السطحَين', () {
+      // قرار المالك 2026-10-24: التوقيعُ والدفعُ من العميلةِ يكفيان، والعقدُ
+      // يَتفعّلُ لحظةَ الدفع. عودةُ الزرِّ تُعيدُ خطوةً لا ينتظرها شيء.
+      for (final src in [flutter, panel]) {
+        expect(src.contains('اعتماد العقد'), isFalse);
+        expect(src.contains('اعتماد الباقة'), isFalse);
+        expect(src.contains("'status': 'approved_waiting_payment'"), isFalse);
+        expect(src.contains("status: 'approved_waiting_payment'"), isFalse,
+            reason: 'كتابةُ اعتمادٍ عادت');
+      }
+      expect(flutter.contains('void _approveContract('), isFalse);
+      expect(panel.contains('const handleApprove = async'), isFalse);
     });
 
-    test('(ب) اللوحةُ: الزرُّ مشروطٌ بالقاعدةِ لا بالحالةِ وحدَها', () {
+    test('(ب) ما لم يُدفَع يُقالُ عنه ذلك — بالقاعدةِ في السطحَين', () {
+      expect(flutter.contains('if (contractAwaitingPayment(data))'), isTrue);
+      expect(flutter.contains('kContractAwaitingPaymentNote'), isTrue);
       expect(panel.contains("from '../utils/contractHealth.ts'"), isTrue,
           reason: 'المرآةُ غيرُ مستورَدة');
-      expect(RegExp(r'contractApproveAllowed\(contract\) && \(').hasMatch(panel),
-          isTrue,
-          reason: 'زرُّ الاعتمادِ لا يُنادي البوّابة');
-      expect(panel.contains("contract.status === 'pending' && ("), isFalse,
-          reason: 'عادَ الشرطُ القديم');
+      expect(panel.contains('contractAwaitingPayment(contract) ?'), isTrue);
+      expect(panel.contains('CONTRACT_AWAITING_PAYMENT_NOTE'), isTrue);
     });
 
-    test('(ج) اللوحةُ تَقرأُ طازجاً داخلَ معامَلةٍ قبلَ الكتابة', () {
-      // `updateDoc` أعمى: صفحةٌ مفتوحةٌ من قبلِ وصولِ الدفعةِ تَكتبُ على
-      // لقطةٍ قديمةٍ، وهذه الكتابةُ بعينِها تُخرِجُ العقدَ من نافذةِ الإنقاذ.
-      final h = panel.substring(panel.indexOf('const handleApprove = async'));
-      final body = h.substring(0, h.indexOf('\n    };'));
-      expect(body.contains('runTransaction(db'), isTrue,
-          reason: 'الاعتمادُ ليس معامَلة');
-      final gate = body.indexOf('contractApproveBlockedReason(');
-      final write = body.indexOf("status: 'approved_waiting_payment'");
-      expect(gate, greaterThan(0), reason: 'لا فحصَ داخلَ المعامَلة');
-      expect(gate, lessThan(write), reason: 'الفحصُ بعد الكتابة');
-      // ورسالةُ المعامَلةِ هي الخبر: نصٌّ عامٌّ يَبتلعُ السببَ فيُقرأُ عطلَ
-      // شبكةٍ فيُعيدُ الأدمنُ المحاولة.
-      expect(body.contains('error instanceof Error ? error.message'), isTrue,
-          reason: 'سببُ الرفضِ يُبتلَعُ برسالةٍ عامّة');
+    test('(ج) العميلةُ تُكمِلُ دفعَ عقدٍ موقَّعٍ من «عقودي»', () {
+      // كان الزرُّ مشروطاً بـ`approved_waiting_payment` وحدَها — فتوقيعٌ لم
+      // يُدفَع (`pending`) بلا زرٍّ إلى الأبد بعد إلغاءِ الاعتماد.
+      final list = _mask(File('lib/screens/contracts_list_screen.dart')
+          .readAsStringSync());
+      expect(list.contains('if (contractAwaitingPayment(data))'), isTrue);
+      expect(list.contains("status == 'approved_waiting_payment' &&"), isFalse);
+    });
+
+    test('(ج٢) الرادارُ يَعُدُّ المدفوعَ الذي لم يَتفعّل وحدَه', () {
+      final insights = _mask(File('lib/screens/admin/admin_insights_screen.dart')
+          .readAsStringSync());
+      expect(insights.contains(".where('is_paid', isEqualTo: true)"), isTrue,
+          reason: 'توقيعاتٌ لم تُدفَع تُعَدُّ «بانتظار المراجعة»');
+      expect(insights.contains('عقود بانتظار المراجعة'), isFalse);
     });
 
     test('(د) اللوحةُ تَعرضُ صحّةَ التفعيلِ — كانت `status` وحدَه', () {
@@ -205,12 +187,6 @@ void main() {
       expect(flutter.contains('contractHealthOf(data)'), isTrue);
     });
 
-    test('(و) السببُ يُقالُ مكانَ الزرِّ في السطحَين — الإخفاءُ وحدَه يُقرأُ عطلاً', () {
-      expect(flutter.contains('contractApproveBlockedReason(data)!'), isTrue,
-          reason: 'شاشةُ Flutter تُخفي الزرَّ بلا سبب');
-      expect(panel.contains('contractApproveBlockedReason(contract)}'), isTrue,
-          reason: 'اللوحةُ تُخفي الزرَّ بلا سبب');
-    });
   });
 
   group('التعليلُ الخادميُّ ما زال قائماً — فالقاعدةُ ليست تخميناً', () {

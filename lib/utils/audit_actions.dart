@@ -60,6 +60,7 @@ const Map<String, String> kAuditActionLabels = {
 
   // العقود والباقات
   'CLIENT_SIGN_CONTRACT': 'توقيع عقد إلكتروني جديد',
+  // سجلّاتٌ قديمة — لا اعتمادَ للعقود منذ 2026-10-24.
   'APPROVE_CONTRACT': 'اعتماد عقد بانتظار الدفع',
   'DELETE_CONTRACT': 'حذف سجل عقد نهائياً',
   'ACTIVATE_CONTRACT': 'تفعيل عقد واحتساب رصيد',

@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:zyiarah/utils/store_order_flow.dart';
 import 'package:zyiarah/screens/store_payment_screen.dart';
 import 'package:zyiarah/screens/hourly_details_screen.dart';
 import 'package:zyiarah/screens/sofa_rug_details_screen.dart';
@@ -308,8 +309,8 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           return _buildLoadError();
         }
         
-        // دورة المتجر الحقيقية: awaiting_payment ⇒ under_review ⇒ delivering ⇒
-        // delivered. ومن `historyStatuses` التي كانت هنا أُخذت المجموعة المنتهية
+        // دورة المتجر: awaiting_payment ⇒ under_review ⇒ preparing ⇒ ready ⇒
+        // with_driver ⇒ delivered (`store_order_flow.dart`). ومن `historyStatuses` التي كانت هنا أُخذت المجموعة المنتهية
         // في `order_activity.dart` حرفياً — هذا الموضع كان الصحيح الوحيد من ثلاثة.
         final allDocs = snapshot.data!.docs;
         final storeOrders = allDocs.where((doc) {
@@ -354,17 +355,10 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     final double payAmount =
         (data['final_amount'] as num?)?.toDouble() ?? total;
 
-    Color statusColor = Colors.orange;
-    String statusText = "قيد المعالجة";
-
-    if (status == 'pending') { statusColor = Colors.orange; statusText = "بانتظار موافقة الإدارة"; }
-    else if (status == 'awaiting_payment' || status == 'approved') { statusColor = Colors.deepOrange; statusText = "بانتظار الدفع"; }
-    else if (status == 'under_review') { statusColor = Colors.orange; statusText = "تحت المراجعة"; }
-    else if (status == 'delivering') { statusColor = Colors.indigo; statusText = "جاري التوصيل"; }
-    else if (status == 'processing') { statusColor = Colors.blue; statusText = "قيد التجهيز"; }
-    else if (status == 'shipped') { statusColor = Colors.indigo; statusText = "تم الشحن"; }
-    else if (status == 'delivered' || status == 'completed') { statusColor = Colors.green; statusText = "تم التوصيل"; }
-    else if (status == 'cancelled' || status == 'rejected') { statusColor = Colors.red; statusText = "ملغي"; }
+    // دورةُ المتجرِ من موضعِها الواحد (`store_order_flow.dart`): تم استلام
+    // طلبكِ ⇒ قيد التجهيز ⇒ جاهز للتوصيل ⇒ مع السائق ⇒ تم التسليم.
+    final Color statusColor = storeStatusColor(status);
+    final String statusText = storeStatusLabel(status, forClient: true);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
