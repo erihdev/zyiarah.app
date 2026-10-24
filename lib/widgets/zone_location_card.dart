@@ -55,41 +55,21 @@ class ZyiarahZoneLocationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final located = zoneName != null;
-
-    if (isLocating) {
-      return Row(
-        children: [
-          const SizedBox(
-            width: 14,
-            height: 14,
-            child: CircularProgressIndicator(strokeWidth: 2, color: _brand),
-          ),
-          const SizedBox(width: 8),
-          Text('جارٍ تحديد موقعك…',
-              style: GoogleFonts.tajawal(fontSize: 12, color: const Color(0xFF64748B))),
-        ],
-      );
+    // **لا سطرَ موقعٍ في شاشةِ الخدمةِ إلّا حين لا موقعَ أصلاً** (قرار المالك
+    // 2026-10-24). الموقعُ يُحدَّدُ مرّةً عند فتحِ التطبيقِ ويَظهرُ أعلى
+    // الرئيسيّة (`ClientLocation` + `ClientLocationChip`)؛ فلا «جارٍ تحديد
+    // موقعك…» ولا «المنطقة: … تغيير» هنا. وخارجَ النطاقِ تقولُ الشاشةُ
+    // نفسُها «الخدمة غير متاحة في منطقتك» — لا سطرانِ لشيءٍ واحد.
+    //
+    // يبقى السطرُ في حالةٍ واحدة: تعذّرُ القراءةِ (إذنٌ مرفوض، GPS مطفأ،
+    // مهلة) فلا موقعَ تُبنى عليه الشاشة — وبلاه صفحةٌ فارغةٌ بلا مخرج.
+    if (isLocating || zoneName != null || failure == null) {
+      return const SizedBox.shrink();
+    }
+    if (failure == LocateFailure.outOfServiceArea) {
+      return const SizedBox.shrink();
     }
 
-    if (located) {
-      return Row(
-        children: [
-          const Icon(Icons.location_on_rounded, size: 18, color: Color(0xFF059669)),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text('المنطقة: $zoneName',
-                style: GoogleFonts.tajawal(
-                    fontSize: 13,
-                    color: const Color(0xFF059669),
-                    fontWeight: FontWeight.bold)),
-          ),
-          _link('تغيير', onPickManually),
-        ],
-      );
-    }
-
-    // لم يُحدَّد: السببُ الفعليُّ في سطرٍ واحد، ثمّ روابطُ صغيرة.
     final needsSettings = failure?.needsSettings == true;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

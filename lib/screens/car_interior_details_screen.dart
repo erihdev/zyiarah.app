@@ -6,6 +6,7 @@ import 'package:zyiarah/models/car_line.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/zone_locator_service.dart';
+import 'package:zyiarah/services/client_location.dart';
 import 'package:zyiarah/widgets/booking_slot_picker.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
 import 'package:zyiarah/utils/vat.dart';
@@ -102,7 +103,8 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
 
   bool get _anyEnabled => CarSize.values.any(_isEnabled);
 
-  Future<void> _attemptAutoLocation({bool userInitiated = false}) async {
+  Future<void> _attemptAutoLocation(
+      {bool userInitiated = false, bool retry = false}) async {
     if (!mounted) return;
     // مناطق فارغة = فشل جلبها عند الفتح غالباً — كان return الصامت يجعل زرّ
     // «حدّد موقعي تلقائياً» ميتاً بلا أي أثر. عند طلبٍ صريح نعيد الجلب، وإن
@@ -128,8 +130,13 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
       _locateFailure = null;
     });
 
-    final res = await ZyiarahZoneLocator.locate(_zones,
-        requestPermission: userInitiated);
+    // الموقعُ من المصدرِ الواحد (`ClientLocation`): المحفوظُ من فتحِ التطبيق
+    // بلا GPS ولا نافذةِ إذن، وقراءةٌ جديدةٌ عند «إعادة المحاولة» وحدَها.
+    final res = retry
+        ? await ClientLocation.instance.refresh(_zones,
+            requestPermission: true, force: true)
+        : await ClientLocation.instance.resolve(_zones,
+            requestPermission: userInitiated);
     if (!mounted) return;
 
     if (!res.isSuccess) {
@@ -150,12 +157,6 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
       _locateFailure = null;
     });
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('تم تحديد موقعك تلقائياً: $_selectedZoneName',
-          style: GoogleFonts.tajawal()),
-      backgroundColor: _brand,
-      duration: const Duration(seconds: 2),
-    ));
   }
 
   Future<void> _pickLocation() async {
@@ -190,6 +191,8 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
     }
 
     final zone = ZyiarahZoneLocator.matchZone(result, _zones);
+    // اختيارُ الخريطةِ يَتّبعُه التطبيقُ كلُّه — رأسُ الرئيسيّةِ وبقيّةُ الشاشات.
+    if (zone != null) ClientLocation.instance.setManual(result, zone);
     if (zone == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('نأسف، موقعك خارج نطاق خدماتنا حالياً',
@@ -402,7 +405,8 @@ class _CarInteriorDetailsScreenState extends State<CarInteriorDetailsScreen> {
         isLocating: _isLocating,
         zoneName: _selectedZoneName,
         failure: _locateFailure,
-        onLocateMe: () => _attemptAutoLocation(userInitiated: true),
+        onLocateMe: () =>
+            _attemptAutoLocation(userInitiated: true, retry: true),
         onPickManually: _pickLocation,
       );
 

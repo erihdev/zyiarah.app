@@ -10,6 +10,7 @@ import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/screens/payment_summary_screen.dart';
 import 'package:zyiarah/services/store_service.dart';
 import 'package:zyiarah/services/zone_locator_service.dart';
+import 'package:zyiarah/services/client_location.dart';
 import 'package:zyiarah/utils/home_packages.dart';
 import 'package:zyiarah/utils/zone_schedule.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
@@ -356,7 +357,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   /// [silent] (مراقبة التنقّل): محاولة خلفية دورية — لا مؤشر تحميل، والفشل يُتجاهل
   /// (تبقى المنطقة الحالية)، ولا إشعار إلا إن تغيّرت المنطقة فعلاً.
   Future<void> _attemptAutoLocation(
-      {bool userInitiated = false, bool silent = false}) async {
+      {bool userInitiated = false, bool silent = false, bool retry = false}) async {
     if (!mounted) return;
     // مناطق فارغة = فشل جلبها عند الفتح غالباً — كان return الصامت يجعل زرّ
     // «حدّد موقعي تلقائياً» ميتاً بلا أي أثر. عند طلبٍ صريح نعيد الجلب، وإن
@@ -388,8 +389,15 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       });
     }
 
-    final res = await ZyiarahZoneLocator.locate(_zones,
-        requestPermission: userInitiated);
+    // الموقعُ من المصدرِ الواحد (`ClientLocation`): المحفوظُ عند الفتح، وقراءةٌ
+    // جديدةٌ عند «إعادة المحاولة» أو المراقبةِ الصامتة (التنقّلُ بين المحافظات).
+    final res = retry
+        ? await ClientLocation.instance.refresh(_zones,
+            requestPermission: true, force: true)
+        : silent
+            ? await ClientLocation.instance.refresh(_zones)
+            : await ClientLocation.instance.resolve(_zones,
+                requestPermission: userInitiated);
     if (!mounted) return;
 
     if (!res.isSuccess) {
@@ -414,13 +422,15 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     _applyZonePackages(res.zone!);
     await _loadAvailabilityFromServer();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(silent
-          ? "انتقلتِ إلى منطقة أخرى — حُدِّثت الأسعار: $_selectedZoneName"
-          : "تم تحديد موقعك تلقائياً: $_selectedZoneName"),
-      backgroundColor: const Color(0xFF660033),
-      duration: const Duration(seconds: 2),
-    ));
+    // الأوّلُ صامت — الموقعُ في رأسِ الرئيسيّة؛ والانتقالُ بين المناطقِ يُقال.
+    if (silent) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+            "انتقلتِ إلى منطقة أخرى — حُدِّثت الأسعار: $_selectedZoneName"),
+        backgroundColor: const Color(0xFF660033),
+        duration: const Duration(seconds: 2),
+      ));
+    }
   }
 
   Future<void> _pickLocation() async {
@@ -460,6 +470,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
 
     // مطابقة المنطقة من المصدر المشترك — كانت منسوخة حرفياً في ثلاث شاشات.
     final matchedZone = ZyiarahZoneLocator.matchZone(loc, _zones);
+    // اختيارُ الخريطةِ يَتّبعُه التطبيقُ كلُّه — رأسُ الرئيسيّةِ وبقيّةُ الشاشات.
+    if (matchedZone != null) ClientLocation.instance.setManual(loc, matchedZone);
 
     if (matchedZone != null) {
       if (mounted) {
@@ -909,7 +921,8 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       isLocating: _isLocating,
       zoneName: _selectedZoneName,
       failure: _locateFailure,
-      onLocateMe: () => _attemptAutoLocation(userInitiated: true),
+      onLocateMe: () =>
+            _attemptAutoLocation(userInitiated: true, retry: true),
       onPickManually: _pickLocation,
     );
   }
