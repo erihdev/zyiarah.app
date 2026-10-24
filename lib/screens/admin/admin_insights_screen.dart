@@ -83,8 +83,14 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       // عدٌّ خادميٌّ (لا جلبُ مستندات): القواعدُ تُجيزُ قراءةَ العقودِ لكلِّ
       // الأدوارِ الإداريّة (`isAdmin`)، ومساواةٌ واحدةٌ بلا ترتيبٍ فلا فهرسَ
       // مركّباً تَحتاجُه (`count()` بلا حقلٍ مُجمَّع — راجع بطاقةَ الإيرادات).
+      // **ما يَحتاجُ الأدمنَ من العقود: مدفوعٌ لم يَتفعّل** (لا اعتمادَ —
+      // قرار المالك 2026-10-24). كان العدُّ `status == 'pending'` وحدَها،
+      // فتُعَدُّ توقيعاتٌ لم تُدفَع منذ أشهرٍ «بانتظار المراجعة» ولا مراجعةَ
+      // لها. مساواتانِ على حقلَين لا تَحتاجانِ فهرساً مركّباً.
       final contractsF  = guarded(db.collection('contracts')
-          .where('status', isEqualTo: 'pending').count().get().timeout(kNetCallTimeout));
+          .where('status', isEqualTo: 'pending')
+          .where('is_paid', isEqualTo: true)
+          .count().get().timeout(kNetCallTimeout));
       final storeF      = canReadStore
           ? guarded(db.collection('store_orders').orderBy('created_at', descending: true).limit(500).get().timeout(kNetCallTimeout))
           : Future<QuerySnapshot<Map<String, dynamic>>?>.value(null);
@@ -899,7 +905,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminStoreOrdersScreen())),
             ),
             _buildLuxuryRequestCard(
-              title: "عقود بانتظار المراجعة",
+              title: "عقود مدفوعة لم تتفعّل",
               count: _pendingContracts,
               icon: Icons.history_edu_rounded,
               gradient: const [Color(0xFF581C87), Color(0xFF701A75)], // Purple/Fuchsia
