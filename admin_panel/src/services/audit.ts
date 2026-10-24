@@ -33,7 +33,6 @@ export const AUDIT = {
     // الأسماءِ **لها تسميةٌ عربيّةٌ سلفاً** في `lib/utils/audit_actions.dart`،
     // فلا مفتاحَ جديداً في الخريطة: الناقصُ كان النداءَ وحدَه.
     PROCESS_ACCOUNT_DELETION: 'PROCESS_ACCOUNT_DELETION',
-    APPROVE_CONTRACT: 'APPROVE_CONTRACT',
     DELETE_CONTRACT: 'DELETE_CONTRACT',
     CREATE_SUBSCRIPTION: 'CREATE_SUBSCRIPTION',
     UPDATE_SUBSCRIPTION: 'UPDATE_SUBSCRIPTION',

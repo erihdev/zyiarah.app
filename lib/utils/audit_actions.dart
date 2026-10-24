@@ -44,6 +44,7 @@ const Map<String, String> kAuditActionLabels = {
   // المتجر
   'CREATE_STORE_ORDER': 'إنشاء طلب متجر',
   'UPDATE_STORE_ORDER_STATUS': 'تحديث حالة طلب متجر',
+  'ASSIGN_STORE_ORDER_DRIVER': 'إسناد طلب متجر لسائق',
   'CREATE_PRODUCT': 'إضافة منتج للمتجر',
   'UPDATE_PRODUCT': 'تعديل منتج في المتجر',
   'DELETE_PRODUCT': 'حذف منتج من المتجر',
@@ -60,8 +61,6 @@ const Map<String, String> kAuditActionLabels = {
 
   // العقود والباقات
   'CLIENT_SIGN_CONTRACT': 'توقيع عقد إلكتروني جديد',
-  // سجلّاتٌ قديمة — لا اعتمادَ للعقود منذ 2026-10-24.
-  'APPROVE_CONTRACT': 'اعتماد عقد بانتظار الدفع',
   'DELETE_CONTRACT': 'حذف سجل عقد نهائياً',
   'ACTIVATE_CONTRACT': 'تفعيل عقد واحتساب رصيد',
   'ACTIVATE_CONTRACT_TAMARA': 'تفعيل عقد مدفوع بالتقسيط',

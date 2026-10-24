@@ -7,7 +7,7 @@ const {
   assertFails,
   assertSucceeds,
 } = require("@firebase/rules-unit-testing");
-const {setDoc, updateDoc, doc, getDoc, runTransaction, serverTimestamp} =
+const {setDoc, updateDoc, doc, getDoc, serverTimestamp} =
     require("firebase/firestore");
 
 (async () => {
