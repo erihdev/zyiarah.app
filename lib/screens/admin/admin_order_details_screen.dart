@@ -252,6 +252,34 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
     }
     setState(() => _isLoading = true);
     try {
+      // **لا كتابةَ فوقَ حالةٍ لم يَرَها المدير** (تجربة 2026-10-24): الشاشةُ
+      // تَقرأُ الطلبَ مرّةً عند فتحِها، والسائقُ يُكمِلُ والصفحةُ مفتوحة —
+      // فكانت «مجدول» على الشاشةِ والطلبُ «مكتمل» فعلاً، و«حفظ التعديلات»
+      // يَكتبُ `{'status': 'scheduled'}` فيُعيدُ مكتملاً إلى مهامِّ السائق
+      // (وملغىً أو مُسترَدّاً إلى النشاط). فقبلَ أيِّ كتابة: قراءةٌ طازجة،
+      // وإن تغيّرت الحالةُ أو السائقُ من جهةٍ أخرى نُعيدُ التحميلَ ولا نَكتب.
+      final fresh = await _db
+          .collection(_srcCollection)
+          .doc(widget.orderId)
+          .get()
+          .timeout(kNetCallTimeout);
+      final Map<String, dynamic>? freshData = fresh.data();
+      if (freshData != null &&
+          (freshData['status'] != _orderData?['status'] ||
+              freshData['driver_id'] != _orderData?['driver_id'])) {
+        if (mounted) setState(() => _isLoading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('تغيّر الطلب من جهةٍ أخرى — صار «'
+                  '${_getStatusText((freshData['status'] ?? '').toString())}». '
+                  'أُعيد تحميله؛ راجِع ثم احفظ.'),
+              backgroundColor: Colors.orange.shade800));
+        }
+        await _fetchOrder();
+        return;
+      }
+      // ما بعدَ القراءةِ الطازجةِ يَستعملُ `context` (رسائلُ المنعِ أدناه).
+      if (!mounted) return;
       final bool isNewAssignment = _selectedDriverId != null &&
           _selectedDriverId != _orderData?['driver_id'];
       final String oldStatus = _orderData?['status'] ?? 'pending';
@@ -369,7 +397,10 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
         } else {
           // المسار المباشر: تغيير حالة، أو تعديل موعد بلا سائق، أو مستند صيانة.
           // تعديل الموعد يُطبَّق بصرف النظر عن السائق (كان محبوساً بشرطه).
-          final Map<String, dynamic> updatePayload = {'status': _currentStatus};
+          // الحالةُ تُكتَبُ حين غيّرها المدير وحدَه — لا إعادةُ كتابةٍ لما قرأه.
+          final Map<String, dynamic> updatePayload = {
+            if (_currentStatus != oldStatus) 'status': _currentStatus,
+          };
           if (scheduleChanged) {
             // ساعةُ الحائطِ التي اختارَها الأدمنُ تُقرأُ **رياضاً**، كما
             // يَقرأُ `parseKsaIso` الـ`scheduledIso` في الفرعِ الخادميِّ
@@ -411,10 +442,12 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
           // فيرمي not-found بصمت ويظن الأدمن أن التعديل حُفظ. (لاحقاً جمّدت
           // القواعد maintenance_requests نهائياً، فصارت الشاشة تعرض الأرشيف
           // للقراءة فقط ولا يصل هذا المسار إلا لمستندات orders.)
-          await _db
-              .collection(_srcCollection)
-              .doc(widget.orderId)
-              .update(updatePayload);
+          if (updatePayload.isNotEmpty) {
+            await _db
+                .collection(_srcCollection)
+                .doc(widget.orderId)
+                .update(updatePayload);
+          }
         }
       }
 
