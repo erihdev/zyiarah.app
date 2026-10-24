@@ -7,7 +7,8 @@ const {
   assertFails,
   assertSucceeds,
 } = require("@firebase/rules-unit-testing");
-const {setDoc, updateDoc, doc} = require("firebase/firestore");
+const {setDoc, updateDoc, doc, getDoc, runTransaction, serverTimestamp} =
+    require("firebase/firestore");
 
 (async () => {
   const testEnv = await initializeTestEnvironment({
@@ -360,6 +361,39 @@ const {setDoc, updateDoc, doc} = require("firebase/firestore");
         zone_name: "فيفا", hours: 4, createdAt: new Date(),
       })),
       true);
+
+  // ── قراءةُ طلبٍ لم يُنشأ بعد (حارسُ الوجودِ في مساراتِ الدفع) ──
+  // كانت مرفوضةً لكلِّ عميلةٍ غيرِ مديرة، فتَفشلُ معاملةُ إنشاءِ الطلبِ كلُّها
+  // بـ permission-denied قبلَ شاشةِ البطاقة/STC/تمارا، ومسارُ المحفظةِ وApple Pay.
+  console.log("Existence guard — reading an order that does not exist yet:");
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "metadata/order_counter"), {last_id: 500});
+    await setDoc(doc(ctx.firestore(), "orders/someone_elses"),
+        {client_id: "other_client", status: "pending", is_paid: false});
+  });
+  await check("guard: get a missing order -> ALLOWED",
+      getDoc(doc(db, "orders/not_yet_created")), true);
+  await check("guard: get another client's EXISTING order -> still DENIED",
+      getDoc(doc(db, "orders/someone_elses")), false);
+  await check("guard: unauthenticated get of a missing order -> DENIED",
+      getDoc(doc(testEnv.unauthenticatedContext().firestore(),
+          "orders/not_yet_created")), false);
+  // المعاملةُ كما يَكتبُها `_createUnpaidServiceOrder` حرفيّاً: قراءةُ الطلب،
+  // ثمّ العدّاد، ثمّ تحديثُه وإنشاءُ الطلب.
+  await check("guard: the app's create-order transaction -> ALLOWED",
+      runTransaction(db, async (tx) => {
+        const orderRef = doc(db, "orders/tx_new_order");
+        const snap = await tx.get(orderRef);
+        if (snap.exists()) return;
+        const counterRef = doc(db, "metadata/order_counter");
+        const c = await tx.get(counterRef);
+        tx.update(counterRef, {last_id: c.data().last_id + 1});
+        tx.set(orderRef, {
+          client_id: uid, status: "pending", is_paid: false, amount: 1.15,
+          payment_method: "card", coupon_code: "ZTEST", discount_amount: 300,
+          created_at: serverTimestamp(), code: "ZY-501",
+        });
+      }), true);
 
   await testEnv.cleanup();
   console.log(`\nRules test: ${pass} passed, ${fail} failed`);
