@@ -1,3 +1,4 @@
+import 'package:zyiarah/services/client_location.dart';
 import 'package:zyiarah/utils/payment_keys.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -55,6 +56,8 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
   // اسم منطقة الطلب السابق الذي وُرث عنوانه منه — للعرض فقط، كي ترى العميلة
   // مصدر العنوان المقترَح وتغيّره إن لم يعد عنوانها. null عند الاختيار اليدوي.
   String? _prefillZoneName;
+  /// العنوانُ من موقعِ العميلةِ المحدَّدِ أعلى الرئيسيّة (لا من طلبٍ سابق).
+  bool _prefillFromHeader = false;
 
   double get _vat => vatInGross(widget.total);
   double get _subtotal => widget.total - _vat;
@@ -66,8 +69,19 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
     _loadDefaultAddress();
   }
 
-  /// عنوان التوصيل الافتراضي = موقع آخر طلب للعميل (عنوانه المعتاد).
+  /// عنوان التوصيل الافتراضي = **موقعُ العميلةِ المحدَّدُ تلقائياً** أعلى
+  /// الرئيسيّة (قرار المالك 2026-10-24: «موقعه محدد تلقائياً»)، وإلّا موقعُ
+  /// آخرِ طلبٍ لها (عنوانُها المعتاد).
   Future<void> _loadDefaultAddress() async {
+    final here = ClientLocation.instance.result;
+    if (here != null && here.isSuccess && here.location != null) {
+      setState(() {
+        _deliveryLocation = here.location;
+        _prefillZoneName = here.zoneName;
+        _prefillFromHeader = true;
+      });
+      return;
+    }
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
@@ -122,6 +136,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
         _deliveryLocation = loc;
         // عنوان مُختار يدوياً — لم يعد موروثاً من طلب سابق فنُخفي سطر المصدر.
         _prefillZoneName = null;
+        _prefillFromHeader = false;
       });
     }
   }
@@ -421,7 +436,9 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
                                       // فتظن العميلة أنه عنوانها الحالي حتماً.
                                       if (_prefillZoneName != null)
                                         Text(
-                                          'العنوان من طلبك السابق — منطقة $_prefillZoneName',
+                                          _prefillFromHeader
+                                              ? 'موقعكِ الحالي — منطقة $_prefillZoneName'
+                                              : 'العنوان من طلبك السابق — منطقة $_prefillZoneName',
                                           style: GoogleFonts.tajawal(
                                               fontSize: 11,
                                               color: Colors.grey.shade500),

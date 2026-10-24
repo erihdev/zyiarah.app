@@ -189,6 +189,8 @@ void main() {
     // صندوقُ السائقِ لا يَفتحُ شيئاً لأيِّ نوع — نقرتُه تُعلّمُ مقروءاً
     // وحدَه. قصورُ سطحٍ أوسعُ من هذا النوع: مرفوعٌ لا مُغلَقٌ هنا.
     'task_reminder',
+    // إسنادُ توصيلِ متجرٍ (2026-10-24): التوصيلةُ تَظهرُ في لوحتِه نفسِها.
+    'store_delivery_assigned',
   };
   const deadTrigger = <String>{
     // `notifyClientOnMaintenanceRejected` مُشغّلٌ على `maintenance_requests`

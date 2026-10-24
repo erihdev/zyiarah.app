@@ -115,12 +115,16 @@ void main() {
         isFalse,
         reason: 'عقدٌ مُفعَّلٌ يُقرأُ «جارٍ التفعيل» — دعوى معاكسة');
     // والزرُّ مشروطٌ بأنّها لم تَدفعْ — وإلّا قادَها إلى خصمٍ ثانٍ بالبطاقة.
-    expect(
-        s.contains("status == 'approved_waiting_payment' &&\n"
-            "                          data['is_paid'] != true"),
-        isTrue,
-        reason: 'زرُّ «دفع وتفعيل العقد» بلا شرطِ `is_paid` — '
-            'عقدٌ فشلَ تفعيلُه يَدعو العميلةَ إلى دفعةٍ ثانية');
+    // (2026-10-24) الشرطُ صارَ القاعدةَ `contractAwaitingPayment` — وهي
+    // تَستبعدُ المدفوعَ سلوكاً أدناه، وتَشملُ `pending` (لا اعتمادَ قبلَ الدفع).
+    expect(s.contains('if (contractAwaitingPayment(data))'), isTrue,
+        reason: 'زرُّ «دفع وتفعيل العقد» لا يَسألُ القاعدة');
+    expect(contractAwaitingPayment({'status': 'pending', 'is_paid': true}),
+        isFalse,
+        reason: 'عقدٌ فشلَ تفعيلُه يَدعو العميلةَ إلى دفعةٍ ثانية');
+    expect(contractAwaitingPayment(
+            {'status': 'approved_waiting_payment', 'is_paid': true}),
+        isFalse);
   });
 
   test('والمحفظةُ وحدَها عديمةُ الأثرِ التكراريّ — لا البطاقة', () {

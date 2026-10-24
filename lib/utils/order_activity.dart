@@ -52,6 +52,10 @@ const Set<String> kTerminalOrderStatuses = {
 /// المستنداتُ القديمةُ أيضاً.
 const Set<String> kStoreNeedsActionStatuses = {
   'under_review',
+  // دورةُ 2026-10-24: «قيد التجهيز» يَنتظرُ «جاهز»، و«جاهز» يَنتظرُ اختيارَ
+  // السائق. و«مع السائق» ليس هنا — السائقُ يُسلِّمُ لا الإدارة.
+  'preparing',
+  'ready',
   'delivering',
   'processing',
   'shipped',

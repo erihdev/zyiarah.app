@@ -120,8 +120,8 @@ void main() {
   });
 
   group('سلّةُ المتجر: المجموعُ يقول إنّه قبل الضريبة', () {
-    // الرقمُ في السلّة أساسٌ: `store_schedule_screen` يأخذه ويضيف 15% فوقه
-    // (`_grandTotal = widget.total + _vat`). و«المجموع الإجمالي» بلا قيدٍ تقرأ
+    // الرقمُ في السلّة أساسٌ: `createStoreOrder` يُعيدُ تسعيرَه خادميّاً ويضيف
+    // 15% فوقه (`grossFromBaseRounded`). و«المجموع الإجمالي» بلا قيدٍ تقرأ
     // كآخرِ ما يُدفع — نفسُ شكل «الأسعار شاملة الضريبة» أعلاه، وبقيّةُ الشاشات
     // تقول «الإجمالي قبل الضريبة» صراحةً.
     final src = File('lib/screens/store_screen.dart').readAsStringSync();
@@ -132,20 +132,18 @@ void main() {
           reason: 'عاد المجموعُ يُقدَّم كآخرِ ما يُدفع');
     });
 
-    test('والضريبةُ مذكورةٌ في سطر التنبيه، للمسارين', () {
+    test('والضريبةُ مذكورةٌ في سطر التنبيه — مسارٌ واحدٌ للمتجرَين', () {
       // النسبةُ مُستقرَأةٌ من `kVatRateLabel` لا مكتوبةً — فالمسارانِ يَتبعانِ
       // `kVatRate`، وعودةُ النصِّ الحرفيِّ تُسقط هذا الفحصَ لا تُمرّره.
       expect(r'تُضاف ضريبة القيمة المضافة $kVatRateLabel عند الدفع.'
           .allMatches(src)
           .length,
-          2,
-          reason: 'مسارُ الشركات ومسارُ العميل كلاهما يحتاجها');
+          1,
+          reason: 'المتجرانِ مسارٌ واحدٌ منذ 2026-10-24 — جملةٌ واحدة');
     });
 
-    test('وشاشةُ الجدولة ما زالت تعامله أساساً (وإلّا انقلبت القاعدة)', () {
-      final sch = File('lib/screens/store_schedule_screen.dart').readAsStringSync();
-      expect(sch.contains('double get _vat => vatOnBase(widget.total);'), isTrue);
-      expect(sch.contains('double get _grandTotal => widget.total + _vat;'), isTrue);
+    test('وشاشةُ الجدولة حُذفت — المتجرانِ إلى الدفعِ مباشرةً', () {
+      expect(File('lib/screens/store_schedule_screen.dart').existsSync(), isFalse);
     });
   });
 }

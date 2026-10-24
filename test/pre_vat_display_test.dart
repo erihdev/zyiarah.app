@@ -22,7 +22,6 @@ void main() {
     'lib/screens/ac_service_details_screen.dart',
     'lib/screens/car_interior_details_screen.dart',
     'lib/screens/sofa_rug_details_screen.dart',
-    'lib/screens/store_schedule_screen.dart',
     'lib/screens/hourly_details_screen.dart',
   ];
 

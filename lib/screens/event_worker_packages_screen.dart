@@ -620,7 +620,7 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
           const SizedBox(width: 14),
           Expanded(
             child: Text(
-              'اختاري باقة العاملات المناسبة لمناسبتك. توقّعين العقد إلكترونيّاً، ثمّ تعتمده الإدارة، ثمّ تُسدّدين لتفعيل الباقة.',
+              'اختاري باقة العاملات المناسبة لمناسبتك. توقّعين العقد إلكترونيّاً، ثمّ تُسدّدين فتتفعّل الباقة فوراً.',
               style: GoogleFonts.tajawal(fontSize: 13, height: 1.5, color: Colors.blueGrey[700]),
             ),
           ),

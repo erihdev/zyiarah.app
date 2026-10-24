@@ -131,7 +131,7 @@ void main() {
         isTrue);
     final rules = File('firestore.rules').readAsStringSync();
     expect(
-        RegExp(r"match /store_orders/\{orderId\} \{[\s\S]*?allow read: if isLoggedIn\(\) &&\s*\(request\.auth\.uid == resource\.data\.client_id \|\| isOrdersManager\(\) \|\|\s*isAccountantAdmin\(\)\);")
+        RegExp(r"match /store_orders/\{orderId\} \{[\s\S]*?allow read: if isLoggedIn\(\) &&\s*\(request\.auth\.uid == resource\.data\.client_id \|\| isOrdersManager\(\) \|\|\s*isAccountantAdmin\(\)")
             .hasMatch(rules),
         isTrue,
         reason: 'سجل الفواتير يجمع طلبات المتجر — يقرؤها المحاسب أيضاً');

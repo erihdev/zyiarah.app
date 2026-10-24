@@ -100,11 +100,11 @@ void main() {
     });
 
     test('«يَنتظرُ إجراءً» هو ما تَعرضُ له الإدارةُ زرّاً', () {
-      for (final s in ['under_review', 'delivering', 'processing', 'shipped']) {
+      for (final s in ['under_review', 'preparing', 'ready', 'delivering', 'processing', 'shipped']) {
         expect(storeOrderNeedsAction(s), isTrue, reason: s);
       }
       // المدفوعُ غيرُ بعد، والمنتهي، وغيرُ الموجود — لا إجراء.
-      for (final s in ['awaiting_payment', 'delivered', 'pending', '', 'x']) {
+      for (final s in ['awaiting_payment', 'with_driver', 'delivered', 'pending', '', 'x']) {
         expect(storeOrderNeedsAction(s), isFalse, reason: s);
       }
       expect(storeOrderNeedsAction(null), isFalse);
@@ -223,7 +223,8 @@ void main() {
           reason: 'رقمٌ لم يَحسبْه أحد');
       expect(insights.contains('_pendingContracts'), isTrue);
       expect(insights.contains("collection('contracts')"), isTrue);
-      expect(insights.contains('عقود بانتظار المراجعة'), isTrue);
+      // (2026-10-24) تَعدُّ المدفوعَ الذي لم يَتفعّل — لا اعتمادَ يُنتظَر.
+      expect(insights.contains('عقود مدفوعة لم تتفعّل'), isTrue);
     });
 
     test('عدُّ العقودِ `count()` بلا حقلٍ مُجمَّع فلا فهرسَ مركّباً', () {

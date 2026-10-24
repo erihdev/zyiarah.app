@@ -156,7 +156,7 @@ void main() {
 
     test('الاشتقاقُ يَجدُ الشاشاتِ فعلاً — وإلّا فالفحوصُ أدناه جوفاء', () {
       final found = _locatingScreens();
-      expect(found.length, greaterThanOrEqualTo(7),
+      expect(found.length, greaterThanOrEqualTo(6),
           reason: 'وُجد ${found.length} فقط: $found');
       expect(found, contains('lib/screens/hourly_details_screen.dart'));
       expect(found, isNot(contains(_picker)));

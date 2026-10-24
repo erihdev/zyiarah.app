@@ -262,7 +262,6 @@ void main() {
     '/contracts|create|event_worker_packages': 'orders_manager',
     '/contracts|update|event_worker_packages': 'orders_manager',
     '/contracts|delete|event_worker_packages': 'orders_manager',
-    '/contracts|update|contracts': 'marketing_admin',
     // والحذفُ `isSuperAdmin` وحدَه، فزرُّه مشروطٌ بـ`full` في الصفحة.
     '/contracts|delete|contracts': 'marketing_admin,orders_manager',
     // `Drivers` تَحذفُ `users/{uid}` **تراجعاً تعويضيّاً** داخلَ `catch` لا

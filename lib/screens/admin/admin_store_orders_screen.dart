@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/price_review.dart';
 import 'package:zyiarah/utils/home_packages.dart';
+import 'package:zyiarah/utils/store_order_flow.dart';
 
 class AdminStoreOrdersScreen extends StatefulWidget {
   /// داخلَ تبويبِ المتجرِ في اللوحةِ (`AdminStoreHubScreen`) تُرسَمُ بلا
@@ -87,6 +88,89 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
   /// (`price_mismatch` / `price_unverifiable` / `price_expected` …) ويُنبّهُ
   /// الإدارةَ بأكوادٍ — وهذه هي الشاشةُ الوحيدةُ التي تَعرضُ طلباتِ المتجر،
   /// ولم تكن تَذكرُ شيئاً من ذلك. والاعتمادُ هو ما يُصرّفُ نافذةَ المكنسة.
+  /// **الإدارةُ تختارُ السائق** (قرار المالك) — لا إسنادَ تلقائيّاً لطلبِ
+  /// المتجر. السائقونَ النشطون (`drivers.is_active`، ومعرّفُ المستندِ هو
+  /// معرّفُ دخولِ السائق الذي تَفحصُه القواعد)، والكتابةُ تَنقلُ الطلبَ «مع
+  /// السائق» فيَظهرُ في لوحتِه ويُشعَرُ هو والعميلة.
+  Future<void> _assignDriver(BuildContext context, String orderId,
+      Map<String, dynamic> order) async {
+    final messenger = ScaffoldMessenger.of(context);
+    List<Map<String, String>> drivers;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('drivers')
+          .where('is_active', isEqualTo: true)
+          .get()
+          .timeout(kNetCallTimeout);
+      drivers = snap.docs
+          .map((d) => {
+                'id': d.id,
+                'name': (d.data()['name'] ?? 'بدون اسم').toString(),
+              })
+          .toList();
+    } catch (e) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('تعذّر تحميل السائقين — تحقّق من الاتصال'),
+          backgroundColor: Colors.red));
+      return;
+    }
+    if (!context.mounted) return;
+    if (drivers.isEmpty) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('لا يوجد سائق نشط — فعّل سائقاً من «السائقين والعمال»'),
+          backgroundColor: Colors.orange));
+      return;
+    }
+    final picked = await showModalBottomSheet<Map<String, String>>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text('اختر السائق لتوصيل الطلب',
+                    style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
+              for (final d in drivers)
+                ListTile(
+                  leading: const Icon(Icons.person_pin_circle_outlined, color: Color(0xFF660033)),
+                  title: Text(d['name']!, style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+                  onTap: () => Navigator.pop(ctx, d),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked == null) return;
+    try {
+      await FirebaseFirestore.instance.collection('store_orders').doc(orderId).update({
+        'status': kStoreWithDriver,
+        'driver_id': picked['id'],
+        'driver_name': picked['name'],
+        'assigned_at': FieldValue.serverTimestamp(),
+        'updated_at': FieldValue.serverTimestamp(),
+      });
+      await ZyiarahAuditService().logAction(
+        action: 'ASSIGN_STORE_ORDER_DRIVER',
+        details: {'driver_id': picked['id'] ?? '', 'driver_name': picked['name'] ?? ''},
+        targetId: orderId,
+      );
+      messenger.showSnackBar(SnackBar(
+          content: Text('أُسند الطلب إلى ${picked['name']}'),
+          backgroundColor: Colors.green));
+    } catch (e) {
+      final String msg = e is FirebaseException && e.code == 'permission-denied'
+          ? 'لا تملك صلاحية تحديث طلبات المتجر'
+          : 'تعذّر إسناد السائق — أعد المحاولة';
+      messenger.showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
+    }
+  }
+
   Widget _priceReviewBanner(BuildContext context, String orderId,
       Map<String, dynamic> order) {
     final PriceReview r = priceReviewOf(order);
@@ -270,40 +354,6 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
     }
   }
 
-  String _translateStatus(String status) {
-    switch (status) {
-      case 'pending': return 'جديد (بانتظار الموافقة)';
-      case 'awaiting_payment': return 'بانتظار دفع العميل';
-      case 'under_review': return 'مدفوع — تحت المراجعة';
-      case 'delivering': return 'جاري التوصيل';
-      case 'approved': return 'تمت الموافقة (بانتظار دفع العميل)';
-      case 'processing': return 'مدفوع (جاري التجهيز)';
-      case 'shipped': return 'تم التسليم للمندوب / الشحن';
-      case 'delivered':
-      case 'completed': return 'مكتمل ومُسلم';
-      case 'rejected':
-      case 'cancelled': return 'مرفوض / ملغي';
-      default: return 'تحت المعالجة';
-    }
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'pending': return Colors.orange;
-      case 'awaiting_payment': return Colors.deepOrange;
-      case 'under_review': return Colors.orange;
-      case 'delivering': return Colors.indigo;
-      case 'approved': return Colors.blue;
-      case 'processing': return Colors.teal;
-      case 'shipped': return Colors.purple;
-      case 'delivered':
-      case 'completed': return Colors.green;
-      case 'rejected':
-      case 'cancelled': return Colors.red;
-      default: return Colors.grey;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -378,10 +428,20 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
                   }
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("لا توجد طلبات في المتجر حتى الآن"));
 
+                  // **المدفوعُ وحدَه** (قرار المالك): طلبُ المتجرِ يُنشأُ قبلَ الدفعِ
+                  // ليُسعَّرَ خادميّاً، فسلّةٌ هُجرت عند الدفعِ كانت تَظهرُ هنا
+                  // «جديد (بانتظار الموافقة)» و«الدفع: بانتظار الدفع».
+                  final paid = snapshot.data!.docs
+                      .where((doc) => storeOrderVisibleToAdmin(
+                          doc.data() as Map<String, dynamic>))
+                      .toList();
+                  if (paid.isEmpty) {
+                    return const Center(child: Text('لا توجد طلبات مدفوعة في المتجر حتى الآن'));
+                  }
                   final query = _search.trim().toLowerCase();
                   final docs = query.isEmpty
-                      ? snapshot.data!.docs
-                      : snapshot.data!.docs.where((doc) {
+                      ? paid
+                      : paid.where((doc) {
                           final data = doc.data() as Map<String, dynamic>;
                           final code = doc.id.substring(0, 6).toLowerCase();
                           final clientName = (data['client_name'] ?? '').toString().toLowerCase();
@@ -415,8 +475,8 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
                             Text("رقم الطلب #${orderDoc.id.substring(0, 6).toUpperCase()}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(color: _getStatusColor(status).withValues(alpha:0.1), borderRadius: BorderRadius.circular(12)),
-                              child: Text(_translateStatus(status), style: TextStyle(color: _getStatusColor(status), fontWeight: FontWeight.bold, fontSize: 12)),
+                              decoration: BoxDecoration(color: storeStatusColor(status).withValues(alpha:0.1), borderRadius: BorderRadius.circular(12)),
+                              child: Text(storeStatusLabel(status), style: TextStyle(color: storeStatusColor(status), fontWeight: FontWeight.bold, fontSize: 12)),
                             ),
                           ],
                         ),
@@ -448,6 +508,17 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
                             Text("الدفع: ${_paymentLabel(order)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
                           ],
                         ),
+                        if ((order['driver_name'] ?? '').toString().isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              const Icon(Icons.local_shipping_outlined, size: 20, color: Colors.grey),
+                              const SizedBox(width: 8),
+                              Text('السائق: ${order['driver_name']}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+                            ],
+                          ),
+                        ],
                         _priceReviewBanner(context, orderDoc.id, order),
                         const SizedBox(height: 15),
                         Row(
@@ -459,22 +530,26 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
                               style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF660033)),
                               onPressed: () => _showOrderItems(context, order),
                             ),
-                            // سلسلة الإدارة: تحت المراجعة ⇒ جاري التوصيل ⇒
-                            // تم التوصيل — كل نقرة تصل العميل حيّاً بإشعار خادمي.
-                            // 'processing' إرث المسار القديم يُعامل كتحت المراجعة.
-                            if (status == 'under_review' || status == 'processing')
+                            // دورةُ الإدارة (`store_order_flow.dart`): مدفوع ⇒ قيد
+                            // التجهيز ⇒ جاهز للتوصيل ⇒ إسناد لسائق ⇒ يُسلِّمُه السائق.
+                            // كلُّ نقرةٍ تَصِلُ العميلةَ بإشعارٍ خادميّ.
+                            if (storeAdminNextStep(status) case final step?)
                               ElevatedButton.icon(
-                                icon: const Icon(Icons.local_shipping_outlined, size: 18),
-                                label: const Text('بدء التوصيل'),
-                                style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
-                                onPressed: () => _updateOrderStatus(context, orderDoc.id, 'delivering'),
-                              ),
-                            if (status == 'delivering' || status == 'shipped')
-                              ElevatedButton.icon(
-                                icon: const Icon(Icons.check_circle_outline, size: 18),
-                                label: const Text('تم التوصيل'),
-                                style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                                onPressed: () => _updateOrderStatus(context, orderDoc.id, 'delivered'),
+                                icon: Icon(
+                                    switch (step) {
+                                      StoreAdminStep.startPreparing => Icons.inventory_2_outlined,
+                                      StoreAdminStep.markReady => Icons.check_box_outlined,
+                                      StoreAdminStep.assignDriver => Icons.local_shipping_outlined,
+                                      StoreAdminStep.markDelivered => Icons.check_circle_outline,
+                                    },
+                                    size: 18),
+                                label: Text(step.label),
+                                style: ElevatedButton.styleFrom(
+                                    backgroundColor: storeStatusColor(step.nextStatus),
+                                    foregroundColor: Colors.white),
+                                onPressed: () => step == StoreAdminStep.assignDriver
+                                    ? _assignDriver(context, orderDoc.id, order)
+                                    : _updateOrderStatus(context, orderDoc.id, step.nextStatus),
                               ),
                           ],
                         ),
