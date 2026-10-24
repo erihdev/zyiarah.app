@@ -12,7 +12,13 @@ import 'package:zyiarah/utils/net_timeout.dart';
 
 
 class AdminOrdersScreen extends StatefulWidget {
-  const AdminOrdersScreen({super.key});
+  /// تبويبٌ داخلَ `AdminDashboardScreen` (الذي يَرسمُ شريطَه بنفسِه): بلا
+  /// `AppBar` خاصٍّ كي لا يُرسَمَ شريطانِ متراكبان، وزرُّ التصديرِ يَنتقلُ إلى
+  /// صفٍّ أعلى القائمة. الافتراضُ `false` يُبقي السلوكَ الحاليَّ للشاشةِ حين
+  /// تُدفَعُ مساراً مستقلّاً (من الرؤى والتحليلات).
+  final bool embedded;
+
+  const AdminOrdersScreen({super.key, this.embedded = false});
 
   @override
   State<AdminOrdersScreen> createState() => _AdminOrdersScreenState();
@@ -31,6 +37,21 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
   final List<QueryDocumentSnapshot> _olderDocs = [];
   bool _loadingMore = false;
   bool _exhausted = false;
+
+  // البثُّ يُبنى مرّةً واحدةً لا في كلِّ `build`: كلُّ حرفٍ في حقلِ البحث
+  // كان يُلغي المستمِعَ ويُنشئُ غيرَه فتُستأنفُ مهلةُ الحدثِ الأوّل، فلا
+  // يُبلَغُ فرعُ الخطأِ ما دام الأدمنُ يَكتب. (`_pageSize` ثابتٌ لا يَنمو —
+  // الصفحاتُ الأقدمُ تُجلَبُ بـ`startAfterDocument` لا بتوسيعِ البثّ.)
+  Stream<QuerySnapshot>? _ordersStream;
+  Stream<QuerySnapshot> get _orders => _ordersStream ??= _db
+      .collection('orders')
+      .orderBy('created_at', descending: true)
+      .limit(_pageSize)
+      .snapshots()
+      .firstEventTimeout();
+
+  /// إعادةُ المحاولةِ صريحةٌ: تُصفّرُ البثَّ فيُفتَحُ مستمِعٌ جديدٌ بمهلةٍ جديدة.
+  void _reopenOrders() => setState(() => _ordersStream = null);
 
   @override
   void dispose() {
@@ -90,8 +111,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: StreamBuilder<QuerySnapshot>(
-        stream: _db.collection('orders').orderBy('created_at', descending: true).limit(_pageSize).snapshots()
-            .firstEventTimeout(),
+        stream: _orders,
         builder: (context, snapshot) {
           final streamDocs = snapshot.data?.docs ?? [];
           // دمج نافذة البث الحيّ مع الصفحات الأقدم مع منع تكرار المستندات
@@ -103,9 +123,21 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
           ];
           final canLoadMore = !_exhausted && streamDocs.length >= _pageSize;
 
+          void exportCsv() {
+            final csvData = ZyiarahExportUtil.convertToCsv(docs);
+            Clipboard.setData(ClipboardData(text: csvData));
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text("تم تجهيز التقرير المحاسبي ونسخه بنجاح ✅"),
+              backgroundColor: Colors.green,
+            ));
+          }
+
+          final body = _buildBody(snapshot, docs, canLoadMore: canLoadMore);
           return Scaffold(
             backgroundColor: const Color(0xFFF8FAFC),
-            appBar: AppBar(
+            appBar: widget.embedded
+                ? null
+                : AppBar(
               title: Text("سجل الطلبات الشامل", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
               backgroundColor: const Color(0xFF660033),
               foregroundColor: Colors.white,
@@ -116,20 +148,37 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                     padding: const EdgeInsets.only(left: 8.0),
                     child: IconButton(
                       tooltip: "تصدير للتقرير المحاسبي",
-                      onPressed: () {
-                        final csvData = ZyiarahExportUtil.convertToCsv(docs);
-                        Clipboard.setData(ClipboardData(text: csvData));
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text("تم تجهيز التقرير المحاسبي ونسخه بنجاح ✅"),
-                          backgroundColor: Colors.green,
-                        ));
-                      }, 
+                      onPressed: exportCsv,
                       icon: const Icon(Icons.file_download_outlined)
                     ),
                   )
               ],
             ),
-            body: _buildBody(snapshot, docs, canLoadMore: canLoadMore),
+            body: widget.embedded && docs.isNotEmpty
+                ? Column(children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+                      child: Row(children: [
+                        Expanded(
+                          child: Text("سجل الطلبات الشامل",
+                              style: GoogleFonts.tajawal(
+                                  fontWeight: FontWeight.bold, fontSize: 15)),
+                        ),
+                        TextButton.icon(
+                          onPressed: exportCsv,
+                          icon: const Icon(Icons.file_download_outlined,
+                              color: Color(0xFF660033), size: 18),
+                          label: Text("تصدير للتقرير المحاسبي",
+                              style: GoogleFonts.tajawal(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF660033))),
+                        ),
+                      ]),
+                    ),
+                    Expanded(child: body),
+                  ])
+                : body,
           );
         },
       ),
@@ -150,6 +199,15 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
             const SizedBox(height: 16),
             Text("تعذّر تحميل الطلبات، تحقّق من الاتصال",
                 style: GoogleFonts.tajawal(color: Colors.grey)),
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: _reopenOrders,
+              icon: const Icon(Icons.refresh_rounded, color: Color(0xFF660033)),
+              label: Text("إعادة المحاولة",
+                  style: GoogleFonts.tajawal(
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF660033))),
+            ),
           ],
         ),
       );

@@ -209,13 +209,12 @@ void _vatLabelGuards() {
         }
       }
       expect(readers, {
-        // شاشاتُ الحجزِ الخمس: الجملةُ المعيار
+        // شاشاتُ الحجزِ الأربع: الجملةُ المعيار
         'lib/screens/ac_service_details_screen.dart',
         'lib/screens/car_interior_details_screen.dart',
         'lib/screens/hourly_details_screen.dart',
         'lib/screens/sofa_rug_details_screen.dart',
-        'lib/screens/store_schedule_screen.dart',
-        // سلّةُ المتجر: جملتانِ (مسارُ الشركاتِ ومسارُ العميلة)
+        // سلّةُ المتجر: جملةٌ واحدة (المتجرانِ مسارٌ واحد)
         'lib/screens/store_screen.dart',
         // صفُّ الضريبةِ في شاشتَي الدفع
         'lib/screens/payment_summary_screen.dart',
@@ -231,7 +230,7 @@ void _vatLabelGuards() {
       }, reason: 'قارئٌ جديدٌ أو مفقود — راجع قبل تعديل الحارس');
     });
 
-    test('(ز) والجملةُ المعيارُ لخمسِ شاشاتٍ بعينِها', () {
+    test('(ز) والجملةُ المعيارُ لأربعِ شاشاتٍ بعينِها', () {
       final users = <String>{};
       for (final f in sourcesIn('lib/screens', atLeast: 40)) {
         if (stripComments(f.readAsStringSync())
@@ -244,8 +243,7 @@ void _vatLabelGuards() {
         'lib/screens/car_interior_details_screen.dart',
         'lib/screens/hourly_details_screen.dart',
         'lib/screens/sofa_rug_details_screen.dart',
-        'lib/screens/store_schedule_screen.dart',
-      }, reason: 'شاشةٌ سادسةٌ كتبت جملتَها، أو خامسةٌ فقدتها');
+      }, reason: 'شاشةٌ خامسةٌ كتبت جملتَها، أو رابعةٌ فقدتها');
     });
 
     test('(ح) وثيقةُ الفاتورةِ الضريبيّةِ ما زالت تُعلِنُ النسبة', () {

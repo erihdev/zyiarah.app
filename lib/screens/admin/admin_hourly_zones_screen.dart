@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:zyiarah/utils/map_tiles.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -221,8 +222,17 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
   /// ومنحاز لمنطقة جازان (proximity) كي تتقدّم «صبيا جازان» على أي تشابه أبعد.
   /// بمهلة، والفشل يُسجَّل ولا يُزعج — هذه مساعدة، والنقر على الخريطة يبقى سيّداً.
   Future<GeoPoint?> _geocodeZoneName(String query) async {
+    final hits = await _searchPlaces(query, limit: 1);
+    return hits.isEmpty ? null : hits.first.geo;
+  }
+
+  /// اقتراحاتُ أماكنَ لحقلِ «ابحث عن مكان» في حوارِ المنطقة — الاستعلامُ نفسُه
+  /// (السعوديّة، حدودُ جازان، الانحيازُ لها) بعدّةِ نتائج تُعرَضُ قائمةً.
+  Future<List<({String label, String sub, GeoPoint geo})>> _searchPlaces(
+      String query,
+      {int limit = 5}) async {
     final token = envOrEmpty('MAPBOX_TOKEN');
-    if (token.isEmpty || query.trim().length < 2) return null;
+    if (token.isEmpty || query.trim().length < 2) return const [];
     try {
       final url = Uri.parse(
           'https://api.mapbox.com/search/geocode/v6/forward'
@@ -230,17 +240,29 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
           '&access_token=$token&language=ar&country=sa'
           // bbox: قصر النتائج على منطقة جازان فقط (لا مدن/مناطق أخرى).
           '&bbox=${kJazanSw.longitude},${kJazanSw.latitude},${kJazanNe.longitude},${kJazanNe.latitude}'
-          '&proximity=43.0505,17.3023&limit=1');
+          '&proximity=43.0505,17.3023&limit=$limit');
       final res = await http.get(url).timeout(const Duration(seconds: 8));
-      if (res.statusCode != 200) return null;
+      if (res.statusCode != 200) return const [];
       final features = (json.decode(res.body)['features'] as List?) ?? [];
-      if (features.isEmpty) return null;
-      final coords = features.first['geometry']?['coordinates'];
-      if (coords is! List || coords.length < 2) return null;
-      return GeoPoint((coords[1] as num).toDouble(), (coords[0] as num).toDouble());
+      final out = <({String label, String sub, GeoPoint geo})>[];
+      for (final f in features) {
+        if (f is! Map) continue;
+        final geometry = f['geometry'];
+        final coords = geometry is Map ? geometry['coordinates'] : null;
+        if (coords is! List || coords.length < 2) continue;
+        final props = f['properties'];
+        final p = props is Map ? props : const {};
+        out.add((
+          label: (p['name'] ?? p['full_address'] ?? '').toString(),
+          sub: (p['place_formatted'] ?? '').toString(),
+          geo: GeoPoint(
+              (coords[1] as num).toDouble(), (coords[0] as num).toDouble()),
+        ));
+      }
+      return out;
     } catch (e) {
       debugPrint('[ZoneGeocode] failed for "$query": $e');
-      return null;
+      return const [];
     }
   }
 
@@ -384,6 +406,18 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
 
     int rank = (data?['rank'] as num?)?.toInt() ?? 0;
     GeoPoint? selectedGeo = data?['centerLoc'] as GeoPoint?;
+    // **الاسمُ مفتاحُ تسعيرٍ لا تسمية.** الطلباتُ تَحُلُّ منطقتَها باسمِها
+    // (`zone_name`)، فإعادةُ تسميةِ منطقةٍ قائمةٍ لا تُرمِّزُ الاسمَ الجديدَ ولا
+    // تَنقلُ مركزَها: الترميزُ التلقائيُّ للمنطقةِ الجديدةِ وحدَها، وقبلَ أن
+    // يُحدّدَ الأدمنُ الموقعَ بيدِه. وتغييرُ الاسمِ يُنبَّهُ عنه في الحوارِ
+    // ويُؤكَّدُ عند الحفظ.
+    final String originalName = (data?['name'] ?? '').toString().trim();
+    bool locationPinned = doc != null;
+    bool renamed() =>
+        doc != null && nameCtrl.text.trim() != originalName;
+    final placeSearchCtrl = TextEditingController();
+    Timer? placeDebounce;
+    var placeHits = <({String label, String sub, GeoPoint geo})>[];
     bool isSaving = false;
 
     // جدول فتح المنطقة — يبنيه المحرّر ويُكتب على المستند.
@@ -430,15 +464,85 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                       // «كتبت صبيا — المفترض ينقلني مباشرة إلى صبيا».
                       onChanged: (q) {
                         nameDebounce?.cancel();
+                        // تعديلُ منطقةٍ قائمة: لا ترميزَ ولا نقل — تنبيهٌ فقط.
+                        if (doc != null) {
+                          setDialogState(() {});
+                          return;
+                        }
+                        if (locationPinned) return;
                         nameDebounce = Timer(const Duration(milliseconds: 700), () async {
                           final g = await _geocodeZoneName(q);
                           if (g == null) return;
-                          if (!ctx.mounted) return;
+                          if (!ctx.mounted || locationPinned) return;
                           setDialogState(() => selectedGeo = g);
                         });
                       },
                     ),
-                    const SizedBox(height: 15),
+                    if (renamed())
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(top: 8),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFF59E0B)),
+                        ),
+                        child: Text(
+                          'تغيير الاسم من «$originalName» لا ينقل المنطقة ولا يغيّر موقعها. '
+                          'لكن الطلبات تُربط بالمنطقة باسمها: الطلبات القائمة التي تحمل '
+                          'الاسم القديم لن تُطابق هذه المنطقة بعد الحفظ (تسعيرها والتحقق منه).',
+                          style: const TextStyle(
+                              fontSize: 11, height: 1.6, color: Color(0xFF92400E)),
+                        ),
+                      ),
+                    const SizedBox(height: 12),
+                    // البحثُ عن مكانٍ باقتراحات — يَنقلُ المركزَ عند الاختيار فقط،
+                    // لا عند الكتابة.
+                    TextField(
+                      controller: placeSearchCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'ابحث عن مكان لوضع المركز',
+                        hintText: 'قرية، مركز، أو معلم في منطقة جازان',
+                        prefixIcon: Icon(Icons.search_rounded),
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      onChanged: (q) {
+                        placeDebounce?.cancel();
+                        placeDebounce = Timer(const Duration(milliseconds: 500), () async {
+                          final hits = await _searchPlaces(q);
+                          if (!ctx.mounted) return;
+                          setDialogState(() => placeHits = hits);
+                        });
+                      },
+                    ),
+                    if (placeHits.isNotEmpty)
+                      Container(
+                        margin: const EdgeInsets.only(top: 4),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Column(
+                          children: [
+                            for (final h in placeHits)
+                              ListTile(
+                                dense: true,
+                                leading: const Icon(Icons.place_outlined, size: 18),
+                                title: Text(h.label),
+                                subtitle: h.sub.isEmpty ? null : Text(h.sub),
+                                onTap: () => setDialogState(() {
+                                  selectedGeo = h.geo;
+                                  locationPinned = true;
+                                  placeHits = [];
+                                  placeSearchCtrl.clear();
+                                }),
+                              ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 12),
                     
                     // الخريطة الحيّة — ظاهرة دائماً تحت الاسم مباشرة (طلب المالك):
                     // قبل التحديد تفتح على منطقة جازان، والنقر عليها يضع المركز،
@@ -446,7 +550,10 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     _ZoneCoveragePreview(
                       center: selectedGeo,
                       radiusKm: double.tryParse(radiusCtrl.text) ?? 15.0,
-                      onPick: (g) => setDialogState(() => selectedGeo = g),
+                      onPick: (g) => setDialogState(() {
+                        selectedGeo = g;
+                        locationPinned = true;
+                      }),
                     ),
                     const SizedBox(height: 12),
 
@@ -456,6 +563,26 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                       decoration: const InputDecoration(labelText: 'نصف القطر للتغطية (كم)', border: OutlineInputBorder()),
                       // إعادة الرسم عند كل تغيير كي تتحدث دائرة التغطية حيّاً.
                       onChanged: (_) => setDialogState(() {}),
+                    ),
+                    // مُنزلِقٌ يَكتبُ في الحقلِ نفسِه — الحقلُ يَبقى مصدرَ القيمة
+                    // ومعه تحقّقُه (1..100) عند الحفظ، فلا قيمةٌ ثانية.
+                    Slider(
+                      // موضعُ المُنزلِقِ وحدَه — قيمةٌ غيرُ صالحةٍ تُرفَضُ عند الحفظ.
+                      value: (optionalNum(radiusCtrl.text, whenEmpty: 15) ?? 15.0)
+                          .clamp(1.0, 100.0),
+                      min: 1,
+                      max: 100,
+                      divisions: 198,
+                      activeColor: const Color(0xFF660033),
+                      label: '${radiusCtrl.text.trim()} كم',
+                      onChanged: isSaving
+                          ? null
+                          : (v) => setDialogState(() {
+                                final r = (v * 2).roundToDouble() / 2;
+                                radiusCtrl.text = r % 1 == 0
+                                    ? r.toInt().toString()
+                                    : r.toString();
+                              }),
                     ),
                     const SizedBox(height: 10),
                     // (قرار المالك 2026-09-16) سقف يومي خاص بالمنطقة يضيّق السقف
@@ -539,23 +666,39 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     const SizedBox(height: 10),
 
                     // خريطة كاملة للتحديد الأدق (بحث بالاسم + سحب) — مكمّلة للنقر السريع.
-                    InkWell(
-                      onTap: () async {
-                        final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => LocationPickerScreen(
-                          serviceName: 'تحديد موقع المنطقة',
-                          radius: double.tryParse(radiusCtrl.text) ?? 15.0,
-                        )));
-                        if (result != null && result is GeoPoint) {
-                          setDialogState(() => selectedGeo = result);
-                        }
-                      },
-                      child: Row(
-                        children: [
-                          Icon(Icons.open_in_full_rounded, size: 15, color: Colors.blue.shade700),
-                          const SizedBox(width: 6),
-                          Text('فتح خريطة كاملة لتحديدٍ أدق',
-                              style: TextStyle(fontSize: 12, color: Colors.blue.shade700)),
-                        ],
+                    // الخريطةُ الكاملة: بحثٌ باقتراحات، وسحبٌ أو نقرٌ للدبوس، ومُنزلِقٌ
+                    // لنصفِ القطرِ بدائرةٍ حيّة — وتَفتحُ على المركزِ الحاليِّ عند
+                    // التعديل (`initialLocation`) لا على موقعِ جهازِ الأدمن.
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: isSaving
+                            ? null
+                            : () async {
+                                final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => LocationPickerScreen(
+                                  serviceName: 'تحديد موقع المنطقة',
+                                  radius: double.tryParse(radiusCtrl.text) ?? 15.0,
+                                  initialLocation: selectedGeo,
+                                  adjustableRadius: true,
+                                )));
+                                if (result is Map) {
+                                  final loc = result['location'];
+                                  final r = result['radiusKm'];
+                                  setDialogState(() {
+                                    if (loc is GeoPoint) {
+                                      selectedGeo = loc;
+                                      locationPinned = true;
+                                    }
+                                    if (r is num) {
+                                      radiusCtrl.text = r % 1 == 0
+                                          ? r.toInt().toString()
+                                          : r.toString();
+                                    }
+                                  });
+                                }
+                              },
+                        icon: const Icon(Icons.map_outlined, size: 18),
+                        label: const Text('فتح الخريطة الكاملة (بحث، دبوس، ونصف القطر)'),
                       ),
                     ),
 
@@ -985,6 +1128,31 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                       ));
                       return;
                     }
+                    // إعادةُ التسميةِ قرارٌ يُؤكَّد: الاسمُ مفتاحُ ربطِ الطلبات.
+                    if (renamed()) {
+                      final ok = await showDialog<bool>(
+                        context: context,
+                        builder: (c3) => Directionality(
+                          textDirection: TextDirection.rtl,
+                          child: AlertDialog(
+                            title: const Text('تأكيد تغيير اسم المنطقة'),
+                            content: Text(
+                                'سيتغيّر الاسم من «$originalName» إلى «${nameCtrl.text.trim()}». '
+                                'الطلبات القائمة باسمها القديم لن تُطابق هذه المنطقة بعد الآن. '
+                                'الموقع ونصف القطر لا يتغيّران بتغيير الاسم.'),
+                            actions: [
+                              TextButton(
+                                  onPressed: () => Navigator.pop(c3, false),
+                                  child: const Text('تراجع')),
+                              ElevatedButton(
+                                  onPressed: () => Navigator.pop(c3, true),
+                                  child: const Text('تغيير الاسم')),
+                            ],
+                          ),
+                        ),
+                      );
+                      if (ok != true || !ctx.mounted) return;
+                    }
                     setDialogState(() => isSaving = true);
                     try {
                       final newData = {
@@ -1049,6 +1217,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                         details: {
                           'name': newData['name'],
                           'zone_id': doc?.id ?? 'NEW',
+                          if (renamed()) 'renamed_from': originalName,
                         },
                         targetId: doc?.id,
                       );
@@ -1075,6 +1244,8 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
       ),
     ).whenComplete(() {
       nameDebounce?.cancel();
+      placeDebounce?.cancel();
+      placeSearchCtrl.dispose();
       nameCtrl.dispose();
       radiusCtrl.dispose();
       maxPerDayCtrl.dispose();
@@ -1344,14 +1515,8 @@ class _ZoneCoveragePreview extends StatelessWidget {
                     },
                   ),
                   children: [
-                    // بلاطات OSM القياسية: تعرض الأسماء المحلية (العربية في السعودية)
-                    // بدل بلاطات Mapbox النقطية الإنجليزية التي لا يُغيَّر لسانها من
-                    // العميل — وتوحيدٌ مع بقية خرائط التطبيق (التتبع/السائق/العامة).
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.zyiarah.zyiarah',
-                    ),
+                    // البلاطاتُ من موضعٍ واحد (Mapbox) — انظر map_tiles.dart.
+                    zyiarahTileLayer(),
                     // قناع «خارج جازان»: مستطيل واسع بثقوبٍ = حلقات المنطقة — يُعتِّم
                     // كل ما حولها فلا يظهر إلا محافظات جازان وقراها وهجرها، بحدٍّ بنفسجي.
                     PolygonLayer(polygons: [

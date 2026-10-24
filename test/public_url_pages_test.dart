@@ -171,7 +171,8 @@ void main() {
   }
 
   test('كلُّ مسارِ zyiarah.com يَنشرُه المستودعُ له صفحةٌ مَخدومة', () {
-    expect(published.length, greaterThanOrEqualTo(6),
+    // (2026-10-24) `/contracts` كان في بريدِ «اعتماد العقد» وحدَه، وزالَ معه.
+    expect(published.length, greaterThanOrEqualTo(5),
         reason: 'المسحُ انهارَ (${published.length} مسار) — حارسٌ لا يَجدُ '
             'شيئاً أسوأُ من لا حارس');
     final sources = published.values.expand((e) => e).toSet();

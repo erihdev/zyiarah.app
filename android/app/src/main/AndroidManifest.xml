@@ -1,5 +1,12 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- AD_ID يُضيفُه play-services-measurement (عبر firebase_analytics) إلى
+         البيانِ المدمجِ تلقائيّاً، والتطبيقُ لا يَستعملُ إعلاناتٍ ولا معرّفَ
+         إعلاناتٍ أصلاً (NSPrivacyTracking=false على iOS، ولا نداءَ logEvent).
+         إذنٌ حاضرٌ في البيانِ وغائبٌ عن نموذجِ «أمان البيانات» سببُ رفضٍ
+         معروفٌ في Play، فيُحذَفُ من الدمجِ ويُطفأُ جمعُه (2026-10-22). -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- تتبّع موقع السائق أثناء التوصيل. مؤقّتاً بلا خدمة أمامية ولا أذون
@@ -26,10 +33,16 @@
          يَشدُّ المطابقةَ `test/permissions_guard_test.dart`. -->
 
     <application
-        android:label="Zyiarah"
+        android:label="زيارة"
         android:name="${applicationName}"
-        android:icon="@mipmap/launcher_icon"
-        android:usesCleartextTraffic="true">
+        android:icon="@mipmap/launcher_icon">
+        <!-- `android:usesCleartextTraffic="true"` حُذِف (2026-10-22): لا نقطةَ
+             http:// في lib/ ولا functions/ (كلُّ الاتصالاتِ https)، وكان يُناقضُ
+             جوابَ «مشفّرة أثناء النقل = نعم» في نموذجِ أمانِ البيانات. الافتراضُ
+             من API 28+ هو false. -->
+        <meta-data
+            android:name="google_analytics_adid_collection_enabled"
+            android:value="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -51,8 +64,11 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- Deep Linking -->
-            <intent-filter android:autoVerify="true">
+            <!-- Deep Linking — بلا `autoVerify`: التحقّقُ التلقائيُّ يَخصُّ روابطَ
+                 http/https بملفِّ `assetlinks.json` ولا معنى له لمُخطَّطٍ مخصَّص
+                 (`zyiarah://`)، وكان يُنتجُ تحذيرَ lint ومحاولةَ تحقّقٍ تَفشلُ
+                 عند التثبيت (2026-10-22). -->
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
@@ -89,23 +105,17 @@
             <data android:mimeType="text/plain"/>
         </intent>
         <!-- Package visibility (Android 11+): without these, canLaunchUrl/launchUrl
-             cannot resolve https/market/tel/mailto handlers, which broke the store
-             link (force-update lockout) and any external link. -->
+             cannot resolve https/tel handlers, which broke the store link
+             (force-update lockout) and any external link.
+             `market` و`mailto` حُذِفا (2026-10-22): لا رابطَ بأيٍّ منهما في lib/ —
+             رابطُ المتجرِ https (app_update_service) والبريدُ لا يُفتَحُ من التطبيق. -->
         <intent>
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="https"/>
         </intent>
         <intent>
-            <action android:name="android.intent.action.VIEW"/>
-            <data android:scheme="market"/>
-        </intent>
-        <intent>
             <action android:name="android.intent.action.DIAL"/>
             <data android:scheme="tel"/>
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.SENDTO"/>
-            <data android:scheme="mailto"/>
         </intent>
     </queries>
 </manifest>

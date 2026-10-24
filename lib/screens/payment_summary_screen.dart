@@ -1,3 +1,4 @@
+import 'package:zyiarah/utils/payment_keys.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -22,7 +23,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:pay/pay.dart';
 import 'package:zyiarah/services/moyasar_service.dart';
-import 'package:zyiarah/screens/moyasar_card_screen.dart';
+import 'package:zyiarah/widgets/moyasar_inline_card.dart';
 import 'package:zyiarah/screens/moyasar_stc_screen.dart';
 import 'package:moyasar/moyasar.dart';
 import 'package:zyiarah/services/zyiarah_wallet_service.dart';
@@ -35,11 +36,14 @@ import 'package:zyiarah/utils/terrain_surcharge.dart';
 import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/error_report.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/native_pay_config.dart';
 import 'package:zyiarah/utils/zone_schedule.dart';
 import 'package:zyiarah/utils/phone_format.dart';
 import 'package:zyiarah/utils/invoice_stamp.dart';
 import 'package:zyiarah/utils/price_review.dart';
 import '../utils/env.dart';
+import 'package:zyiarah/utils/home_packages.dart' show formatSar;
+import 'package:zyiarah/screens/terms_privacy_screens.dart';
 
 
 
@@ -125,6 +129,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   late String _pendingOrderId;
   late final Future<PaymentConfiguration>? _googlePayConfigFuture;
 
+  /// أُهيَّأَ إعدادُ Google Pay للمالِ الحقيقيِّ؟ يُقرَأُ من الأصلِ مرّةً عند
+  /// الإقلاع، وافتراضُه `false` فالزرُّ مخفيٌّ حتى يَثبُتَ العكس (fail-closed).
+  bool _googlePayLive = false;
+
   // dart:io Platform **يرمي على الويب** (Unsupported operation: Platform._operatingSystem)
   // فيقتل الشاشة كاملة بشاشة حمراء لحظة فتحها. نحرسه بـ kIsWeb: على الويب لا
   // Apple/Google/Samsung Pay (حِزمها أصلية فقط) — تُخفى أزرارها وتبقى البطاقة
@@ -139,7 +147,14 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         FirebaseFirestore.instance.collection('orders').doc().id;
     if (_isNativeAndroid) {
       _googlePayConfigFuture =
-          PaymentConfiguration.fromAsset('assets/google_pay_config.json');
+          PaymentConfiguration.fromAsset(kGooglePayConfigAsset);
+      // غيرُ مُنتظَرٍ بقصد: لا نُؤخّرُ أوّلَ رسمٍ على قراءةِ أصل، و
+      // `googlePayAssetIsLive` لا تَرمي بحالٍ فلا رميَ يَضيع.
+      googlePayAssetIsLive().then((live) {
+        if (mounted && live != _googlePayLive) {
+          setState(() => _googlePayLive = live);
+        }
+      });
     } else {
       _googlePayConfigFuture = null;
     }
@@ -918,39 +933,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         }
 
       } else if (_selectedPaymentMethod == 'card') {
-        // Moyasar SDK — Credit Card
-        // ننشئ الطلب is_paid=false قبل فتح شاشة الدفع (كتمارا): لو نجح الخصم ثم
-        // فشلت كتابة الطلب، يظل موجوداً ويؤكّده الـ webhook — فلا دفعة يتيمة بلا طلب.
-        if (widget.contractId == null) {
-          await _createUnpaidServiceOrder(finalOrderId, method: 'card');
+        // **البطاقةُ لا تَمرُّ من هنا.** حقولُها تَظهرُ تحتَ خيارِها
+        // (`MoyasarInlineCard`) وزرُّ ميسر هو زرُّ الدفع، وشريطُ «تأكيد وإتمام
+        // الدفع» مخفيٌّ ما دامت مختارة. والفرعُ باقٍ كي لا يَعلقَ `_isLoading`
+        // لو بَلَغه نداءٌ ما: بلا فرعٍ يَسقطُ الشرطُ كلُّه ولا شيءَ يُطفئه.
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('أدخلي بيانات البطاقة أعلاه ثم اضغطي «ادفع»',
+                  style: GoogleFonts.tajawal())));
         }
-        if (mounted) setState(() => _isLoading = false);
-        if (!mounted) return;
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => MoyasarCardScreen(
-              amountSAR: totalWithVat,
-              description: 'خدمة زيارة - ${widget.serviceName}',
-              orderId: finalOrderId,
-              onSuccess: (paymentId) async {
-                setState(() => _isLoading = true);
-                await _processUnifiedSuccess(finalOrderId, 'card', paymentId: paymentId);
-              },
-              onFailure: (error) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(error, style: GoogleFonts.tajawal()),
-                    backgroundColor: Colors.red.shade800,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    margin: const EdgeInsets.all(15),
-                  ));
-                }
-              },
-            ),
-          ),
-        );
         return;
 
       } else if (_selectedPaymentMethod == 'stc_pay') {
@@ -1728,7 +1720,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
 
   Widget _buildPaymentMethods() {
     final String publishableKey =
-        envOrEmpty('MOYASAR_PUBLISHABLE_KEY');
+        moyasarPublishableKey();
     final bool moyasarReady = publishableKey.isNotEmpty;
 
     return Column(
@@ -1752,6 +1744,33 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             icon: Icons.credit_card,
             logoAsset: 'assets/payment/mada.png',
           ),
+
+        // **حقولُ البطاقةِ تحتَ خيارِها لا في صفحةٍ ثانية** (بطلب المالك
+        // 2026-10-24). ميسر تَشحنُ من زرِّها مباشرةً ولا تُتيحُ خطوةً قبلَه،
+        // فالطلبُ لا يُنشأ قبلَ الدفعِ كما كانت الشاشةُ المنفصلة؛ المسارُ مسارُ
+        // Apple Pay بعينِه: `_nativePayMeta` تَحملُ الحجزَ كاملاً،
+        // و`_processUnifiedSuccess` يُنادي `verifyMoyasarPayment` فيُنشئُ الطلبَ
+        // من البيانات إن غاب ويَقلبُ `is_paid`، و`reconcileOrphanPayments`
+        // احتياطُه. و`_gateNative` يَحجبُ الحقولَ حتى تَتحقّقَ الشروطُ والجوالُ
+        // والسعة — فحوصُ `_handlePayment` نفسُها.
+        if (moyasarReady && _selectedPaymentMethod == 'card')
+          _gateNative(MoyasarInlineCard(
+            config: PaymentConfig(
+              publishableApiKey: publishableKey,
+              amount: (totalWithVat * 100).round(),
+              description: 'خدمة زيارة - ${widget.serviceName}',
+              givenID: MoyasarUtil.givenIdFromOrder(_pendingOrderId),
+              metadata: _nativePayMeta(),
+              creditCard: CreditCardConfig(saveCard: false, manual: false),
+            ),
+            onSuccess: (paymentId) async {
+              if (!mounted) return;
+              setState(() => _isLoading = true);
+              await _processUnifiedSuccess(_pendingOrderId, 'card',
+                  paymentId: paymentId);
+            },
+            onFailure: (_, raw) => _handleNativePayFailure(raw, 'card'),
+          )),
 
         // --- Apple Pay (iOS only — Moyasar SDK) ---
         if (_isNativeIOS && moyasarReady) ...[
@@ -1785,7 +1804,13 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         ],
 
         // --- Google Pay (Android only) ---
-        if (_isNativeAndroid && _googlePayConfigFuture != null) ...[
+        // `_googlePayConfigFuture` لا يَكونُ null على أندرويد أبداً، فالشرطُ
+        // الحقيقيُّ هو أنّ الإعدادَ يَقبضُ مالاً — ومعه `moyasarReady` لأنّ
+        // الرمزَ يُسلَّمُ إلى ميسر.
+        if (_isNativeAndroid &&
+            moyasarReady &&
+            _googlePayLive &&
+            _googlePayConfigFuture != null) ...[
           const SizedBox(height: 16),
           Row(children: [
             const Expanded(child: Divider()),
@@ -1878,8 +1903,7 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           Builder(builder: (context) {
             final samsungServiceId =
                 envOrEmpty('SAMSUNG_PAY_SERVICE_ID');
-            if (samsungServiceId.isEmpty ||
-                samsungServiceId.startsWith('REPLACE')) {
+            if (nativePayPlaceholder(samsungServiceId)) {
               return const SizedBox.shrink();
             }
             return Column(
@@ -2137,9 +2161,19 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         value: _agreeToTerms,
         onChanged: (val) => setState(() => _agreeToTerms = val ?? false),
         activeColor: const Color(0xFF660033),
-        title: Text(
-          "أوافق على شروط الخدمة وسياسة الخصوصية الخاصة بزيارة",
-          style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold),
+        // الشروطُ والسياسةُ رابطانِ يُفتحانِ في شاشتَيهما — موافقةٌ على نصٍّ لا
+        // سبيلَ إلى قراءتِه من موضعِها ليست موافقةً مستنيرة.
+        title: Text.rich(
+          TextSpan(
+            style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold),
+            children: [
+              const TextSpan(text: 'أوافق على '),
+              _legalLink('شروط الخدمة', const ZyiarahTermsScreen()),
+              const TextSpan(text: ' و'),
+              _legalLink('سياسة الخصوصية', const ZyiarahPrivacyScreen()),
+              const TextSpan(text: ' الخاصة بزيارة'),
+            ],
+          ),
         ),
         controlAffinity: ListTileControlAffinity.leading,
         contentPadding: EdgeInsets.zero,
@@ -2147,7 +2181,34 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     );
   }
 
+  /// رابطٌ داخلَ نصِّ الموافقة يَفتحُ شاشتَه — `WidgetSpan` لا
+  /// `TapGestureRecognizer` كي لا يَلزمَ مُعرِّفٌ يُحرَّرُ في `dispose`.
+  InlineSpan _legalLink(String label, Widget screen) {
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      child: InkWell(
+        onTap: () => Navigator.push(
+            context, MaterialPageRoute(builder: (_) => screen)),
+        child: Text(
+          label,
+          style: GoogleFonts.tajawal(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF660033),
+            decoration: TextDecoration.underline,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildBottomButton() {
+    // البطاقةُ تَدفعُ من زرِّ ميسر داخلَ خيارِها — زرٌّ ثانٍ هنا يَضغطُه
+    // العميلُ فلا يَدفع. ويَعودُ الشريطُ أثناءَ التأكيدِ ليَحملَ المؤشّر.
+    if (_selectedPaymentMethod == 'card' && !_isLoading) {
+      return const SizedBox.shrink();
+    }
     return Positioned(
       bottom: 0,
       left: 0,
@@ -2158,7 +2219,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
           color: Colors.white,
           boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
         ),
-        child: ElevatedButton(
+        // داخلَ SafeArea: الزرُّ ملاصقٌ لأسفلِ الشاشة، وبلا هذا يقع تحت شريطِ
+        // الإيماءات في الأجهزةِ بلا زرٍّ مادّيّ.
+        child: SafeArea(
+          top: false,
+          child: ElevatedButton(
           onPressed: _isLoading ? null : _handlePayment,
           style: ElevatedButton.styleFrom(
                         // **لونُ العلامةِ لا لونَ تجربةٍ لا يَكتبُها أحد.** كان
@@ -2183,7 +2248,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
                   width: 24,
                   child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
                 )
-              : Text('تأكيد وإتمام الدفع', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, fontSize: 18)),
+              // المبلغُ على الزرِّ نفسِه: هو ما سيُخصَم (شاملاً الضريبة)، فلا
+              // تضغطُ على «إتمام الدفع» وهي لا تَرى الرقم.
+              : FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                      'تأكيد وإتمام الدفع · ${formatSar(totalWithVat)} ر.س',
+                      style: GoogleFonts.tajawal(
+                          fontWeight: FontWeight.bold, fontSize: 18)),
+                ),
+          ),
         ),
       ),
     );

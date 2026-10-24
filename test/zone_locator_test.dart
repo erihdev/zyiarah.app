@@ -35,7 +35,11 @@ List<String> _locatingScreens() {
       .where((f) => f.path.endsWith('.dart'))) {
     final path = f.path.replaceAll(r'\', '/');
     if (path == _picker) continue;
-    if (f.readAsStringSync().contains('ZyiarahZoneLocator.locate')) {
+    // (2026-10-24) الشاشاتُ لم تَعُد تُنادي المُحدِّدَ مباشرةً — تَقرأُ المصدرَ
+    // الواحدَ `ClientLocation` الذي يُناديه. فالاشتقاقُ على الاثنين معاً.
+    final src = f.readAsStringSync();
+    if (src.contains('ZyiarahZoneLocator.locate') ||
+        src.contains('ClientLocation.instance.resolve(')) {
       out.add(path);
     }
   }
@@ -91,31 +95,27 @@ void main() {
     });
 
     test('«الإعدادات» لا يَترُكُ طريقاً مسدوداً — إعادةٌ بجوارِه', () {
-      // زرُّ «الإعدادات» يَحلُّ **محلَّ** «حدّد موقعي تلقائياً» (شرطُ
-      // `needsSettings` في الـRow)، فمن سمحت ثمّ عادت كانت تَفقدُ وسيلةَ
-      // استعمالِ ما سمحت به: السطحُ الذي أرسلَها إلى الإعداداتِ يَنزعُ
-      // الإعادة. وإعادةُ التحديدِ عند الرجوعِ مُنفَّذةٌ في **شاشةٍ واحدةٍ
-      // من سبع** فالستُّ الأخرى لا تَتعافى وحدَها.
+      // (قرارُ المالك ٢٠٢٦-١٠-٢٣: البطاقةُ صارت سطراً صغيراً بلا عنوانٍ ولا
+      // أزرارٍ كبيرة — التحديدُ تلقائيّ.) القاعدةُ نفسُها باقية: حين يكونُ
+      // الإذنُ مرفوضاً نهائيّاً يَظهرُ «الإعدادات» **ومعه** «إعادة المحاولة»
+      // موصولةً بـ`onLocateMe`، و«من الخريطة» دائماً، فلا طريقَ مسدود.
       final String card =
           File('lib/widgets/zone_location_card.dart').readAsStringSync();
-      // الشرطُ الذي يَنزعُ الزرَّ الأساسيَّ ما زال قائماً — فالتعليلُ حيّ.
       expect(card.contains("failure?.needsSettings == true"), isTrue,
           reason: 'شرطُ «الإعدادات» تغيّر — يُراجَعُ التعليلُ لا يُسكَت');
-      // والإعادةُ معروضةٌ في الحالةِ نفسِها، موصولةً بـ`onLocateMe`.
-      final int i = card.indexOf("if (!located && !isLocating && "
-          "failure?.needsSettings == true)");
-      expect(i, greaterThan(0),
-          reason: 'لا إعادةَ محاولةٍ عند «الإذنُ مرفوضٌ نهائيّاً» — طريقٌ مسدود');
-      final int j = card.indexOf('const SizedBox(height: 14)', i);
-      expect(j, greaterThan(i), reason: 'تعذّرَ اقتطاعُ كتلةِ الإعادة');
-      final String block = card.substring(i, j);
-      expect(block.contains('onPressed: onLocateMe'), isTrue,
-          reason: 'زرُّ الإعادةِ غيرُ موصولٍ بإعادةِ التحديد');
-      expect(block.contains('إعادة المحاولة'), isTrue,
-          reason: 'زرُّ الإعادةِ بلا نصٍّ يَدلُّ عليه');
-      // وهي **قبلَ** صفِّ الأزرار، فلا تُزاحِمُ ثلاثةَ أزرارٍ في سطرٍ واحد.
-      expect(card.indexOf('Row(\n            children: ['), greaterThan(i),
-          reason: 'الإعادةُ داخلَ صفِّ الأزرارِ — ثلاثةُ أزرارٍ على ٣٦٠px');
+      final int i = card.indexOf('if (needsSettings)');
+      expect(i, greaterThan(0), reason: '«الإعدادات» لم يَعُد مشروطاً بالإذن');
+      final int j = card.indexOf(']', i);
+      final String links = card.substring(i, j);
+      expect(links.contains("_link('إعادة المحاولة', onLocateMe)"), isTrue,
+          reason: 'لا إعادةَ محاولةٍ بجوارِ «الإعدادات» — طريقٌ مسدود');
+      expect(links.contains("_link('من الخريطة', onPickManually)"), isTrue,
+          reason: 'لا اختيارَ من الخريطة عند تعذّرِ التحديد');
+      // ولا عنوانَ ولا زرَّ «حدّد موقعي تلقائياً» — قرارُ المالك.
+      expect(card.contains("Text('موقع تقديم الخدمة'"), isFalse,
+          reason: 'عادت بطاقةُ «موقع تقديم الخدمة» — المالكُ أزالها');
+      expect(card.contains("'حدّد موقعي تلقائياً'"), isFalse,
+          reason: 'عاد زرُّ «حدّد موقعي تلقائياً» — التحديدُ تلقائيّ');
     });
 
     test('إعادةُ التحديدِ عند الرجوعِ ما زالت في شاشةٍ واحدة — مرفوعةٌ لا منسوخة',
@@ -156,7 +156,7 @@ void main() {
 
     test('الاشتقاقُ يَجدُ الشاشاتِ فعلاً — وإلّا فالفحوصُ أدناه جوفاء', () {
       final found = _locatingScreens();
-      expect(found.length, greaterThanOrEqualTo(7),
+      expect(found.length, greaterThanOrEqualTo(6),
           reason: 'وُجد ${found.length} فقط: $found');
       expect(found, contains('lib/screens/hourly_details_screen.dart'));
       expect(found, isNot(contains(_picker)));
@@ -174,7 +174,12 @@ void main() {
     test('كلُّها تستعمل الخدمةَ والبطاقةَ المشتركتَين', () {
       for (final p in _locatingScreens()) {
         final s = _code(p);
-        expect(s.contains('ZyiarahZoneLocator.locate'), isTrue, reason: p);
+        // المُحدِّدُ المشترَكُ عبرَ المصدرِ الواحد (`ClientLocation` يُناديه).
+        expect(
+            s.contains('ZyiarahZoneLocator.locate') ||
+                s.contains('ClientLocation.instance.resolve('),
+            isTrue,
+            reason: p);
         expect(s.contains('ZyiarahZoneLocationCard'), isTrue, reason: p);
         expect(s.contains('_locateFailure'), isTrue,
             reason: '$p لا يحتفظ بالسبب ⇒ سيعرض رسالة عامة كالسابق');

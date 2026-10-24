@@ -13,6 +13,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:zyiarah/firebase_options.dart';
 import 'package:zyiarah/services/notification_service.dart';
+import 'dart:async' show unawaited;
 import 'dart:ui';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
@@ -109,22 +110,12 @@ void main() async {
   // مُغلَّف بمهلة وtry/catch لا ترمي: activate يُنتظَر قبل runApp، ودرسُ تابي أن
   // نداءً شبكياً هناك يجعل انقطاعاً عابراً لحظة الفتح يمنع إقلاع التطبيق كلّه.
   // الفشل يعني غياب رمز موثَّق — وهو بلا أثر ما دام الإلزام مُطفأً.
+  // **بلا انتظار** (2026-10-11): الإلزامُ مُطفأٌ فلا شيءَ يَنتظرُ الرمز، وكانت
+  // المهلةُ (٨ث) تُبقي شاشةَ الإقلاعِ الأصليّةَ على شبكةٍ بطيئة.
   if (!kIsWeb) {
-    try {
-      await FirebaseAppCheck.instance
-          .activate(
-            providerAndroid: kDebugMode
-                ? const AndroidDebugProvider()
-                : const AndroidPlayIntegrityProvider(),
-            providerApple: kDebugMode
-                ? const AppleDebugProvider()
-                : const AppleAppAttestWithDeviceCheckFallbackProvider(),
-          )
-          .timeout(const Duration(seconds: 8));
-    } catch (e) {
-      debugPrint('[AppCheck] activate failed — التطبيق يعمل بلا رمز موثَّق: $e');
-    }
+    unawaited(_activateAppCheck());
   }
+
 
   // Enable Firestore Persistence for Enterprise Resilience
   FirebaseFirestore.instance.settings = const Settings(
@@ -162,9 +153,13 @@ void main() async {
 
   // (A2) انتظار اكتمال التهيئة قبل تشغيل الواجهة لمنع سباق نسخة الإصدار (Release race)
   // كل تهيئة محميّة داخلياً بـ try/catch فلن تُسقط الإقلاع.
-  await ZyiarahNotificationService().initialize();
+  // **بلا انتظار** (2026-10-11): كانا يُنتظَرانِ قبلَ `runApp` فيَبقى
+  // التطبيقُ على شاشةِ الإقلاعِ حتى يُجيبَ المستخدمُ على إذنِ الإشعاراتِ
+  // ويَرجعَ رمزُ FCM وقراءتانِ وكتابةٌ بمهلةِ ٢٠ث لكلٍّ، ثمّ قراءةُ مناطقَ
+  // بمهلةِ ٢٠ث أخرى. جسماهما مُغلَّفانِ بالكاملِ فلا يَرميان.
+  unawaited(ZyiarahNotificationService().initialize());
   ZyiarahDeepLinkService().initialize(navigatorKey);
-  await GeofenceService.initialize(); // يبذر service_zones الافتراضية إن كانت فارغة
+  unawaited(GeofenceService.initialize()); // يبذر service_zones الافتراضية إن كانت فارغة
   // **بياناتُ البائعِ على الفاتورةِ تُحمَّلُ مرّةً عند الإقلاع.** كانت
   // `ensureConfigLoaded()` تُنادى في موضعَين فقط (خدمةُ الـPDF وشاشةُ
   // النجاح)، فبقيَ موضعانِ يَبنيانِ رمزَ QR بلا تحميلٍ — سجلُّ الفواتير
@@ -188,6 +183,24 @@ void main() async {
       child: const ZyiarahApp(),
     ),
   );
+}
+
+/// تفعيلُ App Check مُغلَّفٌ بالكامل: لا يَرمي أبداً، فيُنادى بلا انتظار.
+Future<void> _activateAppCheck() async {
+  try {
+    await FirebaseAppCheck.instance
+        .activate(
+          providerAndroid: kDebugMode
+              ? const AndroidDebugProvider()
+              : const AndroidPlayIntegrityProvider(),
+          providerApple: kDebugMode
+              ? const AppleDebugProvider()
+              : const AppleAppAttestWithDeviceCheckFallbackProvider(),
+        )
+        .timeout(const Duration(seconds: 8));
+  } catch (e) {
+    debugPrint('[AppCheck] activate failed — التطبيق يعمل بلا رمز موثَّق: $e');
+  }
 }
 
 class ZyiarahApp extends StatelessWidget {
@@ -258,38 +271,63 @@ class ZyiarahApp extends StatelessWidget {
 /// (#16) بوّابة الصيانة الشاملة — تُعرض شاشة الصيانة للعملاء/الضيوف حين
 /// maintenance_mode=true، فوق كل الشاشات (لأنها في MaterialApp.builder). الإدارة
 /// والسائقون معفَوْن؛ fail-open: تعذّر القراءة/غياب العلم/أثناء تحميل الدور ⇒ التطبيق طبيعي.
-Widget _maintenanceGate(BuildContext context, Widget child) {
-  // الضيف غير المسجَّل يصل شاشات الدخول/التسجيل دائماً (لا نقفله)، وقاعدة system_configs
-  // تشترط تسجيل الدخول للقراءة — فاشتراكه هنا = PERMISSION_DENIED متكرّر بلا فائدة.
-  // نخرج مبكراً قبل إنشاء التيار (نتيجة مطابقة: الضيف يرى child على أي حال).
-  if (FirebaseAuth.instance.currentUser == null) return child;
-  Stream<DocumentSnapshot>? stream;
-  try {
-    stream = FirebaseFirestore.instance
-        .collection('system_configs')
-        .doc('main_settings')
-        .snapshots()
-            .firstEventTimeout();
-  } catch (_) {
-    return child; // Firebase غير مهيّأ (نادر/اختبار) ⇒ لا بوّابة، لا نُسقط التطبيق
-  }
-  return StreamBuilder<DocumentSnapshot>(
-    stream: stream,
-    builder: (context, snap) {
-      final data = snap.data?.data() as Map<String, dynamic>?;
-      final maintenance = data != null && data['maintenance_mode'] == true;
-      if (!maintenance) return child;
-      ZyiarahUserProvider? up;
+Widget _maintenanceGate(BuildContext context, Widget child) =>
+    _MaintenanceGate(child: child);
+
+/// البثُّ يُنشَأُ **مرّةً لكلِّ مستخدم** لا في كلِّ نداءٍ للبوّابة (2026-10-11):
+/// `MaterialApp.builder` يَقرأُ `MediaQuery` فيُعادُ مع كلِّ إطارٍ من حركةِ
+/// لوحةِ المفاتيح، وكانت البوّابةُ تُلغي مُستمِعَ Firestore وتُنشئُ غيرَه في
+/// كلٍّ منها — ومعه مؤقِّتُ `firstEventTimeout` من جديد.
+class _MaintenanceGate extends StatefulWidget {
+  final Widget child;
+  const _MaintenanceGate({required this.child});
+
+  @override
+  State<_MaintenanceGate> createState() => _MaintenanceGateState();
+}
+
+class _MaintenanceGateState extends State<_MaintenanceGate> {
+  Stream<DocumentSnapshot>? _stream;
+  String? _streamUid;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = widget.child;
+    // الضيف غير المسجَّل يصل شاشات الدخول/التسجيل دائماً (لا نقفله)، وقاعدة system_configs
+    // تشترط تسجيل الدخول للقراءة — فاشتراكه هنا = PERMISSION_DENIED متكرّر بلا فائدة.
+    // نخرج مبكراً قبل إنشاء التيار (نتيجة مطابقة: الضيف يرى child على أي حال).
+    if (FirebaseAuth.instance.currentUser == null) return child;
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    if (_stream == null || _streamUid != uid) {
       try {
-        up = Provider.of<ZyiarahUserProvider>(context);
-      } catch (_) {}
-      // غير المسجّل يصل شاشات الدخول/التسجيل (وإلّا تعذّر على الإدارة/السائق الدخول
-      // أثناء الصيانة = جمود). وأثناء تحميل الدور لا نقفل. نقفل **العميل المسجَّل فقط**.
-      if (up == null || !up.isAuthenticated || up.isLoading) return child;
-      if (up.role == 'client') return const _MaintenanceScreen();
-      return child; // إدارة/سائق/دور غير معروف ⇒ لا يُقفل (fail-open)
-    },
-  );
+        _stream = FirebaseFirestore.instance
+            .collection('system_configs')
+            .doc('main_settings')
+            .snapshots()
+            .firstEventTimeout();
+        _streamUid = uid;
+      } catch (_) {
+        return child; // Firebase غير مهيّأ (نادر/اختبار) ⇒ لا بوّابة، لا نُسقط التطبيق
+      }
+    }
+    return StreamBuilder<DocumentSnapshot>(
+      stream: _stream,
+      builder: (context, snap) {
+        final data = snap.data?.data() as Map<String, dynamic>?;
+        final maintenance = data != null && data['maintenance_mode'] == true;
+        if (!maintenance) return child;
+        ZyiarahUserProvider? up;
+        try {
+          up = Provider.of<ZyiarahUserProvider>(context);
+        } catch (_) {}
+        // غير المسجّل يصل شاشات الدخول/التسجيل (وإلّا تعذّر على الإدارة/السائق الدخول
+        // أثناء الصيانة = جمود). وأثناء تحميل الدور لا نقفل. نقفل **العميل المسجَّل فقط**.
+        if (up == null || !up.isAuthenticated || up.isLoading) return child;
+        if (up.role == 'client') return const _MaintenanceScreen();
+        return child; // إدارة/سائق/دور غير معروف ⇒ لا يُقفل (fail-open)
+      },
+    );
+  }
 }
 
 class AuthWrapper extends StatelessWidget {

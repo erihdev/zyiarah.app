@@ -262,7 +262,6 @@ void main() {
     '/contracts|create|event_worker_packages': 'orders_manager',
     '/contracts|update|event_worker_packages': 'orders_manager',
     '/contracts|delete|event_worker_packages': 'orders_manager',
-    '/contracts|update|contracts': 'marketing_admin',
     // والحذفُ `isSuperAdmin` وحدَه، فزرُّه مشروطٌ بـ`full` في الصفحة.
     '/contracts|delete|contracts': 'marketing_admin,orders_manager',
     // `Drivers` تَحذفُ `users/{uid}` **تراجعاً تعويضيّاً** داخلَ `catch` لا
@@ -421,7 +420,16 @@ void main() {
       }
     }
 
-    Set<String> writesOf(String path) {
+    // **الشاشةُ المُضمَّنةُ جزءٌ من بلاطتِها (2026-10-11).** صارت «الباقات»
+    // بلاطةً واحدةً (`AdminPackagesScreen`) تَحملُ شاشتَي الكتالوجَين مُضمَّنتَين
+    // (`embedded: true`) — وملفُّ الحاويةِ بلا كتابةٍ واحدة. فقراءةُ ملفِّ
+    // البلاطةِ وحدَه كانت ستُسقِطُ كتاباتِ المجموعتَين من الفحصِ بصمت، وهو
+    // العقمُ المسجَّلُ أدناه بعينِه. فكتاباتُ كلِّ شاشةٍ تُبنى `embedded: true`
+    // تُحسَبُ على البلاطةِ التي تَحتويها — والقيدُ بالتضمينِ لا بأيِّ ذكرٍ
+    // لشاشة: زرٌّ يَدفعُ شاشةً أخرى (`Navigator.push`) ليس جزءاً من البلاطة.
+    Set<String> writesOf(String path, [Set<String>? seen]) {
+      seen ??= <String>{};
+      if (!seen.add(path)) return <String>{};
       final src = File(path)
           .readAsStringSync()
           .split('\n')
@@ -432,6 +440,10 @@ void main() {
               r"collection\('([\w_]+)'\)[\s\S]{0,220}?\.(set|update|delete|add)\(")
           .allMatches(src)) {
         out.add('${m.group(2)}|${m.group(1)}');
+      }
+      for (final m in RegExp(r'(\w+)\(\s*embedded:\s*true').allMatches(src)) {
+        final child = cls2file[m.group(1)!];
+        if (child != null) out.addAll(writesOf(child, seen));
       }
       return out;
     }
@@ -451,8 +463,53 @@ void main() {
       'AdminUsersScreen|set|account_deletions': 'orders_manager',
     };
 
+    test('حاويةُ «الباقات» تُحسَبُ عليها كتاباتُ شاشتَيها المُضمَّنتَين', () {
+      final hub = cls2file['AdminPackagesScreen'];
+      expect(hub, isNotNull);
+      final w = writesOf(hub!);
+      expect(w.any((x) => x.endsWith('|subscription_packages')), isTrue,
+          reason: 'كتاباتُ باقاتِ الاشتراكِ سقطت من فحصِ البلاطة');
+      expect(w.any((x) => x.endsWith('|event_worker_packages')), isTrue,
+          reason: 'كتاباتُ باقاتِ العاملاتِ سقطت من فحصِ البلاطة');
+    });
+
+    // «طلبات المتجر» خرجت من «المزيد» إلى تبويبِ المتجر (AdminStoreHubScreen)،
+    // فخرجت كتاباتُها من قراءةِ البلاطاتِ أعلاه. أدوارُ شريحتِها تُفحَصُ هنا
+    // بالقاعدةِ نفسِها كي لا يَصيرَ النقلُ ثغرة.
+    test('شريحةُ طلباتِ المتجرِ في تبويبِ المتجرِ لا تَمنحُ كتابةً تَرفضُها القواعد',
+        () {
+      final hubSrc = read('lib/screens/admin/admin_store_hub_screen.dart');
+      final m = RegExp(r"static const orderRoles = \[([^\]]*)\]")
+          .firstMatch(hubSrc);
+      expect(m, isNotNull, reason: 'تعذّر قراءةُ أدوارِ شريحةِ الطلبات');
+      final roles = m!
+          .group(1)!
+          .split(',')
+          .map((x) => x.trim().replaceAll("'", ''))
+          .where((x) => x.isNotEmpty)
+          .toSet();
+      expect(roles, equals({'super_admin', 'orders_manager'}),
+          reason: 'أدوارُ البلاطةِ السابقةِ حرفاً — لا يُوسَّعُ وصولٌ بالنقل');
+      final writes = writesOf(cls2file['AdminStoreOrdersScreen']!);
+      expect(writes, isNotEmpty);
+      for (final w in writes) {
+        final verb = w.split('|')[0];
+        final coll = w.split('|')[1];
+        final allowed = <String>{};
+        for (final v in vmap[verb]!) {
+          allowed.addAll(colls[coll]?[v] ?? <String>{});
+        }
+        final bad = roles.difference(allowed)..remove('super_admin');
+        expect(bad, isEmpty, reason: '$w ممنوحٌ لـ$bad والقواعدُ تَرفضه');
+      }
+    });
+
     test('كلُّ بلاطةٍ تَحلُّ إلى شاشةٍ وتُفحَصُ كتاباتُها فعلاً', () {
-      expect(pairs.length, greaterThanOrEqualTo(18),
+      // سبعَ عشرةَ بعدَ تبسيطِ «المزيد» (2026-10-11): «الباقات» بلاطةٌ واحدةٌ
+      // لشاشتَين، و«طلبات المتجر» في تبويبِ المتجر (لها فحصُها أعلاه)،
+      // و«الإحصائيات والأرباح» تُفتَحُ من تبويبِ الإحصاءات. الأرضيّةُ تَسألُ
+      // «أقُرئت البلاطات؟» لا عدداً بعينِه — فتُضبَطُ على الواقعِ لا تُرخى.
+      expect(pairs.length, greaterThanOrEqualTo(17),
           reason: 'لم تُقرأ بلاطاتُ admin_more_screen');
       final unmapped = pairs
           .where((p) => !cls2file.containsKey(p[0] as String))

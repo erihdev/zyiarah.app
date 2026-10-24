@@ -47,33 +47,6 @@ class ZyiarahMessagingService {
     }
   }
 
-  Future<void> notifyContractApproved(String userId, String planName,
-      {String? customerEmail, String? clientName, String? contractId}) async {
-    await triggerNotification(
-      toUid: userId,
-      title: "تمت الموافقة على طلبك بنجاح! 📄",
-      body: "تم اعتماد عقد باقة ($planName) من قبل الإدارة. يرجى إتمام الدفع لتفعيل الباقة.",
-      type: 'hybrid',
-      data: {
-        'planName': planName,
-        'customerEmail': customerEmail,
-        // `deepLink` كان **لا يَقرؤه أحد**: `handleNotificationTap` يَقرأُ
-        // مفاتيحَ المعرّفات، وقيمتُه (`zyiarah://app/contracts`) كان
-        // `_handleUri` يَرفضُها مرّتَين — بلا معرّفٍ، وبموردٍ لا فرعَ له.
-        // `contractId` هو ما تَفتحُ به القاعدةُ المشتركةُ «عقودي».
-        if (contractId != null && contractId.isNotEmpty) 'contractId': contractId,
-      },
-      template: {
-        'id': 'contract-approved',
-        'variables': {
-          'clientName': clientName ?? 'عميلنا العزيز',
-          'planName': planName,
-          'actionUrl': 'https://zyiarah.com/contracts',
-        }
-      },
-    );
-  }
-
   /// يرسل تنبيه مزدوج (للعميل وللإدارة) عند إنشاء طلب جديد
   Future<void> notifyOrderCreated({
     required String clientId,

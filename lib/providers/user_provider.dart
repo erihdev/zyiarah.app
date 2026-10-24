@@ -17,6 +17,11 @@ class ZyiarahUserProvider extends ChangeNotifier {
   StreamSubscription? _authSubscription;
   StreamSubscription? _profileSubscription;
 
+  /// المستخدمُ الذي رُكِّبَ له المستمعُ الحاليّ، وعدّادُ النداءاتِ كي لا يَكتبَ
+  /// نداءٌ قديمٌ (أبطأُ جلباً للدور) فوقَ نتيجةِ نداءٍ أحدث.
+  String? _loadedUid;
+  int _refreshGen = 0;
+
   /// حالة المصادقة الحقيقية من Firebase — المرجع الوحيد لكون المستخدم مسجّلاً.
   User? _authUser;
 
@@ -66,7 +71,14 @@ class ZyiarahUserProvider extends ChangeNotifier {
         _isLoading = false;
         _profileSubscription?.cancel();
         _profileSubscription = null;
+        _loadedUid = null;
+        _refreshGen++;
         notifyListeners();
+      } else if (firebaseUser.uid == _loadedUid &&
+          _profileSubscription != null) {
+        // المستمعُ الحيُّ لهذا المستخدمِ قائمٌ أصلاً: إعادةُ تركيبِه تُعيدُ
+        // قراءةَ الملفِّ والدورِ بلا داعٍ (حدثُ مصادقةٍ مكرَّرٌ للمستخدمِ نفسِه).
+        return;
       } else {
         await refreshUser(firebaseUser.uid);
       }
@@ -84,18 +96,17 @@ class ZyiarahUserProvider extends ChangeNotifier {
     _sessionEndedNotice = null;
     notifyListeners();
 
-    try {
-      // استرجاع الدور مرة واحدة (أو الاستماع له)
-      _role = await ZyiarahFirebaseService().getUserRole(uid);
-    } catch (e, s) {
-      // كان هذا الفشل يقفز فوق تركيب المستمع أدناه — فيبقى التطبيق بلا ملف شخصي
-      // ولا تعافي حتى إعادة التشغيل، ويظهر المستخدم كأنه «غير مسجّل». الآن: نُسجّل
-      // الخطأ (لا debugPrint صامت) ونواصل لتركيب المستمع الذي يجلب الدور أيضاً.
-      _profileError = e;
-      reportSilent(e, s, reason: 'get_user_role_failed', info: {'uid': uid});
-    }
+    final int gen = ++_refreshGen;
+    _loadedUid = uid;
+    // جلبُ الدورِ ومستمعُ الملفِّ **بالتوازي** لا بالتتابع: كان المستمعُ لا
+    // يُركَّبُ إلّا بعد انتهاءِ `getUserRole` (حتى ثلاثِ قراءاتٍ متتالية)، فتنتظرُ
+    // الشاشةُ الأولى مجموعَ الرحلتَين. والأسبقيّةُ كما كانت: الملفُّ متى وصلَ
+    // يُقرّرُ الدور، و`getUserRole` يُقرّرُه حين لا مستندَ في `users`.
+    bool profileDelivered = false;
+    final Future<String?> roleFuture =
+        ZyiarahFirebaseService().getUserRole(uid);
 
-    // يُركَّب دائماً — حتى لو فشل جلب الدور أعلاه — فهو مصدر التعافي.
+    // يُركَّب دائماً — حتى لو فشل جلب الدور — فهو مصدر التعافي.
     _profileSubscription?.cancel();
     _profileSubscription = FirebaseFirestore.instance
         .collection('users')
@@ -124,6 +135,7 @@ class ZyiarahUserProvider extends ChangeNotifier {
           }
           _user = ZyiarahUser.fromMap(uid, data);
           _role = _user!.role;
+          profileDelivered = true;
           _profileError = null;
         }
       } catch (e, s) {
@@ -143,6 +155,24 @@ class ZyiarahUserProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     });
+
+    try {
+      final String? role = await roleFuture;
+      // نداءٌ أحدثُ بدأ، أو الملفُّ وصلَ وقرّرَ الدورَ: لا نَكتبُ فوقَه.
+      if (gen == _refreshGen && !profileDelivered) {
+        _role = role;
+        if (!_isLoading) notifyListeners();
+      }
+    } catch (e, s) {
+      // كان هذا الفشل يقفز فوق تركيب المستمع — فيبقى التطبيق بلا ملف شخصي
+      // ولا تعافي حتى إعادة التشغيل، ويظهر المستخدم كأنه «غير مسجّل». الآن: نُسجّل
+      // الخطأ (لا debugPrint صامت) والمستمعُ مُركَّبٌ أصلاً ويجلب الدور أيضاً.
+      if (gen == _refreshGen && !profileDelivered) {
+        _profileError = e;
+        if (!_isLoading) notifyListeners();
+      }
+      reportSilent(e, s, reason: 'get_user_role_failed', info: {'uid': uid});
+    }
   }
 
   // كان هنا `_reportSilent` خاصّ بهذا الملف — وُحِّد على `reportSilent` في

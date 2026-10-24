@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:zyiarah/utils/map_tiles.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -8,6 +9,8 @@ import 'package:latlong2/latlong.dart';
 
 import 'package:zyiarah/services/zone_locator_service.dart';
 import 'package:zyiarah/utils/jazan_boundary.dart';
+import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/zone_search.dart';
 import '../utils/env.dart';
 
 class LocationPickerScreen extends StatefulWidget {
@@ -20,6 +23,14 @@ class LocationPickerScreen extends StatefulWidget {
   final double? radius;
   final Color? circleColor;
 
+  /// نقطةُ بدءٍ معروفة (تعديلُ منطقةٍ قائمة): تَفتحُ الخريطةُ عليها مباشرةً
+  /// بدلَ موقعِ الجهاز — فمركزُ المنطقةِ لا يَقفزُ إلى مكانِ الأدمنِ صامتاً.
+  final GeoPoint? initialLocation;
+
+  /// مُنزلِقُ نصفِ القطرِ (محرّرُ المناطق): الدائرةُ تَتبعُه حيّاً، والنتيجةُ
+  /// خريطةٌ `{location, radiusKm}` بدلَ `GeoPoint` وحدَه.
+  final bool adjustableRadius;
+
   const LocationPickerScreen({
     super.key, 
     required this.serviceName,
@@ -30,6 +41,8 @@ class LocationPickerScreen extends StatefulWidget {
     this.workerCount = 1,
     this.radius,
     this.circleColor,
+    this.initialLocation,
+    this.adjustableRadius = false,
   });
 
   @override
@@ -41,6 +54,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   final MapController _mapController = MapController();
   Timer? _debounce;
   List<dynamic> _searchResults = [];
+  // مناطقُ الخدمة: محرّكُ البحثِ لا يَعرفُ قرى الخدمة، فنُطابِقُ أسماءَها هنا
+  // أوّلاً، ونَبدأُ الخريطةَ عند مركزِها إن تعذّرَ التحديد (`zone_search.dart`).
+  List<Map<String, dynamic>> _zones = const [];
+  List<ZoneHit> _zoneHits = const [];
   // الافتراضي: مدينة جازان — الخدمة محصورة بمنطقة جازان (كان الرياض خارج النطاق).
   LatLng _selectedLatLng = const LatLng(16.8894, 42.5706);
   bool _isMapReady = false;
@@ -54,10 +71,54 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
   final String _mapboxToken = envOrEmpty('MAPBOX_TOKEN');
 
+  /// نصفُ القطرِ المعروض — يَبدأُ بما مُرِّر ويُحرّكُه المُنزلِق.
+  late double? _radiusKm = widget.radius;
+
   @override
   void initState() {
     super.initState();
-    _locateMe();
+    final init = widget.initialLocation;
+    if (init != null) {
+      // موقعٌ معروفٌ سلفاً: لا تحديدَ تلقائيّاً يَنقلُ الدبوسَ عنه.
+      _selectedLatLng = LatLng(init.latitude, init.longitude);
+      _userSelected = true;
+      _isMapReady = true;
+    } else {
+      // التحديدُ تلقائيٌّ ويَطلبُ الإذنَ مرّةً (قرارُ المالك: لا زرَّ تَحتاجُه).
+      _locateMe(userInitiated: true);
+    }
+    _loadZones();
+  }
+
+  Future<void> _loadZones() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('service_zones')
+          .get()
+          .timeout(kNetCallTimeout);
+      if (!mounted) return;
+      _zones = snap.docs.map((d) => d.data()).toList();
+      _centerOnServiceIfUnplaced();
+    } catch (e) {
+      // البحثُ الجغرافيُّ يَبقى يعمل؛ نَخسرُ مطابقةَ أسماءِ القرى فقط.
+      debugPrint('[LocationPicker] zones load failed: $e');
+    }
+  }
+
+  /// إن لم يُحدَّد موقعٌ بعد (فشلَ GPS أو لم يَنتهِ) فلا معنى لفتحِ الخريطةِ على
+  /// مدينةٍ خارجَ الخدمة: نَنقلُها إلى مركزِ المناطقِ المفعّلة. الدبوسُ يَبقى
+  /// «غيرَ محدَّد» فتحذيرُ التأكيدِ قائمٌ كما هو.
+  void _centerOnServiceIfUnplaced() {
+    if (_userSelected || _isLocating) return;
+    final c = serviceCenter(_zones);
+    if (c == null) return;
+    setState(() => _selectedLatLng = LatLng(c.lat, c.lng));
+    try {
+      _mapController.move(_selectedLatLng, 11.0);
+    } catch (e) {
+      // الخريطةُ لم تُرسَم بعد — `initialCenter` يأخذُ القيمةَ الجديدة.
+      debugPrint('[LocationPicker] map not ready for move: $e');
+    }
   }
 
   /// يضع الدبوس على موقع المستخدم — **ويقول لماذا إن لم يستطع.**
@@ -104,10 +165,13 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       _isMapReady = true; // تُعرض الخريطة دائماً — الاختيار اليدوي متاح
       _locateFailure = res.failure;
     });
+    _centerOnServiceIfUnplaced();
   }
 
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
+    // مناطقُ الخدمةِ فوراً، بلا شبكةٍ ولا انتظار.
+    setState(() => _zoneHits = matchZones(_zones, query));
     _debounce = Timer(const Duration(milliseconds: 500), () {
       if (query.isNotEmpty) {
         _performSearch(query);
@@ -164,6 +228,21 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     FocusScope.of(context).unfocus();
   }
 
+  /// اختيارُ منطقةِ خدمةٍ من النتائج: الخريطةُ تَنتقلُ إلى مركزِها لتُحرِّكَ
+  /// العميلةُ الدبوسَ إلى بيتِها بدقّة (المركزُ ليس عنوانَها).
+  void _selectZoneHit(ZoneHit hit) {
+    final p = LatLng(hit.lat, hit.lng);
+    setState(() {
+      _selectedLatLng = p;
+      _userSelected = true;
+      _searchResults = [];
+      _zoneHits = const [];
+      _searchController.clear();
+    });
+    _mapController.move(p, 15.0);
+    FocusScope.of(context).unfocus();
+  }
+
   void _confirmLocation() async {
     // إن لم يحدّد المستخدم موقعه (GPS مرفوض ولم يحرّك الخريطة) نحذّره قبل اعتماد
     // الموقع الافتراضي — منعاً لإرسال الفريق لمدينة خاطئة بصمت.
@@ -200,7 +279,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       return;
     }
     final geoPoint = GeoPoint(_selectedLatLng.latitude, _selectedLatLng.longitude);
-    if (widget.hours != null) {
+    if (widget.adjustableRadius) {
+      Navigator.pop(context, {'location': geoPoint, 'radiusKm': _radiusKm});
+    } else if (widget.hours != null) {
       Navigator.pop(context, {
         'location': geoPoint,
         'hours': widget.hours,
@@ -261,6 +342,14 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       LatLng(kJazanNe.latitude + 0.15, kJazanNe.longitude + 0.15),
                     ),
                   ),
+                  // النقرُ يَنقلُ الدبوسَ إلى موضعِه — مكمّلٌ لسحبِ الخريطة.
+                  onTap: (_, ll) {
+                    setState(() {
+                      _selectedLatLng = ll;
+                      _userSelected = true;
+                    });
+                    _mapController.move(ll, _mapController.camera.zoom);
+                  },
                   onPositionChanged: (position, hasGesture) {
                     if (hasGesture) {
                       setState(() {
@@ -271,12 +360,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                   },
                 ),
                 children: [
-                   // بلاطات OSM القياسية: أسماء محلية (عربية في السعودية) بدل بلاطات
-                   // Mapbox النقطية الإنجليزية — وتوحيدٌ مع بقية خرائط التطبيق.
-                   TileLayer(
-                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.zyiarah.zyiarah',
-                  ),
+                  // البلاطاتُ من موضعٍ واحد (Mapbox) — انظر map_tiles.dart.
+                  zyiarahTileLayer(),
                   // قناع «خارج جازان»: مستطيل واسع بثقوبٍ = حلقات المنطقة — يُعتِّم كل
                   // ما حول جازان فلا تظهر إلا محافظاتها وقراها وهجرها، مع حدّ بنفسجي.
                   PolygonLayer(polygons: [
@@ -297,12 +382,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                         color: const Color(0xFF660033),
                       ),
                   ]),
-                  if (widget.radius != null)
+                  if (_radiusKm != null)
                     CircleLayer(
                       circles: [
                         CircleMarker(
                           point: _selectedLatLng,
-                          radius: widget.radius! * 1000, // Convert km to meters
+                          radius: _radiusKm! * 1000, // Convert km to meters
                           useRadiusInMeter: true,
                           color: (widget.circleColor ?? Colors.blue).withValues(alpha: 0.3),
                           borderColor: widget.circleColor ?? Colors.blue,
@@ -403,7 +488,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       ),
                     ),
                   ),
-                  if (_searchResults.isNotEmpty)
+                  if (_zoneHits.isNotEmpty || _searchResults.isNotEmpty)
                     Container(
                       margin: const EdgeInsets.only(top: 8),
                       decoration: BoxDecoration(
@@ -414,9 +499,20 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       child: ListView.builder(
                         padding: EdgeInsets.zero,
                         shrinkWrap: true,
-                        itemCount: _searchResults.length,
+                        itemCount: _zoneHits.length + _searchResults.length,
                         itemBuilder: (context, index) {
-                          final feature = _searchResults[index];
+                          if (index < _zoneHits.length) {
+                            final hit = _zoneHits[index];
+                            return ListTile(
+                              leading: const Icon(Icons.verified_rounded,
+                                  color: Color(0xFF059669)),
+                              title: Text(hit.name),
+                              subtitle: const Text('ضمن مناطق خدمة زيارة'),
+                              onTap: () => _selectZoneHit(hit),
+                            );
+                          }
+                          final feature =
+                              _searchResults[index - _zoneHits.length];
                           final props = feature['properties'];
                           return ListTile(
                             title: Text(props['name'] ?? props['full_address'] ?? ''),
@@ -429,6 +525,43 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                 ],
               ),
             ),
+
+            // مُنزلِقُ نصفِ القطر — الدائرةُ تَتبعُه حيّاً.
+            if (widget.adjustableRadius && _radiusKm != null)
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 160,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'نصف قطر التغطية: ${_radiusKm!.toStringAsFixed(_radiusKm! % 1 == 0 ? 0 : 1)} كم',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      Slider(
+                        value: _radiusKm!.clamp(1.0, 100.0),
+                        min: 1,
+                        max: 100,
+                        divisions: 198,
+                        activeColor: const Color(0xFF660033),
+                        label: '${_radiusKm!.toStringAsFixed(1)} كم',
+                        onChanged: (v) => setState(
+                            () => _radiusKm = (v * 2).roundToDouble() / 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
             // Confirm Button
             Positioned(

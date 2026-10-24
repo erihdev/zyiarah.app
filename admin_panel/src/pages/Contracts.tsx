@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { formatSarAny } from '../utils/money';
 import { Search, FileSignature, CheckCircle2, Clock, XCircle, AlertCircle, Calendar, CreditCard, Trash2, Info, Package, Plus, Pencil, Star, Loader2, PartyPopper } from 'lucide-react';
-import { collection, onSnapshot, query, orderBy, limit, Timestamp, doc, updateDoc, deleteDoc, addDoc, serverTimestamp, runTransaction, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
-import { db, auth } from '../services/firebase.ts';
+import { collection, onSnapshot, query, orderBy, limit, Timestamp, doc, updateDoc, deleteDoc, addDoc, serverTimestamp, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { db } from '../services/firebase.ts';
 import { useNotification } from '../components/notificationContext.ts';
 import {
     contractHealthOf, contractHealthReason, contractNeedsHuman,
-    contractApproveAllowed, contractApproveBlockedReason,
+    contractAwaitingPayment, CONTRACT_AWAITING_PAYMENT_NOTE,
     CONTRACT_HEALTH_TITLES,
 } from '../utils/contractHealth.ts';
 import {
@@ -607,7 +607,7 @@ const StatusBadge = ({ status }: { status: string }) => {
         case 'approved_waiting_payment':
             return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAF1F6] text-[#4D0026] font-bold border border-[#F2DEE9] text-[10px]"><CreditCard size={12} />بانتظار الدفع</span>;
         case 'pending':
-            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-100 text-[10px]"><Clock size={12} />قيد المراجعة</span>;
+            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-100 text-[10px]"><Clock size={12} />بانتظار الدفع</span>;
         case 'rejected':
             return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-red-700 font-bold border border-red-100 text-[10px]"><XCircle size={12} />مرفوض</span>;
         default:
@@ -657,61 +657,6 @@ export default function Contracts({ role }: { role?: string | null }) {
         return () => unsubscribe();
     }, [retryKey]);
 
-    const handleApprove = async (id: string, planName: string, userId?: string) => {
-        if (!await confirm(`هل أنت متأكد من رغبتك في اعتماد عقد (${planName})؟`)) return;
-        try {
-            // **القراءةُ طازجةً داخلَ معامَلة، لا `updateDoc` أعمى.** البوّابةُ
-            // في الرسمِ تَحرُسُ العرضَ لا الضغطة: صفحةٌ مفتوحةٌ من قبلِ وصولِ
-            // الدفعةِ تَحملُ لقطةً قديمةً، وهذه الكتابةُ بعينِها تُخرِجُ العقدَ
-            // من نافذةِ الإنقاذ. (والقواعدُ تَمنعُ الانتقالَ كذلك — محجوزةٌ مع
-            // STAGE-C، فهذه هي العاملةُ اليوم.)
-            await runTransaction(db, async (tx) => {
-                const ref = doc(db, 'contracts', id);
-                const snap = await tx.get(ref);
-                if (!snap.exists()) throw new Error('العقد غير موجود');
-                const blocked = contractApproveBlockedReason(snap.data() as ContractRecord);
-                if (blocked) throw new Error(blocked);
-                tx.update(ref, {
-                    status: 'approved_waiting_payment',
-                    adminApprovedAt: Timestamp.now(),
-                });
-            });
-            // إشعار العميل بإتمام الدفع — مسار تطبيق الأدمن يستدعي notifyContractApproved،
-            // أما لوحة الويب فكانت تعتمد العقد بصمت ولا يصل العميل أي تنبيه. نكتب هنا في
-            // نفس طابور notification_triggers (نوع غير بريدي = دفع + سجل داخل التطبيق فقط).
-            if (userId) {
-                await addDoc(collection(db, 'notification_triggers'), {
-                    toUid: userId,
-                    title: 'تمت الموافقة على طلبك بنجاح! 📄',
-                    body: `تم اعتماد عقد باقة (${planName}) من قبل الإدارة. يرجى إتمام الدفع لتفعيل الباقة.`,
-                    type: 'contract_approved',
-                    // `deepLink` كان **لا يَقرؤه أحد**: مُعالِجُ نقرِ الإشعارِ في
-                    // التطبيق يَقرأُ مفاتيحَ المعرّفاتِ لا هذا الحقل، وقيمتُه بلا
-                    // معرّفٍ كان `_handleUri` يَرفضُها مرّتَين. `contractId` هو ما
-                    // تَفتحُ به القاعدةُ المشتركةُ «عقودي».
-                    data: { planName, contractId: id },
-                    // **كان غائباً، والإشعارُ يُرفَض بصمت.** حارسُ مكافحةِ
-                    // الترحيلِ في `processNotificationTriggers` يَرفضُ أيَّ
-                    // trigger موجَّهٍ لغيرِ مُنشئه ما لم يُثبت `createdBy` أنّه
-                    // موظّف — وبلا الحقلِ يُحسَب غيرَ موثوقٍ فيُوسَم
-                    // `refused_untrusted_sender` ولا يَصلُ العميلةَ شيء. أي أنّ
-                    // اعتمادَ العقدِ من اللوحةِ كان صامتاً **بعد** الإصلاحِ
-                    // الذي أُضيف لإخراجه من الصمت.
-                    createdBy: auth.currentUser?.uid ?? null,
-                    createdAt: serverTimestamp(),
-                    processed: false,
-                });
-            }
-            await logAudit(AUDIT.APPROVE_CONTRACT, { planName, userId }, id);
-            toast.success("تم اعتماد العقد بنجاح وبانتظار دفع العميل");
-        } catch (error) {
-            console.error(error);
-            // **رسالةُ المعامَلةِ هي الخبر.** الرفضُ هنا سببُه مكتوبٌ
-            // («مدفوع سلفاً — …»)، ونصٌّ عامٌّ يَبتلعُه فيُقرأُ عطلَ شبكةٍ
-            // فيُعيدُ الأدمنُ المحاولةَ — نمطُ `Orders.tsx` نفسُه.
-            toast.error(error instanceof Error ? error.message : "حدث خطأ أثناء الاعتماد");
-        }
-    };
 
     const handleDelete = async (id: string) => {
         if (!await confirm("هل أنت متأكد من حذف هذا العقد نهائياً؟")) return;
@@ -854,25 +799,13 @@ export default function Contracts({ role }: { role?: string | null }) {
                                 </div>
 
                                 <div className="flex items-center gap-3">
-                                    {/* **الاعتمادُ لِما لم يُدفَع بعد.** كان الشرطُ
-                                        `status === 'pending'` وحدَها، وعقدٌ فشلَ تفعيلُه
-                                        يَسكنُ تلك الحالةَ — فالضغطةُ تُطالِبُ مَن دفعَ
-                                        بالدفعِ وتُخرِجُه من نافذةِ الإنقاذ. */}
-                                    {contractApproveAllowed(contract) && (
-                                        <button 
-                                            type="button"
-                                            onClick={() => handleApprove(contract.id, contract.planName, contract.userId)}
-                                            className="flex-1 py-3.5 bg-[#660033] text-white text-sm font-black rounded-2xl hover:bg-[#4D0026] transition-all shadow-lg shadow-[#F2DEE9] active:scale-95"
-                                        >
-                                            اعتماد الباقة
-                                        </button>
-                                    )}
-                                    {/* الإخفاءُ وحدَه يُقرأُ عطلاً، فيُقالُ سببُه مكانَه. */}
-                                    {!contractApproveAllowed(contract) && contractApproveBlockedReason(contract) && (
-                                        <p className="flex-1 text-[11px] font-bold text-amber-700 leading-relaxed">
-                                            {contractApproveBlockedReason(contract)}
+                                    {/* لا اعتمادَ (قرار المالك 2026-10-24): يَتفعّلُ العقدُ
+                                        وحدَه عند الدفع، وما لم يُدفَع يُقالُ عنه ذلك. */}
+                                    {contractAwaitingPayment(contract) ? (
+                                        <p className="flex-1 text-[11px] font-bold text-slate-500 leading-relaxed">
+                                            {CONTRACT_AWAITING_PAYMENT_NOTE}
                                         </p>
-                                    )}
+                                    ) : <div className="flex-1" />}
                                     <button 
                                         type="button" 
                                         className="p-3.5 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600 rounded-2xl transition-all"

@@ -101,6 +101,9 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
       body: Directionality(
         textDirection: TextDirection.rtl,
         child: SafeArea(
+          // AutofillGroup: مديرُ كلماتِ المرورِ يملأ البريدَ والكلمةَ معاً،
+          // ويَعرضُ حفظَهما بعد الدخول.
+          child: AutofillGroup(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 30.0),
             child: Column(
@@ -146,6 +149,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                   controller: _emailController,
                   hint: "example@email.com",
                   keyboardType: TextInputType.emailAddress,
+                  autofillHints: const [AutofillHints.email, AutofillHints.username],
                 ),
                 const SizedBox(height: 20),
                 _buildFieldLabel("كلمة المرور"),
@@ -153,6 +157,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
                   controller: _passwordController,
                   hint: "********",
                   isPassword: true,
+                  autofillHints: const [AutofillHints.password],
                   isPasswordVisible: _isPasswordVisible,
                   toggleVisibility: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
                 ),
@@ -207,6 +212,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
               ],
             ),
           ),
+          ),
         ),
       ),
       ),
@@ -230,6 +236,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
     bool isPassword = false,
     bool isPasswordVisible = false,
     VoidCallback? toggleVisibility,
+    Iterable<String>? autofillHints,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -239,6 +246,7 @@ class _ZyiarahLoginScreenState extends State<ZyiarahLoginScreen> {
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
+        autofillHints: autofillHints,
         obscureText: isPassword && !isPasswordVisible,
         decoration: InputDecoration(
           hintText: hint,

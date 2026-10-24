@@ -100,21 +100,17 @@ export function contractHealthReason(c: ContractDoc | null | undefined): string 
   return null;
 }
 
-/** هل يُعرَضُ زرُّ الاعتماد؟ — الاعتمادُ لِما لم يُدفَع بعد. */
-export function contractApproveAllowed(c: ContractDoc | null | undefined): boolean {
+/**
+ * موقَّعٌ ولم يُدفَع بعد — يَتفعّلُ وحدَه عند الدفع. **لا اعتمادَ للعقود**
+ * (قرار المالك 2026-10-24): التوقيعُ والدفعُ من العميلةِ يكفيان، و
+ * `activateContractOnPaid` يُطلَقُ بانقلابِ `is_paid` وحدَه. مرآةُ
+ * `contractAwaitingPayment` في `lib/utils/contract_health.dart`.
+ */
+export function contractAwaitingPayment(c: ContractDoc | null | undefined): boolean {
   const status = c?.status ?? 'pending';
-  return status === 'pending' && c?.is_paid !== true;
+  return (status === 'pending' || status === 'approved_waiting_payment') &&
+    c?.is_paid !== true;
 }
 
-/** سببُ حجبِ الزرِّ، أو `null` حين لا يَكونُ موضعُه أصلاً. */
-export function contractApproveBlockedReason(
-  c: ContractDoc | null | undefined,
-): string | null {
-  const status = c?.status ?? 'pending';
-  if (status !== 'pending') return null;
-  if (c?.is_paid === true) {
-    return 'مدفوع سلفاً — الاعتماد خطوة قبل الدفع. اعتماده الآن يطالب ' +
-      'العميلة بالدفع مرة أخرى ويُخرجه من إعادة المحاولة التلقائية.';
-  }
-  return null;
-}
+export const CONTRACT_AWAITING_PAYMENT_NOTE =
+  'لم يُدفع بعد — يتفعّل العقد وحده لحظة دفع العميلة، ولا يحتاج اعتماداً.';

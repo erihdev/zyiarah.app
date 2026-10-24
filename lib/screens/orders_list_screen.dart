@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' as intl;
+import 'package:zyiarah/utils/store_order_flow.dart';
 import 'package:zyiarah/screens/store_payment_screen.dart';
 import 'package:zyiarah/screens/hourly_details_screen.dart';
 import 'package:zyiarah/screens/sofa_rug_details_screen.dart';
@@ -22,6 +23,7 @@ import 'package:zyiarah/utils/crew_delay_notice.dart';
 import 'package:zyiarah/utils/time_format.dart';
 import 'package:zyiarah/utils/cancel_refund_notice.dart';
 import 'package:zyiarah/utils/user_facing_error.dart';
+import 'package:zyiarah/utils/order_amount_label.dart';
 
 // تحويل رقمي دفاعي — حقول Firestore (amount/total_amount/quotePrice) قد تصل نصّاً
 // أو null، و.toDouble()/as num المباشر كان يعطّل بطاقة الطلب داخل القائمة.
@@ -66,16 +68,72 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
       _storeOrders = null;
       return;
     }
+    // الأحدثُ أوّلاً وبسقفٍ (`kClientOrdersQueryLimit`): كان البثُّ يَقرأُ
+    // كلَّ طلبٍ في عمرِ الحسابِ بلا حدّ. والفهرسُ المركَّبُ قائمٌ للمجموعتَين.
     _orders = FirebaseFirestore.instance
         .collection('orders')
         .where('client_id', isEqualTo: uid)
+        .orderBy('created_at', descending: true)
+        .limit(kClientOrdersQueryLimit)
         .snapshots()
         .firstEventTimeout();
     _storeOrders = FirebaseFirestore.instance
         .collection('store_orders')
         .where('client_id', isEqualTo: uid)
+        .orderBy('created_at', descending: true)
+        .limit(kClientOrdersQueryLimit)
         .snapshots()
         .firstEventTimeout();
+  }
+
+  /// زرُّ «إعادة المحاولة» يُعيدُ فتحَ البثّين **صراحةً**: البثُّ مُثبَّت، فـ
+  /// `setState(() {})` وحدَه لم يَعُد يُعيدُ الاشتراكَ (والخطأُ يَلتصق).
+  void _reopenStreams() {
+    setState(() {
+      _streamsUid = null;
+      _orders = null;
+      _storeOrders = null;
+    });
+  }
+
+  /// ملاحظةُ السقفِ تُعرَضُ **في تبويبِ السجلِّ وحدَه** ومتى بلغَ البثُّ حدَّه
+  /// فعلاً: الطلبُ المفتوحُ يُحَلُّ أو يُلغى خلالَ أيّام فلا يَكادُ يَسقطُ
+  /// خلفَ مئتَي طلبٍ أحدثَ منه، أمّا السجلُّ فيَطولُ مع العمر.
+  Widget? _capNotice(int loaded) {
+    if (_activePhase == 0 || loaded < kClientOrdersQueryLimit) return null;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 16),
+      child: Text(
+        'يُعرض أحدث $kClientOrdersQueryLimit طلب من سجلّكِ',
+        textAlign: TextAlign.center,
+        style: GoogleFonts.tajawal(fontSize: 12, color: const Color(0xFF94A3B8)),
+      ),
+    );
+  }
+
+  Widget _buildLoadError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_off_rounded, size: 52, color: Colors.grey.shade400),
+            const SizedBox(height: 12),
+            Text('تعذّر تحميل البيانات، تحقّقي من الاتصال',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.tajawal(color: const Color(0xFF64748B))),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _reopenStreams,
+              icon: const Icon(Icons.refresh),
+              label: Text('إعادة المحاولة',
+                  style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -195,7 +253,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           );
         }
         if (snapshot.hasError) {
-          return const Center(child: Text('تعذّر تحميل البيانات، تحقّقي من الاتصال'));
+          return _buildLoadError();
         }
         // القسمة قاعدة واحدة (`orderIsOpen`) لا قائمتان: القائمتان كانتا
         // صحيحتين هنا، لكن أي حالة لا تَرِد في إحداهما تسقط من التبويبين معاً
@@ -208,20 +266,23 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
         }).toList();
 
         if (orders.isEmpty) {
-          return _buildEmptyState();
+          return _buildEmptyState(store: false);
         }
 
-        // Sort in-memory to avoid composite index requirement
+        // الاستعلامُ مرتَّبٌ خادميّاً؛ الفرزُ المحلّيُّ يَبقى لِما لم يَصِله
+        // طابعُ الخادمِ بعدُ (كتابةٌ معلَّقةٌ محلّيّاً بلا `created_at`).
         orders.sort((a, b) {
           final aTime = (a.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
           final bTime = (b.data() as Map<String, dynamic>)['created_at'] as Timestamp?;
           return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
         });
 
+        final cap = _capNotice(allDocs.length);
         return ListView.builder(
           padding: const EdgeInsets.all(16),
-          itemCount: orders.length,
+          itemCount: orders.length + (cap == null ? 0 : 1),
           itemBuilder: (context, index) {
+            if (index == orders.length) return cap!;
             final order = orders[index].data() as Map<String, dynamic>;
             final orderDocId = orders[index].id;
             return _buildOrderCard(context, order, orderDocId);
@@ -245,11 +306,11 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           );
         }
         if (snapshot.hasError) {
-          return const Center(child: Text('تعذّر تحميل البيانات، تحقّقي من الاتصال'));
+          return _buildLoadError();
         }
         
-        // دورة المتجر الحقيقية: awaiting_payment ⇒ under_review ⇒ delivering ⇒
-        // delivered. ومن `historyStatuses` التي كانت هنا أُخذت المجموعة المنتهية
+        // دورة المتجر: awaiting_payment ⇒ under_review ⇒ preparing ⇒ ready ⇒
+        // with_driver ⇒ delivered (`store_order_flow.dart`). ومن `historyStatuses` التي كانت هنا أُخذت المجموعة المنتهية
         // في `order_activity.dart` حرفياً — هذا الموضع كان الصحيح الوحيد من ثلاثة.
         final allDocs = snapshot.data!.docs;
         final storeOrders = allDocs.where((doc) {
@@ -259,7 +320,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
         }).toList();
 
         if (storeOrders.isEmpty) {
-          return _buildEmptyState();
+          return _buildEmptyState(store: true);
         }
 
         storeOrders.sort((a, b) {
@@ -268,10 +329,12 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
         });
 
+        final cap = _capNotice(allDocs.length);
         return ListView.builder(
           padding: const EdgeInsets.all(16),
-          itemCount: storeOrders.length,
+          itemCount: storeOrders.length + (cap == null ? 0 : 1),
           itemBuilder: (context, index) {
+            if (index == storeOrders.length) return cap!;
             final data = storeOrders[index].data() as Map<String, dynamic>;
             return _buildStoreOrderCard(context, storeOrders[index].id, data);
           },
@@ -292,17 +355,10 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
     final double payAmount =
         (data['final_amount'] as num?)?.toDouble() ?? total;
 
-    Color statusColor = Colors.orange;
-    String statusText = "قيد المعالجة";
-
-    if (status == 'pending') { statusColor = Colors.orange; statusText = "بانتظار موافقة الإدارة"; }
-    else if (status == 'awaiting_payment' || status == 'approved') { statusColor = Colors.deepOrange; statusText = "بانتظار الدفع"; }
-    else if (status == 'under_review') { statusColor = Colors.orange; statusText = "تحت المراجعة"; }
-    else if (status == 'delivering') { statusColor = Colors.indigo; statusText = "جاري التوصيل"; }
-    else if (status == 'processing') { statusColor = Colors.blue; statusText = "قيد التجهيز"; }
-    else if (status == 'shipped') { statusColor = Colors.indigo; statusText = "تم الشحن"; }
-    else if (status == 'delivered' || status == 'completed') { statusColor = Colors.green; statusText = "تم التوصيل"; }
-    else if (status == 'cancelled' || status == 'rejected') { statusColor = Colors.red; statusText = "ملغي"; }
+    // دورةُ المتجرِ من موضعِها الواحد (`store_order_flow.dart`): تم استلام
+    // طلبكِ ⇒ قيد التجهيز ⇒ جاهز للتوصيل ⇒ مع السائق ⇒ تم التسليم.
+    final Color statusColor = storeStatusColor(status);
+    final String statusText = storeStatusLabel(status, forClient: true);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -399,7 +455,19 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
   }
 
 
-  Widget _buildEmptyState() {
+  /// فراغٌ يقول **أيُّ** قائمةٍ فارغة (جارية/سابقة، خدمات/متجر) ويدعوها إلى
+  /// الخطوة التالية — «لا توجد طلبات» وحدَها تحت تبويب «السابقة» تُقرأ كأنّ
+  /// طلباتِها الجاريةَ ضاعت.
+  Widget _buildEmptyState({required bool store}) {
+    final bool history = _activePhase != 0;
+    final String title = store
+        ? (history ? 'لا توجد طلبات متجر سابقة' : 'لا توجد طلبات متجر جارية')
+        : (history ? 'لا توجد حجوزات سابقة' : 'لا توجد حجوزات جارية');
+    final String body = history
+        ? 'ستظهر هنا طلباتكِ بعد اكتمالها أو إلغائها.'
+        : (store
+            ? 'لم تطلبي من المتجر بعد.\nتصفّحي أدوات التنظيف واطلبي ما تحتاجينه.'
+            : 'لم تحجزي أي خدمة بعد.\nاحجزي خدمتكِ الأولى الآن!');
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -412,32 +480,46 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
                 color: const Color(0xFF660033).withValues(alpha: 0.06),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.calendar_today_rounded, size: 52, color: Color(0xFF660033)),
+              child: Icon(
+                  store
+                      ? Icons.shopping_bag_outlined
+                      : Icons.calendar_today_rounded,
+                  size: 52,
+                  color: const Color(0xFF660033)),
             ),
             const SizedBox(height: 24),
             Text(
-              'لا توجد طلبات',
+              title,
+              textAlign: TextAlign.center,
               style: GoogleFonts.tajawal(fontSize: 20, color: const Color(0xFF0F172A), fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
             Text(
-              'لم تقم بأي حجز بعد.\nابدأ بطلب خدمتك الأولى الآن!',
+              body,
               textAlign: TextAlign.center,
               style: GoogleFonts.tajawal(color: const Color(0xFF64748B), height: 1.6, fontSize: 14),
             ),
             const SizedBox(height: 28),
             ElevatedButton.icon(
               onPressed: () {
-                // الشاشة مسار في الراوتر: pop يرجع للرئيسية إن جئنا منها، وإلا نذهب
-                // إليها صراحةً (رابط عميق فتح '/orders' مباشرةً بلا مكدّس تحته).
+                if (store) {
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const ZyiarahStoreScreen()));
+                  return;
+                }
+                // الخدماتُ في الرئيسيّة: الشاشة مسار في الراوتر، فـpop يرجع
+                // إليها إن جئنا منها، وإلا نذهب صراحةً (رابط عميق فتح
+                // '/orders' مباشرةً بلا مكدّس تحته).
                 if (context.canPop()) {
                   context.pop();
                 } else {
                   context.go('/client');
                 }
               },
-              icon: const Icon(Icons.home_rounded),
-              label: Text('العودة للرئيسية', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+              icon: Icon(store ? Icons.storefront_rounded : Icons.add_circle_outline_rounded),
+              label: Text(store ? 'تصفّحي المتجر' : 'احجزي خدمة الآن', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF660033),
                 foregroundColor: Colors.white,
@@ -599,7 +681,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> with SingleTickerPr
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('${_asDouble(order['amount']).toStringAsFixed(2)} ر.س',
+              Text(clientOrderAmountLabel(order),
                 style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: const Color(0xFF660033))),
               if (status == 'completed' && order['rating'] == null)
                 TextButton.icon(

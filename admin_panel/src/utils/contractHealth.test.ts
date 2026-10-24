@@ -1,4 +1,4 @@
-// مرآةُ صحّةِ العقدِ وبوّابةِ اعتمادِه.
+// مرآةُ صحّةِ العقدِ و«بانتظار الدفع» (لا اعتمادَ للعقود منذ 2026-10-24).
 //
 // جدولُ الحالاتِ **مشتركٌ بين اللغتَين**: نسخةٌ بعينِها في
 // `test/contract_approve_gate_test.dart` بين العلامتَين نفسِهما، وذاك الفحصُ
@@ -9,8 +9,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   contractHealthOf,
-  contractApproveAllowed,
-  contractApproveBlockedReason,
+  contractAwaitingPayment,
+  CONTRACT_AWAITING_PAYMENT_NOTE,
   contractNeedsHuman,
   CONTRACT_HEALTH_TITLES,
   type ContractHealth,
@@ -26,7 +26,7 @@ const CASES: Row[] = [
   [{"status": "pending"}, "ok", true],
   [{"status": "pending", "is_paid": false}, "ok", true],
   [{"status": "pending", "is_paid": true}, "activationStuck", false],
-  [{"status": "approved_waiting_payment"}, "ok", false],
+  [{"status": "approved_waiting_payment"}, "ok", true],
   [{"status": "approved_waiting_payment", "is_paid": true},
    "activationStuck", false],
   [{"status": "active", "is_paid": true}, "ok", false],
@@ -57,18 +57,15 @@ describe('contractHealth — المرآة', () => {
   it.each(rows.map((r, i) => [i, r] as const))(
     'الحالةُ [%i] تُطابقُ الدارت',
     (_i, row) => {
-      const [doc, health, approve] = row;
+      const [doc, health, awaiting] = row;
       expect(contractHealthOf(doc)).toBe(health);
-      expect(contractApproveAllowed(doc)).toBe(approve);
+      expect(contractAwaitingPayment(doc)).toBe(awaiting);
     },
   );
 
-  it('المدفوعُ المعلَّقُ وحدَه يُحجَبُ بسببٍ منطوق', () => {
-    expect(contractApproveBlockedReason({ status: 'pending', is_paid: true }))
-      .toBeTruthy();
-    expect(contractApproveBlockedReason({ status: 'pending' })).toBeNull();
-    expect(contractApproveBlockedReason({ status: 'active', is_paid: true }))
-      .toBeNull();
+  it('نصُّ «بانتظار الدفع» يَقولُ إنّه بلا اعتماد', () => {
+    expect(CONTRACT_AWAITING_PAYMENT_NOTE).toContain('لا يحتاج اعتماداً');
+    expect(CONTRACT_AWAITING_PAYMENT_NOTE).toContain('يتفعّل');
   });
 
   it('`planMismatch` وحدَها قرارٌ بشريّ — البقيّةُ تُعادُ محاولتُها', () => {

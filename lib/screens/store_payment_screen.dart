@@ -1,3 +1,5 @@
+import 'package:zyiarah/services/client_location.dart';
+import 'package:zyiarah/utils/payment_keys.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -9,13 +11,14 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:zyiarah/services/tamara_service.dart';
 import 'package:zyiarah/services/moyasar_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
-import 'package:zyiarah/screens/moyasar_card_screen.dart';
+import 'package:zyiarah/widgets/moyasar_inline_card.dart';
+import 'package:zyiarah/utils/moyasar_util.dart';
+import 'package:moyasar/moyasar.dart' show PaymentConfig, CreditCardConfig;
 import 'package:zyiarah/screens/order_success_screen.dart';
 import 'package:zyiarah/utils/global_error_handler.dart';
 import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/invoice_stamp.dart';
-import '../utils/env.dart';
 import 'package:zyiarah/utils/user_facing_error.dart';
 
 /// شاشة دفع طلب المتجر — تُفتح فور إنشاء الطلب (طلب مباشر، لا موافقة مسبقة).
@@ -53,6 +56,8 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
   // اسم منطقة الطلب السابق الذي وُرث عنوانه منه — للعرض فقط، كي ترى العميلة
   // مصدر العنوان المقترَح وتغيّره إن لم يعد عنوانها. null عند الاختيار اليدوي.
   String? _prefillZoneName;
+  /// العنوانُ من موقعِ العميلةِ المحدَّدِ أعلى الرئيسيّة (لا من طلبٍ سابق).
+  bool _prefillFromHeader = false;
 
   double get _vat => vatInGross(widget.total);
   double get _subtotal => widget.total - _vat;
@@ -64,8 +69,19 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
     _loadDefaultAddress();
   }
 
-  /// عنوان التوصيل الافتراضي = موقع آخر طلب للعميل (عنوانه المعتاد).
+  /// عنوان التوصيل الافتراضي = **موقعُ العميلةِ المحدَّدُ تلقائياً** أعلى
+  /// الرئيسيّة (قرار المالك 2026-10-24: «موقعه محدد تلقائياً»)، وإلّا موقعُ
+  /// آخرِ طلبٍ لها (عنوانُها المعتاد).
   Future<void> _loadDefaultAddress() async {
+    final here = ClientLocation.instance.result;
+    if (here != null && here.isSuccess && here.location != null) {
+      setState(() {
+        _deliveryLocation = here.location;
+        _prefillZoneName = here.zoneName;
+        _prefillFromHeader = true;
+      });
+      return;
+    }
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
@@ -120,6 +136,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
         _deliveryLocation = loc;
         // عنوان مُختار يدوياً — لم يعد موروثاً من طلب سابق فنُخفي سطر المصدر.
         _prefillZoneName = null;
+        _prefillFromHeader = false;
       });
     }
   }
@@ -141,7 +158,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
   // هل تتوفّر أي طريقة دفع؟ (بطاقة عبر مفتاح Moyasar أو تمارا) — لتعطيل زر الدفع
   // حين لا تُعرَض أي طريقة، بدل زرّ ميّت يفتح شاشة بمفتاح فارغ.
   bool get _hasPaymentMethod =>
-      _tamaraAvailable || (envOrEmpty('MOYASAR_PUBLISHABLE_KEY')).isNotEmpty;
+      _tamaraAvailable || moyasarPublishableKey().isNotEmpty;
 
   Future<void> _handlePay() async {
     if (_isLoading) return;
@@ -163,7 +180,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
       // البطاقة (Moyasar) هي الطريقة الافتراضية، لكنها لا تُعرَض حين يغيب المفتاح.
       // لو بقيت الطريقة 'card' بلا مفتاح لفُتحت شاشة بطاقة بمفتاح فارغ (طريق مسدود).
       // نحوّل لتمارا إن توفّرت، وإلا نُبلغ المستخدم بدل المتابعة.
-      final moyasarReady = (envOrEmpty('MOYASAR_PUBLISHABLE_KEY')).isNotEmpty;
+      final moyasarReady = moyasarPublishableKey().isNotEmpty;
       if (_selectedMethod == 'card' && !moyasarReady) {
         if (_tamaraAvailable) {
           _selectedMethod = 'tamara';
@@ -176,33 +193,16 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
         }
       }
       if (_selectedMethod == 'card') {
-        if (mounted) setState(() => _isLoading = false);
-        if (!mounted) return;
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => MoyasarCardScreen(
-              amountSAR: widget.total,
-              description: 'طلب متجر زيارة #${widget.orderCode}',
-              orderId: widget.storeOrderId,
-              onSuccess: (paymentId) async {
-                setState(() => _isLoading = true);
-                // is_paid=false يكتبه العميل (القاعدة تمنعه من true)، ثم نؤكّد خادميّاً
-                // فوراً عبر verifyMoyasarPayment (يقلب is_paid=true بعد فحص المبلغ). كان
-                // المتجر يعتمد على webhook ميسر وحده (المعلّق) فيبقى الطلب غير مؤكَّد.
-                await _finalizeStorePayment('card', isPaid: false, paymentId: paymentId);
-              },
-              onFailure: (error) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(error, style: GoogleFonts.tajawal()),
-                    backgroundColor: Colors.red.shade800,
-                  ));
-                }
-              },
-            ),
-          ),
-        );
+        // البطاقةُ تَدفعُ من زرِّ ميسر داخلَ خيارِها (`MoyasarInlineCard`)،
+        // وهذا الزرُّ مخفيٌّ ما دامت مختارة — فلا يُبلَغُ هذا الفرعُ إلّا
+        // بخطأ، ولا يَترُكُ `_isLoading` عالقاً.
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('أدخلي بيانات البطاقة أعلاه ثم اضغطي «ادفع»',
+                  style: GoogleFonts.tajawal())));
+        }
+        return;
       } else if (_selectedMethod == 'tamara') {
         String? checkoutUrl;
         try {
@@ -373,7 +373,7 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
   @override
   Widget build(BuildContext context) {
     final bool moyasarReady =
-        (envOrEmpty('MOYASAR_PUBLISHABLE_KEY')).isNotEmpty;
+        moyasarPublishableKey().isNotEmpty;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
@@ -436,7 +436,9 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
                                       // فتظن العميلة أنه عنوانها الحالي حتماً.
                                       if (_prefillZoneName != null)
                                         Text(
-                                          'العنوان من طلبك السابق — منطقة $_prefillZoneName',
+                                          _prefillFromHeader
+                                              ? 'موقعكِ الحالي — منطقة $_prefillZoneName'
+                                              : 'العنوان من طلبك السابق — منطقة $_prefillZoneName',
                                           style: GoogleFonts.tajawal(
                                               fontSize: 11,
                                               color: Colors.grey.shade500),
@@ -475,6 +477,40 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
                       title: 'بطاقة فيزا / مدى',
                       subtitle: 'دفع آمن عبر ميسر',
                       icon: Icons.credit_card,
+                    ),
+                  // حقولُ البطاقةِ تحتَ خيارِها لا في صفحةٍ ثانية. طلبُ المتجرِ
+                  // قائمٌ قبلَ هذه الشاشة، فمعرّفُه في البياناتِ الوصفيّة يَكفي
+                  // الـwebhook و`verifyMoyasarPayment`.
+                  if (moyasarReady && _selectedMethod == 'card')
+                    MoyasarInlineCard(
+                      blockedReason: _cardBlockReason(),
+                      config: PaymentConfig(
+                        publishableApiKey: moyasarPublishableKey(),
+                        amount: (widget.total * 100).round(),
+                        description: 'طلب متجر زيارة #${widget.orderCode}',
+                        givenID:
+                            MoyasarUtil.givenIdFromOrder(widget.storeOrderId),
+                        metadata: {'order_id': widget.storeOrderId},
+                        creditCard:
+                            CreditCardConfig(saveCard: false, manual: false),
+                      ),
+                      onSuccess: (paymentId) async {
+                        if (!mounted) return;
+                        setState(() => _isLoading = true);
+                        // is_paid=false يكتبه العميل (القاعدة تمنعه من true)، ثم
+                        // نؤكّد خادميّاً فوراً عبر verifyMoyasarPayment.
+                        // (`_finalizeStorePayment` يَلتقطُ أخطاءَه بنفسِه.)
+                        await _finalizeStorePayment('card',
+                            isPaid: false, paymentId: paymentId);
+                      },
+                      onFailure: (e, _) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content:
+                              Text(e.message, style: GoogleFonts.tajawal()),
+                          backgroundColor: Colors.red.shade800,
+                        ));
+                      },
                     ),
                   if (_tamaraAvailable) ...[
                     const SizedBox(height: 12),
@@ -640,7 +676,18 @@ class _StorePaymentScreenState extends State<StorePaymentScreen> {
     );
   }
 
+  /// ما يَفحصُه `_handlePay` قبلَ أيِّ دفع — والبطاقةُ لا تَمرُّ به.
+  String? _cardBlockReason() {
+    if (_deliveryLocation == null) return 'يرجى تحديد عنوان التوصيل أولاً';
+    if (!_agreeToTerms) return 'يرجى الموافقة على الشروط والأحكام أولاً';
+    return null;
+  }
+
   Widget _buildBottomButton() {
+    // البطاقةُ تَدفعُ من زرِّ ميسر داخلَ خيارِها؛ زرٌّ ثانٍ لا يَدفع.
+    if (_selectedMethod == 'card' && !_isLoading) {
+      return const SizedBox.shrink();
+    }
     return Positioned(
       bottom: 0,
       left: 0,

@@ -2,11 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/services/zone_locator_service.dart';
 
-/// بطاقة موقع الخدمة: تحدّد تلقائياً، وتقول **لماذا** إن تعذّر، وتعطي إجراءً.
+/// سطرُ موقعِ الخدمة: **التحديدُ تلقائيٌّ** عند فتحِ الشاشة، ولا يظهرُ للعميلةِ
+/// إلّا سطرٌ صغيرٌ بنتيجتِه — لا بطاقةَ ولا عنوانَ ولا زرَّ «حدّد موقعي».
 ///
-/// حلّت محلّ ثلاث نسخ متطابقة كانت تعرض «لم يُحدَّد موقعك بعد — اختره من الزر
-/// بالأسفل» لكل الأسباب على السواء: الخدمة مطفأة، الإذن مرفوض، GPS لم يستجب،
-/// خارج النطاق… كلها رسالة واحدة لا تدلّ على شيء، وبلا سجلّ يكشف السبب.
+/// (قرارُ المالك: كانت هنا بطاقةٌ مؤطَّرةٌ بعنوانِ «موقع تقديم الخدمة» وزرَّين
+/// كبيرَين؛ والمطلوبُ أن يُحدَّدَ الموقعُ وحدَه بلا واجهةٍ تطلبُ منها شيئاً.)
+///
+/// **لا طريقَ مسدود:** إن تعذّرَ التحديدُ ظهرَ السببُ الفعليُّ في سطرٍ واحد،
+/// وتحتَه روابطُ نصّيّةٌ صغيرة — «إعادة المحاولة» دائماً (موصولةٌ بـ
+/// `onLocateMe`)، و«الإعدادات» حين يكونُ الإذنُ مرفوضاً نهائيّاً، و«من الخريطة».
+/// فمن فتحت الإعداداتَ وسمحت ثمّ عادت تَجدُ ما تُعيدُ به المحاولة.
 class ZyiarahZoneLocationCard extends StatelessWidget {
   static const Color _brand = Color(0xFF660033);
 
@@ -19,7 +24,7 @@ class ZyiarahZoneLocationCard extends StatelessWidget {
   /// سبب آخر تعذّر، أو null إن لم تُحاوَل/نجحت.
   final LocateFailure? failure;
 
-  /// «حدّد موقعي تلقائياً» — يطلب الإذن صراحةً.
+  /// إعادةُ التحديد — يطلب الإذن صراحةً.
   final VoidCallback onLocateMe;
 
   /// «تحديد من الخريطة».
@@ -34,153 +39,65 @@ class ZyiarahZoneLocationCard extends StatelessWidget {
     this.failure,
   });
 
+  Widget _link(String label, VoidCallback onTap, {Color color = _brand}) {
+    return TextButton(
+      onPressed: onTap,
+      style: TextButton.styleFrom(
+        foregroundColor: color,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        minimumSize: const Size(0, 32),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      child: Text(label,
+          style: GoogleFonts.tajawal(fontSize: 12, fontWeight: FontWeight.bold)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final located = zoneName != null;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _brand.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _brand.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('موقع تقديم الخدمة',
-              style: GoogleFonts.tajawal(fontWeight: FontWeight.bold, color: _brand)),
-          const SizedBox(height: 10),
-          if (isLocating)
-            Row(
-              children: [
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: _brand),
-                ),
-                const SizedBox(width: 10),
-                Text('جارٍ تحديد موقعك…',
-                    style: GoogleFonts.tajawal(
-                        fontSize: 13, color: const Color(0xFF64748B))),
-              ],
-            )
-          else if (located)
-            Row(
-              children: [
-                const Icon(Icons.check_circle_rounded,
-                    size: 18, color: Color(0xFF059669)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text('المنطقة: $zoneName',
-                      style: GoogleFonts.tajawal(
-                          color: const Color(0xFF059669),
-                          fontWeight: FontWeight.bold)),
-                ),
-              ],
-            )
-          else if (failure != null)
-            // **السبب الفعلي** بدل رسالة واحدة تصلح لكل شيء.
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.error_outline_rounded,
-                    size: 18, color: Color(0xFFB45309)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(failure!.message,
-                      style: GoogleFonts.tajawal(
-                          fontSize: 12,
-                          color: const Color(0xFF92400E),
-                          height: 1.6)),
-                ),
-              ],
-            )
-          else
-            Text('لم يُحدَّد موقعك بعد',
-                style: GoogleFonts.tajawal(
-                    fontSize: 13, color: const Color(0xFF64748B))),
-          // **لا طريقَ مسدود.** متى كان السببُ إذناً مرفوضاً حَلَّ زرُّ
-          // «الإعدادات» **محلَّ** «حدّد موقعي تلقائياً» أدناه — فمن فتحت
-          // الإعداداتَ وسمحت ثمّ عادت لا تَجدُ ما تُعيدُ به المحاولةَ
-          // إطلاقاً: السطحُ الذي أرسلَها إلى الإعداداتِ يَنزعُ وسيلةَ
-          // استعمالِ ما سمحت به. وإعادةُ التحديدِ عند الرجوعِ مُنفَّذةٌ في
-          // **شاشةٍ واحدةٍ من سبع** (`hourly_details_screen` عبر
-          // `didChangeAppLifecycleState`)، فالستُّ الأخرى لا تَتعافى وحدَها.
-          if (!located && !isLocating && failure?.needsSettings == true)
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: TextButton.icon(
-                onPressed: onLocateMe,
-                icon: const Icon(Icons.refresh_rounded, size: 16),
-                label: Text('إعادة المحاولة',
-                    style: GoogleFonts.tajawal(
-                        fontSize: 12, fontWeight: FontWeight.bold)),
-                style: TextButton.styleFrom(
-                  foregroundColor: _brand,
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(0, 30),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
+    // **لا سطرَ موقعٍ في شاشةِ الخدمةِ إلّا حين لا موقعَ أصلاً** (قرار المالك
+    // 2026-10-24). الموقعُ يُحدَّدُ مرّةً عند فتحِ التطبيقِ ويَظهرُ أعلى
+    // الرئيسيّة (`ClientLocation` + `ClientLocationChip`)؛ فلا «جارٍ تحديد
+    // موقعك…» ولا «المنطقة: … تغيير» هنا. وخارجَ النطاقِ تقولُ الشاشةُ
+    // نفسُها «الخدمة غير متاحة في منطقتك» — لا سطرانِ لشيءٍ واحد.
+    //
+    // يبقى السطرُ في حالةٍ واحدة: تعذّرُ القراءةِ (إذنٌ مرفوض، GPS مطفأ،
+    // مهلة) فلا موقعَ تُبنى عليه الشاشة — وبلاه صفحةٌ فارغةٌ بلا مخرج.
+    if (isLocating || zoneName != null || failure == null) {
+      return const SizedBox.shrink();
+    }
+    if (failure == LocateFailure.outOfServiceArea) {
+      return const SizedBox.shrink();
+    }
+
+    final needsSettings = failure?.needsSettings == true;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.location_off_outlined, size: 18, color: Color(0xFFB45309)),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(failure?.message ?? 'لم يُحدَّد موقعك بعد',
+                  style: GoogleFonts.tajawal(
+                      fontSize: 12, color: const Color(0xFF92400E), height: 1.6)),
             ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              if (!located && failure?.needsSettings == true)
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => ZyiarahZoneLocator.openSettings(),
-                    icon: const Icon(Icons.settings_outlined, size: 18),
-                    label: Text('الإعدادات', style: GoogleFonts.tajawal()),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFB45309),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                )
-              else
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: isLocating ? null : onLocateMe,
-                    icon: const Icon(Icons.my_location_rounded, size: 18),
-                    label: Text(located ? 'تحديث موقعي' : 'حدّد موقعي تلقائياً',
-                        style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _brand,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: const Color(0xFFCBD5E1),
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: isLocating ? null : onPickManually,
-                  icon: const Icon(Icons.map_outlined, size: 18),
-                  label: Text(located ? 'تغيير' : 'من الخريطة',
-                      style: GoogleFonts.tajawal()),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _brand,
-                    side: BorderSide(color: _brand.withValues(alpha: 0.4)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+          ],
+        ),
+        Wrap(
+          spacing: 4,
+          children: [
+            if (needsSettings)
+              _link('الإعدادات', () => ZyiarahZoneLocator.openSettings(),
+                  color: const Color(0xFFB45309)),
+            _link('إعادة المحاولة', onLocateMe),
+            _link('من الخريطة', onPickManually),
+          ],
+        ),
+      ],
     );
   }
 }

@@ -7,7 +7,10 @@ import 'package:zyiarah/utils/home_packages.dart';
 import 'package:zyiarah/utils/catalog_number.dart';
 
 class AdminSubscriptionsScreen extends StatefulWidget {
-  const AdminSubscriptionsScreen({super.key});
+  /// داخلَ حاويةِ «الباقات» تُرسَمُ بلا شريطِ عنوانٍ خاصٍّ — الحاويةُ تَحملُ
+  /// العنوانَ ومُبدِّلَ الشريحتَين، وشريطانِ متراكبانِ يُهدِرانِ الشاشة.
+  final bool embedded;
+  const AdminSubscriptionsScreen({super.key, this.embedded = false});
 
   @override
   State<AdminSubscriptionsScreen> createState() => _AdminSubscriptionsScreenState();
@@ -224,7 +227,7 @@ class _AdminSubscriptionsScreenState extends State<AdminSubscriptionsScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
-        appBar: AppBar(
+        appBar: widget.embedded ? null : AppBar(
           title: Text('إدارة باقات الاشتراك', style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
           backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,

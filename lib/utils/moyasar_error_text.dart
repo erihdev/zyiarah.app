@@ -1,6 +1,6 @@
 /// **ماذا نَقولُ للعميلةِ عن خطأِ بوّابةِ ميسر — مرّةً واحدةً للشاشتَين (2026-10-07).**
 ///
-/// شاشتا SDK (`moyasar_card_screen` و`moyasar_stc_screen`) كانت لكلٍّ منهما
+/// سطحا SDK (`moyasar_inline_card` — كانت `moyasar_card_screen` — و`moyasar_stc_screen`) كانت لكلٍّ منهما
 /// نسختُها من المُبدِّل، و**كلتاهما تُسرِّبُ نصَّ البوّابة**:
 ///
 ///  • `ApiError.message` و`ValidationError.message` هما `jsonBody['message']`
