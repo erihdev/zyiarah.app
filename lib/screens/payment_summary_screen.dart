@@ -23,7 +23,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:pay/pay.dart';
 import 'package:zyiarah/services/moyasar_service.dart';
-import 'package:zyiarah/screens/moyasar_card_screen.dart';
+import 'package:zyiarah/widgets/moyasar_inline_card.dart';
 import 'package:zyiarah/screens/moyasar_stc_screen.dart';
 import 'package:moyasar/moyasar.dart';
 import 'package:zyiarah/services/zyiarah_wallet_service.dart';
@@ -933,39 +933,16 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         }
 
       } else if (_selectedPaymentMethod == 'card') {
-        // Moyasar SDK — Credit Card
-        // ننشئ الطلب is_paid=false قبل فتح شاشة الدفع (كتمارا): لو نجح الخصم ثم
-        // فشلت كتابة الطلب، يظل موجوداً ويؤكّده الـ webhook — فلا دفعة يتيمة بلا طلب.
-        if (widget.contractId == null) {
-          await _createUnpaidServiceOrder(finalOrderId, method: 'card');
+        // **البطاقةُ لا تَمرُّ من هنا.** حقولُها تَظهرُ تحتَ خيارِها
+        // (`MoyasarInlineCard`) وزرُّ ميسر هو زرُّ الدفع، وشريطُ «تأكيد وإتمام
+        // الدفع» مخفيٌّ ما دامت مختارة. والفرعُ باقٍ كي لا يَعلقَ `_isLoading`
+        // لو بَلَغه نداءٌ ما: بلا فرعٍ يَسقطُ الشرطُ كلُّه ولا شيءَ يُطفئه.
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('أدخلي بيانات البطاقة أعلاه ثم اضغطي «ادفع»',
+                  style: GoogleFonts.tajawal())));
         }
-        if (mounted) setState(() => _isLoading = false);
-        if (!mounted) return;
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => MoyasarCardScreen(
-              amountSAR: totalWithVat,
-              description: 'خدمة زيارة - ${widget.serviceName}',
-              orderId: finalOrderId,
-              onSuccess: (paymentId) async {
-                setState(() => _isLoading = true);
-                await _processUnifiedSuccess(finalOrderId, 'card', paymentId: paymentId);
-              },
-              onFailure: (error) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(error, style: GoogleFonts.tajawal()),
-                    backgroundColor: Colors.red.shade800,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    margin: const EdgeInsets.all(15),
-                  ));
-                }
-              },
-            ),
-          ),
-        );
         return;
 
       } else if (_selectedPaymentMethod == 'stc_pay') {
@@ -1768,6 +1745,33 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
             logoAsset: 'assets/payment/mada.png',
           ),
 
+        // **حقولُ البطاقةِ تحتَ خيارِها لا في صفحةٍ ثانية** (بطلب المالك
+        // 2026-10-24). ميسر تَشحنُ من زرِّها مباشرةً ولا تُتيحُ خطوةً قبلَه،
+        // فالطلبُ لا يُنشأ قبلَ الدفعِ كما كانت الشاشةُ المنفصلة؛ المسارُ مسارُ
+        // Apple Pay بعينِه: `_nativePayMeta` تَحملُ الحجزَ كاملاً،
+        // و`_processUnifiedSuccess` يُنادي `verifyMoyasarPayment` فيُنشئُ الطلبَ
+        // من البيانات إن غاب ويَقلبُ `is_paid`، و`reconcileOrphanPayments`
+        // احتياطُه. و`_gateNative` يَحجبُ الحقولَ حتى تَتحقّقَ الشروطُ والجوالُ
+        // والسعة — فحوصُ `_handlePayment` نفسُها.
+        if (moyasarReady && _selectedPaymentMethod == 'card')
+          _gateNative(MoyasarInlineCard(
+            config: PaymentConfig(
+              publishableApiKey: publishableKey,
+              amount: (totalWithVat * 100).round(),
+              description: 'خدمة زيارة - ${widget.serviceName}',
+              givenID: MoyasarUtil.givenIdFromOrder(_pendingOrderId),
+              metadata: _nativePayMeta(),
+              creditCard: CreditCardConfig(saveCard: false, manual: false),
+            ),
+            onSuccess: (paymentId) async {
+              if (!mounted) return;
+              setState(() => _isLoading = true);
+              await _processUnifiedSuccess(_pendingOrderId, 'card',
+                  paymentId: paymentId);
+            },
+            onFailure: (_, raw) => _handleNativePayFailure(raw, 'card'),
+          )),
+
         // --- Apple Pay (iOS only — Moyasar SDK) ---
         if (_isNativeIOS && moyasarReady) ...[
           const SizedBox(height: 16),
@@ -2200,6 +2204,11 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
   }
 
   Widget _buildBottomButton() {
+    // البطاقةُ تَدفعُ من زرِّ ميسر داخلَ خيارِها — زرٌّ ثانٍ هنا يَضغطُه
+    // العميلُ فلا يَدفع. ويَعودُ الشريطُ أثناءَ التأكيدِ ليَحملَ المؤشّر.
+    if (_selectedPaymentMethod == 'card' && !_isLoading) {
+      return const SizedBox.shrink();
+    }
     return Positioned(
       bottom: 0,
       left: 0,
