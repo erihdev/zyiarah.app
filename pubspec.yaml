@@ -47,7 +47,7 @@ dependencies:
   firebase_crashlytics: ^5.4.0
   firebase_analytics: ^12.4.1
   cloud_functions: ^6.3.2
-  image_picker: ^1.2.2
+  image_picker: ^1.2.4
   table_calendar: ^3.0.9
   printing: ^5.14.3
   app_links: ^7.0.0
