@@ -382,7 +382,7 @@ void main() {
   // `lib/utils/moyasar_error_text.dart`، نقيّةً فتُختبَرُ سلوكاً.
   group('خطأُ بوّابةِ ميسر: قاعدةٌ واحدةٌ للشاشتَين', () {
     final String card = stripComments(
-        File('lib/screens/moyasar_card_screen.dart').readAsStringSync());
+        File('lib/widgets/moyasar_inline_card.dart').readAsStringSync());
     final String stc = stripComments(
         File('lib/screens/moyasar_stc_screen.dart').readAsStringSync());
 

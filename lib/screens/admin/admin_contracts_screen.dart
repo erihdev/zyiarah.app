@@ -1,4 +1,3 @@
-import 'package:zyiarah/services/zyiarah_messaging_service.dart';
 import 'package:zyiarah/services/audit_service.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -35,11 +34,6 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
 
   bool get _canDeleteContracts => const ['admin', 'super_admin'].contains(_role);
 
-  // اعتماد العقد عملية إدارة طلبات (يغيّر status ويطلق إشعار العميل) — حكرها
-  // على مديري الطلبات كسائر إجراءات الإدارة، لا للمحاسب/التسويق الواصلَين من
-  // بطاقة الرؤى للعرض فقط.
-  bool get _canApproveContracts =>
-      const ['admin', 'super_admin', 'orders_manager'].contains(_role);
 
   // **البثُّ يُبنى مرّةً واحدةً، لا في كلِّ `build`.** كان يُنشأُ داخلَ دالّةِ
   // البناءِ، فكلُّ `setState` — حرفٌ في حقلِ البحثِ، تبديلُ مُرشِّح، فتحُ
@@ -275,37 +269,18 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Row(
               children: [
-                // **الاعتمادُ لِما لم يُدفَع بعد.** كان الشرطُ
-                // `status == 'pending'` وحدَها، وعقدٌ فشلَ تفعيلُه يَسكنُ
-                // تلك الحالةَ — فالضغطةُ تُطالِبُ مَن دفعَ بالدفعِ وتُخرِجُه
-                // ولا يُعادُ إطلاقُ مُشغّلِ التفعيل. التفصيلُ في
-                // `contract_health.dart` (وفيه تصحيحُ بندِ «نافذةِ الإنقاذ»).
-                if (contractApproveAllowed(data) && _canApproveContracts)
+                // لا اعتمادَ (قرار المالك): التوقيعُ والدفعُ من العميلةِ يكفيانِ،
+                // والعقدُ يَتفعّلُ وحدَه عند الدفع. ما لم يُدفَع يُقالُ عنه ذلك.
+                if (contractAwaitingPayment(data))
                   Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => _approveContract(doc),
-                      icon: const Icon(Icons.check_circle_outline, size: 18),
-                      label: Text("اعتماد العقد", style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green[600],
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        elevation: 0,
-                      ),
-                    ),
-                  ),
-                // الإخفاءُ وحدَه يُقرأُ عطلاً في الشاشة، فيُقالُ سببُه مكانَه.
-                if (!contractApproveAllowed(data) &&
-                    contractApproveBlockedReason(data) != null &&
-                    _canApproveContracts)
-                  Expanded(
-                    child: Text(contractApproveBlockedReason(data)!,
+                    child: Text(kContractAwaitingPaymentNote,
                         style: GoogleFonts.tajawal(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: const Color(0xFFB45309))),
-                  ),
+                            color: const Color(0xFF64748B))),
+                  )
+                else
+                  const Spacer(),
                 const SizedBox(width: 8),
                 IconButton.filled(
                   onPressed: () => _showDetails(data, doc.id),
@@ -367,9 +342,10 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
         icon = Icons.payments_rounded;
         break;
       case 'pending':
-        color = Colors.orange;
-        text = "قيد المراجعة";
-        icon = Icons.timer_rounded;
+        // توقيعٌ لم يُدفَع — لا مراجعةَ تنتظره (لا اعتمادَ للعقود).
+        color = Colors.blueGrey;
+        text = "بانتظار الدفع";
+        icon = Icons.payments_outlined;
         break;
     }
 
@@ -389,44 +365,6 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
         ],
       ),
     );
-  }
-
-  void _approveContract(DocumentSnapshot doc) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final data = doc.data() as Map<String, dynamic>;
-    // شاشةٌ مفتوحةٌ من قبلِ وصولِ الدفعةِ تَحملُ لقطةً قديمةً، والبوّابةُ في
-    // البناءِ وحدَها تَحرُسُ العرضَ لا الضغطة — فتُعادُ هنا بنصِّ السبب.
-    final String? blocked = contractApproveBlockedReason(data);
-    if (blocked != null) {
-      messenger.showSnackBar(SnackBar(
-          content: Text(blocked), backgroundColor: Colors.orange.shade800));
-      return;
-    }
-    final confirm = await _showConfirm("اعتماد العقد", "هل أنت متأكد من اعتماد باقة (${data['planName']})؟");
-    if (!confirm) return;
-    try {
-      await FirebaseFirestore.instance.collection('contracts').doc(doc.id).update({
-        'status': 'approved_waiting_payment',
-        'adminApprovedAt': FieldValue.serverTimestamp(),
-      });
-      // تسميةُ APPROVE_CONTRACT كانت في شاشةِ السجلِّ ولا كاتبَ لها: اعتمادُ
-      // العقدِ — وهو ما يَفتحُ بابَ الدفعِ لأكبرِ مبلغٍ في التطبيق — بلا أثر.
-      await ZyiarahAuditService().logAction(
-        action: ZyiarahAuditService.actionApproveContract,
-        details: {'plan': data['planName'] ?? '—', 'client': data['userName'] ?? '—'},
-        targetId: doc.id,
-      );
-      await ZyiarahMessagingService().notifyContractApproved(
-        data['userId'] ?? '',
-        data['planName'] ?? 'باقة اشتراك',
-        contractId: doc.id,
-      );
-      messenger.showSnackBar(const SnackBar(
-          content: Text('تم اعتماد العقد ✅'), backgroundColor: Colors.green));
-    } catch (_) {
-      messenger.showSnackBar(const SnackBar(
-          content: Text('تعذّر اعتماد العقد — أعد المحاولة'), backgroundColor: Colors.red));
-    }
   }
 
   void _deleteContract(String id) async {

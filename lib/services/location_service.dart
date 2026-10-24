@@ -29,6 +29,20 @@ class ZyiarahLocationService {
   factory ZyiarahLocationService() => _instance;
   ZyiarahLocationService._internal();
 
+  /// هل ما زالَ قرارُ الإذنِ بيدِ المستخدم (لم يُسأل بعدُ، أو رفضَ رفضاً
+  /// يُمكِنُ إعادةُ السؤالِ عنه)؟ تَسبقُ طلبَ الإذنِ شاشةُ إفصاحٍ تَشرحُ
+  /// الاستعمالَ (سياسةُ Play «الإفصاح البارز» ونافذةُ أبل تُقرآنِ معاً)،
+  /// ولا معنى لها على إذنٍ مُقرَّرٍ سلفاً. «تعذّرَ السؤالُ» يُقرأُ «لا
+  /// إفصاحَ» فيَمضي المسارُ إلى `requestPermission` التي تَفشلُ مُغلَقةً.
+  Future<bool> permissionUndecided() async {
+    try {
+      return await Geolocator.checkPermission() == LocationPermission.denied;
+    } catch (e, st) {
+      reportSilent(e, st, reason: 'location_permission_check_failed');
+      return false;
+    }
+  }
+
   /// Just checks/requests permission without necessarily waiting for a lock.
   Future<bool> requestPermission() async {
     try {

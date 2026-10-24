@@ -413,7 +413,7 @@ void main() {
   });
 
   // ── (٨) والحقلُ الميّتُ زال، والمعرّفُ يُكتَبُ في الجهتَين ────────────
-  test('deepLink الميّتُ زالَ، وكلا المُحرِّرَين يَكتبُ contractId', () {
+  test('deepLink الميّتُ زالَ، ولا إشعارَ «اعتماد عقد» في المُحرِّرَين', () {
     final dart = _strip(
         File('lib/services/zyiarah_messaging_service.dart').readAsStringSync());
     final panel =
@@ -425,8 +425,11 @@ void main() {
       expect(e.$2.contains('deepLink'), isFalse,
           reason: '${e.$1}: `deepLink` حقلٌ لا يَقرؤه أحد — '
               'وقيمتُه بلا معرّفٍ يَرفضُها `_handleUri` مرّتَين');
-      expect(e.$2.contains('contractId'), isTrue,
-          reason: '${e.$1}: لا معرّفَ عقدٍ في الحِمل — فالنقرُ بلا وجهة');
+      // (2026-10-24) لا اعتمادَ للعقود — فلا إشعارَ «تم اعتماد عقد…
+      // يرجى إتمام الدفع» من أيِّ سطحٍ إداريّ.
+      expect(e.$2.contains('contract_approved'), isFalse,
+          reason: '${e.$1}: عادَ إشعارُ اعتمادِ عقد');
+      expect(e.$2.contains('notifyContractApproved'), isFalse);
     }
   });
 

@@ -113,6 +113,13 @@ flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
   image_path: "assets/logo.png"
+  # أيقونةٌ تكيُّفيّةٌ لأندرويد 8+ (2026-10-22): بلا طبقتَين يُعرَضُ الشعارُ
+  # مصغَّراً داخلَ قناعٍ أبيضَ ويَختلفُ عن أيقونةِ المتجر. الطبقةُ الأماميّةُ
+  # هي الشعارُ داخلَ منطقةِ الأمانِ (٦٦٪) على أبيض، والخلفيّةُ بيضاءُ مثلُه.
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/icon_adaptive_foreground.png"
+  # أيقونةُ App Store (1024) لا تَقبلُ قناةَ ألفا (ITMS-90717) — تُولَّدُ RGB.
+  remove_alpha_ios: true
 
 # شاشة الإطلاق الأصلية (native) — تعرض شعار زيارة فوراً على أبيض بدل الشاشة البيضاء
 # الفارغة. الخلفية بيضاء مطابقة لـ ZyiarahSplashScreen فينتقل بسلاسة للمتحرّك.

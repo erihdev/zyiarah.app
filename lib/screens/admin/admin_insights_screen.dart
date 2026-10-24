@@ -4,6 +4,7 @@ import 'package:intl/intl.dart' as intl;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zyiarah/screens/admin/admin_compliance_screen.dart';
+import 'package:zyiarah/screens/admin/admin_analytics_screen.dart';
 import 'package:zyiarah/screens/admin/admin_staff_performance_screen.dart';
 import 'package:zyiarah/screens/admin/admin_orders_screen.dart';
 import 'package:zyiarah/screens/admin/admin_order_details_screen.dart';
@@ -37,6 +38,11 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
   int _pendingContracts = 0;
   int _userCount = 0;
   bool _isLoading = true;
+
+  /// إحصاءاتُ اللوحةِ تُحسَبُ **مرّةً عند وصولِ البيانات** لا في كلِّ `build`:
+  /// كانت `_calculateStats` تمرُّ على ألفِ مستندٍ (٥٠٠ طلب + ٥٠٠ متجر) بعدّةِ
+  /// حلقاتٍ مع كلِّ إعادةِ رسمٍ — سحبٌ للتحديث، تبديلُ تبويب، أو تغيّرُ MediaQuery.
+  Map<String, dynamic>? _stats;
 
   @override
   void initState() {
@@ -77,8 +83,14 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       // عدٌّ خادميٌّ (لا جلبُ مستندات): القواعدُ تُجيزُ قراءةَ العقودِ لكلِّ
       // الأدوارِ الإداريّة (`isAdmin`)، ومساواةٌ واحدةٌ بلا ترتيبٍ فلا فهرسَ
       // مركّباً تَحتاجُه (`count()` بلا حقلٍ مُجمَّع — راجع بطاقةَ الإيرادات).
+      // **ما يَحتاجُ الأدمنَ من العقود: مدفوعٌ لم يَتفعّل** (لا اعتمادَ —
+      // قرار المالك 2026-10-24). كان العدُّ `status == 'pending'` وحدَها،
+      // فتُعَدُّ توقيعاتٌ لم تُدفَع منذ أشهرٍ «بانتظار المراجعة» ولا مراجعةَ
+      // لها. مساواتانِ على حقلَين لا تَحتاجانِ فهرساً مركّباً.
       final contractsF  = guarded(db.collection('contracts')
-          .where('status', isEqualTo: 'pending').count().get().timeout(kNetCallTimeout));
+          .where('status', isEqualTo: 'pending')
+          .where('is_paid', isEqualTo: true)
+          .count().get().timeout(kNetCallTimeout));
       final storeF      = canReadStore
           ? guarded(db.collection('store_orders').orderBy('created_at', descending: true).limit(500).get().timeout(kNetCallTimeout))
           : Future<QuerySnapshot<Map<String, dynamic>>?>.value(null);
@@ -98,6 +110,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
         _drivers     = driversSnap?.docs ?? _drivers;
         _storeOrders = storeSnap?.docs ?? _storeOrders;
         _pendingContracts = contractsSnap?.count ?? _pendingContracts;
+        _stats = _calculateStats(_orders, _maintenance, _storeOrders);
         _isLoading   = false;
       });
       if (firstError != null) {
@@ -118,7 +131,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
       return const Center(child: CircularProgressIndicator(color: Color(0xFF1E293B)));
     }
 
-    final stats = _calculateStats(_orders, _maintenance, _storeOrders);
+    final stats = _stats ??= _calculateStats(_orders, _maintenance, _storeOrders);
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -172,7 +185,12 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
                 // (دمج من لوحة الويب — Accountants) لوحة مالية مصغّرة: الصافي قبل
                 // الضريبة + توزيع طرق الدفع بعدد المعاملات ومبالغها.
                 _buildFinanceCard(stats),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
+                if (_canOpenAnalytics) ...[
+                  _buildAnalyticsEntry(),
+                  const SizedBox(height: 20),
+                ] else
+                  const SizedBox(height: 8),
                 _buildRecentActivityList(_orders, _maintenance),
                 const SizedBox(height: 20),
                 _buildSystemHealthSection(_drivers),
@@ -401,6 +419,59 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
   /// (دمج من لوحة الويب) اللوحة المالية: الصافي قبل الضريبة (الإجمالي ÷ 1.15)
   /// + توزيع طرق الدفع (عدد المعاملات والمبلغ ونسبته) من الطلبات المدفوعة في
   /// العيّنة المجلوبة.
+  /// «لوحة الإحصائيات والأرباح» كانت بلاطةً في «المزيد» بجوارِ تبويبِ
+  /// الإحصاءاتِ هذا — موضعانِ للأرقام. فصارت تُفتَحُ من هنا وحدَه، لأنّ ما
+  /// تَنفردُ به (الإجماليُّ التراكميُّ من `metadata/analytics_summary` الذي
+  /// يُحدّثُه الخادم، لا عيّنةُ آخرِ ٥٠٠ طلبٍ هنا) تفصيلٌ لِما في هذه البطاقات.
+  /// والأدوارُ هي أدوارُ بلاطتِها السابقةِ حرفاً (التسويقُ لم يكن يراها).
+  bool get _canOpenAnalytics =>
+      const ['admin', 'super_admin', 'accountant_admin', 'orders_manager']
+          .contains(widget.role);
+
+  Widget _buildAnalyticsEntry() {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const AdminAnalyticsScreen())),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF660033).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.insert_chart_outlined,
+                    color: Color(0xFF660033)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('التحليلات المالية التفصيلية',
+                        style: GoogleFonts.tajawal(
+                            fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 2),
+                    Text('الإيراد التراكمي، طرق الدفع، وأحدث المعاملات',
+                        style: GoogleFonts.tajawal(
+                            fontSize: 12, color: Colors.grey.shade600)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_left_rounded, color: Colors.grey),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFinanceCard(Map<String, dynamic> stats) {
     double d(dynamic v) => v is num ? v.toDouble() : (double.tryParse('$v') ?? 0.0);
     const labels = {
@@ -834,7 +905,7 @@ class _AdminInsightsScreenState extends State<AdminInsightsScreen> {
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminStoreOrdersScreen())),
             ),
             _buildLuxuryRequestCard(
-              title: "عقود بانتظار المراجعة",
+              title: "عقود مدفوعة لم تتفعّل",
               count: _pendingContracts,
               icon: Icons.history_edu_rounded,
               gradient: const [Color(0xFF581C87), Color(0xFF701A75)], // Purple/Fuchsia

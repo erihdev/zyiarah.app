@@ -145,6 +145,7 @@ class ZyiarahPopupService {
                           height: 150,
                           width: double.infinity,
                           fit: BoxFit.cover,
+                          memCacheWidth: 1080,
                           placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: Colors.white70)),
                           errorWidget: (context, url, error) => const SizedBox.shrink(),
                         ),

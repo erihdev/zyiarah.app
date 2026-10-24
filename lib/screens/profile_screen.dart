@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/services.dart';
@@ -935,9 +934,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
+      child: Container(
           width: 140,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           decoration: BoxDecoration(
@@ -1057,7 +1054,6 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
             ],
           ),
         ),
-      ),
     );
   }
 
@@ -1068,9 +1064,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
   Widget _buildReferralSection() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: Container(
+      child: Container(
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.92),
             borderRadius: BorderRadius.circular(24),
@@ -1260,7 +1254,6 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
             ],
           ),
         ),
-      ),
     );
   }
 
@@ -1515,7 +1508,8 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
               Text(
                 'سيُحذف حسابك وبياناتك الشخصية نهائياً ولن تتمكّني من تسجيل '
                 'الدخول بعدها. أمّا الفواتير الضريبية وسجلّات الطلبات فتُحفظ '
-                'بحكم نظام ضريبة القيمة المضافة ولا يمكن حذفها.',
+                'بحكم نظام ضريبة القيمة المضافة، وكذلك عقود الباقات الموقَّعة '
+                'وسجلّات الدعم للمدة النظامية، ولا يمكن حذفها.',
                 style: GoogleFonts.tajawal(height: 1.5),
               ),
               const SizedBox(height: 12),

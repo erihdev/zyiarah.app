@@ -43,7 +43,11 @@ void main() {
         .map((f) => f.readAsStringSync())
         .join('\n');
     final serverWriters = read('functions/index.js');
-    for (final k in kinds) {
+    // `store_products` **عرضٌ لا كتابة** منذ 2026-10-24: متجرُ الأدواتِ صارَ
+    // طلبَ متجرٍ مباشراً (`store_orders`)، وطلباتُ `orders` المجدولةُ القديمةُ
+    // بهذا النوعِ باقيةٌ فيُعرَضُ تفصيلُها — فالعرضُ يبقى والكاتبُ زال.
+    const legacyDisplayOnly = {'store_products'};
+    for (final k in kinds.where((k) => !legacyDisplayOnly.contains(k))) {
       final writtenByClient = dartWriters.contains("'kind': '$k'");
       final writtenByServer = serverWriters.contains('kind: "$k"');
       expect(writtenByClient || writtenByServer, isTrue,

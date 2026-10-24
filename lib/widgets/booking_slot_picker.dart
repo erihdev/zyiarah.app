@@ -6,6 +6,7 @@ import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/utils/date_strip.dart';
 import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/live_availability.dart';
 import 'package:zyiarah/utils/zone_schedule.dart';
 import 'package:zyiarah/utils/time_format.dart';
 
@@ -65,16 +66,21 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
   late DateTime _selectedDate;
   int? _selectedHour;
   final ScrollController _dateStripCtrl = ScrollController();
+  /// الأخضرُ والأحمرُ يَتبعانِ الواقعَ وهي على الشاشة — `live_availability.dart`.
+  late final LiveAvailability _liveAvailability =
+      LiveAvailability(() => _load(silent: true));
 
   @override
   void initState() {
     super.initState();
     _selectedDate = DateTime.now().add(const Duration(days: 1));
     _load();
+    _liveAvailability.start();
   }
 
   @override
   void dispose() {
+    _liveAvailability.dispose();
     _dateStripCtrl.dispose();
     super.dispose();
   }
@@ -95,12 +101,17 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
     WidgetsBinding.instance.addPostFrameCallback((_) => widget.onSlotSelected(null));
   }
 
-  Future<void> _load() async {
+  /// `silent` للتحديثِ الحيّ: لا دوّارَ ولا شاشةَ خطأٍ فوقَ بياناتٍ صالحة،
+  /// ولا نقلَ لليوم — ما امتلأ من اختيارِها يُلغى ويُقال لها.
+  Future<void> _load({bool silent = false}) async {
     if (!mounted) return;
-    setState(() {
-      _loading = true;
-      _error = false;
-    });
+    if (silent && _loading) return;
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = false;
+      });
+    }
     try {
       final now = DateTime.now();
       final fmt = intl.DateFormat('yyyy-MM-dd');
@@ -129,6 +140,7 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
       sched.markClosedHoursFull(slots);
 
       if (!mounted) return;
+      final int? prevHour = _selectedHour;
       setState(() {
         _dailyCounts = daily;
         _slotCounts = slots;
@@ -139,9 +151,11 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
             .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
         _maxTeamsPerSlot = (data['maxTeamsPerSlot'] as num?)?.toInt() ?? 0;
         _loading = false;
+        _error = false;
         // لو صار التاريخ المختار ممتلئاً أو مغلقاً، انتقل لأول يوم صالح —
         // **ثمّ أظهِره**: الانتقال بلا تمرير يترك الاختيار خارج الشاشة.
-        if (_isDayUnavailable(_selectedDate)) {
+        // (عند الفتحِ وحدَه؛ التحديثُ الحيُّ لا يُحرِّكُ ما اختارته.)
+        if (!silent && _isDayUnavailable(_selectedDate)) {
           for (int i = 1; i <= _horizonDays; i++) {
             final c = now.add(Duration(days: i));
             if (!_isDayUnavailable(c)) {
@@ -152,8 +166,20 @@ class _ZyiarahBookingSlotPickerState extends State<ZyiarahBookingSlotPicker> {
           }
         }
       });
+      // التحديثُ الحيّ: ساعةٌ مختارةٌ امتلأت (أو يومُها) تحتَ إصبعِها تُلغى
+      // ويُقالُ لها — لا اختيارٌ أحمرُ يَمضي إلى الدفع.
+      if (silent &&
+          prevHour != null &&
+          (_isDayUnavailable(_selectedDate) ||
+              !_isSlotFree(_selectedDate, prevHour))) {
+        setState(_clearSelection);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('اكتمل الموعد الذي اخترتِه للتو — اختاري موعداً أخضر',
+                style: GoogleFonts.tajawal())));
+      }
     } catch (e) {
       debugPrint('[BookingSlotPicker] getHourlyAvailability failed: $e');
+      if (silent) return; // آخرُ قراءةٍ صالحةٍ تبقى؛ الدورةُ التاليةُ تُعيد.
       if (!mounted) return;
       setState(() {
         _loading = false;

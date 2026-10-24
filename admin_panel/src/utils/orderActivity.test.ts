@@ -43,10 +43,10 @@ describe('orderActivity — مرآةُ order_activity.dart', () => {
   });
 
   it('«يَنتظرُ إجراءً» هو ما تَعرضُ له الإدارةُ زرّاً', () => {
-    for (const s of ['under_review', 'delivering', 'processing', 'shipped']) {
+    for (const s of ['under_review', 'preparing', 'ready', 'delivering', 'processing', 'shipped']) {
       expect(storeOrderNeedsAction(s), s).toBe(true);
     }
-    for (const s of ['awaiting_payment', 'delivered', 'pending', '', 'x']) {
+    for (const s of ['awaiting_payment', 'with_driver', 'delivered', 'pending', '', 'x']) {
       expect(storeOrderNeedsAction(s), s).toBe(false);
     }
     expect(storeOrderNeedsAction(null)).toBe(false);

@@ -856,11 +856,23 @@ service cloud.firestore {
       // الخدمات والمتجر معاً (يحرسه rules.roles.test.js). الكتابة كما كانت.
       allow read: if isLoggedIn() &&
         (request.auth.uid == resource.data.client_id || isOrdersManager() ||
-         isAccountantAdmin());
+         isAccountantAdmin() ||
+         // السائقُ يَقرأُ ما أُسنِدَ إليه وحدَه (قرار المالك 2026-10-24: الإدارةُ
+         // تختارُ سائقَ طلبِ المتجر). و`get` لأنّ أغلبَ الطلباتِ بلا سائق.
+         request.auth.uid == resource.data.get('driver_id', ''));
       // Client may finalise payment on their OWN order (mirrors the /orders trust model):
       // restricted to payment-completion fields and status -> processing only, so a paid
       // store order is no longer stuck after checkout. Full control stays with the manager.
       allow update: if isOrdersManager() ||
+        // السائقُ يُسلِّمُ ما أُسنِدَ إليه — كتابةٌ واحدة: «مع السائق» ⇒ «تم
+        // التسليم» مع لحظةِ الخادم. لا يَلمسُ مبلغاً ولا سائقاً ولا حالةً أخرى.
+        (isLoggedIn() &&
+         request.auth.uid == resource.data.get('driver_id', '') &&
+         resource.data.get('status', '') == 'with_driver' &&
+         request.resource.data.status == 'delivered' &&
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['status', 'delivered_at']) &&
+         request.resource.data.delivered_at == request.time) ||
         // فرع الفاتورة وحده: بعد تأكيد الدفع خادمياً يكتب العميل رابط فاتورة
         // ZATCA وحالتها — الفرع العام أدناه يشترط is_paid==false فكان يحجبها.
         (isLoggedIn() && request.auth.uid == resource.data.client_id &&

@@ -395,6 +395,60 @@ const {setDoc, updateDoc, doc, getDoc, runTransaction, serverTimestamp} =
         });
       }), true);
 
+  // ── طلبُ المتجرِ والسائقُ المُسنَد (قرار المالك 2026-10-24) ──
+  // الإدارةُ تختارُ السائق؛ السائقُ يَقرأُ ما أُسنِدَ إليه ويُسلِّمُه وحدَه.
+  console.log("Store order — admin-picked driver delivers:");
+  const driverUid = "driver_store_1";
+  const otherDriver = "driver_store_2";
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const d = ctx.firestore();
+    await setDoc(doc(d, "store_orders/so_with_driver"), {
+      client_id: "store_client", status: "with_driver", is_paid: true,
+      driver_id: driverUid, total_amount: 23,
+    });
+    await setDoc(doc(d, "store_orders/so_ready"), {
+      client_id: "store_client", status: "ready", is_paid: true,
+      driver_id: driverUid, total_amount: 23,
+    });
+    await setDoc(doc(d, "store_orders/so_unassigned"), {
+      client_id: "store_client", status: "under_review", is_paid: true,
+      total_amount: 23,
+    });
+  });
+  const drv = testEnv.authenticatedContext(driverUid).firestore();
+  const drv2 = testEnv.authenticatedContext(otherDriver).firestore();
+  await check("store: assigned driver reads the order -> ALLOWED",
+      getDoc(doc(drv, "store_orders/so_with_driver")), true);
+  await check("store: another driver reads it -> DENIED",
+      getDoc(doc(drv2, "store_orders/so_with_driver")), false);
+  await check("store: driver reads an unassigned order -> DENIED",
+      getDoc(doc(drv, "store_orders/so_unassigned")), false);
+  await check("store: driver marks with_driver -> delivered -> ALLOWED",
+      updateDoc(doc(drv, "store_orders/so_with_driver"),
+          {status: "delivered", delivered_at: serverTimestamp()}), true);
+  await check("store: driver delivers before it is with_driver -> DENIED",
+      updateDoc(doc(drv, "store_orders/so_ready"),
+          {status: "delivered", delivered_at: serverTimestamp()}), false);
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "store_orders/so_with_driver2"), {
+      client_id: "store_client", status: "with_driver", is_paid: true,
+      driver_id: driverUid, total_amount: 23,
+    });
+  });
+  await check("store: driver touches the amount -> DENIED",
+      updateDoc(doc(drv, "store_orders/so_with_driver2"),
+          {status: "delivered", delivered_at: serverTimestamp(), total_amount: 1}),
+      false);
+  await check("store: driver writes another status -> DENIED",
+      updateDoc(doc(drv, "store_orders/so_with_driver2"), {status: "cancelled"}),
+      false);
+  await check("store: driver forges the delivery time -> DENIED",
+      updateDoc(doc(drv, "store_orders/so_with_driver2"),
+          {status: "delivered", delivered_at: new Date(2020, 0, 1)}), false);
+  await check("store: another driver delivers it -> DENIED",
+      updateDoc(doc(drv2, "store_orders/so_with_driver2"),
+          {status: "delivered", delivered_at: serverTimestamp()}), false);
+
   await testEnv.cleanup();
   console.log(`\nRules test: ${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);

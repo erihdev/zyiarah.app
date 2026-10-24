@@ -61,8 +61,13 @@ void main() {
 
   test('والصامتُ بحقٍّ يبقى صامتاً (لا نُغرق المستخدمَ برسائل)', () {
     // أمثلةٌ مقصودة: إلغاءُ حوارٍ، ودجةٌ مُفكَّكة، ونصٌّ فارغ.
-    final driver = File('lib/screens/driver_dashboard.dart').readAsStringSync();
-    expect(driver.contains('if (confirm != true) return;'), isTrue);
+    // أُعيد توجيهُه بوعي (2026-10-11): المثالُ كان تأكيدَ الخروجِ في
+    // `driver_dashboard`، وهو **التأكيدُ الثاني** المحذوفُ لأنّ «حسابي» يَسألُ
+    // قبلَه. والصمتُ الصحيحُ نفسُه باقٍ في موضعِ التأكيدِ الوحيد.
+    final driver =
+        File('lib/screens/driver_profile_screen.dart').readAsStringSync();
+    expect(driver.contains('if (confirmed != true || !mounted) return;'),
+        isTrue);
     final support = File('lib/screens/support_screen.dart').readAsStringSync();
     expect(support.contains('if (text.isEmpty) return;'), isTrue);
   });
