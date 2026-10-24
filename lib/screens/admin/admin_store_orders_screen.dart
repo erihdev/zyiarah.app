@@ -100,7 +100,8 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
       final snap = await FirebaseFirestore.instance
           .collection('drivers')
           .where('is_active', isEqualTo: true)
-          .get()
+          // الخادمُ لا المخزن: قائمةٌ باردةٌ فارغةٌ تَقولُ «لا سائق» فيُحجَبُ الإسناد.
+          .get(const GetOptions(source: Source.server))
           .timeout(kNetCallTimeout);
       drivers = snap.docs
           .map((d) => {

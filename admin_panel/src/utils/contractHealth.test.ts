@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import {
   contractHealthOf,
   contractAwaitingPayment,
+  CONTRACT_AWAITING_PAYMENT_NOTE,
   contractNeedsHuman,
   CONTRACT_HEALTH_TITLES,
   type ContractHealth,
@@ -61,6 +62,11 @@ describe('contractHealth — المرآة', () => {
       expect(contractAwaitingPayment(doc)).toBe(awaiting);
     },
   );
+
+  it('نصُّ «بانتظار الدفع» يَقولُ إنّه بلا اعتماد', () => {
+    expect(CONTRACT_AWAITING_PAYMENT_NOTE).toContain('لا يحتاج اعتماداً');
+    expect(CONTRACT_AWAITING_PAYMENT_NOTE).toContain('يتفعّل');
+  });
 
   it('`planMismatch` وحدَها قرارٌ بشريّ — البقيّةُ تُعادُ محاولتُها', () => {
     expect(contractNeedsHuman('planMismatch')).toBe(true);

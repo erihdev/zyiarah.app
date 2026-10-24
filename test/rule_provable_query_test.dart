@@ -32,7 +32,8 @@ String _code(String path) => stripComments(File(path).readAsStringSync());
 /// من عميلٍ بحال، فأيُّ استعلامٍ عليها مخالفةٌ بذاتِه.)
 const Map<String, List<String>> kProvingFilters = {
   'orders': ['client_id', 'driver_id'],
-  'store_orders': ['client_id'],
+  // `driver_id` (2026-10-24): القاعدةُ تَمنحُ السائقَ ما أُسنِدَ إليه.
+  'store_orders': ['client_id', 'driver_id'],
   'contracts': ['userId'],
   'notifications': ['userId'],
   'support_tickets': ['userId'],

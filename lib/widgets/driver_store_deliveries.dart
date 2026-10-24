@@ -30,16 +30,18 @@ class DriverStoreDeliveries extends StatefulWidget {
 class _DriverStoreDeliveriesState extends State<DriverStoreDeliveries> {
   static const _brand = Color(0xFF660033);
 
-  /// البثُّ يُبنى مرّةً لا في كلِّ `build`.
-  late final Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _stream =
-      widget.items ??
+  /// البثُّ يُبنى مرّةً لا في كلِّ `build` — و«إعادة المحاولة» تُصفِّرُه
+  /// صراحةً فيُفتَحُ غيرُه.
+  Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>? _streamCache;
+  Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> get _stream =>
+      _streamCache ??= widget.items ??
           FirebaseFirestore.instance
               .collection('store_orders')
               .where('driver_id', isEqualTo: widget.driverId)
               .where('status', isEqualTo: kStoreWithDriver)
               .snapshots()
               // مهلةُ أوّلِ حدثٍ كبقيّةِ البثوث: ذاكرةٌ باردةٌ وخادمٌ بعيدٌ لا
-              // يُعلِّقانِ اللوحة — والخطأُ يُخفي القسمَ لا مهامَّ الخدمات.
+              // يُعلِّقانِ اللوحة.
               .firstEventTimeout()
               .map((s) => s.docs);
 
@@ -114,8 +116,29 @@ class _DriverStoreDeliveriesState extends State<DriverStoreDeliveries> {
     return StreamBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
       stream: _stream,
       builder: (context, snap) {
-        // لا شيءَ مُسندٌ (أو تعذّرت القراءة): لا قسمَ — مهامُّ الخدماتِ أسفلَه
-        // تَبقى كما هي، ولا لافتةَ خطأٍ فوقَ لوحةٍ تعمل.
+        // **الفشلُ لا يُقرأُ «لا توصيلات»**: سطرٌ صغيرٌ بسببِه وإعادة — وإلّا
+        // ظنَّ السائقُ أنّ لا شيءَ مُسنَدٌ إليه وطلبٌ مدفوعٌ ينتظرُه.
+        if (snap.hasError) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline, size: 18, color: Color(0xFFB45309)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text('تعذّر تحميل توصيلات المتجر',
+                      style: GoogleFonts.tajawal(
+                          fontSize: 12, color: const Color(0xFF92400E))),
+                ),
+                TextButton(
+                  onPressed: () => setState(() => _streamCache = null),
+                  child: const Text('إعادة المحاولة'),
+                ),
+              ],
+            ),
+          );
+        }
+        // لا شيءَ مُسنَدٌ: لا قسم — مهامُّ الخدماتِ أسفلَه تَبقى كما هي.
         final docs = snap.data ?? const [];
         if (docs.isEmpty) return const SizedBox.shrink();
         return Padding(
