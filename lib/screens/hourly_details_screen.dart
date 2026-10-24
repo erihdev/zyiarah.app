@@ -17,6 +17,7 @@ import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/vat.dart';
 import 'package:zyiarah/utils/date_strip.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/live_availability.dart';
 import 'package:zyiarah/utils/time_format.dart';
 
 
@@ -47,6 +48,9 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   /// مراقبة تنقّل العميل: يعاد التحديد بصمت دورياً وعند العودة للتطبيق،
   /// فإن دخل محافظة أخرى تتبدّل المنطقة والأسعار تلقائياً.
   Timer? _zoneWatch;
+  /// الأخضرُ والأحمرُ يَتبعانِ الواقعَ وهي على الشاشة — `live_availability.dart`.
+  late final LiveAvailability _liveAvailability =
+      LiveAvailability(() => _loadAvailabilityFromServer(silent: true));
 
   /// اختار العميل موقعه يدوياً من الخريطة (يحجز لبيته وهو في مكان آخر) —
   /// **تتوقف المراقبة الصامتة** كي لا يسحقه GPS موضعِه الحالي كل 45 ثانية
@@ -90,6 +94,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
     WidgetsBinding.instance.addObserver(this);
     _fetchConfigAndZones();
     _loadAvailabilityFromServer();
+    _liveAvailability.start();
     // إعادة تحديد صامتة دورية: إن تنقّل العميل لمحافظة أخرى تتبدّل المنطقة تلقائياً.
     _startZoneWatch();
     _fetchMaterials();
@@ -198,13 +203,21 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
 
   /// جلب بيانات الإتاحة عبر Cloud Function (Admin SDK — لا قيود صلاحيات).
   /// تُعيد الأعداد الحقيقية للطلبات لكل تاريخ وكل خانة زمنية.
-  Future<void> _loadAvailabilityFromServer() async {
+  ///
+  /// `silent` للتحديثِ الحيّ: لا دوّارَ ولا شاشةَ خطأٍ فوقَ بياناتٍ صالحة
+  /// (فشلٌ عابرٌ يُبقي آخرَ قراءة)، ولا نقلَ لليومِ المختار — إن امتلأ صارَ
+  /// أحمرَ وقيلَ لها، وزرُّ المتابعةِ يَحجبُه أصلاً.
+  Future<void> _loadAvailabilityFromServer({bool silent = false}) async {
     if (!mounted) return;
+    // الصامتُ لا يُنافسُ قراءةً صريحةً جارية (تغييرُ منطقةٍ أو «إعادة المحاولة»).
+    if (silent && _loadingDailyCounts) return;
     final int reqId = ++_availabilityReqId; // استجابة أقدم من الأحدث تُهمَل
-    setState(() {
-      _loadingDailyCounts = true;
-      _availabilityError = false;
-    });
+    if (!silent) {
+      setState(() {
+        _loadingDailyCounts = true;
+        _availabilityError = false;
+      });
+    }
     try {
       final now = DateTime.now();
       final startDate = intl.DateFormat('yyyy-MM-dd').format(now);
@@ -243,6 +256,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
           .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
 
       if (!mounted || reqId != _availabilityReqId) return;
+      final bool wasAvailable = !_dateUnavailable(_selectedDate);
       setState(() {
         _dailyOrderCounts = daily;
         _slotCounts = slots;
@@ -252,9 +266,11 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
         _zoneMaxOrdersPerDay = zoneMax;
         _zoneDailyCounts = zoneDaily;
         _loadingDailyCounts = false;
+        _availabilityError = false;
 
-        // انتقل تلقائياً لأول تاريخ متاح (سعةً وسائقين، وغير مغلق بالجدول).
-        if (_dateUnavailable(_selectedDate)) {
+        // انتقل تلقائياً لأول تاريخ متاح (سعةً وسائقين، وغير مغلق بالجدول) —
+        // عند الفتحِ وحدَه؛ التحديثُ الحيُّ لا يُحرِّكُ ما اختارته.
+        if (!silent && _dateUnavailable(_selectedDate)) {
           for (int i = 0; i < 30; i++) {
             final candidate = now.add(Duration(days: i + 1));
             if (!_dateUnavailable(candidate)) {
@@ -265,6 +281,14 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
         }
       });
 
+      if (silent) {
+        if (wasAvailable && _dateUnavailable(_selectedDate) && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('اكتمل اليوم الذي اخترتِه للتو — اختاري يوماً أخضر',
+                  style: GoogleFonts.tajawal())));
+        }
+        return;
+      }
       // الشريط لا يتبع الاختيار من تلقائه — أظهِر اليومَ المنتقَل إليه.
       _revealSelectedDate();
     } catch (e) {
@@ -273,6 +297,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       // = false ⇒ **كل التواريخ تظهر خضراء** والعميل يختار يوماً ممتلئاً.
       // الأخضر يجب أن يعني «متاح»، لا «لا نعرف».
       debugPrint('[getHourlyAvailability] error: $e');
+      if (silent) return; // آخرُ قراءةٍ صالحةٍ تبقى؛ الدورةُ التاليةُ تُعيد.
       if (mounted && reqId == _availabilityReqId) {
         setState(() {
           _loadingDailyCounts = false;
@@ -704,6 +729,7 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
   @override
   void dispose() {
     _zoneWatch?.cancel();
+    _liveAvailability.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _dateStripCtrl.dispose();
     super.dispose();

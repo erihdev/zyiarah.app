@@ -14,6 +14,7 @@ import 'package:zyiarah/widgets/zone_location_card.dart';
 import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/date_strip.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
+import 'package:zyiarah/utils/live_availability.dart';
 import 'package:zyiarah/utils/zone_schedule.dart';
 import 'package:zyiarah/utils/home_packages.dart';
 
@@ -39,6 +40,9 @@ class _ZyiarahSubscriptionPlansScreenState
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
   final ScrollController _dateStripCtrl = ScrollController();
   int? _selectedStartHour;
+  /// الأخضرُ والأحمرُ يَتبعانِ الواقعَ وهي على الشاشة — `live_availability.dart`.
+  late final LiveAvailability _liveAvailability =
+      LiveAvailability(() => _loadAvailabilityFromServer(silent: true));
   Map<int, bool> _slotAvailability = {};
   bool _checkingSlots = false;
 
@@ -77,10 +81,12 @@ class _ZyiarahSubscriptionPlansScreenState
     _fetchPackages();
     _fetchZonesAndLocate();
     _loadAvailabilityFromServer();
+    _liveAvailability.start();
   }
 
   @override
   void dispose() {
+    _liveAvailability.dispose();
     _dateStripCtrl.dispose();
     super.dispose();
   }
@@ -221,9 +227,17 @@ class _ZyiarahSubscriptionPlansScreenState
 
   /// جلب بيانات الإتاحة عبر Cloud Function (Admin SDK — لا قيود صلاحيات).
   /// تُعيد الأعداد الحقيقية للطلبات لكل تاريخ وكل خانة زمنية.
-  Future<void> _loadAvailabilityFromServer() async {
+  /// `silent` للتحديثِ الحيّ: لا دوّارَ ولا شاشةَ خطأٍ فوقَ بياناتٍ صالحة،
+  /// ولا نقلَ لليومِ أو الساعةِ المختارة — ما امتلأ يُلغى اختيارُه ويُقال لها.
+  Future<void> _loadAvailabilityFromServer({bool silent = false}) async {
     if (!mounted) return;
-    setState(() { _loadingDailyCounts = true; _availabilityError = false; });
+    if (silent && _loadingDailyCounts) return;
+    if (!silent) {
+      setState(() {
+        _loadingDailyCounts = true;
+        _availabilityError = false;
+      });
+    }
     try {
       final now = DateTime.now();
       final startDate = intl.DateFormat('yyyy-MM-dd').format(now);
@@ -261,6 +275,8 @@ class _ZyiarahSubscriptionPlansScreenState
           .map((k, v) => MapEntry(k.toString(), int.tryParse('$v') ?? 0));
 
       if (!mounted) return;
+      final bool wasAvailable = !_dateUnavailable(
+          intl.DateFormat('yyyy-MM-dd').format(_selectedDate));
       setState(() {
         _zoneSchedule     = sched;
         _dailyOrderCounts = daily;
@@ -270,10 +286,11 @@ class _ZyiarahSubscriptionPlansScreenState
         _zoneMaxOrdersPerDay = zoneMax;
         _zoneDailyCounts = zoneDaily;
         _loadingDailyCounts = false;
+        _availabilityError = false;
 
         // انتقل تلقائياً لأول تاريخ متاح إذا كان المحدد ممتلئاً
         final String selStr = intl.DateFormat('yyyy-MM-dd').format(_selectedDate);
-        if (_dateUnavailable(selStr)) {
+        if (!silent && _dateUnavailable(selStr)) {
           for (int i = 0; i < 30; i++) {
             final candidate = now.add(Duration(days: i + 1));
             final candStr = intl.DateFormat('yyyy-MM-dd').format(candidate);
@@ -286,14 +303,20 @@ class _ZyiarahSubscriptionPlansScreenState
       });
 
       // الشريط لا يتبع الاختيار من تلقائه — أظهِر اليومَ المنتقَل إليه.
-      _revealSelectedDate();
+      if (!silent) _revealSelectedDate();
 
       // بعد تحميل البيانات: احسب إتاحة الخانات من الـ cache مباشرة
       if (_selectedPackageIndex != null) {
-        _buildSlotAvailabilityFromCache();
+        _buildSlotAvailabilityFromCache(keepSelection: silent);
+      }
+      if (silent && wasAvailable && mounted &&
+          _dateUnavailable(intl.DateFormat('yyyy-MM-dd').format(_selectedDate))) {
+        setState(() => _selectedStartHour = null);
+        _notifyChoiceTaken();
       }
     } catch (e) {
       debugPrint('[getHourlyAvailability] subscription error: $e');
+      if (silent) return; // آخرُ قراءةٍ صالحةٍ تبقى؛ الدورةُ التاليةُ تُعيد.
       // لا نكتفي بإخفاء المؤشّر: بيانات إتاحة فارغة تعني «كل شيء متاح» زوراً
       // (0 < الحد الافتراضي) فيُحجَز على أيام ممتلئة — نُظهر خطأً وزرّ إعادة محاولة.
       if (mounted) {
@@ -372,7 +395,7 @@ class _ZyiarahSubscriptionPlansScreenState
         zoneMax: _zoneMaxOrdersPerDay,
       );
 
-  void _buildSlotAvailabilityFromCache() {
+  void _buildSlotAvailabilityFromCache({bool keepSelection = false}) {
     if (!mounted) return;
     final dateKey = intl.DateFormat('yyyy-MM-dd').format(_selectedDate);
     final slots = _getStartHours();
@@ -384,11 +407,23 @@ class _ZyiarahSubscriptionPlansScreenState
       // فيوقّع العميل باقة بلا سائق)؛ وإلا نحجب الممتلئة فقط.
       result[h] = _maxTeamsPerSlot <= 0 ? false : count < _maxTeamsPerSlot;
     }
+    // التحديثُ الحيُّ يُبقي الساعةَ المختارةَ ما دامت خضراء؛ وما امتلأ تحتَ
+    // إصبعِها يُلغى ويُقال لها — لا اختيارٌ أحمرُ يَمضي إلى الدفع.
+    final int? prev = _selectedStartHour;
+    final bool keep = keepSelection && prev != null && result[prev] == true;
     setState(() {
       _slotAvailability = result;
-      _selectedStartHour = null;
+      _selectedStartHour = keep ? prev : null;
       _checkingSlots = false;
     });
+    if (keepSelection && prev != null && !keep) _notifyChoiceTaken();
+  }
+
+  void _notifyChoiceTaken() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('اكتمل الموعد الذي اخترتِه للتو — اختاري موعداً أخضر',
+            style: GoogleFonts.tajawal())));
   }
 
   Future<void> _fetchPackages() async {
