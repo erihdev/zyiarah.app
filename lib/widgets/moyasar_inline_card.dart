@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:moyasar/moyasar.dart';
@@ -50,6 +51,13 @@ class MoyasarInlineCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // **الويب لا يَستطيعُ خطوةَ البنك.** بعد «ادفع» تُعيدُ ميسر حالةَ
+    // `initiated` وتَدفعُ حزمتُها `ThreeDSWebView` — و`webview_flutter` بلا
+    // منصّةٍ على الويب، فتُرسَمُ شاشةٌ رماديّةٌ مكانَ صفحةِ رمزِ البنك
+    // (معاينةُ 2026-10-24). ولا عميلةَ تَدفعُ من الويب: النطاقُ العامُّ صفحةُ
+    // تعريف، وتطبيقُ Flutter على الويب معاينةٌ وحدَها. فالقولُ الصادقُ هنا
+    // أفضلُ من حقولٍ تَقبلُ البطاقةَ ثمّ تَتجمّد.
+    if (kIsWeb) return _webNotice();
     final form = _form();
     final reason = blockedReason;
     if (reason == null) return form;
@@ -69,6 +77,33 @@ class MoyasarInlineCard extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _webNotice() {
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7ED),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFFDBA74)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.phone_iphone_rounded, color: Color(0xFFC2410C)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'الدفع بالبطاقة يتمّ من تطبيق زيارة على الجوال — خطوة تحقّق '
+              'البنك لا تعمل في المتصفح.',
+              style: GoogleFonts.tajawal(
+                  fontSize: 13, color: const Color(0xFF9A3412), height: 1.5),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

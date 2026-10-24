@@ -69,6 +69,17 @@ void main() {
         reason: 'الفشلُ يَحتاجُ قرارَ تجديدِ المعرّفِ وتسجيلَ المجهول');
   });
 
+  test('الويبُ يَقولُ الحقيقةَ بدلَ حقولٍ تَتجمّدُ عند خطوةِ البنك', () {
+    // ميسر تَدفعُ ThreeDSWebView بعد «ادفع»، وwebview_flutter بلا منصّةٍ على
+    // الويب: شاشةٌ رماديّةٌ مكانَ رمزِ البنك.
+    final at = widget.indexOf('Widget build(BuildContext context)');
+    final head = widget.substring(at, at + 900);
+    expect(head.contains('if (kIsWeb) return _webNotice();'), isTrue,
+        reason: 'حقولُ بطاقةٍ على الويب تَقبلُ الرقمَ ثمّ تَتجمّد');
+    expect(head.indexOf('kIsWeb') < head.indexOf('_form()'), isTrue,
+        reason: 'الفحصُ بعدَ بناءِ الحقول');
+  });
+
   test('الودجةُ تَقرأُ النتيجةَ بالقاعدةِ الواحدة', () {
     expect(widget.contains('moyasarErrorText('), isTrue);
     expect(widget.contains('PaymentStatus.paid'), isTrue);
