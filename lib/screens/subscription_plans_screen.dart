@@ -10,6 +10,7 @@ import 'package:intl/intl.dart' as intl;
 import 'package:zyiarah/screens/contract_signing_screen.dart';
 import 'package:zyiarah/screens/location_picker_screen.dart';
 import 'package:zyiarah/services/zone_locator_service.dart';
+import 'package:zyiarah/services/client_location.dart';
 import 'package:zyiarah/widgets/zone_location_card.dart';
 import 'package:zyiarah/utils/day_capacity.dart';
 import 'package:zyiarah/utils/date_strip.dart';
@@ -110,7 +111,8 @@ class _ZyiarahSubscriptionPlansScreenState
   ///
   /// [userInitiated] عند الفتح نحاول بلا إظهار مربّع الإذن إن كان مرفوضاً سلفاً؛
   /// وعند ضغط «حدّد موقعي تلقائياً» نطلبه صراحةً.
-  Future<void> _attemptAutoLocation({bool userInitiated = false}) async {
+  Future<void> _attemptAutoLocation(
+      {bool userInitiated = false, bool retry = false}) async {
     if (!mounted) return;
     // مناطق فارغة = فشل جلبها عند الفتح غالباً — عند طلبٍ صريح نعيد الجلب،
     // وإن استمر الفشل نعرض سبباً قابلاً لإعادة المحاولة بدل الصمت.
@@ -135,8 +137,13 @@ class _ZyiarahSubscriptionPlansScreenState
       _locateFailure = null;
     });
 
-    final res = await ZyiarahZoneLocator.locate(_zones,
-        requestPermission: userInitiated);
+    // الموقعُ من المصدرِ الواحد (`ClientLocation`): المحفوظُ من فتحِ التطبيق
+    // بلا GPS ولا نافذةِ إذن، وقراءةٌ جديدةٌ عند «إعادة المحاولة» وحدَها.
+    final res = retry
+        ? await ClientLocation.instance.refresh(_zones,
+            requestPermission: true, force: true)
+        : await ClientLocation.instance.resolve(_zones,
+            requestPermission: userInitiated);
     if (!mounted) return;
 
     if (!res.isSuccess) {
@@ -157,11 +164,6 @@ class _ZyiarahSubscriptionPlansScreenState
       _locateFailure = null;
     });
     _reloadAvailabilityIfZoneChanged(zoneBefore);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text("تم تحديد موقعك تلقائياً: $_userZoneName"),
-      backgroundColor: _brand,
-      duration: const Duration(seconds: 2),
-    ));
   }
 
   /// اختيار يدوي من الخريطة + مطابقة المنطقة من المصدر المشترك — كما في
@@ -199,6 +201,8 @@ class _ZyiarahSubscriptionPlansScreenState
     }
 
     final matchedZone = ZyiarahZoneLocator.matchZone(loc, _zones);
+    // اختيارُ الخريطةِ يَتّبعُه التطبيقُ كلُّه — رأسُ الرئيسيّةِ وبقيّةُ الشاشات.
+    if (matchedZone != null) ClientLocation.instance.setManual(loc, matchedZone);
     final String? zoneBefore = _userZoneName;
     if (matchedZone != null) {
       setState(() {
@@ -698,7 +702,8 @@ class _ZyiarahSubscriptionPlansScreenState
             isLocating: _isLocating,
             zoneName: _userZoneName,
             failure: _locateFailure,
-            onLocateMe: () => _attemptAutoLocation(userInitiated: true),
+            onLocateMe: () =>
+            _attemptAutoLocation(userInitiated: true, retry: true),
             onPickManually: _pickLocation,
           ),
           const SizedBox(height: 24),

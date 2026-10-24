@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:zyiarah/widgets/client_location_chip.dart';
 import 'package:zyiarah/utils/order_lifecycle.dart';
 import 'package:zyiarah/utils/service_catalog.dart';
 import 'package:flutter/material.dart';
@@ -586,13 +587,17 @@ class _ClientDashboardState extends State<ClientDashboard> {
             child: const Icon(Icons.maps_home_work_rounded, color: Colors.white, size: 18),
           ),
           const SizedBox(width: 10),
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('زيارة', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFF0F172A))),
-              Text('بوابة العميل', style: TextStyle(fontWeight: FontWeight.w400, fontSize: 11, color: Color(0xFF64748B))),
-            ],
+          // تحتَ الاسمِ موقعُ العميلة — نقطةٌ واسمُ المنطقة (قرار المالك):
+          // هنا يُحدَّدُ مرّةً ويُغيَّر، وشاشاتُ الخدماتِ تَقرؤه بلا سطرِ موقع.
+          const Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('زيارة', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFF0F172A))),
+                ClientLocationChip(),
+              ],
+            ),
           ),
         ],
       ),

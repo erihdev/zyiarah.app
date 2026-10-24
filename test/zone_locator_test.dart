@@ -35,7 +35,11 @@ List<String> _locatingScreens() {
       .where((f) => f.path.endsWith('.dart'))) {
     final path = f.path.replaceAll(r'\', '/');
     if (path == _picker) continue;
-    if (f.readAsStringSync().contains('ZyiarahZoneLocator.locate')) {
+    // (2026-10-24) الشاشاتُ لم تَعُد تُنادي المُحدِّدَ مباشرةً — تَقرأُ المصدرَ
+    // الواحدَ `ClientLocation` الذي يُناديه. فالاشتقاقُ على الاثنين معاً.
+    final src = f.readAsStringSync();
+    if (src.contains('ZyiarahZoneLocator.locate') ||
+        src.contains('ClientLocation.instance.resolve(')) {
       out.add(path);
     }
   }
@@ -170,7 +174,12 @@ void main() {
     test('كلُّها تستعمل الخدمةَ والبطاقةَ المشتركتَين', () {
       for (final p in _locatingScreens()) {
         final s = _code(p);
-        expect(s.contains('ZyiarahZoneLocator.locate'), isTrue, reason: p);
+        // المُحدِّدُ المشترَكُ عبرَ المصدرِ الواحد (`ClientLocation` يُناديه).
+        expect(
+            s.contains('ZyiarahZoneLocator.locate') ||
+                s.contains('ClientLocation.instance.resolve('),
+            isTrue,
+            reason: p);
         expect(s.contains('ZyiarahZoneLocationCard'), isTrue, reason: p);
         expect(s.contains('_locateFailure'), isTrue,
             reason: '$p لا يحتفظ بالسبب ⇒ سيعرض رسالة عامة كالسابق');
