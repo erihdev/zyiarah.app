@@ -117,12 +117,65 @@ function overlapsSlot(orderData, slotStart, slotEnd) {
   return slotStart < orderEnd(oStart, orderData) && oStart < slotEnd;
 }
 
+// ═══ كم عاملةً يَحجزُ الطلب، ومَن هنّ (قرارُ المالك 2026-10-31) ═══
+//
+// السعةُ عددُ العاملاتِ المتوفّرات، والطلبُ يَتحقّقُ بتوفّرِ عددِ العاملاتِ
+// غيرِ المشغولات — والكادرُ عاملةٌ واحدة. فطلبٌ بكادرَين يَحجزُ عاملتَين،
+// لا واحدةً كما كان: الإسنادُ كان يَكتبُ `driver_id` واحداً مهما اختارت
+// العميلة، فيُعرَضُ يومٌ «متاحاً» بعاملةٍ واحدةٍ فارغةٍ لطلبٍ يَحتاجُ ثلاثاً.
+//
+// `driver_id` يَبقى العاملةَ الأولى (كلُّ ما يَقرؤه — الرؤيةُ، الإشعار،
+// النقلُ، التقييم — لا يَتغيّر)، و`worker_ids` قائمةُ المحجوزاتِ كلِّهنّ
+// وأوّلُها `driver_id`. والانشغالُ يُقرأُ من القائمة **و**`driver_id` معاً
+// (`orderWorkerIds`)، لأنّ الطلباتِ القديمةَ والمُسنَدةَ يدويّاً لا تَحملُ القائمة.
+
+/** حدٌّ أعلى معقولٌ للعدد — قيمةٌ فوقه تالفةٌ لا اختيار. */
+const MAX_WORKERS_PER_ORDER = 20;
+
+/**
+ * عددُ العاملاتِ الذي يَحتاجُه الطلب: `service_meta.crewCount` (باقاتُ السكن)،
+ * ثمّ `service_meta.workers` (عاملاتُ المناسبات)، ثمّ `worker_count` (الحجزُ
+ * بالساعة). القيمةُ الفاسدةُ تُتخطّى إلى التالي، وغيابُ الكلِّ ⇒ ١.
+ * @param {object|null|undefined} order
+ * @return {number}
+ */
+function orderWorkersNeeded(order) {
+  const o = order || {};
+  const meta = o.service_meta || {};
+  for (const v of [meta.crewCount, meta.workers, o.worker_count]) {
+    const n = Number(v);
+    if (v !== null && v !== undefined && Number.isInteger(n) &&
+        n >= 1 && n <= MAX_WORKERS_PER_ORDER) return n;
+  }
+  return 1;
+}
+
+/**
+ * معرّفاتُ العاملاتِ اللاتي يَشغلُهنّ الطلب: `driver_id` ثمّ `worker_ids`، بلا تكرار.
+ * @param {object|null|undefined} order
+ * @return {string[]}
+ */
+function orderWorkerIds(order) {
+  const o = order || {};
+  const ids = [];
+  if (typeof o.driver_id === "string" && o.driver_id) ids.push(o.driver_id);
+  if (Array.isArray(o.worker_ids)) {
+    for (const id of o.worker_ids) {
+      if (typeof id === "string" && id && !ids.includes(id)) ids.push(id);
+    }
+  }
+  return ids;
+}
+
 module.exports = {
   ORDER_HOURS_DEFAULT,
   CONFLICT_LOOKBACK_HOURS,
   CONFLICT_STATUSES,
+  MAX_WORKERS_PER_ORDER,
   orderHours,
   orderEnd,
   conflictWindowStart,
   overlapsSlot,
+  orderWorkersNeeded,
+  orderWorkerIds,
 };

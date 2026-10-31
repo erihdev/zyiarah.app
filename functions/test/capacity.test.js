@@ -88,4 +88,20 @@ t("zoneDailyCap: positive integer or null", () => {
   assert.strictEqual(zoneDailyCap({max_orders_per_day: "abc"}), null);
 });
 
+t("الساعةُ تُعَدُّ بالعاملات: طلبٌ بكادرَين يَشغلُ اثنتَين، واليومُ يَبقى بالطلبات", () => {
+  const r = countBookings([
+    paid({service_meta: {kind: "home_package", crewCount: 2}}),
+    paid({booking_time_slot: "10:00", hours_contracted: 2, worker_count: 3}),
+    paid({booking_time_slot: "10:00", hours_contracted: 1,
+      service_meta: {kind: "event_workers", workers: 4}}),
+  ]);
+  assert.strictEqual(r.dailyCounts["2026-09-20"], 3, "السقفُ اليوميُّ حدُّ طلبات");
+  assert.strictEqual(r.slotCounts["2026-09-20_09:00"], 2);
+  assert.strictEqual(r.slotCounts["2026-09-20_10:00"], 2 + 3 + 4);
+  assert.strictEqual(r.slotCounts["2026-09-20_11:00"], 2 + 3);
+  assert.strictEqual(r.slotCounts["2026-09-20_12:00"], 2);
+  const bad = countBookings([paid({service_meta: {crewCount: 0}})]);
+  assert.strictEqual(bad.slotCounts["2026-09-20_09:00"], 1, "قيمةٌ تالفةٌ ⇒ عاملةٌ واحدة");
+});
+
 console.log(`\ncapacity tests: ${passed} passed`);

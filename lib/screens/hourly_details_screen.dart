@@ -554,7 +554,11 @@ class _HourlyCleaningDetailsScreenState extends State<HourlyCleaningDetailsScree
       bool free = true;
       for (int hh = h; hh < h + hours; hh++) {
         final slotKey = '${key}_${hh.toString().padLeft(2, '0')}:00';
-        if ((_slotCounts[slotKey] ?? 0) >= _maxTeamsPerSlot) {
+        // بعدد الكوادر المختار — الساعةُ تُعَدُّ بالعاملاتِ لا بالطلبات.
+        if (!slotHasRoom(
+            used: _slotCounts[slotKey] ?? 0,
+            max: _maxTeamsPerSlot,
+            need: _selectedCrews ?? 1)) {
           free = false;
           break;
         }

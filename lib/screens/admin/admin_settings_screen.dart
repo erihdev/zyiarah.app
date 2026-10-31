@@ -26,6 +26,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   late AnimationController _fadeController;
 
   final TextEditingController _maxOrdersPerDayCtrl = TextEditingController();
+  // عددُ العاملات (قرار المالك 2026-10-31): رقمٌ تضبطه الإدارة لا أسماء —
+  // الخادمُ يجسّده عاملاتٍ (`syncWorkerPool`) ومنه السعة.
+  final TextEditingController _workersCountCtrl = TextEditingController();
   final TextEditingController _merchantNameCtrl = TextEditingController();
   final TextEditingController _vatNumberCtrl = TextEditingController();
   // **السجلُّ التجاريُّ كان مطبوعاً على الفاتورةِ بلا محرّرٍ إطلاقاً** —
@@ -102,6 +105,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
             setState(() {
               _maxOrdersPerDayCtrl.text =
                   (hourlyDoc.data()?['max_orders_per_day'] ?? 10).toString();
+              final wc = hourlyDoc.data()?['workers_count'];
+              _workersCountCtrl.text = wc is num ? wc.toInt().toString() : '';
             });
           }
 
@@ -215,6 +220,19 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
     // السعة اليومية: كان `int.tryParse(...) ?? 10` بلا حدّ أدنى — فيُكتب 0 أو
     // رقم سالب حرفياً، وحدٌّ صفر **يُغلق الحجز في كل المناطق** بلا رسالة خطأ.
     // نرفض غير الصالح بدل ابتلاعه (لوحة الويب ترفضه أصلاً — هذا تكافؤ معها).
+    final workersText = _workersCountCtrl.text.trim();
+    final int? workersCount =
+        workersText.isEmpty ? null : int.tryParse(workersText);
+    if (workersText.isNotEmpty &&
+        (workersCount == null || workersCount < 0 || workersCount > 200)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('عدد العاملات رقمٌ صحيح من 0 إلى 200'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
     final capacity = int.tryParse(_maxOrdersPerDayCtrl.text.trim());
     if (capacity == null || capacity < 1) {
       if (mounted) {
@@ -302,6 +320,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
       // تَدخلُ دفعتَه — فرقُ تقسيمٍ في الواجهةِ لا فرقُ قرار.
       batch.set(_db.collection('system_configs').doc('hourly_settings'), {
         'max_orders_per_day': capacity,
+        // فارغٌ = لا يُمَسّ (لا نكتب صفراً لم تكتبه الإدارة فتتوقّف السعة).
+        if (workersCount != null) 'workers_count': workersCount,
+        'updated_at': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
       // (دمج من الويب) نشر سياسة الخصوصية لمستند عام تقرأه zyiarah.com/privacy بلا دخول.
@@ -377,6 +398,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   void dispose() {
     _fadeController.dispose();
     _maxOrdersPerDayCtrl.dispose();
+    _workersCountCtrl.dispose();
     _merchantNameCtrl.dispose();
     _vatNumberCtrl.dispose();
     _crNumberCtrl.dispose();
@@ -561,8 +583,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                           // باقات السكن: العميل يختار اليوم فقط، واليوم يمتلئ
                           // عند بلوغ هذا السقف (مع شرط توفر سائق لمدة الباقة).
                           _buildPremiumField("سقف الطلبات المجدولة في اليوم الواحد", "طلبات/يوم", _maxOrdersPerDayCtrl, Icons.calendar_month_rounded),
+                          const SizedBox(height: 12),
+                          _buildPremiumField("عدد العاملات المتوفّرات (منه تُحسب السعة)", "عاملة", _workersCountCtrl, Icons.groups_rounded),
                           const SizedBox(height: 16),
-                          // السعة المتزامنة تُحسب تلقائياً = عدد السائقين النشطين (لا رقم يدوي)
+                          // السعة المتزامنة = عدد العاملات المضبوط أعلاه (قرار المالك 2026-10-31)
                           Container(
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
@@ -576,7 +600,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                                 SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    "الحد الأقصى للطلبات المتزامنة في الفترة يُحسب تلقائياً = عدد السائقين النشطين المسجّلين. أضِف سائقين لزيادة السعة.",
+                                    "العاملات المتوفّرات في الساعة = عدد العاملات أعلاه، والطلب يحجز منهنّ بعدد كوادره. عدّل الرقم لزيادة السعة أو إنقاصها — النقل عبر مواصلات.",
                                     style: TextStyle(fontSize: 12, color: Color(0xFF475569), height: 1.5),
                                   ),
                                 ),

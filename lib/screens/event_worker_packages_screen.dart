@@ -354,6 +354,19 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
     }
   }
 
+  /// عددُ عاملاتِ الباقةِ المختارة — به تُحجَزُ الساعة (الخادمُ يَحجزُه كذلك
+  /// في `generateSubscriptionVisits`). لا باقة أو قيمةٌ تالفة ⇒ ١.
+  int get _selectedPackageWorkers {
+    if (_selectedPackageIndex == null ||
+        _selectedPackageIndex! >= _packages.length) {
+      return 1;
+    }
+    final data =
+        _packages[_selectedPackageIndex!].data() as Map<String, dynamic>;
+    final n = int.tryParse('${data['workers'] ?? 1}') ?? 1;
+    return n < 1 ? 1 : n;
+  }
+
   List<int> _getStartHours() {
     int visitHours = 4;
     if (_selectedPackageIndex != null &&
@@ -414,7 +427,9 @@ class _EventWorkerPackagesScreenState extends State<EventWorkerPackagesScreen> {
       final slotKey = '${dateKey}_${h.toString().padLeft(2, '0')}:00';
       final count = _slotCounts[slotKey] ?? 0;
       // لا فريق متاح (<=0) ⇒ **تُحجَب** كل الخانات؛ وإلا نحجب الممتلئة فقط.
-      result[h] = _maxTeamsPerSlot <= 0 ? false : count < _maxTeamsPerSlot;
+      // بعدد عاملات الباقة المختارة — الساعةُ تُعَدُّ بالعاملاتِ لا بالطلبات.
+      result[h] = slotHasRoom(
+          used: count, max: _maxTeamsPerSlot, need: _selectedPackageWorkers);
     }
     // التحديثُ الحيُّ يُبقي الساعةَ المختارةَ ما دامت خضراء؛ وما امتلأ تحتَ
     // إصبعِها يُلغى ويُقال لها — لا اختيارٌ أحمرُ يَمضي إلى الدفع.

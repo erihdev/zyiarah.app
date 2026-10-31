@@ -183,6 +183,9 @@ export default function Settings({ role }: { role?: string | null }) {
     // الطاقة الاستيعابية اليومية (سقف الطلبات المجدولة) — يقرؤها العميل والخادم
     // من system_configs/hourly_settings؛ كانت تُضبط من التطبيق فقط.
     const [maxOrdersPerDay, setMaxOrdersPerDay] = useState('');
+    // عدد العاملات (قرار المالك 2026-10-31): رقمٌ تضبطه الإدارة لا أسماء —
+    // الخادم يجسّده عاملاتٍ (`syncWorkerPool`) ومنه السعة. نظيرُ حقل التطبيق.
+    const [workersCount, setWorkersCount] = useState('');
     const [isSavingCapacity, setIsSavingCapacity] = useState(false);
     // true فقط عند فشل قراءة الإعدادات (لا عند غيابها لأول مرة) — يمنع الحفظ فوق
     // الإعدادات الإنتاجية بالقيم الافتراضية المعروضة بعد قراءة فاشلة.
@@ -204,6 +207,8 @@ export default function Settings({ role }: { role?: string | null }) {
                 }
                 const cap = capSnap.exists() ? capSnap.data().max_orders_per_day : undefined;
                 if (typeof cap === 'number' && cap > 0) setMaxOrdersPerDay(String(cap));
+                const wc = capSnap.exists() ? capSnap.data().workers_count : undefined;
+                if (typeof wc === 'number' && wc >= 0) setWorkersCount(String(wc));
             } catch (error) {
                 console.error("Error fetching settings:", error);
                 setLoadFailed(true);
@@ -453,14 +458,23 @@ export default function Settings({ role }: { role?: string | null }) {
     const handleSaveCapacity = async () => {
         const n = parseInt(maxOrdersPerDay);
         if (isNaN(n) || n < 1) { toast.error('أدخل رقماً صحيحاً (1 فأكثر)'); return; }
+        // فارغٌ = لا يُمَسّ (لا نكتب صفراً لم تكتبه الإدارة فتتوقّف السعة).
+        const wText = workersCount.trim();
+        const w = wText === '' ? null : Number(wText);
+        if (w !== null && (!Number.isInteger(w) || w < 0 || w > 200)) {
+            toast.error('عدد العاملات رقمٌ صحيح من 0 إلى 200'); return;
+        }
         setIsSavingCapacity(true);
         try {
             await setDoc(doc(db, 'system_configs', 'hourly_settings'),
-                { max_orders_per_day: n, updated_at: serverTimestamp() }, { merge: true });
+                { max_orders_per_day: n, ...(w !== null ? { workers_count: w } : {}),
+                  updated_at: serverTimestamp() }, { merge: true });
             // السعةُ اليوميّةُ بزرٍّ مستقلٍّ هنا (وفي دفعةِ التطبيق) — وهي
             // تَحكمُ قبولَ الحجزِ لكلِّ يوم، فتُقيَّدُ كأختِها.
-            await logAudit(AUDIT.UPDATE_SETTINGS, { daily_cap: n }, 'hourly_settings');
-            toast.success(`تم الحفظ — سقف الطلبات اليومي: ${n}`);
+            await logAudit(AUDIT.UPDATE_SETTINGS,
+                { daily_cap: n, ...(w !== null ? { workers_count: w } : {}) }, 'hourly_settings');
+            toast.success(w !== null ? `تم الحفظ — السقف اليومي: ${n}، العاملات: ${w}`
+                : `تم الحفظ — سقف الطلبات اليومي: ${n}`);
         } catch (e) {
             console.error(e);
             toast.error('تعذّر حفظ الطاقة الاستيعابية');
@@ -1083,6 +1097,17 @@ export default function Settings({ role }: { role?: string | null }) {
                                                 placeholder="مثال: 20"
                                                 className="w-40 bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 transition-all"
                                             />
+                                            <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                                                عدد العاملات
+                                                <input
+                                                    type="number" dir="ltr" min="0" max="200" step="1"
+                                                    value={workersCount}
+                                                    onChange={e => setWorkersCount(e.target.value)}
+                                                    placeholder="مثال: 9"
+                                                    aria-label="عدد العاملات المتوفّرات — منه تُحسب السعة"
+                                                    className="w-28 bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 transition-all"
+                                                />
+                                            </label>
                                             <button
                                                 type="button"
                                                 onClick={handleSaveCapacity}
@@ -1090,7 +1115,7 @@ export default function Settings({ role }: { role?: string | null }) {
                                                 className="flex items-center gap-2 px-5 py-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white font-bold rounded-xl transition-all"
                                             >
                                                 {isSavingCapacity ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                                                حفظ السقف
+                                                حفظ السعة
                                             </button>
                                         </div>
                                     </div>

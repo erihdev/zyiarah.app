@@ -46,10 +46,14 @@ function countBookings(orders, {zoneName = null} = {}) {
     if (ts) {
       const startH = parseInt(String(ts).split(":")[0], 10);
       const hrs = slots.orderHours(d);
+      // الساعةُ تُعَدُّ بالعاملاتِ لا بالطلبات (قرارُ المالك 2026-10-31): طلبٌ
+      // بكادرَين يَشغلُ عاملتَين، والمقامُ `maxTeamsPerSlot` عددُ العاملات.
+      // والسقفُ اليوميُّ (`dailyCounts`) يَبقى بالطلبات — هو حدُّ طلباتٍ لا عاملات.
+      const workers = slots.orderWorkersNeeded(d);
       if (!isNaN(startH)) {
         for (let h = startH; h < startH + hrs; h++) {
           const key = `${bDate}_${String(h).padStart(2, "0")}:00`;
-          slotCounts[key] = (slotCounts[key] || 0) + 1;
+          slotCounts[key] = (slotCounts[key] || 0) + workers;
         }
       }
     }

@@ -82,4 +82,35 @@ void main() {
     expect(web.contains('max_orders_per_day: zoneMaxPerDay,'), isTrue);
     expect(web.contains('الحدّ اليومي للطلبات في هذه المنطقة'), isTrue);
   });
+  // ── الساعةُ تُعَدُّ بالعاملات (قرار المالك 2026-10-31) ──
+  test('slotHasRoom: الطلبُ يَحتاجُ عددَ كوادرِه لا عاملةً واحدة', () {
+    expect(slotHasRoom(used: 2, max: 3), isTrue);
+    expect(slotHasRoom(used: 2, max: 3, need: 1), isTrue);
+    expect(slotHasRoom(used: 2, max: 3, need: 2), isFalse,
+        reason: 'عاملةٌ واحدةٌ فارغةٌ لا تَكفي طلباً بكادرَين');
+    expect(slotHasRoom(used: 0, max: 3, need: 3), isTrue);
+    expect(slotHasRoom(used: 3, max: 3), isFalse);
+    expect(slotHasRoom(used: 0, max: 0), isFalse, reason: 'لا عاملات = لا مكان');
+    expect(slotHasRoom(used: 0, max: 2, need: 0), isTrue,
+        reason: 'عددٌ تالفٌ يُعامَلُ عاملةً واحدة');
+  });
+
+  test('الشاشاتُ الثلاثُ والبوّابةُ تَفحصُ بعددِ العاملات لا بـ>= وحدَه', () {
+    final hourly =
+        File('lib/screens/hourly_details_screen.dart').readAsStringSync();
+    expect(hourly.contains('need: _selectedCrews ?? 1'), isTrue);
+    expect(hourly.contains('>= _maxTeamsPerSlot'), isFalse);
+    final pay =
+        File('lib/screens/payment_summary_screen.dart').readAsStringSync();
+    expect('need: widget.workerCount'.allMatches(pay).length, 2,
+        reason: 'مسارا البوّابة (اليومُ كاملاً والخانةُ المحدّدة)');
+    expect(pay.contains('>= maxTeamsPerSlot'), isFalse);
+    final ev = File('lib/screens/event_worker_packages_screen.dart')
+        .readAsStringSync();
+    expect(ev.contains('need: _selectedPackageWorkers'), isTrue);
+    expect(ev.contains('count < _maxTeamsPerSlot'), isFalse);
+    // والخادمُ يَعدُّ العاملاتِ في الساعة — وإلّا فالمقارنةُ أعلاه بلا معنى.
+    final cap = File('functions/capacity.js').readAsStringSync();
+    expect(cap.contains('slots.orderWorkersNeeded(d)'), isTrue);
+  });
 }

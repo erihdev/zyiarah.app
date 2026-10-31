@@ -583,7 +583,7 @@ t("(و٥) العرف الجديد: لا وحدةٍ تستورد Firestore — ا
   assert.ok(mod.includes("async function autoResolveUnfulfilledPaidOrder(db,"));
 });
 
-t("(و٦) index.js ما زال يُصدّر ٧٢ دالّة", () => {
+t("(و٦) index.js ما زال يُصدّر ٧٣ دالّة", () => {
   // كانت ٦٢ وصارت ٦٣ بإضافة `processServerNotificationQueue`: طابورُ الإشعاراتِ
   // الخادميُّ (`notification_queue`) انفصلَ عن طابورِ العميلِ لأنّ الثقةَ كانت
   // تُحسَب من `createdBy` — حقلٍ يَكتبه العميل. المُعالِجُ **واحدٌ مُشترَك**
@@ -626,8 +626,11 @@ t("(و٦) index.js ما زال يُصدّر ٧٢ دالّة", () => {
   // HMAC على الخامّ كتابي)، و`sweepTransportRides` (رحلةٌ لم تُقبَل والموعدُ
   // قريب ⇒ تنبيه)، و`retryTransportRide` (إعادةٌ بيدِ الإدارة). السياسةُ في
   // `transport.js` تُختبَرُ على db مزيّف. (مراجعةٌ مقصودةٌ، كأخواتِها أعلاه.)
+  // وصارت ٧٣ بـ`syncWorkerPool` (2026-10-31): عددُ العاملاتِ رقمٌ تَضبطُه
+  // الإدارةُ في `hourly_settings.workers_count`، والمُشغّلُ يُجسِّدُه مستنداتٍ
+  // `drivers/pool_worker_1..N` يَعملُ عليها المُسنِدُ وعدّادُ السعة. (مراجعةٌ مقصودة.)
   const n = (idx.match(/^exports\.\w+ = /gm) || []).length;
-  assert.strictEqual(n, 72, `عدد الصادرات ${n} ≠ 72`);
+  assert.strictEqual(n, 73, `عدد الصادرات ${n} ≠ 73`);
 });
 
 // ── إعادةُ رصيدِ طلبٍ مُلغًى: مرّةً واحدةً، ومع قولِ الفشل ─────────────────
