@@ -547,8 +547,15 @@ t("(ز٢) خريطةُ الحالات: المعروفُ يُطبَّع، وال�
     ride: {id: 77, reference: "o:outbound:1", status: "en_route", eta_minutes: "9",
       driver: {name: "س", phone: "05", vehicle_plate: "ق 1"}}});
   assert.deepStrictEqual(ev, {rideId: "77", reference: "o:outbound:1", status: "driving",
-    driver: {name: "س", phone: "05", plate: "ق 1"}, etaMinutes: 9});
+    driver: {name: "س", phone: "05", plate: "ق 1"}, etaMinutes: 9, location: null});
   assert.strictEqual(mowasalat.parseWebhookEvent(null).reference, null);
+  // الموقعُ بشكلَيه، وغيرُ الصالحِ (خارجَ المدى أو نصٌّ) يُسقَط لا يُكتَب.
+  assert.deepStrictEqual(mowasalat.parseWebhookEvent({ride: {reference: "r", status: "arrived",
+    location: {lat: "17.5", lng: 42.1}}}).location, {lat: 17.5, lng: 42.1});
+  assert.deepStrictEqual(mowasalat.parseWebhookEvent({ride: {reference: "r", status: "arrived",
+    driver: {location: {latitude: 17.5, longitude: 42.1}}}}).location, {lat: 17.5, lng: 42.1});
+  assert.strictEqual(mowasalat.parseWebhookEvent({ride: {reference: "r", status: "arrived",
+    location: {lat: 95, lng: 42.1}}}).location, null);
 });
 
 tAsync("(ز٣) لا رميَ على حالةِ HTTP، والتحليلُ متسامحٌ، و404 عندَ الإلغاءِ «أُلغيت»", async () => {
@@ -584,6 +591,131 @@ tAsync("(ز٣) لا رميَ على حالةِ HTTP، والتحليلُ متس�
   } finally {
     global.fetch = realFetch;
   }
+});
+
+// ═══════════ (ح) التطبيقُ هو المنسّق: الحالةُ من الرحلة، والإنجازُ بالوقت ═══════════
+
+const GeoPointFake = function(lat, lng) {
+  this.latitude = lat; this.longitude = lng;
+};
+
+tAsync("(ح١) انطلاقُ سيارةِ الذهابِ ⇒ on_the_way، ووصولُها ⇒ in_progress بطوابعِه وموقعِه", async () => {
+  const db = fakeDb({"orders/o1": {...seededLive(), status: "scheduled"}});
+  const q = fakePush();
+  const r1 = await transport.applyRideEvent(db, {rideId: "r_1", reference: "o1:outbound:2",
+    status: "driving", location: {lat: 17.3, lng: 42.6}}, {queuePush: q, now: NOW, GeoPoint: GeoPointFake});
+  let o = db._store.get("orders/o1");
+  assert.strictEqual(r1.orderStatusTo, "on_the_way");
+  assert.strictEqual(o.status, "on_the_way");
+  assert.strictEqual(o.on_the_way_at, NOW);
+  assert.strictEqual(o.status_source, "transport");
+  assert.deepStrictEqual([o.driver_location.latitude, o.driver_location.longitude], [17.3, 42.6]);
+  const r2 = await transport.applyRideEvent(db, {rideId: "r_1", reference: "o1:outbound:2",
+    status: "arrived"}, {queuePush: q, now: NOW, GeoPoint: GeoPointFake});
+  o = db._store.get("orders/o1");
+  assert.strictEqual(r2.orderStatusTo, "in_progress");
+  assert.strictEqual(o.status, "in_progress");
+  assert.strictEqual(o.arrived_at, NOW);
+  assert.strictEqual(o.start_time, NOW);
+});
+
+tAsync("(ح٢) إلى الأمامِ فقط، ومن الذهابِ فقط: لا in_progress من completed، ولا أثرَ لرحلةِ العودة، ولا موقعَ بلا GeoPoint", async () => {
+  // طلبٌ أُنجِزَ (بيدٍ أو بالوقت) ثمّ وصلَ حدثُ ذهابٍ متأخّر ⇒ الحالةُ لا تَرجِع.
+  const db = fakeDb({"orders/o1": {...seededLive(), status: "completed"}});
+  const q = fakePush();
+  const r = await transport.applyRideEvent(db, {rideId: "r_1", reference: "o1:outbound:2",
+    status: "arrived", location: {lat: 1, lng: 2}}, {queuePush: q, now: NOW});
+  assert.strictEqual(r.applied, true, "الساقُ تُحدَّثُ");
+  assert.strictEqual(r.orderStatusTo, null);
+  const o = db._store.get("orders/o1");
+  assert.strictEqual(o.status, "completed");
+  assert.strictEqual(o.driver_location, undefined, "بلا GeoPoint مَحقونٍ لا يُكتَبُ موقعٌ");
+  // رحلةُ العودةِ لا تُحرّكُ الحالةَ ولا تَكتبُ موقعاً.
+  const db2 = fakeDb({"orders/o1": {...BASE, status: "completed", transport: {
+    return: {state: "accepted", gen: 1, provider_ride_id: "r_9"}}}});
+  const r2 = await transport.applyRideEvent(db2, {rideId: "r_9", reference: "o1:return:1",
+    status: "driving", location: {lat: 1, lng: 2}}, {queuePush: q, now: NOW, GeoPoint: GeoPointFake});
+  assert.strictEqual(r2.orderStatusTo, null);
+  assert.strictEqual(db2._store.get("orders/o1").status, "completed");
+  assert.strictEqual(db2._store.get("orders/o1").driver_location, undefined);
+});
+
+tAsync("(ح٣) الإنجازُ بالوقت: مدّةُ الطلبِ من الوصولِ ⇒ completed بمفتاحِ الجوائزِ وتحريرِ العاملة؛ وما لم يَحِن أو بلا رحلةٍ لا يُمَسّ", async () => {
+  const h = 3600e3;
+  const arrivedLeg = {outbound: {state: "arrived", gen: 1}};
+  const db = fakeDb({
+    // حانَ: وصلت قبلَ ٤ ساعاتٍ ودقيقة، والمدّةُ ٤.
+    "orders/due": {...BASE, status: "in_progress", arrived_at: ts(NOW.getTime() - 4 * h - 60e3), transport: arrivedLeg},
+    // لم يَحِن: وصلت قبلَ ساعة.
+    "orders/early": {...BASE, status: "in_progress", arrived_at: ts(NOW.getTime() - h), transport: arrivedLeg},
+    // سائقٌ بشريٌّ بلا رحلةٍ: خارجَ النطاقِ ولو مضت مدّتُه.
+    "orders/human": {...BASE, status: "in_progress", arrived_at: ts(NOW.getTime() - 9 * h)},
+    // رحلةٌ لم تَصِل (ما زالت في الطريق): لا إنجاز.
+    "orders/driving": {...BASE, status: "in_progress", arrived_at: ts(NOW.getTime() - 9 * h),
+      transport: {outbound: {state: "driving", gen: 1}}},
+    // غيرُ مدفوعٍ: لا إنجازَ آليّاً لِما لا يَحقُّ له.
+    "orders/unpaid": {...BASE, is_paid: false, status: "in_progress", arrived_at: ts(NOW.getTime() - 9 * h), transport: arrivedLeg},
+    // مدّةٌ أطولُ (٨ ساعات) وصلت قبلَ ٥: لم يَحِن — المدّةُ من الطلبِ لا ثابتةٌ.
+    "orders/long": {...BASE, hours_contracted: 8, status: "in_progress", arrived_at: ts(NOW.getTime() - 5 * h), transport: arrivedLeg},
+    "drivers/w1": {current_order_id: "due", is_available: false},
+  });
+  const FieldValue = {increment: (n) => ({__inc: n})};
+  const Timestamp = {fromDate: (d) => ts(d.getTime())};
+  const n = await transport.sweepAutoComplete(db, {now: NOW, Timestamp, FieldValue});
+  assert.strictEqual(n, 1);
+  const o = db._store.get("orders/due");
+  assert.strictEqual(o.status, "completed");
+  assert.strictEqual(o.rewards_handled_by, "server", "مفتاحُ الجوائزِ وخصمِ الزيارة");
+  assert.strictEqual(o.completed_by, transport.AUTO_COMPLETED_BY);
+  assert.strictEqual(o.end_time, NOW);
+  const w = db._store.get("drivers/w1");
+  assert.strictEqual(w.current_order_id, null);
+  assert.strictEqual(w.is_available, true);
+  assert.deepStrictEqual(w.completed_orders_count, {__inc: 1});
+  for (const id of ["early", "human", "driving", "unpaid", "long"]) {
+    assert.strictEqual(db._store.get(`orders/${id}`).status, "in_progress", id);
+  }
+  // مرّةً ثانيةً: لا شيءَ يُعادُ إنجازُه.
+  assert.strictEqual(await transport.sweepAutoComplete(db, {now: NOW, Timestamp, FieldValue}), 0);
+});
+
+tAsync("(ح٤) تحريرُ العاملةِ بحارسِ المِلكيّة: منشغلةٌ بطلبٍ آخرَ لا تُحرَّر، والعدّادُ يُزادُ على أيِّ حال", async () => {
+  const db = fakeDb({
+    "orders/due": {...BASE, status: "in_progress", arrived_at: ts(NOW.getTime() - 5 * 3600e3),
+      transport: {outbound: {state: "completed", gen: 1}}},
+    "drivers/w1": {current_order_id: "other", is_available: false},
+  });
+  const FieldValue = {increment: (n) => ({__inc: n})};
+  await transport.sweepAutoComplete(db, {now: NOW, Timestamp: {}, FieldValue});
+  assert.strictEqual(db._store.get("orders/due").status, "completed");
+  const w = db._store.get("drivers/w1");
+  assert.strictEqual(w.current_order_id, "other");
+  assert.strictEqual(w.is_available, false);
+  assert.deepStrictEqual(w.completed_orders_count, {__inc: 1});
+});
+
+t("(ح٥) المصدر: الإنجازُ الآليُّ موصولٌ بالمكنسةِ ومشروطٌ بالتفعيل، والويب هوك يَحقنُ GeoPoint، وجدولُ التقدّمِ إلى الأمامِ فقط", () => {
+  const idx = codeOf(fs.readFileSync(path.join(ROOT, "index.js"), "utf8"));
+  const i = idx.indexOf("exports.sweepTransportRides");
+  const j = idx.indexOf("\nexports.", i + 10);
+  const body = idx.slice(i, j);
+  assert.ok(body.includes("transport.sweepAutoComplete("), "المكنسةُ لا تُنادي الإنجازَ الآليّ");
+  assert.ok(body.includes("readConfig(") && body.indexOf("cfg.enabled") < body.indexOf("sweepAutoComplete("),
+      "الإنجازُ الآليُّ بلا شرطِ التفعيل");
+  assert.ok(body.includes("FieldValue"), "عدّادُ الإنجازِ بلا FieldValue");
+  const w = idx.slice(idx.indexOf("exports.mowasalatWebhook"), idx.indexOf("\nexports.", idx.indexOf("exports.mowasalatWebhook") + 10));
+  assert.ok(/applyRideEvent\([\s\S]*?GeoPoint/.test(w), "الويب هوك لا يَحقنُ GeoPoint فلا موقعَ للعميلة");
+  // الجدول: لا حالةَ هدفٍ أدنى من مصدرِها، ومصادرُها حالاتٌ قبلَ الهدفِ وحدَها.
+  const rank = {scheduled: 0, assigned: 0, accepted: 0, on_the_way: 1, in_progress: 2, completed: 3};
+  for (const [k, v] of Object.entries(transport.ORDER_PROGRESS_BY_RIDE)) {
+    assert.ok(["driving", "arrived", "completed"].includes(k));
+    for (const f of v.from) assert.ok(rank[f] < rank[v.to], `${k}: ${f} → ${v.to} ليس تقدّماً`);
+    assert.ok(!v.from.includes("completed") && !v.from.includes("cancelled"), `${k}: يُحرّكُ طلباً منتهياً`);
+  }
+  // `rewards_handled_by: "server"` هو ما يَقرؤه onOrderRewards — شاهدُ التعليل.
+  assert.ok(idx.includes("after.rewards_handled_by !== \"server\""), "مفتاحُ الجوائزِ تغيّر — يُراجَعُ الإنجازُ الآليّ");
+  const src = fs.readFileSync(path.join(ROOT, "transport.js"), "utf8");
+  assert.ok(src.includes("async function sweepAutoComplete(db,"));
 });
 
 (async () => {

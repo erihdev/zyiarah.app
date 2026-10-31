@@ -208,6 +208,19 @@ function parseWebhookEvent(body) {
   const ride = b.ride && typeof b.ride === "object" ? b.ride : b;
   const d = ride.driver && typeof ride.driver === "object" ? ride.driver : null;
   const eta = Number(ride.eta_minutes);
+  // موقعُ السيارةِ (اختياريّ): `location`/`driver_location` بـ`lat`/`lng` أو
+  // `latitude`/`longitude`. يُكتَبُ على الطلبِ `driver_location` فتَراه
+  // العميلةُ على خريطةِ التتبّعِ كما كانت تَرى سائقَ المؤسّسة.
+  const rawLoc = (ride.location || ride.driver_location || (d && d.location));
+  let location = null;
+  if (rawLoc && typeof rawLoc === "object") {
+    const lat = Number(rawLoc.lat !== undefined ? rawLoc.lat : rawLoc.latitude);
+    const lng = Number(rawLoc.lng !== undefined ? rawLoc.lng : rawLoc.longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lng) &&
+        Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+      location = {lat, lng};
+    }
+  }
   return {
     rideId: ride.id || ride.ride_id ? String(ride.id || ride.ride_id) : null,
     reference: ride.reference ? String(ride.reference) : null,
@@ -218,6 +231,7 @@ function parseWebhookEvent(body) {
       plate: String(d.plate || d.vehicle_plate || ""),
     } : null,
     etaMinutes: Number.isFinite(eta) ? eta : null,
+    location,
   };
 }
 
