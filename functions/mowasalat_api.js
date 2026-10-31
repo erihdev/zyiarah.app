@@ -103,7 +103,8 @@ function urlOf(baseUrl, p) {
  *
  * `req` بشكلِنا الداخليّ (يَبنيه `transport.buildRideRequest`):
  *   {reference, pickup:{lat,lng,label}, dropoff:{lat,lng,label},
- *    pickupAt: ISO, passenger:{name, phone}, notes}
+ *    pickupAt: ISO, passengerCount, notes}
+ * لا اسمَ ولا جوّالَ لراكبة (قرارُ المالك 2026-10-31): العددُ وحدَه.
  * @param {{baseUrl:string, apiKey:string}} cfg
  * @param {object} req
  * @return {Promise<{ok:boolean, httpStatus:number, rideId:string|null,
@@ -115,7 +116,7 @@ async function createRide(cfg, req) {
     scheduled_at: req.pickupAt,
     pickup: {lat: req.pickup.lat, lng: req.pickup.lng, label: req.pickup.label},
     dropoff: {lat: req.dropoff.lat, lng: req.dropoff.lng, label: req.dropoff.label},
-    passenger: {name: req.passenger.name, phone: req.passenger.phone},
+    passenger_count: req.passengerCount,
     notes: req.notes || "",
   };
   const r = await fetch(urlOf(cfg.baseUrl, "/v1/rides"), {

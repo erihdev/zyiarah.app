@@ -277,16 +277,39 @@ function buildRideRequest(order, cfg, leg, gen, orderId, nowMs) {
   } else {
     pickupMs = nowMs;
   }
+  const count = workerCount(order);
   return {
     reference: `${orderId}:${leg}:${gen}`,
     pickup: leg === "outbound" ? hq : client,
     dropoff: leg === "outbound" ? client : hq,
     pickupAt: new Date(pickupMs).toISOString(),
     pickupMs,
-    passenger: {name: order.driver_name || "عاملة زيارة", phone: order.driver_phone || ""},
+    // قرارُ المالكِ (2026-10-31): لا اسمَ ولا جوّالَ للعاملة يَخرجُ إلى مواصلات —
+    // العددُ وحدَه. العاملةُ لا دورَ لها في المسار ولا حسابَ تَستعمله.
+    passengerCount: count,
     notes: `طلب زيارة #${code} — ${leg === "outbound" ? "ذهاب" : "عودة"}` +
-      ` (${slots.orderHours(order)} س)`,
+      ` — ${count} ${count === 1 ? "عاملة" : "عاملات"} (${slots.orderHours(order)} س)`,
   };
+}
+
+/**
+ * عددُ العاملاتِ في الطلب. الكادرُ عاملةٌ واحدة (تأكيدُ المالك 2026-10-31)،
+ * والعددُ ما اختارته العميلةُ من باقاتِ الكوادرِ التي وضعتها الإدارة:
+ * باقاتُ السكن `service_meta.crewCount`، وعاملاتُ المناسبات
+ * `service_meta.workers`، ثمّ `worker_count` على الطلب (الحجزُ بالساعة —
+ * ويُسعَّرُ به في `pricing.js`). قيمةٌ فاسدةٌ ⇒ تُتخطّى إلى التالي، وغيابُ
+ * الكلِّ ⇒ ١ (لا رحلةَ بلا راكبة، والصفرُ ليس عدداً هنا).
+ * @param {object} order
+ * @return {number}
+ */
+function workerCount(order) {
+  const o = order || {};
+  const meta = o.service_meta || {};
+  for (const v of [meta.crewCount, meta.workers, o.worker_count]) {
+    const n = Number(v);
+    if (v !== null && v !== undefined && Number.isInteger(n) && n >= 1 && n <= 20) return n;
+  }
+  return 1;
 }
 
 /**
@@ -691,6 +714,7 @@ module.exports = {
   isLive,
   decide,
   buildRideRequest,
+  workerCount,
   claimLeg,
   requestLeg,
   cancelLegs,
