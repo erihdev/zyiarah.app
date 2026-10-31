@@ -39,8 +39,14 @@ void main() {
   });
 
   test('محرّك الإسناد لا يرشّح السائقين بالمنطقة', () {
-    final i = fn.indexOf('async function _findFreeDriverForSlot');
-    expect(i, greaterThan(-1), reason: 'مُحدِّد السائق اختفى — حدِّث الحارس');
+    // المُسنِدُ صار يَحجزُ عددَ الكوادر (قرار المالك 2026-10-31):
+    // `_findFreeDriverForSlot` غلافٌ يُفوِّضُ، والترشيحُ في `_findFreeWorkersForSlot`.
+    final w = fn.indexOf('async function _findFreeDriverForSlot');
+    expect(w, greaterThan(-1), reason: 'مُحدِّد السائق اختفى — حدِّث الحارس');
+    expect(fn.substring(w, fn.indexOf('\n}', w)).contains('_findFreeWorkersForSlot('),
+        isTrue, reason: 'الغلافُ يُفوِّضُ إلى مُحدِّدِ العاملات');
+    final i = fn.indexOf('async function _findFreeWorkersForSlot');
+    expect(i, greaterThan(-1), reason: 'مُحدِّد العاملات اختفى — حدِّث الحارس');
     final body = fn.substring(i, fn.indexOf('\n}', i));
     expect(body.contains('zoneName'), isFalse,
         reason: 'ترشيح جغرافي يمنع إسناد سائق حرّ لطلب خارج منطقته');
