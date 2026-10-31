@@ -303,13 +303,9 @@ function buildRideRequest(order, cfg, leg, gen, orderId, nowMs) {
  * @return {number}
  */
 function workerCount(order) {
-  const o = order || {};
-  const meta = o.service_meta || {};
-  for (const v of [meta.crewCount, meta.workers, o.worker_count]) {
-    const n = Number(v);
-    if (v !== null && v !== undefined && Number.isInteger(n) && n >= 1 && n <= 20) return n;
-  }
-  return 1;
+  // مصدرٌ واحدٌ مع الحجز (`slots.orderWorkersNeeded`): العددُ المُرسَلُ إلى
+  // مواصلات هو عددُ العاملاتِ المحجوزاتِ للطلب، لا نسخةً تُطابقُه.
+  return slots.orderWorkersNeeded(order);
 }
 
 /**
