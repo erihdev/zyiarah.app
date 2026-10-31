@@ -1,0 +1,38 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/graphify-setup.sh\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "G=$(command -v graphify || echo \"$HOME/.local/bin/graphify\"); [ -x \"$G\" ] && [ -f graphify-out/graph.json ] && \"$G\" hook-guard search || true",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "G=$(command -v graphify || echo \"$HOME/.local/bin/graphify\"); [ -x \"$G\" ] && [ -f graphify-out/graph.json ] && \"$G\" hook-guard read || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

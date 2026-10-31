@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+coverage/
+.dart_tool/
+ios/Pods/
+ios/.symlinks/
+android/.gradle/
+android/build/
+windows/flutter/ephemeral/
+linux/flutter/ephemeral/
+macos/Flutter/ephemeral/
+.firebase/
+graphify-out/
+*.lock
+*.min.js
+*.map
