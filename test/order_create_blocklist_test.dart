@@ -60,6 +60,13 @@ const Map<String, String> _notAnOrderFlag = {
   'retry': 'خيارُ onDocument*({retry: true})',
   'recursive': 'خيارُ fs.mkdirSync({recursive: true}) في سكربتِ التصفيرِ '
       'reset_test_data.js — خيارُ نظامِ ملفّاتٍ لا حقلَ Firestore',
+  // نقلُ العاملاتِ: مفاتيحُ عائدٍ من transport.js، وعلَمٌ متداخلٌ تحتَ
+  // `transport.outbound` — والمفتاحُ الأعلى `transport` محجوبٌ فيُحجَبُ
+  // ما تحتَه (الكتابةُ `transport.outbound.alerted_unaccepted` مسارٌ منقوط
+  // لا يُطابقُه هذا الكاشف، فيُعلَّلُ هنا ويُثبَّتُ حجبُ الأعلى أدناه).
+  'applied': 'مفتاحُ عائدِ transport.applyRideEvent',
+  'replace': 'مفتاحُ قرارِ transport.decide (كائنٌ مُعاد)',
+  'alerted_unaccepted': 'علَمٌ تحتَ transport.outbound — الأعلى محجوب',
   // حقولٌ على مجموعاتٍ أخرى — لها قواعدُها.
   'is_available': 'حقلُ drivers (حالةُ اتصالِ السائقِ نفسِه)',
   // (وزالَ `has_active_subscription`: الخادمُ لم يَعُد يَكتبُه على
@@ -225,6 +232,15 @@ void main() {
       ..sort();
     expect(stale, isEmpty,
         reason: 'إعفاءاتٌ لأسماءٍ لم يَعُد الخادمُ يَكتبُها: $stale');
+  });
+
+  test('خريطةُ النقلِ `transport` محجوبةٌ عند الإنشاءِ — فما تحتَها محجوب', () {
+    expect(blocked, contains('transport'),
+        reason: 'عميلةٌ تَزرعُ رحلةً «حيّة» فلا يَطلبُ المُشغّلُ واحدةً');
+    // والشفرةُ ما زالت تَكتبُ تحتَها بمسارٍ منقوطٍ — وإلّا فالإعفاءُ أعلاه بلا موضوع.
+    final t = File('functions/transport.js').readAsStringSync();
+    expect(t, contains('alerted_unaccepted: true'));
+    expect(t, contains('[`transport.\${leg}.\${k}`]'));
   });
 
   // ── والعلَمانِ الحيّانِ: الحجبُ بلا قارئٍ لا معنى له، فيُثبَّتُ القارئ ──

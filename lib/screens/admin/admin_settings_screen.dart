@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:zyiarah/utils/build_gate.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/catalog_number.dart';
+import 'package:zyiarah/utils/transport_settings.dart';
 
 class AdminSettingsScreen extends StatefulWidget {
   const AdminSettingsScreen({super.key});
@@ -43,6 +44,14 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
   final TextEditingController _latestBuildIosCtrl = TextEditingController();
   final TextEditingController _latestBuildAndroidCtrl = TextEditingController();
   final TextEditingController _updateMsgCtrl = TextEditingController();
+  // نقلُ العاملاتِ عبر مواصلات — `system_configs/transport` (يقرؤه الخادم).
+  final TextEditingController _transportLatCtrl = TextEditingController();
+  final TextEditingController _transportLngCtrl = TextEditingController();
+  final TextEditingController _transportLabelCtrl = TextEditingController();
+  final TextEditingController _transportLeadCtrl = TextEditingController();
+  final TextEditingController _transportUrlCtrl = TextEditingController();
+  bool _transportEnabled = false;
+  String _transportProvider = 'mowasalat';
   bool _updateEnabled = false;
   bool _updateForce = false;
   bool _maintenanceMode = false;
@@ -119,6 +128,33 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                         '')
                     .toString();
                 _updateMsgCtrl.text = u['message'] ?? '';
+              });
+            }
+          } catch (_) {}
+
+          // نقلُ العاملاتِ — غيابُ المستندِ يَعني مُطفأً (كما يَقرؤه الخادم).
+          try {
+            final tDoc = await _db
+                .collection('system_configs')
+                .doc('transport')
+                .get()
+                .timeout(kNetCallTimeout);
+            if (tDoc.exists && tDoc.data() != null && mounted) {
+              final t = tDoc.data()!;
+              final loc = t['hq_location'];
+              setState(() {
+                _transportEnabled = t['enabled'] == true;
+                _transportProvider = kTransportProviders.contains(t['provider'])
+                    ? t['provider'] as String
+                    : 'mowasalat';
+                _transportLatCtrl.text =
+                    loc is GeoPoint ? loc.latitude.toString() : '';
+                _transportLngCtrl.text =
+                    loc is GeoPoint ? loc.longitude.toString() : '';
+                _transportLabelCtrl.text = (t['hq_label'] ?? '').toString();
+                _transportLeadCtrl.text =
+                    (t['lead_minutes'] ?? kTransportDefaultLeadMinutes).toString();
+                _transportUrlCtrl.text = (t['api_base_url'] ?? '').toString();
               });
             }
           } catch (_) {}
@@ -225,6 +261,25 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
       return;
     }
 
+    final transportCfg = transportSettingsPayload(
+      enabled: _transportEnabled,
+      provider: _transportProvider,
+      lat: _transportLatCtrl.text,
+      lng: _transportLngCtrl.text,
+      label: _transportLabelCtrl.text,
+      leadMinutes: _transportLeadCtrl.text,
+      baseUrl: _transportUrlCtrl.text,
+    );
+    if (!transportCfg.ok) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('نقل العاملات: ${transportCfg.error}'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
+
     setState(() => _isSaving = true);
     try {
       final batch = _db.batch();
@@ -266,6 +321,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
         'force': _updateForce,
         'message': _updateMsgCtrl.text.trim(),
       }, SetOptions(merge: true));
+
+      // نقلُ العاملاتِ عبر مواصلات — يقرؤه `functions/transport.js`. المفتاحُ
+      // السرّيُّ ليس هنا (المستندُ مقروءٌ لكلِّ مسجَّل) بل في Secret Manager.
+      batch.set(_db.collection('system_configs').doc('transport'),
+          transportCfg.payload!, SetOptions(merge: true));
 
       await batch.commit();
 
@@ -329,6 +389,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
     _latestBuildIosCtrl.dispose();
     _latestBuildAndroidCtrl.dispose();
     _updateMsgCtrl.dispose();
+    _transportLatCtrl.dispose();
+    _transportLngCtrl.dispose();
+    _transportLabelCtrl.dispose();
+    _transportLeadCtrl.dispose();
+    _transportUrlCtrl.dispose();
     super.dispose();
   }
 
@@ -561,6 +626,65 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                           _buildToggle("إجباري (لا يمكن تجاهله)", "يمنع المستخدم من استخدام التطبيق حتى يُحدّث.", _updateForce, (v) => setState(() => _updateForce = v), const Color(0xFF660033)),
                           const SizedBox(height: 12),
                           _buildPremiumField("رسالة التحديث (اختياري)", "نص", _updateMsgCtrl, Icons.message_rounded, keyboardType: TextInputType.text),
+                        ],
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // نقلُ العاملاتِ عبر مواصلات — يقرؤه الخادمُ لطلبِ رحلةِ
+                      // الذهابِ لحظةَ الإسنادِ والعودةِ لحظةَ الإنجاز.
+                      _buildSectionCard(
+                        title: "نقل العاملات (مواصلات)",
+                        icon: Icons.airport_shuttle_rounded,
+                        color: const Color(0xFF1D4ED8),
+                        children: [
+                          const Text(
+                            "عند التفعيل يطلب الخادم من مواصلات رحلة ذهاب للعاملة من المقرّ إلى بيت العميلة لحظة إسناد الطلب، "
+                            "ورحلة عودة لحظة الإنجاز، ويُنبّه الإدارة إن لم تُقبل الرحلة قبل الموعد بساعة.",
+                            style: TextStyle(fontSize: 12, color: Colors.grey, height: 1.5),
+                          ),
+                          const SizedBox(height: 12),
+                          _buildToggle(
+                            "تفعيل النقل عبر مواصلات",
+                            "مطفأ = لا تُطلب أي رحلة (الوضع اليدوي الحالي).",
+                            _transportEnabled,
+                            (v) => setState(() => _transportEnabled = v),
+                            const Color(0xFF1D4ED8),
+                          ),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<String>(
+                            initialValue: _transportProvider,
+                            decoration: const InputDecoration(
+                              labelText: "المزوّد",
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: 'mowasalat', child: Text("مواصلات (حقيقي)")),
+                              DropdownMenuItem(value: 'simulator', child: Text("محاكي (للتجربة — بلا سيارة حقيقية)")),
+                            ],
+                            onChanged: (v) => setState(() => _transportProvider = v ?? 'mowasalat'),
+                          ),
+                          const SizedBox(height: 12),
+                          _buildPremiumField("خط عرض المقرّ", "مثال 17.1502", _transportLatCtrl, Icons.place_rounded, keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+                          _buildPremiumField("خط طول المقرّ", "مثال 42.6210", _transportLngCtrl, Icons.place_outlined, keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+                          const Padding(
+                            padding: EdgeInsets.only(top: 6, bottom: 4),
+                            child: Text(
+                              "من خرائط قوقل: اضغطي مطوّلاً على موقع المقرّ وانسخي الرقمين. نقطة انطلاق الذهاب ونهاية العودة.",
+                              style: TextStyle(fontSize: 11, color: Colors.grey, height: 1.5),
+                            ),
+                          ),
+                          _buildPremiumField("اسم المقرّ (يظهر للسائق)", "مقر المؤسسة", _transportLabelCtrl, Icons.home_work_rounded, keyboardType: TextInputType.text),
+                          _buildPremiumField("مهلة الانطلاق قبل الموعد (دقائق)", "45", _transportLeadCtrl, Icons.timer_rounded),
+                          _buildPremiumField("عنوان واجهة مواصلات", "https://...", _transportUrlCtrl, Icons.link_rounded, keyboardType: TextInputType.url),
+                          const Padding(
+                            padding: EdgeInsets.only(top: 6, bottom: 4),
+                            child: Text(
+                              "مفتاح مواصلات السرّي لا يُكتب هنا — يُضبط في Secret Manager باسم MOWASALAT_API_KEY.",
+                              style: TextStyle(fontSize: 11, color: Colors.grey, height: 1.5),
+                            ),
+                          ),
                         ],
                       ),
 

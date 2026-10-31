@@ -72,13 +72,15 @@ function bodyOf(src, name) {
   throw new Error(`${name}: أقواسٌ غيرُ متوازنة`);
 }
 
-t("(أ) النقاطُ العامّةُ ثلاثٌ بعينِها — رابعةٌ تُراجَع", () => {
+t("(أ) النقاطُ العامّةُ أربعٌ بعينِها — خامسةٌ تُراجَع", () => {
   // كلُّ `onRequest` جديدٍ نقطةٌ عامّةٌ غيرُ مُصادَقةٍ ما لم تَتحقّقْ من شيء.
+  // الرابعةُ `mowasalatWebhook` (2026-10-31): أحداثُ رحلاتِ نقلِ العاملات —
+  // HMAC-SHA256 على الخامّ كتابي، ويُفحَصُ أدناه في (ح) و(ي).
   const names = [...code.matchAll(/exports\.(\w+) = onRequest\(/g)]
       .map((m) => m[1])
       .sort();
   assert.deepStrictEqual(names,
-      ["moyasarWebhook", "tabbyWebhook", "tamaraWebhook"],
+      ["mowasalatWebhook", "moyasarWebhook", "tabbyWebhook", "tamaraWebhook"],
       `تغيّرت مجموعةُ نقاطِ onRequest: ${names.join(", ")}`);
 });
 
@@ -148,6 +150,7 @@ t("(ح) ولا نقطةَ تُعالِجُ قبل أن تَتحقّق — الر
     ["moyasarWebhook", "event.secret_token !== webhookSecret"],
     ["tamaraWebhook", "jwt.verify("],
     ["tabbyWebhook", "crypto.timingSafeEqual("],
+    ["mowasalatWebhook", "mowasalat.verifySignature("],
   ]) {
     const b = bodyOf(code, name);
     const gate = b.indexOf(marker);
@@ -158,6 +161,21 @@ t("(ح) ولا نقطةَ تُعالِجُ قبل أن تَتحقّق — الر
           `${name}: الإقرارُ 200 يَسبقُ التحقّقَ من الأصالة`);
     }
   }
+});
+
+t("(ي) مواصلات: HMAC على الخامّ، وترويسةٌ غائبةٌ تُرَدّ، والتحقّقُ في الوحدة لا بيدٍ", () => {
+  const b = bodyOf(code, "mowasalatWebhook");
+  assert.ok(b.includes("const rawBody = req.rawBody || JSON.stringify(req.body);"),
+      "التوقيعُ ليس على البايتاتِ الخامّة");
+  assert.ok(b.includes("if (!signature)"), "ترويسةٌ غائبةٌ تَجبُ أن تُرَدّ");
+  assert.ok(/return res\.status\(401\)[\s\S]{0,120}?Invalid signature/.test(b));
+  // لا `createHmac` بيدٍ هنا: التحقّقُ في `mowasalat_api.verifySignature` وحدَه
+  // (طولٌ ثمّ timingSafeEqual، وسرٌّ غائبٌ ⇒ رفض — مُثبَتٌ في transport.test.js).
+  assert.ok(!b.includes("createHmac("), "عادَ حسابُ HMAC بيدٍ في index.js");
+  const api = fs.readFileSync(path.join(__dirname, "..", "mowasalat_api.js"), "utf8");
+  assert.ok(api.includes("if (!secret || !signature) return false;"),
+      "verifySignature لم تَعُدْ تَفشلُ مُغلَقاً");
+  assert.ok(api.includes("crypto.timingSafeEqual(sigBuf, expBuf)"));
 });
 
 t("(ط) والتجريدُ أزالَ شيئاً فعلاً — وإلّا فالنمطُ معطوب", () => {

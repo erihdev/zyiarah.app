@@ -411,6 +411,12 @@ void main() {
       'lib/services/order_service.dart': 'شرطُ «هل يَجوزُ الإلغاء» لا «هل مفتوح»',
       'lib/screens/admin/admin_order_details_screen.dart':
           'تعدادٌ موجَبٌ لِما يَجوزُ للأدمنِ ضبطُه',
+      // حالاتُ **رحلةِ النقل** (مواصلات، 2026-10-31) لا حالاتُ الطلب:
+      // `completed`/`cancelled`/`failed` على `transport.{leg}.state`، ومرآتُها
+      // تُقرأُ من `functions/transport.js` في `transport_ride_test.dart`.
+      'lib/utils/transport_ride.dart': 'حالاتُ رحلةِ النقلِ النهائيّة (مرآةُ الخادم)',
+      'admin_panel/src/utils/transportRide.ts':
+          'حالاتُ رحلةِ النقلِ النهائيّة (مرآةُ الدارت)',
     };
 
     test('(س) مجموعةُ النسخِ اليدويّةِ كاملةً = المعروفةُ بأسبابِها', () {

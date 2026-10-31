@@ -269,6 +269,24 @@ Failed to publish زيارة | Zyiarah.ipa to App Store Connect.
 | `Pass the --force option ... failure policy` | **لا يُتوقَّع بعد 2026-10-05** (`--force` صار في النداء). إن ظهر فالعلمُ أُزيل من المسار — أعِدْه ولا تُزِل الحارس |
 | `403 ... cloudscheduler.jobs.update` | دورُ `Cloud Scheduler Admin` ناقص — الخطوة ٢. العاديّةُ تُنشَر وتنجح والمجدولةُ التسعُ تفشل وحدها |
 | النشر أخضرُ ولم يتغيّر شيءٌ في الإنتاج | رسالةُ الدمج تحمل `[skip ci]` — فتُكبَت المساراتُ الثلاثةُ كلُّها. شغّلها باليد، وراجِعْ `deploy_drift.yml` أدناه |
+| `Secret ... MOWASALAT_API_KEY ... not found` (أو `MOWASALAT_WEBHOOK_SECRET`) | سرّا نقلِ العاملاتِ لم يُنشآ بعد. أنشئهما **مرّةً** قبلَ أوّلِ نشرٍ يحمل `transport.js`، ولو بقيمةٍ مؤقّتة — راجع «نقلُ العاملاتِ» أدناه |
+
+### نقلُ العاملاتِ عبر مواصلات — سرّانِ ومستندُ تفعيل (2026-10-31)
+
+الدوالُّ `onOrderTransport` و`mowasalatWebhook` و`retryTransportRide` تَربطُ سرَّين بـ`defineSecret`،
+والنشرُ **كلُّه** يُرفَضُ إن لم يَكنِ السرُّ موجوداً في Secret Manager. فقبلَ أوّلِ دمجٍ يَحملُها:
+
+```bash
+firebase functions:secrets:set MOWASALAT_API_KEY         # مفتاحُ واجهةِ مواصلات — مؤقّتاً أيُّ نصٍّ حتى يَصِل
+firebase functions:secrets:set MOWASALAT_WEBHOOK_SECRET  # سرُّ توقيعِ الويب هوك — ولّده أنت وأعطِه لمواصلات
+```
+
+ثمّ **لا شيءَ يَعملُ حتى تُفعِّلَه أنت**: المستندُ `system_configs/transport` غائبٌ ⇒ لا رحلةَ تُطلَب.
+يُفعَّلُ من تطبيقِ الإدارة ← الإعدادات ← «نقل العاملات (مواصلات)»: المزوّدُ (`simulator` للتجربةِ بلا
+سيارةٍ حقيقيّة، `mowasalat` للحقيقيّ)، وموقعُ المقرِّ، ومهلةُ الانطلاق، وعنوانُ واجهتِهم. عنوانُ الويب هوك
+الذي يُعطى لمواصلات: `https://<region>-zyiarah-app.cloudfunctions.net/mowasalatWebhook`، والترويسةُ
+`x-mowasalat-signature` = HMAC-SHA256 (hex) على جسمِ الطلبِ الخامّ بالسرِّ أعلاه. شكلُ طلبِ الرحلةِ
+والحدثِ **افتراضيٌّ** حتى تَصِلَ وثائقُهم، وتعديلُه محصورٌ في `functions/mowasalat_api.js`.
 
 ## 1-ج. نشرُ اللوحة الإدارية — آليّ منذ 2026-10-04
 
@@ -389,9 +407,9 @@ Admin` يشمل الاستضافة)، ويلزمه سرُّ `MAPBOX_TOKEN` ال�
 | المهمّة | ما تفحصه |
 |---|---|
 | Flutter Analyze | `flutter analyze --no-fatal-infos` |
-| Flutter Test | `flutter test` — **٢٠٤ ملفَّ فحص** (عددُ الفحوصِ نفسُه لا يُكتَب هنا: كثيرٌ منها يُسجَّل في حلقات، فأيُّ رقمٍ يُدوَّن يَبيت — ويُشدُّ عددُ الملفّاتِ في `test/deploy_guide_accuracy_test.dart`) |
+| Flutter Test | `flutter test` — **٢٠٥ ملفَّ فحص** (عددُ الفحوصِ نفسُه لا يُكتَب هنا: كثيرٌ منها يُسجَّل في حلقات، فأيُّ رقمٍ يُدوَّن يَبيت — ويُشدُّ عددُ الملفّاتِ في `test/deploy_guide_accuracy_test.dart`) |
 | Flutter Build (full compile) | `flutter build bundle --release` — تصريف إغلاق `main.dart` كله. الوحيد الذي يكشف خطأ تصريف **داخل اعتمادية**: analyze يُبلّغ عن ملفات المشروع وحدها، وtest يصرّف ما تستورده الاختبارات فقط (درس البناء ٣١) |
-| Cloud Functions Tests | lint + **٢٩ ملفَّ فحصِ وحدة** + **٥ ملفّاتِ محاكٍ** (قواعدُ الطلبات، الأدوار، شروطُ الخدمة، الإشعارات، خصمُ المحفظة) |
+| Cloud Functions Tests | lint + **٣٠ ملفَّ فحصِ وحدة** + **٥ ملفّاتِ محاكٍ** (قواعدُ الطلبات، الأدوار، شروطُ الخدمة، الإشعارات، خصمُ المحفظة) |
 | Admin Panel Build | lint + Vitest + `tsc -b` + بناء |
 
 ## 3. اختبار الدخان بعد وصول البناء

@@ -22,6 +22,8 @@ import 'package:zyiarah/utils/phone_format.dart';
 import 'package:zyiarah/utils/price_review.dart';
 import 'package:zyiarah/utils/cancel_refund_notice.dart';
 import 'package:zyiarah/utils/home_packages.dart';
+import 'package:zyiarah/utils/transport_ride.dart';
+import 'package:zyiarah/utils/time_format.dart';
 
 class AdminOrderDetailsScreen extends StatefulWidget {
   final String orderId;
@@ -1213,6 +1215,137 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
     );
   }
 
+  /// بطاقةُ رحلتَي النقل: الذهابُ والعودةُ كما كتبهما الخادم.
+  Widget _buildTransportCard(Map<String, dynamic> data) {
+    final legs = <TransportLegView>[
+      for (final l in const ['outbound', 'return'])
+        if (TransportLegView.fromOrder(data, l) case final v?) v,
+    ];
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      color: const Color(0xFFEFF6FF),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.airport_shuttle_rounded,
+                    color: Color(0xFF1D4ED8), size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'نقل العاملة — مواصلات',
+                  style: GoogleFonts.tajawal(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: const Color(0xFF1E40AF),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(),
+            for (final leg in legs) _buildTransportLegRow(leg),
+            if (legs.isEmpty)
+              Text('لم تُطلب رحلة بعد.',
+                  style: GoogleFonts.tajawal(fontSize: 13, color: Colors.grey.shade700)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTransportLegRow(TransportLegView leg) {
+    final pickup = leg.pickupAt;
+    final pickupText = pickup == null
+        ? null
+        : '${ksaDateText(pickup)} ${formatTime12(ksaWallOf(pickup))}';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('رحلة ${leg.legLabel}: ',
+                  style: GoogleFonts.tajawal(fontSize: 13, fontWeight: FontWeight.w700)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: leg.stateColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(leg.stateLabel,
+                    style: GoogleFonts.tajawal(
+                        fontSize: 12, color: leg.stateColor, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          if (pickupText != null)
+            Text('الانطلاق: $pickupText',
+                style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey.shade700)),
+          if (leg.driverLine != null)
+            Text('السائق: ${leg.driverLine}',
+                style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey.shade700)),
+          if (leg.driverPhone != null)
+            Text('جوال السائق: ${leg.driverPhone}',
+                style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey.shade700)),
+          if (leg.etaMinutes != null && leg.isLive)
+            Text('الوصول خلال ${leg.etaMinutes} دقيقة تقريباً',
+                style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey.shade700)),
+          if (leg.error != null)
+            Text('السبب: ${leg.error}',
+                style: GoogleFonts.tajawal(fontSize: 12, color: const Color(0xFFDC2626))),
+          if (leg.canRetry && _canEditOrders)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: _operationButton(
+                label: 'إعادة طلب رحلة ${leg.legLabel}',
+                icon: Icons.refresh_rounded,
+                color: const Color(0xFF1D4ED8),
+                onTap: () => _retryTransportRide(leg.leg),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// إعادةُ طلبِ رحلةٍ بيدِ الإدارة — نداءٌ مُغيِّرٌ للحالة (قد يَكونُ الخادمُ
+  /// أرسلَ الطلبَ ثمّ انقطع)، فهو في `_statefulCallFiles` كسائرِ هذه الشاشة.
+  Future<void> _retryTransportRide(String leg) async {
+    setState(() => _isLoading = true);
+    try {
+      await FirebaseFunctions.instance
+          .httpsCallable('retryTransportRide')
+          .call({'orderId': widget.orderId, 'leg': leg});
+      await _fetchOrder();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('أُعيد طلب الرحلة ✅', style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.green,
+        ));
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.message ?? 'تعذّر إعادة طلب الرحلة',
+              style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.red.shade700,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('خطأ غير متوقع: $e', style: GoogleFonts.tajawal()),
+          backgroundColor: Colors.red.shade700,
+        ));
+      }
+    }
+  }
+
   Widget _operationButton({
     required String label,
     required IconData icon,
@@ -1535,6 +1668,13 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                 _canEditOrders) ...[
               const SizedBox(height: 15),
               _buildBnplRefundCard(data),
+            ],
+            // ── نقلُ العاملاتِ (مواصلات) ────────────────────────────────────────
+            // يَكتبُها الخادمُ وحدَه؛ تُعرَضُ لكلِّ الأدوارِ الإداريّةِ لأنّها
+            // قراءةٌ، وزرُّ الإعادةِ وحدَه بوّابتُه _canEditOrders كبقيّةِ الكتابات.
+            if (data['transport'] is Map) ...[
+              const SizedBox(height: 15),
+              _buildTransportCard(data),
             ],
             const SizedBox(height: 15),
             // لوحة الإدارة تُستبدل بشارة «للقراءة فقط» حين تكون الكتابة محكومة

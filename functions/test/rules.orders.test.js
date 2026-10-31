@@ -284,6 +284,14 @@ const {setDoc, updateDoc, doc, getDoc, runTransaction, serverTimestamp} =
             moyasar_payment_id: "pay_forged", amount: 200}),
       false);
 
+  // نقلُ العاملاتِ (مواصلات، 2026-10-31): خريطةُ `transport` خادميّةٌ كلُّها —
+  // رحلةٌ «حيّةٌ» مزروعةٌ عند الإنشاءِ تَمنعُ المُشغّلَ من طلبِ واحدة.
+  await check("mute: transport map at create -> DENIED",
+      setDoc(doc(db, "orders/mute16"),
+          {client_id: uid, status: "pending", is_paid: false, amount: 200,
+            transport: {outbound: {state: "accepted", gen: 1}}}),
+      false);
+
   // ─── طلباتُ المتجر: القائمةُ نفسُها، فالخادمُ يَكتبُ الأعلامَ نفسَها ──
   //
   // `store_orders` كانت تَمنعُ اسمَين (`paid_confirmed`,

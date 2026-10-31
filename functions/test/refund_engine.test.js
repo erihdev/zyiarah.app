@@ -566,7 +566,7 @@ t("(و٥) العرف الجديد: لا وحدةٍ تستورد Firestore — ا
   // حارس تمارا: لا نقطع السطر عند أوّل `//` وإلّا محا `https://` ما نبحث عنه.
   const MODULES = ["pricing.js", "capacity.js", "notify_prefs.js", "vat.js",
     "drivers.js", "amounts.js", "moyasar_api.js", "tamara_api.js",
-    "refund_engine.js"];
+    "refund_engine.js", "transport.js", "mowasalat_api.js"];
   for (const f of MODULES) {
     const src = codeOf(fs.readFileSync(path.join(ROOT, f), "utf8"));
     for (const bad of ["getFirestore(", "getApp(", "initializeApp("]) {
@@ -583,7 +583,7 @@ t("(و٥) العرف الجديد: لا وحدةٍ تستورد Firestore — ا
   assert.ok(mod.includes("async function autoResolveUnfulfilledPaidOrder(db,"));
 });
 
-t("(و٦) index.js ما زال يُصدّر ٦٨ دالّة", () => {
+t("(و٦) index.js ما زال يُصدّر ٧٢ دالّة", () => {
   // كانت ٦٢ وصارت ٦٣ بإضافة `processServerNotificationQueue`: طابورُ الإشعاراتِ
   // الخادميُّ (`notification_queue`) انفصلَ عن طابورِ العميلِ لأنّ الثقةَ كانت
   // تُحسَب من `createdBy` — حقلٍ يَكتبه العميل. المُعالِجُ **واحدٌ مُشترَك**
@@ -619,8 +619,15 @@ t("(و٦) index.js ما زال يُصدّر ٦٨ دالّة", () => {
   // `applyReferralCode` يَحُلُّ المُحيلَ بالكودِ فالتصادمُ إسنادٌ خاطئٌ
   // لمكافأةٍ ماليّة — فمكانُه الخادمُ وحدَه. (مُثبَتٌ على المُحاكي في
   // `rules.roles`؛ ومراجعةٌ مقصودةٌ كأخواتِها أعلاه.)
+  // وصارت ٧٢ بإضافةِ نقلِ العاملاتِ عبر مواصلات (2026-10-31): `onOrderTransport`
+  // (مُشغّلٌ على الطلبِ يَطلبُ رحلةَ الذهابِ لحظةَ الإسنادِ والعودةِ لحظةَ
+  // الإنجازِ ويُلغي عندَ الإلغاء — مُشغّلٌ لا نداءٌ داخلَ المُسنِد، لأنّ
+  // `driver_id` يُكتَبُ من سبعةِ مسارات)، و`mowasalatWebhook` (أحداثُ الرحلة،
+  // HMAC على الخامّ كتابي)، و`sweepTransportRides` (رحلةٌ لم تُقبَل والموعدُ
+  // قريب ⇒ تنبيه)، و`retryTransportRide` (إعادةٌ بيدِ الإدارة). السياسةُ في
+  // `transport.js` تُختبَرُ على db مزيّف. (مراجعةٌ مقصودةٌ، كأخواتِها أعلاه.)
   const n = (idx.match(/^exports\.\w+ = /gm) || []).length;
-  assert.strictEqual(n, 68, `عدد الصادرات ${n} ≠ 68`);
+  assert.strictEqual(n, 72, `عدد الصادرات ${n} ≠ 72`);
 });
 
 // ── إعادةُ رصيدِ طلبٍ مُلغًى: مرّةً واحدةً، ومع قولِ الفشل ─────────────────

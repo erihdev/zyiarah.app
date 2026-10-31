@@ -41,6 +41,9 @@ const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "";
 // مكتوباً بيدٍ في ٢٣ موضعاً (مدّةُ الطلب ١٦، ومسحُ التعارض ٧).
 const slots = require("./slots");
 const phoneLib = require("./phone");
+// نقلُ العاملاتِ عبر مواصلات: السياسةُ في transport.js والنقلُ في mowasalat_api.js.
+const transport = require("./transport");
+const mowasalat = require("./mowasalat_api");
 initializeApp();
 
 // Secrets — stored in Firebase Secret Manager, never in source code
@@ -52,6 +55,10 @@ const resendApiKeySecret = defineSecret("RESEND_API_KEY");
 const moyasarSecretKey = defineSecret("MOYASAR_SECRET_KEY");
 const moyasarWebhookSecret = defineSecret("MOYASAR_WEBHOOK_SECRET");
 const tabbyWebhookSecret = defineSecret("TABBY_WEBHOOK_SECRET");
+// مواصلات (نقلُ العاملات): مفتاحُ الواجهةِ وسرُّ توقيعِ الويب هوك — يُنشآنِ في
+// Secret Manager **قبلَ** أوّلِ نشرٍ (ولو بقيمةٍ مؤقّتة)، وإلّا رُفض النشرُ كلُّه.
+const mowasalatApiKey = defineSecret("MOWASALAT_API_KEY");
+const mowasalatWebhookSecret = defineSecret("MOWASALAT_WEBHOOK_SECRET");
 
 // (#1 Phase 2) بوّابة إنفاذ التسعير الخادمي (Tier B): استرداد/إلغاء آليّ عند دفعٍ ناقص
 // صارخ. **فُعّلت بقرار المالك (2026-07-31)** بعد مراجعة سجلّات [price-shadow]:
@@ -7768,3 +7775,128 @@ exports.tabbyWebhook = onRequest(
       }
     },
 );
+
+// ════════════════════════════════════════════════════════════════════════
+// نقلُ العاملاتِ عبر «مواصلات» (2026-10-31)
+// ════════════════════════════════════════════════════════════════════════
+//
+// المالكُ تعاقدَ مع مواصلات لنقلِ العاملاتِ من مقرِّ المؤسّسةِ إلى بيتِ
+// العميلةِ وإعادتِهنّ. السياسةُ كلُّها في `transport.js` (تُختبَرُ بلا
+// محاكٍ)، والنقلُ في `mowasalat_api.js`؛ هنا التسجيلُ وحدَه: مُشغّلٌ على
+// الطلب، وويب هوك، ومكنسةٌ، ونداءُ إعادةٍ للإدارة.
+//
+// التفعيلُ بمستندِ `system_configs/transport` (`enabled`, `provider`,
+// `hq_location`, `hq_label`, `lead_minutes`, `api_base_url`) — غيابُه يَعني
+// لا نقلَ، فالنشرُ آمنٌ قبلَ قرارِ التفعيل.
+
+/**
+ * اعتمادياتُ النقلِ من الإعداداتِ والأسرار. `provider: null` يَعني «معطَّل
+ * عمليّاً» (مواصلات بلا مفتاحٍ أو عنوان) ويُقال في السجلّ.
+ * @param {FirebaseFirestore.Firestore} db
+ * @return {Promise<object>}
+ */
+async function _transportDeps(db) {
+  const cfg = await transport.readConfig(db);
+  let apiKey = "";
+  try {
+    apiKey = mowasalatApiKey.value();
+  } catch {
+    apiKey = "";
+  }
+  const provider = transport.selectProvider(cfg, {apiKey});
+  if (cfg.enabled && !provider) {
+    console.warn("[transport] enabled but no provider: missing MOWASALAT_API_KEY or api_base_url");
+  }
+  return {cfg, provider, queuePush, now: new Date()};
+}
+
+exports.onOrderTransport = onDocumentWritten(
+    {document: "orders/{orderId}", cpu: 0.083, secrets: ["MOWASALAT_API_KEY"]},
+    async (event) => {
+      const change = event.data;
+      if (!change) return null;
+      const before = change.before && change.before.exists ? change.before.data() : null;
+      const after = change.after && change.after.exists ? change.after.data() : null;
+      // قرارٌ صِرفٌ أوّلاً: أغلبُ الكتاباتِ لا تَعني النقلَ، فلا نَقرأُ الإعداداتِ لها.
+      if (transport.decide(before, after, Date.now()).length === 0) return null;
+      try {
+        const db = getFirestore();
+        const deps = await _transportDeps(db);
+        const done = await transport.handleOrderChange(db,
+            {orderId: event.params.orderId, before, after}, deps);
+        if (done.length) console.log(`[transport] ${event.params.orderId}: ${JSON.stringify(done)}`);
+      } catch (e) {
+        console.error(`[transport] onOrderTransport failed for ${event.params.orderId}:`, e.message);
+      }
+      return null;
+    });
+
+exports.mowasalatWebhook = onRequest(
+    {secrets: ["MOWASALAT_WEBHOOK_SECRET"], cpu: 0.083},
+    async (req, res) => {
+      if (req.method !== "POST") {
+        return res.status(405).json({error: "Method not allowed"});
+      }
+      // التوقيعُ على البايتاتِ الخامّة (درسُ tabbyWebhook)، ويَفشلُ مُغلَقاً:
+      // سرٌّ غائبٌ أو ترويسةٌ غائبةٌ ⇒ 401، لا قبولاً مفتوحاً.
+      const signature = req.headers[mowasalat.SIGNATURE_HEADER];
+      if (!signature) {
+        console.warn("mowasalatWebhook: rejected — missing signature header");
+        return res.status(401).json({error: "Missing signature"});
+      }
+      const rawBody = req.rawBody || JSON.stringify(req.body);
+      if (!mowasalat.verifySignature(mowasalatWebhookSecret.value(), rawBody, signature)) {
+        console.warn("mowasalatWebhook: rejected — invalid HMAC signature");
+        return res.status(401).json({error: "Invalid signature"});
+      }
+      res.status(200).json({received: true});
+      try {
+        const ev = mowasalat.parseWebhookEvent(req.body);
+        const r = await transport.applyRideEvent(getFirestore(), ev,
+            {queuePush, now: new Date()});
+        console.log(`mowasalatWebhook: ${ev.reference || "?"} ${ev.status || "?"} → ${JSON.stringify(r)}`);
+      } catch (e) {
+        console.error("mowasalatWebhook processing error:", e.message);
+      }
+    });
+
+exports.sweepTransportRides = onSchedule(
+    {schedule: "every 10 minutes", timeZone: "Asia/Riyadh"},
+    async () => {
+      const db = getFirestore();
+      try {
+        const n = await transport.sweepUnacceptedRides(db, {queuePush, now: new Date(), Timestamp});
+        if (n) console.log(`[transport] sweep: ${n} unaccepted ride alert(s)`);
+      } catch (e) {
+        console.error("[transport] sweepTransportRides failed:", e.message);
+      }
+    });
+
+/**
+ * إعادةُ طلبِ رحلةٍ بيدِ الإدارة (من تفاصيلِ الطلب) بعدَ فشلٍ أو إلغاءٍ من
+ * المزوّد: جيلٌ جديدٌ يُلغي السابقَ إن كان حيّاً.
+ */
+exports.retryTransportRide = onCall(
+    {cpu: 0.25, secrets: ["MOWASALAT_API_KEY"]},
+    async (request) => {
+      await _assertAdmin(request);
+      const orderId = String((request.data && request.data.orderId) || "");
+      const leg = String((request.data && request.data.leg) || "outbound");
+      if (!orderId || !transport.LEGS.includes(leg)) {
+        throw new HttpsError("invalid-argument", "معرّف الطلب أو الساق غير صحيح");
+      }
+      const db = getFirestore();
+      const deps = await _transportDeps(db);
+      if (!deps.cfg.enabled) {
+        throw new HttpsError("failed-precondition", "نقل العاملات غير مفعّل في الإعدادات");
+      }
+      if (!deps.provider) {
+        throw new HttpsError("failed-precondition",
+            "مزوّد النقل غير مهيّأ: مفتاح مواصلات أو عنوان الواجهة غائب");
+      }
+      const r = await transport.requestLeg(db, orderId, leg, true, deps);
+      if (r.outcome === "noop") {
+        throw new HttpsError("not-found", "الطلب غير موجود");
+      }
+      return {ok: r.outcome === "requested", outcome: r.outcome, gen: r.gen || null};
+    });
