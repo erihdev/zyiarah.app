@@ -77,7 +77,9 @@ testers.txt
 # Secrets & private keys
 AuthKey_*.p8
 *.b64
-.claude/
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
 ios/dist.key
 ios/*.key
 # Code-signing material — never commit (the .p12 carries the private key)
@@ -162,3 +164,6 @@ functions/_tmp_ord198.js
 
 # نسخُ سكربتِ التصفير (reset_test_data.js) — بياناتُ إنتاجٍ لا تُلتزَم
 functions/backups/
+
+# خريطة Graphify — تُبنى في كل جلسة ولا تُرفع
+graphify-out/
