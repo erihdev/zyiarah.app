@@ -69,6 +69,8 @@ const Map<String, String> _notAnOrderFlag = {
   'alerted_unaccepted': 'علَمٌ تحتَ transport.outbound — الأعلى محجوب',
   // حقولٌ على مجموعاتٍ أخرى — لها قواعدُها.
   'is_available': 'حقلُ drivers (حالةُ اتصالِ السائقِ نفسِه)',
+  'is_active': 'حقلُ drivers — syncWorkerPool يُفعّلُ/يُوقِفُ العاملاتِ المُجسَّدة',
+  'pool': 'حقلُ drivers — علَمُ العاملةِ المُجسَّدةِ من العدد (syncWorkerPool)',
   // (وزالَ `has_active_subscription`: الخادمُ لم يَعُد يَكتبُه على
   // `users/{uid}` — حقلٌ يُحلَّلُ ولا يَقرؤه سطح، حُذفَ 2026-10-08. وهذه
   // القائمةُ تُقارَنُ بمجموعةِ ما يَكتبُه الخادمُ **كاملةً**، فمُدخَلٌ
