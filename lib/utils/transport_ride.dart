@@ -19,7 +19,7 @@ const Set<String> kTransportLiveStates = {
   'requesting',
   'requested',
   'accepted',
-  'en_route',
+  'driving',
   'arrived',
 };
 
@@ -105,7 +105,7 @@ String transportStateLabel(String state) {
     'requesting' => 'جارٍ الطلب',
     'requested' => 'بانتظار سائق',
     'accepted' => 'سائق مؤكّد',
-    'en_route' => 'السائق في الطريق',
+    'driving' => 'السائق في الطريق',
     'arrived' => 'السائق وصل',
     'completed' => 'اكتملت',
     'cancelled' => 'أُلغيت',
@@ -118,7 +118,7 @@ String transportStateLabel(String state) {
 Color transportStateColor(String state) {
   return switch (state) {
     'requesting' || 'requested' => const Color(0xFFD97706),
-    'accepted' || 'en_route' || 'arrived' => const Color(0xFF2563EB),
+    'accepted' || 'driving' || 'arrived' => const Color(0xFF2563EB),
     'completed' => const Color(0xFF16A34A),
     'cancelled' => const Color(0xFF6B7280),
     'failed' => const Color(0xFFDC2626),

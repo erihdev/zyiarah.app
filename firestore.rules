@@ -248,6 +248,13 @@ service cloud.firestore {
         // تُصفّرُها عند تغييرِ الموعد (وذاك `update` لا `create`).
         'client_reminder_24h_sent', 'client_reminder_soon_sent',
         'reminder_sent', 'payment_push_sent',
+        // ونقلُ العاملاتِ عبر مواصلات (2026-10-31): الخريطةُ `transport`
+        // كلُّها خادميّةٌ (`functions/transport.js`) — عميلةٌ تُنشئُ طلبَها
+        // بـ`transport.outbound.state: "accepted"` تَجعلُ المُشغّلَ يَرى
+        // رحلةً حيّةً فلا يَطلبُ واحدةً، والعاملةُ تَنتظرُ سيارةً لا تأتي؛
+        // و`alerted_unaccepted` داخلَها يُسكِتُ تنبيهَ المكنسة. منعُ المفتاحِ
+        // الأعلى يَمنعُ كلَّ ما تحتَه.
+        'transport',
       ];
     }
 

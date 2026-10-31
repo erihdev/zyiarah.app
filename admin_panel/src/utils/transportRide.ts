@@ -5,7 +5,7 @@
 // وتُقابَلُ بالمرآةِ الدارتيّةِ في `transportRide.test.ts` فلا تَنحرِف.
 
 export const TRANSPORT_LIVE_STATES = [
-  'requesting', 'requested', 'accepted', 'en_route', 'arrived',
+  'requesting', 'requested', 'accepted', 'driving', 'arrived',
 ] as const;
 export const TRANSPORT_FINAL_STATES = ['completed', 'cancelled', 'failed'] as const;
 
@@ -56,7 +56,7 @@ export function transportStateLabel(state: string): string {
     case 'requesting': return 'جارٍ الطلب';
     case 'requested': return 'بانتظار سائق';
     case 'accepted': return 'سائق مؤكّد';
-    case 'en_route': return 'السائق في الطريق';
+    case 'driving': return 'السائق في الطريق';
     case 'arrived': return 'السائق وصل';
     case 'completed': return 'اكتملت';
     case 'cancelled': return 'أُلغيت';
@@ -72,7 +72,7 @@ export function transportStateClass(state: string): string {
     case 'requested':
       return 'bg-amber-50 text-amber-700 border-amber-200';
     case 'accepted':
-    case 'en_route':
+    case 'driving':
     case 'arrived':
       return 'bg-blue-50 text-blue-700 border-blue-200';
     case 'completed':

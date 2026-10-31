@@ -46,11 +46,11 @@ const mowasalat = require("./mowasalat_api");
 const CONFIG_DOC = "system_configs/transport";
 
 const LEGS = Object.freeze(["outbound", "return"]);
-const LIVE_STATES = Object.freeze(["requesting", "requested", "accepted", "en_route", "arrived"]);
+const LIVE_STATES = Object.freeze(["requesting", "requested", "accepted", "driving", "arrived"]);
 const FINAL_STATES = Object.freeze(["completed", "cancelled", "failed"]);
 /** ترتيبُ التقدّم: حدثٌ أدنى رتبةً من المكتوبِ لا يَرجِعُ به (وصولُ الأحداثِ غيرُ مرتَّب). */
 const STATE_RANK = Object.freeze({
-  requesting: 0, requested: 1, accepted: 2, en_route: 3, arrived: 4,
+  requesting: 0, requested: 1, accepted: 2, driving: 3, arrived: 4,
   completed: 5, cancelled: 5, failed: 5,
 });
 /** الحالاتُ التي يَجوزُ فيها طلبُ رحلةِ الذهاب: قبلَ أن تَتحرّكَ العاملة. */

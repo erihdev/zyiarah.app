@@ -94,10 +94,14 @@ void main() {
           reason: 'فحصُ رقمِ البناءِ زال');
     });
 
-    test('(د) الكتاباتُ الأربعُ دفعةٌ واحدةٌ بـcommit واحد', () {
+    test('(د) الكتاباتُ الخمسُ دفعةٌ واحدةٌ بـcommit واحد', () {
+      // كانت أربعاً؛ الخامسةُ `system_configs/transport` (نقلُ العاملات،
+      // 2026-10-31) — في الدفعةِ نفسِها كأخواتِها لا كتابةً مباشرة.
       final save = saveBody();
-      expect(RegExp(r'batch\.set\(').allMatches(save).length, 4,
-          reason: 'عددُ الكتاباتِ في الدفعةِ ليس أربعاً');
+      expect(RegExp(r'batch\.set\(').allMatches(save).length, 5,
+          reason: 'عددُ الكتاباتِ في الدفعةِ ليس خمساً');
+      expect(save.contains("doc('transport')"), isTrue,
+          reason: 'إعداداتُ النقلِ خرجت من الدفعة');
       expect(RegExp(r'batch\.commit\(\)').allMatches(save).length, 1,
           reason: 'commit ليس واحداً — فالذرّيّةُ تَنكسِر');
       // ولا كتابةً مباشرةً خارجَ الدفعة: تلك هي الحالةُ الجزئيّةُ عائدةً.

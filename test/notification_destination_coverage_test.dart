@@ -180,6 +180,9 @@ void main() {
     'admin_price_review',
     'admin_price_tamper',
     'new_maintenance_admin',
+    // نقلُ العاملاتِ عبر مواصلات (2026-10-31): فشلُ طلبِ رحلةٍ، إلغاءٌ من
+    // المزوّد، رحلةٌ لم تُقبَل والموعدُ قريب — بثٌّ إداريٌّ كأخواتِه.
+    'admin_transport_alert',
   };
   const noInboxAtAll = <String>{
     // `queuePush(null, …)`: بريدٌ وحدَه، والبوّابةُ نفسُها تُسقِطُه.

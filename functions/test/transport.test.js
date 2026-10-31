@@ -546,7 +546,7 @@ t("(ز٢) خريطةُ الحالات: المعروفُ يُطبَّع، وال�
   const ev = mowasalat.parseWebhookEvent({event: "ride.updated",
     ride: {id: 77, reference: "o:outbound:1", status: "en_route", eta_minutes: "9",
       driver: {name: "س", phone: "05", vehicle_plate: "ق 1"}}});
-  assert.deepStrictEqual(ev, {rideId: "77", reference: "o:outbound:1", status: "en_route",
+  assert.deepStrictEqual(ev, {rideId: "77", reference: "o:outbound:1", status: "driving",
     driver: {name: "س", phone: "05", plate: "ق 1"}, etaMinutes: 9});
   assert.strictEqual(mowasalat.parseWebhookEvent(null).reference, null);
 });
