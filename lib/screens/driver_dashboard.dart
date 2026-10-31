@@ -28,6 +28,7 @@ import 'package:zyiarah/screens/driver_notifications_screen.dart';
 import 'package:zyiarah/screens/driver_profile_screen.dart';
 import 'package:zyiarah/utils/net_timeout.dart';
 import 'package:zyiarah/utils/phone_format.dart';
+import 'package:zyiarah/utils/transport_ride.dart';
 import 'package:zyiarah/utils/driver_activation.dart';
 import 'package:zyiarah/models/driver_schedule.dart';
 
@@ -1271,6 +1272,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
           // ما يحمل من عُدّة — الطلب يحمل مبلغاً واسم خدمة فقط.
           ZyiarahServiceMetaView(meta: data['service_meta']),
           _buildHouseRulesAlert(data),
+          _buildTransportAlert(data, status),
           if (data['client_id'] != null) const Divider(height: 28),
           if (status == 'in_progress' && data['start_time'] is Timestamp)
             _buildTimer((data['start_time'] as Timestamp).toDate(),
@@ -1337,6 +1339,70 @@ class _DriverDashboardState extends State<DriverDashboard> {
   /// العميل إلى الطلب عند الإسناد. القراءة المباشرة لـ users/{clientId} مرفوضة
   /// بقواعد Firestore للسائق فكانت اللوحة تُخفى دائماً (فشل الجلب = لا بيانات).
   /// عند غياب الحقل (طلبات قديمة قبل النسخ) تُخفى بصمت — لا شيء يُعرض خطأً.
+  /// سيارةُ التوصيل (مواصلات) للمهمّة: قبلَ الانطلاقِ تُعرَضُ رحلةُ الذهاب،
+  /// وبعدَ الإنجازِ رحلةُ العودة. تُكتَبُ خادميّاً وحدَها، والسائقُ لا يَكتبُها.
+  Widget _buildTransportAlert(Map<String, dynamic> orderData, String status) {
+    final String leg = status == 'completed' ? 'return' : 'outbound';
+    final view = TransportLegView.fromOrder(orderData, leg);
+    if (view == null) return const SizedBox.shrink();
+    // ما اكتملَ أو أُلغي قبلَ الانطلاقِ لا يَعني السائقَ في هذه اللحظة.
+    if (!view.isLive && view.state != 'failed') return const SizedBox.shrink();
+    final Color c = view.stateColor;
+    final String? phone = view.driverPhone;
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.airport_shuttle_rounded, color: c, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  "سيارة ${view.legLabel}: ${view.stateLabel}",
+                  style: GoogleFonts.tajawal(
+                      fontWeight: FontWeight.bold, fontSize: 13, color: c),
+                ),
+              ),
+            ],
+          ),
+          if (view.driverLine != null) ...[
+            const SizedBox(height: 4),
+            Text("السائق: ${view.driverLine}",
+                style: const TextStyle(fontSize: 12, color: Colors.black87)),
+          ],
+          if (view.etaMinutes != null) ...[
+            const SizedBox(height: 2),
+            Text("يصل خلال ${view.etaMinutes} دقيقة تقريباً",
+                style: const TextStyle(fontSize: 12, color: Colors.black87)),
+          ],
+          if (view.state == 'failed') ...[
+            const SizedBox(height: 2),
+            const Text("لم تُحجز السيارة — تواصل مع الإدارة",
+                style: TextStyle(fontSize: 12, color: Colors.black87)),
+          ],
+          if (phone != null)
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: TextButton.icon(
+                onPressed: () => _callClient(phone),
+                icon: Icon(Icons.call, size: 16, color: c),
+                label: Text("اتصال بالسائق",
+                    style: GoogleFonts.tajawal(fontSize: 12, color: c)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHouseRulesAlert(Map<String, dynamic> orderData) {
     final rules = (orderData['house_rules'] as String?)?.trim();
     if (rules == null || rules.isEmpty) return const SizedBox.shrink();

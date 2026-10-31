@@ -211,8 +211,10 @@ function codeOf(file) {
     // كاذبة فيه)، وهذا يُزيل التعليق بالضرورة. لا تُوحَّد إحداهما بالأخرى.
     const root = path.join(__dirname, "..");
     const offenders = [];
+    // `mowasalat_api.js` وحدةُ نقلٍ بالعرفِ نفسِه (ترويسةُ Bearer لمواصلات في
+    // موضعٍ واحد، يَحرسُه transport.test.js (و٢)) — فليس نسخةً إنلاين من تمارا.
     for (const f of fs.readdirSync(root).filter((x) => x.endsWith(".js"))) {
-      if (f === "tamara_api.js") continue;
+      if (f === "tamara_api.js" || f === "mowasalat_api.js") continue;
       const src = codeOf(f);
       if (/api\.tamara\.co|api\.tabby\.ai/.test(src)) {
         offenders.push(`${f}: عنوان بوابة تقسيط مباشر`);

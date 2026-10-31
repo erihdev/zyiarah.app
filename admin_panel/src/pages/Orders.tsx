@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { formatSarAny } from '../utils/money';
+import { currentTransportLeg, transportStateLabel, transportStateClass } from '../utils/transportRide';
 import { Search, Filter, MoreVertical, CheckCircle2, Clock, XCircle, Package, UserCheck, X, Loader2, CalendarClock, Undo2 } from 'lucide-react';
 import {
     collection, onSnapshot, query, orderBy, where, limit, doc, Timestamp, updateDoc, runTransaction,
@@ -57,6 +58,8 @@ interface OrderRecord {
     // كلتاهما تُخفيان زر الاسترداد (الخادم يرفضه بعدها منعاً للردّ المزدوج).
     refunded?: boolean;
     refund_credited?: boolean;
+    // نقلُ العاملاتِ عبر مواصلات — يَكتبُه الخادمُ وحدَه (`functions/transport.js`).
+    transport?: Record<string, unknown>;
     service_date?: Timestamp;
     // تفصيل الخدمة — يظهر تحت نوع الخدمة وفي نافذتي التعيين/التعديل.
     // ستة أنواع يكتبها التطبيق؛ كانت اللوحة تقرأ home_package وحده.
@@ -519,6 +522,7 @@ export default function Orders() {
                                     <th className="font-bold text-slate-500 text-xs uppercase px-6 py-4">رقم الطلب</th>
                                     <th className="font-bold text-slate-500 text-xs uppercase px-6 py-4">العميل</th>
                                     <th className="font-bold text-slate-500 text-xs uppercase px-6 py-4">السائق</th>
+                                    <th className="font-bold text-slate-500 text-xs uppercase px-6 py-4">النقل</th>
                                     <th className="font-bold text-slate-500 text-xs uppercase px-6 py-4">نوع الخدمة</th>
                                     <th className="font-bold text-slate-500 text-xs uppercase px-6 py-4">المبلغ</th>
                                     <th className="font-bold text-slate-500 text-xs uppercase px-6 py-4">التاريخ</th>
@@ -528,7 +532,7 @@ export default function Orders() {
                             </thead>
                             <tbody className="divide-y divide-slate-50">
                                 {filteredOrders.length === 0 ? (
-                                    <tr><td colSpan={8} className="text-center py-12 text-slate-500 font-bold">لا توجد طلبات</td></tr>
+                                    <tr><td colSpan={9} className="text-center py-12 text-slate-500 font-bold">لا توجد طلبات</td></tr>
                                 ) : filteredOrders.map((order) => (
                                     <tr key={order.id} className="hover:bg-[#FAF1F6]/30 transition-colors group">
                                         <td className="px-6 py-4"><span className="font-bold text-slate-800">#{order.code || order.id.substring(0, 6).toUpperCase()}</span></td>
@@ -542,6 +546,23 @@ export default function Orders() {
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`font-medium ${!order.driver_id ? 'text-amber-500' : 'text-slate-600'}`}>{order.driver}</span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {(() => {
+                                                // رحلةُ مواصلات الحاليّة (ذهابٌ ثمّ عودة) — لا شيءَ قبلَ أن تُطلَب.
+                                                const leg = currentTransportLeg(order as unknown as Record<string, unknown>);
+                                                if (!leg) return <span className="text-slate-300">—</span>;
+                                                const title = [leg.driverName, leg.driverPlate, leg.driverPhone, leg.error]
+                                                    .filter(Boolean).join(' — ');
+                                                return (
+                                                    <span
+                                                        title={title || undefined}
+                                                        className={`inline-block px-2 py-0.5 rounded-md border text-[11px] font-bold whitespace-nowrap ${transportStateClass(leg.state)}`}
+                                                    >
+                                                        {leg.leg === 'outbound' ? 'ذهاب' : 'عودة'}: {transportStateLabel(leg.state)}
+                                                    </span>
+                                                );
+                                            })()}
                                         </td>
                                         <td className="px-6 py-4 font-medium text-slate-600">
                                             {order.type}
