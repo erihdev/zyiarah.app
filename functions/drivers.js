@@ -102,7 +102,76 @@ function isActiveDriverDoc(driverData) {
  * @return {boolean}
  */
 function isAssignableDriver(driverData, userData) {
+  if (isPoolWorkerDoc(driverData)) return isActiveDriverDoc(driverData);
   return isActiveDriverDoc(driverData) && hasDriverRole(userData);
+}
+
+// ═══ العاملاتُ عددٌ تَضبطُه الإدارة (قرارُ المالك 2026-10-31) ═══
+//
+// الإدارةُ لا تُسجّلُ العاملاتِ بأسمائهنّ: تَضعُ **رقماً** — عددَ العاملاتِ
+// (`system_configs/hourly_settings.workers_count`) — وتُعدّلُه. والخادمُ
+// يُجسِّدُ الرقمَ مستنداتٍ في `drivers/` (`pool_worker_1..N`، `pool: true`)
+// فيَعملُ عليها كلُّ ما بُنيَ على المستندات بلا تغيير: المُسنِدُ وعدّادُ
+// السعةِ وفحوصُ التعارضِ ومنتقيا الأدمن والنقل. ولا حسابَ دخولٍ لها ولا
+// `users/{id}` — فلا يُشترطُ هنا، بخلافِ الكادرِ المسجَّلِ بحسابه. وقاعدةُ
+// «الطلبُ لا يُرى إلّا لصاحبِ driver_id» لا تَعني شيئاً هنا: العاملةُ لا
+// تَستعملُ التطبيق، والطلبُ تَراه الإدارةُ والعميلة.
+
+/** بادئةُ معرّفاتِ مستنداتِ العاملاتِ المُجسَّدة من العدد. */
+const POOL_WORKER_PREFIX = "pool_worker_";
+
+/**
+ * هل المستندُ عاملةٌ مُجسَّدةٌ من العدد؟ العلَمُ **و**الدورُ معاً: علَمٌ وحدَه
+ * على مستندِ سائقٍ لا يَجعلُه قابلاً للإسنادِ بلا حساب.
+ * @param {object|null|undefined} driverData
+ * @return {boolean}
+ */
+function isPoolWorkerDoc(driverData) {
+  return !!driverData && driverData.pool === true && driverData.role === DRIVER_ROLE;
+}
+
+/**
+ * عددُ العاملاتِ من الإعداد: صحيحٌ من ٠ إلى ٢٠٠، وغيرُه ⇒ null (لا تغيير).
+ * الصفرُ عددٌ مقصود (إيقافُ الحجز)، لا غياب.
+ * @param {*} raw
+ * @return {number|null}
+ */
+function poolSize(raw) {
+  if (raw === null || raw === undefined || raw === "") return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 && n <= 200 ? n : null;
+}
+
+/**
+ * ما يَلزمُ كتابتُه ليُطابقَ الأسطولُ المُجسَّدُ العددَ — نقيّ.
+ * الأوائلُ حتى N نشطات، وما بعدَها يُوقَف (لا يُحذف: طلباتٌ قديمةٌ تُشيرُ إليه،
+ * والإيقافُ يُطلِقُ فكَّ إسنادِ مهامِّه القادمة).
+ * @param {number} n العددُ المطلوب
+ * @param {Object<string, object>} existing بياناتُ المستنداتِ الموجودة بمعرّفاتها
+ * @return {Array<{id:string, data:object}>}
+ */
+function poolSyncPlan(n, existing) {
+  const ex = existing || {};
+  const plan = [];
+  const ids = new Set(Object.keys(ex));
+  for (let i = 1; i <= n; i++) ids.add(`${POOL_WORKER_PREFIX}${i}`);
+  const idx = (id) => Number(id.slice(POOL_WORKER_PREFIX.length));
+  for (const id of [...ids].filter((x) => x.startsWith(POOL_WORKER_PREFIX)).sort((a, b) => idx(a) - idx(b))) {
+    const i = idx(id);
+    const want = i <= n;
+    const cur = ex[id];
+    if (want) {
+      if (cur && cur.is_active !== false && cur.is_suspended !== true &&
+          cur.pool === true && cur.role === DRIVER_ROLE) continue;
+      plan.push({id, data: {
+        name: `عاملة ${i}`, role: DRIVER_ROLE, type: DRIVER_ROLE, pool: true,
+        is_active: true, is_suspended: false, status: "available",
+      }});
+    } else if (cur && cur.is_active !== false) {
+      plan.push({id, data: {is_active: false}});
+    }
+  }
+  return plan;
 }
 
 /**
@@ -116,6 +185,7 @@ function isAssignableDriver(driverData, userData) {
 function assignabilityProblem(driverData, userData) {
   if (!driverData) return "العاملة غير موجودة";
   if (!isActiveDriverDoc(driverData)) return "العاملة غير نشطة";
+  if (isPoolWorkerDoc(driverData)) return null;
   if (!userData) {
     return "هذه العاملة بلا حساب في النظام — إسناد الطلب إليها يُخفيه عن الجميع. " +
       "سجّلها من «إضافة كادر» بنوع «كادر تنظيف» أو اختر غيرها.";
@@ -146,6 +216,10 @@ const GET_ALL_CHUNK = 300;
 
 module.exports = {
   DRIVER_ROLE,
+  POOL_WORKER_PREFIX,
+  isPoolWorkerDoc,
+  poolSize,
+  poolSyncPlan,
   GET_ALL_CHUNK,
   hasDriverRole,
   isActiveDriverDoc,

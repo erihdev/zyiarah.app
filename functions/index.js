@@ -23,8 +23,8 @@ const {grossFromBaseRounded, grossFromBase} = require("./vat");
 const {parseKsaIso, riyadhBookingFields, riyadhLocalDate, riyadhLocalSlot,
   riyadhStamp, riyadhDayStartMs} = require("./ksa_time");
 const coupons = require("./coupons");
-const {isAssignableDriver, assignabilityProblem, chunk, GET_ALL_CHUNK} =
-  require("./drivers");
+const {isAssignableDriver, assignabilityProblem, chunk, GET_ALL_CHUNK,
+  POOL_WORKER_PREFIX, poolSize, poolSyncPlan} = require("./drivers");
 const moyasar = require("./moyasar_api");
 const tamara = require("./tamara_api");
 const amounts = require("./amounts");
@@ -4652,6 +4652,46 @@ function _unassignPayload(reason) {
 // وننبّه الإدارة بعددها. الجارية فعلاً (on_the_way/in_progress) تُترك عمداً —
 // قرارها بشري: قد يُكملها السائق قبل مغادرته.
 // ════════════════════════════════════════════════════════════════════════
+/**
+ * عددُ العاملاتِ تَضبطُه الإدارةُ رقماً (قرارُ المالك 2026-10-31) — هذا
+ * المُشغّلُ يُجسِّدُه مستنداتٍ في `drivers/` (`pool_worker_1..N`) فيَعملُ
+ * عليها المُسنِدُ وعدّادُ السعةِ ومنتقيا الأدمن كما هي. الزيادةُ تُنشئُ أو
+ * تُعيدُ تفعيلَ، والنقصُ **يُوقِفُ** الأعلى رقماً (لا يَحذف) فيُطلِقُ
+ * `unassignJobsOnDriverDisable` فكَّ إسنادِ مهامِّها القادمة.
+ * الإعدادُ في `system_configs/hourly_settings.workers_count` بجوارِ السقفِ
+ * اليوميّ، ويَكتبُه المحرّران كلاهما (تطبيقُ الإدارةِ ولوحةُ الويب).
+ */
+exports.syncWorkerPool = onDocumentWritten(
+    {document: "system_configs/hourly_settings", cpu: 0.083},
+    async (event) => {
+      const after = event.data && event.data.after && event.data.after.exists ?
+        event.data.after.data() : null;
+      const before = event.data && event.data.before && event.data.before.exists ?
+        event.data.before.data() : null;
+      const n = poolSize(after && after.workers_count);
+      if (n === null) return null; // لا عددَ مضبوطاً — لا نَمسُّ شيئاً
+      const db = getFirestore();
+      const snap = await db.collection("drivers")
+          .where("pool", "==", true).get();
+      const existing = {};
+      for (const d of snap.docs) {
+        if (d.id.startsWith(POOL_WORKER_PREFIX)) existing[d.id] = d.data();
+      }
+      const plan = poolSyncPlan(n, existing);
+      if (!plan.length) return null;
+      const batch = db.batch();
+      for (const {id, data} of plan) {
+        batch.set(db.collection("drivers").doc(id),
+            {...data, updated_at: FieldValue.serverTimestamp(),
+              ...(existing[id] ? {} : {created_at: FieldValue.serverTimestamp()})},
+            {merge: true});
+      }
+      await batch.commit();
+      console.log(`syncWorkerPool: ${poolSize(before && before.workers_count)} → ${n} ` +
+        `(${plan.length} write(s))`);
+      return null;
+    });
+
 exports.unassignJobsOnDriverDisable = onDocumentUpdated(
     {document: "drivers/{driverId}", cpu: 0.083},
     async (event) => {

@@ -29,7 +29,7 @@ const fs = require("fs");
 const path = require("path");
 const {
   DRIVER_ROLE, hasDriverRole, isActiveDriverDoc, isAssignableDriver,
-  assignabilityProblem, chunk,
+  assignabilityProblem, chunk, isPoolWorkerDoc, poolSize, poolSyncPlan,
 } = require("../drivers");
 
 const SRC = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
@@ -287,6 +287,65 @@ t("مجموعةُ أعلامِ التعطيلِ واحدةٌ بين القارئ
       [...body[1].matchAll(/driverData\.([a-z_]+)/g)].map((x) => x[1]));
   assert.deepStrictEqual([...gotFlags].sort(), [...refFlags].sort(),
       "الأهليّةُ تَقرأُ أعلاماً غيرَ ما يَقرؤه فكُّ الإسناد");
+});
+
+// ── العاملاتُ عددٌ تَضبطُه الإدارة (قرارُ المالك 2026-10-31) ───────────
+
+t("العاملةُ المُجسَّدةُ من العدد مؤهَّلةٌ بلا حساب — والعلَمُ وحدَه لا يَكفي", () => {
+  const pw = {pool: true, role: "worker", is_active: true};
+  assert.strictEqual(isPoolWorkerDoc(pw), true);
+  assert.strictEqual(isAssignableDriver(pw, null), true, "لا users/{id} للعاملةِ المُجسَّدة");
+  assert.strictEqual(assignabilityProblem(pw, null), null);
+  assert.strictEqual(isAssignableDriver({...pw, is_active: false}, null), false,
+      "الموقوفةُ بالنقصِ لا تُحجَز");
+  assert.strictEqual(isAssignableDriver({pool: true, role: "driver"}, null), false,
+      "علَمٌ على مستندِ سائقٍ لا يَجعلُه قابلاً للإسنادِ بلا حساب");
+  assert.strictEqual(isAssignableDriver({role: "worker"}, null), false,
+      "كادرٌ مسجَّلٌ بلا علَمِ العدد ما زال يَحتاجُ حسابَه");
+});
+
+t("poolSize: صحيحٌ ٠–٢٠٠، والصفرُ عددٌ لا غياب، وغيرُه لا يُغيّر", () => {
+  assert.strictEqual(poolSize(9), 9);
+  assert.strictEqual(poolSize("9"), 9);
+  assert.strictEqual(poolSize(0), 0);
+  for (const bad of [null, undefined, "", -1, 2.5, 201, "x"]) {
+    assert.strictEqual(poolSize(bad), null, String(bad));
+  }
+});
+
+t("poolSyncPlan: الزيادةُ تُنشئ، والنقصُ يُوقِفُ الأعلى رقماً ولا يَحذف، والمطابقُ لا يُكتَب", () => {
+  const nine = poolSyncPlan(9, {});
+  assert.strictEqual(nine.length, 9);
+  assert.deepStrictEqual(nine.map((p) => p.id),
+      Array.from({length: 9}, (_, i) => `pool_worker_${i + 1}`));
+  assert.strictEqual(nine[0].data.name, "عاملة 1");
+  assert.strictEqual(nine[8].data.role, "worker");
+  assert.strictEqual(nine[8].data.pool, true);
+  const have = Object.fromEntries(nine.map((p) => [p.id, p.data]));
+  assert.deepStrictEqual(poolSyncPlan(9, have), [], "المطابقُ لا يُكتَب");
+  const down = poolSyncPlan(7, have);
+  assert.deepStrictEqual(down, [
+    {id: "pool_worker_8", data: {is_active: false}},
+    {id: "pool_worker_9", data: {is_active: false}},
+  ], "النقصُ يُوقِفُ ٨ و٩ فقط");
+  const afterDown = {...have, pool_worker_8: {...have.pool_worker_8, is_active: false},
+    pool_worker_9: {...have.pool_worker_9, is_active: false}};
+  const up = poolSyncPlan(8, afterDown);
+  assert.deepStrictEqual(up.map((p) => p.id), ["pool_worker_8"], "الزيادةُ تُعيدُ تفعيلَ الموقوفة");
+  assert.strictEqual(up[0].data.is_active, true);
+  assert.deepStrictEqual(poolSyncPlan(0, have).length, 9, "الصفرُ يُوقِفُ الكلّ");
+  assert.strictEqual(poolSyncPlan(10, have).length, 1, "العاشرةُ وحدَها تُضاف");
+});
+
+t("المحرّران يَكتبانِ workers_count، والمُشغّلُ يَقرؤه — الثلاثةُ عقدٌ واحد", () => {
+  const root = path.join(__dirname, "..", "..");
+  const app = fs.readFileSync(path.join(root, "lib/screens/admin/admin_settings_screen.dart"), "utf8");
+  const web = fs.readFileSync(path.join(root, "admin_panel/src/pages/Settings.tsx"), "utf8");
+  assert.ok(app.includes("'workers_count': workersCount"), "تطبيقُ الإدارة يَكتبُ العدد");
+  assert.ok(web.includes("workers_count: w"), "لوحةُ الويب تَكتبُ العدد");
+  assert.ok(SRC.includes("exports.syncWorkerPool = onDocumentWritten("), "مُشغّلُ التجسيد قائم");
+  assert.ok(SRC.includes("document: \"system_configs/hourly_settings\""), "على المستندِ الذي يَكتبانه");
+  assert.ok(SRC.includes("poolSize(after && after.workers_count)"), "ويَقرأُ الحقلَ نفسَه");
 });
 
 console.log(`\ndrivers tests: ${passed} passed`);
