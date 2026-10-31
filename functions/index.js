@@ -7853,7 +7853,7 @@ exports.mowasalatWebhook = onRequest(
       try {
         const ev = mowasalat.parseWebhookEvent(req.body);
         const r = await transport.applyRideEvent(getFirestore(), ev,
-            {queuePush, now: new Date()});
+            {queuePush, now: new Date(), GeoPoint});
         console.log(`mowasalatWebhook: ${ev.reference || "?"} ${ev.status || "?"} → ${JSON.stringify(r)}`);
       } catch (e) {
         console.error("mowasalatWebhook processing error:", e.message);
@@ -7869,6 +7869,17 @@ exports.sweepTransportRides = onSchedule(
         if (n) console.log(`[transport] sweep: ${n} unaccepted ride alert(s)`);
       } catch (e) {
         console.error("[transport] sweepTransportRides failed:", e.message);
+      }
+      // الإنجازُ الآليُّ بالوقت — مشروطٌ بتفعيلِ النقل: بلا تفعيلٍ لا تَصلُ
+      // ساقُ ذهابٍ إلى «وصلت» أصلاً، والشرطُ هنا يَقولُ القرارَ صريحاً.
+      try {
+        const cfg = await transport.readConfig(db);
+        if (cfg.enabled) {
+          const c = await transport.sweepAutoComplete(db, {now: new Date(), Timestamp, FieldValue});
+          if (c) console.log(`[transport] sweep: ${c} order(s) auto-completed`);
+        }
+      } catch (e) {
+        console.error("[transport] sweepAutoComplete failed:", e.message);
       }
     });
 

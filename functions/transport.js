@@ -33,6 +33,18 @@
 // هنا باسمِ «قاعدةٌ عامّةٌ مُنفَّذةٌ في بعضِ المواضع». المُشغّلُ على مستندِ
 // الطلبِ يَرى الكتابةَ كيفما جاءت — ومَن يُكتَبُ غداً كذلك.
 //
+// ═══ التطبيقُ هو المنسّق (قرارُ المالك 2026-10-31، «الآليّ») ═══
+//
+// لا سائقَ للمؤسّسةِ يَضغطُ الأزرارَ الثلاثة. فحالةُ الطلبِ تَتحرّكُ من
+// أحداثِ رحلةِ **الذهاب**: السيارةُ انطلقت بالعاملاتِ ⇒ `on_the_way`
+// (فتَصِلُ العميلةَ دفعةُ «سائقكِ في الطريق» من مُشغّلِها القائم)، ووصلت
+// ⇒ `in_progress`. والإنجازُ **بالوقت**: مدّةُ الطلبِ (`slots.orderHours`)
+// من لحظةِ الوصولِ ⇒ `completed` من المكنسةِ، وهو ما يُطلِقُ رحلةَ العودةِ
+// والجوائزَ وخصمَ الزيارةِ عبرَ المُشغّلاتِ القائمة (`rewards_handled_by:
+// "server"` هو مفتاحُها). الاختيارُ المرفوضُ كان «ضغطةُ الإدارة» لكلِّ
+// طلب. وكلُّ تقدّمٍ **إلى الأمامِ فقط** وعلى طلبٍ تَقودُه رحلةٌ (ساقُ
+// الذهابِ وصلت) — فطلبٌ يُنفّذُه سائقٌ بشريٌّ بلا رحلةٍ لا تَمَسُّه المكنسة.
+//
 // ═══ العرف ═══
 //
 // الوحدةُ تَستقبلُ `db` وسيطاً ولا تَستوردُه (قاعدةُ `refund_engine.js`)،
@@ -58,6 +70,19 @@ const PRE_TRIP_STATUSES = Object.freeze(["scheduled", "assigned", "accepted"]);
 const DEFAULT_LEAD_MINUTES = 45;
 const UNACCEPTED_ALERT_MINUTES = 60;
 const ADMIN_ROLES = Object.freeze(["super_admin", "orders_manager"]);
+/**
+ * حالةُ الطلبِ التي تَستدعيها حالةُ رحلةِ **الذهاب** — والانتقالُ إلى الأمامِ
+ * فقط، ومن الحالاتِ المذكورةِ في `from` وحدَها (مرآةُ تسلسلِ
+ * `order_service.updateOrderStatus`: لا `in_progress` من `completed`).
+ * `completed` للرحلةِ = أُنزِلت العاملاتُ عند العميلة، فهو وصولٌ كذلك.
+ */
+const ORDER_PROGRESS_BY_RIDE = Object.freeze({
+  driving: {to: "on_the_way", from: PRE_TRIP_STATUSES},
+  arrived: {to: "in_progress", from: [...PRE_TRIP_STATUSES, "on_the_way"]},
+  completed: {to: "in_progress", from: [...PRE_TRIP_STATUSES, "on_the_way"]},
+});
+/** قيمةُ `completed_by` التي تَكتبُها المكنسةُ — لتمييزِ الإنجازِ الآليِّ في السجلّ. */
+const AUTO_COMPLETED_BY = "transport_auto";
 
 /**
  * المزوّدُ التجريبيُّ: يَقبلُ فوراً بسائقٍ وهميٍّ ولا يَلمسُ شبكة. يُفعَّلُ
@@ -459,11 +484,12 @@ async function handleOrderChange(db, change, deps) {
  * غيرِ الحيّ يُهمَل؛ وحدثٌ أدنى رتبةً من المكتوبِ لا يَرجِعُ به.
  * @param {object} db
  * @param {object} ev ناتجُ `mowasalat.parseWebhookEvent`
- * @param {{queuePush:Function, now:Date}} deps
- * @return {Promise<{applied:boolean, reason?:string, orderId?:string, leg?:string, state?:string}>}
+ * @param {{queuePush:Function, now:Date, GeoPoint?:Function}} deps
+ * @return {Promise<{applied:boolean, reason?:string, orderId?:string, leg?:string, state?:string,
+ *   orderStatusTo?:string|null}>}
  */
 async function applyRideEvent(db, ev, deps) {
-  const {queuePush, now} = deps;
+  const {queuePush, now, GeoPoint} = deps;
   if (!ev || !ev.reference) return {applied: false, reason: "no_reference"};
   const parts = String(ev.reference).split(":");
   if (parts.length !== 3) return {applied: false, reason: "bad_reference"};
@@ -496,8 +522,26 @@ async function applyRideEvent(db, ev, deps) {
       upd[`transport.${leg}.eta_minutes`] = ev.etaMinutes;
     }
     if (!cur.provider_ride_id && ev.rideId) upd[`transport.${leg}.provider_ride_id`] = ev.rideId;
+    // موقعُ السيارةِ ⇒ `driver_location` الذي تَقرؤه خريطةُ تتبّعِ العميلة —
+    // على ساقِ الذهابِ الحيّةِ وحدَها (سيارةُ العودةِ لا تَعنيها).
+    if (ev.location && leg === "outbound" && LIVE_STATES.includes(ev.status) && GeoPoint) {
+      upd.driver_location = new GeoPoint(ev.location.lat, ev.location.lng);
+      upd[`transport.${leg}.location`] = ev.location;
+    }
+    // التطبيقُ هو المنسّق: رحلةُ الذهابِ تُحرّكُ حالةَ الطلبِ إلى الأمام.
+    const prog = leg === "outbound" ? ORDER_PROGRESS_BY_RIDE[ev.status] : null;
+    const orderStatusTo = prog && prog.from.includes(order.status) ? prog.to : null;
+    if (orderStatusTo) {
+      upd.status = orderStatusTo;
+      upd.status_source = "transport";
+      if (orderStatusTo === "on_the_way") upd.on_the_way_at = now;
+      if (orderStatusTo === "in_progress") {
+        upd.arrived_at = now;
+        upd.start_time = now;
+      }
+    }
     tx.update(ref, upd);
-    return {applied: true, orderId, leg, state: ev.status, prevState,
+    return {applied: true, orderId, leg, state: ev.status, prevState, orderStatusTo,
       driverUid: order.driver_id || null, code: order.code || orderId};
   });
   if (!out.applied) return out;
@@ -519,7 +563,7 @@ async function applyRideEvent(db, ev, deps) {
         `الطلب #${out.code}: أُلغيت رحلة ${legAr} من جهة المزوّد — احجز بديلاً أو أعد المحاولة من تفاصيل الطلب.`,
         "admin_transport_alert", {orderId, leg}, ADMIN_ROLES).catch(() => {});
   }
-  return {applied: true, orderId, leg, state: ev.status};
+  return {applied: true, orderId, leg, state: ev.status, orderStatusTo: out.orderStatusTo || null};
 }
 
 /**
@@ -559,6 +603,74 @@ async function sweepUnacceptedRides(db, deps) {
   return alerts;
 }
 
+/**
+ * الإنجازُ الآليُّ بالوقت: طلبٌ `in_progress` وصلت رحلةُ ذهابِه ومضت مدّتُه
+ * من لحظةِ الوصولِ ⇒ `completed`. الكتابةُ تُحاكي ما يَكتبُه إكمالُ السائقِ
+ * في `order_service.updateOrderStatus` (الحالةُ، `end_time`،
+ * `rewards_handled_by: "server"` — مفتاحُ الجوائزِ وخصمِ الزيارة — وتحريرُ
+ * مستندِ السائقِ بحارسِ المِلكيّةِ نفسِه)، فتَسري عليه المُشغّلاتُ القائمةُ
+ * كلُّها بلا استثناء، ومنها `onOrderTransport` الذي يَطلبُ رحلةَ العودة.
+ *
+ * الاستعلامُ مساواةٌ واحدةٌ على `status` (لا فهرسَ مركَّباً) ثمّ ترشيحٌ
+ * محلّيّ. مجموعةُ `in_progress` جمهورُ لحظةٍ لا تراكُم، فلا تَزدحمُ النافذة.
+ * والشرطُ «ساقُ الذهابِ وصلت» هو ما يَحصُرُ الأثرَ في الطلباتِ التي يَقودُها
+ * النقلُ: طلبٌ يُنفّذُه سائقٌ بشريٌّ بلا رحلةٍ لا تَمَسُّه.
+ * @param {object} db
+ * @param {{now:Date, Timestamp:object, FieldValue?:object}} deps
+ * @return {Promise<number>} عددُ ما أُنجِز
+ */
+async function sweepAutoComplete(db, deps) {
+  const {now, FieldValue} = deps;
+  const nowMs = now.getTime();
+  const snap = await db.collection("orders")
+      .where("status", "==", "in_progress")
+      .limit(200).get();
+  let done = 0;
+  for (const doc of snap.docs) {
+    const o = doc.data();
+    const out = legOf(o, "outbound");
+    if (!out || !["arrived", "completed"].includes(out.state)) continue;
+    if (o.is_paid !== true) continue;
+    const arrived = o.arrived_at || o.start_time;
+    const arrivedMs = arrived && typeof arrived.toMillis === "function" ? arrived.toMillis() :
+      (arrived && typeof arrived.getTime === "function" ? arrived.getTime() : null);
+    if (arrivedMs === null) continue;
+    const dueMs = arrivedMs + slots.orderHours(o) * 60 * 60 * 1000;
+    if (dueMs > nowMs) continue;
+
+    const ref = db.collection("orders").doc(doc.id);
+    const driverId = o.driver_id || null;
+    const okWrite = await db.runTransaction(async (tx) => {
+      const fresh = await tx.get(ref);
+      if (!fresh.exists || fresh.data().status !== "in_progress") return false;
+      const driverRef = driverId ? db.collection("drivers").doc(driverId) : null;
+      const driverSnap = driverRef ? await tx.get(driverRef) : null;
+      tx.update(ref, {
+        status: "completed",
+        end_time: now,
+        completed_at: now,
+        rewards_handled_by: "server",
+        completed_by: AUTO_COMPLETED_BY,
+        status_source: "transport",
+      });
+      if (driverSnap && driverSnap.exists) {
+        const dCur = driverSnap.data().current_order_id;
+        const owns = dCur === null || dCur === undefined || dCur === "" || dCur === doc.id;
+        const du = {};
+        if (owns) {
+          du.current_order_id = null;
+          du.is_available = true;
+        }
+        if (FieldValue) du.completed_orders_count = FieldValue.increment(1);
+        if (Object.keys(du).length) tx.update(driverRef, du);
+      }
+      return true;
+    });
+    if (okWrite) done++;
+  }
+  return done;
+}
+
 module.exports = {
   CONFIG_DOC,
   LEGS,
@@ -568,6 +680,8 @@ module.exports = {
   DEFAULT_LEAD_MINUTES,
   UNACCEPTED_ALERT_MINUTES,
   ADMIN_ROLES,
+  ORDER_PROGRESS_BY_RIDE,
+  AUTO_COMPLETED_BY,
   simulatorProvider,
   mowasalatProvider,
   normalizeConfig,
@@ -583,4 +697,5 @@ module.exports = {
   handleOrderChange,
   applyRideEvent,
   sweepUnacceptedRides,
+  sweepAutoComplete,
 };
