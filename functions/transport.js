@@ -293,16 +293,23 @@ function buildRideRequest(order, cfg, leg, gen, orderId, nowMs) {
 }
 
 /**
- * عددُ العاملاتِ في الطلب، من بياناتِ الخدمةِ التي حجزتها العميلة:
- * باقاتُ السكن `crewCount`، وعاملاتُ المناسبات `workers`. غيرُهما أو قيمةٌ
- * فاسدةٌ ⇒ ١ (لا رحلةَ بلا راكبة، والصفرُ ليس عدداً هنا).
+ * عددُ العاملاتِ في الطلب. الكادرُ عاملةٌ واحدة (تأكيدُ المالك 2026-10-31)،
+ * والعددُ ما اختارته العميلةُ من باقاتِ الكوادرِ التي وضعتها الإدارة:
+ * باقاتُ السكن `service_meta.crewCount`، وعاملاتُ المناسبات
+ * `service_meta.workers`، ثمّ `worker_count` على الطلب (الحجزُ بالساعة —
+ * ويُسعَّرُ به في `pricing.js`). قيمةٌ فاسدةٌ ⇒ تُتخطّى إلى التالي، وغيابُ
+ * الكلِّ ⇒ ١ (لا رحلةَ بلا راكبة، والصفرُ ليس عدداً هنا).
  * @param {object} order
  * @return {number}
  */
 function workerCount(order) {
-  const meta = (order && order.service_meta) || {};
-  const raw = Number(meta.crewCount !== undefined ? meta.crewCount : meta.workers);
-  return Number.isInteger(raw) && raw >= 1 && raw <= 20 ? raw : 1;
+  const o = order || {};
+  const meta = o.service_meta || {};
+  for (const v of [meta.crewCount, meta.workers, o.worker_count]) {
+    const n = Number(v);
+    if (v !== null && v !== undefined && Number.isInteger(n) && n >= 1 && n <= 20) return n;
+  }
+  return 1;
 }
 
 /**

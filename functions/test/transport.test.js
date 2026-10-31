@@ -266,10 +266,15 @@ t("(أ١٠) طلبُ الرحلة: الذهابُ من المقرِّ قبلَ �
   assert.strictEqual(transport.buildRideRequest({...BASE, location: null}, CFG, "outbound", 1, "o1", 0), null);
 });
 
-t("(أ١١) عددُ العاملات: crewCount للباقات، workers للمناسبات، وكلُّ فاسدٍ ⇒ ١", () => {
+t("(أ١١) عددُ العاملات: crewCount للباقات، workers للمناسبات، worker_count بالساعة، وكلُّ فاسدٍ ⇒ ١", () => {
   assert.strictEqual(transport.workerCount({service_meta: {crewCount: 3}}), 3);
   assert.strictEqual(transport.workerCount({service_meta: {crewCount: "2"}}), 2);
   assert.strictEqual(transport.workerCount({service_meta: {workers: 5}}), 5);
+  assert.strictEqual(transport.workerCount({worker_count: 2}), 2, "الحجزُ بالساعة");
+  assert.strictEqual(transport.workerCount({service_meta: {crewCount: 3}, worker_count: 1}), 3,
+      "اختيارُ الكوادرِ يَتقدّمُ على الحقلِ العامّ");
+  assert.strictEqual(transport.workerCount({service_meta: {crewCount: 0}, worker_count: 2}), 2,
+      "الفاسدُ يُتخطّى إلى التالي لا إلى ١ مباشرة");
   for (const bad of [0, -1, 2.5, "x", null, 999]) {
     assert.strictEqual(transport.workerCount({service_meta: {crewCount: bad}}), 1, String(bad));
   }
