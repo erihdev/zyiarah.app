@@ -14,3 +14,17 @@ bool dayIsFull({
   if (zoneMax != null && zoneMax > 0 && zoneCount >= zoneMax) return true;
   return false;
 }
+
+/// هل في الساعة مكانٌ لطلبٍ يَحتاجُ [need] عاملة؟ (قرار المالك 2026-10-31)
+///
+/// السعةُ عددُ العاملاتِ المتوفّرات، والكادرُ عاملةٌ واحدة: الخادمُ يَعدُّ في
+/// `slotCounts` **العاملاتِ** المحجوزاتِ في الساعة (`functions/capacity.js`)،
+/// و[max] (`maxTeamsPerSlot`) عددُ العاملاتِ المسجّلات. فطلبٌ بكادرَين لا يَكفيه
+/// أن تبقى عاملةٌ واحدة — كان الفحصُ `used >= max` يُعرِضُ ساعةً بعاملةٍ فارغةٍ
+/// لطلبٍ يَحتاجُ ثلاثاً، فتَدفعُ العميلةُ ثمّ لا يَجدُ المُسنِدُ الفريقَ كاملاً.
+/// [max] صفرٌ أو أقلّ ⇒ لا فريق، فلا مكان.
+bool slotHasRoom({required int used, required int max, int need = 1}) {
+  if (max <= 0) return false;
+  final n = need < 1 ? 1 : need;
+  return used + n <= max;
+}

@@ -3131,7 +3131,8 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
       const start = afterData.service_date.toDate();
       const hours = slots.orderHours(afterData);
       const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
-      const driver = await _findFreeDriverForSlot(db, {startDateTime: start, endDateTime: end});
+      const driver = await _findFreeDriverForSlot(db, {startDateTime: start, endDateTime: end,
+        count: slots.orderWorkersNeeded(afterData)});
       if (driver) {
         // المسرحية (18 طلباً بثانية) كشفت أن السطر هنا كان يقول «assigned» حتى حين
         // ترفض المعاملة (سباق حجز مزدوج صدّه القفل الذرّي) — احترم قيمة الإرجاع.
@@ -3200,7 +3201,8 @@ exports.onOrderWritten = onDocumentWritten({document: "orders/{orderId}", cpu: 0
         const start = o.service_date.toDate();
         const hours = slots.orderHours(o);
         const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
-        const driver = await _findFreeDriverForSlot(db, {startDateTime: start, endDateTime: end});
+        const driver = await _findFreeDriverForSlot(db, {startDateTime: start, endDateTime: end,
+          count: slots.orderWorkersNeeded(o)});
         if (driver) {
           const res = await _assignDriverScheduled(db, doc.id, driver, start);
           if (res.assigned) {
@@ -3490,21 +3492,30 @@ async function _assertAssignableDriver(db, driverId) {
  * @param {object} opts {startDateTime, endDateTime}
  * @return {Promise<FirebaseFirestore.QueryDocumentSnapshot|null>}
  */
-async function _findFreeDriverForSlot(db, {startDateTime, endDateTime}) {
+async function _findFreeDriverForSlot(db, {startDateTime, endDateTime, count = 1}) {
+  const free = await _findFreeWorkersForSlot(db, {startDateTime, endDateTime, count});
+  return free ? free[0] : null;
+}
+
+/**
+ * يجد `count` عاملةً حرّةً للفترة، أو null إن لم يَتوفّر العددُ كلُّه
+ * (قرارُ المالك 2026-10-31: الطلبُ يَتحقّقُ بتوفّرِ عددِ العاملاتِ غيرِ
+ * المشغولات، والكادرُ عاملةٌ واحدة). الانشغالُ بأيِّ عاملةٍ محجوزةٍ في طلبٍ
+ * متقاطع (`slots.orderWorkerIds`)، لا بـ`driver_id` وحدَه.
+ * @param {FirebaseFirestore.Firestore} db
+ * @param {object} opts {startDateTime, endDateTime, count}
+ * @return {Promise<Array<FirebaseFirestore.QueryDocumentSnapshot>|null>}
+ */
+async function _findFreeWorkersForSlot(db, {startDateTime, endDateTime, count = 1}) {
+  const need = Math.max(1, Math.floor(Number(count)) || 1);
   // نافذة الانشغال [البداية−24س، النهاية): تلتقط أي مهمة قد تتقاطع زمنياً، بما
-  // فيها العابرة لمنتصف ليل UTC. كانت حدود اليوم التقويمي (getFullYear/Month/Date
-  // بتوقيت UTC للخادم) تُفوّت مهمة سائقٍ في اليوم السابق UTC (سلوت الرياض
-  // 00:00–02:59 = اليوم UTC السابق)، فيُعاد اختيار السائق نفسه ويرفضه الفحص الذرّي
-  // فيبقى الطلب المدفوع عالقاً بلا سائق أبداً. (24س تغطي أي مدة مهمة ≤ يوم.)
+  // فيها العابرة لمنتصف ليل UTC (سلوت الرياض 00:00–02:59 = اليوم UTC السابق).
   const winStart = slots.conflictWindowStart(startDateTime);
 
-  // الأهلية من الموضع الواحد (نشط + حساب دخول بدور سائق) — كانت هنا حلقةٌ
-  // تقرأ `users/{id}` لكل مرشّح على التوالي حتى تجد أوّل مؤهَّل. صارت نداءً
-  // واحداً (`getAll`) ثم ترشيحاً في الذاكرة.
+  // الأهلية من الموضع الواحد (نشطة + حسابٌ بدور كادر تنظيف) — `drivers.js`.
   const eligible = await _eligibleDriverDocs(db);
-  if (eligible.length === 0) return null;
+  if (eligible.length < need) return null;
 
-  // بناء مجموعة السائقين المشغولين بطلبات متقاطعة زمنياً
   const ordersSnap = await db.collection("orders")
       .where("service_date", ">=", Timestamp.fromDate(winStart))
       .where("service_date", "<", Timestamp.fromDate(endDateTime))
@@ -3514,18 +3525,14 @@ async function _findFreeDriverForSlot(db, {startDateTime, endDateTime}) {
   const busy = new Set();
   for (const doc of ordersSnap.docs) {
     const data = doc.data();
-    if (!data.driver_id) continue; // غيابُ service_date يعالجه overlapsSlot
     if (slots.overlapsSlot(data, startDateTime, endDateTime)) {
-      busy.add(data.driver_id);
+      for (const id of slots.orderWorkerIds(data)) busy.add(id);
     }
   }
 
-  // أوّل مؤهَّل غير مشغول — نفس الترتيب ونفس الاختيار كما قبل التوحيد.
-  // (فحص H3 كان هنا داخل الحلقة؛ صار في `_eligibleDriverDocs` أعلاه.)
-  for (const doc of eligible) {
-    if (!busy.has(doc.id)) return doc;
-  }
-  return null;
+  // أوائلُ المؤهَّلاتِ غيرِ المشغولات — نفس الترتيب كما قبل التوحيد.
+  const free = eligible.filter((doc) => !busy.has(doc.id));
+  return free.length >= need ? free.slice(0, need) : null;
 }
 
 /**
@@ -3549,8 +3556,8 @@ async function _isDriverFreeForSlot(db, driverId, startDateTime, endDateTime) {
 
   for (const doc of ordersSnap.docs) {
     const data = doc.data();
-    if (data.driver_id !== driverId) continue;
-    if (slots.overlapsSlot(data, startDateTime, endDateTime)) return false; // مشغول
+    if (!slots.orderWorkerIds(data).includes(driverId)) continue;
+    if (slots.overlapsSlot(data, startDateTime, endDateTime)) return false; // مشغولة
   }
   return true;
 }
@@ -3572,6 +3579,13 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
   const {bookingDate, bookingTimeSlot: timeSlot} =
     riyadhBookingFields(startDateTime);
   const orderRef = db.collection("orders").doc(orderId);
+
+  // (عدد العاملات — قرارُ المالك 2026-10-31) طلبٌ بكادرَين يَحجزُ عاملتَين.
+  // المرشّحاتُ تُقرأُ قبل المعاملة (قراءةٌ غيرُ معامَليّةٍ لمستنداتِ `drivers`
+  // تكفي: ما يَمنعُ الازدواجَ هو فحصُ الطلباتِ المتقاطعةِ **داخل** المعاملة).
+  const pre = await orderRef.get();
+  const needPre = pre.exists ? slots.orderWorkersNeeded(pre.data()) : 1;
+  const pool = needPre > 1 ? await _eligibleDriverDocs(db) : [];
 
   // معامَلة: نُعيد قراءة الطلب ولا نكتب فوقه إن كان مُسنَداً سلفاً أو لم يعد قابلاً
   // للإسناد. يمنع سباق الازدواج: قبول السائق يدوياً مقابل الإسناد التلقائي، أو
@@ -3611,12 +3625,29 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
         .where("service_date", "<", Timestamp.fromDate(slotEnd))
         .where("status", "in", slots.CONFLICT_STATUSES);
     const daySnap = await tx.get(dayQ);
+    // المشغولاتُ في الفترة: كلُّ عاملةٍ محجوزةٍ في طلبٍ متقاطع، لا أولاها وحدَها.
+    const busy = new Set();
     for (const d2 of daySnap.docs) {
+      if (d2.id === orderId) continue;
       const od = d2.data();
-      if (od.driver_id !== driverDoc.id) continue;
-      // تعارض زمني — لا تُسنِد
-      if (slots.overlapsSlot(od, startDateTime, slotEnd)) return false;
+      if (slots.overlapsSlot(od, startDateTime, slotEnd)) {
+        for (const id of slots.orderWorkerIds(od)) busy.add(id);
+      }
     }
+    // تعارض زمني للأولى — لا تُسنِد
+    if (busy.has(driverDoc.id)) return false;
+
+    // البقيّةُ حتى عددِ الكوادر — وإن لم يَكتمل العددُ فلا إسنادَ جزئيّاً:
+    // نصفُ فريقٍ يَصلُ بيتَ العميلةِ أسوأُ من طلبٍ تُعيدُ المكنسةُ محاولتَه
+    // (ثمّ يُستردُّ آليّاً إن انقضت نافذتُه).
+    const need = slots.orderWorkersNeeded(cur);
+    const team = [driverDoc];
+    for (const w of pool) {
+      if (team.length >= need) break;
+      if (w.id === driverDoc.id || busy.has(w.id)) continue;
+      team.push(w);
+    }
+    if (team.length < need) return false;
 
     // (تعليمات المنزل) ننسخ house_rules من مستند العميل إلى الطلب عند الإسناد —
     // قواعد Firestore تمنع السائق من قراءة مستندات users الأخرى، فكانت التعليمات
@@ -3631,6 +3662,9 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
     tx.update(orderRef, {
       status: "scheduled",
       driver_id: driverDoc.id,
+      // كلُّ المحجوزات، وأوّلُهنّ `driver_id` — منها يُقرأُ الانشغال.
+      worker_ids: team.map((w) => w.id),
+      worker_names: team.map((w) => w.data().name || "عاملة"),
       ...(houseRules ? {house_rules: houseRules} : {}),
       driver_name: d.name || "سائق",
       // assigned_driver: شاشات تتبّع العميل تقرأ هذا الحقل — لولاه تُظهر «جاري
@@ -3851,7 +3885,9 @@ exports.generateSubscriptionVisits = onCall({cpu: 0.5}, async (request) => {
     });
 
     // محاولة الإسناد التلقائي (منطقة + فترة) → scheduled، وإلا تبقى للإدارة
-    const driver = await _findFreeDriverForSlot(db, {startDateTime, endDateTime});
+    const driver = await _findFreeDriverForSlot(db, {startDateTime, endDateTime,
+      count: c.contract_kind === "event_workers" ?
+        slots.orderWorkersNeeded({service_meta: {workers: Number(c.workers || 0)}}) : 1});
     if (driver) {
       const r = await _assignDriverScheduled(db, orderRef.id, driver, startDateTime);
       results.push({visit: i + 1, assigned: r.assigned !== false, driverId: r.driverId});
@@ -3965,7 +4001,9 @@ async function _generateContractVisits(db, contractRef, c) {
         kind: "event_workers", workers: Number(c.workers || 0), event_hours: hours,
       }} : {}),
     });
-    const driver = await _findFreeDriverForSlot(db, {startDateTime, endDateTime});
+    const driver = await _findFreeDriverForSlot(db, {startDateTime, endDateTime,
+      count: c.contract_kind === "event_workers" ?
+        slots.orderWorkersNeeded({service_meta: {workers: Number(c.workers || 0)}}) : 1});
     if (driver) {
       const r = await _assignDriverScheduled(db, orderRef.id, driver, startDateTime);
       results.push({visit: i + 1, assigned: r.assigned !== false, driverId: r.driverId});
@@ -4383,10 +4421,11 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
     const conflictSnap = await tx.get(conflictQ);
     for (const d2 of conflictSnap.docs) {
       const od = d2.data();
-      if (od.driver_id !== driverId) continue;
+      // الانشغالُ بأيِّ عاملةٍ محجوزةٍ في الطلبِ الآخر، لا بأولاها وحدَها.
+      if (!slots.orderWorkerIds(od).includes(driverId)) continue;
       if (slots.overlapsSlot(od, startDateTime, slotEnd)) {
         throw new HttpsError("failed-precondition",
-            "السائق مشغول بمهمة أخرى في هذا الوقت — اختر سائقاً أو موعداً آخر");
+            "العاملة مشغولة بمهمة أخرى في هذا الوقت — اختر عاملة أو موعداً آخر");
       }
     }
     tx.update(orderRef, {
@@ -4496,10 +4535,10 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
     for (const d2 of conflictSnap.docs) {
       if (d2.id === orderId) continue; // استثناء الطلب الحالي
       const od = d2.data();
-      if (od.driver_id !== targetDriver) continue;
+      if (!slots.orderWorkerIds(od).includes(targetDriver)) continue;
       if (slots.overlapsSlot(od, startDateTime, slotEnd)) {
         throw new HttpsError("failed-precondition",
-            "السائق مشغول بمهمة أخرى في هذا الوقت — اختر موعداً أو سائقاً آخر");
+            "العاملة مشغولة بمهمة أخرى في هذا الوقت — اختر موعداً أو عاملة أخرى");
       }
     }
     const upd = {rescheduled_at: FieldValue.serverTimestamp()};
@@ -4964,6 +5003,7 @@ exports.sweepUnassignedPaidOrders = onSchedule(
           const driver = await _findFreeDriverForSlot(db, {
             startDateTime: start,
             endDateTime: end,
+            count: slots.orderWorkersNeeded(d),
           });
           if (driver) {
             await _assignDriverScheduled(db, doc.id, driver, start);
@@ -5971,6 +6011,7 @@ exports.confirmPendingTamaraOrders = onSchedule(
                 const driver = await _findFreeDriverForSlot(db, {
                   startDateTime: start,
                   endDateTime: end,
+                  count: slots.orderWorkersNeeded(d),
                 });
                 if (driver) await _assignDriverScheduled(db, doc.id, driver, start);
               } catch (e) {
@@ -6262,6 +6303,7 @@ exports.autoAssignDriverDirectly = onCall({cpu: 0.25}, async (request) => {
   const driver = await _findFreeDriverForSlot(db, {
     startDateTime,
     endDateTime,
+    count: slots.orderWorkersNeeded(orderData),
   });
   if (!driver) {
     return {assigned: false, error: "no_available_drivers"};

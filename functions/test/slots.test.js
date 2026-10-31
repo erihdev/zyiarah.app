@@ -327,4 +327,44 @@ t("الوحدةُ نقيّة: لا Firestore ولا db", () => {
   }
 });
 
+t("عددُ العاملات: crewCount ثمّ workers ثمّ worker_count، والتالفُ يُتخطّى", () => {
+  const n = slots.orderWorkersNeeded;
+  assert.strictEqual(n({service_meta: {crewCount: 3}}), 3);
+  assert.strictEqual(n({service_meta: {crewCount: "2"}}), 2);
+  assert.strictEqual(n({service_meta: {workers: 4}}), 4);
+  assert.strictEqual(n({worker_count: 2}), 2);
+  assert.strictEqual(n({service_meta: {crewCount: 3}, worker_count: 1}), 3);
+  assert.strictEqual(n({service_meta: {crewCount: 0}, worker_count: 2}), 2);
+  for (const bad of [0, -1, 2.5, "x", null, slots.MAX_WORKERS_PER_ORDER + 1]) {
+    assert.strictEqual(n({service_meta: {crewCount: bad}}), 1, String(bad));
+  }
+  assert.strictEqual(n({}), 1);
+  assert.strictEqual(n(null), 1);
+});
+
+t("المحجوزات: driver_id ثمّ worker_ids بلا تكرار — القديمُ بلا القائمةِ يُقرأ", () => {
+  const ids = slots.orderWorkerIds;
+  assert.deepStrictEqual(ids({driver_id: "a"}), ["a"], "طلبٌ قديم أو مُسنَدٌ يدويّاً");
+  assert.deepStrictEqual(ids({driver_id: "a", worker_ids: ["a", "b", "c"]}), ["a", "b", "c"]);
+  assert.deepStrictEqual(ids({worker_ids: ["b", "b", "", null]}), ["b"]);
+  assert.deepStrictEqual(ids({driver_id: "a", worker_ids: "a"}), ["a"], "قائمةٌ تالفةٌ لا تَكسر");
+  assert.deepStrictEqual(ids({}), []);
+  assert.deepStrictEqual(ids(null), []);
+});
+
+t("الانشغالُ في index.js يُقرأُ من المحجوزاتِ كلِّهنّ لا من driver_id وحدَه", () => {
+  const src = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
+  // كلُّ فحصِ تعارضٍ كان يُقارِنُ `od.driver_id !== X` — فعاملةٌ ثانيةٌ في
+  // فريقٍ محجوزٍ تُقرأُ حرّةً وتُحجَزُ لطلبٍ متداخل.
+  for (const bad of ["od.driver_id !== driverId", "od.driver_id !== targetDriver",
+    "od.driver_id !== driverDoc.id", "data.driver_id !== driverId",
+    "busy.add(data.driver_id)"]) {
+    assert.ok(!src.includes(bad), `فحصُ تعارضٍ بـdriver_id وحدَه: ${bad}`);
+  }
+  assert.ok((src.match(/slots\.orderWorkerIds\(/g) || []).length >= 5,
+      "مواضعُ الانشغالِ الخمسةُ تَقرأُ المحجوزات");
+  assert.ok(src.includes("worker_ids: team.map((w) => w.id)"),
+      "الإسنادُ الآليُّ يَكتبُ الفريقَ كاملاً");
+});
+
 console.log(`\nslots tests: ${passed} passed`);

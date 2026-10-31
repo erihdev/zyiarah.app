@@ -711,7 +711,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
         bool free = true;
         for (int hh = h; hh < h + widget.hours!; hh++) {
           final key = '${bookingDate}_${hh.toString().padLeft(2, '0')}:00';
-          if (((slots[key] as num?)?.toInt() ?? 0) >= maxTeamsPerSlot) {
+          if (!slotHasRoom(
+              used: (slots[key] as num?)?.toInt() ?? 0,
+              max: maxTeamsPerSlot,
+              need: widget.workerCount)) {
             free = false;
             break;
           }
@@ -734,7 +737,10 @@ class _PaymentSummaryScreenState extends State<PaymentSummaryScreen> {
     }
     for (int h = reqStart; h < reqEnd; h++) {
       final key = '${bookingDate}_${h.toString().padLeft(2, '0')}:00';
-      if (((slots[key] as num?)?.toInt() ?? 0) >= maxTeamsPerSlot) {
+      if (!slotHasRoom(
+          used: (slots[key] as num?)?.toInt() ?? 0,
+          max: maxTeamsPerSlot,
+          need: widget.workerCount)) {
         return 'نعتذر، هذا الوقت محجوز بالكامل حالياً. يرجى اختيار وقت بدء آخر.';
       }
     }

@@ -156,8 +156,19 @@ function bodyOf(startRe) {
 t("المسارات الأربعة كلها تمرّ على دالّة الأهلية الواحدة", () => {
   // سبباً سبباً لا عدّاً: عند السقوط يقول الفحص **أيُّ** مسارٍ فقد حرسه.
   const paths = {
-    "_findFreeDriverForSlot (المُسنِد الآلي)": {
+    // المُسنِدُ الآليُّ صار يَحجزُ عددَ الكوادر (قرارُ المالك 2026-10-31):
+    // `_findFreeDriverForSlot` غلافٌ يُفوِّضُ إلى `_findFreeWorkersForSlot`،
+    // وهذه هي التي تَقرأُ الأهليّة — فالحارسُ على الاثنتَين.
+    "_findFreeDriverForSlot (المُسنِد الآلي — الغلاف)": {
       re: /^async function _findFreeDriverForSlot\(/,
+      needs: "_findFreeWorkersForSlot",
+    },
+    "_findFreeWorkersForSlot (المُسنِد الآلي)": {
+      re: /^async function _findFreeWorkersForSlot\(/,
+      needs: "_eligibleDriverDocs",
+    },
+    "_assignDriverScheduled (بقيّةُ الفريق)": {
+      re: /^async function _assignDriverScheduled\(/,
       needs: "_eligibleDriverDocs",
     },
     "approveAndAssignOrder (إسناد الأدمن يدوياً)": {
