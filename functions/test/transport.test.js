@@ -242,19 +242,39 @@ t("(أ٩) الإعداداتُ: غيابُ المستندِ أو enabled≠true 
   assert.strictEqual(transport.selectProvider({...c, provider: "simulator"}, {}).name, "simulator");
 });
 
-t("(أ١٠) طلبُ الرحلة: الذهابُ من المقرِّ قبلَ الموعدِ بمهلةٍ، والعودةُ من العميلةِ الآن، والراكبةُ هي العاملة", () => {
+t("(أ١٠) طلبُ الرحلة: الذهابُ من المقرِّ قبلَ الموعدِ بمهلةٍ، والعودةُ من العميلةِ الآن، والراكبُ عددٌ لا اسم", () => {
   const out = transport.buildRideRequest(BASE, CFG, "outbound", 3, "o1", NOW.getTime());
   assert.strictEqual(out.reference, "o1:outbound:3");
   assert.deepStrictEqual(out.pickup, CFG.hq);
   assert.strictEqual(out.dropoff.lat, 17.2);
   assert.strictEqual(out.pickupMs, TOMORROW - 45 * 60e3);
-  assert.deepStrictEqual(out.passenger, {name: "فاطمة", phone: "0501112222"});
+  // قرارُ المالك: لا اسمَ ولا جوّالَ للعاملة يَخرجُ — العددُ وحدَه.
+  assert.strictEqual(out.passengerCount, 1);
+  assert.ok(!("passenger" in out), "لا حقلَ راكبةٍ بالاسم");
+  const blob = JSON.stringify(out);
+  assert.ok(!blob.includes("فاطمة") && !blob.includes("0501112222"),
+      "اسمُ العاملةِ وجوّالُها لا يَظهرانِ في أيِّ حقل");
+  const two = transport.buildRideRequest({...BASE, service_meta: {crewCount: 2}},
+      CFG, "outbound", 1, "o1", NOW.getTime());
+  assert.strictEqual(two.passengerCount, 2);
+  assert.ok(two.notes.includes("2 عاملات"));
   const ret = transport.buildRideRequest(BASE, CFG, "return", 1, "o1", NOW.getTime());
   assert.strictEqual(ret.pickup.lat, 17.2);
   assert.deepStrictEqual(ret.dropoff, CFG.hq);
   assert.strictEqual(ret.pickupMs, NOW.getTime());
   assert.strictEqual(transport.buildRideRequest(BASE, {...CFG, hq: null}, "outbound", 1, "o1", 0), null);
   assert.strictEqual(transport.buildRideRequest({...BASE, location: null}, CFG, "outbound", 1, "o1", 0), null);
+});
+
+t("(أ١١) عددُ العاملات: crewCount للباقات، workers للمناسبات، وكلُّ فاسدٍ ⇒ ١", () => {
+  assert.strictEqual(transport.workerCount({service_meta: {crewCount: 3}}), 3);
+  assert.strictEqual(transport.workerCount({service_meta: {crewCount: "2"}}), 2);
+  assert.strictEqual(transport.workerCount({service_meta: {workers: 5}}), 5);
+  for (const bad of [0, -1, 2.5, "x", null, 999]) {
+    assert.strictEqual(transport.workerCount({service_meta: {crewCount: bad}}), 1, String(bad));
+  }
+  assert.strictEqual(transport.workerCount({}), 1);
+  assert.strictEqual(transport.workerCount(null), 1);
 });
 
 // ═════════════════════ (ب)(ج) المسارُ الكاملُ على db مزيّف ═════════════════════
@@ -571,8 +591,11 @@ tAsync("(ز٣) لا رميَ على حالةِ HTTP، والتحليلُ متس�
     const cfg = {baseUrl: "https://api.example/", apiKey: "K"};
     const c = await mowasalat.createRide(cfg, {reference: "r", pickup: {lat: 1, lng: 2, label: "a"},
       dropoff: {lat: 3, lng: 4, label: "b"}, pickupAt: "2026-01-01T00:00:00Z",
-      passenger: {name: "n", phone: "p"}});
+      passengerCount: 2});
     assert.deepStrictEqual({ok: c.ok, httpStatus: c.httpStatus, rideId: c.rideId}, {ok: false, httpStatus: 503, rideId: null});
+    const sent = JSON.parse(calls[0][1].body);
+    assert.strictEqual(sent.passenger_count, 2);
+    assert.ok(!("passenger" in sent), "الجسمُ المُرسَلُ بلا راكبةٍ بالاسم");
     assert.strictEqual(calls[0][0], "https://api.example/v1/rides", "شرطةُ النهايةِ تُزال");
     assert.strictEqual(calls[0][1].headers.Authorization, "Bearer K");
     const x = await mowasalat.cancelRide(cfg, "id 1");
@@ -586,7 +609,7 @@ tAsync("(ز٣) لا رميَ على حالةِ HTTP، والتحليلُ متس�
     const g2 = await mowasalat.getRide(cfg, "z");
     assert.deepStrictEqual({ok: g2.ok, status: g2.status}, {ok: false, status: null},
         "getRide يَبتلعُ خطأَ الشبكةِ كـ«لا نعرف»");
-    await assert.rejects(() => mowasalat.createRide(cfg, {pickup: {}, dropoff: {}, passenger: {}}),
+    await assert.rejects(() => mowasalat.createRide(cfg, {pickup: {}, dropoff: {}, passengerCount: 1}),
         /down/, "createRide يُمرّرُ خطأَ الشبكةِ ليُكتَبَ failed عندَ المُنادي");
   } finally {
     global.fetch = realFetch;

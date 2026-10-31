@@ -277,16 +277,32 @@ function buildRideRequest(order, cfg, leg, gen, orderId, nowMs) {
   } else {
     pickupMs = nowMs;
   }
+  const count = workerCount(order);
   return {
     reference: `${orderId}:${leg}:${gen}`,
     pickup: leg === "outbound" ? hq : client,
     dropoff: leg === "outbound" ? client : hq,
     pickupAt: new Date(pickupMs).toISOString(),
     pickupMs,
-    passenger: {name: order.driver_name || "عاملة زيارة", phone: order.driver_phone || ""},
+    // قرارُ المالكِ (2026-10-31): لا اسمَ ولا جوّالَ للعاملة يَخرجُ إلى مواصلات —
+    // العددُ وحدَه. العاملةُ لا دورَ لها في المسار ولا حسابَ تَستعمله.
+    passengerCount: count,
     notes: `طلب زيارة #${code} — ${leg === "outbound" ? "ذهاب" : "عودة"}` +
-      ` (${slots.orderHours(order)} س)`,
+      ` — ${count} ${count === 1 ? "عاملة" : "عاملات"} (${slots.orderHours(order)} س)`,
   };
+}
+
+/**
+ * عددُ العاملاتِ في الطلب، من بياناتِ الخدمةِ التي حجزتها العميلة:
+ * باقاتُ السكن `crewCount`، وعاملاتُ المناسبات `workers`. غيرُهما أو قيمةٌ
+ * فاسدةٌ ⇒ ١ (لا رحلةَ بلا راكبة، والصفرُ ليس عدداً هنا).
+ * @param {object} order
+ * @return {number}
+ */
+function workerCount(order) {
+  const meta = (order && order.service_meta) || {};
+  const raw = Number(meta.crewCount !== undefined ? meta.crewCount : meta.workers);
+  return Number.isInteger(raw) && raw >= 1 && raw <= 20 ? raw : 1;
 }
 
 /**
@@ -691,6 +707,7 @@ module.exports = {
   isLive,
   decide,
   buildRideRequest,
+  workerCount,
   claimLeg,
   requestLeg,
   cancelLegs,
