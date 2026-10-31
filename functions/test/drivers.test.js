@@ -28,7 +28,7 @@ const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
 const {
-  hasDriverRole, isActiveDriverDoc, isAssignableDriver,
+  DRIVER_ROLE, hasDriverRole, isActiveDriverDoc, isAssignableDriver,
   assignabilityProblem, chunk,
 } = require("../drivers");
 
@@ -48,25 +48,27 @@ function t(name, fn) {
 // ── القاعدة نفسها ───────────────────────────────────────────────────────
 
 t("الدور: staff_role يسبق role (نفس ترتيب القواعد و_assertAdmin)", () => {
-  assert.strictEqual(hasDriverRole({staff_role: "driver"}), true);
-  assert.strictEqual(hasDriverRole({role: "driver"}), true, "احتياط الحسابات القديمة");
+  // قرارُ المالك (2026-10-31): الطلبُ يُسنَدُ لكادرِ التنظيف (worker)، والنقلُ عبر مواصلات.
+  assert.strictEqual(DRIVER_ROLE, "worker");
+  assert.strictEqual(hasDriverRole({staff_role: "worker"}), true);
+  assert.strictEqual(hasDriverRole({role: "worker"}), true, "احتياط الحسابات القديمة");
   // الكادر يحمل role:'admin' + staff_role:'<الدور الحقيقي>' — فالأسبقية تهمّ
-  // في الاتجاهين: كادرٌ إداري لا يصير سائقاً، وسائقٌ مسجَّل كذلك لا يُستبعَد.
-  assert.strictEqual(hasDriverRole({role: "admin", staff_role: "driver"}), true);
-  assert.strictEqual(hasDriverRole({role: "driver", staff_role: "accountant_admin"}), false,
+  // في الاتجاهين: كادرٌ إداري لا يصير عاملةً، وعاملةٌ مسجَّلة كذلك لا تُستبعَد.
+  assert.strictEqual(hasDriverRole({role: "admin", staff_role: "worker"}), true);
+  assert.strictEqual(hasDriverRole({role: "worker", staff_role: "accountant_admin"}), false,
       "staff_role هو الحاكم — لا يُقرأ role إلا عند غيابه");
 });
 
-t("الدور: كل ما ليس سائقاً مستبعَد — ومنه الغياب وكادر التنظيف", () => {
+t("الدور: كل ما ليس كادرَ تنظيفٍ مستبعَد — ومنه الغياب والسائق", () => {
   assert.strictEqual(hasDriverRole(null), false, "لا users/{id} = مسودّة addDoc القديمة");
   assert.strictEqual(hasDriverRole(undefined), false);
   assert.strictEqual(hasDriverRole({}), false, "مستند بلا دور");
   assert.strictEqual(hasDriverRole({role: "client"}), false);
   assert.strictEqual(hasDriverRole({role: "admin"}), false);
-  // اللوحة تكتب users/{uid}.role = staffType، وقد يكون كادر تنظيف لا سائق
-  // توصيل: له حساب يعمل، ولا تظهر له الطلبات المُسنَدة.
-  assert.strictEqual(hasDriverRole({role: "cleaner"}), false);
-  assert.strictEqual(hasDriverRole({role: "Driver"}), false, "حسّاس لحالة الأحرف كالقواعد");
+  // السائقُ لم يَعُد يُعَدُّ ولا يُحجَز: النقلُ عبر مواصلات، وبقاؤه يَنفخُ السعةَ بمن لا يُنظِّف.
+  assert.strictEqual(hasDriverRole({role: "driver"}), false);
+  assert.strictEqual(hasDriverRole({staff_role: "driver"}), false);
+  assert.strictEqual(hasDriverRole({role: "Worker"}), false, "حسّاس لحالة الأحرف كالقواعد");
 });
 
 t("النشاط: الغياب يعني نشطاً (!== false لا === true)", () => {
@@ -80,26 +82,26 @@ t("النشاط: الغياب يعني نشطاً (!== false لا === true)", ()
 });
 
 t("القاعدة تجمع النصفين: يلزم النشاط **و** حساب الدخول", () => {
-  assert.strictEqual(isAssignableDriver({}, {role: "driver"}), true);
-  assert.strictEqual(isAssignableDriver({is_active: false}, {role: "driver"}), false,
-      "موقوف ولو كان حسابه سائقاً");
+  assert.strictEqual(isAssignableDriver({}, {role: "worker"}), true);
+  assert.strictEqual(isAssignableDriver({is_active: false}, {role: "worker"}), false,
+      "موقوفة ولو كان حسابها كادر تنظيف");
   assert.strictEqual(isAssignableDriver({}, null), false,
       "نشطٌ بلا حساب دخول — هذه هي مسودّة addDoc التي تُخفي الطلب");
-  assert.strictEqual(isAssignableDriver(null, {role: "driver"}), false);
+  assert.strictEqual(isAssignableDriver(null, {role: "worker"}), false);
   assert.strictEqual(isAssignableDriver(null, null), false);
 });
 
 t("سبب الرفض يقول للأدمن ما العمل — لا رفضاً مبهماً", () => {
-  assert.strictEqual(assignabilityProblem({}, {role: "driver"}), null, "مؤهَّل = لا مشكلة");
+  assert.strictEqual(assignabilityProblem({}, {role: "worker"}), null, "مؤهَّل = لا مشكلة");
   assert.match(assignabilityProblem(null, null), /غير موجود/);
-  assert.match(assignabilityProblem({is_active: false}, {role: "driver"}), /غير نشط/);
+  assert.match(assignabilityProblem({is_active: false}, {role: "worker"}), /غير نشط/);
   // المسار اليدوي يحتاج أن يميّز الحالتين: مستندٌ بلا حساب ≠ حسابٌ بدور آخر،
   // والعلاج مختلف (أنشئ حساباً / صحّح التصنيف).
   const noAccount = assignabilityProblem({}, null);
-  assert.match(noAccount, /بلا حساب دخول/);
-  assert.match(noAccount, /إضافة سائق/, "يسمّي الإجراء");
-  const wrongRole = assignabilityProblem({}, {role: "cleaner"});
-  assert.match(wrongRole, /ليس سائق توصيل/);
+  assert.match(noAccount, /بلا حساب في النظام/);
+  assert.match(noAccount, /إضافة كادر/, "يسمّي الإجراء");
+  const wrongRole = assignabilityProblem({}, {role: "driver"});
+  assert.match(wrongRole, /ليس كادر تنظيف/);
   assert.notStrictEqual(noAccount, wrongRole, "سببان مختلفان لعلاجين مختلفين");
 });
 
@@ -241,7 +243,7 @@ t("علَمانِ يُعطّلانِ — والأهليّةُ تَقرأُ ما 
   // بينما `isActiveDriverDoc` كان `is_active` وحدَه: فسائقٌ موقوفٌ بالعلَمِ
   // الثاني تُلغى مهامُّه ثمّ **تُعادُ إليه** بالمكنسةِ كلَّ خمسِ دقائق.
   const d = require("../drivers.js");
-  const user = {role: "driver"};
+  const user = {role: "worker"};
   assert.strictEqual(d.isAssignableDriver({}, user), true, "الغيابُ = مُفعَّل");
   assert.strictEqual(d.isAssignableDriver({is_active: false}, user), false);
   assert.strictEqual(d.isAssignableDriver({is_suspended: true}, user), false,
