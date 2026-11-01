@@ -107,14 +107,23 @@ void main() {
   /// `.env` **التطبيقِ** بعينِه لا أيَّ `.env*`: أوّلُ صياغةٍ طابقت
   /// `'> .env'` فابتلعت `admin_deploy.yml` وهو يَكتبُ `.env.production`
   /// للوحةِ الويبِ (مفتاحُ Mapbox لـVite) — ملفٌّ آخرُ لمشروعٍ آخر.
+  /// ملفّاتُ سِيَرِ GitHub — **الامتدادانِ معاً**: GitHub يَقبلُ `.yml`
+  /// و`.yaml`، وأربعُ اشتقاقاتٍ في هذا الملفِّ كانت تُرشِّحُ الأوّلَ وحدَه،
+  /// فسيرُ إصدارٍ باسمِ `.yaml` يَخرُجُ من ثلاثةِ حُرّاسٍ معاً (أسرارُ
+  /// الكتابة، ومسارُ Play، وversionCode المُشتَقّ). ومعه فحصٌ يُثبّتُ أنّ
+  /// كلَّ ملفٍّ في المجلّدِ يَحملُ أحدَهما، فلا امتدادٌ ثالثٌ يَتسلّلُ.
+  List<String> workflowFiles() => Directory('.github/workflows')
+      .listSync()
+      .whereType<File>()
+      .map((f) => f.path.replaceAll(r'\', '/'))
+      .where((f) => f.endsWith('.yml') || f.endsWith('.yaml'))
+      .toList()
+    ..sort();
+
   final appEnvWrite = RegExp(r'>\s*\.env\s*$', multiLine: true);
   List<String> envWriters() => [
         'codemagic.yaml',
-        ...Directory('.github/workflows')
-            .listSync()
-            .whereType<File>()
-            .map((f) => f.path.replaceAll(r'\', '/'))
-            .where((f) => f.endsWith('.yml'))
+        ...workflowFiles()
             .where((f) => appEnvWrite.hasMatch(File(f).readAsStringSync())),
       ]..sort();
 
@@ -174,11 +183,7 @@ void main() {
   test('كلُّ مسارٍ يَنشرُ إلى Play يَستهدفُ alpha — لا codemagic وحدَه', () {
     final paths = <String>[
       'codemagic.yaml',
-      ...Directory('.github/workflows')
-          .listSync()
-          .whereType<File>()
-          .map((f) => f.path.replaceAll(r'\', '/'))
-          .where((f) => f.endsWith('.yml'))
+      ...workflowFiles()
           .where((f) =>
               File(f).readAsStringSync().contains('upload-google-play') ||
               File(f).readAsStringSync().contains('google_play:')),
@@ -217,11 +222,7 @@ void main() {
   // نفسِها: كلُّ ناشرٍ يُمرّرُ `--build-number` من `get-latest-build-number`،
   // وتعذُّرُ القراءةِ يُفشِلُ (لا `|| echo <رقم>` ولا سقوطٌ صامت في سيرِ GitHub).
   test('كلُّ مسارٍ يَنشرُ إلى Play يَبني بـversionCode مُشتَقٍّ من Play', () {
-    final paths = Directory('.github/workflows')
-        .listSync()
-        .whereType<File>()
-        .map((f) => f.path.replaceAll(r'\', '/'))
-        .where((f) => f.endsWith('.yml'))
+    final paths = workflowFiles()
         .where((f) => File(f).readAsStringSync().contains('upload-google-play'))
         .toList()
       ..add('codemagic.yaml')
@@ -250,5 +251,35 @@ void main() {
         reason: 'سيرُ الوسمِ يَسقطُ إلى رقمٍ مكتوبٍ عند الفشل — تصادمٌ صامت');
     expect(gh.contains("''|*[!0-9]*)"), isTrue,
         reason: 'زالَ فحصُ أنّ الناتجَ رقمٌ — خَرْجٌ تالفٌ يُبنى به');
+  });
+
+  // ════════════════════════════════════════════════════════════════════
+  // **قاعدةُ «سرٌّ بلا فحصِ حضور» انتقلت إلى `test/release_secret_gate_test.dart`
+  // (2026-11-01).**
+  //
+  // كانت تَسكنُ هذا الملفَّ ككاشفٍ يُعدِّدُ **أشكالَ الكتابةِ** (توجيهٌ،
+  // `tee`، `dd of=`، `install /dev/stdin`، مُفسِّرٌ يَكتبُ مساراً)، فأثبتَ
+  // مسحٌ هجوميٌّ أنّ تعدادَ الأشكالِ **مجموعةٌ مفتوحةٌ تَفشلُ مفتوحةً**:
+  // إحدى وعشرونَ صيغةً تُعيدُ العطلَ كاملاً والحارسُ أخضر، وأسوأُها أنّ
+  // **صيغةَ هذا الملفِّ نفسِه** (`python3 - <<'PY'` في `codemagic.yaml:73`)
+  // كانت غيرَ مرئيّةٍ للكاشف. فالقاعدةُ أُعيد بناؤها على سؤالٍ **مُغلَق** —
+  // «أيُذكَرُ اسمُ السرِّ في جسمِ خطوةِ إصدار؟» لا «أهذا السطرُ كتابةُ
+  // ملفّ؟» — ومعه تحوّلَت كلُّ مجموعةٍ مفتوحةٍ إلى الجهةِ التي تَفشلُ
+  // **مُغلَقةً**. التفصيلُ في ترويسةِ الملفِّ الجديد.
+  //
+  // ولا نسختانِ من المنطق: ما بقيَ هنا هو توزيعُ أندرويد ومفاتيحُ `.env`
+  // و`versionCode`، وفحصٌ واحدٌ يُثبّتُ أنّ الحارسَ العامَّ قائمٌ فعلاً كي
+  // لا تَزولَ القاعدةُ بحذفِ ملفٍّ لا يَذكرُه شيء.
+  test('قاعدةُ «سرٌّ بلا فحصِ حضور» ما زالت محروسةً في موضعِها الواحد', () {
+    final g = File('test/release_secret_gate_test.dart');
+    expect(g.existsSync(), isTrue,
+        reason: 'زالَ الحارسُ العامُّ للأسرار — والقاعدةُ هنا تُحيلُ إليه، '
+            'فالإحالةُ صارت إلى لا شيء');
+    final src = g.readAsStringSync();
+    expect(src.contains('kReleaseSecrets'), isTrue,
+        reason: 'الحارسُ العامُّ لم يَعُدْ يُثبّتُ مجموعةَ الأسرار');
+    expect(RegExp(r'\bloadYaml\s*\(').hasMatch(src), isTrue,
+        reason: 'الحارسُ العامُّ لم يَعُدْ يُحلّلُ الـYAML تحليلاً حقيقيّاً — '
+            'فعَدُّ الخطواتِ بالنصِّ هو ما أعماهُ ثلاثَ مرّات');
   });
 }
