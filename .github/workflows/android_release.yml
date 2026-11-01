@@ -62,14 +62,32 @@ jobs:
           } > .env
 
       - name: Decode keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
+          # base64 -d على فراغٍ يُنتجُ .jks فارغاً بخروجٍ صفر، فيَفشلُ التوقيعُ
+          # لاحقاً بخطأٍ لا يُسمّي السبب — نفسُ قرارِ مفاتيحِ .env أعلاه.
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::error::سرُّ ANDROID_KEYSTORE_BASE64 غير مضبوط — المفتاحُ يُكتَبُ فارغاً فيَفشلُ التوقيع"
+            exit 1
+          fi
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
 
       - name: Create key.properties
+        env:
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          for v in ANDROID_STORE_PASSWORD ANDROID_KEY_PASSWORD; do
+            eval "val=\$$v"
+            if [ -z "$val" ]; then
+              echo "::error::سرُّ $v غير مضبوط — توقيعُ الحزمةِ يَفشلُ لاحقاً بخطأِ Gradle مُبهَم"
+              exit 1
+            fi
+          done
           cat > android/key.properties << EOF
-          storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}
-          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          storePassword=$ANDROID_STORE_PASSWORD
+          keyPassword=$ANDROID_KEY_PASSWORD
           keyAlias=upload
           storeFile=upload-keystore.jks
           EOF
