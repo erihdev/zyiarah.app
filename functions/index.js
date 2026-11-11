@@ -4231,6 +4231,11 @@ exports.payContractWithWallet = onCall({cpu: 0.083}, async (request) => {
     const c = cSnap.data();
     if (c.userId !== uid) throw new HttpsError("permission-denied", "ليس عقدك");
     if (c.is_paid === true) return {alreadyPaid: true};
+    // عقدٌ أُغلِقَ (مرفوضٌ أو أُعيد مالُه قبل التفعيل) لا يُدفَعُ ثانيةً من المحفظة:
+    // الدفعُ كان سيَقلبُ is_paid فيُطلِقُ التفعيلَ على عقدٍ مُغلَق.
+    if (!["pending", "approved_waiting_payment"].includes(c.status || "pending")) {
+      throw new HttpsError("failed-precondition", "هذا العقد مغلق ولا يمكن دفعه");
+    }
     const price = Number(c.planPrice || 0);
     if (price <= 0) throw new HttpsError("failed-precondition", "سعر الباقة غير صالح");
     const wSnap = await t.get(walletRef);

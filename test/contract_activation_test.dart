@@ -365,6 +365,11 @@ void main() {
           'existing.data.moyasar_payment_id !== paymentId', fi);
       expect(bind, greaterThan(fi));
       expect(bind, lessThan(idx.indexOf('moyasar.refund(', fi)));
+      // والعقدُ المُغلَقُ لا يُدفَعُ ثانيةً من المحفظة.
+      final int wi = idx.indexOf('exports.payContractWithWallet');
+      final int gate = idx.indexOf('هذا العقد مغلق ولا يمكن دفعه', wi);
+      expect(gate, greaterThan(wi));
+      expect(gate, lessThan(idx.indexOf('t.update(contractRef', wi)));
     });
   });
 }
