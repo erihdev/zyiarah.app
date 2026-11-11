@@ -3752,11 +3752,22 @@ async function _validateContractPlan(db, c, tx) {
       return `عدد عاملات العقد (${Number(c.workers || 0)}) لا يطابق الباقة ` +
           `(${Number(pkg.workers)}) — رُفض توليد الزيارات`;
     }
+    // مدّةُ الزيارة: العميلُ يَكتبُ `hours` من الباقةِ نفسِها، فمدّةٌ أطولُ من
+    // الباقةِ عملٌ إضافيٌّ بلا مقابل. الأقصرُ لا ضررَ فيه، فيُرفَضُ الأطولُ وحدَه.
+    const pkgHours = Number(pkg.hours);
+    const cHours = Number(c.hours);
+    if (pkgHours > 0 && Number.isFinite(cHours) && cHours > pkgHours) {
+      return `مدّة زيارة العقد (${cHours}س) أطول من الباقة ` +
+          `(${pkgHours}س) — رُفض توليد الزيارات`;
+    }
     return null;
   };
   const problems = snap.docs.map((d) => problemFor(d.data()));
   if (problems.some((p) => p === null)) return;
-  throw new HttpsError("failed-precondition", problems[0]);
+  // أنفعُ سببٍ: سببُ الباقةِ التي طابقَ سعرُها (إن وُجدت) لا أوّلُ باقةٍ بالعنوان.
+  const priceMismatch = (p) => p.startsWith("سعر العقد");
+  throw new HttpsError("failed-precondition",
+      problems.find((p) => !priceMismatch(p)) || problems[0]);
 }
 
 // ════════════════════════════════════════════════════════════════════════
