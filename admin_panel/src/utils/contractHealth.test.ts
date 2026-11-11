@@ -16,6 +16,9 @@ import {
   type ContractHealth,
   type ContractDoc,
   contractHealthReason,
+  contractRefundRoute,
+  CONTRACT_PAID_NOT_ACTIVE,
+  type ContractRefundRoute,
 } from './contractHealth';
 
 type Row = [ContractDoc, ContractHealth, boolean];
@@ -134,5 +137,55 @@ describe('contractHealthReason', () => {
   it('ولا سببَ لمستندٍ غائب', () => {
     expect(contractHealthReason(null)).toBe(null);
     expect(contractHealthReason(undefined)).toBe(null);
+  });
+});
+
+// ── مسارُ استردادِ العقد — مرآةُ `contractRefundRoute` في الدارت. جدولُه
+// مشتركٌ: `test/contract_activation_test.dart` يَقرأُ الكتلةَ بين العلامتَين
+// ويُشغّلُ القاعدةَ الدارتيّةَ عليها.
+type RouteRow = [ContractDoc, ContractRefundRoute];
+
+// ── CONTRACT_REFUND_ROUTE_CASES_BEGIN ──
+const ROUTE_CASES: RouteRow[] = [
+  [{}, "none"],
+  [{"status": "pending", "is_paid": false, "moyasar_payment_id": "p1"}, "none"],
+  [{"status": "active", "is_paid": true, "moyasar_payment_id": "p1"}, "none"],
+  [{"status": "rejected", "is_paid": true, "moyasar_payment_id": "p1"}, "none"],
+  [{"status": "pending", "is_paid": true, "moyasar_payment_id": "p1"}, "moyasar"],
+  [{"status": "approved_waiting_payment", "is_paid": true, "moyasar_payment_id": "p1"}, "moyasar"],
+  [{"is_paid": true, "plan_validation_failed": true, "moyasar_payment_id": "p1"}, "moyasar"],
+  [{"is_paid": true, "contract_visits_pending": true, "moyasar_payment_id": "p1"}, "none"],
+  [{"is_paid": true, "moyasar_payment_id": "p1", "refund_claimed": true}, "none"],
+  [{"is_paid": true, "moyasar_payment_id": "p1", "refund_credited": true}, "none"],
+  [{"is_paid": true, "moyasar_payment_id": "p1", "payment_status": "refunded"}, "none"],
+  [{"is_paid": true, "payment_method": "wallet", "moyasar_payment_id": "p1"}, "wallet"],
+  [{"is_paid": true, "payment_method": "tamara"}, "tamara"],
+  [{"is_paid": true, "payment_method": "tamara", "moyasar_payment_id": "p1"}, "tamara"],
+  [{"is_paid": true, "payment_method": "credit_card", "moyasar_payment_id": "p1"}, "moyasar"],
+  [{"is_paid": true, "payment_method": "credit_card"}, "none"],
+  [{"is_paid": true, "payment_method": "apple_pay", "tamara_order_id": "t1"}, "none"],
+  [{"is_paid": true, "tamara_order_id": "t1"}, "tamara"],
+  [{"is_paid": true, "tamara_order_id": "t1", "moyasar_payment_id": "p1"}, "tamara"],
+  [{"is_paid": true, "moyasar_payment_id": "  "}, "none"],
+  [{"is_paid": true}, "none"],
+];
+// ── CONTRACT_REFUND_ROUTE_CASES_END ──
+
+describe('contractRefundRoute', () => {
+  it('يُطابقُ جدولَ الحالاتِ المشترَك', () => {
+    expect(ROUTE_CASES.length).toBeGreaterThanOrEqual(15);
+    for (const [doc, want] of ROUTE_CASES) {
+      expect(contractRefundRoute(doc), JSON.stringify(doc)).toBe(want);
+    }
+  });
+
+  it('الغيابُ لا مسار', () => {
+    expect(contractRefundRoute(null)).toBe('none');
+    expect(contractRefundRoute(undefined)).toBe('none');
+  });
+
+  it('مجموعةُ «مدفوعٌ لم يُفعَّل» ثلاثٌ بعينِها — `visitsMissing` خارجَها', () => {
+    expect([...CONTRACT_PAID_NOT_ACTIVE].sort()).toEqual(
+      ['activationFailed', 'activationStuck', 'planMismatch']);
   });
 });

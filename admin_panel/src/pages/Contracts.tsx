@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { formatSarAny } from '../utils/money';
-import { Search, FileSignature, CheckCircle2, Clock, XCircle, AlertCircle, Calendar, CreditCard, Trash2, Info, Package, Plus, Pencil, Star, Loader2, PartyPopper } from 'lucide-react';
+import { Search, FileSignature, Undo2, CheckCircle2, Clock, XCircle, AlertCircle, Calendar, CreditCard, Trash2, Info, Package, Plus, Pencil, Star, Loader2, PartyPopper } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, limit, Timestamp, doc, updateDoc, deleteDoc, addDoc, serverTimestamp, type QuerySnapshot, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
-import { db } from '../services/firebase.ts';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../services/firebase.ts';
 import { useNotification } from '../components/notificationContext.ts';
 import {
     contractHealthOf, contractHealthReason, contractNeedsHuman,
     contractAwaitingPayment, CONTRACT_AWAITING_PAYMENT_NOTE,
-    CONTRACT_HEALTH_TITLES,
+    CONTRACT_HEALTH_TITLES, contractRefundRoute,
 } from '../utils/contractHealth.ts';
 import {
     packageFormError, positiveNum, positiveInt, resolvedVisits,
@@ -36,6 +37,13 @@ interface ContractRecord {
     contract_visits_error?: string;
     contract_activation_failed?: boolean;
     contract_activation_error?: string;
+    // حقولُ الدفعِ والاستردادِ — يَقرؤها `contractRefundRoute`.
+    payment_method?: string;
+    moyasar_payment_id?: string;
+    tamara_order_id?: string;
+    payment_status?: string;
+    refund_claimed?: boolean;
+    refund_credited?: boolean;
 }
 
 /** بطاقةُ صحّةِ التفعيل — مرآةُ `_contractHealthBanner` في شاشةِ Flutter. */
@@ -637,6 +645,7 @@ export default function Contracts({ role }: { role?: string | null }) {
     // فشل المستمع نهائي — حالة خطأ صريحة بزر إعادة بدل «لا توجد سجلات» المضلّلة.
     const [loadError, setLoadError] = useState(false);
     const [retryKey, setRetryKey] = useState(0);
+    const [refundingId, setRefundingId] = useState<string | null>(null);
 
     useEffect(() => {
         // (أداء) أحدث 300 عقد فقط — كانت المجموعة كلها تُقرأ بلا حد
@@ -667,6 +676,33 @@ export default function Contracts({ role }: { role?: string | null }) {
         } catch (error) {
             console.error(error);
             toast.error("حدث خطأ أثناء الحذف");
+        }
+    };
+
+    // **استردادُ عقدٍ مدفوعٍ لم يُفعَّل** — مرآةُ `_refundContract` في تطبيقِ
+    // الإدارة: النداءانِ نفسُهما بالوسائطِ نفسِها، والخادمُ يَتحقّقُ من ميسر أنّ
+    // الدفعةَ تخصُّ هذا العقدَ ويَرُدُّ قيمتَه وحدَها ثمّ يُغلِقُه «مرفوضاً».
+    // لا كتابةَ هنا: المستمعُ يُحدّثُ البطاقةَ حين يُغلَقُ العقد.
+    const handleRefund = async (contract: ContractRecord) => {
+        const route = contractRefundRoute(contract);
+        if (!await confirm(`سيُعاد ${formatSarAny(contract.planPrice)} ر.س كاملاً إلى وسيلة الدفع الأصلية، ويُغلَق العقد #${contractRef(contract.contractId, contract.id)} (مرفوض) فلا يُطلب من العميل الدفع مرة أخرى. لا يمكن التراجع.`)) return;
+        setRefundingId(contract.id);
+        try {
+            if (route === 'tamara') {
+                await httpsCallable(functions, 'tamaraRefundPayment')({ order_id: contract.id });
+            } else {
+                await httpsCallable(functions, 'moyasarRefundPayment')({
+                    paymentId: String(contract.moyasar_payment_id ?? ''),
+                    orderId: contract.id,
+                });
+            }
+            toast.success('تم استرداد المبلغ وإغلاق العقد');
+        } catch (err: unknown) {
+            console.error('Error refunding contract:', err);
+            // رسائلُ الدالّةِ الخادميّةِ عربيّةٌ أصلاً (HttpsError) — تُعرَضُ كما هي.
+            toast.error((err as { message?: string })?.message || 'تعذّر الاسترداد — أعد المحاولة');
+        } finally {
+            setRefundingId(null);
         }
     };
 
@@ -805,7 +841,22 @@ export default function Contracts({ role }: { role?: string | null }) {
                                         <p className="flex-1 text-[11px] font-bold text-slate-500 leading-relaxed">
                                             {CONTRACT_AWAITING_PAYMENT_NOTE}
                                         </p>
+                                    ) : contractRefundRoute(contract) === 'wallet' ? (
+                                        <p className="flex-1 text-[11px] font-bold text-slate-500 leading-relaxed">
+                                            دُفع هذا العقد من المحفظة — استرداده إلى المحفظة غير متاح من هنا بعد.
+                                        </p>
                                     ) : <div className="flex-1" />}
+                                    {(contractRefundRoute(contract) === 'moyasar' || contractRefundRoute(contract) === 'tamara') && (
+                                        <button
+                                            type="button"
+                                            disabled={refundingId === contract.id}
+                                            onClick={() => handleRefund(contract)}
+                                            className="flex items-center gap-2 px-4 py-3 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-2xl text-sm font-bold transition-all disabled:opacity-50"
+                                        >
+                                            {refundingId === contract.id ? <Loader2 size={18} className="animate-spin" /> : <Undo2 size={18} />}
+                                            {contractRefundRoute(contract) === 'tamara' ? 'استرداد المبلغ (تمارا)' : 'استرداد المبلغ'}
+                                        </button>
+                                    )}
                                     <button 
                                         type="button" 
                                         className="p-3.5 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600 rounded-2xl transition-all"

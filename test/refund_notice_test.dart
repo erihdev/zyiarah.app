@@ -274,7 +274,7 @@ void main() {
       expect(idx.length, greaterThan(idxCode.length));
     });
 
-    test('(ز) ومجموعةُ أسطحِ عمليّاتِ البوّابةِ كاملةً هي الثلاثةُ وحدَها', () {
+    test('(ز) ومجموعةُ أسطحِ عمليّاتِ البوّابةِ كاملةً هي الأربعةُ وحدَها', () {
       final Set<String> surfaces = <String>{};
       final RegExp ops = RegExp(
           r"""['"](?:moyasarRefundPayment|moyasarVoidPayment|tamaraRefundPayment|tabbyRefundPayment)['"]""");
@@ -294,6 +294,8 @@ void main() {
             // «ما يَحدثُ للخدمة» لا موضوعَ لها؛ وحوارُه يَقولُ ما يَحدثُ
             // فعلاً — العقدُ يُغلَقُ «مرفوضاً» (`_contractRefundClose`).
             'lib/screens/admin/admin_contracts_screen.dart',
+            // ومرآتُه في لوحةِ الويب — للسببِ نفسِه.
+            'admin_panel/src/pages/Contracts.tsx',
           },
           reason: 'سطحٌ ثالثٌ يُنادي عمليّاتَ البوّابةِ — يَلزمُه نفسُ الجملة');
     });

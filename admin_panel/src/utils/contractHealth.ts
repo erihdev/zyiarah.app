@@ -48,6 +48,13 @@ export interface ContractDoc {
   contract_visits_error?: string;
   contract_activation_failed?: boolean;
   contract_activation_error?: string;
+  // حقولُ الدفعِ والاستردادِ — يَقرؤها `contractRefundRoute`.
+  payment_method?: string;
+  moyasar_payment_id?: string;
+  tamara_order_id?: string;
+  payment_status?: string;
+  refund_claimed?: boolean;
+  refund_credited?: boolean;
 }
 
 /** نصُّ البطاقةِ لكلِّ حالة — حرفيّاً كما في `kContractHealthTitles`. */
@@ -114,3 +121,41 @@ export function contractAwaitingPayment(c: ContractDoc | null | undefined): bool
 
 export const CONTRACT_AWAITING_PAYMENT_NOTE =
   'لم يُدفع بعد — يتفعّل العقد وحده لحظة دفع العميلة، ولا يحتاج اعتماداً.';
+
+/** الحالاتُ التي قُبِضَ فيها المالُ ولم يُفعَّل العقد — مرآةُ
+ *  `kContractPaidNotActive` في الدارت. */
+export const CONTRACT_PAID_NOT_ACTIVE: ContractHealth[] = [
+  'planMismatch',
+  'activationFailed',
+  'activationStuck',
+];
+
+/** مسارُ استردادِ عقدٍ مدفوعٍ لم يُفعَّل — مرآةُ `ContractRefundRoute`. */
+export type ContractRefundRoute = 'none' | 'moyasar' | 'tamara' | 'wallet';
+
+/**
+ * كيف يُستردُّ مالُ العقد — مرآةُ `contractRefundRoute` في
+ * `lib/utils/contract_health.dart` حرفاً بحرف، وجدولُ حالاتِها مشترَكٌ مع
+ * فحصِ الدارت (`test/contract_activation_test.dart`). الوسيلةُ المكتوبةُ
+ * تَغلِبُ المعرّفات: عقدٌ جُرِّبت بطاقتُه ثمّ دُفِعَ من المحفظةِ يَحملُ
+ * معرّفَ دفعةٍ فاشلة، فتوجيهُه إلى ميسر يَرُدُّ دفعةً غيرَ التي قُبِضَ بها.
+ */
+export function contractRefundRoute(c: ContractDoc | null | undefined): ContractRefundRoute {
+  if (!c) return 'none';
+  const status = String(c.status ?? 'pending');
+  if (c.is_paid !== true || !CONTRACT_PRE_ACTIVE_STATUSES.includes(status)) return 'none';
+  if (!CONTRACT_PAID_NOT_ACTIVE.includes(contractHealthOf(c))) return 'none';
+  if (c.refund_claimed === true || c.refund_credited === true ||
+      c.payment_status === 'refunded') {
+    return 'none';
+  }
+  const method = String(c.payment_method ?? '');
+  const hasTamara = String(c.tamara_order_id ?? '').trim() !== '';
+  const hasMoyasar = String(c.moyasar_payment_id ?? '').trim() !== '';
+  if (method === 'wallet') return 'wallet';
+  if (method === 'tamara') return 'tamara';
+  if (method !== '') return hasMoyasar ? 'moyasar' : 'none';
+  if (hasTamara) return 'tamara';
+  if (hasMoyasar) return 'moyasar';
+  return 'none';
+}
