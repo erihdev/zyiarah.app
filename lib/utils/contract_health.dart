@@ -181,14 +181,18 @@ ContractRefundRoute contractRefundRoute(Map<String, dynamic> c) {
       c['payment_status'] == 'refunded') {
     return ContractRefundRoute.none;
   }
+  // الوسيلةُ المكتوبةُ تَغلِبُ المعرّفاتِ: عقدٌ جُرِّبت بطاقتُه ثمّ دُفِعَ من
+  // المحفظةِ قد يَحملُ `moyasar_payment_id` لدفعةٍ فاشلة، فتوجيهُه إلى ميسر
+  // كان سيَرُدُّ — أو يُحاوِلُ ردَّ — دفعةً غيرَ التي قُبِضَ بها العقد.
   final String method = (c['payment_method'] ?? '').toString();
-  if (method == 'tamara' ||
-      '${c['tamara_order_id'] ?? ''}'.trim().isNotEmpty) {
-    return ContractRefundRoute.tamara;
-  }
-  if ('${c['moyasar_payment_id'] ?? ''}'.trim().isNotEmpty) {
-    return ContractRefundRoute.moyasar;
-  }
+  final bool hasTamara = '${c['tamara_order_id'] ?? ''}'.trim().isNotEmpty;
+  final bool hasMoyasar = '${c['moyasar_payment_id'] ?? ''}'.trim().isNotEmpty;
   if (method == 'wallet') return ContractRefundRoute.wallet;
+  if (method == 'tamara') return ContractRefundRoute.tamara;
+  if (method.isNotEmpty) {
+    return hasMoyasar ? ContractRefundRoute.moyasar : ContractRefundRoute.none;
+  }
+  if (hasTamara) return ContractRefundRoute.tamara;
+  if (hasMoyasar) return ContractRefundRoute.moyasar;
   return ContractRefundRoute.none;
 }
