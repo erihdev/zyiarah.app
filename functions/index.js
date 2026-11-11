@@ -7302,6 +7302,13 @@ exports.moyasarRefundPayment = onCall(
       // Moyasar (نفس نمط المطالبة الذرّية في generateSubscriptionVisits/onOrderRewards)،
       // ونحرّرها عند فشل البوابة كي تبقى إعادة المحاولة ممكنة.
       const existing = await _findOrder(orderId);
+      // العقدُ يُغلَقُ بعد الاسترداد (`_contractRefundClose`)، فدفعةٌ لا تَخصُّه
+      // كانت ستَرُدُّ مالَ طلبٍ وتُغلِقُ عقداً آخر: نربطُ الدفعةَ بمستندِها.
+      if (existing && existing.col === "contracts" &&
+          existing.data.moyasar_payment_id !== paymentId) {
+        throw new HttpsError("failed-precondition",
+            "رقم الدفعة لا يطابق دفعة هذا العقد");
+      }
       if (existing) {
         await getFirestore().runTransaction(async (tx) => {
           const snap = await tx.get(existing.ref);

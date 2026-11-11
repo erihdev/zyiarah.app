@@ -358,6 +358,13 @@ void main() {
       final String idx = File('functions/index.js').readAsStringSync();
       expect(RegExp(r'\.\.\._contractRefundClose\(').allMatches(idx).length, 2);
       expect(idx, contains('status: "rejected", rejected_reason: "refunded_before_activation"'));
+      // دفعةُ ميسر مربوطةٌ بالعقدِ قبلَ أيِّ ردٍّ أو إغلاق: بلاهُ يُرَدُّ مالُ
+      // دفعةٍ ويُغلَقُ عقدٌ لا تَخصُّه.
+      final int fi = idx.indexOf('exports.moyasarRefundPayment');
+      final int bind = idx.indexOf(
+          'existing.data.moyasar_payment_id !== paymentId', fi);
+      expect(bind, greaterThan(fi));
+      expect(bind, lessThan(idx.indexOf('moyasar.refund(', fi)));
     });
   });
 }
