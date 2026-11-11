@@ -7259,6 +7259,22 @@ async function _findOrder(orderId) {
   return null;
 }
 
+/**
+ * (استرداد عقدٍ لم يُفعَّل) عقدٌ مدفوعٌ في حالةِ ما قبلَ التفعيل
+ * (`pending`/`approved_waiting_payment`) يُستردُّ مالُه ⇒ يُغلَقُ `rejected`.
+ * بلاه يَعودُ «بانتظار الدفع» بزرِّ دفعٍ عند العميلة — فتَدفعُ مرّةً أخرى
+ * لعقدٍ رُفِضَ تفعيلُه. العقدُ المُفعَّلُ لا يُمَسّ (الاستردادُ الجزئيُّ لا
+ * يُنهي اشتراكاً قائماً).
+ * @param {{col: string, data: object}|null} doc مستندُ الطلب من `_findOrder`.
+ * @return {object} حقولٌ تُدمَجُ في كتابةِ الاسترداد.
+ */
+function _contractRefundClose(doc) {
+  if (!doc || doc.col !== "contracts") return {};
+  const st = (doc.data && doc.data.status) || "pending";
+  if (!["pending", "approved_waiting_payment"].includes(st)) return {};
+  return {status: "rejected", rejected_reason: "refunded_before_activation"};
+}
+
 // ── Refund ─────────────────────────────────────────────────────────────────────
 // Refunds a paid or captured Moyasar payment. Supports full and partial refund.
 // Required: paymentId (string), orderId (string)
@@ -7348,6 +7364,7 @@ exports.moyasarRefundPayment = onCall(
           refunded_at: FieldValue.serverTimestamp(),
           // المبلغ الحقيقي يختلف بالمجموعة: store=total_amount، عقد=planPrice، غيرها=amount.
           refunded_amount: refundedAmount,
+          ..._contractRefundClose(order),
         });
         // العميل كان لا يُشعر بشيء عند استرداد الأدمن من البوابة — بينما كل مسارات
         // الاسترداد الأخرى (webhook/الآلي) تُشعره. رسالة واحدة بنفس صيغتها.
@@ -7501,6 +7518,7 @@ exports.tamaraRefundPayment = onCall(
         refund_reason: reason,
         refunded_at: FieldValue.serverTimestamp(),
         refunded_amount: refundAmount,
+        ..._contractRefundClose(existing),
       });
 
       const clientId = existing.data.client_id || existing.data.userId;

@@ -2,6 +2,7 @@ import 'package:zyiarah/services/audit_service.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:zyiarah/services/firebase_service.dart';
 import 'package:zyiarah/services/zyiarah_pdf_service.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -367,6 +368,82 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
     );
   }
 
+  /// **مالٌ محبوسٌ بلا زرّ.** عقدٌ مدفوعٌ لم يُفعَّل (أوضحُه «السعر أو عدد
+  /// الزيارات لا يطابق الباقة» وقرارُه بشريٌّ بالبناء) كان الخادمُ يَعرفُ
+  /// استردادَه ولا سطحَ يُناديه. القرارُ في `contractRefundRoute`، والخادمُ
+  /// يُغلِقُ العقدَ `rejected` بعد الاسترداد كي لا يَعودَ «بانتظار الدفع».
+  Widget _contractRefundAction(
+      Map<String, dynamic> data, String docId, BuildContext sheetCtx) {
+    final ContractRefundRoute route = contractRefundRoute(data);
+    if (route == ContractRefundRoute.none) return const SizedBox.shrink();
+    if (route == ContractRefundRoute.wallet) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Text(
+          'دُفع هذا العقد من المحفظة — استرداده إلى المحفظة غير متاح من هنا بعد.',
+          style: GoogleFonts.tajawal(fontSize: 11, color: Colors.grey.shade700),
+        ),
+      );
+    }
+    final String via = route == ContractRefundRoute.tamara ? 'تمارا' : 'بوابة الدفع';
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: () => _refundContract(data, docId, route, sheetCtx),
+          icon: const Icon(Icons.currency_exchange_rounded),
+          label: Text('استرداد المبلغ للعميل ($via)',
+              style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            side: BorderSide(color: Colors.red.shade700),
+            foregroundColor: Colors.red.shade700,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _refundContract(Map<String, dynamic> data, String docId,
+      ContractRefundRoute route, BuildContext sheetCtx) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final String amount = formatSarAny(data['planPrice']);
+    final bool ok = await _showConfirm(
+      'استرداد مبلغ العقد',
+      'سيُعاد $amount ر.س كاملاً إلى وسيلة الدفع الأصلية، ويُغلَق العقد '
+          '(مرفوض) فلا يُطلب من العميل الدفع مرة أخرى. لا يمكن التراجع.',
+    );
+    if (!ok) return;
+    if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+    try {
+      if (route == ContractRefundRoute.tamara) {
+        await FirebaseFunctions.instance
+            .httpsCallable('tamaraRefundPayment')
+            .call({'order_id': docId});
+      } else {
+        await FirebaseFunctions.instance
+            .httpsCallable('moyasarRefundPayment')
+            .call({
+          'paymentId': '${data['moyasar_payment_id']}',
+          'orderId': docId,
+        });
+      }
+      messenger.showSnackBar(const SnackBar(
+          content: Text('تم استرداد المبلغ وإغلاق العقد ✅'),
+          backgroundColor: Colors.green));
+    } on FirebaseFunctionsException catch (e) {
+      messenger.showSnackBar(SnackBar(
+          content: Text(e.message ?? 'تعذّر الاسترداد — أعد المحاولة'),
+          backgroundColor: Colors.red));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('تعذّر الاسترداد — تحقّق من الاتصال وأعد المحاولة'),
+          backgroundColor: Colors.red));
+    }
+  }
+
   void _deleteContract(String id) async {
     final messenger = ScaffoldMessenger.of(context);
     final confirm = await _showConfirm("حذف العقد", "سيتم حذف هذا السجل نهائياً. هل أنت متأكد؟");
@@ -429,6 +506,7 @@ class _AdminContractsScreenState extends State<AdminContractsScreen> {
                 contractVisitsView(data).text),
             _buildDetailRow("رقم الاتصال", data['userPhone'] ?? 'غير مسجل'),
             _contractHealthBanner(data),
+            _contractRefundAction(data, docId, ctx),
             const Divider(height: 32),
             if (data['status'] == 'active' || data['status'] == 'approved_waiting_payment')
               SizedBox(

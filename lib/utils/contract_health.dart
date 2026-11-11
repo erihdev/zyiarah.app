@@ -145,3 +145,50 @@ bool contractAwaitingPayment(Map<String, dynamic> c) {
 /// ما يُكتَبُ للأدمنِ تحتَ عقدٍ لم يُدفَع.
 const String kContractAwaitingPaymentNote =
     'لم يُدفع بعد — يتفعّل العقد وحده لحظة دفع العميلة، ولا يحتاج اعتماداً.';
+
+/// كيف يُستردُّ مالُ عقدٍ مدفوعٍ لم يُفعَّل — من شاشةِ العقودِ نفسِها.
+///
+/// كان الخادمُ يَعرفُ استردادَ العقدِ (`moyasarRefundPayment` و
+/// `tamaraRefundPayment` يَبحثانِ في `contracts` عبرَ `_findOrder`) ولا سطحَ
+/// يُناديه للعقد: بطاقةُ عمليّاتِ الدفعِ في تفاصيلِ **الطلب** وحدَها. فعقدٌ
+/// وُسِمَ «السعر أو عدد الزيارات لا يطابق الباقة» — وقرارُه بشريٌّ بالبناء —
+/// يَبقى مالُه محبوساً بلا زرّ.
+enum ContractRefundRoute {
+  /// لا استردادَ من هنا (غيرُ مدفوع، أو مُفعَّل، أو سبقَ استردادُه).
+  none,
+
+  /// بطاقةٌ/Apple Pay/STC عبرَ ميسر — `moyasarRefundPayment`.
+  moyasar,
+
+  /// تقسيطُ تمارا — `tamaraRefundPayment`.
+  tamara,
+
+  /// دُفِعَ من المحفظة — لا مسارَ استردادٍ خادميٍّ له بعد.
+  wallet,
+}
+
+/// المسارُ المناسبُ للعقد، أو `none`.
+ContractRefundRoute contractRefundRoute(Map<String, dynamic> c) {
+  final String status = (c['status'] ?? 'pending').toString();
+  if (c['is_paid'] != true || !kContractPreActiveStatuses.contains(status)) {
+    return ContractRefundRoute.none;
+  }
+  if (!kContractPaidNotActive.contains(contractHealthOf(c))) {
+    return ContractRefundRoute.none;
+  }
+  if (c['refund_claimed'] == true ||
+      c['refund_credited'] == true ||
+      c['payment_status'] == 'refunded') {
+    return ContractRefundRoute.none;
+  }
+  final String method = (c['payment_method'] ?? '').toString();
+  if (method == 'tamara' ||
+      '${c['tamara_order_id'] ?? ''}'.trim().isNotEmpty) {
+    return ContractRefundRoute.tamara;
+  }
+  if ('${c['moyasar_payment_id'] ?? ''}'.trim().isNotEmpty) {
+    return ContractRefundRoute.moyasar;
+  }
+  if (method == 'wallet') return ContractRefundRoute.wallet;
+  return ContractRefundRoute.none;
+}

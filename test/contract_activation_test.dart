@@ -327,4 +327,37 @@ void main() {
       }
     });
   });
+
+  group('استرداد عقدٍ مدفوعٍ لم يُفعَّل', () {
+    Map<String, dynamic> c(Map<String, dynamic> extra) => {
+          'status': 'approved_waiting_payment',
+          'is_paid': true,
+          'plan_validation_failed': true,
+          ...extra,
+        };
+    test('بطاقة ⇒ ميسر، وتقسيط ⇒ تمارا، ومحفظة ⇒ رسالة', () {
+      expect(contractRefundRoute(c({'moyasar_payment_id': 'pay_1'})),
+          ContractRefundRoute.moyasar);
+      expect(contractRefundRoute(c({'payment_method': 'tamara'})),
+          ContractRefundRoute.tamara);
+      expect(contractRefundRoute(c({'payment_method': 'wallet'})),
+          ContractRefundRoute.wallet);
+    });
+    test('لا زرَّ لعقدٍ غيرِ مدفوعٍ أو مُفعَّلٍ أو مُستردٍّ سلفاً', () {
+      final m = {'moyasar_payment_id': 'pay_1'};
+      expect(contractRefundRoute(c({...m, 'is_paid': false})),
+          ContractRefundRoute.none);
+      expect(contractRefundRoute(c({...m, 'status': 'active'})),
+          ContractRefundRoute.none);
+      expect(contractRefundRoute(c({...m, 'refund_claimed': true})),
+          ContractRefundRoute.none);
+      expect(contractRefundRoute(c({...m, 'payment_status': 'refunded'})),
+          ContractRefundRoute.none);
+    });
+    test('الخادمُ يُغلِقُ العقدَ بعد استردادِه في المسارَين', () {
+      final String idx = File('functions/index.js').readAsStringSync();
+      expect(RegExp(r'\.\.\._contractRefundClose\(').allMatches(idx).length, 2);
+      expect(idx, contains('status: "rejected", rejected_reason: "refunded_before_activation"'));
+    });
+  });
 }
