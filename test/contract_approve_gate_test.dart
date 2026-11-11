@@ -42,7 +42,13 @@ const String kCasesJson = '''
   [{"status": "pending", "is_paid": true, "contract_visits_pending": true,
     "plan_validation_failed": true}, "planMismatch", false],
   [{"status": "pending", "is_paid": true, "contract_activation_failed": true,
-    "contract_visits_pending": true}, "visitsMissing", false]
+    "contract_visits_pending": true}, "visitsMissing", false],
+  [{"status": "rejected", "is_paid": true, "plan_validation_failed": true,
+    "rejected_reason": "refunded_before_activation"}, "ok", false],
+  [{"status": "cancelled", "is_paid": true, "contract_activation_failed": true},
+   "ok", false],
+  [{"status": "expired", "is_paid": true, "contract_visits_pending": true},
+   "ok", false]
 ]
 ''';
 // ── CONTRACT_HEALTH_CASES_END ──
