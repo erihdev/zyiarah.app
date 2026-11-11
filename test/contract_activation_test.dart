@@ -38,11 +38,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:zyiarah/utils/contract_health.dart';
 import 'helpers/sources_in.dart';
 
-String _stripJs(String src) => src
-    .split('\n')
-    .where((l) => !l.trimLeft().startsWith('//'))
-    .join('\n');
-
+String _stripJs(String src) =>
+    src.split('\n').where((l) => !l.trimLeft().startsWith('//')).join('\n');
 
 /// جدولُ أسبابِ العقدِ **المشترَكُ** مع فحصِ اللوحة — يُقرَأُ من ملفِّه.
 ///
@@ -73,15 +70,13 @@ List<List<Object?>> _sharedReasons() {
   }
   if (start < 0) throw StateError('تعذّرَ موازنةُ أقواسِ جدولِ الأسباب');
   var json = block.substring(start, end + 1);
-  json = json
-      .split('\n')
-      .where((l) => !l.trimLeft().startsWith('//'))
-      .join('\n');
+  json =
+      json.split('\n').where((l) => !l.trimLeft().startsWith('//')).join('\n');
   json = json.replaceAll("'", '"');
   json = json.replaceAll(RegExp(r'\bundefined\b'), 'null');
   // مفاتيحُ الكائناتِ في TS بلا اقتباس — وJSON يَلزمُه.
-  json = json.replaceAllMapped(
-      RegExp(r'([{,]\s*)([A-Za-z_]\w*)(\s*:)'), (m) => '${m[1]}"${m[2]}"${m[3]}');
+  json = json.replaceAllMapped(RegExp(r'([{,]\s*)([A-Za-z_]\w*)(\s*:)'),
+      (m) => '${m[1]}"${m[2]}"${m[3]}');
   json = json.replaceAllMapped(RegExp(r',(\s*[\]\}])'), (m) => m.group(1)!);
   return (jsonDecode(json) as List<dynamic>)
       .map((r) => (r as List<dynamic>).cast<Object?>())
@@ -206,8 +201,8 @@ void main() {
       expect(seg.contains('contract_visits_alerted'), isTrue,
           reason: 'التصعيدُ بلا علَمٍ خاصٍّ يُكرَّرُ كلَّ دورة');
       // والنجاحُ يَمحو العلَمَ — بلاه يَبقى العقدُ في مجموعةِ الإعادةِ للأبد.
-      expect(seg.contains('contract_visits_pending: FieldValue.delete()'),
-          isTrue,
+      expect(
+          seg.contains('contract_visits_pending: FieldValue.delete()'), isTrue,
           reason: 'النجاحُ لا يَمحو العلَم');
     });
 
@@ -242,7 +237,9 @@ void main() {
 
     test('والقاعدةُ مرّةٌ واحدةٌ بمُنادِيَين — لا نسخةَ في المكنسة', () {
       expect(
-          RegExp(r'async function _activateContractNow').allMatches(jsCode).length,
+          RegExp(r'async function _activateContractNow')
+              .allMatches(jsCode)
+              .length,
           1);
       expect(RegExp(r'_activateContractNow\(').allMatches(jsCode).length,
           greaterThanOrEqualTo(3),
@@ -263,8 +260,9 @@ void main() {
       // `generateSubscriptionVisits`. هذا الفحصُ يُثبّتُ أنّ الحجّةَ صحيحةٌ:
       // لو ظهرَ له مُنادٍ يوماً فالتعليلُ يُراجَعُ لا يُسكَت.
       final callers = sourcesIn('lib', atLeast: 100)
-          .where((f) => RegExp(r"httpsCallable\(\s*'generateSubscriptionVisits'")
-              .hasMatch(f.readAsStringSync()))
+          .where((f) =>
+              RegExp(r"httpsCallable\(\s*'generateSubscriptionVisits'")
+                  .hasMatch(f.readAsStringSync()))
           .map((f) => f.path)
           .toList();
       expect(callers, isEmpty,
@@ -283,8 +281,8 @@ void main() {
 
   // ── الشاشةُ تَقرأُ الوسم — وكان بلا قارئٍ في أيِّ سطح ──
   group('شاشةُ العقودِ الإداريّة', () {
-    final screen =
-        File('lib/screens/admin/admin_contracts_screen.dart').readAsStringSync();
+    final screen = File('lib/screens/admin/admin_contracts_screen.dart')
+        .readAsStringSync();
 
     test('تُنادي القاعدةَ ولا تُعيدُ تعدادَ الحالاتِ بجوارِها', () {
       expect(screen.contains('contractHealthOf('), isTrue);
@@ -325,6 +323,79 @@ void main() {
         expect(contractHealthReason(doc), c[1],
             reason: 'القاعدتانِ افترقتا على $doc');
       }
+    });
+  });
+
+  group('استرداد عقدٍ مدفوعٍ لم يُفعَّل', () {
+    Map<String, dynamic> c(Map<String, dynamic> extra) => {
+          'status': 'approved_waiting_payment',
+          'is_paid': true,
+          'plan_validation_failed': true,
+          ...extra,
+        };
+    test('بطاقة ⇒ ميسر، وتقسيط ⇒ تمارا، ومحفظة ⇒ رسالة', () {
+      expect(contractRefundRoute(c({'moyasar_payment_id': 'pay_1'})),
+          ContractRefundRoute.moyasar);
+      expect(contractRefundRoute(c({'payment_method': 'tamara'})),
+          ContractRefundRoute.tamara);
+      expect(contractRefundRoute(c({'payment_method': 'wallet'})),
+          ContractRefundRoute.wallet);
+      // الوسيلةُ المكتوبةُ تَغلِبُ معرّفاً باقياً من محاولةٍ سابقة.
+      expect(
+          contractRefundRoute(c({
+            'payment_method': 'wallet',
+            'moyasar_payment_id': 'pay_failed',
+          })),
+          ContractRefundRoute.wallet);
+      expect(
+          contractRefundRoute(c({
+            'payment_method': 'card',
+            'tamara_order_id': 'tm_old',
+            'moyasar_payment_id': 'pay_1',
+          })),
+          ContractRefundRoute.moyasar);
+    });
+    test('لا زرَّ لعقدٍ غيرِ مدفوعٍ أو مُفعَّلٍ أو مُستردٍّ سلفاً', () {
+      final m = {'moyasar_payment_id': 'pay_1'};
+      expect(contractRefundRoute(c({...m, 'is_paid': false})),
+          ContractRefundRoute.none);
+      expect(contractRefundRoute(c({...m, 'status': 'active'})),
+          ContractRefundRoute.none);
+      expect(contractRefundRoute(c({...m, 'refund_claimed': true})),
+          ContractRefundRoute.none);
+      expect(contractRefundRoute(c({...m, 'payment_status': 'refunded'})),
+          ContractRefundRoute.none);
+    });
+    test('الخادمُ يُغلِقُ العقدَ بعد استردادِه في المسارَين', () {
+      final String idx = File('functions/index.js').readAsStringSync();
+      expect(RegExp(r'\.\.\._contractRefundClose\(').allMatches(idx).length, 2);
+      expect(
+          idx,
+          contains(
+              'status: "rejected", rejected_reason: "refunded_before_activation"'));
+      // دفعةُ ميسر مربوطةٌ بالعقدِ قبلَ أيِّ ردٍّ أو إغلاق: بلاهُ يُرَدُّ مالُ
+      // دفعةٍ ويُغلَقُ عقدٌ لا تَخصُّه.
+      final int fi = idx.indexOf('exports.moyasarRefundPayment');
+      final int bind =
+          idx.indexOf('existing.data.moyasar_payment_id !== paymentId', fi);
+      expect(bind, greaterThan(fi));
+      expect(bind, lessThan(idx.indexOf('moyasar.refund(', fi)));
+      // والعقدُ يُطابَقُ مع ميسر نفسِها لا مع حقلٍ قد يكونُ زُرِع.
+      final int vi = idx.indexOf('moyasar.getPayment(secret, paymentId)', fi);
+      expect(vi, greaterThan(fi));
+      expect(vi, lessThan(idx.indexOf('moyasar.refund(', fi)));
+      expect(idx.indexOf('String(md.order_id) === String(orderId)', fi),
+          greaterThan(vi));
+      // والعقدُ المُغلَقُ لا يُدفَعُ ثانيةً من المحفظة.
+      final int wi = idx.indexOf('exports.payContractWithWallet');
+      final int gate = idx.indexOf('هذا العقد مغلق ولا يمكن دفعه', wi);
+      expect(gate, greaterThan(wi));
+      expect(gate, lessThan(idx.indexOf('t.update(contractRef', wi)));
+      // وحدثُ تمارا المتأخّرُ لا يُعيدُ مستنداً مُستردّاً مدفوعاً.
+      final int ti = idx.indexOf('async function _tamaraFlipPaid');
+      final int tg = idx.indexOf('data.payment_status === "refunded"', ti);
+      expect(tg, greaterThan(ti));
+      expect(tg, lessThan(idx.indexOf('payment_status: "paid"', ti)));
     });
   });
 }

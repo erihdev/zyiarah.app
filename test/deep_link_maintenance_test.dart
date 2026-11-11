@@ -125,7 +125,16 @@ void main() {
       // المُزامِنُ الوحيدُ يَكتب هاتين فقط.
       expect(idx, contains('status: "in_progress",'));
       expect(idx, contains('status: "completed",'));
-      expect(idx.contains('status: "rejected",'), isFalse,
+      // `_contractRefundClose` يَكتبُ `rejected` على **العقود** وحدَها
+      // (`doc.col !== "contracts"` ⇒ لا شيء)، والمُشغّلُ على
+      // `maintenance_requests` — فيُستثنى جسمُها ويُثبَّتُ حصرُها.
+      final int ci = idx.indexOf('function _contractRefundClose(');
+      expect(ci, greaterThan(-1));
+      final int ce = idx.indexOf('\n}\n', ci);
+      final String closeFn = idx.substring(ci, ce);
+      expect(closeFn, contains('doc.col !== "contracts"'));
+      final String rest = idx.substring(0, ci) + idx.substring(ce);
+      expect(rest.contains('status: "rejected",'), isFalse,
           reason: 'موضعٌ صار يَكتب rejected — الدالّةُ صارت حيّةً فراجِعها');
     });
   });

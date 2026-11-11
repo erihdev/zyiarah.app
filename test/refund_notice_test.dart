@@ -290,6 +290,10 @@ void main() {
           {
             'lib/screens/admin/admin_order_details_screen.dart',
             'admin_panel/src/pages/Orders.tsx',
+            // عقدٌ مدفوعٌ **لم يُفعَّل**: لا زياراتٍ ولا سائقَ يَذهب، فجملةُ
+            // «ما يَحدثُ للخدمة» لا موضوعَ لها؛ وحوارُه يَقولُ ما يَحدثُ
+            // فعلاً — العقدُ يُغلَقُ «مرفوضاً» (`_contractRefundClose`).
+            'lib/screens/admin/admin_contracts_screen.dart',
           },
           reason: 'سطحٌ ثالثٌ يُنادي عمليّاتَ البوّابةِ — يَلزمُه نفسُ الجملة');
     });

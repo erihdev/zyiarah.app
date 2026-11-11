@@ -145,3 +145,54 @@ bool contractAwaitingPayment(Map<String, dynamic> c) {
 /// ما يُكتَبُ للأدمنِ تحتَ عقدٍ لم يُدفَع.
 const String kContractAwaitingPaymentNote =
     'لم يُدفع بعد — يتفعّل العقد وحده لحظة دفع العميلة، ولا يحتاج اعتماداً.';
+
+/// كيف يُستردُّ مالُ عقدٍ مدفوعٍ لم يُفعَّل — من شاشةِ العقودِ نفسِها.
+///
+/// كان الخادمُ يَعرفُ استردادَ العقدِ (`moyasarRefundPayment` و
+/// `tamaraRefundPayment` يَبحثانِ في `contracts` عبرَ `_findOrder`) ولا سطحَ
+/// يُناديه للعقد: بطاقةُ عمليّاتِ الدفعِ في تفاصيلِ **الطلب** وحدَها. فعقدٌ
+/// وُسِمَ «السعر أو عدد الزيارات لا يطابق الباقة» — وقرارُه بشريٌّ بالبناء —
+/// يَبقى مالُه محبوساً بلا زرّ.
+enum ContractRefundRoute {
+  /// لا استردادَ من هنا (غيرُ مدفوع، أو مُفعَّل، أو سبقَ استردادُه).
+  none,
+
+  /// بطاقةٌ/Apple Pay/STC عبرَ ميسر — `moyasarRefundPayment`.
+  moyasar,
+
+  /// تقسيطُ تمارا — `tamaraRefundPayment`.
+  tamara,
+
+  /// دُفِعَ من المحفظة — لا مسارَ استردادٍ خادميٍّ له بعد.
+  wallet,
+}
+
+/// المسارُ المناسبُ للعقد، أو `none`.
+ContractRefundRoute contractRefundRoute(Map<String, dynamic> c) {
+  final String status = (c['status'] ?? 'pending').toString();
+  if (c['is_paid'] != true || !kContractPreActiveStatuses.contains(status)) {
+    return ContractRefundRoute.none;
+  }
+  if (!kContractPaidNotActive.contains(contractHealthOf(c))) {
+    return ContractRefundRoute.none;
+  }
+  if (c['refund_claimed'] == true ||
+      c['refund_credited'] == true ||
+      c['payment_status'] == 'refunded') {
+    return ContractRefundRoute.none;
+  }
+  // الوسيلةُ المكتوبةُ تَغلِبُ المعرّفاتِ: عقدٌ جُرِّبت بطاقتُه ثمّ دُفِعَ من
+  // المحفظةِ قد يَحملُ `moyasar_payment_id` لدفعةٍ فاشلة، فتوجيهُه إلى ميسر
+  // كان سيَرُدُّ — أو يُحاوِلُ ردَّ — دفعةً غيرَ التي قُبِضَ بها العقد.
+  final String method = (c['payment_method'] ?? '').toString();
+  final bool hasTamara = '${c['tamara_order_id'] ?? ''}'.trim().isNotEmpty;
+  final bool hasMoyasar = '${c['moyasar_payment_id'] ?? ''}'.trim().isNotEmpty;
+  if (method == 'wallet') return ContractRefundRoute.wallet;
+  if (method == 'tamara') return ContractRefundRoute.tamara;
+  if (method.isNotEmpty) {
+    return hasMoyasar ? ContractRefundRoute.moyasar : ContractRefundRoute.none;
+  }
+  if (hasTamara) return ContractRefundRoute.tamara;
+  if (hasMoyasar) return ContractRefundRoute.moyasar;
+  return ContractRefundRoute.none;
+}

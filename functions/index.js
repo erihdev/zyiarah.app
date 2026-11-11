@@ -1122,6 +1122,12 @@ async function _tamaraFlipPaid(db, orderRef, eventType, tamaraOrderId) {
       if (!snap.exists) return null;
       data = snap.data();
       if (data.is_paid) return false; // سبق تأكيده
+      // مستندٌ أُعيد مالُه لا يُقلَبُ مدفوعاً بحدثٍ متأخّرٍ أو مُعادٍ أو بالمكنسة:
+      // الاستردادُ يَكتبُ is_paid:false، فبلا هذا كان «approved» لاحقٌ يُعيدُه
+      // مدفوعاً — ولعقدٍ مُغلَقٍ يُطلِقُ التفعيلَ على مالٍ رُدَّ فعلاً.
+      if (data.refunded === true || data.payment_status === "refunded") {
+        return false;
+      }
       t.update(ref, {
         payment_status: "paid",
         is_paid: true,
@@ -4231,6 +4237,11 @@ exports.payContractWithWallet = onCall({cpu: 0.083}, async (request) => {
     const c = cSnap.data();
     if (c.userId !== uid) throw new HttpsError("permission-denied", "ليس عقدك");
     if (c.is_paid === true) return {alreadyPaid: true};
+    // عقدٌ أُغلِقَ (مرفوضٌ أو أُعيد مالُه قبل التفعيل) لا يُدفَعُ ثانيةً من المحفظة:
+    // الدفعُ كان سيَقلبُ is_paid فيُطلِقُ التفعيلَ على عقدٍ مُغلَق.
+    if (!["pending", "approved_waiting_payment"].includes(c.status || "pending")) {
+      throw new HttpsError("failed-precondition", "هذا العقد مغلق ولا يمكن دفعه");
+    }
     const price = Number(c.planPrice || 0);
     if (price <= 0) throw new HttpsError("failed-precondition", "سعر الباقة غير صالح");
     const wSnap = await t.get(walletRef);
@@ -7259,6 +7270,22 @@ async function _findOrder(orderId) {
   return null;
 }
 
+/**
+ * (استرداد عقدٍ لم يُفعَّل) عقدٌ مدفوعٌ في حالةِ ما قبلَ التفعيل
+ * (`pending`/`approved_waiting_payment`) يُستردُّ مالُه ⇒ يُغلَقُ `rejected`.
+ * بلاه يَعودُ «بانتظار الدفع» بزرِّ دفعٍ عند العميلة — فتَدفعُ مرّةً أخرى
+ * لعقدٍ رُفِضَ تفعيلُه. العقدُ المُفعَّلُ لا يُمَسّ (الاستردادُ الجزئيُّ لا
+ * يُنهي اشتراكاً قائماً).
+ * @param {{col: string, data: object}|null} doc مستندُ الطلب من `_findOrder`.
+ * @return {object} حقولٌ تُدمَجُ في كتابةِ الاسترداد.
+ */
+function _contractRefundClose(doc) {
+  if (!doc || doc.col !== "contracts") return {};
+  const st = (doc.data && doc.data.status) || "pending";
+  if (!["pending", "approved_waiting_payment"].includes(st)) return {};
+  return {status: "rejected", rejected_reason: "refunded_before_activation"};
+}
+
 // ── Refund ─────────────────────────────────────────────────────────────────────
 // Refunds a paid or captured Moyasar payment. Supports full and partial refund.
 // Required: paymentId (string), orderId (string)
@@ -7268,7 +7295,8 @@ exports.moyasarRefundPayment = onCall(
     async (request) => {
       await _assertAdmin(request);
 
-      const {paymentId, orderId, amountHalalas} = request.data;
+      const {paymentId, orderId} = request.data;
+      let {amountHalalas} = request.data;
       if (!paymentId || !orderId) {
         throw new HttpsError("invalid-argument", "paymentId و orderId مطلوبان");
       }
@@ -7286,10 +7314,51 @@ exports.moyasarRefundPayment = onCall(
       // Moyasar (نفس نمط المطالبة الذرّية في generateSubscriptionVisits/onOrderRewards)،
       // ونحرّرها عند فشل البوابة كي تبقى إعادة المحاولة ممكنة.
       const existing = await _findOrder(orderId);
+      // العقدُ يُغلَقُ بعد الاسترداد (`_contractRefundClose`)، فدفعةٌ لا تَخصُّه
+      // كانت ستَرُدُّ مالَ طلبٍ وتُغلِقُ عقداً آخر: نربطُ الدفعةَ بمستندِها.
+      if (existing && existing.col === "contracts" &&
+          existing.data.moyasar_payment_id !== paymentId) {
+        throw new HttpsError("failed-precondition",
+            "رقم الدفعة لا يطابق دفعة هذا العقد");
+      }
+      // والمطابقةُ مع المستندِ وحدَها لا تَكفي للعقد: الحقلُ كان يَكتبُه مالكُ
+      // العقدِ (قبلَ نشرِ القواعد)، فالمرجعُ هو ميسر نفسُها — الدفعةُ تَحملُ
+      // `metadata.order_id` هذا العقدَ بعينِه.
+      if (existing && existing.col === "contracts") {
+        const pay = await moyasar.getPayment(secret, paymentId);
+        if (!pay.ok || !pay.raw) {
+          throw new HttpsError("unavailable",
+              "تعذّر التحقق من الدفعة لدى Moyasar — أعد المحاولة");
+        }
+        // كلُّ مسارِ دفعٍ للعقدِ (البطاقة/STC/Apple/Google) يَكتبُ
+        // `metadata.order_id = contractId` (`_nativePayMeta`)، فلا احتياطَ
+        // بالمبلغ: دفعةٌ أخرى بلا metadata وبالمبلغِ نفسِه كانت تَمرّ.
+        const md = pay.raw.metadata || {};
+        const bound = !!md.order_id && String(md.order_id) === String(orderId);
+        if (!bound) {
+          throw new HttpsError("failed-precondition",
+              "هذه الدفعة لا تخصّ هذا العقد — لا يمكن استردادها من هنا");
+        }
+        // والمبلغُ المُعادُ هو قيمةُ العقدِ بعينِها لا مبلغُ الدفعةِ كاملاً، كي
+        // يُطابِقَ ما تُسجّلُه `refunded_amount` وما يَراه الأدمنُ في الحوار.
+        const planH = Math.round(Number(existing.data.planPrice || 0) * 100);
+        const paidH = Number(pay.raw.amount || 0);
+        if (!amountHalalas) amountHalalas = planH;
+        if (!(amountHalalas > 0) || amountHalalas > paidH) {
+          throw new HttpsError("failed-precondition",
+              "مبلغ الاسترداد لا يطابق مبلغ الدفعة");
+        }
+      }
       if (existing) {
         await getFirestore().runTransaction(async (tx) => {
           const snap = await tx.get(existing.ref);
           const cur = snap.data() || {};
+          // لا استردادَ لدفعةٍ غيرِ المسجَّلةِ على المستند (قراءةٌ طازجة).
+          if (cur.moyasar_payment_id &&
+              String(cur.moyasar_payment_id) !== String(paymentId)) {
+            throw new HttpsError("failed-precondition",
+                "معرّف الدفعة لا يطابق الدفع المسجَّل على هذا المستند");
+          }
           if (cur.refund_credited === true) {
             throw new HttpsError("failed-precondition",
                 "سبق ردّ هذا الطلب إلى محفظة العميل — لا يمكن ردّه عبر البوابة أيضاً");
@@ -7348,6 +7417,7 @@ exports.moyasarRefundPayment = onCall(
           refunded_at: FieldValue.serverTimestamp(),
           // المبلغ الحقيقي يختلف بالمجموعة: store=total_amount، عقد=planPrice، غيرها=amount.
           refunded_amount: refundedAmount,
+          ..._contractRefundClose(order),
         });
         // العميل كان لا يُشعر بشيء عند استرداد الأدمن من البوابة — بينما كل مسارات
         // الاسترداد الأخرى (webhook/الآلي) تُشعره. رسالة واحدة بنفس صيغتها.
@@ -7501,6 +7571,7 @@ exports.tamaraRefundPayment = onCall(
         refund_reason: reason,
         refunded_at: FieldValue.serverTimestamp(),
         refunded_amount: refundAmount,
+        ..._contractRefundClose(existing),
       });
 
       const clientId = existing.data.client_id || existing.data.userId;

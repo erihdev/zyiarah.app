@@ -340,7 +340,7 @@ const {setDoc, doc, updateDoc, getDoc, getDocs, collection, query, addDoc,
   // نقلُ العقدِ بـ`userId` كان يَمُرُّ بالتحديثِ بعد الإنشاء. مستندٌ لكلِّ فحص.
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
-    for (const id of ["cOwn1", "cOwn2", "cOwn3", "cOwn4", "cOwn5"]) {
+    for (const id of ["cOwn1", "cOwn2", "cOwn3", "cOwn4", "cOwn5", "cOwn6", "cOwn7"]) {
       await setDoc(doc(db, `contracts/${id}`),
           {userId: "client1", status: "pending", is_paid: false,
             planPrice: 500, planVisits: 4});
@@ -358,6 +358,14 @@ const {setDoc, doc, updateDoc, getDoc, getDocs, collection, query, addDoc,
   await check("contract owner: CANNOT set contract_visits_pending",
       updateDoc(doc(asUser("client1"), "contracts/cOwn4"),
           {contract_visits_pending: true}), false);
+  // زرُّ الاسترداد يُرسِلُ `moyasar_payment_id` المخزَّنَ إلى ميسر — فكتابتُه
+  // بيدِ المالكِ كانت تُوجِّهُ الاسترداد إلى دفعةِ غيرِه.
+  await check("contract owner: CANNOT plant moyasar_payment_id",
+      updateDoc(doc(asUser("client1"), "contracts/cOwn6"),
+          {moyasar_payment_id: "pay_someone_else"}), false);
+  await check("contract owner: CANNOT pre-mark payment_status refunded",
+      updateDoc(doc(asUser("client1"), "contracts/cOwn7"),
+          {payment_status: "refunded"}), false);
   // والفاتورةُ تُكتَبُ من شاشةِ الدفعِ على مستندِ العقد — التضييقُ لا يَمسُّها.
   await check("contract owner: CAN write invoice_pdf fields",
       updateDoc(doc(asUser("client1"), "contracts/cOwn5"),

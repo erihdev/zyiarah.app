@@ -648,6 +648,16 @@ service cloud.firestore {
         // الإداريّة، فتلفيقُه يُظهِرُ للأدمنِ سبباً لم يُكتَب.
         'plan_validation_failed', 'plan_validation_error',
         'plan_validation_at',
+        // ⚠️ **حقولُ الدفعِ والاسترداد (2026-11-11).** زرُّ «استرداد مبلغ
+        // العقد» يَقرأُ `moyasar_payment_id` من المستندِ ويُرسِلُه إلى ميسر،
+        // فمالكُ عقدٍ يَكتبُه بيدِه كان يُوجِّهُ استرداداً إداريّاً إلى دفعةِ
+        // عميلٍ آخر؛ وكتابةُ `payment_status: 'refunded'` أو `refund_claimed`
+        // سلفاً تَحجبُ الاستردادَ والتأكيدَ عن عقدٍ مدفوع. لا كاتبَ عميليَّ
+        // لأيٍّ منها — يَكتبُها الخادمُ وحدَه.
+        'moyasar_payment_id', 'moyasar_status', 'tamara_order_id',
+        'tamara_status', 'payment_status', 'refunded', 'refunded_at',
+        'refunded_amount', 'refund_claimed', 'refund_claimed_at',
+        'refund_credited', 'rejected_reason',
       ];
     }
 
