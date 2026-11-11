@@ -385,6 +385,11 @@ void main() {
       final int gate = idx.indexOf('هذا العقد مغلق ولا يمكن دفعه', wi);
       expect(gate, greaterThan(wi));
       expect(gate, lessThan(idx.indexOf('t.update(contractRef', wi)));
+      // وحدثُ تمارا المتأخّرُ لا يُعيدُ مستنداً مُستردّاً مدفوعاً.
+      final int ti = idx.indexOf('async function _tamaraFlipPaid');
+      final int tg = idx.indexOf('data.payment_status === "refunded"', ti);
+      expect(tg, greaterThan(ti));
+      expect(tg, lessThan(idx.indexOf('payment_status: "paid"', ti)));
     });
   });
 }

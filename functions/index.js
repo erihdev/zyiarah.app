@@ -1122,6 +1122,12 @@ async function _tamaraFlipPaid(db, orderRef, eventType, tamaraOrderId) {
       if (!snap.exists) return null;
       data = snap.data();
       if (data.is_paid) return false; // سبق تأكيده
+      // مستندٌ أُعيد مالُه لا يُقلَبُ مدفوعاً بحدثٍ متأخّرٍ أو مُعادٍ أو بالمكنسة:
+      // الاستردادُ يَكتبُ is_paid:false، فبلا هذا كان «approved» لاحقٌ يُعيدُه
+      // مدفوعاً — ولعقدٍ مُغلَقٍ يُطلِقُ التفعيلَ على مالٍ رُدَّ فعلاً.
+      if (data.refunded === true || data.payment_status === "refunded") {
+        return false;
+      }
       t.update(ref, {
         payment_status: "paid",
         is_paid: true,
