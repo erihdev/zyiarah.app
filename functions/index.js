@@ -7320,10 +7320,35 @@ exports.moyasarRefundPayment = onCall(
         throw new HttpsError("failed-precondition",
             "رقم الدفعة لا يطابق دفعة هذا العقد");
       }
+      // والمطابقةُ مع المستندِ وحدَها لا تَكفي للعقد: الحقلُ كان يَكتبُه مالكُ
+      // العقدِ (قبلَ نشرِ القواعد)، فالمرجعُ هو ميسر نفسُها — الدفعةُ تَحملُ
+      // `metadata.order_id` هذا العقدَ، أو (لدفعةٍ بلا metadata) مبلغَه بعينِه.
+      if (existing && existing.col === "contracts") {
+        const pay = await moyasar.getPayment(secret, paymentId);
+        if (!pay.ok || !pay.raw) {
+          throw new HttpsError("unavailable",
+              "تعذّر التحقق من الدفعة لدى Moyasar — أعد المحاولة");
+        }
+        const md = pay.raw.metadata || {};
+        const expectedH = Math.round(Number(existing.data.planPrice || 0) * 100);
+        const bound = md.order_id ?
+          String(md.order_id) === String(orderId) :
+          Number(pay.raw.amount) === expectedH;
+        if (!bound) {
+          throw new HttpsError("failed-precondition",
+              "هذه الدفعة لا تخصّ هذا العقد — لا يمكن استردادها من هنا");
+        }
+      }
       if (existing) {
         await getFirestore().runTransaction(async (tx) => {
           const snap = await tx.get(existing.ref);
           const cur = snap.data() || {};
+          // لا استردادَ لدفعةٍ غيرِ المسجَّلةِ على المستند (قراءةٌ طازجة).
+          if (cur.moyasar_payment_id &&
+              String(cur.moyasar_payment_id) !== String(paymentId)) {
+            throw new HttpsError("failed-precondition",
+                "معرّف الدفعة لا يطابق الدفع المسجَّل على هذا المستند");
+          }
           if (cur.refund_credited === true) {
             throw new HttpsError("failed-precondition",
                 "سبق ردّ هذا الطلب إلى محفظة العميل — لا يمكن ردّه عبر البوابة أيضاً");

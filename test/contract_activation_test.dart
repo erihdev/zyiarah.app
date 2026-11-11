@@ -380,6 +380,12 @@ void main() {
           idx.indexOf('existing.data.moyasar_payment_id !== paymentId', fi);
       expect(bind, greaterThan(fi));
       expect(bind, lessThan(idx.indexOf('moyasar.refund(', fi)));
+      // والعقدُ يُطابَقُ مع ميسر نفسِها لا مع حقلٍ قد يكونُ زُرِع.
+      final int vi = idx.indexOf('moyasar.getPayment(secret, paymentId)', fi);
+      expect(vi, greaterThan(fi));
+      expect(vi, lessThan(idx.indexOf('moyasar.refund(', fi)));
+      expect(idx.indexOf('String(md.order_id) === String(orderId)', fi),
+          greaterThan(vi));
       // والعقدُ المُغلَقُ لا يُدفَعُ ثانيةً من المحفظة.
       final int wi = idx.indexOf('exports.payContractWithWallet');
       final int gate = idx.indexOf('هذا العقد مغلق ولا يمكن دفعه', wi);
