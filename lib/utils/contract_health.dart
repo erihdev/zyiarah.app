@@ -85,6 +85,13 @@ bool contractNeedsHuman(ContractHealth h) => h == ContractHealth.planMismatch;
 ContractHealth contractHealthOf(Map<String, dynamic> c) {
   final bool paid = c['is_paid'] == true;
   final String status = (c['status'] as String?) ?? 'pending';
+  // **العقدُ المُغلَقُ لا صحّةَ له تُعرَض.** عقدٌ رُفِضَ أو أُلغيَ أو انتهى —
+  // ومنه المُستردُّ مالُه (`rejected` + `refunded_before_activation`) — كان
+  // يَحملُ وسمَ الفشلِ القديمَ فيُرسَمُ فوقه «مدفوع ولم يُفعَّل» وقد أُعيد
+  // المالُ وأُغلِق. الأعلامُ تَعني شيئاً قبلَ التفعيلِ أو أثناءه وحدَهما.
+  if (status != 'active' && !kContractPreActiveStatuses.contains(status)) {
+    return ContractHealth.ok;
+  }
   if (c['plan_validation_failed'] == true) return ContractHealth.planMismatch;
   if (c['contract_visits_pending'] == true) return ContractHealth.visitsMissing;
   if (c['contract_activation_failed'] == true) {

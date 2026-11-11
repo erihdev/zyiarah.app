@@ -82,6 +82,9 @@ export function contractHealthOf(c: ContractDoc | null | undefined): ContractHea
   if (!c) return 'ok';
   const paid = c.is_paid === true;
   const status = c.status ?? 'pending';
+  // العقدُ المُغلَقُ (مرفوضٌ/مُلغىً/منتهٍ، ومنه المُستردُّ مالُه) لا صحّةَ له
+  // تُعرَض — مرآةُ `contractHealthOf` في الدارت.
+  if (status !== 'active' && !CONTRACT_PRE_ACTIVE_STATUSES.includes(status)) return 'ok';
   if (c.plan_validation_failed === true) return 'planMismatch';
   if (c.contract_visits_pending === true) return 'visitsMissing';
   if (c.contract_activation_failed === true) return 'activationFailed';
