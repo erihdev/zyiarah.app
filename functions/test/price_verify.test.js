@@ -258,12 +258,54 @@ function fakeDb({byId = {}, byName = {}} = {}) {
 
   t("(١٩) والمسالكُ الثلاثةُ تُناديها", () => {
     assert.strictEqual(
-        (code.match(/_verifyOrderPriceTierA\(/g) || []).length, 4,
-        "التعريفُ + ثلاثةُ نداءات (verify / webhook / tamara)");
-    for (const src of ["\"verify\"", "\"webhook\"", "\"tamara\""]) {
+        (code.match(/_verifyOrderPriceTierA\(/g) || []).length, 5,
+        "التعريفُ + أربعةُ نداءات (verify / webhook / tamara / reconcile)");
+    for (const src of ["\"verify\"", "\"webhook\"", "\"tamara\"",
+      "\"reconcile\""]) {
       assert.ok(code.includes(src),
           `المسلكُ ${src} لا يُسمّي نفسَه — فالسجلُّ لا يُميّزُ مَن وَسَم`);
     }
+  });
+
+  t("(١٩ب) الدفعةُ مربوطةٌ بطلبِها، والمُنشأُ خادميّاً يُفحَص", () => {
+    const i = code.indexOf("exports.verifyMoyasarPayment");
+    const j = code.indexOf("\nexports.", i + 10);
+    const body = code.slice(i, j);
+    // (أ) metadata.order_id المخالِف يُرفَض قبل أيِّ قراءةٍ للطلب.
+    const bind = body.indexOf("String(pmd.order_id) !== String(orderId)");
+    assert.ok(bind > 0, "لا ربطَ بين الدفعةِ والطلب — دفعةٌ تؤكّد طلباتٍ عدّة");
+    assert.ok(bind < body.indexOf("const db = getFirestore()"),
+        "الربطُ يسبق البحثَ عن الطلب");
+    // (ب) سجلُّ المطالبة داخل معامَلةِ القلب، وقبل الكتابة.
+    const tx = body.indexOf("db.runTransaction", bind);
+    const claimGet = body.indexOf("tx.get(claimRef)", tx);
+    const upd = body.indexOf("tx.update(orderRef", tx);
+    assert.ok(claimGet > tx && claimGet < upd,
+        "المطالبةُ تُقرأ في المعامَلةِ نفسِها قبل القلب");
+    assert.ok(body.includes("_claimIsForeign(claim.data(), orderRef)"),
+        "دفعةٌ مُطالَبٌ بها لطلبٍ آخر تُرفَض");
+    // المعرّفُ وحدَه لا يكفي: المعرّفُ نفسُه قد يوجد في مجموعتَين.
+    const fi = code.indexOf("function _claimIsForeign");
+    const foreign = code.slice(fi, code.indexOf("\n}", fi));
+    assert.ok(foreign.includes("claim.order_id !== orderRef.id") &&
+        foreign.includes("claim.collection !== orderRef.parent.id"),
+    "المطالبةُ تُقارَن بالمعرّفِ والمجموعةِ معاً");
+    // والحجبُ (Tier B) يُطالِب بالدفعةِ قبل الاسترداد.
+    const tb = body.indexOf("if (tierBReason && paymentId)");
+    const cp = body.indexOf("_claimPayment(db, paymentId, orderRef", tb);
+    assert.ok(cp > tb && cp < body.indexOf("refunds.voidOrRefundTampered(", tb),
+        "دفعةٌ محجوبةٌ بلا مطالبةٍ تؤكّد مستنداً آخر");
+    // و`payment_method` (يكتبه العميل) لا يُعفي من الفحص.
+    assert.ok(!/skip\w* = [^;]*(includes\(method\)|nonMoyasar)/.test(code),
+        "وسيلةُ دفعٍ يكتبها العميلُ تُطفئ فحصَ السعر");
+    assert.ok(body.includes("tx.set(claimRef"), "المطالبةُ تُكتَب مع القلب");
+    // (ج) العملة.
+    assert.ok(body.includes("paymentData.currency !== \"SAR\""));
+    // (د) لا إعفاءَ من Tier A للمُنشأ خادميّاً (الحجبُ وحدَه مستثنى).
+    assert.ok(!/skip\w* = \w+\.server_created_from_payment/.test(code),
+        "المُنشأُ من بيانات الدفعِ يُعفى من الفحصِ كلِّه — ريالٌ يشتري خدمة");
+    assert.ok(code.includes("od.server_created_from_payment !== true"),
+        "واستثناءُ الحجبِ (Tier B) باقٍ داخل الدالّة");
   });
 
   t("(٢٠) وTier B يَبقى على مسارِ النداءِ وحدَه — بقرارٍ مكتوب", () => {

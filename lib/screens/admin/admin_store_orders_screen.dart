@@ -534,7 +534,16 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
                             // دورةُ الإدارة (`store_order_flow.dart`): مدفوع ⇒ قيد
                             // التجهيز ⇒ جاهز للتوصيل ⇒ إسناد لسائق ⇒ يُسلِّمُه السائق.
                             // كلُّ نقرةٍ تَصِلُ العميلةَ بإشعارٍ خادميّ.
-                            if (storeAdminNextStep(status) case final step?)
+                            // لا خطوةَ تجهيزٍ ولا توصيلٍ قبل أن يؤكّد الخادمُ الدفع:
+                            // العميلُ يكتب `under_review` بنفسِه (القاعدةُ تُجيزه
+                            // مع is_paid=false)، فالحالةُ وحدَها ليست دليلَ دفع.
+                            if (order['is_paid'] != true &&
+                                storeAdminNextStep(status) != null)
+                              Text('بانتظار تأكيد الدفع',
+                                  style: GoogleFonts.tajawal(
+                                      color: Colors.orange.shade800,
+                                      fontWeight: FontWeight.bold))
+                            else if (storeAdminNextStep(status) case final step?)
                               ElevatedButton.icon(
                                 icon: Icon(
                                     switch (step) {
