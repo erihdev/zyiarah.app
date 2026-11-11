@@ -366,9 +366,22 @@ void main() {
       expect(contractRefundRoute(c({...m, 'payment_status': 'refunded'})),
           ContractRefundRoute.none);
     });
-    test('الخادمُ يُغلِقُ العقدَ بعد استردادِه في المسارَين', () {
+    test('الخادمُ يُغلِقُ العقدَ بعد استردادِه أو إلغائه في المساراتِ الأربعة', () {
       final String idx = File('functions/index.js').readAsStringSync();
-      expect(RegExp(r'\.\.\._contractRefundClose\(').allMatches(idx).length, 2);
+      expect(RegExp(r'\.\.\._contractRefundClose\(').allMatches(idx).length, 4);
+      // الإلغاءُ يُغلِقُ العقدَ — فالدفعةُ مربوطةٌ به قبلَ نداءِ البوّابة.
+      final int voidFn = idx.indexOf('exports.moyasarVoidPayment');
+      final int vbind = idx.indexOf(
+          'order.data.moyasar_payment_id !== paymentId', voidFn);
+      final int vcall = idx.indexOf('moyasar.voidPayment(', voidFn);
+      expect(vbind, greaterThan(voidFn));
+      expect(vbind, lessThan(vcall));
+      // والتحصيلُ يَقلبُ `is_paid` فيُفعِّلُ ويُسنِد — الدفعةُ مربوطةٌ قبلَه.
+      final int capFn = idx.indexOf('exports.moyasarCapturePayment');
+      final int cbind = idx.indexOf(
+          'order.data.moyasar_payment_id !== paymentId', capFn);
+      expect(cbind, greaterThan(capFn));
+      expect(cbind, lessThan(idx.indexOf('moyasar.capture(', capFn)));
       expect(
           idx,
           contains(

@@ -7664,6 +7664,7 @@ exports.tabbyRefundPayment = onCall(
         refunded: true,
         tabby_status: "refunded",
         refund_provider: "tabby",
+        ..._contractRefundClose(existing),
         ...(refundId ? {refund_id: refundId} : {}),
         refund_reason: reason,
         refunded_at: FieldValue.serverTimestamp(),
@@ -7703,6 +7704,15 @@ exports.moyasarVoidPayment = onCall(
         throw new HttpsError("failed-precondition", "مفتاح Moyasar السري غير مهيأ");
       }
 
+      // العقدُ يُغلَقُ بعد الإلغاء (`_contractRefundClose`) — فالدفعةُ يَجبُ
+      // أن تَخصَّه قبلَ أيِّ نداء، وإلّا أُلغيت دفعةٌ وأُغلِقَ عقدٌ لا تَخصُّه.
+      const order = await _findOrder(orderId);
+      if (order && order.col === "contracts" &&
+          order.data.moyasar_payment_id !== paymentId) {
+        throw new HttpsError("failed-precondition",
+            "هذه الدفعة لا تخصّ هذا العقد");
+      }
+
       // كان `await response.json()` عارياً هنا: ردٌّ غير JSON من وسيطٍ يرمي
       // خطأً خامّاً بدل الرسالة العربية. التحليل في الوحدة متسامح، فيصل
       // `result = {}` و`ok = false` فتُرمى الرسالة المقصودة.
@@ -7714,13 +7724,13 @@ exports.moyasarVoidPayment = onCall(
         throw new HttpsError("internal", result.message ?? "فشل إلغاء عملية الدفع من Moyasar");
       }
 
-      const order = await _findOrder(orderId);
       if (order) {
         await order.ref.update({
           payment_status: "voided",
           moyasar_status: result.status,
           voided_at: FieldValue.serverTimestamp(),
           is_paid: false,
+          ..._contractRefundClose(order),
         });
       }
 
@@ -7748,6 +7758,18 @@ exports.moyasarCapturePayment = onCall(
         throw new HttpsError("failed-precondition", "مفتاح Moyasar السري غير مهيأ");
       }
 
+      // التحصيلُ يَكتبُ `is_paid: true`، وانقلابُه يُفعِّلُ العقدَ ويُسنِدُ
+      // الطلب — فالدفعةُ يَجبُ أن تَخصَّ هذا المستندَ قبلَ نداءِ البوّابة،
+      // وإلّا حُصِّلت دفعةٌ وصارَ مدفوعاً مستندٌ لم يُدفَع.
+      const order = await _findOrder(orderId);
+      if (!order) {
+        throw new HttpsError("not-found", "لم يتم العثور على الطلب");
+      }
+      if (order.data.moyasar_payment_id !== paymentId) {
+        throw new HttpsError("failed-precondition",
+            "هذه الدفعة لا تخصّ هذا الطلب");
+      }
+
       // نفس ملاحظة الإلغاء: كان التحليل عارياً.
       const res = await moyasar.capture(secret, paymentId, amountHalalas);
       const result = res.result;
@@ -7757,8 +7779,7 @@ exports.moyasarCapturePayment = onCall(
         throw new HttpsError("internal", result.message ?? "فشل تحصيل المبلغ المحجوز من Moyasar");
       }
 
-      const order = await _findOrder(orderId);
-      if (order) {
+      {
         await order.ref.update({
           payment_status: "captured",
           is_paid: true,
