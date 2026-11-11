@@ -3711,46 +3711,52 @@ async function _assignDriverScheduled(db, orderId, driverDoc, startDateTime) {
 async function _validateContractPlan(db, c, tx) {
   const isEventWorkers = c.contract_kind === "event_workers";
   const col = isEventWorkers ? "event_worker_packages" : "subscription_packages";
+  // العنوانُ ليس فريداً: باقتانِ قد تَحملانِ «الباقة الشهرية» نفسَها بسعرَين
+  // وعددَي زيارات (حدثَ في الإنتاج: 680/4 و1100/8). فكان limit(1) يَأخذُ
+  // إحداهما اعتباطاً فيُرفَضُ كلُّ عقدٍ مدفوعٍ للأخرى planMismatch ولا يُفعَّل.
+  // فالعقدُ يُقبَلُ إن طابقَ **أيَّ** باقةٍ بذلك العنوان سعراً وزياراتٍ وعاملات.
   const q = db.collection(col)
-      .where("title", "==", String(c.planName || "")).limit(1);
+      .where("title", "==", String(c.planName || "")).limit(20);
   const snap = tx ? await tx.get(q) : await q.get();
   if (snap.empty) {
     throw new HttpsError("failed-precondition",
         "باقة العقد غير موجودة في قائمة الباقات — رُفض توليد الزيارات");
   }
-  const pkg = snap.docs[0].data();
-  // السعر المتوقّع = سعر الباقة + 15% ضريبة بنفس تقريب العميل لسنتين عشريتين
-  // (انظر contract_signing_screen: _grossedPlanPrice) — سماحية قرش واحد للتعويم.
-  const base = Number(pkg.price || 0);
-  const expected = grossFromBaseRounded(base);
   const actual = Number(c.planPrice || 0);
-  if (!(base > 0) || Math.abs(actual - expected) > 0.01) {
-    throw new HttpsError("failed-precondition",
-        `سعر العقد (${actual}) لا يطابق سعر الباقة شامل الضريبة (${expected}) — ` +
-        "رُفض توليد الزيارات");
-  }
-  // عدد الزيارات: الحقل الرقمي في الباقة، أو (كما تستخرجه واجهة العميل احتياطياً)
-  // العدد المجاور لكلمة «زيار» في العنوان/العنوان الفرعي/المزايا إن غاب الحقل.
-  let pkgVisits = Number(pkg.visits || 0);
-  if (pkgVisits <= 0) {
-    const features = Array.isArray(pkg.features) ? pkg.features.join(" ") : "";
-    const m = /(\d+)\s*زيار/.exec(
-        `${pkg.title || ""} ${pkg.subtitle || ""} ${features}`);
-    if (m) pkgVisits = Number(m[1]);
-  }
-  if (pkgVisits > 0 && Number(c.planVisits || 0) !== pkgVisits) {
-    throw new HttpsError("failed-precondition",
-        `عدد زيارات العقد (${Number(c.planVisits || 0)}) لا يطابق الباقة ` +
-        `(${pkgVisits}) — رُفض توليد الزيارات`);
-  }
-  // (عاملات المناسبات) تحقّق عدد العاملات إن حدّدته الباقة — نفس أسلوب تحقّق
-  // السعر/الزيارات أعلاه، مقصور على مسار event_workers فقط.
-  if (isEventWorkers && Number(pkg.workers || 0) > 0 &&
-      Number(c.workers || 0) !== Number(pkg.workers)) {
-    throw new HttpsError("failed-precondition",
-        `عدد عاملات العقد (${Number(c.workers || 0)}) لا يطابق الباقة ` +
-        `(${Number(pkg.workers)}) — رُفض توليد الزيارات`);
-  }
+  const problemFor = (pkg) => {
+    // السعر المتوقّع = سعر الباقة + 15% ضريبة بنفس تقريب العميل لسنتين عشريتين
+    // (انظر contract_signing_screen: _grossedPlanPrice) — سماحية قرش واحد للتعويم.
+    const base = Number(pkg.price || 0);
+    const expected = grossFromBaseRounded(base);
+    if (!(base > 0) || Math.abs(actual - expected) > 0.01) {
+      return `سعر العقد (${actual}) لا يطابق سعر الباقة شامل الضريبة ` +
+          `(${expected}) — رُفض توليد الزيارات`;
+    }
+    // عدد الزيارات: الحقل الرقمي في الباقة، أو (كما تستخرجه واجهة العميل احتياطياً)
+    // العدد المجاور لكلمة «زيار» في العنوان/العنوان الفرعي/المزايا إن غاب الحقل.
+    let pkgVisits = Number(pkg.visits || 0);
+    if (pkgVisits <= 0) {
+      const features = Array.isArray(pkg.features) ? pkg.features.join(" ") : "";
+      const m = /(\d+)\s*زيار/.exec(
+          `${pkg.title || ""} ${pkg.subtitle || ""} ${features}`);
+      if (m) pkgVisits = Number(m[1]);
+    }
+    if (pkgVisits > 0 && Number(c.planVisits || 0) !== pkgVisits) {
+      return `عدد زيارات العقد (${Number(c.planVisits || 0)}) لا يطابق الباقة ` +
+          `(${pkgVisits}) — رُفض توليد الزيارات`;
+    }
+    // (عاملات المناسبات) تحقّق عدد العاملات إن حدّدته الباقة — مقصور على
+    // مسار event_workers فقط.
+    if (isEventWorkers && Number(pkg.workers || 0) > 0 &&
+        Number(c.workers || 0) !== Number(pkg.workers)) {
+      return `عدد عاملات العقد (${Number(c.workers || 0)}) لا يطابق الباقة ` +
+          `(${Number(pkg.workers)}) — رُفض توليد الزيارات`;
+    }
+    return null;
+  };
+  const problems = snap.docs.map((d) => problemFor(d.data()));
+  if (problems.some((p) => p === null)) return;
+  throw new HttpsError("failed-precondition", problems[0]);
 }
 
 // ════════════════════════════════════════════════════════════════════════

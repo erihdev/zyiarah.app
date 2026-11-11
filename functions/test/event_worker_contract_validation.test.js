@@ -156,6 +156,34 @@ const db = fakeDb({
     }, undefined, HttpsError);
   });
 
+  // (f) العنوانُ غيرُ فريد: باقتانِ «الباقة الشهرية» (680/4 و1100/8) كما في
+  // الإنتاج. كان limit(1) يَأخذُ الأولى فيُرفَضُ عقدُ الثانية المدفوع ولا يُفعَّل.
+  const dupDb = fakeDb({subscription_packages: [
+    {title: "الباقة الشهرية", price: 1100, visits: 8, features: []},
+    {title: "الباقة الشهرية", price: 680, visits: 4, features: []},
+  ]});
+  await t("(f) عنوانٌ مكرَّر: عقدُ الباقةِ الثانية يُقبَل", async () => {
+    await validateContractPlan(dupDb, {
+      planName: "الباقة الشهرية", planPrice: 782, planVisits: 4,
+    }, undefined, HttpsError);
+    await validateContractPlan(dupDb, {
+      planName: "الباقة الشهرية", planPrice: 1265, planVisits: 8,
+    }, undefined, HttpsError);
+  });
+  await t("(g) عنوانٌ مكرَّر لا يَفتحُ خلطاً: سعرُ إحداهما بزياراتِ الأخرى يُرفَض",
+      async () => {
+        await assert.rejects(
+            () => validateContractPlan(dupDb, {
+              planName: "الباقة الشهرية", planPrice: 782, planVisits: 8,
+            }, undefined, HttpsError),
+            (e) => e instanceof HttpsError && e.code === "failed-precondition");
+        await assert.rejects(
+            () => validateContractPlan(dupDb, {
+              planName: "الباقة الشهرية", planPrice: 1, planVisits: 4,
+            }, undefined, HttpsError),
+            (e) => e instanceof HttpsError && e.code === "failed-precondition");
+      });
+
   console.log(`\nevent_worker_contract_validation: ${passed} passed`);
 })().catch((e) => {
   console.error(e);
