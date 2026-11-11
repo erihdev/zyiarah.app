@@ -398,4 +398,59 @@ void main() {
       expect(tg, lessThan(idx.indexOf('payment_status: "paid"', ti)));
     });
   });
+
+  group('مرآةُ مسارِ الاستردادِ في لوحةِ الويب', () {
+    test('جدولُ الحالاتِ المشترَكُ يُعطي الجوابَ نفسَه في الدارت', () {
+      final String ts = File(
+              'admin_panel/src/utils/contractHealth.test.ts')
+          .readAsStringSync();
+      const String begin = '// ── CONTRACT_REFUND_ROUTE_CASES_BEGIN ──';
+      const String end = '// ── CONTRACT_REFUND_ROUTE_CASES_END ──';
+      final int b = ts.indexOf(begin);
+      final int e = ts.indexOf(end);
+      expect(b, greaterThan(-1), reason: 'علامةُ بدايةِ الجدولِ زالت');
+      expect(e, greaterThan(b), reason: 'علامةُ نهايةِ الجدولِ زالت');
+      final String block = ts.substring(b + begin.length, e);
+      // من آخرِ `]` إلى الوراءِ بموازنةِ الأقواس — `indexOf('[')` يَلتقطُ
+      // قوسَ تعليقِ النوعِ `Row[]` لا بدايةَ المصفوفة.
+      final int close = block.lastIndexOf(']');
+      int depth = 0, open = -1;
+      for (int k = close; k >= 0; k--) {
+        if (block[k] == ']') depth++;
+        if (block[k] == '[') {
+          depth--;
+          if (depth == 0) {
+            open = k;
+            break;
+          }
+        }
+      }
+      expect(open, greaterThan(-1));
+      final String json = block
+          .substring(open, close + 1)
+          .replaceAllMapped(RegExp(r',(\s*[\]}])'), (m) => m.group(1)!);
+      final List<dynamic> rows = jsonDecode(json) as List<dynamic>;
+      expect(rows.length, greaterThanOrEqualTo(15),
+          reason: 'الجدولُ انحلَّ — فالمقارنةُ بلا موضوع');
+      for (final r in rows) {
+        final Map<String, dynamic> doc =
+            Map<String, dynamic>.from((r as List)[0] as Map);
+        expect(contractRefundRoute(doc).name, r[1],
+            reason: 'افترقت اللوحةُ عن التطبيقِ على: ${jsonEncode(doc)}');
+      }
+    });
+
+    test('صفحةُ العقودِ في اللوحةِ تُنادي القاعدةَ والنداءَين بالوسائطِ نفسِها', () {
+      final String p = File('admin_panel/src/pages/Contracts.tsx')
+          .readAsStringSync();
+      expect(p, contains('contractRefundRoute('),
+          reason: 'الزرُّ يُقرّرُ ظهورَه بنفسِه لا بالقاعدة');
+      expect(p, contains("'tamaraRefundPayment'"));
+      expect(p, contains("'moyasarRefundPayment'"));
+      expect(RegExp(r'paymentId:\s*String\(contract\.moyasar_payment_id').hasMatch(p),
+          isTrue, reason: 'ميسر يَلزمُه معرّفُ الدفعةِ المخزَّنُ على العقد');
+      expect(RegExp(r'orderId:\s*contract\.id').hasMatch(p), isTrue);
+      expect(RegExp(r'order_id:\s*contract\.id').hasMatch(p), isTrue);
+    });
+  });
 }

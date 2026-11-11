@@ -294,7 +294,13 @@ void main() {
       ...Directory('admin_panel/src')
           .listSync(recursive: true)
           .whereType<File>()
-          .where((f) => f.path.endsWith('.ts') || f.path.endsWith('.tsx')),
+          // ملفّاتُ الفحصِ تُستثنى: حالاتُها مستنداتٌ مُصطنَعةٌ تُمرَّرُ إلى
+          // دالّةٍ نقيّة، لا حِملٌ يُكتَبُ في Firestore — وجدولُ مسارِ
+          // استردادِ العقدِ (`contractHealth.test.ts`) يَحملُ `refund_claimed`
+          // بقصد ليُثبِتَ أنّ العقدَ المستردَّ لا زرَّ له.
+          .where((f) =>
+              (f.path.endsWith('.ts') || f.path.endsWith('.tsx')) &&
+              !f.path.contains('.test.')),
     ];
     expect(client.length, greaterThanOrEqualTo(120),
         reason: 'مسحُ العميلِ واللوحةِ انهار');
