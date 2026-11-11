@@ -282,8 +282,22 @@ function fakeDb({byId = {}, byName = {}} = {}) {
     const upd = body.indexOf("tx.update(orderRef", tx);
     assert.ok(claimGet > tx && claimGet < upd,
         "المطالبةُ تُقرأ في المعامَلةِ نفسِها قبل القلب");
-    assert.ok(body.includes("claim.data().order_id !== orderId"),
+    assert.ok(body.includes("_claimIsForeign(claim.data(), orderRef)"),
         "دفعةٌ مُطالَبٌ بها لطلبٍ آخر تُرفَض");
+    // المعرّفُ وحدَه لا يكفي: المعرّفُ نفسُه قد يوجد في مجموعتَين.
+    const fi = code.indexOf("function _claimIsForeign");
+    const foreign = code.slice(fi, code.indexOf("\n}", fi));
+    assert.ok(foreign.includes("claim.order_id !== orderRef.id") &&
+        foreign.includes("claim.collection !== orderRef.parent.id"),
+    "المطالبةُ تُقارَن بالمعرّفِ والمجموعةِ معاً");
+    // والحجبُ (Tier B) يُطالِب بالدفعةِ قبل الاسترداد.
+    const tb = body.indexOf("if (tierBReason && paymentId)");
+    const cp = body.indexOf("_claimPayment(db, paymentId, orderRef", tb);
+    assert.ok(cp > tb && cp < body.indexOf("refunds.voidOrRefundTampered(", tb),
+        "دفعةٌ محجوبةٌ بلا مطالبةٍ تؤكّد مستنداً آخر");
+    // و`payment_method` (يكتبه العميل) لا يُعفي من الفحص.
+    assert.ok(!/skip\w* = [^;]*(includes\(method\)|nonMoyasar)/.test(code),
+        "وسيلةُ دفعٍ يكتبها العميلُ تُطفئ فحصَ السعر");
     assert.ok(body.includes("tx.set(claimRef"), "المطالبةُ تُكتَب مع القلب");
     // (ج) العملة.
     assert.ok(body.includes("paymentData.currency !== \"SAR\""));

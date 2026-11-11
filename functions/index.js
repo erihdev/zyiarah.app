@@ -2772,6 +2772,31 @@ async function _verifyStoreOrderPrice(db, ref, orderId, od, paid, source) {
   }
 }
 
+/** هل سجلُّ المطالبة لمستندٍ غير هذا؟ (المعرّف **والمجموعة** معاً.) */
+function _claimIsForeign(claim, orderRef) {
+  return claim.order_id !== orderRef.id ||
+    claim.collection !== orderRef.parent.id;
+}
+
+/** يسجّل مطالبةَ دفعةٍ لمستندٍ واحد، ويرفض إن طالب بها مستندٌ آخر. */
+async function _claimPayment(db, paymentId, orderRef, uid) {
+  const claimRef = db.collection("payment_claims").doc(String(paymentId));
+  await db.runTransaction(async (tx) => {
+    const claim = await tx.get(claimRef);
+    if (claim.exists) {
+      if (_claimIsForeign(claim.data(), orderRef)) {
+        throw new HttpsError("permission-denied",
+            "عملية الدفع مستخدمة لطلب آخر");
+      }
+      return;
+    }
+    tx.set(claimRef, {
+      order_id: orderRef.id, collection: orderRef.parent.id,
+      uid, claimed_at: FieldValue.serverTimestamp(),
+    });
+  });
+}
+
 exports.verifyMoyasarPayment = onCall(
     {secrets: ["MOYASAR_SECRET_KEY"], cpu: 0.25},
     async (request) => {
@@ -2946,17 +2971,17 @@ exports.verifyMoyasarPayment = onCall(
       let tierBReason = null;
       if (orderRef.parent.id === "orders") {
         const od = orderDoc.data();
-        const method = od.payment_method || "";
         const paid = Number(paymentData.amount) / 100; // الشحن الفعلي من البوابة (لا od.amount)
-        const nonMoyasar = ["wallet", "subscription", "tamara", "tabby"]
-            .includes(method);
+        // `payment_method` يكتبه العميلُ عند الإنشاء، فلا يُقرّر هل يجري الفحص:
+        // طلبٌ بريالٍ موسومٌ «wallet» ثم مدفوعٌ ببطاقةٍ كان يتخطّى الفحصَ كلَّه.
+        // ومن بلغ هذا المسارَ فقد دفع عبر ميسر فعلاً.
         // الدفع الأصلي (Apple/Google/Samsung) يُنشأ خادميّاً بالكوبون مضمَّناً وبلا
         // discount_amount — استثناؤه صريحٌ وإلزاميّ يمنع ردّ كل عميل native-pay بكوبون.
         // والطلبُ المُنشأ خادميّاً **يُفحَص وسماً وتنبيهاً** (Tier A) ولا يُحجَب:
         // مبلغُ الدفعةِ يختاره الجهاز، فدفعُ ريالٍ ببياناتِ حجزٍ كاملةٍ كان
         // يُنشئ طلباً مدفوعاً بلا أيِّ أثر. الحجبُ (Tier B) مستثنىً له داخل
         // `_verifyOrderPriceTierA` لأنّ كوبونَه مضمَّنٌ بلا discount_amount.
-        const skip = nonMoyasar || !(paid > 0);
+        const skip = !(paid > 0);
         if (!skip) {
           tierBReason = await _verifyOrderPriceTierA(
               db, orderRef, orderId, od, paid, "verify");
@@ -2967,6 +2992,9 @@ exports.verifyMoyasarPayment = onCall(
       // ثم أعِد {blocked} للعميل. طلبٌ ثبت تلاعبه لا يُقلَب مدفوعاً حتى لو فشلت البوابة (يبقى
       // payment_review للمراجعة اليدوية) — فلا عميلٌ مخصومٌ بلا خدمة يُخدَم بالخطأ.
       if (tierBReason && paymentId) {
+        // المطالبةُ قبل الاسترداد: دفعةٌ فشل استردادُها تبقى مدفوعةً عند ميسر،
+        // وبلا مطالبةٍ كانت تؤكّد مستنداً آخر بالمبلغ نفسِه.
+        await _claimPayment(db, paymentId, orderRef, request.auth.uid);
         const secret = moyasarSecretKey.value();
         const r = await refunds.voidOrRefundTampered(db, secret, paymentId, orderRef);
         await queuePush("ADMIN_BROADCAST", "حُجب طلبٌ لدفعٍ ناقص صارخ 🛑",
@@ -2985,7 +3013,9 @@ exports.verifyMoyasarPayment = onCall(
         const snap = await tx.get(orderRef);
         const claim = await tx.get(claimRef);
         const cur = snap.data() || {};
-        if (claim.exists && claim.data().order_id !== orderId) {
+        // المعرّفُ وحدَه لا يُعيّن مستنداً: العميلُ يختار معرّفاتِ مستنداته،
+        // فالمعرّفُ نفسُه قد يوجد في `orders` و`contracts` معاً.
+        if (claim.exists && _claimIsForeign(claim.data(), orderRef)) {
           throw new HttpsError("permission-denied",
               "عملية الدفع مستخدمة لطلب آخر");
         }
@@ -6858,10 +6888,8 @@ exports.moyasarWebhook = onRequest(
                 }
                 let tierB = null;
                 if (col === "orders") {
-                  const method = data.payment_method || "";
                   const paidSar = Number(verifiedPayment.amount) / 100;
-                  const skipPv = ["wallet", "subscription", "tamara", "tabby"]
-                      .includes(method) || !(paidSar > 0);
+                  const skipPv = !(paidSar > 0);
                   if (!skipPv) {
                     tierB = await _verifyOrderPriceTierA(
                         getFirestore(), ref, orderId, data, paidSar, "webhook");

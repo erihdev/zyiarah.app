@@ -9,7 +9,7 @@ const {
   assertSucceeds,
 } = require("@firebase/rules-unit-testing");
 const {setDoc, doc, updateDoc, getDoc, getDocs, collection, query, addDoc,
-  where, limit} = require("firebase/firestore");
+  where, limit, serverTimestamp} = require("firebase/firestore");
 
 (async () => {
   const testEnv = await initializeTestEnvironment({
@@ -132,8 +132,10 @@ const {setDoc, doc, updateDoc, getDoc, getDocs, collection, query, addDoc,
   // يضبطه على كود غيره فتُرجِع الاستعلامةُ أحدَ المستندَين، وقد تُنسب إحالةٌ
   // ومكافأتُها (50 ر.س) إلى غير صاحبها. والتوليدُ الأوّل يجب أن يبقى ممكناً:
   // `getOrCreateReferralCode` يكتبه من العميل.
-  await check("client CAN write referral_code when absent (first generation)",
-      updateDoc(doc(asUser("refNew"), "users/refNew"), {referral_code: "BBBB2222"}), true);
+  // (2026-11-11) الكودُ خادميٌّ بحت (`ensureReferralCode`): حتى الكتابةُ الأولى
+  // مرفوضة، فهي كانت تُجيز لحسابٍ جديدٍ كتابةَ كودِ غيرِه.
+  await check("client CANNOT write referral_code even when absent",
+      updateDoc(doc(asUser("refNew"), "users/refNew"), {referral_code: "BBBB2222"}), false);
 
   // ── بريدُ السجلِّ يَجبُ أن يُطابقَ بريدَ المصادقة ──────────────────────
   //
@@ -472,6 +474,24 @@ const {setDoc, doc, updateDoc, getDoc, getDocs, collection, query, addDoc,
   await check("ticket create without userEmail -> ALLOWED",
       setDoc(doc(asUser("client1"), "support_tickets/tkPlain"),
           {userId: "client1", subject: "x", status: "open"}), true);
+
+  await check("self-signup with an invented role -> DENIED",
+      setDoc(doc(asUser("newbie3"), "users/newbie3"),
+          {name: "ن", role: "x"}), false);
+  await check("self-signup with a foreign email -> DENIED",
+      setDoc(doc(asUser("newbie4"), "users/newbie4"),
+          {name: "ن", role: "client", email: "victim@example.com"}), false);
+  await check("ticket created already resolved -> DENIED",
+      setDoc(doc(asUser("client1"), "support_tickets/tkClosed"),
+          {userId: "client1", subject: "x", status: "resolved"}), false);
+  await check("ticket with a future createdAt -> DENIED",
+      setDoc(doc(asUser("client1"), "support_tickets/tkFuture"),
+          {userId: "client1", subject: "x", status: "open",
+            createdAt: new Date(Date.now() + 864e5 * 365)}), false);
+  await check("ticket with server createdAt -> ALLOWED",
+      setDoc(doc(asUser("client1"), "support_tickets/tkNow"),
+          {userId: "client1", subject: "x", status: "open",
+            createdAt: serverTimestamp()}), true);
 
   await testEnv.cleanup();
   console.log(`\nRole test: ${pass} passed, ${fail} failed`);

@@ -334,7 +334,7 @@ export default function StoreOrders() {
                           </button>
                         </div>
                       )}
-                      {(order.status === 'delivering' || order.status === 'shipped') && (
+                      {(order.status === 'delivering' || order.status === 'shipped') && order.is_paid === true && (
                         <button
                           type="button"
                           onClick={() => handleStatusUpdate(order.id, 'delivered')}
