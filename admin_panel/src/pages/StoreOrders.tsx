@@ -242,7 +242,9 @@ export default function StoreOrders() {
                     statusTone(order) === 'blue' ? 'bg-[#F2DEE9] text-[#4D0026]' :
                     'bg-amber-100 text-amber-700'
                   }`}>
-                    {STATUS_LABELS[order.status] ?? order.status}
+                    {order.status === 'under_review' && order.is_paid !== true
+                      ? 'بانتظار تأكيد الدفع'
+                      : STATUS_LABELS[order.status] ?? order.status}
                   </div>
                   {/* في الرأسِ لا داخلَ التوسيع: الوسمُ يَجبُ أن يُرى بلا نقر. */}
                   <PriceReviewBadge r={priceReviewOf(order as unknown as Record<string, unknown>)} />
@@ -296,7 +298,14 @@ export default function StoreOrders() {
                       {/* المتجر المباشر: العميل يدفع فوراً ثم تحت المراجعة ⇒ جاري
                           التوصيل ⇒ تم التوصيل. (مسار الموافقة/الرفض القديم أُلغي في
                           تطبيق الأدمن؛ حُدّثت اللوحة لتقود نفس السلسلة.) */}
-                      {(order.status === 'under_review' || order.status === 'processing') && (
+                      {/* الحالةُ وحدَها ليست دليلَ دفع: العميلُ يكتب under_review
+                          بنفسِه مع is_paid=false، والخادمُ وحدَه يقلب is_paid. */}
+                      {(order.status === 'under_review' || order.status === 'processing') && order.is_paid !== true && (
+                        <p className="w-full text-center text-sm font-bold text-amber-700 bg-amber-50 border border-amber-200 py-3 rounded-2xl">
+                          بانتظار تأكيد الدفع — لا توصيل قبل التأكيد
+                        </p>
+                      )}
+                      {(order.status === 'under_review' || order.status === 'processing') && order.is_paid === true && (
                         <button
                           type="button"
                           onClick={() => handleStatusUpdate(order.id, 'delivering')}

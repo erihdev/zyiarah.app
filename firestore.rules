@@ -281,7 +281,12 @@ service cloud.firestore {
           !(request.resource.data.get('role', 'client') in
             ['admin', 'super_admin', 'orders_manager',
              'accountant_admin', 'marketing_admin', 'driver']) &&
-          request.resource.data.get('staff_role', 'client') == 'client');
+          request.resource.data.get('staff_role', 'client') == 'client' &&
+          // كودُ الإحالةِ يَسُكُّه الخادمُ (`ensureReferralCode`). التحديثُ
+          // محروسٌ «مرّةً واحدة»، والإنشاءُ لم يكن: حسابٌ جديدٌ بكودِ غيرِه
+          // يُطابقُه استعلامُ المُحيل فتُنسَبُ له المكافأة. ومعه حقولُ الثقة.
+          !request.resource.data.keys().hasAny(
+            ['referral_code', 'wallet', 'is_blocked', 'visits_remaining']));
 
       // SECURITY: only super_admin may set role/is_blocked (prevents a sub-admin from
       // self-escalating to super_admin or blocking users); the `wallet` field on the
@@ -371,8 +376,12 @@ service cloud.firestore {
 
     // ─── Support Tickets ──────────────────────────────────────────────────
     match /support_tickets/{ticketId} {
+      // `userEmail` هو ما تقرؤه الإدارةُ هويّةً للمشتكية ويُبحَث به — فلا
+      // يُقبَل عند الإنشاء إلّا بريدُ المصادقة نفسُه (أو غيابُه).
       allow create: if isLoggedIn() &&
-        request.resource.data.get('userId', '') == request.auth.uid;
+        request.resource.data.get('userId', '') == request.auth.uid &&
+        (request.resource.data.get('userEmail', null) == null ||
+         request.resource.data.userEmail == request.auth.token.email);
       allow read: if isLoggedIn() &&
         (request.auth.uid == resource.data.userId || isAdmin());
 
@@ -571,7 +580,10 @@ service cloud.firestore {
         !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['name', 'phone', 'monthly_salary', 'wallet',
                    'rating_avg', 'rating_count', 'rides', 'email',
-                   'id_number', 'id_expiry', 'nationality']);
+                   'id_number', 'id_expiry', 'nationality',
+                   // الإيقافُ قرارُ الإدارة: بلا هذين كان سائقٌ موقوفٌ يرفع
+                   // إيقافَه بكتابةٍ مباشرة فيعود قابلاً للإسناد.
+                   'is_active', 'is_suspended', 'role', 'type', 'pool']);
     }
 
     // ─── FCM Tokens ───────────────────────────────────────────────────────
