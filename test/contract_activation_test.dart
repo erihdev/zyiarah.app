@@ -366,9 +366,16 @@ void main() {
       expect(contractRefundRoute(c({...m, 'payment_status': 'refunded'})),
           ContractRefundRoute.none);
     });
-    test('الخادمُ يُغلِقُ العقدَ بعد استردادِه في المسارَين', () {
+    test('الخادمُ يُغلِقُ العقدَ بعد استردادِه أو إلغائه في المساراتِ الأربعة', () {
       final String idx = File('functions/index.js').readAsStringSync();
-      expect(RegExp(r'\.\.\._contractRefundClose\(').allMatches(idx).length, 2);
+      expect(RegExp(r'\.\.\._contractRefundClose\(').allMatches(idx).length, 4);
+      // الإلغاءُ يُغلِقُ العقدَ — فالدفعةُ مربوطةٌ به قبلَ نداءِ البوّابة.
+      final int vi = idx.indexOf('exports.moyasarVoidPayment');
+      final int vbind = idx.indexOf(
+          'order.data.moyasar_payment_id !== paymentId', vi);
+      final int vcall = idx.indexOf('moyasar.voidPayment(', vi);
+      expect(vbind, greaterThan(vi));
+      expect(vbind, lessThan(vcall));
       expect(
           idx,
           contains(
