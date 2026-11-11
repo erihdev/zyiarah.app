@@ -7295,7 +7295,8 @@ exports.moyasarRefundPayment = onCall(
     async (request) => {
       await _assertAdmin(request);
 
-      const {paymentId, orderId, amountHalalas} = request.data;
+      const {paymentId, orderId} = request.data;
+      let {amountHalalas} = request.data;
       if (!paymentId || !orderId) {
         throw new HttpsError("invalid-argument", "paymentId و orderId مطلوبان");
       }
@@ -7337,6 +7338,15 @@ exports.moyasarRefundPayment = onCall(
         if (!bound) {
           throw new HttpsError("failed-precondition",
               "هذه الدفعة لا تخصّ هذا العقد — لا يمكن استردادها من هنا");
+        }
+        // والمبلغُ المُعادُ هو قيمةُ العقدِ بعينِها لا مبلغُ الدفعةِ كاملاً، كي
+        // يُطابِقَ ما تُسجّلُه `refunded_amount` وما يَراه الأدمنُ في الحوار.
+        const planH = Math.round(Number(existing.data.planPrice || 0) * 100);
+        const paidH = Number(pay.raw.amount || 0);
+        if (!amountHalalas) amountHalalas = planH;
+        if (!(amountHalalas > 0) || amountHalalas > paidH) {
+          throw new HttpsError("failed-precondition",
+              "مبلغ الاسترداد لا يطابق مبلغ الدفعة");
         }
       }
       if (existing) {
