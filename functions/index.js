@@ -7322,18 +7322,18 @@ exports.moyasarRefundPayment = onCall(
       }
       // والمطابقةُ مع المستندِ وحدَها لا تَكفي للعقد: الحقلُ كان يَكتبُه مالكُ
       // العقدِ (قبلَ نشرِ القواعد)، فالمرجعُ هو ميسر نفسُها — الدفعةُ تَحملُ
-      // `metadata.order_id` هذا العقدَ، أو (لدفعةٍ بلا metadata) مبلغَه بعينِه.
+      // `metadata.order_id` هذا العقدَ بعينِه.
       if (existing && existing.col === "contracts") {
         const pay = await moyasar.getPayment(secret, paymentId);
         if (!pay.ok || !pay.raw) {
           throw new HttpsError("unavailable",
               "تعذّر التحقق من الدفعة لدى Moyasar — أعد المحاولة");
         }
+        // كلُّ مسارِ دفعٍ للعقدِ (البطاقة/STC/Apple/Google) يَكتبُ
+        // `metadata.order_id = contractId` (`_nativePayMeta`)، فلا احتياطَ
+        // بالمبلغ: دفعةٌ أخرى بلا metadata وبالمبلغِ نفسِه كانت تَمرّ.
         const md = pay.raw.metadata || {};
-        const expectedH = Math.round(Number(existing.data.planPrice || 0) * 100);
-        const bound = md.order_id ?
-          String(md.order_id) === String(orderId) :
-          Number(pay.raw.amount) === expectedH;
+        const bound = !!md.order_id && String(md.order_id) === String(orderId);
         if (!bound) {
           throw new HttpsError("failed-precondition",
               "هذه الدفعة لا تخصّ هذا العقد — لا يمكن استردادها من هنا");
