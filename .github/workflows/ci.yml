@@ -16,6 +16,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          # مثبَّت: «stable» بلا رقمٍ قفزَ إلى 3.50 في 2026-11 فأسقطَ ١٢ اختبارَ واجهةٍ
+          # بلا تغييرٍ في الشفرة. الترقيةُ قرارٌ مقصودٌ يُرفَعُ هنا ومع codemagic.yaml.
+          flutter-version: '3.47.2'
           cache: true
 
       - name: Flutter pub get
@@ -37,6 +40,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          # مثبَّت: «stable» بلا رقمٍ قفزَ إلى 3.50 في 2026-11 فأسقطَ ١٢ اختبارَ واجهةٍ
+          # بلا تغييرٍ في الشفرة. الترقيةُ قرارٌ مقصودٌ يُرفَعُ هنا ومع codemagic.yaml.
+          flutter-version: '3.47.2'
           cache: true
 
       - name: Flutter pub get
@@ -63,6 +69,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          # مثبَّت: «stable» بلا رقمٍ قفزَ إلى 3.50 في 2026-11 فأسقطَ ١٢ اختبارَ واجهةٍ
+          # بلا تغييرٍ في الشفرة. الترقيةُ قرارٌ مقصودٌ يُرفَعُ هنا ومع codemagic.yaml.
+          flutter-version: '3.47.2'
           cache: true
 
       - name: Flutter pub get
