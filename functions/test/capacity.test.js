@@ -1,7 +1,7 @@
 "use strict";
 // عدّ الإتاحة + سقف المنطقة اليومي — تشغيل: node test/capacity.test.js (ضمن npm test).
 const assert = require("assert");
-const {countBookings, zoneDailyCap} = require("../capacity");
+const {countBookings, zoneDailyCap, isLiveHold, HOLD_MINUTES} = require("../capacity");
 
 let passed = 0;
 function t(name, fn) {
@@ -75,6 +75,75 @@ t("zoneDailyCounts counts only the named zone; dailyCounts still counts everyone
   assert.strictEqual(r.zoneDailyCounts["2026-09-20"], 1);
   const none = countBookings([paid()]);
   assert.deepStrictEqual(none.zoneDailyCounts, {}, "no zone requested → empty");
+});
+
+// ── الحجزُ المؤقّت ──
+const NOW = Date.UTC(2026, 10, 17, 9, 0, 0);
+const ts = (minsAgo) => ({toMillis: () => NOW - minsAgo * 60 * 1000});
+const hold = (over) => paid({status: "pending", is_paid: false, client_id: "c1",
+  created_at: ts(3), ...over});
+
+t("حجزٌ مؤقّت: غيرُ مدفوعٍ حديثٌ يَشغلُ خانتَه ويومَه", () => {
+  const r = countBookings([hold()], {nowMs: NOW});
+  assert.strictEqual(r.dailyCounts["2026-09-20"], 1);
+  assert.strictEqual(r.slotCounts["2026-09-20_09:00"], 1);
+  assert.strictEqual(r.slotCounts["2026-09-20_12:00"], 1);
+});
+
+t("حجزٌ مؤقّت: يَسقطُ بعدَ المدّة، وعلى حدِّها بالضبط", () => {
+  assert.deepStrictEqual(
+      countBookings([hold({created_at: ts(HOLD_MINUTES)})], {nowMs: NOW}).dailyCounts, {});
+  assert.deepStrictEqual(
+      countBookings([hold({created_at: ts(HOLD_MINUTES + 20)})], {nowMs: NOW}).dailyCounts, {});
+  assert.strictEqual(countBookings([hold({created_at: ts(HOLD_MINUTES - 1)})],
+      {nowMs: NOW}).dailyCounts["2026-09-20"], 1);
+});
+
+t("حجزٌ مؤقّت: طلبُ السائلةِ نفسِها لا يَحجزُ عليها، وطلبُ غيرِها يَحجز", () => {
+  const r = countBookings([hold(), hold({client_id: "c2"})],
+      {nowMs: NOW, excludeClientId: "c1"});
+  assert.strictEqual(r.dailyCounts["2026-09-20"], 1);
+  assert.strictEqual(r.slotCounts["2026-09-20_09:00"], 1);
+});
+
+t("حجزٌ مؤقّت: بلا nowMs لا حجزَ (السلوكُ القديم)، وغيرُ pending لا يَحجز", () => {
+  assert.deepStrictEqual(countBookings([hold()]).dailyCounts, {});
+  for (const st of ["cancelled", "rejected", "scheduled", "under_review", undefined]) {
+    assert.deepStrictEqual(
+        countBookings([hold({status: st})], {nowMs: NOW}).dailyCounts, {}, String(st));
+  }
+});
+
+t("حجزٌ مؤقّت: طابعٌ غائبٌ أو تالفٌ أو مستقبليٌّ لا يَحجز", () => {
+  for (const c of [undefined, null, "2026-11-17", 5, {}, {toMillis: () => NaN},
+    ts(-30)]) {
+    assert.strictEqual(isLiveHold(hold({created_at: c}), {nowMs: NOW}), false);
+  }
+  assert.strictEqual(isLiveHold(hold({created_at: ts(-1)}), {nowMs: NOW}), true,
+      "انحرافُ دقيقةٍ بين خادمَين مقبول");
+  assert.strictEqual(isLiveHold(hold(), {nowMs: NaN}), false);
+  assert.strictEqual(isLiveHold(null, {nowMs: NOW}), false);
+});
+
+t("حجزٌ مؤقّت: يُعَدُّ بالعاملاتِ كالمدفوع، والمدفوعُ لا يَتأثّرُ بالوقت", () => {
+  const r = countBookings([hold({service_meta: {crewCount: 2}}),
+    paid({created_at: ts(9999)})], {nowMs: NOW});
+  assert.strictEqual(r.slotCounts["2026-09-20_09:00"], 3);
+  assert.strictEqual(r.dailyCounts["2026-09-20"], 2);
+});
+
+t("الحجزُ أقصرُ من مهلةِ إلغاءِ غيرِ المدفوع، والخادمُ يُمرّرُ الوقتَ والسائلة", () => {
+  const fs = require("fs");
+  const path = require("path");
+  const idx = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
+  const m = idx.match(/exports\.cancelStaleUnpaidOrders[\s\S]*?Date\.now\(\) - (\d+) \* 60 \* 1000/);
+  assert.ok(m, "مهلةُ مكنسةِ الإلغاءِ لم تُقرأ");
+  assert.ok(HOLD_MINUTES < Number(m[1]),
+      "الحجزُ يَجبُ أن يَنتهيَ قبلَ إلغاءِ الطلب");
+  const i = idx.indexOf("exports.getHourlyAvailability");
+  const body = idx.slice(i, idx.indexOf("\nexports.", i + 10));
+  assert.ok(/countBookings\([\s\S]*?nowMs: Date\.now\(\),[\s\S]*?excludeClientId: request\.auth\.uid/.test(body),
+      "getHourlyAvailability لا يُمرّرُ الحجزَ المؤقّت");
 });
 
 t("zoneDailyCap: positive integer or null", () => {
