@@ -6630,7 +6630,13 @@ exports.getHourlyAvailability = onCall({cpu: 0.25, minInstances: 1}, async (requ
   // بلا مناطق (driverCount عالمي — البسط والمقام من العالم نفسه)، ونعدّ طلبات
   // المنطقة المطلوبة على حدة لسقفها الخاص إن وُجد.
   const {dailyCounts, slotCounts, zoneDailyCounts} =
-    countBookings(snap.docs.map((doc) => doc.data()), {zoneName: zoneName || null});
+    countBookings(snap.docs.map((doc) => doc.data()), {
+      zoneName: zoneName || null,
+      // الحجزُ المؤقّت: غيرُ المدفوعِ الحديثُ يَحجزُ خانتَه دقائقَ الدفع، وطلبُ
+      // السائلةِ نفسِها لا يَحجزُ عليها (capacity.isLiveHold).
+      nowMs: Date.now(),
+      excludeClientId: request.auth.uid,
+    });
 
   // 4. اشتقاق جدول الفتح لكل يوم في المدى — مرجعيّ، يرسم منه العميل ويفرضه الدفع.
   const openHours = {};   // "yyyy-MM-dd" -> [start, end]

@@ -16,26 +16,58 @@
 // عبارةُ «بلا تبعيات» تَحرُسُه حقّاً.
 const slots = require("./slots");
 
+// ── الحجزُ المؤقّت (2026-11-17، قرارُ المالك «منع الحجز المزدوج») ──────────
+// البطاقةُ وSTC وتمارا تُنشئُ الطلبَ `pending` وغيرَ مدفوعٍ ثمّ تَفتحُ الدفع،
+// والعدُّ كان يَتخطّى غيرَ المدفوعِ كلَّه — فعميلتانِ تَريانِ آخرَ خانةٍ حرّةً
+// معاً وتَدفعانِ كلتاهما، ثمّ لا يَجدُ المُسنِدُ عاملةً للثانية فيَعلقُ طلبُها
+// المدفوعُ حتى الاستردادِ الآليّ. فالطلبُ غيرُ المدفوعِ **الحديثُ** يَحجزُ خانتَه
+// مدّةً قصيرةً تَكفي لإتمامِ الدفع، ثمّ يَسقطُ الحجزُ بنفسِه إن لم يُدفَع.
+// المدّةُ أقصرُ من مهلةِ `cancelStaleUnpaidOrders` (٣٠ دقيقة) عمداً: الحجزُ
+// يَنتهي قبلَ أن يُلغى الطلب، فلا خانةَ تُحبَسُ على طلبٍ ميّت.
+const HOLD_MINUTES = 15;
+const HOLD_MS = HOLD_MINUTES * 60 * 1000;
+// انحرافُ ساعةٍ مقبولٌ بين خادمَين — طابعٌ «في المستقبل» بأكثرَ منه تالفٌ فلا يَحجز.
+const HOLD_SKEW_MS = 2 * 60 * 1000;
+
+/**
+ * هل الطلبُ غيرُ المدفوعِ حجزٌ مؤقّتٌ حيّ؟ بلا `nowMs` لا حجزَ أصلاً (السلوكُ
+ * القديم)، وطلبُ السائلةِ نفسِها لا يَحجزُ عليها (محاولةٌ سابقةٌ متروكةٌ لا
+ * تَمنعُها من إعادةِ الحجز).
+ * @param {object} d بيانات الطلب
+ * @param {{nowMs?: number, excludeClientId?: string|null}} opts
+ * @return {boolean}
+ */
+function isLiveHold(d, {nowMs, excludeClientId = null} = {}) {
+  if (!Number.isFinite(nowMs) || nowMs <= 0) return false;
+  if (!d || d.status !== "pending") return false;
+  if (excludeClientId && d.client_id === excludeClientId) return false;
+  const c = d.created_at;
+  if (!c || typeof c.toMillis !== "function") return false;
+  const age = nowMs - c.toMillis();
+  return Number.isFinite(age) && age >= -HOLD_SKEW_MS && age < HOLD_MS;
+}
+
 /**
  * يعدّ الطلبات التي تستهلك سائقاً في كل يوم/ساعة.
- * - تُستبعد الملغاة والمرفوضة وغير المدفوعة (is_paid !== true) والبلا booking_date.
+ * - تُستبعد الملغاة والمرفوضة وغير المدفوعة (is_paid !== true) والبلا booking_date
+ *   — إلّا غيرَ المدفوعِ الذي هو حجزٌ مؤقّتٌ حيّ (`isLiveHold`) متى مُرِّر `nowMs`.
  * - الطلب يشغل سائقاً طوال مدته: يُعدّ في كل ساعة من booking_time_slot إلى
  *   + مدّته من `slots.orderHours` (افتراضياً 4 عند الغياب/الصفر/التلف).
  * - `zoneDailyCounts`: طلبات المنطقة المسمّاة وحدها (zone_name === zoneName) —
  *   البسط الذي يُقاس على سقف المنطقة الخاص، بينما dailyCounts تعدّ الجميع
  *   لأن السائقين بلا مناطق (البسط والمقام من العالم نفسه).
  * @param {Array<object>} orders بيانات وثائق الطلبات
- * @param {{zoneName?: string|null}} opts
+ * @param {{zoneName?: string|null, nowMs?: number, excludeClientId?: string|null}} opts
  * @return {{dailyCounts: object, slotCounts: object, zoneDailyCounts: object}}
  */
-function countBookings(orders, {zoneName = null} = {}) {
+function countBookings(orders, {zoneName = null, nowMs, excludeClientId = null} = {}) {
   const dailyCounts = {};
   const slotCounts = {};
   const zoneDailyCounts = {};
   for (const d of orders || []) {
     if (!d) continue;
     if (d.status === "cancelled" || d.status === "rejected") continue;
-    if (d.is_paid !== true) continue;
+    if (d.is_paid !== true && !isLiveHold(d, {nowMs, excludeClientId})) continue;
     const bDate = d.booking_date;
     if (!bDate) continue;
     dailyCounts[bDate] = (dailyCounts[bDate] || 0) + 1;
@@ -72,4 +104,4 @@ function zoneDailyCap(zoneData) {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
 }
 
-module.exports = {countBookings, zoneDailyCap};
+module.exports = {countBookings, zoneDailyCap, isLiveHold, HOLD_MINUTES};
