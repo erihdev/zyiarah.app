@@ -67,6 +67,11 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.13.1
   flutter_native_splash: ^2.4.0
+  # تحليلُ YAML الحقيقيُّ لحارسِ أسرارِ الإصدار — عَدُّ الخطواتِ بالنصِّ
+  # أعماهُ ثلاثَ مرّات (مَسرَدٌ بإزاحةِ صفر، ورمزٌ زائدٌ على سطرِ
+  # المفتاح، ومِرساةُ YAML خارجَ الخطوات). اعتمادُ اختبارٍ فقط، وهو
+  # في `pubspec.lock` عابراً سلفاً عند 3.1.4 فلا تنزيلَ جديد.
+  yaml: ^3.1.4
 
 flutter:
   uses-material-design: true

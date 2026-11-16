@@ -181,6 +181,16 @@ workflows:
         script: |
           # CERTIFICATE_PRIVATE_KEY مخزَّن في appstore_credentials group في Codemagic
           # (أضفه من Dashboard → Environment variables → appstore_credentials)
+          # الفحصُ **قبلَ** الكتابة: `echo "$VAR" > f` يَنجحُ ويَطبعُ ✓ ولو كان
+          # المتغيّرُ غائباً (يُنشَأُ ملفٌّ بسطرٍ فارغٍ والخروجُ صفر) — فتُقرأُ
+          # هذه الخطوةُ ناجحةً وتَفشلُ `fetch-signing-files` بعدَها بأربعِ ثوان،
+          # فيَضيعُ السبب. (31 أكتوبر 2026: خمسُ دمجاتٍ من خمسٍ فشلت عند تلك
+          # الخطوةِ بعينِها فوقَ ✓ هذه، ولا شيءَ في البناءِ يُبِينُ أيُّ مُدخَلٍ
+          # غاب.) ونجاحُ هذه الخطوةِ **ليس دليلاً** أنّ المفتاحَ موجود.
+          if [ -z "$CERTIFICATE_PRIVATE_KEY" ]; then
+            echo "سرُّ CERTIFICATE_PRIVATE_KEY غير مضبوط في مجموعة appstore_credentials — fetch-signing-files تَفشلُ بعدَه بلا سببٍ مقروء" >&2
+            exit 1
+          fi
           echo "$CERTIFICATE_PRIVATE_KEY" > /tmp/private.key
           chmod 600 /tmp/private.key
           echo "✓ Certificate private key written to /tmp/private.key"
@@ -356,6 +366,16 @@ workflows:
 
       - name: Set up key.properties
         script: |
+          # وقائيٌّ: الثلاثةُ مضبوطةٌ اليومَ (بناءُ أندرويد ينجح)، لكنّ غيابَ
+          # أحدِها يُنتجُ key.properties ناقصاً فيَفشلُ التوقيعُ بخطأِ Gradle
+          # مُبهَمٍ بعدَ دقائقَ لا باسمِ السرِّ الغائب.
+          for v in ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_PASSWORD ANDROID_KEY_ALIAS; do
+            eval "val=\$$v"
+            if [ -z "$val" ]; then
+              echo "سرُّ $v غير مضبوط في مجموعة android_credentials — توقيعُ الحزمةِ يَفشلُ لاحقاً بخطأِ Gradle مُبهَم" >&2
+              exit 1
+            fi
+          done
           echo "storePassword=$ANDROID_KEYSTORE_PASSWORD" > android/key.properties
           echo "keyPassword=$ANDROID_KEY_PASSWORD"        >> android/key.properties
           echo "keyAlias=$ANDROID_KEY_ALIAS"              >> android/key.properties
@@ -363,6 +383,12 @@ workflows:
 
       - name: Set up keystore file
         script: |
+          # `base64 --decode` على فراغٍ يُنتجُ .jks فارغاً بخروجٍ صفر، فيَفشلُ
+          # التوقيعُ لاحقاً بخطأٍ لا يُسمّي السبب.
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "سرُّ ANDROID_KEYSTORE_BASE64 غير مضبوط في مجموعة android_credentials — المفتاحُ يُكتَبُ فارغاً فيَفشلُ التوقيع" >&2
+            exit 1
+          fi
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
 
       - name: Get Flutter dependencies
