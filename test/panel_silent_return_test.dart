@@ -226,7 +226,7 @@ void main() {
 
     test('تعيينٌ بلا سائقٍ أو موعد — فرعانِ لا فرعٌ واحد', () {
       speaksIn('admin_panel/src/pages/Orders.tsx', 'handleAssignDriver',
-          '!selectedDriverId', 'اختر سائقاً متاحاً قبل التعيين');
+          '!selectedDriverId', 'اختر كادراً متاحاً قبل التعيين');
       speaksIn('admin_panel/src/pages/Orders.tsx', 'handleAssignDriver',
           '!scheduledAt', 'حدّد موعد الخدمة قبل التعيين');
     });

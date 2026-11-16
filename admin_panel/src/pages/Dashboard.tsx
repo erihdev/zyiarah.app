@@ -271,7 +271,7 @@ export default function Dashboard() {
             case 'in_progress': return chip('bg-[#FAF1F6]', 'text-[#660033]', 'border-[#F2DEE9]', 'جاري التنفيذ');
             case 'on_the_way': return chip('bg-cyan-50', 'text-cyan-700', 'border-cyan-100', 'في الطريق');
             case 'scheduled':
-            case 'assigned': return chip('bg-teal-50', 'text-teal-700', 'border-teal-100', 'تم تعيين السائق');
+            case 'assigned': return chip('bg-teal-50', 'text-teal-700', 'border-teal-100', 'تم تعيين الكادر');
             case 'accepted': return chip('bg-[#FAF1F6]', 'text-[#660033]', 'border-[#F2DEE9]', 'تم القبول');
             case 'under_review':
             case 'pending_admin_approval': return chip('bg-orange-50', 'text-orange-600', 'border-orange-100', 'تحت المراجعة');
@@ -312,7 +312,7 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                 <StatCard title="إيرادات الخدمات (شامل الضريبة)" value={sar(totalRevenue)} icon={TrendingUp} trend={revenueTrend} trendUp={parseFloat(revenueTrend) >= 0} colorScheme="blue" />
                 <StatCard title="الطلبات النشطة" value={activeOrders} icon={Clock} trend={ordersTrend} trendUp={parseFloat(ordersTrend) >= 0} colorScheme="orange" />
-                <StatCard title="السائقين المتاحين" value={availableDrivers} icon={CarFront} trend="0" trendUp colorScheme="indigo" />
+                <StatCard title="الكوادر المتاحة" value={availableDrivers} icon={CarFront} trend="0" trendUp colorScheme="indigo" />
                 <StatCard title="إجمالي المستخدمين" value={totalUsers} icon={Users} trend={usersTrend} trendUp={parseFloat(usersTrend) >= 0} colorScheme="emerald" />
             </div>
 

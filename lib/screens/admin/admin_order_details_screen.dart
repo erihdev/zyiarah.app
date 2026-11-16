@@ -339,7 +339,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
         if (isInitialAssign && effectiveSchedule == null) {
           if (mounted) setState(() => _isLoading = false);
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('حدد موعد الزيارة أولاً قبل إسناد السائق'),
+              content: Text('حدد موعد الزيارة أولاً قبل إسناد الكادر'),
               backgroundColor: Colors.red));
           return;
         }
@@ -435,7 +435,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
             if (mounted) setState(() => _isLoading = false);
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                 content: Text(
-                    'لا يمكن إسناد سائق لطلب بحالة «$_currentStatus» من هنا — '
+                    'لا يمكن إسناد كادر لطلب بحالة «$_currentStatus» من هنا — '
                     'اعتمد الطلب أولاً أو استعمل إعادة الجدولة'),
                 backgroundColor: Colors.red));
             return;
@@ -490,7 +490,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
             isNewAssignment
-                ? 'تم تعيين ${_selectedDriverName ?? "السائق"} وإرسال إشعار فوري ✅'
+                ? 'تم تعيين ${_selectedDriverName ?? "الكادر"} وإرسال إشعار فوري ✅'
                 : 'تم حفظ تعديلات الطلب بنجاح ✅',
           ),
           backgroundColor: Colors.green,
@@ -1590,7 +1590,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                             style: GoogleFonts.tajawal(fontWeight: FontWeight.w700)),
                         subtitle: Text(
                           data['driver_location'] != null
-                              ? "اضغط لتتبع السائق مباشرة على الخريطة"
+                              ? "اضغط لتتبع الفريق مباشرة على الخريطة"
                               : "اضغط لعرض موقع العميل",
                           style: GoogleFonts.tajawal(fontSize: 12),
                         ),
@@ -1625,7 +1625,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                         final num distM = data['completed_distance_m'] as num;
                         final bool far = distM > 1000;
                         return ListTile(
-                          title: Text("مسافة السائق عند الإتمام",
+                          title: Text("مسافة الكادر عند الإتمام",
                               style: GoogleFonts.tajawal(fontWeight: FontWeight.w700)),
                           subtitle: Text(
                             '${distM.round()} م',
@@ -1706,7 +1706,7 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                       decoration: const InputDecoration(border: OutlineInputBorder()),
                     ),
                     const SizedBox(height: 20),
-                    const Text("تعيين السائق / العامل المسؤول"),
+                    const Text("تعيين الكادر المسؤول"),
                     _isLoadingDrivers 
                       ? const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(strokeWidth: 2)))
                       : DropdownButtonFormField<String>(

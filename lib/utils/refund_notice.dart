@@ -86,12 +86,12 @@ String refundNoticeText({
   final List<String> lines = <String>[];
   switch (impact) {
     case RefundServiceImpact.crewStillAssigned:
-      lines.add('$verb لا يُلغي الطلب: يبقى بحالته وسائقُه مُسنَداً، '
+      lines.add('$verb لا يُلغي الطلب: يبقى بحالته وكادرُه مُسنَداً، '
           'فيذهب الفريق إلى العميلة. ألغِ الطلب أيضاً إن كانت الخدمة '
           'لن تُنفَّذ.');
       break;
     case RefundServiceImpact.openWithoutCrew:
-      lines.add('$verb لا يُلغي الطلب: يبقى مفتوحاً بلا سائق ولن يُسنَد له '
+      lines.add('$verb لا يُلغي الطلب: يبقى مفتوحاً بلا كادر ولن يُسنَد له '
           'فريق بعدها (الإسناد يشترط الدفع). ألغِه أيضاً كي لا يبقى '
           'معلّقاً.');
       break;

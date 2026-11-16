@@ -17,10 +17,10 @@ class TrackingSteps {
   static const List<TrackingStep> steps = [
     TrackingStep('تم استلام وتأكيد الطلب', Icons.receipt_long_rounded,
         ['paid_at', 'created_at']),
-    TrackingStep('تم تعيين السائق', Icons.assignment_ind,
+    TrackingStep('تم تعيين الفريق', Icons.assignment_ind,
         ['assigned_at', 'accepted_at']),
-    TrackingStep('السائق في الطريق', Icons.directions_car, ['on_the_way_at']),
-    TrackingStep('وصل السائق وبدأ الخدمة', Icons.cleaning_services,
+    TrackingStep('الفريق في الطريق', Icons.directions_car, ['on_the_way_at']),
+    TrackingStep('وصل الفريق وبدأت الخدمة', Icons.cleaning_services,
         ['arrived_at', 'start_time']),
     TrackingStep('تمت المهمة بنجاح', Icons.verified, ['end_time']),
   ];

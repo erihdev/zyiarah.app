@@ -86,12 +86,12 @@ interface DriverOption { id: string; name: string; is_available: boolean; is_act
 const StatusBadge = ({ status }: { status: string }) => {
     switch (status) {
         case 'completed': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-100 text-xs"><CheckCircle2 size={14} />مكتمل</span>;
-        case 'pending':   return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-100 text-xs"><Clock size={14} />بانتظار سائق</span>;
+        case 'pending':   return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-100 text-xs"><Clock size={14} />بانتظار كادر</span>;
         case 'pending_admin_approval': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-orange-700 font-bold border border-orange-100 text-xs"><Clock size={14} />بانتظار موافقة الإدارة</span>;
         case 'awaiting_payment': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-100 text-xs"><Clock size={14} />بانتظار الدفع</span>;
         case 'under_review': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-orange-700 font-bold border border-orange-100 text-xs"><Clock size={14} />تحت المراجعة</span>;
         case 'delivering': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAF1F6] text-[#4D0026] font-bold border border-[#F2DEE9] text-xs"><Package size={14} />جاري التنفيذ</span>;
-        case 'scheduled': case 'assigned': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-50 text-teal-700 font-bold border border-teal-100 text-xs"><UserCheck size={14} />تم تعيين السائق</span>;
+        case 'scheduled': case 'assigned': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-50 text-teal-700 font-bold border border-teal-100 text-xs"><UserCheck size={14} />تم تعيين الكادر</span>;
         case 'accepted':  return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAF1F6] text-[#4D0026] font-bold border border-[#F2DEE9] text-xs"><UserCheck size={14} />تم القبول</span>;
         case 'on_the_way': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-50 text-cyan-700 font-bold border border-cyan-100 text-xs"><Package size={14} />في الطريق</span>;
         case 'in_progress': return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAF1F6] text-[#4D0026] font-bold border border-[#F2DEE9] text-xs"><Package size={14} />جاري التنفيذ</span>;
@@ -107,7 +107,7 @@ export default function Orders() {
     const [drivers, setDrivers] = useState<DriverOption[]>([]);
     // المستمعُ الرئيسُ أدناه يُظهِرُ حالةَ خطأٍ بزرِّ إعادة («لا فشل صامت»)،
     // ومستمعُ السائقينِ بجوارِه كان `console.error` وحدَه — ففشلُه يَجعلُ
-    // حوارَ الإسنادِ يَطبعُ **«لا يوجد سائقون متاحون حالياً»**: دعوى عن
+    // حوارَ الإسنادِ يَطبعُ **«لا توجد كوادر متاحة حالياً»**: دعوى عن
     // الأسطولِ تَمنعُ الأدمنَ من إسنادِ طلبٍ مدفوعٍ ولا تُخبرُه بالسبب.
     const [driversError, setDriversError] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -147,7 +147,7 @@ export default function Orders() {
                     ...d,
                     id: doc.id,
                     customer: d.client_name || d.client_id || 'غير متوفر',
-                    driver: d.assigned_driver || (d.status === 'pending' ? 'بانتظار سائق' : '-'),
+                    driver: d.assigned_driver || (d.status === 'pending' ? 'بانتظار كادر' : '-'),
                     status: d.status || 'pending',
                     amount: `${formatSarAny(d.amount)} ر.س`,
                     amount_raw: typeof (doc.data() as DocumentData).amount === 'number'
@@ -172,7 +172,7 @@ export default function Orders() {
         );
 
         const driversUnsub = onSnapshot(collection(db, 'drivers'), (snap) => {
-            setDrivers(snap.docs.map(d => ({ id: d.id, name: d.data().name || 'سائق', is_available: d.data().is_available || false, is_active: d.data().is_active !== false })));
+            setDrivers(snap.docs.map(d => ({ id: d.id, name: d.data().name || 'كادر', is_available: d.data().is_available || false, is_active: d.data().is_active !== false })));
             setDriversError(false);
         }, (e) => { console.error('Drivers listener error:', e); setDriversError(true); });
 
@@ -195,7 +195,7 @@ export default function Orders() {
         // مباشرةً يُنبّه.
         if (!assignModal) return;
         if (!selectedDriverId) {
-            toast.error('اختر سائقاً متاحاً قبل التعيين');
+            toast.error('اختر كادراً متاحاً قبل التعيين');
             return;
         }
         if (!scheduledAt) {
@@ -225,7 +225,7 @@ export default function Orders() {
             setAssignModal(null);
             setSelectedDriverId('');
             setScheduledAt('');
-            toast.success('تم اعتماد الطلب وتعيين السائق');
+            toast.success('تم اعتماد الطلب وتعيين الكادر');
         } catch (err: unknown) {
             console.error('Error assigning driver:', err);
             toast.error((err as { message?: string })?.message || 'حدث خطأ أثناء التعيين');
@@ -263,7 +263,7 @@ export default function Orders() {
                 }
                 if (editDriverId && editDriverId !== editModal.driver_id) payload.newDriverId = editDriverId;
                 if (!payload.scheduledIso && !payload.newDriverId) {
-                    toast.error('لا تغيير — عدّل الموعد أو اختر سائقاً آخر');
+                    toast.error('لا تغيير — عدّل الموعد أو اختر كادراً آخر');
                     setIsEditing(false);
                     return;
                 }
@@ -521,7 +521,7 @@ export default function Orders() {
                                 <tr className="bg-slate-50 border-b border-slate-100">
                                     <th className="font-bold text-slate-500 text-xs uppercase px-6 py-4">رقم الطلب</th>
                                     <th className="font-bold text-slate-500 text-xs uppercase px-6 py-4">العميل</th>
-                                    <th className="font-bold text-slate-500 text-xs uppercase px-6 py-4">السائق</th>
+                                    <th className="font-bold text-slate-500 text-xs uppercase px-6 py-4">الكادر</th>
                                     <th className="font-bold text-slate-500 text-xs uppercase px-6 py-4">النقل</th>
                                     <th className="font-bold text-slate-500 text-xs uppercase px-6 py-4">نوع الخدمة</th>
                                     <th className="font-bold text-slate-500 text-xs uppercase px-6 py-4">المبلغ</th>
@@ -623,7 +623,7 @@ export default function Orders() {
                                                             }}
                                                             className="w-full flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-[#FAF1F6] hover:text-[#4D0026] transition-colors text-right"
                                                         >
-                                                            <UserCheck size={16} />{order.status === 'pending_admin_approval' ? 'اعتماد وتعيين' : 'تعيين سائق'}
+                                                            <UserCheck size={16} />{order.status === 'pending_admin_approval' ? 'اعتماد وتعيين' : 'تعيين كادر'}
                                                         </button>
                                                     )}
                                                     {order.status === 'under_review' && (
@@ -698,7 +698,7 @@ export default function Orders() {
                     <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md overflow-hidden">
                         <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-slate-50/50">
                             <div>
-                                <h3 className="text-xl font-extrabold text-slate-800">تعيين سائق</h3>
+                                <h3 className="text-xl font-extrabold text-slate-800">تعيين كادر</h3>
                                 <p className="text-sm text-slate-500 mt-0.5">الطلب #{assignModal.code || assignModal.id.substring(0, 6).toUpperCase()} — {assignModal.customer}</p>
                                 {metaSummary(assignModal.service_meta) && (
                                     <p className="text-xs font-bold text-[#660033] mt-1">{metaSummary(assignModal.service_meta)}</p>
@@ -714,19 +714,19 @@ export default function Orders() {
                                 يحملها، وعدد عاملات المناسبة وساعاتها. */}
                             <ServiceMetaTable meta={assignModal.service_meta} />
                             {driversError ? (
-                                <p className="text-center text-rose-600 font-bold py-4">تعذّر تحميل قائمة السائقين — أعد تحميل الصفحة. هذه ليست «لا سائقين»: القائمة لم تُقرأ.</p>
+                                <p className="text-center text-rose-600 font-bold py-4">تعذّر تحميل قائمة الكوادر — أعد تحميل الصفحة. هذه ليست «لا كوادر»: القائمة لم تُقرأ.</p>
                             ) : availableDrivers.length === 0 ? (
-                                <p className="text-center text-amber-600 font-bold py-4">لا يوجد سائقون متاحون حالياً</p>
+                                <p className="text-center text-amber-600 font-bold py-4">لا توجد كوادر متاحة حالياً</p>
                             ) : (
                                 <div className="space-y-2">
-                                    <label className="block text-sm font-extrabold text-slate-700">اختر سائقاً متاحاً</label>
+                                    <label className="block text-sm font-extrabold text-slate-700">اختر كادراً متاحاً</label>
                                     <select
-                                        title="اختر سائقاً"
+                                        title="اختر كادراً"
                                         value={selectedDriverId}
                                         onChange={e => setSelectedDriverId(e.target.value)}
                                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#660033] focus:ring-2 focus:ring-[#660033]/20 font-medium"
                                     >
-                                        <option value="">-- اختر سائقاً --</option>
+                                        <option value="">-- اختر كادراً --</option>
                                         {availableDrivers.map(d => (
                                             <option key={d.id} value={d.id}>{d.name}</option>
                                         ))}
@@ -755,7 +755,7 @@ export default function Orders() {
                                     onClick={handleAssignDriver}
                                     className="flex-1 px-4 py-3 bg-[#660033] text-white rounded-xl font-bold hover:bg-[#4D0026] transition-colors flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    {isAssigning ? <Loader2 className="animate-spin" size={20} /> : 'تعيين السائق'}
+                                    {isAssigning ? <Loader2 className="animate-spin" size={20} /> : 'تعيين الكادر'}
                                 </button>
                             </div>
                         </div>
@@ -793,9 +793,9 @@ export default function Orders() {
                             </div>
                             {editModal.driver_id && ACTIVE_ASSIGNED.includes(editModal.status) && (
                                 <div className="space-y-2">
-                                    <label className="block text-sm font-extrabold text-slate-700">السائق (اختر آخر لإعادة الإسناد)</label>
+                                    <label className="block text-sm font-extrabold text-slate-700">الكادر (اختر آخر لإعادة الإسناد)</label>
                                     <select
-                                        title="السائق"
+                                        title="الكادر"
                                         value={editDriverId}
                                         onChange={e => setEditDriverId(e.target.value)}
                                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#660033] focus:ring-2 focus:ring-[#660033]/20 font-medium"
@@ -805,7 +805,7 @@ export default function Orders() {
                                         ))}
                                     </select>
                                     <p className="text-[11px] text-slate-400 font-bold">
-                                        يُفحص تفرّغ السائق في الموعد خادمياً — وعند التبديل يُحرَّر السائق السابق ويُشعَر الجديد تلقائياً.
+                                        يُفحص تفرّغ الكادر في الموعد خادمياً — وعند التبديل يُحرَّر الكادر السابق تلقائياً.
                                     </p>
                                 </div>
                             )}

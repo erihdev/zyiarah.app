@@ -220,7 +220,7 @@ export default function Payroll() {
                         <Banknote className="text-emerald-600" size={28} />
                         إدارة الرواتب الشهرية
                     </h2>
-                    <p className="text-slate-500 font-medium text-sm mt-1">صرف وتتبع رواتب الكوادر والسائقين شهرياً</p>
+                    <p className="text-slate-500 font-medium text-sm mt-1">صرف وتتبع رواتب الكوادر شهرياً</p>
                 </div>
 
                 {/* Month Selector */}
@@ -373,7 +373,7 @@ export default function Payroll() {
                                         <td className="px-6 py-4">
                                             <span className={`px-2.5 py-1 text-xs font-bold rounded-lg
                                                 ${row.type === 'worker' ? 'bg-pink-50 text-pink-700 border border-pink-100' : 'bg-orange-50 text-orange-700 border border-orange-100'}`}>
-                                                {row.type === 'worker' ? 'كادر تنظيف' : 'سائق توصيل'}
+                                                {row.type === 'worker' ? 'كادر تنظيف' : 'سائق سابق'}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">

@@ -620,7 +620,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> with SingleTi
                         children: [
                           _buildToggle(
                             "إغلاق التطبيق للعملاء (صيانة)",
-                            "عند التفعيل يرى العملاء شاشة صيانة ولا يستطيعون الطلب. الإدارة والسائقون لا يتأثّرون.",
+                            "عند التفعيل يرى العملاء شاشة صيانة ولا يستطيعون الطلب. الإدارة والكوادر لا يتأثّرون.",
                             _maintenanceMode,
                             (v) => setState(() => _maintenanceMode = v),
                             const Color(0xFFDC2626),

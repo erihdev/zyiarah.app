@@ -44,7 +44,7 @@ const navGroups: NavGroup[] = [
             { icon: FileSignature,   label: 'العقود الإلكترونية',    path: '/contracts',      color: 'teal' },
             { icon: ShoppingBasket,  label: 'إدارة المتجر',           path: '/store-products', color: 'green' },
             { icon: ShoppingBag,     label: 'طلبات المتجر',           path: '/store-orders',   color: 'emerald' },
-            { icon: CarFront,        label: 'إدارة السائقين',         path: '/drivers',        color: 'indigo' },
+            { icon: CarFront,        label: 'إدارة الكوادر',         path: '/drivers',        color: 'indigo' },
             { icon: Users,           label: 'إدارة العملاء',          path: '/users',          color: 'pink' },
         ],
     },
@@ -72,7 +72,7 @@ const pageTitles: Record<string, string> = {
     '/':                 'لوحة القيادة',
     '/orders':           'إدارة الطلبات',
     '/schedule':         'جدول المتابعة',
-    '/drivers':          'إدارة السائقين',
+    '/drivers':          'إدارة الكوادر',
     '/users':            'إدارة العملاء',
     '/contracts':        'العقود الإلكترونية',
     '/store-products':   'إدارة منتجات المتجر',
@@ -197,7 +197,7 @@ function SidebarNav({
 const bottomNavItems = [
     { icon: LayoutDashboard, label: 'الرئيسية', path: '/' },
     { icon: ClipboardList,   label: 'الطلبات',  path: '/orders' },
-    { icon: CarFront,        label: 'السائقين', path: '/drivers' },
+    { icon: CarFront,        label: 'الكوادر', path: '/drivers' },
     { icon: LifeBuoy,        label: 'الدعم',    path: '/support' },
 ];
 

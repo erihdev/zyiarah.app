@@ -388,7 +388,7 @@ class _ZyiarahProfileScreenState extends State<ZyiarahProfileScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'سيتم عرض هذه التنبيهات للسائق عند وصوله لموقعك.',
+                'سيتم عرض هذه التنبيهات للفريق عند وصوله لموقعك.',
                 style: GoogleFonts.tajawal(fontSize: 12, color: Colors.grey),
               ),
               const SizedBox(height: 15),

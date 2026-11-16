@@ -40,7 +40,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     },
     {
       "title": "تتبع حي ودقيق",
-      "desc": "تابعي موقع السائق والعاملة لحظة بلحظة حتى وصولهم لباب منزلكِ.",
+      "desc": "تابعي فريق زيارة لحظة بلحظة حتى وصوله لباب منزلكِ.",
       "art": OnboardingArtKind.tracking,
     }
   ];

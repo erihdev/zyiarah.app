@@ -103,7 +103,7 @@ void main() {
       // بلا هذا يختفي قصدُ المدير: يضغط «حفظ» فلا يُسنَد سائق ولا يُقال له شيء.
       expect(scr.contains('isNewAssignment && isOrdersDoc'), isTrue,
           reason: 'لا فحصَ للسقوط في المسار المباشر مع اختيار سائق');
-      expect(raw.contains('لا يمكن إسناد سائق لطلب بحالة'), isTrue,
+      expect(raw.contains('لا يمكن إسناد كادر لطلب بحالة'), isTrue,
           reason: 'لا رسالةَ خطأ صريحة');
     });
   });

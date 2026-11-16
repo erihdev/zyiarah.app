@@ -4356,7 +4356,7 @@ const PRE_DISPATCH_STATUSES = [
 // `kUnpaidDispatchRefusal` في `lib/utils/order_lifecycle.dart`: صياغتانِ
 // لقرارٍ واحدٍ هي ما يُنتجُ هذا النوعَ من العطل، وكلا الجمهورَين هو الأدمن.
 const UNPAID_DISPATCH_REFUSAL =
-  "لا يمكن إسناد سائق لطلب غير مدفوع — انتظر تأكيد الدفع";
+  "لا يمكن إسناد كادر لطلب غير مدفوع — انتظر تأكيد الدفع";
 
 // **لا موعدَ في الماضي.** أربعةُ مواضعَ تَكتبُ موعدَ الخدمةِ — هذان النداءانِ
 // وفرعا الكتابةِ المباشرةِ في سطحَي الإدارة — وكانت الأربعةُ تَقبلُ أيَّ
@@ -4396,7 +4396,7 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   await _assertAdmin(request); // super_admin أو orders_manager
   const {orderId, driverId, scheduledIso} = request.data;
   if (!orderId || !driverId || !scheduledIso) {
-    throw new HttpsError("invalid-argument", "البيانات ناقصة (الطلب/السائق/الموعد)");
+    throw new HttpsError("invalid-argument", "البيانات ناقصة (الطلب/الكادر/الموعد)");
   }
   const startDateTime = parseKsaIso(scheduledIso);
   if (isNaN(startDateTime.getTime())) {
@@ -4428,7 +4428,7 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   // التعارض) — ولو قبلناه هنا لحُسب السائق الحاليّ تعارضاً مع نفسه.
   if (orderData.driver_id) {
     throw new HttpsError("failed-precondition",
-        "الطلب مُسنَد سلفاً — استعمل إعادة الجدولة/الإسناد لتغيير سائقه");
+        "الطلب مُسنَد سلفاً — استعمل إعادة الجدولة/الإسناد لتغيير كادره");
   }
 
   // **لا سائقَ لطلبٍ غيرِ مدفوع.** القاعدةُ مُنفَّذةٌ في أربعةِ مساراتٍ هنا —
@@ -4464,7 +4464,7 @@ exports.approveAndAssignOrder = onCall({cpu: 0.25}, async (request) => {
   if (!free) {
     throw new HttpsError(
         "failed-precondition",
-        "السائق مشغول بمهمة أخرى في هذا الوقت — اختر سائقاً أو موعداً آخر");
+        "الكادر مشغول بمهمة أخرى في هذا الوقت — اختر كادراً أو موعداً آخر");
   }
 
   // (الثغرة #2) Transaction ذرّي: يُعيد فحص حالة الطلب قبل الإسناد لمنع التعيين
@@ -4568,7 +4568,7 @@ exports.rescheduleAssignedOrder = onCall({cpu: 0.25}, async (request) => {
     throw new HttpsError("invalid-argument", "البيانات ناقصة (الطلب)");
   }
   if (!scheduledIso && !newDriverId) {
-    throw new HttpsError("invalid-argument", "لا تغيير مطلوب (موعد أو سائق)");
+    throw new HttpsError("invalid-argument", "لا تغيير مطلوب (موعد أو كادر)");
   }
   let parsedStart = null;
   if (scheduledIso) {
@@ -5099,7 +5099,7 @@ exports.sweepUnassignedPaidOrders = onSchedule(
         if (latestart && d.stranded_alerted !== true) {
           await queuePush(
               "ADMIN_BROADCAST",
-              "طلب مدفوع تجاوز موعد بدئه بلا سائق ⚠️",
+              "طلب مدفوع تجاوز موعد بدئه بلا كادر ⚠️",
               `الطلب #${d.code || doc.id} مدفوع وفات موعد بدئه ولم يُسنَد — ` +
               `ما تزال نافذته قائمة والمحاولة مستمرة، وقد يلزم تدخّل يدوي.`,
               "admin_order_alert",
@@ -5188,8 +5188,8 @@ exports.sweepUnassignedPaidOrders = onSchedule(
         if (d.stranded_alerted === true) continue;
         await queuePush(
             "ADMIN_BROADCAST",
-            "طلب مدفوع بلا سائق ⚠️",
-            `الطلب #${d.code || doc.id} مدفوع وفات موعده بلا إسناد سائق — يلزم تدخّل يدوي.`,
+            "طلب مدفوع بلا كادر ⚠️",
+            `الطلب #${d.code || doc.id} مدفوع وفات موعده بلا إسناد كادر — يلزم تدخّل يدوي.`,
             "admin_order_alert",
             {orderId: doc.id, code: d.code || doc.id});
         await doc.ref.update({stranded_alerted: true});
@@ -6262,7 +6262,7 @@ exports.notifyClientOnDriverDeparture = onDocumentUpdated(
       // الوارد دائماً ثم تدفع.
       await queuePush(
           after.client_id,
-          "سائقكِ في الطريق إليكِ 🚗",
+          "فريقنا في الطريق إليكِ 🚗",
           `${greet}انطلق فريق زيارة لتنفيذ خدمتكِ — يسعدنا استقبالكِ ✨`,
           "order_update",
           {orderId: event.params.orderId},

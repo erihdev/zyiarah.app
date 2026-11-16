@@ -75,7 +75,7 @@ class AdminMoreScreen extends StatelessWidget {
             'roles': ['super_admin', 'orders_manager'],
           },
           {
-            'title': 'السائقين والعمال',
+            'title': 'الكوادر',
             'icon': Icons.engineering_outlined,
             'color': Colors.orange,
             'page': const AdminDriversScreen(),

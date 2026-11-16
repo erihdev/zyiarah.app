@@ -204,7 +204,7 @@ class _AdminScheduleBoardScreenState extends State<AdminScheduleBoardScreen> {
             const SizedBox(width: 10),
             Expanded(
                 child: _kpi(
-                    'بلا سائق',
+                    'بلا كادر',
                     '$unassigned',
                     Icons.person_off_outlined,
                     unassigned > 0
@@ -300,7 +300,7 @@ class _AdminScheduleBoardScreenState extends State<AdminScheduleBoardScreen> {
                     color: const Color(0xFFFEE2E2),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Text('$unassigned بلا سائق',
+                  child: Text('$unassigned بلا كادر',
                       style: GoogleFonts.tajawal(
                           fontSize: 11,
                           fontWeight: FontWeight.w900,
@@ -406,7 +406,7 @@ class _AdminScheduleBoardScreenState extends State<AdminScheduleBoardScreen> {
                         _tag('${m['driver_name'] ?? 'مُسنَد'}',
                             const Color(0xFF059669))
                       else if (_needsDriver(m))
-                        _tag('بلا سائق', const Color(0xFFDC2626), strong: true)
+                        _tag('بلا كادر', const Color(0xFFDC2626), strong: true)
                       else
                         // غيابه هنا متوقَّع: الإسناد يقع عند الدفع، أو الطلب
                         // إداريّ بلا موعد — رمادي لا أحمر كي لا يُستنزف الانتباه.

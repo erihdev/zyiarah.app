@@ -146,7 +146,7 @@ async function notifyAutoRefund(
         "order_refunded", {orderId}).catch(() => {});
   }
   await queuePush("ADMIN_BROADCAST", "استُرد طلب مدفوع تعذّر تنفيذه ↩️",
-      `أُعيد الطلب #${code} (${adminTag}، ${amount} ر.س) — لا سائق حتى بعد فوات الموعد.`,
+      `أُعيد الطلب #${code} (${adminTag}، ${amount} ر.س) — لا كادر حتى بعد فوات الموعد.`,
       "admin_order_alert", {orderId}).catch(() => {});
 }
 
@@ -173,7 +173,7 @@ async function escalateFailedAutoRefund(
     queuePush, orderId, code, amount, reason) {
   if (typeof queuePush !== "function") return;
   await queuePush("ADMIN_BROADCAST", "تعذّر استرداد طلبٍ مدفوع — تدخّل يدوي 🚨",
-      `الطلب #${code} (${amount} ر.س) فات موعده بلا سائق وتعذّر استردادُه آلياً ` +
+      `الطلب #${code} (${amount} ر.س) فات موعده بلا كادر وتعذّر استردادُه آلياً ` +
       `(${FAILURE_NOTES[reason] || reason}). المبلغ ما يزال محصَّلاً — يلزم ` +
       `استرداد يدويّ من لوحة الطلبات.`,
       "admin_order_alert",

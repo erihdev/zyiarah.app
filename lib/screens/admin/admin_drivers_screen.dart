@@ -91,7 +91,9 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
     final TextEditingController salaryCtrl = TextEditingController(text: (currentData?['monthly_salary'] ?? '').toString());
     // (Direct Dispatch) منطقة عمل السائق — تُستخدم في التعيين الجغرافي للطلبات
 
-    String type = currentData?['type'] ?? 'driver'; 
+    // سائقو المؤسسة أُزيلوا (النقلُ كلُّه عبر مواصلات): الجديدُ كادرُ تنظيفٍ دائماً،
+    // و'driver' يَبقى لقراءةِ سجلٍّ قديمٍ وحدَه.
+    String type = docId == null ? 'worker' : (currentData?['type'] ?? 'driver');
     String? photoUrl = currentData?['photo_url'];
     Uint8List? selectedImageBytes;
     bool isSaving = false;
@@ -307,9 +309,10 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                             child: DropdownButtonFormField<String>(
                               // ignore: deprecated_member_use
                               value: type,
-                              items: const [
-                                DropdownMenuItem(value: 'driver', child: Text("سائق توصيل (Delivery)")),
-                                DropdownMenuItem(value: 'worker', child: Text("كادر تنظيف (Cleaning)")),
+                              items: [
+                                if (type == 'driver')
+                                  const DropdownMenuItem(value: 'driver', child: Text("سائق سابق (غير مستعمل)")),
+                                const DropdownMenuItem(value: 'worker', child: Text("كادر تنظيف (Cleaning)")),
                               ],
                               onChanged: isSaving ? null : (val) {
                                 if (val != null) setDialogState(() => type = val);
@@ -384,7 +387,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                   // حساب Auth — نمنعه هنا قبل أي إنشاء برسالة مفهومة.
                                   if (docId == null && type == 'worker' && _role == 'orders_manager') {
                                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                      content: Text('تسجيل كوادر التنظيف يتطلب صلاحية الإدارة العليا — يمكنك تسجيل سائقي التوصيل فقط'),
+                                      content: Text('تسجيل كوادر التنظيف يتطلب صلاحية الإدارة العليا'),
                                       backgroundColor: Colors.red,
                                     ));
                                     return;
@@ -507,7 +510,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
               // بلا مَخرج.
               return Center(
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const Text("تعذّر تحميل السائقين، تحقّق من الاتصال"),
+                const Text("تعذّر تحميل الكوادر، تحقّق من الاتصال"),
                 TextButton(
                     onPressed: _reopenStaff,
                     child: const Text('إعادة المحاولة')),
@@ -624,7 +627,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         children: [
           _buildMinimalStatCard("الإجمالي", stats['total'].toString(), Colors.blueAccent),
-          _buildMinimalStatCard("سائقين", stats['drivers'].toString(), Colors.orangeAccent),
+          _buildMinimalStatCard("سائقون سابقون", stats['drivers'].toString(), Colors.orangeAccent),
           _buildMinimalStatCard("كوادر تنظيف", stats['workers'].toString(), Colors.pinkAccent),
           _buildMinimalStatCard("نشط حالياً", stats['active'].toString(), Colors.greenAccent),
         ],
@@ -726,7 +729,7 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          isWorker ? "كادر تنظيف" : "سائق توصيل",
+                          isWorker ? "كادر تنظيف" : "سائق سابق",
                           style: GoogleFonts.tajawal(color: isWorker ? Colors.pink : Colors.orange[800], fontSize: 10, fontWeight: FontWeight.bold),
                         ),
                       ),
