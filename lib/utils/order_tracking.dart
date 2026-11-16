@@ -100,5 +100,5 @@ String trackingUnavailableLabel({
   if (status == 'in_progress') return 'جاري التنفيذ';
   // فات الموعد ولا سائق: «انتظري» كذبة — لم يعد هناك ما يُنتظر.
   if (passed) return 'انتهى الموعد — تواصلي مع الدعم';
-  return 'لم يُعيَّن سائق بعد';
+  return 'لم يُعيَّن فريق بعد';
 }

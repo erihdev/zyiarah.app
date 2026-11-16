@@ -154,7 +154,7 @@ export default function Notifications() {
     // الإنتاجِ باقٍ). والمجهولُ «الجميع» — وهو ما يُسلّمُه الخادمُ فعلاً.
     const targetLabel = (t: string) => {
         if (t === 'clients') return 'العملاء فقط';
-        if (t === 'drivers') return 'السائقين فقط';
+        if (t === 'drivers') return 'الكوادر فقط';
         if (t === 'admins') return 'الإدارة فقط';
         return 'الجميع';
     };
@@ -223,7 +223,7 @@ export default function Notifications() {
                             {[
                                 { val: 'all', label: 'الجميع', icon: Smartphone },
                                 { val: 'clients', label: 'العملاء فقط', icon: Users },
-                                { val: 'drivers', label: 'السائقين فقط', icon: UserRound },
+                                { val: 'drivers', label: 'الكوادر فقط', icon: UserRound },
                             ].map(({ val, label, icon: Icon }) => (
                                 <label key={val} className={`cursor-pointer border-2 rounded-xl p-3 flex flex-col items-center justify-center gap-2 transition-all ${target === val ? 'border-[#660033] bg-[#FAF1F6] text-[#4D0026]' : 'border-slate-100 hover:border-slate-300 text-slate-500'}`}>
                                     <input type="radio" name="target" className="hidden" checked={target === val} onChange={() => setTarget(val)} />

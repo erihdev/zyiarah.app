@@ -201,7 +201,7 @@ export default function ScheduleBoard() {
                 <>
                     <div className="grid grid-cols-3 gap-3">
                         <Kpi label="الطلبات" value={orders.length} icon={<CalendarDays size={18} />} tone="text-slate-700" />
-                        <Kpi label="بلا سائق" value={stats.unassigned} icon={<UserX size={18} />}
+                        <Kpi label="بلا كادر" value={stats.unassigned} icon={<UserX size={18} />}
                              tone={stats.unassigned > 0 ? 'text-rose-600' : 'text-emerald-600'} />
                         <Kpi label="غير مدفوعة" value={stats.unpaid} icon={<Clock size={18} />}
                              tone={stats.unpaid > 0 ? 'text-amber-600' : 'text-emerald-600'} />
@@ -241,7 +241,7 @@ export default function ScheduleBoard() {
                                     </span>
                                     <span className="flex-1" />
                                     {dayUnassigned > 0 && (
-                                        <Tag text={`${dayUnassigned} بلا سائق`} tone="bg-rose-100 text-rose-700" strong />
+                                        <Tag text={`${dayUnassigned} بلا كادر`} tone="bg-rose-100 text-rose-700" strong />
                                     )}
                                     <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs font-black">{items.length}</span>
                                 </div>
@@ -274,7 +274,7 @@ export default function ScheduleBoard() {
                                                         {drv !== null
                                                             ? <Tag text={o.driver_name ?? 'مُسنَد'} tone="bg-emerald-50 text-emerald-700" />
                                                             : needsDriver(o)
-                                                                ? <Tag text="بلا سائق" tone="bg-rose-100 text-rose-700" strong />
+                                                                ? <Tag text="بلا كادر" tone="bg-rose-100 text-rose-700" strong />
                                                                 // غيابه هنا متوقَّع: الإسناد يقع عند الدفع — رمادي لا أحمر.
                                                                 : <Tag text="يُسنَد بعد الدفع" tone="bg-slate-100 text-slate-400" />}
                                                         {o.is_paid !== true && !isSub(o) && (

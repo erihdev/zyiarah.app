@@ -55,7 +55,7 @@ export default function Drivers() {
     const [isAdding, setIsAdding] = useState(false);
     const [newDriver, setNewDriver] = useState({
         name: '', phone: '', email: '', monthly_salary: 0,
-        type: 'driver', nationality: '', id_number: '', id_expiry: '', license_info: '',
+        type: 'worker', nationality: '', id_number: '', id_expiry: '', license_info: '',
     });
 
     // Edit
@@ -183,7 +183,7 @@ export default function Drivers() {
             setIsAddModalOpen(false);
             setNewDriver({
                 name: '', phone: '', email: '', monthly_salary: 0,
-                type: 'driver', nationality: '', id_number: '', id_expiry: '', license_info: '',
+                type: 'worker', nationality: '', id_number: '', id_expiry: '', license_info: '',
             });
             setAddPhotoFile(null);
             setAddPhotoPreview(null);
@@ -193,7 +193,7 @@ export default function Drivers() {
             toast.error(
                 code === 'auth/email-already-in-use' ? 'هذا البريد مسجَّل بالفعل — استخدم بريداً آخر'
                     : code === 'auth/invalid-email' ? 'صيغة البريد الإلكتروني غير صحيحة'
-                        : 'حدث خطأ أثناء إضافة السائق',
+                        : 'حدث خطأ أثناء إضافة الكادر',
             );
         } finally {
             await deleteApp(secondaryApp).catch(() => { /* تنظيف فقط */ });
@@ -304,7 +304,7 @@ export default function Drivers() {
         setUploadingPhotoFor(driverId);
         try {
             await uploadPhoto(file, driverId);
-            toast.success('تم تحديث صورة السائق');
+            toast.success('تم تحديث صورة الكادر');
         } catch (err) {
             console.error(err);
             toast.error('فشل رفع الصورة');
@@ -335,7 +335,7 @@ export default function Drivers() {
                 { name: driver.name, suspended: nowSuspended }, driver.id);
         } catch (err) {
             console.error(err);
-            toast.error('حدث خطأ أثناء تعديل حالة السائق');
+            toast.error('حدث خطأ أثناء تعديل حالة الكادر');
         } finally {
             setTogglingId(null);
         }
@@ -352,19 +352,19 @@ export default function Drivers() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">إدارة السائقين</h2>
-                    <p className="text-slate-500 font-medium text-sm mt-1">تتبع أداء السائقين، الحالات، وإدارة الحسابات المالية</p>
+                    <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">إدارة الكوادر</h2>
+                    <p className="text-slate-500 font-medium text-sm mt-1">تتبع أداء الكوادر، الحالات، وإدارة الحسابات المالية</p>
                 </div>
                 <div className="flex items-center gap-3">
                     <button type="button" className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors shadow-sm"><Filter size={18} />تصفية</button>
-                    <button type="button" onClick={() => setIsAddModalOpen(true)} className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl font-bold hover:from-emerald-600 hover:to-teal-700 transition-all shadow-lg shadow-emerald-500/20 hover:shadow-xl hover:-translate-y-0.5">إضافة سائق +</button>
+                    <button type="button" onClick={() => setIsAddModalOpen(true)} className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl font-bold hover:from-emerald-600 hover:to-teal-700 transition-all shadow-lg shadow-emerald-500/20 hover:shadow-xl hover:-translate-y-0.5">إضافة كادر +</button>
                 </div>
             </div>
 
             {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
                 <div className="bg-white p-6 rounded-[20px] shadow-sm border border-slate-100/60 flex items-center justify-between group hover:border-[#E5C3D5] transition-colors">
-                    <div><p className="text-sm font-bold text-slate-500 mb-1">إجمالي السائقين</p><h3 className="text-3xl font-extrabold text-slate-800">{drivers.length}</h3></div>
+                    <div><p className="text-sm font-bold text-slate-500 mb-1">إجمالي الكوادر</p><h3 className="text-3xl font-extrabold text-slate-800">{drivers.length}</h3></div>
                     <div className="w-12 h-12 bg-[#FAF1F6] text-[#660033] rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform"><ShieldCheck size={24} /></div>
                 </div>
                 <div className="bg-white p-6 rounded-[20px] shadow-sm border border-slate-100/60 flex items-center justify-between group hover:border-emerald-200 transition-colors">
@@ -385,12 +385,12 @@ export default function Drivers() {
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 p-6 bg-slate-50/30">
                     {loadError ? (
                         <div className="col-span-full py-12 text-center">
-                            <p className="text-rose-600 font-bold mb-3">تعذّر تحميل قائمة السائقين — تحقّق من الاتصال أو الصلاحيات.</p>
+                            <p className="text-rose-600 font-bold mb-3">تعذّر تحميل قائمة الكوادر — تحقّق من الاتصال أو الصلاحيات.</p>
                             <p className="text-slate-500 text-sm font-medium mb-4">لا تقرأ هذه الشاشة كأسطول فارغ: البيانات لم تُقرأ أصلاً.</p>
                             <button type="button" onClick={() => { setLoadError(false); setRetryKey(k => k + 1); }} className="px-5 py-2.5 bg-[#660033] text-white rounded-xl font-bold">إعادة المحاولة</button>
                         </div>
                     ) : filteredDrivers.length === 0 ? (
-                        <div className="col-span-full py-12 text-center text-slate-500 font-bold">لا يوجد سائقين مطابقين للبحث.</div>
+                        <div className="col-span-full py-12 text-center text-slate-500 font-bold">لا توجد كوادر مطابقة للبحث.</div>
                     ) : filteredDrivers.map(driver => (
                         <div key={driver.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow p-5 relative overflow-hidden group">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-bl-full -z-10 group-hover:bg-[#FAF1F6]/50 transition-colors duration-500"></div>
@@ -477,7 +477,7 @@ export default function Drivers() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
                         <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-slate-50/50 sticky top-0">
-                            <h3 className="text-xl font-extrabold text-slate-800">إضافة سائق جديد</h3>
+                            <h3 className="text-xl font-extrabold text-slate-800">إضافة كادر جديد</h3>
                             <button type="button" title="إغلاق" onClick={() => { setIsAddModalOpen(false); setAddPhotoFile(null); setAddPhotoPreview(null); }} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-xl transition-colors"><X size={20} /></button>
                         </div>
                         <form onSubmit={handleAddDriver} className="p-6 space-y-5">
@@ -498,10 +498,9 @@ export default function Drivers() {
                             <div className="space-y-2">
                                 <label className="block text-sm font-extrabold text-slate-700">تصنيف الموظف</label>
                                 <select aria-label="تصنيف الموظف" value={newDriver.type} onChange={e => setNewDriver({ ...newDriver, type: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium">
-                                    <option value="driver">سائق توصيل (Delivery)</option>
                                     <option value="worker">كادر تنظيف (Cleaning)</option>
                                 </select>
-                                <p className="text-xs text-slate-400">يحدّد من يدخل عدّاد السائقين وكشف الرواتب ومن تصله إسنادات الطلبات.</p>
+                                <p className="text-xs text-slate-400">سائقو المؤسسة أُزيلوا — النقل عبر «مواصلات». يُسجَّل هنا كادر التنظيف فقط.</p>
                             </div>
                             <div className="space-y-2">
                                 <label className="block text-sm font-extrabold text-slate-700">اسم الكادر الكامل</label>
@@ -517,7 +516,7 @@ export default function Drivers() {
                             <div className="space-y-2">
                                 <label className="block text-sm font-extrabold text-slate-700">البريد الإلكتروني (حساب الدخول)</label>
                                 <input type="email" required placeholder="driver@example.com" value={newDriver.email} onChange={e => setNewDriver({ ...newDriver, email: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium" dir="ltr" />
-                                <p className="text-xs text-slate-400">يُنشأ حساب دخول فعلي ويُرسَل للسائق رابط تعيين كلمة المرور على هذا البريد.</p>
+                                <p className="text-xs text-slate-400">يُنشأ حساب دخول فعلي ويُرسَل للكادر رابط تعيين كلمة المرور على هذا البريد.</p>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="space-y-2">
@@ -563,7 +562,7 @@ export default function Drivers() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
                         <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-slate-50/50">
-                            <h3 className="text-xl font-extrabold text-slate-800">تعديل بيانات السائق</h3>
+                            <h3 className="text-xl font-extrabold text-slate-800">تعديل بيانات الكادر</h3>
                             <button type="button" title="إغلاق" onClick={() => setEditDriver(null)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-xl transition-colors"><X size={20} /></button>
                         </div>
                         <form onSubmit={handleSaveEdit} className="p-6 space-y-5">
@@ -618,7 +617,7 @@ export default function Drivers() {
                         <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-5">
                             <Trash2 size={28} className="text-rose-500" />
                         </div>
-                        <h3 className="text-xl font-extrabold text-slate-800 mb-2">حذف السائق نهائياً</h3>
+                        <h3 className="text-xl font-extrabold text-slate-800 mb-2">حذف السجل نهائياً</h3>
                         <p className="text-slate-500 text-sm mb-6">سيُحذف <span className="font-bold text-slate-700">{deleteTarget.name}</span> وحساب دخوله نهائياً ولن يظهر في القائمة. لا يمكن التراجع. <span className="block mt-1 text-slate-400">للإيقاف المؤقّت القابل للتراجع استخدم زر «إيقاف».</span></p>
                         <div className="flex gap-3">
                             <button type="button" onClick={() => setDeleteTarget(null)} className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors">إلغاء</button>

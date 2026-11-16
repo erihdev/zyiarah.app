@@ -306,7 +306,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                           _whatsappDriver(phone);
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('عذراً، رقم السائق غير متوفر حالياً')),
+                            const SnackBar(content: Text('عذراً، رقم الفريق غير متوفر حالياً')),
                           );
                         }
                       },
@@ -320,7 +320,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                           _callDriver(phone);
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('عذراً، رقم اتصال السائق غير متوفر حالياً')),
+                            const SnackBar(content: Text('عذراً، رقم اتصال الفريق غير متوفر حالياً')),
                           );
                         }
                       },
@@ -564,16 +564,16 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     if (number.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('تعذّر فتح واتساب — رقم السائق: $phone')));
+            SnackBar(content: Text('تعذّر فتح واتساب — رقم الفريق: $phone')));
       }
       return;
     }
     await _openExternal(Uri.parse('https://wa.me/$number'),
-        'تعذّر فتح واتساب — رقم السائق: $phone');
+        'تعذّر فتح واتساب — رقم الفريق: $phone');
   }
 
   Future<void> _callDriver(String phone) async {
     await _openExternal(
-        Uri.parse('tel:$phone'), 'تعذّر فتح الاتصال — رقم السائق: $phone');
+        Uri.parse('tel:$phone'), 'تعذّر فتح الاتصال — رقم الفريق: $phone');
   }
 }

@@ -135,7 +135,7 @@ void main() {
           'setLoadError(true)',
           [
             "loadError ? '—' : isAvailableCount",
-            'تعذّر تحميل قائمة السائقين',
+            'تعذّر تحميل قائمة الكوادر',
             'إعادة المحاولة',
           ]
         ),
@@ -143,7 +143,7 @@ void main() {
           'setDriversError(true)',
           [
             'driversError ?',
-            'تعذّر تحميل قائمة السائقين',
+            'تعذّر تحميل قائمة الكوادر',
           ]
         ),
         // **مشدودٌ إلى القرارِ لا إلى اسمِ المُنسِّق.** كان يُثبّتُ
@@ -206,12 +206,12 @@ void main() {
       final cases = <String, (String, String)>{
         'src/pages/Orders.tsx': (
           'driversError ?',
-          'لا يوجد سائقون متاحون حالياً'
+          'لا توجد كوادر متاحة حالياً'
         ),
         'src/pages/Support.tsx': ('msgError ?', 'لا توجد رسائل بعد'),
         'src/pages/Drivers.tsx': (
           'loadError ? (',
-          'لا يوجد سائقين مطابقين للبحث'
+          'لا توجد كوادر مطابقة للبحث'
         ),
       };
       cases.forEach((f, v) {

@@ -141,7 +141,7 @@ class _AdminStaffPerformanceScreenState extends State<AdminStaffPerformanceScree
                       Padding(
                         padding: const EdgeInsets.only(top: 40),
                         child: Center(
-                          child: Text("لا يوجد سائقون مسجّلون بعد",
+                          child: Text("لا توجد كوادر مسجّلة بعد",
                               style: GoogleFonts.tajawal(color: Colors.grey)),
                         ),
                       )

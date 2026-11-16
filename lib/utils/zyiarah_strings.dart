@@ -18,10 +18,10 @@ class ZyiarahStrings {
   // --- Tracking ---
   static String get track => isArabic ? "تتبع" : "Track";
   static String get view => isArabic ? "عرض" : "View";
-  static String get driverOnWay => isArabic ? "السائق في الطريق" : "Driver is on the way";
+  static String get driverOnWay => isArabic ? "الفريق في الطريق" : "Driver is on the way";
   static String get serviceInProgress => isArabic ? "جاري تنفيذ الخدمة" : "Service in progress";
   static String get orderScheduled => isArabic ? "حجز مجدول" : "Scheduled booking";
-  static String get driverAssigned => isArabic ? "تم تعيين السائق" : "Driver assigned";
+  static String get driverAssigned => isArabic ? "تم تعيين الفريق" : "Driver assigned";
   static String get orderAccepted => isArabic ? "تم تأكيد الحجز" : "Booking confirmed";
   static String get tapToTrackMap => isArabic ? "اضغطي للمتابعة المباشرة على الخريطة" : "Tap to track live on map";
   static String get tapToViewDetails => isArabic ? "اضغطي لعرض التفاصيل" : "Tap to view details";

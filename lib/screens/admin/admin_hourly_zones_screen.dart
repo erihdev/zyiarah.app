@@ -874,7 +874,7 @@ class _AdminHourlyZonesScreenState extends State<AdminHourlyZonesScreen> {
                     const Text("باقات السكن — التنظيف المنزلي (ر.س، قبل الضريبة):",
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     const Text(
-                        "السعر لكل خيار يشمل كامل الكوادر. المفتاح يفعّل/يعطّل الخيار لهذه المنطقة — المعطَّل/الصفر لا يظهر للعميل. «المدة» تحجز فترة السائق ولا تظهر للعميل.",
+                        "السعر لكل خيار يشمل كامل الكوادر. المفتاح يفعّل/يعطّل الخيار لهذه المنطقة — المعطَّل/الصفر لا يظهر للعميل. «المدة» تحجز فترة الكادر ولا تظهر للعميل.",
                         style: TextStyle(fontSize: 11, color: Colors.grey)),
                     const SizedBox(height: 10),
                     for (final type in kHomeTypes) ...[

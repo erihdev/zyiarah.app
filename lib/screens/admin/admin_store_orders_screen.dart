@@ -118,7 +118,7 @@ class _AdminStoreOrdersScreenState extends State<AdminStoreOrdersScreen> {
     if (!context.mounted) return;
     if (drivers.isEmpty) {
       messenger.showSnackBar(const SnackBar(
-          content: Text('لا يوجد سائق نشط — فعّل سائقاً من «السائقين والعمال»'),
+          content: Text('لا يوجد سائق نشط — فعّل سائقاً من «الكوادر»'),
           backgroundColor: Colors.orange));
       return;
     }

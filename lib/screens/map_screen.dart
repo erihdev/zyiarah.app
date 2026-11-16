@@ -34,7 +34,7 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: Text('تتبع السائق',
+          title: Text('تتبع الفريق',
               style: GoogleFonts.tajawal(fontWeight: FontWeight.bold)),
           backgroundColor: const Color(0xFF660033),
           foregroundColor: Colors.white,
@@ -168,7 +168,7 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
           _legendRow(Icons.home_work_rounded, Colors.green, 'موقع العميل'),
           if (hasDriver) ...[
             const SizedBox(height: 4),
-            _legendRow(Icons.directions_car_rounded, const Color(0xFF660033), 'السائق (حي)'),
+            _legendRow(Icons.directions_car_rounded, const Color(0xFF660033), 'الفريق (حي)'),
           ],
         ],
       ),
@@ -226,7 +226,7 @@ class _ZyiarahMapTrackingState extends State<ZyiarahMapTracking> {
         }
 
         final statusLabels = {
-          'accepted': 'السائق في الطريق',
+          'accepted': 'الفريق في الطريق',
           'in_progress': 'جاري تنفيذ الخدمة',
           'completed': 'اكتملت الخدمة',
           'assigned': 'تم التعيين',
