@@ -2772,6 +2772,31 @@ async function _verifyStoreOrderPrice(db, ref, orderId, od, paid, source) {
   }
 }
 
+/** هل سجلُّ المطالبة لمستندٍ غير هذا؟ (المعرّف **والمجموعة** معاً.) */
+function _claimIsForeign(claim, orderRef) {
+  return claim.order_id !== orderRef.id ||
+    claim.collection !== orderRef.parent.id;
+}
+
+/** يسجّل مطالبةَ دفعةٍ لمستندٍ واحد، ويرفض إن طالب بها مستندٌ آخر. */
+async function _claimPayment(db, paymentId, orderRef, uid) {
+  const claimRef = db.collection("payment_claims").doc(String(paymentId));
+  await db.runTransaction(async (tx) => {
+    const claim = await tx.get(claimRef);
+    if (claim.exists) {
+      if (_claimIsForeign(claim.data(), orderRef)) {
+        throw new HttpsError("permission-denied",
+            "عملية الدفع مستخدمة لطلب آخر");
+      }
+      return;
+    }
+    tx.set(claimRef, {
+      order_id: orderRef.id, collection: orderRef.parent.id,
+      uid, claimed_at: FieldValue.serverTimestamp(),
+    });
+  });
+}
+
 exports.verifyMoyasarPayment = onCall(
     {secrets: ["MOYASAR_SECRET_KEY"], cpu: 0.25},
     async (request) => {
@@ -2799,6 +2824,20 @@ exports.verifyMoyasarPayment = onCall(
       const paymentData = got.raw;
       if (paymentData.status !== "paid") {
         throw new HttpsError("failed-precondition", `حالة عملية الدفع ليست مدفوعة: ${paymentData.status}`);
+      }
+
+      // **ربطُ الدفعةِ بطلبِها.** كان الفحصُ «مدفوعة + المبلغُ يطابق + المُنادي
+      // مالكُ الطلب» — ولا شيءَ يقول إنّ هذه الدفعةَ دُفعت **لهذا** الطلب. فدفعةٌ
+      // واحدةٌ مدفوعةٌ كانت تؤكّد كلَّ طلبٍ/عقدٍ/طلبِ متجرٍ للمالكِ نفسِه بالمبلغِ
+      // نفسِه (إعادةُ استعمال). كلُّ مساراتِ التطبيق تكتب `metadata.order_id`؛
+      // فإن حضر وخالف رُفض، وما لا يحمله يحرسه سجلُّ المطالبة الذرّيُّ أدناه.
+      const pmd = paymentData.metadata || {};
+      if (pmd.order_id && String(pmd.order_id) !== String(orderId)) {
+        console.error(`verifyMoyasarPayment: payment ${paymentId} belongs to ${pmd.order_id}, not ${orderId}`);
+        throw new HttpsError("permission-denied", "عملية الدفع لا تخصّ هذا الطلب");
+      }
+      if (paymentData.currency && paymentData.currency !== "SAR") {
+        throw new HttpsError("failed-precondition", "عملة الدفع غير مدعومة");
       }
 
       const db = getFirestore();
@@ -2932,13 +2971,17 @@ exports.verifyMoyasarPayment = onCall(
       let tierBReason = null;
       if (orderRef.parent.id === "orders") {
         const od = orderDoc.data();
-        const method = od.payment_method || "";
         const paid = Number(paymentData.amount) / 100; // الشحن الفعلي من البوابة (لا od.amount)
-        const nonMoyasar = ["wallet", "subscription", "tamara", "tabby"]
-            .includes(method);
+        // `payment_method` يكتبه العميلُ عند الإنشاء، فلا يُقرّر هل يجري الفحص:
+        // طلبٌ بريالٍ موسومٌ «wallet» ثم مدفوعٌ ببطاقةٍ كان يتخطّى الفحصَ كلَّه.
+        // ومن بلغ هذا المسارَ فقد دفع عبر ميسر فعلاً.
         // الدفع الأصلي (Apple/Google/Samsung) يُنشأ خادميّاً بالكوبون مضمَّناً وبلا
         // discount_amount — استثناؤه صريحٌ وإلزاميّ يمنع ردّ كل عميل native-pay بكوبون.
-        const skip = od.server_created_from_payment === true || nonMoyasar || !(paid > 0);
+        // والطلبُ المُنشأ خادميّاً **يُفحَص وسماً وتنبيهاً** (Tier A) ولا يُحجَب:
+        // مبلغُ الدفعةِ يختاره الجهاز، فدفعُ ريالٍ ببياناتِ حجزٍ كاملةٍ كان
+        // يُنشئ طلباً مدفوعاً بلا أيِّ أثر. الحجبُ (Tier B) مستثنىً له داخل
+        // `_verifyOrderPriceTierA` لأنّ كوبونَه مضمَّنٌ بلا discount_amount.
+        const skip = !(paid > 0);
         if (!skip) {
           tierBReason = await _verifyOrderPriceTierA(
               db, orderRef, orderId, od, paid, "verify");
@@ -2949,6 +2992,9 @@ exports.verifyMoyasarPayment = onCall(
       // ثم أعِد {blocked} للعميل. طلبٌ ثبت تلاعبه لا يُقلَب مدفوعاً حتى لو فشلت البوابة (يبقى
       // payment_review للمراجعة اليدوية) — فلا عميلٌ مخصومٌ بلا خدمة يُخدَم بالخطأ.
       if (tierBReason && paymentId) {
+        // المطالبةُ قبل الاسترداد: دفعةٌ فشل استردادُها تبقى مدفوعةً عند ميسر،
+        // وبلا مطالبةٍ كانت تؤكّد مستنداً آخر بالمبلغ نفسِه.
+        await _claimPayment(db, paymentId, orderRef, request.auth.uid);
         const secret = moyasarSecretKey.value();
         const r = await refunds.voidOrRefundTampered(db, secret, paymentId, orderRef);
         await queuePush("ADMIN_BROADCAST", "حُجب طلبٌ لدفعٍ ناقص صارخ 🛑",
@@ -2960,12 +3006,28 @@ exports.verifyMoyasarPayment = onCall(
       }
 
       // قلب is_paid داخل معامَلة: إشعار مرّة واحدة عند الانتقال false→true.
+      // سجلُّ المطالبة: دفعةٌ واحدةٌ تؤكّد مستنداً واحداً. يُقرأ ويُكتب في
+      // معامَلةِ القلبِ نفسِها، ولا قاعدةَ له في firestore.rules فلا يبلغه عميل.
+      const claimRef = db.collection("payment_claims").doc(String(paymentId));
       const flipped = await db.runTransaction(async (tx) => {
         const snap = await tx.get(orderRef);
+        const claim = await tx.get(claimRef);
         const cur = snap.data() || {};
+        // المعرّفُ وحدَه لا يُعيّن مستنداً: العميلُ يختار معرّفاتِ مستنداته،
+        // فالمعرّفُ نفسُه قد يوجد في `orders` و`contracts` معاً.
+        if (claim.exists && _claimIsForeign(claim.data(), orderRef)) {
+          throw new HttpsError("permission-denied",
+              "عملية الدفع مستخدمة لطلب آخر");
+        }
         if (cur.is_paid === true) return false;
         // (#1) لا نُحيي طلباً حُجب لتلاعبٍ سعري (Tier B) واستُرد مبلغه.
         if (cur.tamper_blocked === true) return false;
+        if (!claim.exists) {
+          tx.set(claimRef, {
+            order_id: orderId, collection: orderRef.parent.id,
+            uid: request.auth.uid, claimed_at: FieldValue.serverTimestamp(),
+          });
+        }
         tx.update(orderRef, {
           payment_status: "paid",
           is_paid: true,
@@ -6007,6 +6069,13 @@ exports.reconcileOrphanPayments = onSchedule(
             }
           }
           await db.collection("orders").doc(oid).set(payload);
+          // وسمٌ وتنبيهٌ إن كان المدفوعُ دون سعرِ المنطقة (لا حجب) — انظر
+          // التعليلَ في verifyMoyasarPayment.
+          if (amountSar > 0) {
+            await _verifyOrderPriceTierA(db, db.collection("orders").doc(oid),
+                oid, {...payload, created_at: Timestamp.now()}, amountSar,
+                "reconcile");
+          }
           console.log(`[reconcile] RECOVERED order ${oid} (${amountSar} SAR) code ${code}`);
           recovered++;
         }
@@ -6819,11 +6888,8 @@ exports.moyasarWebhook = onRequest(
                 }
                 let tierB = null;
                 if (col === "orders") {
-                  const method = data.payment_method || "";
                   const paidSar = Number(verifiedPayment.amount) / 100;
-                  const skipPv = data.server_created_from_payment === true ||
-                    ["wallet", "subscription", "tamara", "tabby"]
-                        .includes(method) || !(paidSar > 0);
+                  const skipPv = !(paidSar > 0);
                   if (!skipPv) {
                     tierB = await _verifyOrderPriceTierA(
                         getFirestore(), ref, orderId, data, paidSar, "webhook");

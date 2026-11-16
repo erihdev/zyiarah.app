@@ -329,6 +329,9 @@ const {setDoc, updateDoc, doc, getDoc, runTransaction, serverTimestamp} =
       setDoc(doc(db, "store_orders/sm5"),
           sOrder({moyasar_payment_id: "pay_x"})),
       false);
+  await check("store: created already 'delivering' -> DENIED",
+      setDoc(doc(db, "store_orders/sm6"), sOrder({status: "delivering"})),
+      false);
   // (٥) ولا يُكسَرُ إنشاءُ سلّةٍ شرعيٍّ — وهذا الفحصُ هو ما يَمنعُ أن يكونَ
   //     التضييقُ إغلاقاً للمتجرِ كلِّه.
   await check("store: the app's own cart create -> ALLOWED",

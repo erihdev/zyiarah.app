@@ -278,10 +278,18 @@ service cloud.firestore {
         // SECURITY: getUserRole() trusts staff_role BEFORE role, so it must be guarded
         // here too — otherwise a client self-signs with staff_role='super_admin'.
         (isOwner(userId) &&
-          !(request.resource.data.get('role', 'client') in
-            ['admin', 'super_admin', 'orders_manager',
-             'accountant_admin', 'marketing_admin', 'driver']) &&
-          request.resource.data.get('staff_role', 'client') == 'client');
+          // `role` يساوي 'client' بعينِه (لا قائمةَ منع): معالجُ الإشعارات يَعدّ
+          // أيَّ دورٍ غير 'client' مُرسِلاً موثوقاً، فدورٌ مُختلَق كان يجتازه.
+          request.resource.data.get('role', 'client') == 'client' &&
+          request.resource.data.get('staff_role', 'client') == 'client' &&
+          // والبريدُ بريدُ المصادقة أو غائب — نفسُ حارسِ التحديث.
+          (!request.resource.data.keys().hasAny(['email']) ||
+           request.resource.data.email == request.auth.token.email) &&
+          // كودُ الإحالةِ يَسُكُّه الخادمُ (`ensureReferralCode`). التحديثُ
+          // محروسٌ «مرّةً واحدة»، والإنشاءُ لم يكن: حسابٌ جديدٌ بكودِ غيرِه
+          // يُطابقُه استعلامُ المُحيل فتُنسَبُ له المكافأة. ومعه حقولُ الثقة.
+          !request.resource.data.keys().hasAny(
+            ['referral_code', 'wallet', 'is_blocked', 'visits_remaining']));
 
       // SECURITY: only super_admin may set role/is_blocked (prevents a sub-admin from
       // self-escalating to super_admin or blocking users); the `wallet` field on the
@@ -325,9 +333,11 @@ service cloud.firestore {
           // كوده يضبطه على كود غيره، فتُرجِع الاستعلامةُ أحدَ المستندَين، وقد
           // تُنسب إحالةٌ (ومكافأتُها) إلى غير صاحبها. الكتابةُ مسموحةٌ ما دام
           // الحقلُ غائباً أو فارغاً، وممنوعةٌ بعد ذلك.
-          (!request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['referral_code']) ||
-           resource.data.get('referral_code', '') == '') &&
+          // (2026-11-11) صار المنعُ تامّاً: الكودُ يَسُكُّه `ensureReferralCode`
+          // خادميّاً ولا كاتبَ عميليّاً له، و«مرّةً واحدة» كانت تُجيز لحسابٍ
+          // جديدٍ أن يكتب كودَ غيرِه في أوّلِ تحديث.
+          !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['referral_code']) &&
           // SECURITY: `email` على السجلّ يَجبُ أن يُطابقَ بريدَ **المصادقة**.
           //
           // `isAllowedEmailRecipient` يَستعلمُ `users.where('email','==',…)`
@@ -371,8 +381,16 @@ service cloud.firestore {
 
     // ─── Support Tickets ──────────────────────────────────────────────────
     match /support_tickets/{ticketId} {
+      // `userEmail` هو ما تقرؤه الإدارةُ هويّةً للمشتكية ويُبحَث به — فلا
+      // يُقبَل عند الإنشاء إلّا بريدُ المصادقة نفسُه (أو غيابُه).
       allow create: if isLoggedIn() &&
-        request.resource.data.get('userId', '') == request.auth.uid;
+        request.resource.data.get('userId', '') == request.auth.uid &&
+        (request.resource.data.get('userEmail', null) == null ||
+         request.resource.data.userEmail == request.auth.token.email) &&
+        // تذكرةٌ تُنشأ مغلقةً تسقط من تبويب «النشطة»، وتاريخٌ في المستقبل
+        // يعتلي نافذةَ الإدارة فيدفع الشكاوى الحقيقيةَ خارجَها.
+        request.resource.data.get('status', 'open') == 'open' &&
+        request.resource.data.get('createdAt', request.time) == request.time;
       allow read: if isLoggedIn() &&
         (request.auth.uid == resource.data.userId || isAdmin());
 
@@ -571,7 +589,10 @@ service cloud.firestore {
         !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['name', 'phone', 'monthly_salary', 'wallet',
                    'rating_avg', 'rating_count', 'rides', 'email',
-                   'id_number', 'id_expiry', 'nationality']);
+                   'id_number', 'id_expiry', 'nationality',
+                   // الإيقافُ قرارُ الإدارة: بلا هذين كان سائقٌ موقوفٌ يرفع
+                   // إيقافَه بكتابةٍ مباشرة فيعود قابلاً للإسناد.
+                   'is_active', 'is_suspended', 'role', 'type', 'pool']);
     }
 
     // ─── FCM Tokens ───────────────────────────────────────────────────────
@@ -868,6 +889,9 @@ service cloud.firestore {
       allow create: if isLoggedIn() &&
         request.resource.data.client_id == request.auth.uid &&
         request.resource.data.get('is_paid', false) == false &&
+        // يُنشأ بانتظار الدفع وحدَه: طلبٌ يُنشأ «جاري التوصيل» كان يظهر
+        // للإدارة كأنّه مدفوعٌ في الطريق.
+        request.resource.data.get('status', 'awaiting_payment') == 'awaiting_payment' &&
         !request.resource.data.keys().hasAny(serverTrustFlags());
       // المحاسب يقرأ طلبات المتجر أيضاً: سجل الفواتير الإلكترونية يجمع فواتير
       // الخدمات والمتجر معاً (يحرسه rules.roles.test.js). الكتابة كما كانت.
