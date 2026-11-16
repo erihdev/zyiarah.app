@@ -28,6 +28,13 @@ const HOLD_MINUTES = 15;
 const HOLD_MS = HOLD_MINUTES * 60 * 1000;
 // انحرافُ ساعةٍ مقبولٌ بين خادمَين — طابعٌ «في المستقبل» بأكثرَ منه تالفٌ فلا يَحجز.
 const HOLD_SKEW_MS = 2 * 60 * 1000;
+// **الحجزُ غيرُ المدفوعِ محدودٌ بأكبرِ ما يُباع.** مدّتُه وعددُ عاملاتِه يَكتبُهما
+// جهازُ العميلةِ ولا يُحقَّقانِ قبلَ الدفع، فطلبٌ مجّانيٌّ بعشرينَ عاملةً ومدّةٍ
+// طويلةٍ كان يُظهِرُ يوماً كاملاً ممتلئاً ربعَ ساعةٍ قابلةً للتجديد — ومدّةٌ هائلةٌ
+// تَنفخُ خريطةَ الساعات. الحدّانِ هما `kMaxCrews` وتثبيتُ `durationHours` (1..12)
+// في `lib/utils/home_packages.dart`. والمدفوعُ لا يُمَسّ: دُفِعَ ثمنُه وحُقِّقَ سعرُه.
+const HOLD_MAX_WORKERS = 4;
+const HOLD_MAX_HOURS = 12;
 
 /**
  * هل الطلبُ غيرُ المدفوعِ حجزٌ مؤقّتٌ حيّ؟ بلا `nowMs` لا حجزَ أصلاً (السلوكُ
@@ -67,7 +74,8 @@ function countBookings(orders, {zoneName = null, nowMs, excludeClientId = null} 
   for (const d of orders || []) {
     if (!d) continue;
     if (d.status === "cancelled" || d.status === "rejected") continue;
-    if (d.is_paid !== true && !isLiveHold(d, {nowMs, excludeClientId})) continue;
+    const held = d.is_paid !== true;
+    if (held && !isLiveHold(d, {nowMs, excludeClientId})) continue;
     const bDate = d.booking_date;
     if (!bDate) continue;
     dailyCounts[bDate] = (dailyCounts[bDate] || 0) + 1;
@@ -77,11 +85,13 @@ function countBookings(orders, {zoneName = null, nowMs, excludeClientId = null} 
     const ts = d.booking_time_slot;
     if (ts) {
       const startH = parseInt(String(ts).split(":")[0], 10);
-      const hrs = slots.orderHours(d);
+      const rawHrs = slots.orderHours(d);
+      const hrs = held ? Math.min(rawHrs, HOLD_MAX_HOURS) : rawHrs;
       // الساعةُ تُعَدُّ بالعاملاتِ لا بالطلبات (قرارُ المالك 2026-10-31): طلبٌ
       // بكادرَين يَشغلُ عاملتَين، والمقامُ `maxTeamsPerSlot` عددُ العاملات.
       // والسقفُ اليوميُّ (`dailyCounts`) يَبقى بالطلبات — هو حدُّ طلباتٍ لا عاملات.
-      const workers = slots.orderWorkersNeeded(d);
+      const rawWorkers = slots.orderWorkersNeeded(d);
+      const workers = held ? Math.min(rawWorkers, HOLD_MAX_WORKERS) : rawWorkers;
       if (!isNaN(startH)) {
         for (let h = startH; h < startH + hrs; h++) {
           const key = `${bDate}_${String(h).padStart(2, "0")}:00`;
@@ -104,4 +114,6 @@ function zoneDailyCap(zoneData) {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
 }
 
-module.exports = {countBookings, zoneDailyCap, isLiveHold, HOLD_MINUTES};
+module.exports = {
+  countBookings, zoneDailyCap, isLiveHold, HOLD_MINUTES, HOLD_MAX_WORKERS, HOLD_MAX_HOURS,
+};
