@@ -117,6 +117,25 @@ jobs:
               echo
             } >> "$GITHUB_STEP_SUMMARY"
           done < "$RUNNER_TEMP/plan.txt"
+          # تاريخُ النشر: كلُّ مجموعةِ قواعدٍ سابقةٍ وأيُّ التزامٍ تُطابق (قراءةٌ فقط).
+          curl -sS -H "Authorization: Bearer $TOKEN" "$API/rulesets?pageSize=40" \
+            > "$RUNNER_TEMP/rulesets.json"
+          echo "## تاريخ النشر" >> "$GITHUB_STEP_SUMMARY"
+          node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));for(const r of j.rulesets||[])console.log(r.name+"|"+r.createTime)' \
+            "$RUNNER_TEMP/rulesets.json" > "$RUNNER_TEMP/hist.txt"
+          while IFS='|' read -r rs created; do
+            curl -sS -H "Authorization: Bearer $TOKEN" \
+              "https://firebaserules.googleapis.com/v1/$rs" > "$RUNNER_TEMP/rs.json"
+            fname=$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(j.source.files[0].name||"")' "$RUNNER_TEMP/rs.json")
+            node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(j.source.files[0].content)' "$RUNNER_TEMP/rs.json" > "$RUNNER_TEMP/rs.content"
+            case "$fname" in *storage*) f=storage.rules ;; *) f=firestore.rules ;; esac
+            M="-"
+            for c in $(git log --format=%h -- "$f"); do
+              if git show "$c:$f" | cmp -s - "$RUNNER_TEMP/rs.content"; then M="$c"; break; fi
+            done
+            D=$(diff "$RUNNER_TEMP/rs.content" "$f" | grep -c '^[<>]' || true)
+            echo "- $created | $fname | يطابق: $M | فرق عن main: $D | أسطر: $(wc -l < "$RUNNER_TEMP/rs.content")" >> "$GITHUB_STEP_SUMMARY"
+          done < "$RUNNER_TEMP/hist.txt"
           # الملخَّصُ لا يُقرأُ من الواجهةِ البرمجيّة — فيُطبَع في السجلِّ كذلك.
           cat "$GITHUB_STEP_SUMMARY"
 
