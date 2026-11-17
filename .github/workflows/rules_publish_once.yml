@@ -19,7 +19,7 @@ on:
       action:
         description: 'compare لا يكتب شيئاً — publish ينشر'
         type: choice
-        options: [compare, publish]
+        options: [compare, publish, gate]
         default: compare
       target:
         description: 'الهدف عند النشر'
@@ -142,6 +142,27 @@ jobs:
           done < "$RUNNER_TEMP/hist.txt"
           # الملخَّصُ لا يُقرأُ من الواجهةِ البرمجيّة — فيُطبَع في السجلِّ كذلك.
           cat "$GITHUB_STEP_SUMMARY"
+
+      # رفعُ بوّابةِ الإصدار إلى أوّلِ بناءٍ يوافق القواعدَ الجديدة (1.2.50):
+      # iOS 367 وأندرويد 343 — كلاهما من الالتزام 4cb72ad. بطلبِ المالك 2026-11-17.
+      - name: Raise the minimum app build
+        if: inputs.action == 'gate'
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -o pipefail
+          [ "$CONFIRM" = "PUBLISH" ] || { echo "::error::اكتب PUBLISH"; exit 1; }
+          TOKEN=$(gcloud auth print-access-token)
+          echo "::add-mask::$TOKEN"
+          DOC="https://firestore.googleapis.com/v1/projects/zyiarah-app/databases/(default)/documents/system_configs/app_update"
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          CODE=$(curl -sS -o "$RUNNER_TEMP/gate.json" -w '%{http_code}' -X PATCH \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            "$DOC?updateMask.fieldPaths=latest_build_ios&updateMask.fieldPaths=latest_build_android&updateMask.fieldPaths=updated_at&currentDocument.exists=true" \
+            -d "{\"fields\":{\"latest_build_ios\":{\"integerValue\":\"367\"},\"latest_build_android\":{\"integerValue\":\"343\"},\"updated_at\":{\"timestampValue\":\"$NOW\"}}}")
+          echo "HTTP $CODE"
+          node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const o={};for(const[k,v]of Object.entries(j.fields||{}))o[k]=Object.values(v)[0];console.log("GATE_NOW "+JSON.stringify(o)+(j.error?" ERR "+JSON.stringify(j.error):""))' "$RUNNER_TEMP/gate.json"
+          [ "$CODE" = "200" ]
 
       - name: Publish
         if: inputs.action == 'publish'
