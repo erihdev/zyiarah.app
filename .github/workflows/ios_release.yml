@@ -80,6 +80,21 @@ jobs:
             echo "CERT_KEY_FILE=$RUNNER_TEMP/cert_key.pem"
           } >> "$GITHUB_ENV"
 
+      - name: Diagnose key (temporary)
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          [ "$KEY_ID" = "8T28RRH234" ] && echo "KEY_ID: match" || echo "KEY_ID: MISMATCH len=${#KEY_ID}"
+          [ "$ISSUER_ID" = "6dd67287-cfcd-40fc-a3db-8bf378a1ac8f" ] && echo "ISSUER: match" || echo "ISSUER: MISMATCH len=${#ISSUER_ID}"
+          echo "key lines: $(wc -l < "$ASC_KEY_FILE") bytes: $(wc -c < "$ASC_KEY_FILE")"
+          head -1 "$ASC_KEY_FILE" | cut -c1-30
+          tail -1 "$ASC_KEY_FILE" | cut -c1-30
+          grep -c $'\r' "$ASC_KEY_FILE" || true
+          openssl pkey -in "$ASC_KEY_FILE" -noout -text 2>&1 | head -2 | cut -c1-60
+          openssl pkey -in "$ASC_KEY_FILE" -pubout 2>/dev/null | openssl sha256 | cut -c1-80
+          exit 1
+
       - name: Snapshot distribution certificates (before)
         run: |
           export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$ASC_KEY_FILE")"
