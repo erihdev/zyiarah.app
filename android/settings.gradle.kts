@@ -25,8 +25,10 @@ plugins {
     // START: FlutterFire Configuration
     id("com.google.gms.google-services") version "4.4.1" apply false
     // END: FlutterFire Configuration
-    // 2.2.20 = ثالث وآخر حدّ تفرضه إضافة Flutter 3.47 (بعد Gradle وAGP).
-    id("org.jetbrains.kotlin.android") version "2.2.20" apply false
+    // 2.3.20: مكتبات Firebase بعد تحديث الاعتماديّات (#500) مُترجَمةٌ ببيانات
+    // Kotlin 2.4، ومُترجِمُ 2.2 لا يَقرؤها («expected version is 2.2.0») فيَفشلُ
+    // بناءُ الإصدار. 2.3 يَقرأُ بياناتِ النسخةِ التالية، وهو ما يَطلبُه Flutter.
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
 }
 
 include(":app")

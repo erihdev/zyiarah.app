@@ -35,10 +35,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
-    }
-
     defaultConfig {
         applicationId = "com.zyiarah.zyiarah"
         minSdk = flutter.minSdkVersion // يُحَلُّ من Flutter (24 في 3.47.x)؛ لا يُكتَبُ رقمٌ هنا
@@ -70,4 +66,11 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+}
+
+// `kotlinOptions { jvmTarget = "…" }` صارَ خطأً في Kotlin 2.3؛ البديلُ compilerOptions.
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
 }
