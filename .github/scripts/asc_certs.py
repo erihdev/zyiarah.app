@@ -17,13 +17,14 @@ def _headers():
     key = open(os.environ["ASC_KEY_FILE"], encoding="utf-8").read()
     token = jwt.encode(
         {
-            "iss": os.environ["APP_STORE_CONNECT_ISSUER_ID"],
+            "iss": os.environ["APP_STORE_CONNECT_ISSUER_ID"].strip(),
+            "iat": int(time.time()) - 30,
             "exp": int(time.time()) + 600,
             "aud": "appstoreconnect-v1",
         },
         key,
         algorithm="ES256",
-        headers={"kid": os.environ["APP_STORE_CONNECT_KEY_IDENTIFIER"]},
+        headers={"kid": os.environ["APP_STORE_CONNECT_KEY_IDENTIFIER"].strip(), "typ": "JWT"},
     )
     return {"Authorization": f"Bearer {token}"}
 

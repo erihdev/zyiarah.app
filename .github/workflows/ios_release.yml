@@ -81,7 +81,11 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Snapshot distribution certificates (before)
-        run: python3 .github/scripts/asc_certs.py list > "$RUNNER_TEMP/certs_before.txt"
+        run: |
+          export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$ASC_KEY_FILE")"
+          # تشخيص: هل تَقبلُ أبل المفتاحَ بأداةِ Codemagic نفسِها؟
+          app-store-connect get-latest-testflight-build-number 6760955777 || echo "::warning::أداةُ Codemagic لم تَقرأ رقمَ البناء بهذا المفتاح"
+          python3 .github/scripts/asc_certs.py list > "$RUNNER_TEMP/certs_before.txt"
 
       - name: Fetch signing files (temporary certificate)
         run: |
