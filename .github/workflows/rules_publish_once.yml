@@ -1,0 +1,145 @@
+# مقارنةُ قواعدِ الإنتاجِ بالمستودعِ ونشرُها — **بالطلبِ اليدويِّ وحدَه**.
+#
+# لماذا مسارٌ لا أمرٌ محلّيّ: مفتاحُ الوصولِ الوحيدُ إلى مشروعِ zyiarah-app هو
+# سرُّ المستودع `FIREBASE_SERVICE_ACCOUNT` (كما في `functions_delete_once.yml`)؛
+# حسابُ جهازِ المطوِّر ليس عضواً في المشروع (تُحقِّق 2026-11-17).
+#
+# والقرارُ القائمُ لم يتغيّر: **لا دمجةَ تنشرُ القواعد**. هذا المسارُ لا يعمل
+# عند أيِّ دفع، ومساراتُ `*_deploy.yml` ما زالت ممنوعةً من القواعد بحُرّاسِها.
+# النشرُ هنا ضغطةٌ بشريّةٌ بكلمةِ تأكيد، بعد مقارنةٍ تُظهِر ما سيتغيّر.
+#
+# الترتيب: `compare` أوّلاً (لا يكتب شيئاً) — يطبع أيَّ التزامٍ يُطابق الإنتاجَ
+# والفرقَ عنه. ثم `publish` لهدفٍ واحد. و`storage` تُنشَر **بعد** وصولِ بناءِ
+# التطبيقِ الجديد (الدليل §1-و).
+name: Rules — compare / publish (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'compare لا يكتب شيئاً — publish ينشر'
+        type: choice
+        options: [compare, publish]
+        default: compare
+      target:
+        description: 'الهدف عند النشر'
+        type: choice
+        options: [firestore, storage]
+        default: firestore
+      confirm:
+        description: 'للنشر فقط: اكتب PUBLISH'
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-rules
+  cancel-in-progress: false
+
+jobs:
+  rules:
+    name: ${{ inputs.action }} (${{ inputs.target }})
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        if: inputs.action == 'publish'
+        # المُدخَلُ يَبلغُ الصدفةَ بياناً عبر env، لا نصّاً يُلصَق في مصدرِ الأمر.
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "PUBLISH" ]; then
+            echo "::error::اكتب PUBLISH في خانة التأكيد للنشر"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Write service account key
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA_JSON" ]; then
+            echo "::error::سرُّ FIREBASE_SERVICE_ACCOUNT غير مضبوط في إعدادات المستودع"
+            exit 1
+          fi
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+
+      # قراءةٌ فقط: ما المنشورُ الآن، وأيُّ التزامٍ يُطابقه، وما الفرقُ عن main.
+      - name: Compare production with the repository
+        run: |
+          set -o pipefail
+          gcloud auth activate-service-account --key-file="$RUNNER_TEMP/sa.json" --quiet
+          TOKEN=$(gcloud auth print-access-token)
+          echo "::add-mask::$TOKEN"
+          API="https://firebaserules.googleapis.com/v1/projects/zyiarah-app"
+          curl -sS -H "Authorization: Bearer $TOKEN" "$API/releases?pageSize=20" \
+            > "$RUNNER_TEMP/releases.json"
+          node .github/scripts/rules_compare.mjs "$RUNNER_TEMP/releases.json" \
+            | tee "$RUNNER_TEMP/plan.txt"
+          while IFS='|' read -r kind file ruleset updated; do
+            [ -z "$ruleset" ] && continue
+            curl -sS -H "Authorization: Bearer $TOKEN" \
+              "https://firebaserules.googleapis.com/v1/$ruleset" \
+              | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).source.files[0].content))' \
+              > "$RUNNER_TEMP/prod.$kind"
+            MATCH=""
+            for c in $(git log --format=%h -- "$file"); do
+              if git show "$c:$file" | cmp -s - "$RUNNER_TEMP/prod.$kind"; then MATCH="$c"; break; fi
+            done
+            {
+              echo "## $file"
+              echo "- آخرُ نشرٍ في الإنتاج: \`$updated\`"
+              if cmp -s "$file" "$RUNNER_TEMP/prod.$kind"; then
+                echo "- **مطابقٌ لـmain** — لا شيءَ يُنشَر."
+              else
+                if [ -n "$MATCH" ]; then
+                  echo "- الإنتاجُ يُطابق الالتزام \`$MATCH\`: $(git log -1 --format='%ad %s' --date=short "$MATCH" | cut -c1-90)"
+                else
+                  echo "- الإنتاجُ **لا يُطابق أيَّ التزامٍ** لهذا الملفّ (عُدِّل بيدٍ أو من فرع)."
+                fi
+                echo "- الفرقُ عن main: $(diff "$RUNNER_TEMP/prod.$kind" "$file" | grep -c '^[<>]' || true) سطراً"
+                echo
+                echo '```diff'
+                diff -u "$RUNNER_TEMP/prod.$kind" "$file" | head -400 || true
+                echo '```'
+              fi
+              echo
+            } >> "$GITHUB_STEP_SUMMARY"
+          done < "$RUNNER_TEMP/plan.txt"
+
+      - name: Publish
+        if: inputs.action == 'publish'
+        env:
+          TARGET: ${{ inputs.target }}
+        run: |
+          set -o pipefail
+          if [ "$TARGET" = "storage" ]; then ONLY="storage"; else ONLY="firestore:rules"; fi
+          npx --yes firebase-tools@15 deploy --only "$ONLY" \
+            --project zyiarah-app --non-interactive 2>&1 \
+            | tee "$RUNNER_TEMP/deploy.log"
+          echo "## ✓ نُشر: $ONLY من $(git rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Surface the failure
+        if: failure()
+        run: |
+          {
+            echo "## ✗ فشل"
+            echo '```'
+            tail -40 "$RUNNER_TEMP/deploy.log" 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sa.json"

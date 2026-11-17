@@ -39,8 +39,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check confirmation
+        env:
+          CONFIRM: ${{ inputs.confirm }}
         run: |
-          if [ "${{ inputs.confirm }}" != "DELETE" ]; then
+          if [ "$CONFIRM" != "DELETE" ]; then
             echo "::error::اكتب DELETE في خانة التأكيد لتشغيل هذا المسار"
             exit 1
           fi
