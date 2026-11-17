@@ -96,7 +96,9 @@ jobs:
             echo "::error::سرُّ GOOGLE_PLAY_SERVICE_ACCOUNT_JSON غير مضبوط — لا يُمكِنُ اشتقاقُ versionCode"
             exit 1
           fi
-          pip install -q codemagic-cli-tools
+          # pyOpenSSL 24.3 أزالَ `crypto.sign` التي تَستعملُها الأداةُ في توقيعِ
+          # رمزِ الدخول، فتَفشلُ بـAttributeError (2026-11-17).
+          pip install -q codemagic-cli-tools 'pyOpenSSL<24.3'
           export GOOGLE_PLAY_SERVICE_ACCOUNT_CREDENTIALS="$GCLOUD_SERVICE_ACCOUNT_CREDENTIALS"
           # فشلُ الأداةِ كان يَخرجُ بلا سبب («failed unexpectedly») وسجلُّها في
           # ملفٍّ لا يُقرأُ من خارجِ الجهاز — فتُطبَعُ منه أسطرُ السببِ وحدَها.
