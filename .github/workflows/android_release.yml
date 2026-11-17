@@ -28,6 +28,8 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          # نفسُ نسخةِ ci.yml: القناةُ وحدَها تَجلبُ أحدثَ مستقرٍّ لم يُفحَصْ عليه.
+          flutter-version: '3.47.2'
           cache: true
 
       - name: Flutter pub get
@@ -95,7 +97,15 @@ jobs:
             exit 1
           fi
           pip install -q codemagic-cli-tools
-          LATEST=$(google-play get-latest-build-number --package-name com.zyiarah.zyiarah | tail -n1 | tr -d '[:space:]')
+          export GOOGLE_PLAY_SERVICE_ACCOUNT_CREDENTIALS="$GCLOUD_SERVICE_ACCOUNT_CREDENTIALS"
+          # فشلُ الأداةِ كان يَخرجُ بلا سبب («failed unexpectedly») وسجلُّها في
+          # ملفٍّ لا يُقرأُ من خارجِ الجهاز — فتُطبَعُ منه أسطرُ السببِ وحدَها.
+          if ! OUT=$(google-play get-latest-build-number --package-name com.zyiarah.zyiarah); then
+            grep -ihE "error|exception|denied|invalid|forbidden|not found|reason|status" /tmp/codemagic-*.log 2>/dev/null | tail -n 15 | cut -c1-300 || true
+            echo "::error::تعذّرت قراءةُ آخرِ versionCode من Play — راجع الأسطرَ أعلاه"
+            exit 1
+          fi
+          LATEST=$(printf '%s\n' "$OUT" | tail -n1 | tr -d '[:space:]')
           case "$LATEST" in
             ''|*[!0-9]*) echo "::error::تعذّر قراءةُ آخرِ versionCode من Play: '$LATEST'"; exit 1 ;;
           esac
