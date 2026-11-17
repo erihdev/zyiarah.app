@@ -51,9 +51,11 @@ jobs:
           MOYASAR_PUBLISHABLE_KEY: ${{ secrets.MOYASAR_PUBLISHABLE_KEY }}
           SAMSUNG_PAY_SERVICE_ID: ${{ secrets.SAMSUNG_PAY_SERVICE_ID }}
         run: |
+          # السرُّ الغائبُ لم يَعُدْ يُنتجُ بناءً بلا دفع: المفتاحُ القابلُ للنشرِ
+          # مضمَّنٌ في `lib/utils/payment_keys.dart` منذ 2026-10-24 وقيمةُ `.env`
+          # الفارغةُ تَسقطُ إليه. فالغيابُ يُعلَنُ تحذيراً ولا يُوقِفُ البناء.
           if [ -z "$MOYASAR_PUBLISHABLE_KEY" ]; then
-            echo "::error::سرُّ MOYASAR_PUBLISHABLE_KEY غير مضبوط — الحزمةُ تُبنى بلا بطاقة ولا Apple Pay"
-            exit 1
+            echo "::warning::سرُّ MOYASAR_PUBLISHABLE_KEY غير مضبوط — يُستعمَلُ المفتاحُ المضمَّنُ في الشفرة"
           fi
           if [ -z "$MAPBOX_TOKEN" ]; then
             echo "::error::سرُّ MAPBOX_TOKEN غير مضبوط — خريطةُ المناطق لن ترسم"
