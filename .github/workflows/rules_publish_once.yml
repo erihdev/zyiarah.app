@@ -111,7 +111,7 @@ jobs:
                 echo "- الفرقُ عن main: $(diff "$RUNNER_TEMP/prod.$kind" "$file" | grep -c '^[<>]' || true) سطراً"
                 echo
                 echo '```diff'
-                diff -u "$RUNNER_TEMP/prod.$kind" "$file" | head -400 || true
+                diff "$RUNNER_TEMP/prod.$kind" "$file" | grep -E '^(<|[0-9])' || true
                 echo '```'
               fi
               echo
