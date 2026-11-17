@@ -117,6 +117,8 @@ jobs:
               echo
             } >> "$GITHUB_STEP_SUMMARY"
           done < "$RUNNER_TEMP/plan.txt"
+          # الملخَّصُ لا يُقرأُ من الواجهةِ البرمجيّة — فيُطبَع في السجلِّ كذلك.
+          cat "$GITHUB_STEP_SUMMARY"
 
       - name: Publish
         if: inputs.action == 'publish'
