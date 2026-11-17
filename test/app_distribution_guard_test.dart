@@ -158,17 +158,27 @@ void main() {
     }
   });
 
-  test('وغيابُ مفتاحِ الدفعِ يُفشِلُ الوظيفةَ لا يُكتَبُ فارغاً', () {
-    // كان النطاقُ `.github/` وحدَه — و`codemagic.yaml` هو ما يَرفعُ إلى
-    // TestFlight وPlay فعلاً، وكان يَكتبُ `echo "K=$K"` فيُنتجُ `K=` على سرٍّ
-    // غائبٍ ويَمُرُّ أخضرَ (2026-10-22). النطاقُ الآن كلُّ كاتبٍ لـ.env.
+  test('وغيابُ مفتاحِ الدفعِ لا يَمُرُّ صامتاً، ولا يُنتجُ بناءً بلا دفع', () {
+    // كان الغيابُ يُفشِلُ الوظيفةَ في كلِّ كاتبٍ لـ.env، لأنّ `.env` كان
+    // المصدرَ الوحيدَ للمفتاح. ومنذ 2026-10-24 المفتاحُ مضمَّنٌ في الشفرةِ
+    // وقيمةُ `.env` الفارغةُ تَسقطُ إليه — فالفشلُ صارَ يَحجبُ بناءً سليماً
+    // (أوقفَ مسارَ GitHub في 2026-11-17 وسرُّه غيرُ مضبوط). الثابتُ الآن:
+    // كلُّ كاتبٍ يَفحصُ الغيابَ صراحةً (فشلاً أو تحذيراً، لا صمتاً)، والسقوطُ
+    // إلى المضمَّنِ قائمٌ فعلاً — فلو زالَ عادَ الفشلُ واجباً.
     for (final w in envWriters()) {
       final src = read_(w);
       expect(src.contains(r'if [ -z "$MOYASAR_PUBLISHABLE_KEY" ]'), isTrue,
-          reason: '$w: سرٌّ غائبٌ يُكتَبُ فارغاً فتُبنى حزمةٌ بلا دفعٍ بصمت — '
-              'نفسُ قرارِ admin_deploy.yml مع MAPBOX_TOKEN');
+          reason: '$w: سرٌّ غائبٌ يَمُرُّ بلا فحصٍ ولا كلمة');
+      // وMAPBOX_TOKEN بلا مضمَّنٍ يَسقطُ إليه، فغيابُه ما زال يُفشِل.
       expect(src.contains('exit 1'), isTrue, reason: '$w: لا يَفشلُ فعلاً');
     }
+    final keys = File('lib/utils/payment_keys.dart').readAsStringSync();
+    expect(RegExp(r"const String kMoyasarPublishableKey = 'pk_").hasMatch(keys),
+        isTrue,
+        reason: 'المفتاحُ المضمَّنُ زال — فغيابُ السرِّ يَعودُ بناءً بلا دفع');
+    const fallback = 'fromEnv.isNotEmpty ? fromEnv : kMoyasarPublishableKey';
+    expect(keys.contains(fallback), isTrue,
+        reason: 'قيمةُ .env الفارغةُ لم تَعُدْ تَسقطُ إلى المضمَّن');
   });
 
   test('كلُّ مسارٍ يَنشرُ إلى Play يَستهدفُ alpha — لا codemagic وحدَه', () {
