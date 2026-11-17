@@ -117,6 +117,10 @@ jobs:
               echo
             } >> "$GITHUB_STEP_SUMMARY"
           done < "$RUNNER_TEMP/plan.txt"
+          # بوّابةُ الإصدار المفروضة (قراءةٌ فقط) — شرطُ نشرِ القواعد.
+          curl -sS -H "Authorization: Bearer $TOKEN" \
+            "https://firestore.googleapis.com/v1/projects/zyiarah-app/databases/(default)/documents/system_configs/app_update" \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);const o={};for(const[k,v]of Object.entries(j.fields||{}))o[k]=Object.values(v)[0];console.log("APP_UPDATE "+JSON.stringify(o)+" updateTime="+j.updateTime+(j.error?" ERR "+JSON.stringify(j.error):""))})'
           # تاريخُ النشر: كلُّ مجموعةِ قواعدٍ سابقةٍ وأيُّ التزامٍ تُطابق (قراءةٌ فقط).
           curl -sS -H "Authorization: Bearer $TOKEN" "$API/rulesets?pageSize=40" \
             > "$RUNNER_TEMP/rulesets.json"
