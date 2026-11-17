@@ -18,7 +18,7 @@ const {computeExpectedBasePrice, resolveMaterialsBase, applyTerrainSurcharge,
   require("./pricing");
 const priceVerify = require("./price_verify");
 const {isMarketingBroadcast, excludeOptedOut} = require("./notify_prefs");
-const {countBookings, zoneDailyCap} = require("./capacity");
+const {countBookings, zoneDailyCap, dateSpanAllowed} = require("./capacity");
 const {grossFromBaseRounded, grossFromBase} = require("./vat");
 const {parseKsaIso, riyadhBookingFields, riyadhLocalDate, riyadhLocalSlot,
   riyadhStamp, riyadhDayStartMs} = require("./ksa_time");
@@ -6581,6 +6581,10 @@ exports.getHourlyAvailability = onCall({cpu: 0.25, minInstances: 1}, async (requ
   const {startDate, endDate, zoneName} = request.data;
   if (!startDate || !endDate) {
     throw new HttpsError("invalid-argument", "startDate و endDate مطلوبان");
+  }
+  // المدى يَكتبُه العميل: بلا حدٍّ يَقرأُ الخادمُ كلَّ طلباتِ الفترةِ ويَبني مُدخَلاً لكلِّ يوم.
+  if (!dateSpanAllowed(startDate, endDate)) {
+    throw new HttpsError("invalid-argument", "نطاق التاريخ غير صالح");
   }
 
   const db = getFirestore();

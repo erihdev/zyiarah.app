@@ -1,7 +1,10 @@
 "use strict";
 // عدّ الإتاحة + سقف المنطقة اليومي — تشغيل: node test/capacity.test.js (ضمن npm test).
 const assert = require("assert");
-const {countBookings, zoneDailyCap, isLiveHold, HOLD_MINUTES} = require("../capacity");
+const {
+  countBookings, zoneDailyCap, isLiveHold, dateSpanAllowed,
+  HOLD_MINUTES, HOLD_MAX_WORKERS, HOLD_MAX_HOURS, COUNT_MAX_HOURS, MAX_SPAN_DAYS,
+} = require("../capacity");
 
 let passed = 0;
 function t(name, fn) {
@@ -171,6 +174,60 @@ t("الساعةُ تُعَدُّ بالعاملات: طلبٌ بكادرَين �
   assert.strictEqual(r.slotCounts["2026-09-20_12:00"], 2);
   const bad = countBookings([paid({service_meta: {crewCount: 0}})]);
   assert.strictEqual(bad.slotCounts["2026-09-20_09:00"], 1, "قيمةٌ تالفةٌ ⇒ عاملةٌ واحدة");
+});
+
+t("الحجزُ غيرُ المدفوعِ محدودٌ بأكبرِ ما يُباع، والمدفوعُ لا يُمَسّ", () => {
+  const big = {booking_time_slot: "08:00", hours_contracted: 100000,
+    service_meta: {kind: "home_package", crewCount: 20}};
+  const h = countBookings([hold(big)], {nowMs: NOW}).slotCounts;
+  assert.strictEqual(Object.keys(h).length, HOLD_MAX_HOURS, "المدّةُ مقصوصة");
+  assert.strictEqual(h["2026-09-20_08:00"], HOLD_MAX_WORKERS, "العاملاتُ مقصوصات");
+  assert.strictEqual(h["2026-09-20_19:00"], HOLD_MAX_WORKERS);
+  assert.strictEqual(h["2026-09-20_20:00"], undefined);
+  const p = countBookings([paid({booking_time_slot: "08:00", hours_contracted: 14,
+    service_meta: {crewCount: 6}})]).slotCounts;
+  assert.strictEqual(Object.keys(p).length, 14);
+  assert.strictEqual(p["2026-09-20_08:00"], 6);
+  const huge = countBookings([paid({booking_time_slot: "00:00",
+    hours_contracted: 5000000})]).slotCounts;
+  assert.strictEqual(Object.keys(huge).length, COUNT_MAX_HOURS, "المدفوعُ محدودٌ بيوم");
+  const fs = require("fs");
+  const path = require("path");
+  const hp = fs.readFileSync(
+      path.join(__dirname, "..", "..", "lib", "utils", "home_packages.dart"), "utf8");
+  assert.ok(new RegExp(`const int kMaxCrews = ${HOLD_MAX_WORKERS};`).test(hp),
+      "حدُّ العاملاتِ يَتبعُ kMaxCrews");
+  assert.ok(hp.includes(`.clamp(1, ${HOLD_MAX_HOURS})`), "حدُّ المدّةِ يَتبعُ تثبيتَ الباقة");
+});
+
+t("حجزٌ واحدٌ لكلِّ عميلةٍ في اليوم، وعميلتانِ تُعَدّان", () => {
+  const many = [];
+  for (let i = 0; i < 12; i++) many.push(hold({client_id: "a"}));
+  const r = countBookings(many, {nowMs: NOW});
+  assert.strictEqual(r.dailyCounts["2026-09-20"], 1);
+  const two = countBookings([hold({client_id: "a"}), hold({client_id: "b"}),
+    hold({client_id: "a", booking_date: "2026-09-21"})], {nowMs: NOW});
+  assert.strictEqual(two.dailyCounts["2026-09-20"], 2);
+  assert.strictEqual(two.dailyCounts["2026-09-21"], 1);
+  const paidTwice = countBookings([paid({client_id: "a"}), paid({client_id: "a"})]);
+  assert.strictEqual(paidTwice.dailyCounts["2026-09-20"], 2, "المدفوعُ لا يُدمَج");
+});
+
+t("مدى التاريخ: صيغةٌ صحيحةٌ وضمنَ الحدّ، والخادمُ يُنادي الفحصَ قبلَ القراءة", () => {
+  assert.strictEqual(dateSpanAllowed("2026-09-20", "2026-09-20"), true);
+  assert.strictEqual(dateSpanAllowed("2026-09-20", "2026-10-21"), true);
+  assert.strictEqual(dateSpanAllowed("1970-01-01", "9999-12-31"), false);
+  assert.strictEqual(dateSpanAllowed("2026-09-21", "2026-09-20"), false);
+  assert.strictEqual(dateSpanAllowed("2026-9-1", "2026-09-20"), false);
+  assert.strictEqual(dateSpanAllowed("2026-13-40", "2026-13-41"), false);
+  assert.strictEqual(dateSpanAllowed(20260920, "2026-09-20"), false);
+  assert.ok(MAX_SPAN_DAYS >= 32, "الشاشاتُ تَطلبُ ~31 يوماً");
+  const idx = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "index.js"), "utf8");
+  const i = idx.indexOf("exports.getHourlyAvailability");
+  const guard = idx.indexOf("dateSpanAllowed(startDate, endDate)", i);
+  const read = idx.indexOf(".where(\"booking_date\", \">=\", startDate)", i);
+  assert.ok(guard > i && read > guard, "الفحصُ قبلَ الاستعلام");
 });
 
 console.log(`\ncapacity tests: ${passed} passed`);

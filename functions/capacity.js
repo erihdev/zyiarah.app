@@ -28,6 +28,37 @@ const HOLD_MINUTES = 15;
 const HOLD_MS = HOLD_MINUTES * 60 * 1000;
 // انحرافُ ساعةٍ مقبولٌ بين خادمَين — طابعٌ «في المستقبل» بأكثرَ منه تالفٌ فلا يَحجز.
 const HOLD_SKEW_MS = 2 * 60 * 1000;
+// **الحجزُ غيرُ المدفوعِ محدودٌ بأكبرِ ما يُباع.** مدّتُه وعددُ عاملاتِه يَكتبُهما
+// جهازُ العميلةِ ولا يُحقَّقانِ قبلَ الدفع، فطلبٌ مجّانيٌّ بعشرينَ عاملةً ومدّةٍ
+// طويلةٍ كان يُظهِرُ يوماً كاملاً ممتلئاً ربعَ ساعةٍ قابلةً للتجديد — ومدّةٌ هائلةٌ
+// تَنفخُ خريطةَ الساعات. الحدّانِ هما `kMaxCrews` وتثبيتُ `durationHours` (1..12)
+// في `lib/utils/home_packages.dart`.
+const HOLD_MAX_WORKERS = 4;
+const HOLD_MAX_HOURS = 12;
+// **والمدفوعُ محدودُ المدّةِ بيومٍ.** الدفعُ يُثبِتُ المبلغَ المُعلَنَ لا أنّ المدّةَ
+// من كتالوجِ الباقات (تسعيرٌ يَتعذّرُ حسابُه لا يَرفضُ دفعاً)، ومفاتيحُ الساعاتِ
+// بعدَ 23 لا يُطابِقُها قارئٌ أصلاً — فمدّةٌ هائلةٌ لا تُضيفُ إلّا ذاكرة. وعددُ
+// العاملاتِ للمدفوعِ محدودٌ سلفاً في `slots.orderWorkersNeeded` (20).
+const COUNT_MAX_HOURS = 24;
+// أقصى مدًى يُسأَلُ عنه: الشاشاتُ تَطلبُ ~31 يوماً. المدى يَكتبُه العميلُ، وبلا حدٍّ
+// يَبني الخادمُ مُدخَلاً لكلِّ يومٍ ويَقرأُ كلَّ طلباتِ الفترة.
+const MAX_SPAN_DAYS = 62;
+
+/**
+ * هل المدى `yyyy-MM-dd`..`yyyy-MM-dd` صالحٌ وضمنَ الحدّ؟
+ * @param {*} startDate
+ * @param {*} endDate
+ * @return {boolean}
+ */
+function dateSpanAllowed(startDate, endDate) {
+  const re = /^\d{4}-\d{2}-\d{2}$/;
+  if (typeof startDate !== "string" || typeof endDate !== "string") return false;
+  if (!re.test(startDate) || !re.test(endDate)) return false;
+  const a = Date.parse(`${startDate}T00:00:00Z`);
+  const b = Date.parse(`${endDate}T00:00:00Z`);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b < a) return false;
+  return (b - a) / 86400000 <= MAX_SPAN_DAYS;
+}
 
 /**
  * هل الطلبُ غيرُ المدفوعِ حجزٌ مؤقّتٌ حيّ؟ بلا `nowMs` لا حجزَ أصلاً (السلوكُ
@@ -64,12 +95,21 @@ function countBookings(orders, {zoneName = null, nowMs, excludeClientId = null} 
   const dailyCounts = {};
   const slotCounts = {};
   const zoneDailyCounts = {};
+  const heldClientDates = new Set();
   for (const d of orders || []) {
     if (!d) continue;
     if (d.status === "cancelled" || d.status === "rejected") continue;
     if (d.is_paid !== true && !isLiveHold(d, {nowMs, excludeClientId})) continue;
+    const held = d.is_paid !== true;
     const bDate = d.booking_date;
     if (!bDate) continue;
+    // حجزٌ واحدٌ لكلِّ عميلةٍ في اليوم: عددُ طلباتِها غيرِ المدفوعةِ بيدِها، فعدُّها
+    // كلِّها يَملأُ السقفَ اليوميَّ ويُغلقُ اليومَ على غيرِها بلا ريال.
+    if (held) {
+      const holdKey = `${d.client_id || ""}|${bDate}`;
+      if (heldClientDates.has(holdKey)) continue;
+      heldClientDates.add(holdKey);
+    }
     dailyCounts[bDate] = (dailyCounts[bDate] || 0) + 1;
     if (zoneName && d.zone_name === zoneName) {
       zoneDailyCounts[bDate] = (zoneDailyCounts[bDate] || 0) + 1;
@@ -77,11 +117,13 @@ function countBookings(orders, {zoneName = null, nowMs, excludeClientId = null} 
     const ts = d.booking_time_slot;
     if (ts) {
       const startH = parseInt(String(ts).split(":")[0], 10);
-      const hrs = slots.orderHours(d);
+      const rawHrs = slots.orderHours(d);
+      const hrs = Math.min(rawHrs, held ? HOLD_MAX_HOURS : COUNT_MAX_HOURS);
       // الساعةُ تُعَدُّ بالعاملاتِ لا بالطلبات (قرارُ المالك 2026-10-31): طلبٌ
       // بكادرَين يَشغلُ عاملتَين، والمقامُ `maxTeamsPerSlot` عددُ العاملات.
       // والسقفُ اليوميُّ (`dailyCounts`) يَبقى بالطلبات — هو حدُّ طلباتٍ لا عاملات.
-      const workers = slots.orderWorkersNeeded(d);
+      const rawWorkers = slots.orderWorkersNeeded(d);
+      const workers = held ? Math.min(rawWorkers, HOLD_MAX_WORKERS) : rawWorkers;
       if (!isNaN(startH)) {
         for (let h = startH; h < startH + hrs; h++) {
           const key = `${bDate}_${String(h).padStart(2, "0")}:00`;
@@ -104,4 +146,7 @@ function zoneDailyCap(zoneData) {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
 }
 
-module.exports = {countBookings, zoneDailyCap, isLiveHold, HOLD_MINUTES};
+module.exports = {
+  countBookings, zoneDailyCap, isLiveHold, dateSpanAllowed,
+  HOLD_MINUTES, HOLD_MAX_WORKERS, HOLD_MAX_HOURS, COUNT_MAX_HOURS, MAX_SPAN_DAYS,
+};
