@@ -1,9 +1,9 @@
 name: iOS Release
 
-# iOS App Store releases are handled by Codemagic. This workflow is kept
-# for manual runs only — auto-running it on tag pushes made it race with
-# the Codemagic build, and both revoke all distribution certificates,
-# which revoked the certificate the other had just signed with.
+# مسارٌ يدويٌّ مجّانيٌّ لإصدار iOS (المستودعُ عامٌّ فدقائقُ macOS بلا كلفة)، بديلاً
+# عن Codemagic حين يتعذّر. لا يُلغي شهاداتِ التوزيعِ القائمة (كان يُلغيها كلَّها
+# فيُعطّلُ شهادةَ Codemagic): يُنشئُ شهادةً مؤقّتةً بمفتاحٍ يُولَّدُ في الوظيفة،
+# ويُلغي تلك الشهادةَ وحدَها عند الانتهاء.
 on:
   workflow_dispatch:
 
@@ -20,6 +20,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.47.2'
           channel: 'stable'
           cache: true
 
@@ -49,121 +50,102 @@ jobs:
             printf 'SAMSUNG_PAY_SERVICE_ID=%s\n' "$SAMSUNG_PAY_SERVICE_ID"
           } > .env
 
-      - name: Flutter pub get
-        run: flutter pub get
-
-      - name: Pod install
-        run: cd ios && pod install
-
-      - name: Install Fastlane
-        run: gem install fastlane --no-document
-
-      - name: Revoke existing distribution certificates
-        env:
-          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+      - name: Install signing tools
         run: |
-          python3 -m venv /tmp/certenv && source /tmp/certenv/bin/activate
-          pip install PyJWT requests cryptography
-          python3 << 'PYEOF'
-          import jwt, time, requests, os
-          ISSUER_ID = os.environ["APP_STORE_CONNECT_ISSUER_ID"]
-          KEY_ID = os.environ["APP_STORE_CONNECT_KEY_ID"]
-          raw_key = os.environ["APP_STORE_CONNECT_PRIVATE_KEY"].replace("\\n", "\n")
-          BASE = "https://api.appstoreconnect.apple.com/v1"
-          def token():
-              return jwt.encode({"iss": ISSUER_ID, "exp": int(time.time()) + 1200, "aud": "appstoreconnect-v1"}, raw_key, algorithm="ES256", headers={"kid": KEY_ID})
-          hdrs = {"Authorization": f"Bearer {token()}", "Content-Type": "application/json"}
-          r = requests.get(f"{BASE}/certificates", headers=hdrs, params={"filter[certificateType]": "DISTRIBUTION,IOS_DISTRIBUTION"})
-          certs = r.json().get("data", [])
-          print(f"Found {len(certs)} distribution certificates")
-          for c in certs:
-              cid = c["id"]
-              ctype = c.get("attributes", {}).get("certificateType", "")
-              print(f"  Revoking {cid} ({ctype})...")
-              requests.delete(f"{BASE}/certificates/{cid}", headers={"Authorization": f"Bearer {token()}"})
-          print("Done — cleared for new cert creation")
-          PYEOF
+          python3 -m venv /tmp/cm && source /tmp/cm/bin/activate
+          pip install -q codemagic-cli-tools PyJWT requests cryptography
+          echo "/tmp/cm/bin" >> "$GITHUB_PATH"
+          # فشلٌ مبكّرٌ إن تغيّرت أعلامُ النشر، قبل عشرين دقيقةَ بناء.
+          app-store-connect publish --help > /tmp/publish_help.txt 2>&1 || true
+          for f in --app-store --whats-new --cancel-previous-submissions --release-type --locale; do
+            grep -q -- "$f" /tmp/publish_help.txt || { echo "::error::علَمُ النشر $f غير موجود في الأداة"; grep -E "^\s+--" /tmp/publish_help.txt | cut -c1-120; exit 1; }
+          done
 
-      - name: Ensure Apple Pay capability on App ID
+      - name: Normalise App Store Connect key
         env:
-          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          RAW_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
-          python3 -m venv /tmp/asc_env && source /tmp/asc_env/bin/activate
-          pip install PyJWT requests cryptography --quiet
-          python3 << 'PYEOF'
-          import jwt, time, requests, os, sys
+          for v in RAW_KEY KEY_ID ISSUER_ID; do
+            [ -n "${!v}" ] || { echo "::error::سرُّ App Store Connect ($v) غير مضبوط في GitHub"; exit 1; }
+          done
+          umask 077
+          printf '%b\n' "$RAW_KEY" > "$RUNNER_TEMP/asc_key.p8"
+          openssl genrsa -out "$RUNNER_TEMP/cert_key.pem" 2048 2>/dev/null
+          {
+            echo "APP_STORE_CONNECT_KEY_IDENTIFIER=$KEY_ID"
+            echo "APP_STORE_CONNECT_ISSUER_ID=$ISSUER_ID"
+            echo "ASC_KEY_FILE=$RUNNER_TEMP/asc_key.p8"
+            echo "CERT_KEY_FILE=$RUNNER_TEMP/cert_key.pem"
+          } >> "$GITHUB_ENV"
 
-          KEY_ID = os.environ["APP_STORE_CONNECT_KEY_ID"]
-          ISSUER_ID = os.environ["APP_STORE_CONNECT_ISSUER_ID"]
-          raw_key = os.environ["APP_STORE_CONNECT_PRIVATE_KEY"].replace("\\n", "\n")
-          BASE = "https://api.appstoreconnect.apple.com/v1"
-          BUNDLE_ID = "com.zyiarah.zyiarah"
+      - name: Snapshot distribution certificates (before)
+        run: |
+          export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$ASC_KEY_FILE")"
+          # تشخيص: هل تَقبلُ أبل المفتاحَ بأداةِ Codemagic نفسِها؟
+          app-store-connect get-latest-testflight-build-number 6760955777 || echo "::warning::أداةُ Codemagic لم تَقرأ رقمَ البناء بهذا المفتاح"
+          python3 .github/scripts/asc_certs.py list > "$RUNNER_TEMP/certs_before.txt"
 
-          def token():
-              return jwt.encode(
-                  {"iss": ISSUER_ID, "exp": int(time.time()) + 1200, "aud": "appstoreconnect-v1"},
-                  raw_key, algorithm="ES256", headers={"kid": KEY_ID}
-              )
+      - name: Fetch signing files (temporary certificate)
+        run: |
+          export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$ASC_KEY_FILE")"
+          app-store-connect fetch-signing-files com.zyiarah.zyiarah \
+            --type IOS_APP_STORE \
+            --certificate-key "@file:$CERT_KEY_FILE" \
+            --create \
+            --platform IOS
+          python3 .github/scripts/asc_certs.py list > "$RUNNER_TEMP/certs_after.txt"
+          comm -13 <(sort "$RUNNER_TEMP/certs_before.txt") <(sort "$RUNNER_TEMP/certs_after.txt") > "$RUNNER_TEMP/certs_new.txt"
+          echo "شهاداتٌ مؤقّتةٌ أُنشئت: $(wc -l < "$RUNNER_TEMP/certs_new.txt" | tr -d ' ')"
+          keychain initialize
+          keychain add-certificates
+          xcode-project use-profiles
 
-          def hdrs():
-              return {"Authorization": f"Bearer {token()}", "Content-Type": "application/json"}
+      - name: Build Flutter IPA
+        run: |
+          set -eo pipefail
+          export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$ASC_KEY_FILE")"
+          flutter config --no-enable-swift-package-manager
+          flutter pub get
+          if ! OUT=$(app-store-connect get-latest-testflight-build-number 6760955777); then
+            echo "::error::تعذّرت قراءةُ آخرِ رقمِ بناءٍ من TestFlight"; exit 1
+          fi
+          LATEST=$(printf '%s\n' "$OUT" | tail -n1 | tr -d '[:space:]')
+          case "$LATEST" in ''|*[!0-9]*) echo "::error::رقمُ بناءٍ غيرُ مقروء: '$LATEST'"; exit 1;; esac
+          NEW_BUILD=$((LATEST + 1))
+          echo "رقمُ البناء: $NEW_BUILD (آخرُ منشور: $LATEST)"
+          flutter build ipa --release \
+            --build-number="$NEW_BUILD" \
+            --export-options-plist="$HOME/export_options.plist" 2>&1 | tee /tmp/build.log | tail -n 400
+          ls -la build/ios/ipa/
 
-          # Find the bundle ID record
-          r = requests.get(f"{BASE}/bundleIds", headers=hdrs(), params={
-              "filter[identifier]": BUNDLE_ID, "filter[platform]": "IOS"
-          })
-          bundle_ids = r.json().get("data", [])
-          if not bundle_ids:
-              print(f"ERROR: Bundle ID {BUNDLE_ID} not found in App Store Connect")
-              sys.exit(1)
-          bid = bundle_ids[0]["id"]
-          print(f"Found Bundle ID record: {bid}")
+      - name: Upload dSYMs to Firebase Crashlytics
+        continue-on-error: true
+        run: |
+          find build/ios/ipa build/ios/archive -name "*.dSYM.zip" -o -name "*.dSYM" 2>/dev/null | head -n 20 | while read -r f; do
+            ios/Pods/FirebaseCrashlytics/upload-symbols -gsp ios/Runner/GoogleService-Info.plist -p ios "$f" || true
+          done
 
-          # List ALL current capabilities for diagnostics
-          r2 = requests.get(f"{BASE}/bundleIds/{bid}/bundleIdCapabilities", headers=hdrs())
-          caps = r2.json().get("data", [])
-          print(f"Current App ID capabilities ({len(caps)}):")
-          for cap in caps:
-              ct = cap.get("attributes", {}).get("capabilityType", "?")
-              print(f"  - {ct} (id: {cap['id']})")
+      - name: Upload to TestFlight and submit for App Store review
+        run: |
+          set -eo pipefail
+          export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$ASC_KEY_FILE")"
+          test -s .github/whatsnew/whatsnew-ar
+          app-store-connect publish \
+            --path build/ios/ipa/*.ipa \
+            --app-store \
+            --cancel-previous-submissions \
+            --release-type AFTER_APPROVAL \
+            --locale ar-SA \
+            --whats-new "$(cat .github/whatsnew/whatsnew-ar)"
 
-          apple_pay_cap = next((c for c in caps if c["attributes"]["capabilityType"] == "APPLE_PAY"), None)
+      - name: Revoke the temporary certificate
+        if: always()
+        run: |
+          [ -s "$RUNNER_TEMP/certs_new.txt" ] || { echo "لا شهادةَ مؤقّتةً تُلغى"; exit 0; }
+          python3 .github/scripts/asc_certs.py revoke $(cat "$RUNNER_TEMP/certs_new.txt")
 
-          if apple_pay_cap:
-              print(f"Apple Pay capability already enabled (id: {apple_pay_cap['id']}) — no change needed")
-          else:
-              print("Apple Pay NOT found — enabling via API")
-              body = {
-                  "data": {
-                      "type": "bundleIdCapabilities",
-                      "attributes": {
-                          "capabilityType": "APPLE_PAY",
-                          "settings": []
-                      },
-                      "relationships": {
-                          "bundleId": {"data": {"type": "bundleIds", "id": bid}}
-                      }
-                  }
-              }
-              r3 = requests.post(f"{BASE}/bundleIdCapabilities", headers=hdrs(), json=body)
-              print(f"  POST => {r3.status_code}: {r3.text[:500]}")
-              if r3.status_code not in (200, 201):
-                  print("ERROR: Failed to enable Apple Pay — fix it manually in Apple Developer Portal:")
-                  print("  developer.apple.com → Identifiers → com.zyiarah.zyiarah → Capabilities → Apple Pay Payment Processing")
-                  sys.exit(1)
-              print("Apple Pay enabled — waiting 30s for propagation before profile generation")
-              time.sleep(30)
-
-          print("Done — proceeding to Fastlane")
-          PYEOF
-
-      - name: Build and Upload to App Store
-        env:
-          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
-        run: fastlane ios release
+      - name: Remove key material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/asc_key.p8" "$RUNNER_TEMP/cert_key.pem"
