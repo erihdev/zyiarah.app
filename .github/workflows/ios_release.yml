@@ -88,11 +88,15 @@ jobs:
           [ "$KEY_ID" = "8T28RRH234" ] && echo "KEY_ID: match" || echo "KEY_ID: MISMATCH len=${#KEY_ID}"
           [ "$ISSUER_ID" = "6dd67287-cfcd-40fc-a3db-8bf378a1ac8f" ] && echo "ISSUER: match" || echo "ISSUER: MISMATCH len=${#ISSUER_ID}"
           echo "key lines: $(wc -l < "$ASC_KEY_FILE") bytes: $(wc -c < "$ASC_KEY_FILE")"
-          date -u
-          python3 -c "import jwt,cryptography;print('pyjwt',jwt.__version__,'crypto',cryptography.__version__)"
-          for K in 8T28RRH234 3UDLAU27X4 7J2NYY252X 8DJBXKM6RT D99PQ7KJJW HQVT29PD5Q YGX9J3PQUW; do
-            APP_STORE_CONNECT_KEY_IDENTIFIER=$K python3 .github/scripts/asc_certs.py list >/dev/null 2>/tmp/e && echo "TRY $K: OK" || echo "TRY $K: no $(head -c 300 /tmp/e)"
-          done
+          python3 - <<'PY'
+          import os,sys
+          sys.path.insert(0,'.github/scripts')
+          os.environ['APP_STORE_CONNECT_KEY_IDENTIFIER']=os.environ['KEY_ID']
+          import asc_certs,requests
+          r=requests.get(asc_certs.BASE+'/certificates',headers=asc_certs._headers(),params={'limit':200},timeout=60)
+          for c in r.json().get('data',[]):
+              a=c['attributes']; print('CERT',c['id'],a.get('certificateType'),a.get('displayName'),a.get('name'),a.get('expirationDate'),a.get('platform'))
+          PY
           exit 1
 
       - name: Snapshot distribution certificates (before)
