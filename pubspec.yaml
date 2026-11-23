@@ -57,7 +57,7 @@ dependencies:
   provider: ^6.1.5+1
   arabic_reshaper: ^0.0.1
   bidi: ^2.0.13
-  crypto: ^3.0.3
+  crypto: ^3.0.8
   moyasar: ^3.0.3
   firebase_app_check: ^0.5.0
 
